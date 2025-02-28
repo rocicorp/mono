@@ -8,7 +8,7 @@ import {
   type PermissionsConfig,
 } from '../../../zero-schema/src/compiled-permissions.ts';
 import {isSchemaConfig} from '../../../zero-schema/src/schema-config.ts';
-import {zeroOptions} from '../config/zero-config.ts';
+import {appOptions, shardOptions, zeroOptions} from '../config/zero-config.ts';
 
 export const deployPermissionsOptions = {
   schema: {
@@ -33,6 +33,10 @@ export const deployPermissionsOptions = {
 
     type: zeroOptions.upstream.type,
   },
+
+  app: {id: appOptions.id},
+
+  shard: shardOptions,
 
   output: {
     file: {

@@ -6,8 +6,9 @@ import {assert} from '../../../../../../shared/src/asserts.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {Default} from '../../../../db/postgres-replica-identity-enum.ts';
 import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.ts';
+import type {AppID, ShardConfig, ShardID} from '../../../../types/shards.ts';
+import {appSchema, upstreamSchema} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
-import type {ShardConfig} from '../shard-config.ts';
 import {createEventTriggerStatements} from './ddl.ts';
 import {
   getPublicationInfo,
@@ -15,43 +16,28 @@ import {
   type PublicationInfo,
   type PublishedSchema,
 } from './published.ts';
-import {ALLOWED_APP_ID_CHARACTERS, validate} from './validation.ts';
+import {validate} from './validation.ts';
 
-// Creates a function that appends `_SHARD_ID` to the input.
-export function append(shardID: string) {
-  return (name: string) => id(name + '_' + shardID);
-}
-
-export function schemaFor(appID: string, shardID: string) {
-  return append(shardID)(appID);
-}
-
-export function unescapedSchema(appID: string, shardID: string) {
-  return `${appID}_${shardID}`;
-}
-
-export function internalPublicationPrefix(appID: string) {
+export function internalPublicationPrefix({appID}: AppID) {
   return `_${appID}_`;
 }
 
-function defaultPublicationName(appID: string, shardID: string) {
+function defaultPublicationName(appID: string, shardID: string | number) {
   return `_${appID}_public_${shardID}`;
 }
 
-function metadataPublicationName(appID: string, shardID: string) {
+function metadataPublicationName(appID: string, shardID: string | number) {
   return `_${appID}_metadata_${shardID}`;
 }
 
 // The GLOBAL_SETUP must be idempotent as it can be run multiple times for different shards.
-// Exported for testing.
-export function globalSetup(appID: string): string {
-  // Sanity check; should already be validated upstream.
-  assert(ALLOWED_APP_ID_CHARACTERS.test(appID), `Invalid App ID ${appID}`);
+function globalSetup(appID: AppID): string {
+  const app = id(appSchema(appID));
 
   return `
-  CREATE SCHEMA IF NOT EXISTS ${appID};
+  CREATE SCHEMA IF NOT EXISTS ${app};
 
-  CREATE TABLE IF NOT EXISTS ${appID}."schemaVersions" (
+  CREATE TABLE IF NOT EXISTS ${app}."schemaVersions" (
     "minSupportedVersion" INT4,
     "maxSupportedVersion" INT4,
 
@@ -61,10 +47,10 @@ export function globalSetup(appID: string): string {
     "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
   );
 
-  INSERT INTO ${appID}."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
+  INSERT INTO ${app}."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
     VALUES (true, 1, 1) ON CONFLICT DO NOTHING;
 
-  CREATE TABLE IF NOT EXISTS ${appID}.permissions (
+  CREATE TABLE IF NOT EXISTS ${app}.permissions (
     "permissions" JSONB,
     "hash"        TEXT,
 
@@ -74,7 +60,7 @@ export function globalSetup(appID: string): string {
     "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
   );
 
-  CREATE OR REPLACE FUNCTION ${appID}.set_permissions_hash()
+  CREATE OR REPLACE FUNCTION ${app}.set_permissions_hash()
   RETURNS TRIGGER AS $$
   BEGIN
       NEW.hash = md5(NEW.permissions::text);
@@ -83,19 +69,19 @@ export function globalSetup(appID: string): string {
   $$ LANGUAGE plpgsql;
 
   CREATE OR REPLACE TRIGGER on_set_permissions 
-    BEFORE INSERT OR UPDATE ON ${appID}.permissions
+    BEFORE INSERT OR UPDATE ON ${app}.permissions
     FOR EACH ROW
-    EXECUTE FUNCTION ${appID}.set_permissions_hash();
+    EXECUTE FUNCTION ${app}.set_permissions_hash();
 
-  INSERT INTO ${appID}.permissions (permissions) VALUES (NULL) ON CONFLICT DO NOTHING;
+  INSERT INTO ${app}.permissions (permissions) VALUES (NULL) ON CONFLICT DO NOTHING;
 `;
 }
 
-export async function ensureGlobalTables(db: PostgresDB, appID: string) {
+export async function ensureGlobalTables(db: PostgresDB, appID: AppID) {
   await db.unsafe(globalSetup(appID));
 }
 
-export function getClientsTableDefinition(schema: string) {
+function getClientsTableDefinition(schema: string) {
   return `CREATE TABLE ${schema}."clients" (
     "clientGroupID"  TEXT NOT NULL,
     "clientID"       TEXT NOT NULL,
@@ -105,29 +91,27 @@ export function getClientsTableDefinition(schema: string) {
   );`;
 }
 
+export const SHARD_CONFIG_TABLE = 'shardConfig';
+
 export function shardSetup(
-  appID: string,
-  shardID: string,
-  publications: string[],
+  shardConfig: ShardConfig,
+  metadataPublication: string,
 ): string {
-  assert(ALLOWED_APP_ID_CHARACTERS.test(appID), `Invalid App ID ${appID}`);
+  const app = id(appSchema(shardConfig));
+  const shard = id(upstreamSchema(shardConfig));
 
-  const schema = schemaFor(appID, shardID);
-
-  const metadataPublication = metadataPublicationName(appID, shardID);
-
-  publications.push(metadataPublication);
-  publications.sort();
+  const pubs = [...shardConfig.publications].sort();
+  assert(pubs.includes(metadataPublication));
 
   return `
-  CREATE SCHEMA IF NOT EXISTS ${schema};
+  CREATE SCHEMA IF NOT EXISTS ${shard};
 
-  ${getClientsTableDefinition(schema)}
+  ${getClientsTableDefinition(shard)}
 
   CREATE PUBLICATION ${id(metadataPublication)}
-    FOR TABLE ${appID}."schemaVersions", ${appID}."permissions", TABLE ${schema}."clients";
+    FOR TABLE ${app}."schemaVersions", ${app}."permissions", TABLE ${shard}."clients";
 
-  CREATE TABLE ${schema}."shardConfig" (
+  CREATE TABLE ${shard}."${SHARD_CONFIG_TABLE}" (
     "publications"  TEXT[] NOT NULL,
     "ddlDetection"  BOOL NOT NULL,
     "initialSchema" JSON,
@@ -136,18 +120,18 @@ export function shardSetup(
     "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
   );
 
-  INSERT INTO ${schema}."shardConfig" 
+  INSERT INTO ${shard}."${SHARD_CONFIG_TABLE}" 
     ("lock", "publications", "ddlDetection", "initialSchema")
     VALUES (true, 
-      ARRAY[${literal(publications)}], 
+      ARRAY[${literal(pubs)}], 
       false,  -- set in SAVEPOINT with triggerSetup() statements
       null    -- set in initial-sync at consistent_point LSN.
     );
   `;
 }
 
-export function dropShard(appID: string, shardID: string): string {
-  const schema = schemaFor(appID, shardID);
+export function dropShard(appID: string, shardID: string | number): string {
+  const schema = `${appID}_${shardID}`;
   const metadataPublication = metadataPublicationName(appID, shardID);
   const defaultPublication = defaultPublicationName(appID, shardID);
 
@@ -156,7 +140,7 @@ export function dropShard(appID: string, shardID: string): string {
   return `
     DROP PUBLICATION IF EXISTS ${id(defaultPublication)};
     DROP PUBLICATION IF EXISTS ${id(metadataPublication)};
-    DROP SCHEMA IF EXISTS ${schema} CASCADE;
+    DROP SCHEMA IF EXISTS ${id(schema)} CASCADE;
   `;
 }
 
@@ -171,14 +155,10 @@ export type InternalShardConfig = v.Infer<typeof internalShardConfigSchema>;
 // triggerSetup is run separately in a sub-transaction (i.e. SAVEPOINT) so
 // that a failure (e.g. due to lack of superuser permissions) can be handled
 // by continuing in a degraded mode (ddlDetection = false).
-function triggerSetup(
-  appID: string,
-  shardID: string,
-  publications: string[],
-): string {
-  const schema = schemaFor(appID, shardID);
+function triggerSetup(shard: ShardConfig): string {
+  const schema = id(upstreamSchema(shard));
   return (
-    createEventTriggerStatements(appID, shardID, publications) +
+    createEventTriggerStatements(shard) +
     `UPDATE ${schema}."shardConfig" SET "ddlDetection" = true;`
   );
 }
@@ -186,23 +166,21 @@ function triggerSetup(
 // Called in initial-sync to store the exact schema that was initially synced.
 export async function setInitialSchema(
   db: PostgresDB,
-  appID: string,
-  shardID: string,
+  shard: ShardID,
   {tables, indexes}: PublishedSchema,
 ) {
-  const schema = unescapedSchema(appID, shardID);
+  const schema = upstreamSchema(shard);
   const synced: PublishedSchema = {tables, indexes};
   await db`UPDATE ${db(schema)}."shardConfig" SET "initialSchema" = ${synced}`;
 }
 
 export async function getInternalShardConfig(
   db: PostgresDB,
-  appID: string,
-  shardID: string,
+  shard: ShardID,
 ): Promise<InternalShardConfig> {
   const result = await db`
     SELECT "publications", "ddlDetection", "initialSchema" 
-      FROM ${db(unescapedSchema(appID, shardID))}."shardConfig";
+      FROM ${db(upstreamSchema(shard))}."shardConfig";
   `;
   assert(result.length === 1);
   return v.parse(result[0], internalShardConfigSchema, 'passthrough');
@@ -215,9 +193,9 @@ export async function getInternalShardConfig(
 export async function setupTablesAndReplication(
   lc: LogContext,
   tx: PostgresTransaction,
-  appID: string,
-  {id, publications}: ShardConfig,
+  requested: ShardConfig,
 ) {
+  const {publications} = requested;
   // Validate requested publications.
   for (const pub of publications) {
     if (pub.startsWith('_')) {
@@ -243,7 +221,10 @@ export async function setupTablesAndReplication(
     }
     allPublications.push(...publications);
   } else {
-    const defaultPublication = defaultPublicationName(appID, id);
+    const defaultPublication = defaultPublicationName(
+      requested.appID,
+      requested.shardNum,
+    );
     // Note: For re-syncing, this publication is dropped in dropShard(), so an existence
     //       check is unnecessary.
     await tx`
@@ -253,16 +234,22 @@ export async function setupTablesAndReplication(
     allPublications.push(defaultPublication);
   }
 
+  const metadataPublication = metadataPublicationName(
+    requested.appID,
+    requested.shardNum,
+  );
+  allPublications.push(metadataPublication);
+
+  const shard = {...requested, publications: allPublications};
+
   // Setup the global tables and shard tables / publications.
-  await tx.unsafe(globalSetup(appID) + shardSetup(appID, id, allPublications));
+  await tx.unsafe(globalSetup(shard) + shardSetup(shard, metadataPublication));
 
   const pubs = await getPublicationInfo(tx, allPublications);
   await replicaIdentitiesForTablesWithoutPrimaryKeys(pubs)?.apply(lc, tx);
 
   try {
-    await tx.savepoint(sub =>
-      sub.unsafe(triggerSetup(appID, id, allPublications)),
-    );
+    await tx.savepoint(sub => sub.unsafe(triggerSetup(shard)));
   } catch (e) {
     if (
       !(

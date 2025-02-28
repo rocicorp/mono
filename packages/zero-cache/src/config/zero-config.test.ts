@@ -1,6 +1,10 @@
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import {expect, test, vi} from 'vitest';
-import {parseOptions} from '../../../shared/src/options.ts';
+import {
+  parseOptions,
+  parseOptionsAdvanced,
+} from '../../../shared/src/options.ts';
+import {INVALID_APP_ID_MESSAGE} from '../types/shards.ts';
 import {zeroOptions} from './zero-config.ts';
 
 class ExitAfterUsage extends Error {}
@@ -97,35 +101,42 @@ test('zero-cache --help', () => {
        ZERO_LOG_IVM_SAMPLING env                                                                                                                                  
                                                                 How often to collect IVM metrics. 1 out of N requests will be sampled where N is this value.      
                                                                                                                                                                   
-     --shard-id string                                          default: "0"                                                                                      
-       ZERO_SHARD_ID env                                                                                                                                          
-                                                                Unique identifier for the zero-cache shard.                                                       
+     --app-id string                                            default: "zero"                                                                                   
+       ZERO_APP_ID env                                                                                                                                            
+                                                                Unique identifier for the app.                                                                    
                                                                                                                                                                   
-                                                                A shard presents a logical partition of the upstream database, delineated                         
-                                                                by a set of publications and managed by a dedicated replication slot.                             
+                                                                Multiple zero-cache apps can run on a single upstream database, each of which                     
+                                                                is isolated from the others, with its own permissions, sharding (future feature),                 
+                                                                and change/cvr databases.                                                                         
                                                                                                                                                                   
-                                                                A shard's zero clients table and shard-internal functions are stored in                           
-                                                                the zero_{id} schema in the upstream database.                                                    
+                                                                The metadata of an app is stored in an upstream schema with the same name,                        
+                                                                e.g. "zero", and the metadata for each app shard, e.g. client and mutation                        
+                                                                ids, is stored in the "{app-id}_{#}" schema. (Currently there is only a single                    
+                                                                "0" shard, but this will change with sharding).                                                   
                                                                                                                                                                   
-                                                                Due to constraints on replication slot names, a shard ID may only consist of                      
+                                                                The CVR and Change data are managed in schemas named "{app-id}_{shard-num}/cvr"                   
+                                                                and "{app-id}_{shard-num}/cdc", respectively, allowing multiple apps and shards                   
+                                                                to share the same database instance (e.g. a Postgres "cluster") for CVR and Change management.    
+                                                                                                                                                                  
+                                                                Due to constraints on replication slot names, an App ID may only consist of                       
                                                                 lower-case letters, numbers, and the underscore character.                                        
                                                                                                                                                                   
-     --shard-publications string[]                              default: []                                                                                       
-       ZERO_SHARD_PUBLICATIONS env                                                                                                                                
-                                                                Postgres PUBLICATIONs that define the partition of the upstream                                   
-                                                                replicated to the shard. Publication names may not begin with an underscore,                      
+     --app-publications string[]                                default: []                                                                                       
+       ZERO_APP_PUBLICATIONS env                                                                                                                                  
+                                                                Postgres PUBLICATIONs that define the tables and columns to                                       
+                                                                replicate. Publication names may not begin with an underscore,                                    
                                                                 as zero reserves that prefix for internal use.                                                    
                                                                                                                                                                   
                                                                 If unspecified, zero-cache will create and use an internal publication that                       
                                                                 publishes all tables in the public schema, i.e.:                                                  
                                                                                                                                                                   
-                                                                CREATE PUBLICATION _zero_public_0 FOR TABLES IN SCHEMA public;                                    
+                                                                CREATE PUBLICATION _{app-id}_public_0 FOR TABLES IN SCHEMA public;                                
                                                                                                                                                                   
-                                                                Note that once a shard has begun syncing data, this list of publications                          
+                                                                Note that once an app has begun syncing data, this list of publications                           
                                                                 cannot be changed, and zero-cache will refuse to start if a specified                             
                                                                 value differs from what was originally synced.                                                    
                                                                                                                                                                   
-                                                                To use a different set of publications, a new shard should be created.                            
+                                                                To use a different set of publications, a new app should be created.                              
                                                                                                                                                                   
      --auth-jwk string                                          optional                                                                                          
        ZERO_AUTH_JWK env                                                                                                                                          
@@ -266,4 +277,55 @@ test('zero-cache --help', () => {
                                                                                                                                                                   
     "
   `);
+});
+
+test.each([['has/slashes'], ['has-dashes'], ['has.dots']])(
+  '--app-id %s',
+  appID => {
+    const logger = {info: vi.fn()};
+    expect(() =>
+      parseOptionsAdvanced(
+        zeroOptions,
+        ['--app-id', appID],
+        'ZERO_',
+        false, // allow unknown
+        true, // allow partial
+        {},
+        logger,
+        exit,
+      ),
+    ).toThrowError(INVALID_APP_ID_MESSAGE);
+  },
+);
+
+test.each([['isok'], ['has_underscores'], ['1'], ['123']])(
+  '--app-id %s',
+  appID => {
+    const {config} = parseOptionsAdvanced(
+      zeroOptions,
+      ['--app-id', appID],
+      'ZERO_',
+      false,
+      true,
+    );
+    expect(config.app.id).toBe(appID);
+  },
+);
+
+test('--shard-id disallowed', () => {
+  const logger = {info: vi.fn()};
+  expect(() =>
+    parseOptionsAdvanced(
+      zeroOptions,
+      ['--shard-id', 'prod'],
+      'ZERO_',
+      false, // allow unknown
+      true, // allow partial
+      {},
+      logger,
+      exit,
+    ),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: ZERO_SHARD_ID is deprecated. Please use ZERO_APP_ID instead.]`,
+  );
 });

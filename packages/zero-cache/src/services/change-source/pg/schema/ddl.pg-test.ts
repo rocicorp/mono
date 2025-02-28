@@ -23,7 +23,7 @@ describe('change-source/tables/ddl', () => {
   let service: LogicalReplicationService;
 
   const APP_ID = 'zap';
-  const SHARD_ID = '0';
+  const SHARD_NUM = 0;
 
   beforeEach(async () => {
     notices = new Queue();
@@ -35,7 +35,11 @@ describe('change-source/tables/ddl', () => {
     await upstream.unsafe(STARTING_SCHEMA);
 
     await upstream.unsafe(
-      createEventTriggerStatements(APP_ID, SHARD_ID, ['zero_all', 'zero_sum']),
+      createEventTriggerStatements({
+        appID: APP_ID,
+        shardNum: SHARD_NUM,
+        publications: ['zero_all', 'zero_sum'],
+      }),
     );
 
     await upstream`SELECT pg_create_logical_replication_slot(${SLOT_NAME}, 'pgoutput')`;
@@ -1084,14 +1088,14 @@ describe('change-source/tables/ddl', () => {
         {tag: 'insert'},
         {
           tag: 'message',
-          prefix: 'zero/' + SHARD_ID,
+          prefix: 'zap/0',
           content: expect.any(Uint8Array),
           flags: 1,
           transactional: true,
         },
         {
           tag: 'message',
-          prefix: 'zero/' + SHARD_ID,
+          prefix: 'zap/0',
           content: expect.any(Uint8Array),
           flags: 1,
           transactional: true,
@@ -1195,7 +1199,7 @@ describe('change-source/tables/ddl', () => {
         {tag: 'insert'},
         {
           tag: 'message',
-          prefix: 'zero/' + SHARD_ID,
+          prefix: 'zap/0',
           content: expect.any(Uint8Array),
           flags: 1,
           transactional: true,
@@ -1230,14 +1234,14 @@ describe('change-source/tables/ddl', () => {
       {tag: 'begin'},
       {
         tag: 'message',
-        prefix: 'zero/' + SHARD_ID,
+        prefix: 'zap/0',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
       },
       {
         tag: 'message',
-        prefix: 'zero/' + SHARD_ID,
+        prefix: 'zap/0',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
@@ -1247,28 +1251,28 @@ describe('change-source/tables/ddl', () => {
       {tag: 'begin'},
       {
         tag: 'message',
-        prefix: 'zero/' + SHARD_ID,
+        prefix: 'zap/0',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
       },
       {
         tag: 'message',
-        prefix: 'zero/' + SHARD_ID,
+        prefix: 'zap/0',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
       },
       {
         tag: 'message',
-        prefix: 'zero/' + SHARD_ID,
+        prefix: 'zap/0',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
       },
       {
         tag: 'message',
-        prefix: 'zero/' + SHARD_ID,
+        prefix: 'zap/0',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,

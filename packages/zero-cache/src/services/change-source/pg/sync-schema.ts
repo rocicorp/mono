@@ -5,14 +5,13 @@ import {
   type IncrementalMigrationMap,
   type Migration,
 } from '../../../db/migration-lite.ts';
+import type {ShardConfig} from '../../../types/shards.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {initialSync, type InitialSyncOptions} from './initial-sync.ts';
-import type {ShardConfig} from './shard-config.ts';
 
 export async function initSyncSchema(
   log: LogContext,
   debugName: string,
-  appID: string,
   shard: ShardConfig,
   dbPath: string,
   upstreamURI: string,
@@ -20,7 +19,7 @@ export async function initSyncSchema(
 ): Promise<void> {
   const setupMigration: Migration = {
     migrateSchema: (log, tx) =>
-      initialSync(log, appID, shard, tx, upstreamURI, syncOptions),
+      initialSync(log, shard, tx, upstreamURI, syncOptions),
     minSafeVersion: 1,
   };
 

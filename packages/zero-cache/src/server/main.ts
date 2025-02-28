@@ -25,6 +25,7 @@ import {
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
+import {getShardID} from '../types/shards.ts';
 import {orTimeout} from '../types/timeout.ts';
 import {
   createNotifierFrom,
@@ -43,7 +44,7 @@ export default async function runWorker(
   const config = getZeroConfig(env);
   const lc = createLogContext(config, {worker: 'dispatcher'});
   const taskID = must(config.taskID, `main must set --task-id`);
-  const appID = 'zero'; // TODO: --app-id
+  const shard = getShardID(config);
 
   const processes = new ProcessManager(lc, parent ?? process);
 
@@ -111,7 +112,7 @@ export default async function runWorker(
     // but it is done here in the main thread because it is wasteful to have all of
     // the Syncers attempt the migration in parallel.
     const cvrDB = pgClient(lc, config.cvr.db);
-    await initViewSyncerSchema(lc, cvrDB, appID, config.shard.id);
+    await initViewSyncerSchema(lc, cvrDB, shard);
     void cvrDB.end();
   }
 

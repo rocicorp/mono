@@ -13,6 +13,7 @@ import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {stringify, type JSONObject} from '../../types/bigint-json.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
+import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import type {CVRFlushStats, CVRStore} from './cvr-store.ts';
 import {KeyColumns} from './key-columns.ts';
@@ -153,18 +154,11 @@ export class CVRUpdater {
  * but the `stateVersion` of the CVR does not change.
  */
 export class CVRConfigDrivenUpdater extends CVRUpdater {
-  readonly #appID: string;
-  readonly #shardID;
+  readonly #shard: ShardID;
 
-  constructor(
-    cvrStore: CVRStore,
-    cvr: CVRSnapshot,
-    appID: string,
-    shardID: string,
-  ) {
+  constructor(cvrStore: CVRStore, cvr: CVRSnapshot, shard: ShardID) {
     super(cvrStore, cvr, cvr.replicaVersion);
-    this.#appID = appID;
-    this.#shardID = shardID;
+    this.#shard = shard;
   }
 
   #ensureClient(id: string): ClientRecord {
@@ -184,7 +178,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         id: CLIENT_LMID_QUERY_ID,
         ast: {
           schema: '',
-          table: `${this.#appID}_${this.#shardID}.clients`,
+          table: `${upstreamSchema(this.#shard)}.clients`,
           where: {
             type: 'simple',
             left: {

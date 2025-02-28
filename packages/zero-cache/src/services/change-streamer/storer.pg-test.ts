@@ -22,16 +22,18 @@ describe('change-streamer/storer', () => {
   let consumed: Queue<Commit | StatusMessage>;
 
   const REPLICA_VERSION = '00';
-  const SHARD_ID = 'xcv';
+  const APP_ID = 'xero';
+  const SHARD_NUM = 5;
 
   beforeEach(async () => {
     db = await testDBs.create('change_streamer_storer');
-    await db.begin(tx => setupCDCTables(lc, tx, SHARD_ID));
+    const shard = {appID: APP_ID, shardNum: SHARD_NUM};
+    await db.begin(tx => setupCDCTables(lc, tx, shard));
     await ensureReplicationConfig(
       lc,
       db,
       {replicaVersion: REPLICA_VERSION, publications: []},
-      SHARD_ID,
+      shard,
       true,
     );
     await db.begin(async tx => {
@@ -43,12 +45,12 @@ describe('change-streamer/storer', () => {
           {watermark: '06', pos: 0, change: {tag: 'begin', boo: 'dar'}},
           {watermark: '06', pos: 1, change: {tag: 'update'}},
           {watermark: '06', pos: 2, change: {tag: 'commit', boo: 'far'}},
-        ].map(row => tx`INSERT INTO cdc_xcv."changeLog" ${tx(row)}`),
+        ].map(row => tx`INSERT INTO "xero_5/cdc"."changeLog" ${tx(row)}`),
       );
-      await tx`UPDATE cdc_xcv."replicationState" SET "lastWatermark" = '06'`;
+      await tx`UPDATE "xero_5/cdc"."replicationState" SET "lastWatermark" = '06'`;
     });
     consumed = new Queue();
-    storer = new Storer(lc, SHARD_ID, 'task-id', db, REPLICA_VERSION, msg =>
+    storer = new Storer(lc, shard, 'task-id', db, REPLICA_VERSION, msg =>
       consumed.enqueue(msg),
     );
     await storer.assumeOwnership();
@@ -82,7 +84,9 @@ describe('change-streamer/storer', () => {
 
   test('purge', async () => {
     expect(await storer.purgeRecordsBefore('02')).toBe(0);
-    expect(await db`SELECT watermark, pos FROM cdc_xcv."changeLog"`).toEqual([
+    expect(
+      await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
+    ).toEqual([
       {watermark: '03', pos: 0n},
       {watermark: '03', pos: 1n},
       {watermark: '03', pos: 2n},
@@ -92,7 +96,9 @@ describe('change-streamer/storer', () => {
     ]);
 
     expect(await storer.purgeRecordsBefore('03')).toBe(0);
-    expect(await db`SELECT watermark, pos FROM cdc_xcv."changeLog"`).toEqual([
+    expect(
+      await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
+    ).toEqual([
       {watermark: '03', pos: 0n},
       {watermark: '03', pos: 1n},
       {watermark: '03', pos: 2n},
@@ -103,14 +109,18 @@ describe('change-streamer/storer', () => {
 
     // Should be rejected as an invalid watermark.
     expect(await storer.purgeRecordsBefore('04')).toBe(3);
-    expect(await db`SELECT watermark, pos FROM cdc_xcv."changeLog"`).toEqual([
+    expect(
+      await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
+    ).toEqual([
       {watermark: '06', pos: 0n},
       {watermark: '06', pos: 1n},
       {watermark: '06', pos: 2n},
     ]);
 
     expect(await storer.purgeRecordsBefore('06')).toBe(0);
-    expect(await db`SELECT watermark, pos FROM cdc_xcv."changeLog"`).toEqual([
+    expect(
+      await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
+    ).toEqual([
       {watermark: '06', pos: 0n},
       {watermark: '06', pos: 1n},
       {watermark: '06', pos: 2n},
@@ -365,8 +375,9 @@ describe('change-streamer/storer', () => {
       ]
     `);
 
-    expect(await db`SELECT * FROM cdc_xcv."changeLog" ORDER BY watermark, pos`)
-      .toMatchInlineSnapshot(`
+    expect(
+      await db`SELECT * FROM "xero_5/cdc"."changeLog" ORDER BY watermark, pos`,
+    ).toMatchInlineSnapshot(`
         Result [
           {
             "change": {
@@ -549,8 +560,9 @@ describe('change-streamer/storer', () => {
       ]
     `);
 
-    expect(await db`SELECT * FROM cdc_xcv."changeLog" ORDER BY watermark, pos`)
-      .toMatchInlineSnapshot(`
+    expect(
+      await db`SELECT * FROM "xero_5/cdc"."changeLog" ORDER BY watermark, pos`,
+    ).toMatchInlineSnapshot(`
         Result [
           {
             "change": {
@@ -642,7 +654,7 @@ describe('change-streamer/storer', () => {
     // Wait for the storer to commit that transaction.
     for (let i = 0; i < 10; i++) {
       const result =
-        await db`SELECT * FROM cdc_xcv."changeLog" WHERE watermark = '0a'`;
+        await db`SELECT * FROM "xero_5/cdc"."changeLog" WHERE watermark = '0a'`;
       if (result.length) {
         break;
       }

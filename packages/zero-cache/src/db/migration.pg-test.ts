@@ -28,9 +28,9 @@ describe('db/migration', () => {
 
   const logMigrationHistory =
     (name: string) => async (_log: LogContext, sql: postgres.Sql) => {
-      const meta = await getVersionHistory(sql, schemaName);
+      const meta = await getVersionHistory(sql, schemaName, true);
       await sql`INSERT INTO "MigrationHistory" ${sql({
-        event: `${name}-at(${meta.dataVersion})`,
+        event: `${name}-at(${meta?.dataVersion})`,
       })}`;
     };
 
@@ -217,7 +217,7 @@ describe('db/migration', () => {
   for (const c of cases) {
     test(c.name, async () => {
       if (c.preSchema) {
-        await getVersionHistory(db, schemaName); // Ensures that the table is created.
+        await getVersionHistory(db, schemaName, true); // Ensures that the table is created.
         await db`INSERT INTO ${db(schemaName)}."versionHistory" ${db(
           c.preSchema,
         )}`;

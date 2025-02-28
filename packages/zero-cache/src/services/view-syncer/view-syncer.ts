@@ -35,6 +35,7 @@ import {stringify} from '../../types/bigint-json.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
+import type {ShardID} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
@@ -106,8 +107,7 @@ function randomID() {
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
-  readonly #appID: string;
-  readonly #shardID: string;
+  readonly #shard: ShardID;
   readonly #lc: LogContext;
   readonly #pipelines: PipelineDriver;
   readonly #stateChanges: Subscription<ReplicaState>;
@@ -133,10 +133,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   constructor(
     lc: LogContext,
-    appID: string,
+    shard: ShardID,
     taskID: string,
     clientGroupID: string,
-    shardID: string,
     db: PostgresDB,
     pipelineDriver: PipelineDriver,
     versionChanges: Subscription<ReplicaState>,
@@ -144,8 +143,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
   ) {
     this.id = clientGroupID;
-    this.#appID = appID;
-    this.#shardID = shardID;
+    this.#shard = shard;
     this.#lc = lc;
     this.#pipelines = pipelineDriver;
     this.#stateChanges = versionChanges;
@@ -154,8 +152,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#cvrStore = new CVRStore(
       lc,
       db,
-      appID,
-      shardID,
+      shard,
       taskID,
       clientGroupID,
       // On failure, cancel the #stateChanges subscription. The run()
@@ -375,8 +372,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.id,
         clientID,
         wsID,
-        this.#appID,
-        this.#shardID,
+        this.#shard,
         baseCookie,
         protocolVersion,
         schemaVersion,
@@ -440,8 +436,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const updater = new CVRConfigDrivenUpdater(
       this.#cvrStore,
       cvr,
-      this.#appID,
-      this.#shardID,
+      this.#shard,
     );
 
     const patches = fn(updater);

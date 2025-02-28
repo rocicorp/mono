@@ -39,7 +39,8 @@ const zeroConfig = {
 } as unknown as ZeroConfig;
 
 const APP_ID = 'fooz';
-const SHARD_ID = '0';
+const SHARD_NUM = 0;
+const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 const CG_ID = 'abc';
 const TEST_SCHEMA_VERSION = 1;
 
@@ -132,7 +133,7 @@ INSERT INTO "dataTypeTest" (
 `;
 
 async function createUpstreamTables(db: PostgresDB) {
-  await db.unsafe(sqlSchema + zeroSchema(APP_ID, SHARD_ID));
+  await db.unsafe(sqlSchema + zeroSchema(SHARD));
 }
 
 function createReplicaTables(db: Database) {
@@ -351,13 +352,7 @@ beforeEach(async () => {
     .prepare(`UPDATE "${APP_ID}.permissions" SET permissions = ?, hash = ?`)
     .run(perms, h128(perms).toString(16));
 
-  authorizer = new WriteAuthorizerImpl(
-    lc,
-    zeroConfig,
-    replica,
-    APP_ID,
-    SHARD_ID,
-  );
+  authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, APP_ID, CG_ID);
   lmid = 0;
 });
 
@@ -378,8 +373,7 @@ function procMutation(
       ? undefined
       : {sub: uid, role: uid === 'admn' ? 'admin' : 'user'},
     upstream,
-    APP_ID,
-    SHARD_ID,
+    SHARD,
     CG_ID,
     {
       type: MutationType.CRUD,

@@ -29,7 +29,7 @@ import * as Mode from '../../db/mode-enum.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema-versions.ts';
-import {unescapedSchema as schema} from '../change-source/pg/schema/shard.ts';
+import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.ts';
 import type {Service} from '../service.ts';
 
@@ -52,8 +52,7 @@ export class MutagenService implements Mutagen, Service {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #upstream: PostgresDB;
-  readonly #appID: string;
-  readonly #shardID: string;
+  readonly #shard: ShardID;
   readonly #stopped = resolver();
   readonly #replica: Database;
   readonly #writeAuthorizer: WriteAuthorizerImpl;
@@ -61,8 +60,7 @@ export class MutagenService implements Mutagen, Service {
 
   constructor(
     lc: LogContext,
-    appID: string,
-    shardID: string,
+    shard: ShardID,
     clientGroupID: string,
     upstream: PostgresDB,
     config: ZeroConfig,
@@ -70,8 +68,7 @@ export class MutagenService implements Mutagen, Service {
     this.id = clientGroupID;
     this.#lc = lc;
     this.#upstream = upstream;
-    this.#appID = appID;
-    this.#shardID = shardID;
+    this.#shard = shard;
     this.#replica = new Database(this.#lc, config.replicaFile, {
       fileMustExist: true,
     });
@@ -79,7 +76,7 @@ export class MutagenService implements Mutagen, Service {
       this.#lc,
       config,
       this.#replica,
-      appID,
+      shard.appID,
       clientGroupID,
     );
 
@@ -106,8 +103,7 @@ export class MutagenService implements Mutagen, Service {
       this.#lc,
       authData,
       this.#upstream,
-      this.#appID,
-      this.#shardID,
+      this.#shard,
       this.id,
       mutation,
       this.#writeAuthorizer,
@@ -131,8 +127,7 @@ export async function processMutation(
   lc: LogContext,
   authData: JWTPayload | undefined,
   db: PostgresDB,
-  appID: string,
-  shardID: string,
+  shard: ShardID,
   clientGroupID: string,
   mutation: Mutation,
   writeAuthorizer: WriteAuthorizer,
@@ -200,8 +195,7 @@ export async function processMutation(
               lc,
               tx,
               authData,
-              appID,
-              shardID,
+              shard,
               clientGroupID,
               schemaVersion,
               mutation,
@@ -252,8 +246,7 @@ async function processMutationWithTx(
   lc: LogContext,
   tx: PostgresTransaction,
   authData: JWTPayload | undefined,
-  appID: string,
-  shardID: string,
+  shard: ShardID,
   clientGroupID: string,
   schemaVersion: number,
   mutation: CRUDMutation,
@@ -306,8 +299,7 @@ async function processMutationWithTx(
   tasks.unshift(() =>
     checkSchemaVersionAndIncrementLastMutationID(
       tx,
-      appID,
-      shardID,
+      shard,
       clientGroupID,
       schemaVersion,
       mutation.clientID,
@@ -374,8 +366,7 @@ function getDeleteSQL(
 
 async function checkSchemaVersionAndIncrementLastMutationID(
   tx: PostgresTransaction,
-  appID: string,
-  shardID: string,
+  shard: ShardID,
   clientGroupID: string,
   schemaVersion: number,
   clientID: string,
@@ -383,7 +374,7 @@ async function checkSchemaVersionAndIncrementLastMutationID(
 ) {
   const [[{lastMutationID}], supportedVersionRange] = await Promise.all([
     tx<{lastMutationID: bigint}[]>`
-    INSERT INTO ${tx(schema(appID, shardID))}.clients 
+    INSERT INTO ${tx(upstreamSchema(shard))}.clients 
       as current ("clientGroupID", "clientID", "lastMutationID")
           VALUES (${clientGroupID}, ${clientID}, ${1})
       ON CONFLICT ("clientGroupID", "clientID")
@@ -396,7 +387,7 @@ async function checkSchemaVersionAndIncrementLastMutationID(
         maxSupportedVersion: number;
       }[]
     >`SELECT "minSupportedVersion", "maxSupportedVersion" 
-        FROM ${tx(appID)}."schemaVersions"`,
+        FROM ${tx(appSchema(shard))}."schemaVersions"`,
   ]);
 
   // ABORT if the resulting lastMutationID is not equal to the receivedMutationID.

@@ -31,10 +31,10 @@ import type {
 import {initializePostgresChangeSource} from './change-source.ts';
 import {replicationSlot} from './initial-sync.ts';
 import {fromLexiVersion} from './lsn.ts';
-import {dropEventTriggerStatements} from './schema/ddl-test-utils.ts';
+import {dropEventTriggerStatements} from './schema/ddl.ts';
 
 const APP_ID = 'zroo';
-const SHARD_ID = 'change_source_test_id';
+const SHARD_NUM = 1;
 
 describe('change-source/pg', {timeout: 30000}, () => {
   let logSink: TestLogSink;
@@ -92,8 +92,11 @@ describe('change-source/pg', {timeout: 30000}, () => {
       await initializePostgresChangeSource(
         lc,
         upstreamURI,
-        APP_ID,
-        {id: SHARD_ID, publications: ['zero_foo', 'zero_zero']},
+        {
+          appID: APP_ID,
+          publications: ['zero_foo', 'zero_zero'],
+          shardNum: SHARD_NUM,
+        },
         replicaDbFile.path,
         {tableCopyWorkers: 5, rowBatchSize: 10000},
       )
@@ -126,8 +129,8 @@ describe('change-source/pg', {timeout: 30000}, () => {
 
   async function withoutTriggers() {
     await upstream.unsafe(
-      `UPDATE ${APP_ID}_${SHARD_ID}."shardConfig" SET "ddlDetection" = false;` +
-        dropEventTriggerStatements(APP_ID, SHARD_ID),
+      `UPDATE ${APP_ID}_${SHARD_NUM}."shardConfig" SET "ddlDetection" = false;` +
+        dropEventTriggerStatements(APP_ID, SHARD_NUM),
     );
   }
 
@@ -259,7 +262,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
         await tx`INSERT INTO foo(id) VALUES ('include-me')`;
         // clients change that should be included.
         await tx.unsafe(
-          `INSERT INTO ${APP_ID}_${SHARD_ID}.clients("clientGroupID", "clientID", "lastMutationID")
+          `INSERT INTO ${APP_ID}_${SHARD_NUM}.clients("clientGroupID", "clientID", "lastMutationID")
             VALUES ('foo', 'bar', 23)`,
         );
       });
@@ -322,7 +325,10 @@ describe('change-source/pg', {timeout: 30000}, () => {
       // Postgres stores 1 + the LSN of the confirmed ACK.
       const results = await upstream<{confirmed: string}[]>`
     SELECT confirmed_flush_lsn as confirmed FROM pg_replication_slots
-        WHERE slot_name = ${replicationSlot(APP_ID, SHARD_ID)}`;
+        WHERE slot_name = ${replicationSlot({
+          appID: APP_ID,
+          shardNum: SHARD_NUM,
+        })}`;
       const expected = versionFromLexi(commit1[2].watermark) + 1n;
       expect(results).toEqual([
         {confirmed: fromLexiVersion(versionToLexi(expected))},
@@ -716,7 +722,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
 
     const results = await upstream<{pid: number}[]>`
       SELECT active_pid as pid from pg_replication_slots WHERE
-        slot_name = ${replicationSlot(APP_ID, SHARD_ID)}`;
+        slot_name = ${replicationSlot({appID: APP_ID, shardNum: SHARD_NUM})}`;
     const {pid} = results[0];
 
     await upstream`SELECT pg_terminate_backend(${pid})`;
@@ -757,8 +763,11 @@ describe('change-source/pg', {timeout: 30000}, () => {
       await initializePostgresChangeSource(
         lc,
         upstreamURI,
-        APP_ID,
-        {id: SHARD_ID, publications: ['zero_different_publication']},
+        {
+          appID: APP_ID,
+          shardNum: SHARD_NUM,
+          publications: ['zero_different_publication'],
+        },
         replicaDbFile.path,
         {tableCopyWorkers: 5, rowBatchSize: 10000},
       );

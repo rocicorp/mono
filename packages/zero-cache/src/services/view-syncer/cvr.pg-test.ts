@@ -4,6 +4,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {testDBs} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import {cvrSchema} from '../../types/shards.ts';
 import type {PatchToVersion} from './client-handler.ts';
 import {
   ConcurrentModificationException,
@@ -23,7 +24,6 @@ import {
   compareInstancesRows,
   compareQueriesRows,
   compareRowsRows,
-  cvrSchema,
   type DesiresRow,
   type InstancesRow,
   type QueriesRow,
@@ -34,7 +34,8 @@ import {
 import type {CVRVersion, RowID} from './schema/types.ts';
 
 const APP_ID = 'dapp';
-const SHARD_ID = '3';
+const SHARD_NUM = 3;
+const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 
 const LAST_CONNECT = Date.UTC(2024, 2, 1);
 
@@ -66,9 +67,9 @@ describe('view-syncer/cvr', () => {
       }
       for (const [table, rows] of Object.entries(state)) {
         for (const row of rows) {
-          await tx`INSERT INTO ${tx(
-            `${cvrSchema(APP_ID, SHARD_ID)}.` + table,
-          )} ${tx(row)}`;
+          await tx`INSERT INTO ${tx(`${cvrSchema(SHARD)}.` + table)} ${tx(
+            row,
+          )}`;
         }
       }
     });
@@ -77,9 +78,7 @@ describe('view-syncer/cvr', () => {
   async function expectState(db: PostgresDB, state: Partial<DBState>) {
     for (const table of Object.keys(state)) {
       const res = [
-        ...(await db`SELECT * FROM ${db(
-          `${cvrSchema(APP_ID, SHARD_ID)}.` + table,
-        )}`),
+        ...(await db`SELECT * FROM ${db(`${cvrSchema(SHARD)}.` + table)}`),
       ];
       const tableState = [...(state[table as keyof DBState] || [])];
       switch (table) {
@@ -142,7 +141,7 @@ describe('view-syncer/cvr', () => {
 
   beforeEach(async () => {
     db = await testDBs.create('cvr_test_db');
-    await db.begin(tx => setupCVRTables(lc, tx, APP_ID, SHARD_ID));
+    await db.begin(tx => setupCVRTables(lc, tx, SHARD));
   });
 
   afterEach(async () => {
@@ -173,8 +172,7 @@ describe('view-syncer/cvr', () => {
     const pgStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -207,8 +205,7 @@ describe('view-syncer/cvr', () => {
     const pgStore2 = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -283,8 +280,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -380,8 +376,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -431,8 +426,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -476,8 +470,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -525,8 +518,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -620,8 +612,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -665,7 +656,7 @@ describe('view-syncer/cvr', () => {
       },
     } satisfies CVRSnapshot);
 
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, APP_ID, SHARD_ID);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     // This removes and adds desired queries to the existing fooClient.
     expect(updater.deleteDesiredQueries('fooClient', ['oneHash', 'twoHash']))
@@ -834,7 +825,7 @@ describe('view-syncer/cvr', () => {
           id: 'lmids',
           internal: true,
           ast: {
-            table: `${APP_ID}_${SHARD_ID}.clients`,
+            table: `${APP_ID}_${SHARD_NUM}.clients`,
             schema: '',
             where: {
               type: 'simple',
@@ -951,7 +942,7 @@ describe('view-syncer/cvr', () => {
         {
           clientAST: {
             schema: '',
-            table: `${APP_ID}_${SHARD_ID}.clients`,
+            table: `${APP_ID}_${SHARD_NUM}.clients`,
             where: {
               left: {
                 type: 'column',
@@ -1072,8 +1063,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -1083,12 +1073,7 @@ describe('view-syncer/cvr', () => {
 
     // Add the deleted desired query back. This ensures that the
     // desired query update statement is an UPSERT.
-    const updater2 = new CVRConfigDrivenUpdater(
-      cvrStore2,
-      reloaded,
-      APP_ID,
-      SHARD_ID,
-    );
+    const updater2 = new CVRConfigDrivenUpdater(cvrStore2, reloaded, SHARD);
     expect(
       updater2.putDesiredQueries('fooClient', [
         {hash: 'oneHash', ast: {table: 'issues'}, ttl: undefined},
@@ -1171,14 +1156,13 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
     );
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, APP_ID, SHARD_ID);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     // Same desired query set. Nothing should change except last active time.
     expect(
@@ -1202,8 +1186,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -1361,8 +1344,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -1594,8 +1576,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -1846,15 +1827,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    let cvrStore = new CVRStore(
-      lc,
-      db,
-      APP_ID,
-      SHARD_ID,
-      'my-task',
-      'abc123',
-      ON_FAILURE,
-    );
+    let cvrStore = new CVRStore(lc, db, SHARD, 'my-task', 'abc123', ON_FAILURE);
     let cvr = await cvrStore.load(lc, LAST_CONNECT);
     let updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '123');
 
@@ -2044,15 +2017,7 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    cvrStore = new CVRStore(
-      lc,
-      db,
-      APP_ID,
-      SHARD_ID,
-      'my-task',
-      'abc123',
-      ON_FAILURE,
-    );
+    cvrStore = new CVRStore(lc, db, SHARD, 'my-task', 'abc123', ON_FAILURE);
     cvr = await cvrStore.load(lc, LAST_CONNECT);
     expect(cvr).toEqual(updated);
 
@@ -2397,8 +2362,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -2666,8 +2630,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -2916,8 +2879,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -3057,8 +3019,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -3310,8 +3271,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -3597,8 +3557,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -3697,8 +3656,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -3842,8 +3800,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -4002,8 +3959,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -4073,8 +4029,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -4220,8 +4175,7 @@ describe('view-syncer/cvr', () => {
       const cvrStore = new CVRStore(
         lc,
         db,
-        APP_ID,
-        SHARD_ID,
+        SHARD,
         'my-task',
         'abc123',
         ON_FAILURE,
@@ -4267,12 +4221,7 @@ describe('view-syncer/cvr', () => {
         }
       `);
 
-      const updater = new CVRConfigDrivenUpdater(
-        cvrStore,
-        cvr,
-        APP_ID,
-        SHARD_ID,
-      );
+      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
       updater.markDesiredQueryAsInactive('fooClient', 'oneHash', now);
 
       const {cvr: updated} = await updater.flush(lc, true, LAST_CONNECT, now);
@@ -4386,8 +4335,7 @@ describe('view-syncer/cvr', () => {
       const cvrStore = new CVRStore(
         lc,
         db,
-        APP_ID,
-        SHARD_ID,
+        SHARD,
         'my-task',
         'abc123',
         ON_FAILURE,
@@ -4415,12 +4363,7 @@ describe('view-syncer/cvr', () => {
         },
       });
 
-      const updater = new CVRConfigDrivenUpdater(
-        cvrStore,
-        cvr,
-        APP_ID,
-        SHARD_ID,
-      );
+      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
       updater.markDesiredQueryAsInactive('fooClient', 'oneHash', now);
 
       const {cvr: updated} = await updater.flush(lc, true, LAST_CONNECT, now);
@@ -4546,14 +4489,13 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
     );
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, APP_ID, SHARD_ID);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     expect(updater.deleteClient('client-b')).toMatchInlineSnapshot(`
       [
@@ -4871,8 +4813,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -4933,7 +4874,7 @@ describe('view-syncer/cvr', () => {
       }
     `);
 
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, APP_ID, SHARD_ID);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     // No patches because client-b is from a different group.
     expect(updater.deleteClient('client-b')).toEqual([]);
@@ -5140,12 +5081,7 @@ describe('view-syncer/cvr', () => {
 
     {
       const cvr = await cvrStore.load(lc, LAST_CONNECT);
-      const updater = new CVRConfigDrivenUpdater(
-        cvrStore,
-        cvr,
-        APP_ID,
-        SHARD_ID,
-      );
+      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
       updater.deleteClientGroup('def456');
       const {cvr: updated2} = await updater.flush(

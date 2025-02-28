@@ -41,6 +41,7 @@ import {
   registerPostgresTypeParsers,
   type PostgresDB,
 } from '../../../types/pg.ts';
+import type {ShardConfig, ShardID} from '../../../types/shards.ts';
 import {Subscription} from '../../../types/subscription.ts';
 import type {
   ChangeSource,
@@ -73,7 +74,6 @@ import {
   type InternalShardConfig,
 } from './schema/shard.ts';
 import {validate} from './schema/validation.ts';
-import type {ShardConfig} from './shard-config.ts';
 import {initSyncSchema} from './sync-schema.ts';
 
 // BigInt support from LogicalReplicationService.
@@ -87,15 +87,13 @@ registerPostgresTypeParsers();
 export async function initializePostgresChangeSource(
   lc: LogContext,
   upstreamURI: string,
-  appID: string,
   shard: ShardConfig,
   replicaDbFile: string,
   syncOptions: InitialSyncOptions,
 ): Promise<{replicationConfig: ReplicationConfig; changeSource: ChangeSource}> {
   await initSyncSchema(
     lc,
-    `replica-${shard.id}`,
-    appID,
+    `replica-${shard.appID}-${shard.shardNum}`,
     shard,
     replicaDbFile,
     upstreamURI,
@@ -110,7 +108,7 @@ export async function initializePostgresChangeSource(
     // Verify that the publications match what has been synced.
     const requested = [...shard.publications].sort();
     const replicated = replicationConfig.publications
-      .filter(p => !p.startsWith(internalPublicationPrefix(appID)))
+      .filter(p => !p.startsWith(internalPublicationPrefix(shard)))
       .sort();
     if (!deepEqual(requested, replicated)) {
       throw new Error(
@@ -123,7 +121,7 @@ export async function initializePostgresChangeSource(
   // initial sync if not.
   const db = pgClient(lc, upstreamURI);
   try {
-    await checkAndUpdateUpstream(lc, db, appID, shard);
+    await checkAndUpdateUpstream(lc, db, shard);
   } finally {
     await db.end();
   }
@@ -131,8 +129,7 @@ export async function initializePostgresChangeSource(
   const changeSource = new PostgresChangeSource(
     lc,
     upstreamURI,
-    appID,
-    shard.id,
+    shard,
     replicationConfig,
   );
 
@@ -142,10 +139,9 @@ export async function initializePostgresChangeSource(
 async function checkAndUpdateUpstream(
   lc: LogContext,
   db: PostgresDB,
-  appID: string,
   shard: ShardConfig,
 ) {
-  const slot = replicationSlot(appID, shard.id);
+  const slot = replicationSlot(shard);
   const result = await db<{restartLSN: LSN | null}[]>`
   SELECT restart_lsn as "restartLSN" FROM pg_replication_slots WHERE slot_name = ${slot}`;
   if (result.length === 0) {
@@ -158,10 +154,7 @@ async function checkAndUpdateUpstream(
     );
   }
   // Perform any shard schema updates
-  await updateShardSchema(lc, db, appID, {
-    id: shard.id,
-    publications: shard.publications,
-  });
+  await updateShardSchema(lc, db, shard);
 }
 
 const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 5;
@@ -173,36 +166,29 @@ const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 5;
 class PostgresChangeSource implements ChangeSource {
   readonly #lc: LogContext;
   readonly #upstreamUri: string;
-  readonly #appID: string;
-  readonly #shardID: string;
+  readonly #shard: ShardID;
   readonly #replicationConfig: ReplicationConfig;
 
   constructor(
     lc: LogContext,
     upstreamUri: string,
-    appID: string,
-    shardID: string,
+    shard: ShardID,
     replicationConfig: ReplicationConfig,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
     this.#upstreamUri = upstreamUri;
-    this.#appID = appID;
-    this.#shardID = shardID;
+    this.#shard = shard;
     this.#replicationConfig = replicationConfig;
   }
 
   async startStream(clientWatermark: string): Promise<ChangeStream> {
     const db = pgClient(this.#lc, this.#upstreamUri);
-    const slot = replicationSlot(this.#appID, this.#shardID);
+    const slot = replicationSlot(this.#shard);
 
     try {
       await this.#stopExistingReplicationSlotSubscriber(db, slot);
 
-      const config = await getInternalShardConfig(
-        db,
-        this.#appID,
-        this.#shardID,
-      );
+      const config = await getInternalShardConfig(db, this.#shard);
       this.#lc.info?.(`starting replication stream@${slot}`);
 
       // Enabling ssl according to the logic in:
@@ -280,7 +266,7 @@ class PostgresChangeSource implements ChangeSource {
     let acker: Acker | undefined = undefined;
     const changeMaker = new ChangeMaker(
       this.#lc,
-      this.#shardID,
+      this.#shard,
       shardConfig,
       this.#upstreamUri,
     );
@@ -432,13 +418,13 @@ class ChangeMaker {
 
   constructor(
     lc: LogContext,
-    shardID: string,
+    {appID, shardNum}: ShardID,
     shardConfig: InternalShardConfig,
     upstreamURI: string,
   ) {
     this.#lc = lc;
     // Note: This matches the prefix used in pg_logical_emit_message() in pg/schema/ddl.ts.
-    this.#shardPrefix = `zero/${shardID}`;
+    this.#shardPrefix = `${appID}/${shardNum}`;
     this.#shardConfig = shardConfig;
     this.#upstream = new ShortLivedClient(
       lc,

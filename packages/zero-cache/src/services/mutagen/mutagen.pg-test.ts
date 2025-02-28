@@ -17,7 +17,8 @@ import {zeroSchema} from './mutagen-test-shared.ts';
 import {processMutation} from './mutagen.ts';
 
 const APP_ID = 'zeeroh';
-const SHARD_ID = '0';
+const SHARD_NUM = 0;
+const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 
 class MockWriteAuthorizer implements WriteAuthorizer {
   canPreMutation() {
@@ -58,7 +59,7 @@ async function createTables(db: PostgresDB) {
         PRIMARY KEY(id),
         FOREIGN KEY(ref) REFERENCES idonly(id)
       );
-      ${zeroSchema(APP_ID, SHARD_ID)}
+      ${zeroSchema(SHARD)}
     `);
 }
 
@@ -79,15 +80,14 @@ describe('processMutation', {timeout: 15000}, () => {
   test('new client with no last mutation id', async () => {
     await expectTables(db, {
       idonly: [],
-      [`${APP_ID}_${SHARD_ID}.clients`]: [],
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [],
     });
 
     const error = await processMutation(
       lc,
       undefined,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'abc',
       {
         type: MutationType.CRUD,
@@ -116,7 +116,7 @@ describe('processMutation', {timeout: 15000}, () => {
 
     await expectTables(db, {
       idonly: [{id: '1'}],
-      [`${APP_ID}_${SHARD_ID}.clients`]: [
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
         {
           clientGroupID: 'abc',
           clientID: '123',
@@ -130,7 +130,7 @@ describe('processMutation', {timeout: 15000}, () => {
   test('next sequential mutation for previously seen client', async () => {
     await db`
       INSERT INTO ${db(
-        `${APP_ID}_${SHARD_ID}`,
+        `${APP_ID}_${SHARD_NUM}`,
       )}.clients ("clientGroupID", "clientID", "lastMutationID") 
          VALUES ('abc', '123', 2)`;
 
@@ -138,8 +138,7 @@ describe('processMutation', {timeout: 15000}, () => {
       lc,
       {},
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'abc',
       {
         type: MutationType.CRUD,
@@ -168,7 +167,7 @@ describe('processMutation', {timeout: 15000}, () => {
 
     await expectTables(db, {
       idonly: [{id: '1'}],
-      [`${APP_ID}_${SHARD_ID}.clients`]: [
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
         {
           clientGroupID: 'abc',
           clientID: '123',
@@ -182,7 +181,7 @@ describe('processMutation', {timeout: 15000}, () => {
   test('old mutations are skipped', async () => {
     await db`
       INSERT INTO ${db(
-        `${APP_ID}_${SHARD_ID}`,
+        `${APP_ID}_${SHARD_NUM}`,
       )}.clients ("clientGroupID", "clientID", "lastMutationID") 
         VALUES ('abc', '123', 2)`;
 
@@ -190,8 +189,7 @@ describe('processMutation', {timeout: 15000}, () => {
       lc,
       undefined,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'abc',
       {
         type: MutationType.CRUD,
@@ -220,7 +218,7 @@ describe('processMutation', {timeout: 15000}, () => {
 
     await expectTables(db, {
       idonly: [],
-      [`${APP_ID}_${SHARD_ID}.clients`]: [
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
         {
           clientGroupID: 'abc',
           clientID: '123',
@@ -234,7 +232,7 @@ describe('processMutation', {timeout: 15000}, () => {
   test('old mutations that would have errored are skipped', async () => {
     await db`
       INSERT INTO ${db(
-        `${APP_ID}_${SHARD_ID}`,
+        `${APP_ID}_${SHARD_NUM}`,
       )}.clients ("clientGroupID", "clientID", "lastMutationID")
         VALUES ('abc', '123', 2);`;
     await db`INSERT INTO idonly (id) VALUES ('1');`;
@@ -243,8 +241,7 @@ describe('processMutation', {timeout: 15000}, () => {
       lc,
       undefined,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'abc',
       {
         type: MutationType.CRUD,
@@ -273,7 +270,7 @@ describe('processMutation', {timeout: 15000}, () => {
 
     await expectTables(db, {
       idonly: [{id: '1'}],
-      [`${APP_ID}_${SHARD_ID}.clients`]: [
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
         {
           clientGroupID: 'abc',
           clientID: '123',
@@ -287,7 +284,7 @@ describe('processMutation', {timeout: 15000}, () => {
   test('mutation id too far in the future throws', async () => {
     await db`
       INSERT INTO ${db(
-        `${APP_ID}_${SHARD_ID}`,
+        `${APP_ID}_${SHARD_NUM}`,
       )}.clients ("clientGroupID", "clientID", "lastMutationID") 
         VALUES ('abc', '123', 1)`;
 
@@ -296,8 +293,7 @@ describe('processMutation', {timeout: 15000}, () => {
         lc,
         undefined,
         db,
-        APP_ID,
-        SHARD_ID,
+        SHARD,
         'abc',
         {
           type: MutationType.CRUD,
@@ -327,7 +323,7 @@ describe('processMutation', {timeout: 15000}, () => {
 
     await expectTables(db, {
       idonly: [],
-      [`${APP_ID}_${SHARD_ID}.clients`]: [
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
         {
           clientGroupID: 'abc',
           clientID: '123',
@@ -341,7 +337,7 @@ describe('processMutation', {timeout: 15000}, () => {
   test('schema version below supported range throws', async () => {
     await db`
       INSERT INTO ${db(
-        `${APP_ID}_${SHARD_ID}`,
+        `${APP_ID}_${SHARD_NUM}`,
       )}.clients ("clientGroupID", "clientID", "lastMutationID") 
         VALUES ('abc', '123', 1)`;
 
@@ -353,8 +349,7 @@ describe('processMutation', {timeout: 15000}, () => {
         lc,
         undefined,
         db,
-        APP_ID,
-        SHARD_ID,
+        SHARD,
         'abc',
         {
           type: MutationType.CRUD,
@@ -384,7 +379,7 @@ describe('processMutation', {timeout: 15000}, () => {
 
     await expectTables(db, {
       idonly: [],
-      [`${APP_ID}_${SHARD_ID}.clients`]: [
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
         {
           clientGroupID: 'abc',
           clientID: '123',
@@ -398,7 +393,7 @@ describe('processMutation', {timeout: 15000}, () => {
   test('schema version above supported range throws', async () => {
     await db`
       INSERT INTO ${db(
-        `${APP_ID}_${SHARD_ID}`,
+        `${APP_ID}_${SHARD_NUM}`,
       )}.clients ("clientGroupID", "clientID", "lastMutationID") 
         VALUES ('abc', '123', 1)`;
 
@@ -410,8 +405,7 @@ describe('processMutation', {timeout: 15000}, () => {
         lc,
         {},
         db,
-        APP_ID,
-        SHARD_ID,
+        SHARD,
         'abc',
         {
           type: MutationType.CRUD,
@@ -441,7 +435,7 @@ describe('processMutation', {timeout: 15000}, () => {
 
     await expectTables(db, {
       idonly: [],
-      [`${APP_ID}_${SHARD_ID}.clients`]: [
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
         {
           clientGroupID: 'abc',
           clientID: '123',
@@ -457,8 +451,7 @@ describe('processMutation', {timeout: 15000}, () => {
       lc,
       {},
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'abc',
       {
         type: MutationType.CRUD,
@@ -531,7 +524,7 @@ describe('processMutation', {timeout: 15000}, () => {
           col2: 'set',
         },
       ],
-      [`${APP_ID}_${SHARD_ID}.clients`]: [
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
         {
           clientGroupID: 'abc',
           clientID: '123',
@@ -547,8 +540,7 @@ describe('processMutation', {timeout: 15000}, () => {
       lc,
       {},
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'abc',
       {
         type: MutationType.CRUD,
@@ -583,7 +575,7 @@ describe('processMutation', {timeout: 15000}, () => {
 
     await expectTables(db, {
       ['fk_ref']: [],
-      [`${APP_ID}_${SHARD_ID}.clients`]: [
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
         {
           clientGroupID: 'abc',
           clientID: '123',
@@ -598,7 +590,7 @@ describe('processMutation', {timeout: 15000}, () => {
     const {promise, resolve} = resolver();
     await db`
       INSERT INTO ${db(
-        `${APP_ID}_${SHARD_ID}`,
+        `${APP_ID}_${SHARD_NUM}`,
       )}.clients ("clientGroupID", "clientID", "lastMutationID") 
          VALUES ('abc', '123', 2)`;
 
@@ -606,7 +598,7 @@ describe('processMutation', {timeout: 15000}, () => {
     const done = db.begin(Mode.SERIALIZABLE, async tx => {
       // Simulate holding a lock on the row.
       tx`SELECT * FROM ${db(
-        `${APP_ID}_${SHARD_ID}`,
+        `${APP_ID}_${SHARD_NUM}`,
       )}.clients WHERE "clientGroupID" = 'abc' AND "clientID" = '123'`;
 
       await promise;
@@ -614,7 +606,7 @@ describe('processMutation', {timeout: 15000}, () => {
       // Update the row on signal.
       return tx`
       UPDATE ${db(
-        `${APP_ID}_${SHARD_ID}`,
+        `${APP_ID}_${SHARD_NUM}`,
       )}.clients SET "lastMutationID" = 3 WHERE "clientGroupID" = 'abc'`;
     });
 
@@ -622,8 +614,7 @@ describe('processMutation', {timeout: 15000}, () => {
       lc,
       {},
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'abc',
       {
         type: MutationType.CRUD,
@@ -660,7 +651,7 @@ describe('processMutation', {timeout: 15000}, () => {
     // 3 => 4 should succeed after internally retrying.
     await expectTables(db, {
       idonly: [{id: '1'}],
-      [`${APP_ID}_${SHARD_ID}.clients`]: [
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
         {
           clientGroupID: 'abc',
           clientID: '123',
@@ -674,15 +665,14 @@ describe('processMutation', {timeout: 15000}, () => {
   test('data type handling', async () => {
     await expectTables(db, {
       types: [],
-      [`${APP_ID}_${SHARD_ID}.clients`]: [],
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [],
     });
 
     const error = await processMutation(
       lc,
       undefined,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       'abc',
       {
         type: MutationType.CRUD,
@@ -714,7 +704,7 @@ describe('processMutation', {timeout: 15000}, () => {
 
     await expectTables(db, {
       types: [{id: '1', num: 23.45}],
-      [`${APP_ID}_${SHARD_ID}.clients`]: [
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
         {
           clientGroupID: 'abc',
           clientID: '123',

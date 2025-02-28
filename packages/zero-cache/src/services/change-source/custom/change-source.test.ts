@@ -1,9 +1,10 @@
 import websocket from '@fastify/websocket';
-import {consoleLogSink, LogContext} from '@rocicorp/logger';
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {type FastifyInstance} from 'fastify';
 import {afterEach, beforeEach, describe, test} from 'vitest';
 import type WebSocket from 'ws';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {DbFile, expectTables} from '../../../test/lite.ts';
 import {stream, type Sink} from '../../../types/streams.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
@@ -23,7 +24,7 @@ describe('change-source/custom', () => {
   let replicaDbFile: DbFile;
 
   beforeEach(async () => {
-    lc = new LogContext('debug', {}, consoleLogSink);
+    lc = createSilentLogContext();
     server = Fastify();
     await server.register(websocket);
 
@@ -206,8 +207,7 @@ describe('change-source/custom', () => {
     await initializeCustomChangeSource(
       lc,
       changeSourceURI,
-      APP_ID,
-      {id: '0', publications: ['b', 'a']},
+      {appID: APP_ID, shardNum: 0, publications: ['b', 'a']},
       replicaDbFile.path,
     );
 

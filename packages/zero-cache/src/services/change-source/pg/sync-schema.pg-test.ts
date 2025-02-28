@@ -17,7 +17,7 @@ import {replicationSlot} from './initial-sync.ts';
 import {initSyncSchema} from './sync-schema.ts';
 
 const APP_ID = 'zeroz';
-const SHARD_ID = 'sync_schema_test_id';
+const SHARD_NUM = 9;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
@@ -46,13 +46,13 @@ describe('change-streamer/pg/sync-schema', () => {
     {
       name: 'initial tables',
       upstreamPostState: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         [`${APP_ID}.schemaVersions`]: [
           {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
         ],
       },
       replicaPostState: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         [`${APP_ID}.schemaVersions`]: [
           {
             lock: 1,
@@ -79,13 +79,13 @@ describe('change-streamer/pg/sync-schema', () => {
         ],
       },
       upstreamPostState: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         [`${APP_ID}.schemaVersions`]: [
           {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
         ],
       },
       replicaPostState: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         [`${APP_ID}.schemaVersions`]: [
           {
             lock: 1,
@@ -125,11 +125,16 @@ describe('change-streamer/pg/sync-schema', () => {
         await initDB(upstream, c.upstreamSetup, c.upstreamPreState);
         initLiteDB(replica, c.replicaSetup, c.replicaPreState);
 
+        const shard = {
+          appID: APP_ID,
+          shardNum: SHARD_NUM,
+          publications: c.requestedPublications ?? [],
+        };
+
         await initSyncSchema(
           createSilentLogContext(),
           'test',
-          APP_ID,
-          {id: SHARD_ID, publications: c.requestedPublications ?? []},
+          shard,
           replicaFile.path,
           getConnectionURI(upstream),
           {tableCopyWorkers: 5, rowBatchSize: 10000},
@@ -143,12 +148,9 @@ describe('change-streamer/pg/sync-schema', () => {
         });
 
         // Slot should still exist.
-        const slots =
-          await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name = ${replicationSlot(
-            APP_ID,
-            SHARD_ID,
-          )}`.values();
-        expect(slots[0]).toEqual([replicationSlot(APP_ID, SHARD_ID)]);
+        const slots = await upstream`SELECT slot_name FROM pg_replication_slots 
+          WHERE slot_name = ${replicationSlot(shard)}`.values();
+        expect(slots[0]).toEqual([replicationSlot(shard)]);
       },
       10000,
     );

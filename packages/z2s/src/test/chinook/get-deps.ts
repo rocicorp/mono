@@ -37,8 +37,7 @@ export async function writeChinook(pg: PostgresDB, replica: Database) {
 
   await initialSync(
     new LogContext('debug', {}, consoleLogSink),
-    'zero',
-    {id: 'chinook_test', publications: []},
+    {appID: 'chinook_test', shardNum: 0, publications: []},
     replica,
     getConnectionURI(pg),
     {tableCopyWorkers: 1, rowBatchSize: 10000},

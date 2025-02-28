@@ -55,7 +55,7 @@ describe('change-streamer/service', () => {
   let setTimeoutFn: Mock<typeof setTimeout>;
 
   const REPLICA_VERSION = '01';
-  const SHARD_ID = 'zxc';
+  const shard = {appID: 'zoro', shardNum: 3};
 
   beforeEach(async () => {
     lc = createSilentLogContext();
@@ -72,7 +72,7 @@ describe('change-streamer/service', () => {
 
     streamer = await initializeStreamer(
       lc,
-      SHARD_ID,
+      shard,
       'task-id',
       changeDB,
       {
@@ -159,7 +159,7 @@ describe('change-streamer/service', () => {
 
     const logEntries = await changeDB<
       ChangeLogEntry[]
-    >`SELECT * FROM cdc_zxc."changeLog"`;
+    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
       'insert',
@@ -167,7 +167,7 @@ describe('change-streamer/service', () => {
       'commit',
     ]);
     await expectTables(changeDB, {
-      ['cdc_zxc.replicationState']: [
+      ['zoro_3/cdc.replicationState']: [
         {lock: 1, owner: 'task-id', lastWatermark: '09'},
       ],
     });
@@ -236,7 +236,7 @@ describe('change-streamer/service', () => {
 
     const logEntries = await changeDB<
       ChangeLogEntry[]
-    >`SELECT * FROM cdc_zxc."changeLog"`;
+    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
       'insert',
@@ -247,7 +247,7 @@ describe('change-streamer/service', () => {
       'commit',
     ]);
     await expectTables(changeDB, {
-      ['cdc_zxc.replicationState']: [
+      ['zoro_3/cdc.replicationState']: [
         {lock: 1, owner: 'task-id', lastWatermark: '0b'},
       ],
     });
@@ -308,7 +308,7 @@ describe('change-streamer/service', () => {
     // Only the changes for the committed (i.e. first) transaction are persisted.
     const logEntries = await changeDB<
       ChangeLogEntry[]
-    >`SELECT * FROM cdc_zxc."changeLog"`;
+    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
       'insert',
@@ -316,7 +316,7 @@ describe('change-streamer/service', () => {
       'commit',
     ]);
     await expectTables(changeDB, {
-      ['cdc_zxc.replicationState']: [
+      ['zoro_3/cdc.replicationState']: [
         {lock: 1, owner: 'task-id', lastWatermark: '09'},
       ],
     });
@@ -377,7 +377,7 @@ describe('change-streamer/service', () => {
     // Only the changes for the committed (i.e. first) transaction are persisted.
     const logEntries = await changeDB<
       ChangeLogEntry[]
-    >`SELECT * FROM cdc_zxc."changeLog"`;
+    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
       'insert',
@@ -391,7 +391,7 @@ describe('change-streamer/service', () => {
       'commit',
     ]);
     await expectTables(changeDB, {
-      ['cdc_zxc.replicationState']: [
+      ['zoro_3/cdc.replicationState']: [
         {lock: 1, owner: 'task-id', lastWatermark: '0c'},
       ],
     });
@@ -444,7 +444,7 @@ describe('change-streamer/service', () => {
 
     const logEntries = await changeDB<
       ChangeLogEntry[]
-    >`SELECT * FROM cdc_zxc."changeLog"`;
+    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
       'insert',
@@ -485,7 +485,7 @@ describe('change-streamer/service', () => {
       extra: 'info',
     });
     await expectTables(changeDB, {
-      ['cdc_zxc.replicationState']: [
+      ['zoro_3/cdc.replicationState']: [
         {lock: 1, owner: 'task-id', lastWatermark: '09'},
       ],
     });
@@ -494,13 +494,13 @@ describe('change-streamer/service', () => {
   test('change log cleanup', async () => {
     // Initialize the change log with entries that will be purged.
     await changeDB`
-      INSERT INTO cdc_zxc."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
-      INSERT INTO cdc_zxc."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
-      INSERT INTO cdc_zxc."changeLog" (watermark, pos, change) VALUES ('05', 0, '{"tag":"begin"}'::json);
-      INSERT INTO cdc_zxc."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"commit"}'::json);
-      INSERT INTO cdc_zxc."changeLog" (watermark, pos, change) VALUES ('07', 0, '{"tag":"begin"}'::json);
-      INSERT INTO cdc_zxc."changeLog" (watermark, pos, change) VALUES ('08', 0, '{"tag":"commit"}'::json);
-      UPDATE cdc_zxc."replicationState" SET "lastWatermark" = '08';
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('05', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('07', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('08', 0, '{"tag":"commit"}'::json);
+      UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '08';
     `.simple();
 
     // Start two subscribers: one at 06 and one at 04
@@ -521,7 +521,7 @@ describe('change-streamer/service', () => {
     });
 
     expect(
-      await changeDB`SELECT watermark FROM cdc_zxc."changeLog"`.values(),
+      await changeDB`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
     ).toEqual([['03'], ['04'], ['05'], ['06'], ['07'], ['08']]);
 
     expect(setTimeoutFn).toHaveBeenCalledTimes(1);
@@ -530,7 +530,7 @@ describe('change-streamer/service', () => {
     // The first purge should have deleted records before '04'.
     await (setTimeoutFn.mock.calls[0][0]() as unknown as Promise<void>);
     expect(
-      await changeDB`SELECT watermark FROM cdc_zxc."changeLog"`.values(),
+      await changeDB`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
     ).toEqual([['04'], ['05'], ['06'], ['07'], ['08']]);
 
     expect(setTimeoutFn).toHaveBeenCalledTimes(2);
@@ -538,7 +538,7 @@ describe('change-streamer/service', () => {
     // The second purge should be a noop, because sub2 is still at '04'.
     await (setTimeoutFn.mock.calls[1][0]() as unknown as Promise<void>);
     expect(
-      await changeDB`SELECT watermark FROM cdc_zxc."changeLog"`.values(),
+      await changeDB`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
     ).toEqual([['04'], ['05'], ['06'], ['07'], ['08']]);
 
     // And the timer should thus be rescheduled.
@@ -550,14 +550,14 @@ describe('change-streamer/service', () => {
         // a purge should successfully clear records before '06'
         await (setTimeoutFn.mock.calls[2][0]() as unknown as Promise<void>);
         expect(
-          await changeDB`SELECT watermark FROM cdc_zxc."changeLog"`.values(),
+          await changeDB`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
         ).toEqual([['06'], ['07'], ['08']]);
         break;
       }
     }
     // replicationState is unaffected
     await expectTables(changeDB, {
-      ['cdc_zxc.replicationState']: [
+      ['zoro_3/cdc.replicationState']: [
         {lock: 1, owner: 'task-id', lastWatermark: '08'},
       ],
     });
@@ -617,7 +617,7 @@ describe('change-streamer/service', () => {
     };
     const streamer = await initializeStreamer(
       lc,
-      SHARD_ID,
+      shard,
       'task-id',
       changeDB,
       source,
@@ -648,7 +648,7 @@ describe('change-streamer/service', () => {
     };
     let streamer = await initializeStreamer(
       lc,
-      SHARD_ID,
+      shard,
       'task-id',
       changeDB,
       source,
@@ -669,14 +669,14 @@ describe('change-streamer/service', () => {
     expect(await requests.dequeue()).toBe(REPLICA_VERSION);
 
     await changeDB`
-      INSERT INTO cdc_zxc."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
-      INSERT INTO cdc_zxc."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
-      UPDATE cdc_zxc."replicationState" SET "lastWatermark" = '04';
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
+      UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '04';
     `.simple();
 
     streamer = await initializeStreamer(
       lc,
-      SHARD_ID,
+      shard,
       'task-id',
       changeDB,
       source,
@@ -716,7 +716,7 @@ describe('change-streamer/service', () => {
     };
     const streamer = await initializeStreamer(
       lc,
-      SHARD_ID,
+      shard,
       'task-id',
       changeDB,
       source,
@@ -756,7 +756,7 @@ describe('change-streamer/service', () => {
     // Wait for the ack of the first commit.
     await expectAcks('0d');
     // Take over ownership.
-    await changeDB`UPDATE cdc_zxc."replicationState" SET owner = 'other-task'`;
+    await changeDB`UPDATE "zoro_3/cdc"."replicationState" SET owner = 'other-task'`;
 
     // The begin will read the new owner and eventually fail the transaction.
     changes.push(['begin', {tag: 'begin'}, {commitWatermark: '0f'}]);
@@ -768,7 +768,7 @@ describe('change-streamer/service', () => {
     // Only the first changes should be committed.
     const logEntries = await changeDB<
       ChangeLogEntry[]
-    >`SELECT * FROM cdc_zxc."changeLog"`;
+    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
       'insert',
@@ -776,7 +776,7 @@ describe('change-streamer/service', () => {
     ]);
 
     await expectTables(changeDB, {
-      ['cdc_zxc.replicationState']: [
+      ['zoro_3/cdc.replicationState']: [
         {lock: 1, owner: 'other-task', lastWatermark: '0d'},
       ],
     });
@@ -806,7 +806,7 @@ describe('change-streamer/service', () => {
     await sleep(10);
 
     // Take over ownership.
-    await changeDB`UPDATE cdc_zxc."replicationState" SET owner = 'other-task'`;
+    await changeDB`UPDATE "zoro_3/cdc"."replicationState" SET owner = 'other-task'`;
     // The commit should fail (with a SERIALIZATION error).
     changes.push(['commit', {tag: 'commit'}, {watermark: '0f'}]);
 
@@ -815,7 +815,7 @@ describe('change-streamer/service', () => {
     // Only the first changes should be committed.
     const logEntries = await changeDB<
       ChangeLogEntry[]
-    >`SELECT * FROM cdc_zxc."changeLog"`;
+    >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
       'begin',
       'insert',
@@ -823,7 +823,7 @@ describe('change-streamer/service', () => {
     ]);
 
     await expectTables(changeDB, {
-      ['cdc_zxc.replicationState']: [
+      ['zoro_3/cdc.replicationState']: [
         {lock: 1, owner: 'other-task', lastWatermark: '0d'},
       ],
     });
@@ -842,7 +842,7 @@ describe('change-streamer/service', () => {
     changes.push(['control', {tag: 'reset-required'}]);
     await streamerDone;
     await expect(
-      ensureReplicationConfig(lc, changeDB, replicaConfig, SHARD_ID, true),
+      ensureReplicationConfig(lc, changeDB, replicaConfig, shard, true),
     ).rejects.toThrow(AutoResetSignal);
   });
 
@@ -875,9 +875,9 @@ describe('change-streamer/service', () => {
     await streamerDone;
 
     // Nothing should be committed
-    expect(await changeDB`SELECT watermark FROM cdc_zxc."changeLog"`).toEqual(
-      [],
-    );
+    expect(
+      await changeDB`SELECT watermark FROM "zoro_3/cdc"."changeLog"`,
+    ).toEqual([]);
   });
 
   test('shutdown on unexpected storage error', async () => {
@@ -890,7 +890,7 @@ describe('change-streamer/service', () => {
     });
 
     // Insert unexpected data simulating that the stream and store are not in the expected state.
-    await changeDB`INSERT INTO cdc_zxc."changeLog" (watermark, pos, change)
+    await changeDB`INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change)
       VALUES ('05', 3, ${{conflicting: 'entry'}})`;
 
     changes.push(['begin', messages.begin(), {commitWatermark: '05'}]);
@@ -903,7 +903,7 @@ describe('change-streamer/service', () => {
 
     // Commit should not have succeeded
     expect(
-      await changeDB`SELECT watermark, pos FROM cdc_zxc."changeLog"`,
+      await changeDB`SELECT watermark, pos FROM "zoro_3/cdc"."changeLog"`,
     ).toEqual([{watermark: '05', pos: 3n}]);
   });
 });

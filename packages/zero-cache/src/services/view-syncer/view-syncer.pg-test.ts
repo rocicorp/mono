@@ -62,7 +62,9 @@ import {Snapshotter} from './snapshotter.ts';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
 
 const APP_ID = 'this_app';
-const SHARD_ID = '2';
+const SHARD_NUM = 2;
+const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
+
 const logConfig: LogConfig = {
   format: 'text',
   level: 'debug',
@@ -407,7 +409,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
   `);
 
   const cvrDB = await testDBs.create('view_syncer_service_test');
-  await initViewSyncerSchema(lc, cvrDB, APP_ID, SHARD_ID);
+  await initViewSyncerSchema(lc, cvrDB, SHARD);
 
   const replicator = fakeReplicator(lc, replica);
   const stateChanges: Subscription<ReplicaState> = Subscription.create();
@@ -417,16 +419,15 @@ async function setup(permissions: PermissionsConfig | undefined) {
   ).createClientGroupStorage(serviceID);
   const vs = new ViewSyncerService(
     lc,
-    APP_ID,
+    SHARD,
     TASK_ID,
     serviceID,
-    SHARD_ID,
     cvrDB,
     new PipelineDriver(
       lc.withContext('component', 'pipeline-driver'),
       logConfig,
-      new Snapshotter(lc, replicaDbFile.path, APP_ID),
-      APP_ID,
+      new Snapshotter(lc, replicaDbFile.path, SHARD),
+      SHARD,
       operatorStorage,
       'view-syncer.pg-test.ts',
     ),
@@ -588,8 +589,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       TASK_ID,
       serviceID,
       ON_FAILURE,
@@ -643,8 +643,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       TASK_ID,
       serviceID,
       ON_FAILURE,
@@ -2898,8 +2897,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       TASK_ID,
       serviceID,
       ON_FAILURE,
@@ -3062,8 +3060,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       TASK_ID,
       serviceID,
       ON_FAILURE,
@@ -3119,8 +3116,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       TASK_ID,
       serviceID,
       ON_FAILURE,

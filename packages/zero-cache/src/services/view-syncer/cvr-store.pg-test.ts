@@ -24,7 +24,8 @@ import {setupCVRTables, type RowsRow} from './schema/cvr.ts';
 import type {CVRVersion} from './schema/types.ts';
 
 const APP_ID = 'roze';
-const SHARD_ID = '1';
+const SHARD_NUM = 1;
+const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 
 describe('view-syncer/cvr-store', () => {
   const lc = createSilentLogContext();
@@ -43,7 +44,7 @@ describe('view-syncer/cvr-store', () => {
 
   beforeEach(async () => {
     db = await testDBs.create('view_syncer_cvr_schema');
-    await db.begin(tx => setupCVRTables(lc, tx, APP_ID, SHARD_ID));
+    await db.begin(tx => setupCVRTables(lc, tx, SHARD));
     await db.unsafe(`
     INSERT INTO "roze_1/cvr".instances ("clientGroupID", version, "lastActive", "replicaVersion")
       VALUES('${CVR_ID}', '03', '2024-09-04', '01');
@@ -84,8 +85,7 @@ describe('view-syncer/cvr-store', () => {
     store = new CVRStore(
       lc,
       db,
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       TASK_ID,
       CVR_ID,
       ON_FAILURE,

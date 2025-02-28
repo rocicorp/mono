@@ -34,7 +34,11 @@ describe('change-source/pg', () => {
 
   test('default publication, schema version setup', async () => {
     await db.begin(tx =>
-      setupTablesAndReplication(lc, tx, APP_ID, {id: '0', publications: []}),
+      setupTablesAndReplication(lc, tx, {
+        appID: APP_ID,
+        shardNum: 0,
+        publications: [],
+      }),
     );
 
     expect(await publications()).toEqual([
@@ -81,7 +85,11 @@ describe('change-source/pg', () => {
     `);
 
     await db.begin(tx =>
-      setupTablesAndReplication(lc, tx, APP_ID, {id: '0', publications: []}),
+      setupTablesAndReplication(lc, tx, {
+        appID: APP_ID,
+        shardNum: 0,
+        publications: [],
+      }),
     );
 
     expect(await publications()).toEqual([
@@ -116,47 +124,53 @@ describe('change-source/pg', () => {
     expect(index?.isReplicaIdentity).toBe(true);
   });
 
-  test('weird shard IDs', async () => {
+  test('numeric app ID', async () => {
     await db.begin(tx =>
-      setupTablesAndReplication(lc, tx, APP_ID, {
-        id: `'has quotes'`,
+      setupTablesAndReplication(lc, tx, {
+        appID: '1',
+        shardNum: 0,
         publications: [],
       }),
     );
 
     expect(await publications()).toEqual([
-      [`_zro_metadata_'has quotes'`, 'zro', 'schemaVersions', null],
-      [`_zro_metadata_'has quotes'`, 'zro', 'permissions', null],
-      [`_zro_metadata_'has quotes'`, `zro_'has quotes'`, 'clients', null],
-      [`_zro_public_'has quotes'`, null, null, null],
+      [`_1_metadata_0`, '1', 'schemaVersions', null],
+      [`_1_metadata_0`, '1', 'permissions', null],
+      [`_1_metadata_0`, `1_0`, 'clients', null],
+      [`_1_public_0`, null, null, null],
     ]);
 
     await expectTables(db, {
-      ['zro.permissions']: [{lock: true, permissions: null, hash: null}],
-      ['zro.schemaVersions']: [
+      ['1.permissions']: [{lock: true, permissions: null, hash: null}],
+      ['1.schemaVersions']: [
         {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
       ],
-      [`zro_'has quotes'.shardConfig`]: [
+      [`1_0.shardConfig`]: [
         {
           lock: true,
-          publications: [
-            `_zro_metadata_'has quotes'`,
-            `_zro_public_'has quotes'`,
-          ],
+          publications: [`_1_metadata_0`, `_1_public_0`],
           ddlDetection: true,
           initialSchema: null,
         },
       ],
-      [`zro_'has quotes'.clients`]: [],
+      [`1_0.clients`]: [],
     });
   });
 
   test('multiple shards', async () => {
     await db.begin(tx =>
-      setupTablesAndReplication(lc, tx, APP_ID, {id: '0', publications: []}),
+      setupTablesAndReplication(lc, tx, {
+        appID: APP_ID,
+        shardNum: 0,
+        publications: [],
+      }),
     );
     await db.begin(tx =>
-      setupTablesAndReplication(lc, tx, APP_ID, {id: '1', publications: []}),
+      setupTablesAndReplication(lc, tx, {
+        appID: APP_ID,
+        shardNum: 1,
+        publications: [],
+      }),
     );
 
     expect(await publications()).toEqual([
@@ -200,8 +214,9 @@ describe('change-source/pg', () => {
     let err;
     try {
       await db.begin(tx =>
-        setupTablesAndReplication(lc, tx, APP_ID, {
-          id: '0',
+        setupTablesAndReplication(lc, tx, {
+          appID: APP_ID,
+          shardNum: 0,
           publications: ['zero_invalid'],
         }),
       );
@@ -219,8 +234,9 @@ describe('change-source/pg', () => {
     let err;
     try {
       await db.begin(tx =>
-        setupTablesAndReplication(lc, tx, APP_ID, {
-          id: '0',
+        setupTablesAndReplication(lc, tx, {
+          appID: APP_ID,
+          shardNum: 0,
           publications: ['_foo_bar'],
         }),
       );
@@ -244,16 +260,17 @@ describe('change-source/pg', () => {
     CREATE PUBLICATION zero_bar FOR TABLE far.bar;`.simple();
 
     await db.begin(tx =>
-      setupTablesAndReplication(lc, tx, APP_ID, {
-        id: 'A',
+      setupTablesAndReplication(lc, tx, {
+        appID: APP_ID,
+        shardNum: 2,
         publications: ['zero_foo', 'zero_bar'],
       }),
     );
 
     expect(await publications()).toEqual([
-      [`_zro_metadata_A`, 'zro', 'schemaVersions', null],
-      [`_zro_metadata_A`, 'zro', 'permissions', null],
-      [`_zro_metadata_A`, `zro_A`, 'clients', null],
+      [`_zro_metadata_2`, 'zro', 'schemaVersions', null],
+      [`_zro_metadata_2`, 'zro', 'permissions', null],
+      [`_zro_metadata_2`, `zro_2`, 'clients', null],
       ['zero_bar', 'far', 'bar', null],
       ['zero_foo', 'public', 'foo', '(id > 1000)'],
     ]);
@@ -263,15 +280,15 @@ describe('change-source/pg', () => {
       ['zro.schemaVersions']: [
         {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
       ],
-      ['zro_A.shardConfig']: [
+      ['zro_2.shardConfig']: [
         {
           lock: true,
-          publications: ['_zro_metadata_A', 'zero_bar', 'zero_foo'],
+          publications: ['_zro_metadata_2', 'zero_bar', 'zero_foo'],
           ddlDetection: true,
           initialSchema: null,
         },
       ],
-      ['zro_A.clients']: [],
+      ['zro_2.clients']: [],
     });
   });
 
@@ -285,33 +302,34 @@ describe('change-source/pg', () => {
     `.simple();
 
     await db.begin(tx =>
-      setupTablesAndReplication(lc, tx, APP_ID, {
-        id: 'supaneon',
+      setupTablesAndReplication(lc, tx, {
+        appID: 'supaneon',
+        shardNum: 0,
         publications: ['zero_foo'],
       }),
     );
 
     expect(await publications()).toEqual([
-      [`_zro_metadata_supaneon`, 'zro', 'schemaVersions', null],
-      [`_zro_metadata_supaneon`, 'zro', 'permissions', null],
-      [`_zro_metadata_supaneon`, `zro_supaneon`, 'clients', null],
+      [`_supaneon_metadata_0`, 'supaneon', 'schemaVersions', null],
+      [`_supaneon_metadata_0`, 'supaneon', 'permissions', null],
+      [`_supaneon_metadata_0`, `supaneon_0`, 'clients', null],
       ['zero_foo', 'public', 'foo', null],
     ]);
 
     await expectTables(db, {
-      ['zro.permissions']: [{lock: true, permissions: null, hash: null}],
-      ['zro.schemaVersions']: [
+      ['supaneon.permissions']: [{lock: true, permissions: null, hash: null}],
+      ['supaneon.schemaVersions']: [
         {lock: true, minSupportedVersion: 1, maxSupportedVersion: 1},
       ],
-      ['zro_supaneon.shardConfig']: [
+      ['supaneon_0.shardConfig']: [
         {
           lock: true,
-          publications: ['_zro_metadata_supaneon', 'zero_foo'],
+          publications: ['_supaneon_metadata_0', 'zero_foo'],
           ddlDetection: false, // degraded mode
           initialSchema: null,
         },
       ],
-      ['zro_supaneon.clients']: [],
+      ['supaneon_0.clients']: [],
     });
 
     expect(logSink.messages[0]).toMatchInlineSnapshot(`
@@ -334,7 +352,11 @@ describe('change-source/pg', () => {
 
   test('permissions hash trigger', async () => {
     await db.begin(tx =>
-      setupTablesAndReplication(lc, tx, APP_ID, {id: '0', publications: []}),
+      setupTablesAndReplication(lc, tx, {
+        appID: APP_ID,
+        shardNum: 0,
+        publications: [],
+      }),
     );
     await db`UPDATE zro.permissions SET permissions = ${{tables: {foo: {}}}}`;
     expect(await db`SELECT hash FROM zro.permissions`).toMatchInlineSnapshot(`

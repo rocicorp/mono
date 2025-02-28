@@ -22,7 +22,7 @@ import {getPublicationInfo} from './schema/published.ts';
 import {UnsupportedTableSchemaError} from './schema/validation.ts';
 
 const APP_ID = 'zrohs';
-const SHARD_ID = 'initial_sync_test_id';
+const SHARD_NUM = 18;
 
 const ZERO_SCHEMA_VERSIONS_SPEC: PublishedTableSpec = {
   columns: {
@@ -54,7 +54,7 @@ const ZERO_SCHEMA_VERSIONS_SPEC: PublishedTableSpec = {
   oid: expect.any(Number),
   name: 'schemaVersions',
   primaryKey: ['lock'],
-  publications: {[`_${APP_ID}_metadata_${SHARD_ID}`]: {rowFilter: null}},
+  publications: {[`_${APP_ID}_metadata_${SHARD_NUM}`]: {rowFilter: null}},
   schema: APP_ID,
 } as const;
 
@@ -88,7 +88,7 @@ const ZERO_PERMISSIONS_SPEC: PublishedTableSpec = {
   oid: expect.any(Number),
   name: 'permissions',
   primaryKey: ['lock'],
-  publications: {[`_${APP_ID}_metadata_${SHARD_ID}`]: {rowFilter: null}},
+  publications: {[`_${APP_ID}_metadata_${SHARD_NUM}`]: {rowFilter: null}},
   schema: APP_ID,
 } as const;
 
@@ -130,8 +130,8 @@ const ZERO_CLIENTS_SPEC: PublishedTableSpec = {
   oid: expect.any(Number),
   name: 'clients',
   primaryKey: ['clientGroupID', 'clientID'],
-  schema: `${APP_ID}_${SHARD_ID}`,
-  publications: {[`_${APP_ID}_metadata_${SHARD_ID}`]: {rowFilter: null}},
+  schema: `${APP_ID}_${SHARD_NUM}`,
+  publications: {[`_${APP_ID}_metadata_${SHARD_NUM}`]: {rowFilter: null}},
 } as const;
 
 const REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC: LiteTableSpec = {
@@ -219,7 +219,7 @@ const REPLICATED_ZERO_CLIENTS_SPEC: LiteTableSpec = {
       dflt: null,
     },
   },
-  name: `${APP_ID}_${SHARD_ID}.clients`,
+  name: `${APP_ID}_${SHARD_NUM}.clients`,
 } as const;
 
 const WATERMARK_REGEX = /[0-9a-z]{4,}/;
@@ -242,12 +242,12 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     {
       name: 'empty DB',
       published: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
       },
       replicatedSchema: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
       },
@@ -272,13 +272,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             clientID: 'ASC',
           },
           name: 'clients_pkey',
-          schema: `${APP_ID}_initial_sync_test_id`,
+          schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
           unique: true,
         },
       ],
       replicatedData: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         [`${APP_ID}.schemaVersions`]: [
           {
             lock: 1n,
@@ -289,25 +289,25 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         ],
       },
       resultingPublications: [
-        `_${APP_ID}_metadata_${SHARD_ID}`,
-        `_${APP_ID}_public_${SHARD_ID}`,
+        `_${APP_ID}_metadata_${SHARD_NUM}`,
+        `_${APP_ID}_public_${SHARD_NUM}`,
       ],
     },
     {
       name: 'replication slot already exists',
       setupUpstreamQuery: `
-        SELECT * FROM pg_create_logical_replication_slot('${replicationSlot(
-          APP_ID,
-          SHARD_ID,
-        )}', 'pgoutput');
+        SELECT * FROM pg_create_logical_replication_slot('${replicationSlot({
+          appID: APP_ID,
+          shardNum: SHARD_NUM,
+        })}', 'pgoutput');
       `,
       published: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
       },
       replicatedSchema: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
       },
@@ -332,13 +332,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             clientID: 'ASC',
           },
           name: 'clients_pkey',
-          schema: `${APP_ID}_initial_sync_test_id`,
+          schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
           unique: true,
         },
       ],
       replicatedData: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         [`${APP_ID}.schemaVersions`]: [
           {
             lock: 1n,
@@ -349,8 +349,8 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         ],
       },
       resultingPublications: [
-        `_${APP_ID}_metadata_${SHARD_ID}`,
-        `_${APP_ID}_public_${SHARD_ID}`,
+        `_${APP_ID}_metadata_${SHARD_NUM}`,
+        `_${APP_ID}_public_${SHARD_NUM}`,
       ],
     },
     {
@@ -379,7 +379,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         );
       `,
       published: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.issues']: {
@@ -529,11 +529,11 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'issues',
           primaryKey: ['orgID', 'issueID'],
           schema: 'public',
-          publications: {[`_${APP_ID}_public_${SHARD_ID}`]: {rowFilter: null}},
+          publications: {[`_${APP_ID}_public_${SHARD_NUM}`]: {rowFilter: null}},
         },
       },
       replicatedSchema: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         ['issues']: {
           columns: {
             issueID: {
@@ -690,7 +690,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             clientID: 'ASC',
           },
           name: 'clients_pkey',
-          schema: `${APP_ID}_initial_sync_test_id`,
+          schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
           unique: true,
         },
@@ -742,7 +742,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         ],
       },
       replicatedData: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         issues: [
           {
             issueID: 123n,
@@ -809,8 +809,8 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         ],
       },
       resultingPublications: [
-        `_${APP_ID}_metadata_${SHARD_ID}`,
-        `_${APP_ID}_public_${SHARD_ID}`,
+        `_${APP_ID}_metadata_${SHARD_NUM}`,
+        `_${APP_ID}_public_${SHARD_NUM}`,
       ],
     },
     {
@@ -822,7 +822,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       `,
       requestedPublications: ['zero_custom'],
       published: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.users']: {
@@ -853,7 +853,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         },
       },
       replicatedSchema: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
         ['users']: {
@@ -912,7 +912,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             clientID: 'ASC',
           },
           name: 'clients_pkey',
-          schema: `${APP_ID}_initial_sync_test_id`,
+          schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
           unique: true,
         },
@@ -924,7 +924,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         ],
       },
       replicatedData: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         users: [
           {
             userID: 123n,
@@ -946,7 +946,10 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           },
         ],
       },
-      resultingPublications: [`_${APP_ID}_metadata_${SHARD_ID}`, 'zero_custom'],
+      resultingPublications: [
+        `_${APP_ID}_metadata_${SHARD_NUM}`,
+        'zero_custom',
+      ],
     },
     {
       name: 'existing partial filtered publication',
@@ -958,7 +961,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       `,
       requestedPublications: ['zero_custom', 'zero_custom2'],
       published: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.users']: {
@@ -992,7 +995,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         },
       },
       replicatedSchema: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
         ['users']: {
@@ -1051,7 +1054,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             clientID: 'ASC',
           },
           name: 'clients_pkey',
-          schema: `${APP_ID}_initial_sync_test_id`,
+          schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
           unique: true,
         },
@@ -1064,7 +1067,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         ],
       },
       replicatedData: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         users: [
           {
             userID: 456n,
@@ -1087,7 +1090,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         ],
       },
       resultingPublications: [
-        `_${APP_ID}_metadata_${SHARD_ID}`,
+        `_${APP_ID}_metadata_${SHARD_NUM}`,
         'zero_custom',
         'zero_custom2',
       ],
@@ -1105,7 +1108,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         CREATE INDEX ON issues ("orgID" DESC, "other");
       `,
       published: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.issues']: {
@@ -1147,11 +1150,11 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'issues',
           primaryKey: ['orgID', 'issueID'],
           schema: 'public',
-          publications: {[`_${APP_ID}_public_${SHARD_ID}`]: {rowFilter: null}},
+          publications: {[`_${APP_ID}_public_${SHARD_NUM}`]: {rowFilter: null}},
         },
       },
       replicatedSchema: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         [`${APP_ID}.schemaVersions`]: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
         ['issues']: {
           columns: {
@@ -1196,7 +1199,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       upstream: {},
       replicatedData: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         issues: [],
         [`${APP_ID}.schemaVersions`]: [
           {
@@ -1248,14 +1251,14 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             clientID: 'ASC',
           },
           name: 'clients_pkey',
-          schema: `${APP_ID}_initial_sync_test_id`,
+          schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
           unique: true,
         },
       ],
       resultingPublications: [
-        `_${APP_ID}_metadata_${SHARD_ID}`,
-        `_${APP_ID}_public_${SHARD_ID}`,
+        `_${APP_ID}_metadata_${SHARD_NUM}`,
+        `_${APP_ID}_public_${SHARD_NUM}`,
       ],
     },
     {
@@ -1266,7 +1269,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           FOR VALUES WITH (MODULUS 1, REMAINDER 0);
       `,
       published: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.giant']: {
@@ -1284,11 +1287,11 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'giant',
           primaryKey: ['id'],
           schema: 'public',
-          publications: {[`_${APP_ID}_public_${SHARD_ID}`]: {rowFilter: null}},
+          publications: {[`_${APP_ID}_public_${SHARD_NUM}`]: {rowFilter: null}},
         },
       },
       replicatedSchema: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
         ['giant']: {
@@ -1339,7 +1342,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             clientID: 'ASC',
           },
           name: 'clients_pkey',
-          schema: `${APP_ID}_initial_sync_test_id`,
+          schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
           unique: true,
         },
@@ -1348,7 +1351,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         ['giant_default']: [{id: 123}],
       },
       replicatedData: {
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         [`${APP_ID}.schemaVersions`]: [
           {
             lock: 1n,
@@ -1360,8 +1363,8 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         giant: [{id: 123n}],
       },
       resultingPublications: [
-        `_${APP_ID}_metadata_${SHARD_ID}`,
-        `_${APP_ID}_public_${SHARD_ID}`,
+        `_${APP_ID}_metadata_${SHARD_NUM}`,
+        `_${APP_ID}_public_${SHARD_NUM}`,
       ],
     },
   ];
@@ -1386,15 +1389,18 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       const lc = createSilentLogContext();
       await initialSync(
         lc,
-        APP_ID,
-        {id: SHARD_ID, publications: c.requestedPublications ?? []},
+        {
+          appID: APP_ID,
+          shardNum: SHARD_NUM,
+          publications: c.requestedPublications ?? [],
+        },
         replica,
         getConnectionURI(upstream),
         {tableCopyWorkers: 5, rowBatchSize: 10000},
       );
 
       const result = await upstream.unsafe(
-        `SELECT * FROM ${APP_ID}_${SHARD_ID}."shardConfig"`,
+        `SELECT * FROM ${APP_ID}_${SHARD_NUM}."shardConfig"`,
       );
       const tableSpecs = Object.entries(c.published)
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
@@ -1449,12 +1455,12 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       // Check replica state against the upstream slot.
       const slots = await upstream`
         SELECT slot_name as "slotName", confirmed_flush_lsn as lsn 
-          FROM pg_replication_slots WHERE slot_name = ${replicationSlot(
-            APP_ID,
-            SHARD_ID,
-          )}`;
+          FROM pg_replication_slots WHERE slot_name = ${replicationSlot({
+            appID: APP_ID,
+            shardNum: SHARD_NUM,
+          })}`;
       expect(slots[0]).toEqual({
-        slotName: replicationSlot(APP_ID, SHARD_ID),
+        slotName: replicationSlot({appID: APP_ID, shardNum: SHARD_NUM}),
         lsn: fromLexiVersion(replicaState.stateVersion),
       });
     });
@@ -1462,9 +1468,9 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
   test('resume initial sync with invalid table', async () => {
     const lc = createSilentLogContext();
-    const shardConfig = {id: SHARD_ID, publications: []};
+    const shardConfig = {appID: APP_ID, shardNum: SHARD_NUM, publications: []};
 
-    await initShardSchema(lc, upstream, APP_ID, shardConfig);
+    await initShardSchema(lc, upstream, shardConfig);
 
     // Shard should be setup to publish all "public" tables.
     // Now add an invalid table that becomes part of that publication.
@@ -1473,17 +1479,10 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
     let result;
     try {
-      await initialSync(
-        lc,
-        APP_ID,
-        shardConfig,
-        replica,
-        getConnectionURI(upstream),
-        {
-          tableCopyWorkers: 5,
-          rowBatchSize: 10000,
-        },
-      );
+      await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
+        tableCopyWorkers: 5,
+        rowBatchSize: 10000,
+      });
     } catch (e) {
       result = e;
     }
@@ -1495,14 +1494,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     'dashes-not-allowed',
     'spaces not allowed',
     'punctuation!',
-  ])('invalid shard ID: %s', async id => {
+  ])('invalid app ID: %s', async appID => {
     const lc = createSilentLogContext();
     let result;
     try {
       await initialSync(
         lc,
-        APP_ID,
-        {id, publications: []},
+        {appID, shardNum: 0, publications: []},
         replica,
         getConnectionURI(upstream),
         {tableCopyWorkers: 5, rowBatchSize: 10000},
@@ -1512,7 +1510,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     }
     expect(result).toBeInstanceOf(Error);
     expect(String(result)).toEqual(
-      'Error: A shard ID may only consist of lower-case letters, numbers, and the underscore character',
+      'Error: The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
   });
 });

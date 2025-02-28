@@ -5,34 +5,45 @@ import {
   type Migration,
 } from '../../../db/migration.ts';
 import type {PostgresDB, PostgresTransaction} from '../../../types/pg.ts';
+import {cdcSchema, type ShardID} from '../../../types/shards.ts';
 import {
-  cdcSchema,
   createReplicationStateTable,
   setupCDCTables,
   type ReplicationState,
 } from './tables.ts';
 
-async function migrateFromLegacySchema(
+async function migrateFromLegacySchemas(
   lc: LogContext,
   db: PostgresDB,
   newSchema: string,
+  ...legacy: string[]
 ) {
-  const result = await db`SELECT * FROM pg_namespace WHERE nspname = 'cdc'`;
-  if (result.length > 0) {
-    lc.info?.(`Migrating cdc to ${newSchema}`);
-    await db`ALTER SCHEMA cdc RENAME TO ${db(newSchema)}`;
+  const rows = await db<{nspname: string}[]>`
+    SELECT nspname FROM pg_namespace 
+      WHERE nspname IN ${db([newSchema, ...legacy])}`.values();
+  const names = rows.flat();
+  if (names.includes(newSchema)) {
+    return; // already migrated
+  }
+  for (const schema of legacy) {
+    if (names.includes(schema)) {
+      lc.info?.(`Migrating ${schema} to ${newSchema}`);
+      await db`ALTER SCHEMA ${db(schema)} RENAME TO ${db(newSchema)}`;
+      break;
+    }
   }
 }
+
 export async function initChangeStreamerSchema(
   log: LogContext,
   db: PostgresDB,
-  shardID: string,
+  shard: ShardID,
 ): Promise<void> {
-  const schema = cdcSchema(shardID);
-  await migrateFromLegacySchema(log, db, schema);
+  const schema = cdcSchema(shard);
+  await migrateFromLegacySchemas(log, db, schema, `cdc_${shard.appID}`, 'cdc');
 
   const setupMigration: Migration = {
-    migrateSchema: (lc, tx) => setupCDCTables(lc, tx, shardID),
+    migrateSchema: (lc, tx) => setupCDCTables(lc, tx, shard),
     minSafeVersion: 1,
   };
 
@@ -43,11 +54,11 @@ export async function initChangeStreamerSchema(
 
   const migrateV2ToV3 = {
     migrateSchema: async (_: LogContext, db: PostgresTransaction) => {
-      await db.unsafe(createReplicationStateTable(shardID));
+      await db.unsafe(createReplicationStateTable(shard));
     },
 
     migrateData: async (_: LogContext, db: PostgresTransaction) => {
-      const lastWatermark = await getLastWatermarkV2(db, shardID);
+      const lastWatermark = await getLastWatermarkV2(db, shard);
       const replicationState: Partial<ReplicationState> = {lastWatermark};
       await db`
       TRUNCATE TABLE ${db(schema)}."replicationState"`;
@@ -82,9 +93,9 @@ export async function initChangeStreamerSchema(
 
 export async function getLastWatermarkV2(
   db: PostgresDB,
-  shardID: string,
+  shard: ShardID,
 ): Promise<string> {
-  const schema = cdcSchema(shardID);
+  const schema = cdcSchema(shard);
   const [{max}] = await db<{max: string | null}[]>`
     SELECT MAX(watermark) as max FROM ${db(schema)}."changeLog"`;
   if (max !== null) {

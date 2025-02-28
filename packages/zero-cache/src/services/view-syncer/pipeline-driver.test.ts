@@ -42,8 +42,8 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines = new PipelineDriver(
       lc,
       logConfig,
-      new Snapshotter(lc, dbFile.path, 'zeroz'),
-      'zeroz',
+      new Snapshotter(lc, dbFile.path, {appID: 'zeroz'}),
+      {appID: 'zeroz'},
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
       'pipeline-driver.test.ts',
     );

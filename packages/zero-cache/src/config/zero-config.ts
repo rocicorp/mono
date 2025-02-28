@@ -7,51 +7,85 @@ import {parseOptions, type Config} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {runtimeDebugFlags} from '../../../zqlite/src/runtime-debug.ts';
 import {singleProcessMode} from '../types/processes.ts';
+import {
+  ALLOWED_APP_ID_CHARACTERS,
+  INVALID_APP_ID_MESSAGE,
+} from '../types/shards.ts';
 export type {LogConfig} from '../../../otel/src/log-options.ts';
 
-/**
- * Configures the view of the upstream database replicated to this zero-cache.
- */
-const shardOptions = {
+export const appOptions = {
   id: {
-    type: v.string().default('0'),
+    type: v
+      .string()
+      .default('zero')
+      .assert(id => ALLOWED_APP_ID_CHARACTERS.test(id), INVALID_APP_ID_MESSAGE),
     desc: [
-      'Unique identifier for the zero-cache shard.',
+      'Unique identifier for the app.',
       '',
-      'A shard presents a logical partition of the upstream database, delineated',
-      'by a set of publications and managed by a dedicated replication slot.',
+      'Multiple zero-cache apps can run on a single upstream database, each of which',
+      'is isolated from the others, with its own permissions, sharding (future feature),',
+      'and change/cvr databases.',
       '',
-      `A shard's zero {bold clients} table and shard-internal functions are stored in`,
-      `the {bold zero_\\{id\\}} schema in the upstream database.`,
+      'The metadata of an app is stored in an upstream schema with the same name,',
+      'e.g. "zero", and the metadata for each app shard, e.g. client and mutation',
+      'ids, is stored in the "\\{app-id\\}_\\{#\\}" schema. (Currently there is only a single',
+      '"0" shard, but this will change with sharding).',
       '',
-      'Due to constraints on replication slot names, a shard ID may only consist of',
+      'The CVR and Change data are managed in schemas named "\\{app-id\\}_\\{shard-num\\}/cvr"',
+      'and "\\{app-id\\}_\\{shard-num\\}/cdc", respectively, allowing multiple apps and shards',
+      'to share the same database instance (e.g. a Postgres "cluster") for CVR and Change management.',
+      '',
+      'Due to constraints on replication slot names, an App ID may only consist of',
       'lower-case letters, numbers, and the underscore character.',
     ],
-    allCaps: true, // so that the flag is --shardID
   },
 
   publications: {
     type: v.array(v.string()).optional(() => []),
     desc: [
-      `Postgres {bold PUBLICATION}s that define the partition of the upstream`,
-      `replicated to the shard. Publication names may not begin with an underscore,`,
+      `Postgres {bold PUBLICATION}s that define the tables and columns to`,
+      `replicate. Publication names may not begin with an underscore,`,
       `as zero reserves that prefix for internal use.`,
       ``,
       `If unspecified, zero-cache will create and use an internal publication that`,
       `publishes all tables in the {bold public} schema, i.e.:`,
       ``,
-      `CREATE PUBLICATION _zero_public_0 FOR TABLES IN SCHEMA public;`,
+      `CREATE PUBLICATION _\\{app-id\\}_public_0 FOR TABLES IN SCHEMA public;`,
       ``,
-      `Note that once a shard has begun syncing data, this list of publications`,
+      `Note that once an app has begun syncing data, this list of publications`,
       `cannot be changed, and zero-cache will refuse to start if a specified`,
       `value differs from what was originally synced.`,
       ``,
-      `To use a different set of publications, a new shard should be created.`,
+      `To use a different set of publications, a new app should be created.`,
     ],
   },
 };
 
-export type ShardConfig = Config<typeof shardOptions>;
+export const shardOptions = {
+  id: {
+    type: v
+      .string()
+      .assert(() => {
+        throw new Error(
+          `ZERO_SHARD_ID is deprecated. Please use ZERO_APP_ID instead.`,
+          // TODO: Link to release / migration notes?
+        );
+      })
+      .optional(),
+    hidden: true,
+  },
+
+  num: {
+    type: v.number().default(0),
+    desc: [
+      `The shard number (from 0 to NUM_SHARDS) of the App. zero will eventually`,
+      `support data sharding as a first-class primitive; until then, deploying`,
+      `multiple shard-nums creates functionally identical shards. Until sharding is`,
+      `actually meaningful, this flag is hidden but available for testing.`,
+    ],
+    hidden: true,
+  },
+};
 
 const perUserMutationLimit = {
   max: {
@@ -214,6 +248,8 @@ export const zeroOptions = {
   },
 
   log: logOptions,
+
+  app: appOptions,
 
   shard: shardOptions,
 

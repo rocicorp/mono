@@ -1,5 +1,6 @@
 import {literal as lit} from 'pg-format';
 import * as v from '../../../../../../shared/src/valita.ts';
+import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
 import {
   indexDefinitionsQuery,
@@ -120,9 +121,10 @@ export const replicationEventSchema = v.union(
 
 export type ReplicationEvent = v.Infer<typeof replicationEventSchema>;
 
-// Creates a function that appends `_SHARD_ID` to the input.
-export function append(shardID: string) {
-  return (name: string) => id(name + '_' + shardID);
+// Creates a function that appends `_{shard-num}` to the input and
+// quotes the result to be a valid identifier.
+function append(shardNum: number) {
+  return (name: string) => id(name + '_' + String(shardNum));
 }
 
 /**
@@ -142,12 +144,9 @@ export function append(shardID: string) {
  * Instead, we opt for the simplicity and isolation of having each shard
  * completely own (and maintain) the entirety of its trigger/function stack.
  */
-function createEventFunctionStatements(
-  appID: string,
-  shardID: string,
-  publications: string[],
-) {
-  const schema = append(shardID)(appID); // e.g. "{APP_ID}_{SHARD_ID}"
+function createEventFunctionStatements(shard: ShardConfig) {
+  const {appID, shardNum, publications} = shard;
+  const schema = id(upstreamSchema(shard)); // e.g. "{APP_ID}_{SHARD_ID}"
   return `
 CREATE SCHEMA IF NOT EXISTS ${schema};
 
@@ -165,7 +164,7 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION ${schema}.notice_ignore(object_id TEXT)
 RETURNS void AS $$
 BEGIN
-  RAISE NOTICE 'zero(%) ignoring %', ${lit(shardID)}, object_id;
+  RAISE NOTICE 'zero(%) ignoring %', ${lit(shardNum)}, object_id;
 END
 $$ LANGUAGE plpgsql;
 
@@ -201,7 +200,9 @@ BEGIN
     'context', ${schema}.get_trigger_context()
   ) INTO message;
 
-  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, message);
+  PERFORM pg_logical_emit_message(true, ${lit(
+    `${appID}/${shardNum}`,
+  )}, message);
 END
 $$ LANGUAGE plpgsql;
 
@@ -299,7 +300,9 @@ BEGIN
     'context', ${schema}.get_trigger_context()
   ) INTO message;
 
-  PERFORM pg_logical_emit_message(true, ${lit('zero/' + shardID)}, message);
+  PERFORM pg_logical_emit_message(true, ${lit(
+    `${appID}/${shardNum}`,
+  )}, message);
 END
 $$ LANGUAGE plpgsql;
 `;
@@ -315,23 +318,21 @@ export const TAGS = [
   'ALTER PUBLICATION',
 ] as const;
 
-export function createEventTriggerStatements(
-  appID: string,
-  shardID: string,
-  publications: string[],
-) {
+export function createEventTriggerStatements(shard: ShardConfig) {
   // Unlike functions, which are namespaced in shard-specific schemas,
-  // EVENT TRIGGER names are in the global namespace and instead have the shardID appended.
-  const sharded = append(shardID);
-  const schema = sharded(appID);
+  // EVENT TRIGGER names are in the global namespace and thus must include
+  // the appID and shardNum.
+  const {appID, shardNum} = shard;
+  const sharded = append(shardNum);
+  const schema = id(upstreamSchema(shard));
 
   const triggers = [
-    createEventFunctionStatements(appID, shardID, publications),
+    dropEventTriggerStatements(shard.appID, shard.shardNum),
+    createEventFunctionStatements(shard),
   ];
 
   // A single ddl_command_start trigger covering all relevant tags.
   triggers.push(`
-DROP EVENT TRIGGER IF EXISTS ${sharded(`${appID}_ddl_start`)};
 CREATE EVENT TRIGGER ${sharded(`${appID}_ddl_start`)}
   ON ddl_command_start
   WHEN TAG IN (${lit(TAGS)})
@@ -349,8 +350,6 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
-
-DROP EVENT TRIGGER IF EXISTS ${sharded(`${appID}_${tagID}`)};
 CREATE EVENT TRIGGER ${sharded(`${appID}_${tagID}`)}
   ON ddl_command_end
   WHEN TAG IN (${lit(tag)})
@@ -358,4 +357,24 @@ CREATE EVENT TRIGGER ${sharded(`${appID}_${tagID}`)}
 `);
   }
   return triggers.join('');
+}
+
+export function dropEventTriggerStatements(
+  appID: string,
+  shardID: string | number,
+) {
+  const stmts: string[] = [];
+  // A single ddl_command_start trigger covering all relevant tags.
+  stmts.push(`
+    DROP EVENT TRIGGER IF EXISTS ${id(`${appID}_ddl_start_${shardID}`)};
+  `);
+
+  // A per-tag ddl_command_end trigger that dispatches to ${schema}.emit_ddl_end(tag)
+  for (const tag of TAGS) {
+    const tagID = tag.toLowerCase().replace(' ', '_');
+    stmts.push(`
+      DROP EVENT TRIGGER IF EXISTS ${id(`${appID}_${tagID}_${shardID}`)};
+    `);
+  }
+  return stmts.join('');
 }

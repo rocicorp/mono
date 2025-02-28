@@ -10,12 +10,12 @@ import type {PostgresDB} from '../../../../types/pg.ts';
 import {initShardSchema, updateShardSchema} from './init.ts';
 
 const APP_ID = 'zappz';
-const SHARD_ID = 'shard_schema_test_id';
+const SHARD_NUM = 23;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 4,
-  schemaVersion: 4,
+  dataVersion: 5,
+  schemaVersion: 5,
   minSafeVersion: 1,
   lock: 'v',
 } as const;
@@ -46,19 +46,16 @@ describe('change-streamer/pg/schema/init', () => {
     {
       name: 'initial db',
       upstreamPostState: {
-        [`${APP_ID}_${SHARD_ID}.shardConfig`]: [
+        [`${APP_ID}_${SHARD_NUM}.shardConfig`]: [
           {
             lock: true,
-            publications: [
-              `_${APP_ID}_metadata_shard_schema_test_id`,
-              `_${APP_ID}_public_shard_schema_test_id`,
-            ],
+            publications: [`_${APP_ID}_metadata_23`, `_${APP_ID}_public_23`],
             ddlDetection: true,
             initialSchema: null,
           },
         ],
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
-        [`${APP_ID}_${SHARD_ID}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
         [`${APP_ID}.schemaVersions`]: [
           {minSupportedVersion: 1, maxSupportedVersion: 1},
         ],
@@ -72,19 +69,16 @@ describe('change-streamer/pg/schema/init', () => {
       `,
       requestedPublications: [`${APP_ID}_foo`],
       upstreamPostState: {
-        [`${APP_ID}_${SHARD_ID}.shardConfig`]: [
+        [`${APP_ID}_${SHARD_NUM}.shardConfig`]: [
           {
             lock: true,
-            publications: [
-              `_${APP_ID}_metadata_shard_schema_test_id`,
-              `${APP_ID}_foo`,
-            ],
+            publications: [`_${APP_ID}_metadata_23`, `${APP_ID}_foo`],
             ddlDetection: true,
             initialSchema: null,
           },
         ],
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
-        [`${APP_ID}_${SHARD_ID}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
         [`${APP_ID}.schemaVersions`]: [
           {minSupportedVersion: 1, maxSupportedVersion: 1},
         ],
@@ -100,19 +94,16 @@ describe('change-streamer/pg/schema/init', () => {
             ("lock", "minSupportedVersion", "maxSupportedVersion") VALUES (true, 2, 3);
         `,
       upstreamPostState: {
-        [`${APP_ID}_${SHARD_ID}.shardConfig`]: [
+        [`${APP_ID}_${SHARD_NUM}.shardConfig`]: [
           {
             lock: true,
-            publications: [
-              `_${APP_ID}_metadata_shard_schema_test_id`,
-              `_${APP_ID}_public_shard_schema_test_id`,
-            ],
+            publications: [`_${APP_ID}_metadata_23`, `_${APP_ID}_public_23`],
             ddlDetection: true,
             initialSchema: null,
           },
         ],
-        [`${APP_ID}_${SHARD_ID}.clients`]: [],
-        [`${APP_ID}_${SHARD_ID}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
         [`${APP_ID}.schemaVersions`]: [
           {minSupportedVersion: 2, maxSupportedVersion: 3},
         ],
@@ -125,17 +116,19 @@ describe('change-streamer/pg/schema/init', () => {
       await initDB(upstream, c.upstreamSetup, c.upstreamPreState);
 
       if (c.existingVersionHistory) {
-        const schema = `${APP_ID}_${SHARD_ID}`;
+        const schema = `${APP_ID}_${SHARD_NUM}`;
         await createVersionHistoryTable(upstream, schema);
         await upstream`INSERT INTO ${upstream(schema)}."versionHistory"
           ${upstream(c.existingVersionHistory)}`;
-        await updateShardSchema(lc, upstream, APP_ID, {
-          id: SHARD_ID,
+        await updateShardSchema(lc, upstream, {
+          appID: APP_ID,
+          shardNum: SHARD_NUM,
           publications: c.requestedPublications ?? [],
         });
       } else {
-        await initShardSchema(lc, upstream, APP_ID, {
-          id: SHARD_ID,
+        await initShardSchema(lc, upstream, {
+          appID: APP_ID,
+          shardNum: SHARD_NUM,
           publications: c.requestedPublications ?? [],
         });
       }

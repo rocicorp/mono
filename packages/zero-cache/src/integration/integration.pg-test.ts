@@ -105,13 +105,13 @@ const INITIAL_PG_SETUP = `
 
       CREATE PUBLICATION zero_all FOR TABLE foo, TABLE boo.far, TABLE nopk;
 
-      CREATE SCHEMA zero;
+      CREATE SCHEMA "123";
 
-      CREATE TABLE zero.permissions (
+      CREATE TABLE "123".permissions (
         permissions JSON,
         hash TEXT
       );
-      INSERT INTO zero.permissions (permissions, hash) VALUES ('${JSON.stringify(
+      INSERT INTO "123".permissions (permissions, hash) VALUES ('${JSON.stringify(
         permissions,
       )}', '${h128(JSON.stringify(permissions)).toString(16)}');
       `;
@@ -246,7 +246,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-table',
       spec: {
-        schema: 'zero_0',
+        schema: '123_0',
         name: 'clients',
         primaryKey: ['clientGroupID', 'clientID'],
         columns: {
@@ -263,8 +263,8 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-index',
       spec: {
-        name: 'zero_clients_key',
-        schema: 'zero_0',
+        name: '123_clients_key',
+        schema: '123_0',
         tableName: 'clients',
         columns: {
           clientGroupID: 'ASC',
@@ -279,7 +279,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-table',
       spec: {
-        schema: 'zero',
+        schema: '123',
         name: 'schemaVersions',
         primaryKey: ['lock'],
         columns: {
@@ -295,8 +295,8 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-index',
       spec: {
-        name: 'zero_schemaVersions_key',
-        schema: 'zero',
+        name: '123_schemaVersions_key',
+        schema: '123',
         tableName: 'schemaVersions',
         columns: {lock: 'ASC'},
         unique: true,
@@ -308,7 +308,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-table',
       spec: {
-        schema: 'zero',
+        schema: '123',
         name: 'permissions',
         primaryKey: ['lock'],
         columns: {
@@ -324,8 +324,8 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-index',
       spec: {
-        name: 'zero_permissions_key',
-        schema: 'zero',
+        name: '123_permissions_key',
+        schema: '123',
         tableName: 'permissions',
         columns: {lock: 'ASC'},
         unique: true,
@@ -337,7 +337,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'insert',
       relation: {
-        schema: 'zero',
+        schema: '123',
         name: 'permissions',
         keyColumns: ['lock'],
       },
@@ -353,7 +353,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'insert',
       relation: {
-        schema: 'zero',
+        schema: '123',
         name: 'schemaVersions',
         keyColumns: ['lock'],
       },
@@ -438,7 +438,8 @@ describe('integration', {timeout: 30000}, () => {
       ['ZERO_UPSTREAM_MAX_CONNS']: '3',
       ['ZERO_CVR_DB']: getConnectionURI(cvrDB),
       ['ZERO_CVR_MAX_CONNS']: '3',
-      ['ZERO_SHARD_PUBLICATIONS']: 'zero_all',
+      ['ZERO_APP_ID']: '123', // Verify that a numeric App ID works end-to-end
+      ['ZERO_APP_PUBLICATIONS']: 'zero_all',
       ['ZERO_CHANGE_DB']: getConnectionURI(changeDB),
       ['ZERO_REPLICA_FILE']: replicaDbFile.path,
       ['ZERO_NUM_SYNC_WORKERS']: '1',

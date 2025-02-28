@@ -14,7 +14,8 @@ import {Subscription} from '../../types/subscription.ts';
 import {ClientHandler, ensureSafeJSON, type Patch} from './client-handler.ts';
 
 const APP_ID = 'zapp';
-const SHARD_ID = 'xyz';
+const SHARD_NUM = 6;
+const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 
 describe('view-syncer/client-handler', () => {
   const lc = createSilentLogContext();
@@ -38,8 +39,7 @@ describe('view-syncer/client-handler', () => {
       'g1',
       'id1',
       'ws1',
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       '121',
       PROTOCOL_VERSION,
       schemaVersion,
@@ -128,8 +128,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id1',
         'ws1',
-        APP_ID,
-        SHARD_ID,
+        SHARD,
         '121',
         PROTOCOL_VERSION,
         schemaVersion,
@@ -141,8 +140,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id2',
         'ws2',
-        APP_ID,
-        SHARD_ID,
+        SHARD,
         '120:01',
         PROTOCOL_VERSION,
         schemaVersion,
@@ -154,8 +152,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id3',
         'ws3',
-        APP_ID,
-        SHARD_ID,
+        SHARD,
         '11z',
         PROTOCOL_VERSION,
         schemaVersion,
@@ -184,7 +181,7 @@ describe('view-syncer/client-handler', () => {
           op: 'put',
           id: {
             schema: '',
-            table: 'zapp_xyz.clients',
+            table: 'zapp_6.clients',
             rowKey: {clientID: 'bar'},
           },
           contents: {
@@ -225,7 +222,7 @@ describe('view-syncer/client-handler', () => {
           op: 'put',
           id: {
             schema: '',
-            table: 'zapp_xyz.clients',
+            table: 'zapp_6.clients',
             rowKey: {clientID: 'foo'},
           },
           contents: {
@@ -259,7 +256,7 @@ describe('view-syncer/client-handler', () => {
           op: 'put',
           id: {
             schema: '',
-            table: 'zapp_xyz.clients',
+            table: 'zapp_6.clients',
             rowKey: {clientID: 'foo'},
           },
           contents: {
@@ -401,8 +398,7 @@ describe('view-syncer/client-handler', () => {
       'g1',
       'id1',
       'ws1',
-      APP_ID,
-      SHARD_ID,
+      SHARD,
       '120',
       PROTOCOL_VERSION,
       schemaVersion,
@@ -443,7 +439,7 @@ describe('view-syncer/client-handler', () => {
       {
         type: 'row',
         op: 'put',
-        id: {schema: '', table: 'zapp_xyz.clients', rowKey: {clientID: 'boo'}},
+        id: {schema: '', table: 'zapp_6.clients', rowKey: {clientID: 'boo'}},
         contents: {
           clientGroupID: 'g1',
           clientID: 'boo',
@@ -465,8 +461,7 @@ describe('view-syncer/client-handler', () => {
         'g1',
         'id1',
         'ws1',
-        APP_ID,
-        SHARD_ID,
+        SHARD,
         '121',
         PROTOCOL_VERSION,
         schemaVersion,

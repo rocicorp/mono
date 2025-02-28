@@ -15,11 +15,13 @@ describe('change-streamer/schema/tables', () => {
   const lc = createSilentLogContext();
   let db: PostgresDB;
 
-  const SHARD_ID = 'oiu';
+  const APP_ID = 'rezo';
+  const SHARD_NUM = 8;
+  const shard = {appID: APP_ID, shardNum: SHARD_NUM};
 
   beforeEach(async () => {
     db = await testDBs.create('change_streamer_schema_tables');
-    await db.begin(tx => setupCDCTables(lc, tx, SHARD_ID));
+    await db.begin(tx => setupCDCTables(lc, tx, shard));
   });
 
   afterEach(async () => {
@@ -37,12 +39,12 @@ describe('change-streamer/schema/tables', () => {
         replicaVersion: '183',
         publications: ['zero_data', 'zero_metadata'],
       },
-      SHARD_ID,
+      shard,
       true,
     );
 
     await expectTables(db, {
-      ['cdc_oiu.replicationConfig']: [
+      ['rezo_8/cdc.replicationConfig']: [
         {
           replicaVersion: '183',
           publications: ['zero_data', 'zero_metadata'],
@@ -50,20 +52,20 @@ describe('change-streamer/schema/tables', () => {
           lock: 1,
         },
       ],
-      ['cdc_oiu.replicationState']: [
+      ['rezo_8/cdc.replicationState']: [
         {
           lastWatermark: '183',
           owner: null,
           lock: 1,
         },
       ],
-      ['cdc_oiu.changeLog']: [],
+      ['rezo_8/cdc.changeLog']: [],
     });
 
     await db`
-    INSERT INTO cdc_oiu."changeLog" (watermark, pos, change)
+    INSERT INTO "rezo_8/cdc"."changeLog" (watermark, pos, change)
         values ('184', 1, JSONB('{"foo":"bar"}'));
-    UPDATE cdc_oiu."replicationState" 
+    UPDATE "rezo_8/cdc"."replicationState" 
         SET "lastWatermark" = '184', owner = 'my-task';
     `.simple();
 
@@ -75,12 +77,12 @@ describe('change-streamer/schema/tables', () => {
         replicaVersion: '183',
         publications: ['zero_metadata', 'zero_data'],
       },
-      SHARD_ID,
+      shard,
       true,
     );
 
     await expectTables(db, {
-      ['cdc_oiu.replicationConfig']: [
+      ['rezo_8/cdc.replicationConfig']: [
         {
           replicaVersion: '183',
           publications: ['zero_data', 'zero_metadata'],
@@ -88,14 +90,14 @@ describe('change-streamer/schema/tables', () => {
           lock: 1,
         },
       ],
-      ['cdc_oiu.replicationState']: [
+      ['rezo_8/cdc.replicationState']: [
         {
           lastWatermark: '184',
           owner: 'my-task',
           lock: 1,
         },
       ],
-      ['cdc_oiu.changeLog']: [
+      ['rezo_8/cdc.changeLog']: [
         {
           watermark: '184',
           pos: 1n,
@@ -105,9 +107,9 @@ describe('change-streamer/schema/tables', () => {
       ],
     });
 
-    await markResetRequired(db, SHARD_ID);
+    await markResetRequired(db, shard);
     await expectTables(db, {
-      ['cdc_oiu.replicationConfig']: [
+      ['rezo_8/cdc.replicationConfig']: [
         {
           replicaVersion: '183',
           publications: ['zero_data', 'zero_metadata'],
@@ -115,7 +117,7 @@ describe('change-streamer/schema/tables', () => {
           lock: 1,
         },
       ],
-      ['cdc_oiu.replicationState']: [
+      ['rezo_8/cdc.replicationState']: [
         {
           lastWatermark: '184',
           owner: 'my-task',
@@ -132,7 +134,7 @@ describe('change-streamer/schema/tables', () => {
         replicaVersion: '183',
         publications: ['zero_metadata', 'zero_data'],
       },
-      SHARD_ID,
+      shard,
       false,
     );
 
@@ -145,7 +147,7 @@ describe('change-streamer/schema/tables', () => {
           replicaVersion: '183',
           publications: ['zero_metadata', 'zero_data'],
         },
-        SHARD_ID,
+        shard,
         true,
       ),
     ).rejects.toThrow(AutoResetSignal);
@@ -158,12 +160,12 @@ describe('change-streamer/schema/tables', () => {
         replicaVersion: '1g8',
         publications: ['zero_data', 'zero_metadata'],
       },
-      SHARD_ID,
+      shard,
       true,
     );
 
     await expectTables(db, {
-      ['cdc_oiu.replicationConfig']: [
+      ['rezo_8/cdc.replicationConfig']: [
         {
           replicaVersion: '1g8',
           publications: ['zero_data', 'zero_metadata'],
@@ -171,14 +173,14 @@ describe('change-streamer/schema/tables', () => {
           lock: 1,
         },
       ],
-      ['cdc_oiu.replicationState']: [
+      ['rezo_8/cdc.replicationState']: [
         {
           lastWatermark: '1g8',
           owner: null,
           lock: 1,
         },
       ],
-      ['cdc_oiu.changeLog']: [],
+      ['rezo_8/cdc.changeLog']: [],
     });
   });
 });

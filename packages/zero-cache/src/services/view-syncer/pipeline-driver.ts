@@ -23,6 +23,7 @@ import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../db/specs.ts';
 import type {RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
+import type {AppID} from '../../types/shards.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import type {ClientGroupStorage} from './database-storage.ts';
 import {Snapshotter, type SnapshotDiff} from './snapshotter.ts';
@@ -79,7 +80,7 @@ export class PipelineDriver {
     lc: LogContext,
     logConfig: LogConfig,
     snapshotter: Snapshotter,
-    appID: string,
+    {appID}: AppID,
     storage: ClientGroupStorage,
     clientGroupID: string,
   ) {

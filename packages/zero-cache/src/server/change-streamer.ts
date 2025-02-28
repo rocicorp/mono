@@ -16,6 +16,7 @@ import {
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
+import {getShardConfig} from '../types/shards.ts';
 import {createLogContext} from './logging.ts';
 
 export default async function runWorker(
@@ -28,7 +29,6 @@ export default async function runWorker(
     changeStreamerPort: port = config.port + 1,
     upstream,
     change,
-    shard,
     replicaFile,
     initialSync,
   } = config;
@@ -46,7 +46,8 @@ export default async function runWorker(
   );
 
   const {autoReset} = config;
-  const appID = 'zero'; // TODO: --app-id
+  const shard = getShardConfig(config);
+
   let changeStreamer: ChangeStreamerService | undefined;
 
   for (const first of [true, false]) {
@@ -57,7 +58,6 @@ export default async function runWorker(
           ? await initializePostgresChangeSource(
               lc,
               upstream.db,
-              appID,
               shard,
               replicaFile,
               initialSync,
@@ -65,14 +65,13 @@ export default async function runWorker(
           : await initializeCustomChangeSource(
               lc,
               upstream.db,
-              appID,
               shard,
               replicaFile,
             );
 
       changeStreamer = await initializeStreamer(
         lc,
-        shard.id,
+        shard,
         must(taskID, `main must set --task-id`),
         changeDB,
         changeSource,

@@ -21,7 +21,7 @@ test('parse options', () => {
                 ['ZERO_REPLICA_FILE']: 'tenboo.db',
                 ['ZERO_CVR_DB']: 'foo',
                 ['ZERO_CHANGE_DB']: 'foo',
-                ['ZERO_SHARD_ID']: 'foo',
+                ['ZERO_APP_ID']: 'foo',
               },
             },
             {
@@ -31,7 +31,7 @@ test('parse options', () => {
                 ['ZERO_REPLICA_FILE']: 'tenbar.db',
                 ['ZERO_CVR_DB']: 'bar',
                 ['ZERO_CHANGE_DB']: 'bar',
-                ['ZERO_SHARD_ID']: 'bar',
+                ['ZERO_APP_ID']: 'bar',
               },
             },
             {
@@ -42,7 +42,7 @@ test('parse options', () => {
                 ['ZERO_UPSTREAM_DB']: 'overridden',
                 ['ZERO_CVR_DB']: 'baz',
                 ['ZERO_CHANGE_DB']: 'baz',
-                ['ZERO_SHARD_ID']: 'foo',
+                ['ZERO_APP_ID']: 'foo',
               },
             },
           ],
@@ -52,6 +52,10 @@ test('parse options', () => {
   ).toMatchInlineSnapshot(`
     {
       "config": {
+        "app": {
+          "id": "zero",
+          "publications": [],
+        },
         "auth": {},
         "autoReset": true,
         "change": {
@@ -84,16 +88,15 @@ test('parse options', () => {
         "port": 4848,
         "push": {},
         "shard": {
-          "id": "0",
-          "publications": [],
+          "num": 0,
         },
         "tenants": [
           {
             "env": {
+              "ZERO_APP_ID": "foo",
               "ZERO_CHANGE_DB": "foo",
               "ZERO_CVR_DB": "foo",
               "ZERO_REPLICA_FILE": "tenboo.db",
-              "ZERO_SHARD_ID": "foo",
             },
             "host": "normalize.me",
             "id": "ten-boo",
@@ -101,20 +104,20 @@ test('parse options', () => {
           },
           {
             "env": {
+              "ZERO_APP_ID": "bar",
               "ZERO_CHANGE_DB": "bar",
               "ZERO_CVR_DB": "bar",
               "ZERO_REPLICA_FILE": "tenbar.db",
-              "ZERO_SHARD_ID": "bar",
             },
             "id": "ten_bar",
             "path": "/tenbar",
           },
           {
             "env": {
+              "ZERO_APP_ID": "foo",
               "ZERO_CHANGE_DB": "baz",
               "ZERO_CVR_DB": "baz",
               "ZERO_REPLICA_FILE": "tenbar.db",
-              "ZERO_SHARD_ID": "foo",
               "ZERO_UPSTREAM_DB": "overridden",
             },
             "id": "tenbaz-123",
@@ -128,6 +131,8 @@ test('parse options', () => {
         },
       },
       "env": {
+        "ZERO_APP_ID": "zero",
+        "ZERO_APP_PUBLICATIONS": "",
         "ZERO_AUTO_RESET": "true",
         "ZERO_CHANGE_MAX_CONNS": "5",
         "ZERO_CVR_MAX_CONNS": "30",
@@ -145,9 +150,8 @@ test('parse options', () => {
         "ZERO_LOG_SLOW_ROW_THRESHOLD": "2",
         "ZERO_PER_USER_MUTATION_LIMIT_WINDOW_MS": "60000",
         "ZERO_PORT": "4848",
-        "ZERO_SHARD_ID": "0",
-        "ZERO_SHARD_PUBLICATIONS": "",
-        "ZERO_TENANTS_JSON": "{"tenants":[{"id":"ten-boo","host":"Normalize.ME","path":"tenboo","env":{"ZERO_REPLICA_FILE":"tenboo.db","ZERO_CVR_DB":"foo","ZERO_CHANGE_DB":"foo","ZERO_SHARD_ID":"foo"}},{"id":"ten_bar","path":"/tenbar","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_CVR_DB":"bar","ZERO_CHANGE_DB":"bar","ZERO_SHARD_ID":"bar"}},{"id":"tenbaz-123","path":"/tenbaz","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_UPSTREAM_DB":"overridden","ZERO_CVR_DB":"baz","ZERO_CHANGE_DB":"baz","ZERO_SHARD_ID":"foo"}}]}",
+        "ZERO_SHARD_NUM": "0",
+        "ZERO_TENANTS_JSON": "{"tenants":[{"id":"ten-boo","host":"Normalize.ME","path":"tenboo","env":{"ZERO_REPLICA_FILE":"tenboo.db","ZERO_CVR_DB":"foo","ZERO_CHANGE_DB":"foo","ZERO_APP_ID":"foo"}},{"id":"ten_bar","path":"/tenbar","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_CVR_DB":"bar","ZERO_CHANGE_DB":"bar","ZERO_APP_ID":"bar"}},{"id":"tenbaz-123","path":"/tenbaz","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_UPSTREAM_DB":"overridden","ZERO_CVR_DB":"baz","ZERO_CHANGE_DB":"baz","ZERO_APP_ID":"foo"}}]}",
         "ZERO_UPSTREAM_DB": "foo",
         "ZERO_UPSTREAM_MAX_CONNS": "20",
         "ZERO_UPSTREAM_TYPE": "pg",
@@ -337,35 +341,42 @@ test('zero-cache --help', () => {
        ZERO_LOG_IVM_SAMPLING env                                                                                                                                  
                                                                 How often to collect IVM metrics. 1 out of N requests will be sampled where N is this value.      
                                                                                                                                                                   
-     --shard-id string                                          default: "0"                                                                                      
-       ZERO_SHARD_ID env                                                                                                                                          
-                                                                Unique identifier for the zero-cache shard.                                                       
+     --app-id string                                            default: "zero"                                                                                   
+       ZERO_APP_ID env                                                                                                                                            
+                                                                Unique identifier for the app.                                                                    
                                                                                                                                                                   
-                                                                A shard presents a logical partition of the upstream database, delineated                         
-                                                                by a set of publications and managed by a dedicated replication slot.                             
+                                                                Multiple zero-cache apps can run on a single upstream database, each of which                     
+                                                                is isolated from the others, with its own permissions, sharding (future feature),                 
+                                                                and change/cvr databases.                                                                         
                                                                                                                                                                   
-                                                                A shard's zero clients table and shard-internal functions are stored in                           
-                                                                the zero_{id} schema in the upstream database.                                                    
+                                                                The metadata of an app is stored in an upstream schema with the same name,                        
+                                                                e.g. "zero", and the metadata for each app shard, e.g. client and mutation                        
+                                                                ids, is stored in the "{app-id}_{#}" schema. (Currently there is only a single                    
+                                                                "0" shard, but this will change with sharding).                                                   
                                                                                                                                                                   
-                                                                Due to constraints on replication slot names, a shard ID may only consist of                      
+                                                                The CVR and Change data are managed in schemas named "{app-id}_{shard-num}/cvr"                   
+                                                                and "{app-id}_{shard-num}/cdc", respectively, allowing multiple apps and shards                   
+                                                                to share the same database instance (e.g. a Postgres "cluster") for CVR and Change management.    
+                                                                                                                                                                  
+                                                                Due to constraints on replication slot names, an App ID may only consist of                       
                                                                 lower-case letters, numbers, and the underscore character.                                        
                                                                                                                                                                   
-     --shard-publications string[]                              default: []                                                                                       
-       ZERO_SHARD_PUBLICATIONS env                                                                                                                                
-                                                                Postgres PUBLICATIONs that define the partition of the upstream                                   
-                                                                replicated to the shard. Publication names may not begin with an underscore,                      
+     --app-publications string[]                                default: []                                                                                       
+       ZERO_APP_PUBLICATIONS env                                                                                                                                  
+                                                                Postgres PUBLICATIONs that define the tables and columns to                                       
+                                                                replicate. Publication names may not begin with an underscore,                                    
                                                                 as zero reserves that prefix for internal use.                                                    
                                                                                                                                                                   
                                                                 If unspecified, zero-cache will create and use an internal publication that                       
                                                                 publishes all tables in the public schema, i.e.:                                                  
                                                                                                                                                                   
-                                                                CREATE PUBLICATION _zero_public_0 FOR TABLES IN SCHEMA public;                                    
+                                                                CREATE PUBLICATION _{app-id}_public_0 FOR TABLES IN SCHEMA public;                                
                                                                                                                                                                   
-                                                                Note that once a shard has begun syncing data, this list of publications                          
+                                                                Note that once an app has begun syncing data, this list of publications                           
                                                                 cannot be changed, and zero-cache will refuse to start if a specified                             
                                                                 value differs from what was originally synced.                                                    
                                                                                                                                                                   
-                                                                To use a different set of publications, a new shard should be created.                            
+                                                                To use a different set of publications, a new app should be created.                              
                                                                                                                                                                   
      --auth-jwk string                                          optional                                                                                          
        ZERO_AUTH_JWK env                                                                                                                                          

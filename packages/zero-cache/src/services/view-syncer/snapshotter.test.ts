@@ -64,7 +64,7 @@ describe('view-syncer/snapshotter', () => {
     tableSpecs = computeZqlSpecs(lc, db);
 
     replicator = fakeReplicator(lc, db);
-    s = new Snapshotter(lc, dbFile.path, 'my_app').init();
+    s = new Snapshotter(lc, dbFile.path, {appID: 'my_app'}).init();
   });
 
   afterEach(() => {
@@ -169,8 +169,8 @@ describe('view-syncer/snapshotter', () => {
   });
 
   test('concurrent snapshot diffs', () => {
-    const s1 = new Snapshotter(lc, dbFile.path, 'my_app').init();
-    const s2 = new Snapshotter(lc, dbFile.path, 'my_app').init();
+    const s1 = new Snapshotter(lc, dbFile.path, {appID: 'my_app'}).init();
+    const s2 = new Snapshotter(lc, dbFile.path, {appID: 'my_app'}).init();
 
     expect(s1.current().version).toBe('01');
     expect(s2.current().version).toBe('01');
