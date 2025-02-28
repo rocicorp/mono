@@ -846,6 +846,34 @@ describe('change-streamer/service', () => {
     ).rejects.toThrow(AutoResetSignal);
   });
 
+  test('reset required if backup is behind', async () => {
+    await changeDB`
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
+    `;
+
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    void streamer.subscribe({
+      id: 'backup-id',
+      mode: 'backup',
+      watermark: '02', // Too early
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    await streamerDone;
+    await expect(
+      ensureReplicationConfig(lc, changeDB, replicaConfig, shard, true),
+    ).rejects.toThrow(AutoResetSignal);
+  });
+
   test('shutdown on AbortError', async () => {
     // Kick off the initial stream with a serving request.
     void streamer.subscribe({

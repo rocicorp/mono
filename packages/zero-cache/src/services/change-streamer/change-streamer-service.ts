@@ -300,6 +300,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       changeDB,
       replicaVersion,
       consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
+      err => this.stop(err),
     );
     this.#forwarder = new Forwarder();
     this.#autoReset = autoReset;
@@ -420,7 +421,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       this.#lc.debug?.(`adding subscriber ${subscriber.id}`);
 
       this.#forwarder.add(subscriber);
-      this.#storer.catchup(subscriber);
+      this.#storer.catchup(subscriber, mode);
 
       if (initial) {
         this.#scheduleCleanup(watermark);
