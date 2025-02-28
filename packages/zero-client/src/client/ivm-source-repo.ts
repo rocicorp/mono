@@ -21,6 +21,7 @@ import type {MaybePromise} from '../../../shared/src/types.ts';
 import {Lock} from '@rocicorp/lock';
 import {assert} from '../../../shared/src/asserts.ts';
 import {SYNC_HEAD_NAME} from '../../../replicache/src/sync/sync-head-name.ts';
+import type {InternalDiff} from '../../../replicache/src/btree/node.ts';
 
 /**
  * Provides handles to IVM sources at different heads.
@@ -145,39 +146,8 @@ export class IVMSourceRepo {
       return {read: fork, write: fork};
     }
 
-    for (const patch of diffs) {
-      if (!patch.key.startsWith(ENTITIES_KEY_PREFIX)) {
-        continue;
-      }
-
-      const name = sourceNameFromKey(patch.key);
-      const source = must(fork.getSource(name));
-      switch (patch.op) {
-        case 'add': {
-          source.push({
-            type: 'add',
-            row: patch.newValue as Row,
-          });
-          break;
-        }
-        case 'change': {
-          source.push({
-            type: 'edit',
-            row: patch.newValue as Row,
-            oldRow: patch.oldValue as Row,
-          });
-          break;
-        }
-        case 'del': {
-          source.push({
-            type: 'remove',
-            row: patch.oldValue as Row,
-          });
-          break;
-        }
-      }
-    }
-
+    applyDiffs(diffs, fork);
+    fork.hash = hash;
     return {read: fork, write: fork};
   }
 
@@ -243,42 +213,49 @@ export class IVMSourceRepo {
     }
 
     // Sync head was behind. Advance it via the provided diffs.
-    for (const patch of patches) {
-      if (patch.op === 'clear') {
-        this.#sync.clear();
-        continue;
-      }
-
-      const {key} = patch;
-      if (!key.startsWith(ENTITIES_KEY_PREFIX)) {
-        continue;
-      }
-      const name = sourceNameFromKey(key);
-      const source = must(this.#sync.getSource(name));
-      switch (patch.op) {
-        case 'del':
-          source.push({
-            type: 'remove',
-            row: patch.oldValue as Row,
-          });
-          break;
-        case 'add':
-          source.push({
-            type: 'add',
-            row: patch.newValue as Row,
-          });
-          break;
-        case 'change':
-          source.push({
-            type: 'edit',
-            row: patch.newValue as Row,
-            oldRow: patch.oldValue as Row,
-          });
-          break;
-      }
-    }
+    applyDiffs(patches, this.#sync);
     this.#sync.hash = syncHeadHash;
   };
+}
+
+function applyDiffs(
+  patches: readonly Diff[] | InternalDiff,
+  branch: IVMSyncBranch,
+) {
+  for (const patch of patches) {
+    if (patch.op === 'clear') {
+      branch.clear();
+      continue;
+    }
+
+    const {key} = patch;
+    if (!key.startsWith(ENTITIES_KEY_PREFIX)) {
+      continue;
+    }
+    const name = sourceNameFromKey(key);
+    const source = must(branch.getSource(name));
+    switch (patch.op) {
+      case 'del':
+        source.push({
+          type: 'remove',
+          row: patch.oldValue as Row,
+        });
+        break;
+      case 'add':
+        source.push({
+          type: 'add',
+          row: patch.newValue as Row,
+        });
+        break;
+      case 'change':
+        source.push({
+          type: 'edit',
+          row: patch.newValue as Row,
+          oldRow: patch.oldValue as Row,
+        });
+        break;
+    }
+  }
 }
 
 export class IVMSourceBranch {
