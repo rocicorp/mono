@@ -16,7 +16,7 @@ function makeEmoji(userID: string, login: string): Emoji {
       login,
       avatar: 'avatar',
       name: 'James Holden',
-      role: 'admin',
+      role: 'crew',
     },
   };
 }
