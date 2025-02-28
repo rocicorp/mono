@@ -13,16 +13,26 @@ import type {PostgresDB} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
 import type {StatusMessage} from '../change-source/protocol/current/status.ts';
+import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
 import {type ChangeEntry} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
-import {type ReplicationState} from './schema/tables.ts';
+import {
+  AutoResetSignal,
+  markResetRequired,
+  type ReplicationState,
+} from './schema/tables.ts';
 import {Subscriber} from './subscriber.ts';
+
+type SubscriberAndMode = {
+  subscriber: Subscriber;
+  mode: ReplicatorMode;
+};
 
 type QueueEntry =
   | ['change', WatermarkedChange]
-  | ['subscriber', Subscriber]
+  | ['subscriber', SubscriberAndMode]
   | StatusMessage
   | 'stop';
 
@@ -71,6 +81,7 @@ export class Storer implements Service {
   readonly #db: PostgresDB;
   readonly #replicaVersion: string;
   readonly #onConsumed: (c: Commit | StatusMessage) => void;
+  readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
 
   constructor(
@@ -80,6 +91,7 @@ export class Storer implements Service {
     db: PostgresDB,
     replicaVersion: string,
     onConsumed: (c: Commit | StatusMessage) => void,
+    onFatal: (err: Error) => void,
   ) {
     this.#lc = lc;
     this.#shard = shard;
@@ -87,6 +99,7 @@ export class Storer implements Service {
     this.#db = db;
     this.#replicaVersion = replicaVersion;
     this.#onConsumed = onConsumed;
+    this.#onFatal = onFatal;
   }
 
   // For readability in SQL statements.
@@ -124,15 +137,15 @@ export class Storer implements Service {
     this.#queue.enqueue(s);
   }
 
-  catchup(sub: Subscriber) {
-    this.#queue.enqueue(['subscriber', sub]);
+  catchup(subscriber: Subscriber, mode: ReplicatorMode) {
+    this.#queue.enqueue(['subscriber', {subscriber, mode}]);
   }
 
   async run() {
     let tx: PendingTransaction | null = null;
     let msg: QueueEntry | false;
 
-    const catchupQueue: Subscriber[] = [];
+    const catchupQueue: SubscriberAndMode[] = [];
     while ((msg = await this.#queue.dequeue()) !== 'stop') {
       const [msgType] = msg;
       if (msgType === 'subscriber') {
@@ -243,7 +256,7 @@ export class Storer implements Service {
     this.#lc.info?.('storer stopped');
   }
 
-  async #startCatchup(subs: Subscriber[]) {
+  async #startCatchup(subs: SubscriberAndMode[]) {
     if (subs.length === 0) {
       return;
     }
@@ -267,7 +280,10 @@ export class Storer implements Service {
     );
   }
 
-  async #catchup(sub: Subscriber, reader: TransactionPool) {
+  async #catchup(
+    {subscriber: sub, mode}: SubscriberAndMode,
+    reader: TransactionPool,
+  ) {
     try {
       await reader.processReadTask(async tx => {
         const start = Date.now();
@@ -288,6 +304,10 @@ export class Storer implements Service {
             } else if (watermarkFound) {
               sub.catchup(toDownstream(entry));
               count++;
+            } else if (mode === 'backup') {
+              throw new AutoResetSignal(
+                `backup replica at watermark ${sub.watermark} is behind change db: ${entry.watermark})`,
+              );
             } else {
               this.#lc.warn?.(
                 `rejecting subscriber at watermark ${sub.watermark} (earliest watermark: ${entry.watermark})`,
@@ -316,8 +336,12 @@ export class Storer implements Service {
         sub.setCaughtUp();
       });
     } catch (err) {
-      sub.fail(err);
       this.#lc.error?.(`error while catching up subscriber ${sub.id}`, err);
+      if (err instanceof AutoResetSignal) {
+        await markResetRequired(this.#db, this.#shard);
+        this.#onFatal(err);
+      }
+      sub.fail(err);
     }
   }
 
