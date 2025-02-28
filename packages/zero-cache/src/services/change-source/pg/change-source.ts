@@ -130,7 +130,7 @@ export async function initializePostgresChangeSource(
     lc,
     upstreamURI,
     shard,
-    replicationConfig,
+    replicationConfig.replicaVersion,
   );
 
   return {replicationConfig, changeSource};
@@ -167,18 +167,18 @@ class PostgresChangeSource implements ChangeSource {
   readonly #lc: LogContext;
   readonly #upstreamUri: string;
   readonly #shard: ShardID;
-  readonly #replicationConfig: ReplicationConfig;
+  readonly #replicaVersion: string;
 
   constructor(
     lc: LogContext,
     upstreamUri: string,
     shard: ShardID,
-    replicationConfig: ReplicationConfig,
+    replicaVersion: string,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
     this.#upstreamUri = upstreamUri;
     this.#shard = shard;
-    this.#replicationConfig = replicationConfig;
+    this.#replicaVersion = replicaVersion;
   }
 
   async startStream(clientWatermark: string): Promise<ChangeStream> {
@@ -314,7 +314,7 @@ class PostgresChangeSource implements ChangeSource {
       .subscribe(
         new PgoutputPlugin({
           protoVersion: 1,
-          publicationNames: [...this.#replicationConfig.publications],
+          publicationNames: [...shardConfig.publications],
           messages: true,
         }),
         slot,
@@ -324,9 +324,10 @@ class PostgresChangeSource implements ChangeSource {
 
     await started;
 
-    const {replicaVersion} = this.#replicationConfig;
     this.#lc.info?.(
-      `started replication stream@${slot} from ${clientWatermark} (replicaVersion: ${replicaVersion})`,
+      `started replication stream@${slot} from ${clientWatermark} (replicaVersion: ${
+        this.#replicaVersion
+      })`,
     );
 
     return {

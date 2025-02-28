@@ -17,7 +17,7 @@ describe('decommission', () => {
 
   beforeEach(async () => {
     lc = createSilentLogContext();
-    upstream = await testDBs.create('initial_sync_upstream');
+    upstream = await testDBs.create('decommission_test');
     replica = new Database(lc, ':memory:');
   });
 
