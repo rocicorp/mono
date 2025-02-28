@@ -1,3 +1,4 @@
 import {createUseZero} from '@rocicorp/zero/react';
 import type {Schema} from '../../schema.ts';
-export const useZero = createUseZero<Schema>();
+import type {Mutators} from '../../mutators.ts';
+export const useZero = createUseZero<Schema, Mutators>();
