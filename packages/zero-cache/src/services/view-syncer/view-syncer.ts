@@ -113,6 +113,11 @@ function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
 }
 
+type SetTimeout = (
+  fn: (...args: unknown[]) => void,
+  delay?: number,
+) => ReturnType<typeof setTimeout>;
+
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
   readonly #shard: ShardID;
@@ -147,6 +152,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #expiredQueriesTimer: ReturnType<typeof setTimeout> | 0 = 0;
   #nextExpiredQueryTime: number | 0 = 0;
+  readonly #setTimeout: SetTimeout;
 
   constructor(
     lc: LogContext,
@@ -159,6 +165,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     drainCoordinator: DrainCoordinator,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     maxRowCount = DEFAULT_MAX_ROW_COUNT,
+    setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
     this.id = clientGroupID;
     this.#shard = shard;
@@ -178,6 +185,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       () => this.#stateChanges.cancel(),
     );
     this.maxRowCount = maxRowCount;
+    this.#setTimeout = setTimeoutFn;
 
     // Wait for the first connection to init.
     this.keepalive();
@@ -324,7 +332,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #shutdownTimer: NodeJS.Timeout | null = null;
 
   #scheduleShutdown(delayMs = 0) {
-    this.#shutdownTimer ??= setTimeout(() => {
+    this.#shutdownTimer ??= this.#setTimeout(() => {
       this.#shutdownTimer = null;
 
       // All lock tasks check for shutdown so that queued work is immediately
@@ -688,7 +696,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#nextExpiredQueryTime = next;
     const now = Date.now();
     lc.debug?.('Scheduling eviction timer to run in ', next - now, 'ms');
-    this.#expiredQueriesTimer = setTimeout(
+    this.#expiredQueriesTimer = this.#setTimeout(
       () => this.#runInLockWithCVR(this.#removeExpiredQueries),
       next - now,
     );
@@ -1141,7 +1149,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             const elapsed = Date.now() - lapStart;
             if (elapsed > TIME_SLICE_MS) {
               totalProcessingTime += elapsed;
-              await yieldProcess();
+              await yieldProcess(this.#setTimeout);
               lapStart = Date.now();
             }
           }
@@ -1349,8 +1357,8 @@ function createHashToIDs(cvr: CVRSnapshot) {
   return hashToIDs;
 }
 
-function yieldProcess() {
-  return new Promise(resolve => setTimeout(resolve, 0));
+function yieldProcess(setTimeoutFn: SetTimeout) {
+  return new Promise(resolve => setTimeoutFn(resolve, 0));
 }
 
 function contentsAndVersion(row: Row) {
