@@ -201,7 +201,7 @@ describe('rebasing custom mutators', () => {
       title: 'foo',
     });
 
-    const branches = await repo.getSourcesForTransaction('rebase', undefined);
+    const branches = await repo.getSourcesForTransaction('pullEnd', undefined);
 
     for (const branch of Object.values(branches)) {
       expect([
