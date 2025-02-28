@@ -81,7 +81,7 @@ export async function ensureGlobalTables(db: PostgresDB, appID: AppID) {
   await db.unsafe(globalSetup(appID));
 }
 
-function getClientsTableDefinition(schema: string) {
+export function getClientsTableDefinition(schema: string) {
   return `CREATE TABLE ${schema}."clients" (
     "clientGroupID"  TEXT NOT NULL,
     "clientID"       TEXT NOT NULL,
