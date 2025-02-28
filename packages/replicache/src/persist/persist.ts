@@ -36,6 +36,7 @@ import {
   setClient,
 } from './clients.ts';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.ts';
+import type {ZeroOption} from '../replicache-options.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
@@ -65,7 +66,7 @@ export async function persistDD31(
   mutators: MutatorDefs,
   closed: () => boolean,
   formatVersion: FormatVersion,
-  zeroData: unknown | undefined,
+  getZeroData: ZeroOption<unknown>['getRepTxData'] | undefined,
   onGatherMemOnlyChunksForTest = () => Promise.resolve(),
 ): Promise<void> {
   if (closed()) {
@@ -141,6 +142,14 @@ export async function persistDD31(
   if (closed()) {
     return;
   }
+
+  const zeroData =
+    getZeroData === undefined
+      ? undefined
+      : await getZeroData('persist', {
+          store: memdag,
+          hash: memdagBaseSnapshot.chunk.hash,
+        });
 
   let memdagBaseSnapshotPersisted = false;
   await withWrite(perdag, async perdagWrite => {
