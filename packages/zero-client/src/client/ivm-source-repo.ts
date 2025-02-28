@@ -1,7 +1,10 @@
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import {wrapIterable} from '../../../shared/src/iterables.ts';
-import type {Store} from '../../../replicache/src/dag/store.ts';
+import {
+  mustGetHeadHash,
+  type Store,
+} from '../../../replicache/src/dag/store.ts';
 import {withRead} from '../../../replicache/src/with-transactions.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
@@ -16,6 +19,7 @@ import {diff} from '../../../replicache/src/sync/diff.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import {Lock} from '@rocicorp/lock';
 import {assert} from '../../../shared/src/asserts.ts';
+import {SYNC_HEAD_NAME} from '../../../replicache/src/sync/sync-head-name.ts';
 
 /**
  * Provides handles to IVM sources at different heads.
@@ -91,7 +95,7 @@ export class IVMSourceRepo {
     hash: Hash;
   }): Promise<RepTxZeroData> {
     if (this.#sync === undefined) {
-      await this.#initSyncHead(store, hash);
+      await this.#initSyncHead(store, undefined);
     }
     assert(this.#sync !== undefined);
     // fork sync now so it cannot change while
@@ -155,7 +159,7 @@ export class IVMSourceRepo {
     return {read: fork, write: fork};
   }
 
-  async #initSyncHead(store: Store, syncHeadHash: Hash) {
+  async #initSyncHead(store: Store, syncHeadHash: Hash | undefined) {
     await this.#initSyncHeadLock.withLock(async () => {
       if (this.#sync !== undefined) {
         // sync head was created by someone else while we were waiting for the lock.
@@ -163,6 +167,9 @@ export class IVMSourceRepo {
       }
 
       await withRead(store, async dagRead => {
+        if (syncHeadHash === undefined) {
+          syncHeadHash = await mustGetHeadHash(SYNC_HEAD_NAME, dagRead);
+        }
         const syncSources = new IVMSyncBranch(this.#tables, syncHeadHash);
         const read = await readFromHash(
           syncHeadHash,

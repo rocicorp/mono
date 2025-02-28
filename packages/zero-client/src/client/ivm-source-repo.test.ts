@@ -128,24 +128,28 @@ describe('advanceSyncHead', () => {
     );
     await repo.advanceSyncHead(dagStore, syncHash, []);
 
-    expect([
-      ...must(repo.rebase.getSource('issue'))
-        .connect([['id', 'asc']])
-        .fetch({}),
-    ]).toMatchInlineSnapshot(`
-      [
-        {
-          "relationships": {},
-          "row": {
-            "closed": false,
-            "description": "test",
-            "id": "sdf",
-            "ownerId": null,
-            "title": "test",
+    const branches = await repo.getSourcesForTransaction('rebase', undefined);
+
+    for (const branch of Object.values(branches)) {
+      expect([
+        ...must(branch?.getSource('issue'))
+          .connect([['id', 'asc']])
+          .fetch({}),
+      ]).toMatchInlineSnapshot(`
+        [
+          {
+            "relationships": {},
+            "row": {
+              "closed": false,
+              "description": "test",
+              "id": "sdf",
+              "ownerId": null,
+              "title": "test",
+            },
           },
-        },
-      ]
-    `);
+        ]
+      `);
+    }
   });
 
   test('sync is advanced via diffs when already initialized', async () => {
@@ -204,34 +208,37 @@ describe('advanceSyncHead', () => {
       },
     ]);
 
-    expect([
-      ...must(repo.rebase.getSource('issue'))
-        .connect([['id', 'asc']])
-        .fetch({}),
-    ]).toMatchInlineSnapshot(`
-      [
-        {
-          "relationships": {},
-          "row": {
-            "closed": false,
-            "description": "test",
-            "id": "def",
-            "ownerId": null,
-            "title": "test",
+    const branches = repo.getSourcesForTransaction('rebase', undefined);
+    for (const branch of Object.values(branches)) {
+      expect([
+        ...must(branch?.getSource('issue'))
+          .connect([['id', 'asc']])
+          .fetch({}),
+      ]).toMatchInlineSnapshot(`
+        [
+          {
+            "relationships": {},
+            "row": {
+              "closed": false,
+              "description": "test",
+              "id": "def",
+              "ownerId": null,
+              "title": "test",
+            },
           },
-        },
-        {
-          "relationships": {},
-          "row": {
-            "closed": false,
-            "description": "test",
-            "id": "sdf",
-            "ownerId": null,
-            "title": "test",
+          {
+            "relationships": {},
+            "row": {
+              "closed": false,
+              "description": "test",
+              "id": "sdf",
+              "ownerId": null,
+              "title": "test",
+            },
           },
-        },
-      ]
-    `);
+        ]
+      `);
+    }
   });
 
   // test various cases of diff operations result in the correct state of the rebase branch
@@ -430,11 +437,15 @@ describe('advanceSyncHead', () => {
       await repo.advanceSyncHead(dagStore, syncHash, []);
 
       await repo.advanceSyncHead(dagStore, syncHash, diffs);
-      expect([
-        ...must(repo.rebase.getSource('issue'))
-          .connect([['id', 'asc']])
-          .fetch({}),
-      ]).toEqual(expected);
+
+      const branches = repo.getSourcesForTransaction('rebase', undefined);
+      for (const branch of Object.values(branches)) {
+        expect([
+          ...must(branch?.getSource('issue'))
+            .connect([['id', 'asc']])
+            .fetch({}),
+        ]).toEqual(expected);
+      }
     });
   });
 });

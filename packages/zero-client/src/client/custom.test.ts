@@ -4,6 +4,7 @@ import {
   TransactionImpl,
   type CustomMutatorDefs,
   type MakeCustomMutatorInterfaces,
+  type RepTxZeroData,
   type Transaction,
 } from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
@@ -188,9 +189,8 @@ describe('rebasing custom mutators', () => {
         reason: 'rebase',
         has: () => false,
         set: () => {},
-      } as unknown as WriteTransaction,
+      } as unknown as WriteTransaction<RepTxZeroData>,
       schema,
-      repo,
     ) as unknown as Transaction<Schema>;
 
     await tx1.mutate.issue.insert({
@@ -201,24 +201,28 @@ describe('rebasing custom mutators', () => {
       title: 'foo',
     });
 
-    expect([
-      ...must(repo.rebase.getSource('issue'))
-        .connect([['id', 'asc']])
-        .fetch({}),
-    ]).toMatchInlineSnapshot(`
-      [
-        {
-          "relationships": {},
-          "row": {
-            "closed": false,
-            "description": "",
-            "id": "1",
-            "ownerId": "",
-            "title": "foo",
+    const branches = await repo.getSourcesForTransaction('rebase', undefined);
+
+    for (const branch of Object.values(branches)) {
+      expect([
+        ...must(branch?.getSource('issue'))
+          .connect([['id', 'asc']])
+          .fetch({}),
+      ]).toMatchInlineSnapshot(`
+        [
+          {
+            "relationships": {},
+            "row": {
+              "closed": false,
+              "description": "",
+              "id": "1",
+              "ownerId": "",
+              "title": "foo",
+            },
           },
-        },
-      ]
-    `);
+        ]
+      `);
+    }
   });
 
   test('mutations can read their own writes', async () => {
@@ -227,9 +231,8 @@ describe('rebasing custom mutators', () => {
         reason: 'rebase',
         has: () => false,
         set: () => {},
-      } as unknown as WriteTransaction,
+      } as unknown as WriteTransaction<RepTxZeroData>,
       schema,
-      repo,
     ) as unknown as Transaction<Schema>;
 
     await tx1.mutate.issue.insert({
@@ -259,9 +262,8 @@ describe('rebasing custom mutators', () => {
         reason: 'rebase',
         has: () => false,
         set: () => {},
-      } as unknown as WriteTransaction,
+      } as unknown as WriteTransaction<RepTxZeroData>,
       schema,
-      repo,
     ) as unknown as Transaction<Schema>;
 
     await tx1.mutate.issue.insert({
@@ -277,9 +279,8 @@ describe('rebasing custom mutators', () => {
         reason: 'rebase',
         has: () => false,
         set: () => {},
-      } as unknown as WriteTransaction,
+      } as unknown as WriteTransaction<RepTxZeroData>,
       schema,
-      repo,
     ) as unknown as Transaction<Schema>;
 
     expect(await tx2.query.issue.run()).toMatchInlineSnapshot(`
