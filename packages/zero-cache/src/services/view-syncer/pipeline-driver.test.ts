@@ -723,6 +723,15 @@ describe('view-syncer/pipeline-driver', () => {
           "queryHash": "hash1",
           "row": undefined,
           "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "remove",
+        },
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
             "issueID": "1",
             "labelID": "1",
             "legacyID": "1-1",
@@ -737,15 +746,6 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "labels",
-          "type": "remove",
-        },
-        {
-          "queryHash": "hash1",
-          "row": undefined,
-          "rowKey": {
-            "id": "1",
-          },
-          "table": "issues",
           "type": "remove",
         },
       ]
@@ -1019,6 +1019,15 @@ describe('view-syncer/pipeline-driver', () => {
           "queryHash": "hash1",
           "row": undefined,
           "rowKey": {
+            "id": "2",
+          },
+          "table": "issues",
+          "type": "remove",
+        },
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
             "issueID": "2",
             "labelID": "1",
             "legacyID": "2-1",
@@ -1033,15 +1042,6 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "labels",
-          "type": "remove",
-        },
-        {
-          "queryHash": "hash1",
-          "row": undefined,
-          "rowKey": {
-            "id": "2",
-          },
-          "table": "issues",
           "type": "remove",
         },
         {
