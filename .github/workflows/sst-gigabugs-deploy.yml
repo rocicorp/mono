@@ -87,7 +87,7 @@ jobs:
           npx sst deploy --stage gigabugs-ebs
       - name: Deploy SST app non ebs
         env:
-          ZERO_SHARD_ID: '1'
+          ZERO_APP_ID: '1'
           ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
           ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}2
           ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}2

@@ -3,8 +3,8 @@
 // Load .env file
 require("dotenv").config();
 
-import { join } from "node:path";
 import { createDefu } from "defu";
+import { join } from "node:path";
 
 const defu = createDefu((obj, key, value) => {
   // Don't merge functions, just use the last one
@@ -67,7 +67,7 @@ export default $config({
         : "sync-replica.db",
       ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250219-01`,
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
-      ZERO_SHARD_ID: process.env.ZERO_SHARD_ID || "0",
+      ZERO_APP_ID: process.env.ZERO_APP_ID || "zero",
     };
 
     const ecsVolumeRole = IS_EBS_STAGE
