@@ -6,8 +6,9 @@ import type {
   SchemaQuery,
   TableCRUD,
   TransactionBase,
+  ConnectionProvider,
+  DBTransaction,
 } from '../../zql/src/mutate/custom.ts';
-import type {ConnectionProvider, DBTransaction} from './db.ts';
 import {PushProcessor, type PushHandler} from './web.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
 

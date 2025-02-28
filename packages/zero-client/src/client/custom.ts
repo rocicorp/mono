@@ -10,25 +10,16 @@ import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {ZeroContext} from './context.ts';
 import type {
+  ClientTransaction,
   DeleteID,
   InsertValue,
   SchemaCRUD,
   SchemaQuery,
   TableCRUD,
-  TransactionBase,
+  Transaction,
   UpdateValue,
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
-
-/**
- * An instance of this is passed to custom mutator implementations and
- * allows reading and writing to the database and IVM at the head
- * at which the mutator is being applied.
- */
-export interface Transaction<S extends Schema> extends TransactionBase<S> {
-  readonly location: 'client';
-  readonly reason: 'optimistic' | 'rebase';
-}
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
@@ -80,7 +71,7 @@ export type MakeCustomMutatorInterface<
   ? (...args: Args) => Promise<void>
   : never;
 
-export class TransactionImpl implements Transaction<Schema> {
+export class TransactionImpl implements ClientTransaction<Schema> {
   constructor(
     repTx: WriteTransaction,
     schema: Schema,

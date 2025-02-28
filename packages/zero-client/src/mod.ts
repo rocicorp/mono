@@ -103,3 +103,7 @@ export type {
 } from '../../zql/src/mutate/custom.ts';
 export type {ZeroOptions} from './client/options.ts';
 export {Zero} from './client/zero.ts';
+export type {
+  ServerTransaction,
+  Transaction,
+} from '../../zql/src/mutate/custom.ts';

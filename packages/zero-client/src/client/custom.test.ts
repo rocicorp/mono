@@ -4,14 +4,14 @@ import {
   TransactionImpl,
   type CustomMutatorDefs,
   type MakeCustomMutatorInterfaces,
-  type Transaction,
 } from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {IVMSourceRepo} from './ivm-source-repo.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {InsertValue} from '../../../zql/src/mutate/custom.ts';
+import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
+
 type Schema = typeof schema;
 
 test('argument types are preserved on the generated mutator interface', () => {
