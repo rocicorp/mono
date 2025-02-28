@@ -13,7 +13,7 @@ import {must} from '../../../shared/src/must.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Diff} from '../../../replicache/src/sync/patch.ts';
 import {readFromHash} from '../../../replicache/src/db/read.ts';
-import type {TransactionReason} from '../../../replicache/src/transactions.ts';
+import type {DetailedReason} from '../../../replicache/src/transactions.ts';
 import type {RepTxZeroData} from './custom.ts';
 import {diff} from '../../../replicache/src/sync/diff.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
@@ -51,43 +51,57 @@ export class IVMSourceRepo {
   }
 
   getSourcesForTransaction(
-    reason: TransactionReason,
-    customHead:
+    reason: DetailedReason,
+    expectedHead:
       | {
           store: Store;
           hash: Hash;
         }
       | undefined,
   ): MaybePromise<RepTxZeroData> {
-    if (reason === 'initial') {
-      // Mutators read from main and do not write to main for `initial` mutations.
-      // Main is updated via `experimentalWatch` between each mutation.
-      // There is no concept of running many custom mutators in the same transaction at the moment.
-      // If that changes we'll have to revisit.
-      return {
-        read: this.#main,
-        write: undefined,
-      };
-    }
-
-    if (reason === 'rebase') {
-      if (customHead === undefined) {
-        const forked = must(this.#sync, 'sync head does not yet exist').fork();
+    switch (reason) {
+      case 'initial': {
+        assert(
+          expectedHead === undefined,
+          'initial must ron on main not on a custom head',
+        );
+        // Mutators read from main and do not write to main for `initial` mutations.
+        // Main is updated via `experimentalWatch` between each mutation.
+        // There is no concept of running many custom mutators in the same transaction at the moment.
+        // If that changes we'll have to revisit.
         return {
-          read: forked,
-          write: forked,
+          read: this.#main,
+          write: undefined,
         };
       }
+      case 'persist':
+      case 'pullEnd':
+      case 'refresh': {
+        assert(
+          expectedHead !== undefined,
+          'expectedHead must be specified for ' + reason,
+        );
+        if (this.#sync === undefined) {
+          return this.#createSourcesForHead(expectedHead);
+        }
 
-      return this.#createSourcesForRefresh(customHead);
+        if (this.#sync.hash === expectedHead.hash) {
+          // If the hashes are the same, the sync head is already up to date.
+          const fork = this.#sync.fork();
+          return {read: fork, write: fork};
+        }
+
+        console.warn(
+          `Expected sync head ${expectedHead.hash} but got ${
+            this.#sync.hash
+          } for ${reason}`,
+        );
+        return this.#createSourcesForHead(expectedHead);
+      }
     }
-
-    throw new Error(
-      'Authoritative transaction is being run on the client. This is impossible.',
-    );
   }
 
-  async #createSourcesForRefresh({
+  async #createSourcesForHead({
     store,
     hash,
   }: {

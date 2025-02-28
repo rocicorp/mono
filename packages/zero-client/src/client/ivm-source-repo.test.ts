@@ -128,7 +128,7 @@ describe('advanceSyncHead', () => {
     );
     await repo.advanceSyncHead(dagStore, syncHash, []);
 
-    const branches = await repo.getSourcesForTransaction('rebase', undefined);
+    const branches = await repo.getSourcesForTransaction('pullEnd', undefined);
 
     for (const branch of Object.values(branches)) {
       expect([
@@ -208,7 +208,7 @@ describe('advanceSyncHead', () => {
       },
     ]);
 
-    const branches = repo.getSourcesForTransaction('rebase', undefined);
+    const branches = repo.getSourcesForTransaction('pullEnd', undefined);
     for (const branch of Object.values(branches)) {
       expect([
         ...must(branch?.getSource('issue'))
@@ -438,7 +438,10 @@ describe('advanceSyncHead', () => {
 
       await repo.advanceSyncHead(dagStore, syncHash, diffs);
 
-      const branches = repo.getSourcesForTransaction('rebase', undefined);
+      const branches = repo.getSourcesForTransaction('pullEnd', {
+        store: dagStore,
+        hash: syncHash,
+      });
       for (const branch of Object.values(branches)) {
         expect([
           ...must(branch?.getSource('issue'))

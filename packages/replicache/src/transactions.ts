@@ -23,6 +23,7 @@ import {rejectIfClosed, throwIfClosed} from './transaction-closed-error.ts';
 export type TransactionEnvironment = 'client' | 'server';
 export type TransactionLocation = TransactionEnvironment;
 export type TransactionReason = 'initial' | 'rebase' | 'authoritative';
+export type DetailedReason = 'refresh' | 'persist' | 'pullEnd' | 'initial';
 
 /**
  * Basic deep readonly type. It works for {@link JSONValue}.
