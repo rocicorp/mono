@@ -31,6 +31,7 @@ import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {type ButtonProps} from './button.tsx';
 import {EmojiPicker} from './emoji-picker.tsx';
 import {EmojiPill} from './emoji-pill.tsx';
+import {nanoid} from 'nanoid';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 
@@ -54,6 +55,7 @@ export const EmojiPanel = memo(
       const addEmoji = useCallback(
         (unicode: string, annotation: string) => {
           const args = {
+            id: nanoid(),
             unicode,
             annotation,
             subjectID,

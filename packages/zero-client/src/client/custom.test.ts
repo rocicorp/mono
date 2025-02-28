@@ -5,14 +5,13 @@ import {
   type CustomMutatorDefs,
   type MakeCustomMutatorInterfaces,
   type RepTxZeroData,
-  type Transaction,
 } from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {IVMSourceRepo} from './ivm-source-repo.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {InsertValue} from '../../../zql/src/mutate/custom.ts';
+import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import type {DetailedReason} from '../../../replicache/src/transactions.ts';

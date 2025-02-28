@@ -1,4 +1,8 @@
-import type {DBConnection, DBTransaction, Row} from '../db.ts';
+import type {
+  DBConnection,
+  DBTransaction,
+  Row,
+} from '../../../zql/src/mutate/custom.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import type {
   PostgresDB,

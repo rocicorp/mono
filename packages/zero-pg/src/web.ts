@@ -6,7 +6,6 @@ import type {
   PushResponse,
 } from '../../zero-protocol/src/push.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {ConnectionProvider, DBConnection, DBTransaction} from './db.ts';
 import * as v from '../../shared/src/valita.ts';
 import {pushBodySchema} from '../../zero-protocol/src/push.ts';
 import {
@@ -21,6 +20,9 @@ import {
   splitMutatorKey,
   type SchemaCRUD,
   type SchemaQuery,
+  type ConnectionProvider,
+  type DBConnection,
+  type DBTransaction,
 } from '../../zql/src/mutate/custom.ts';
 import {makeSchemaQuery} from './query.ts';
 

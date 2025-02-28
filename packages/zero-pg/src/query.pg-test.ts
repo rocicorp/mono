@@ -1,11 +1,10 @@
 import {beforeEach, describe, expect, test} from 'vitest';
-import type {SchemaQuery} from '../../zql/src/mutate/custom.ts';
+import type {SchemaQuery, DBTransaction} from '../../zql/src/mutate/custom.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {schema, schemaSql, seedDataSql} from './test/schema.ts';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import {makeSchemaQuery} from './query.ts';
 import {Transaction} from './test/util.ts';
-import type {DBTransaction} from './db.ts';
 
 describe('makeSchemaQuery', () => {
   let pg: PostgresDB;

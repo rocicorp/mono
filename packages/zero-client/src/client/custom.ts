@@ -15,20 +15,11 @@ import type {
   SchemaCRUD,
   SchemaQuery,
   TableCRUD,
-  TransactionBase,
+  Transaction,
+  ClientTransaction,
   UpdateValue,
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
-
-/**
- * An instance of this is passed to custom mutator implementations and
- * allows reading and writing to the database and IVM at the head
- * at which the mutator is being applied.
- */
-export interface Transaction<S extends Schema> extends TransactionBase<S> {
-  readonly location: 'client';
-  readonly reason: 'optimistic' | 'rebase';
-}
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
@@ -85,7 +76,7 @@ export type RepTxZeroData = {
   readonly write: IVMSourceBranch | undefined;
 };
 
-export class TransactionImpl implements Transaction<Schema> {
+export class TransactionImpl implements ClientTransaction<Schema> {
   constructor(repTx: WriteTransaction<RepTxZeroData>, schema: Schema) {
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
     this.clientID = repTx.clientID;

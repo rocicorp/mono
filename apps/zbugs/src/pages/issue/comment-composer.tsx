@@ -4,6 +4,7 @@ import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
+import {nanoid} from 'nanoid';
 
 export function CommentComposer({
   id,
@@ -23,6 +24,7 @@ export function CommentComposer({
     setCurrentBody(body ?? '');
     if (!id) {
       z.mutate.comment.add({
+        id: nanoid(),
         issueID,
         creatorID: z.userID,
         body: currentBody,
