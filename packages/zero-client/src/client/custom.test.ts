@@ -13,6 +13,9 @@ import {IVMSourceRepo} from './ivm-source-repo.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {InsertValue} from '../../../zql/src/mutate/custom.ts';
+import type {Store} from '../../../replicache/src/dag/store.ts';
+import type {Hash} from '../../../replicache/src/hash.ts';
+import type {DetailedReason} from '../../../replicache/src/transactions.ts';
 type Schema = typeof schema;
 
 test('argument types are preserved on the generated mutator interface', () => {
@@ -177,122 +180,146 @@ test('custom mutators can query the local store during an optimistic mutation', 
 
 describe('rebasing custom mutators', () => {
   let repo: IVMSourceRepo;
+  let dagStore: Store;
+  let syncHash: Hash;
+  const reasons: DetailedReason[] = ['pullEnd', 'persist', 'refresh'];
   beforeEach(async () => {
-    const {dagStore, syncHash} = await createDb([], 42);
+    const createDbResult = await createDb([], 42);
+    dagStore = createDbResult.dagStore;
+    syncHash = createDbResult.syncHash;
     repo = new IVMSourceRepo(schema.tables);
     await repo.advanceSyncHead(dagStore, syncHash, []);
   });
 
-  test('mutations write to the rebase branch', async () => {
-    const tx1 = new TransactionImpl(
-      {
-        reason: 'rebase',
-        has: () => false,
-        set: () => {},
-      } as unknown as WriteTransaction<RepTxZeroData>,
-      schema,
-    ) as unknown as Transaction<Schema>;
+  test('mutations write to the provided rebase branch', async () => {
+    await check(repo, {store: dagStore, hash: syncHash}, async branches => {
+      const tx1 = new TransactionImpl(
+        {
+          reason: 'rebase',
+          has: () => false,
+          set: () => {},
+          zeroData: branches,
+        } as unknown as WriteTransaction<RepTxZeroData>,
+        schema,
+      ) as unknown as Transaction<Schema>;
 
-    await tx1.mutate.issue.insert({
-      closed: false,
-      description: '',
-      id: '1',
-      ownerId: '',
-      title: 'foo',
-    });
+      await tx1.mutate.issue.insert({
+        closed: false,
+        description: '',
+        id: '1',
+        ownerId: '',
+        title: 'foo',
+      });
 
-    const branches = await repo.getSourcesForTransaction('pullEnd', undefined);
-
-    for (const branch of Object.values(branches)) {
-      expect([
-        ...must(branch?.getSource('issue'))
-          .connect([['id', 'asc']])
-          .fetch({}),
-      ]).toMatchInlineSnapshot(`
-        [
+      for (const branch of Object.values(branches)) {
+        expect([
+          ...must(branch?.getSource('issue'))
+            .connect([['id', 'asc']])
+            .fetch({}),
+        ]).toEqual([
           {
-            "relationships": {},
-            "row": {
-              "closed": false,
-              "description": "",
-              "id": "1",
-              "ownerId": "",
-              "title": "foo",
+            relationships: {},
+            row: {
+              closed: false,
+              description: '',
+              id: '1',
+              ownerId: '',
+              title: 'foo',
             },
           },
-        ]
-      `);
-    }
+        ]);
+      }
+    });
   });
 
   test('mutations can read their own writes', async () => {
-    const tx1 = new TransactionImpl(
-      {
-        reason: 'rebase',
-        has: () => false,
-        set: () => {},
-      } as unknown as WriteTransaction<RepTxZeroData>,
-      schema,
-    ) as unknown as Transaction<Schema>;
-
-    await tx1.mutate.issue.insert({
-      closed: false,
-      description: '',
-      id: '1',
-      ownerId: '',
-      title: 'foo',
-    });
-
-    expect(await tx1.query.issue.run()).toMatchInlineSnapshot(`
-      [
+    await check(repo, {store: dagStore, hash: syncHash}, async branches => {
+      const tx1 = new TransactionImpl(
         {
-          "closed": false,
-          "description": "",
-          "id": "1",
-          "ownerId": "",
-          "title": "foo",
+          reason: 'rebase',
+          has: () => false,
+          set: () => {},
+          zeroData: branches,
+        } as unknown as WriteTransaction<RepTxZeroData>,
+        schema,
+      ) as unknown as Transaction<Schema>;
+
+      await tx1.mutate.issue.insert({
+        closed: false,
+        description: '',
+        id: '1',
+        ownerId: '',
+        title: 'foo',
+      });
+
+      expect(await tx1.query.issue.run()).toEqual([
+        {
+          closed: false,
+          description: '',
+          id: '1',
+          ownerId: '',
+          title: 'foo',
         },
-      ]
-    `);
+      ]);
+    });
   });
 
   test('later mutations can read writes done by earlier mutations', async () => {
-    const tx1 = new TransactionImpl(
-      {
-        reason: 'rebase',
-        has: () => false,
-        set: () => {},
-      } as unknown as WriteTransaction<RepTxZeroData>,
-      schema,
-    ) as unknown as Transaction<Schema>;
-
-    await tx1.mutate.issue.insert({
-      closed: false,
-      description: '',
-      id: '1',
-      ownerId: '',
-      title: 'foo',
-    });
-
-    const tx2 = new TransactionImpl(
-      {
-        reason: 'rebase',
-        has: () => false,
-        set: () => {},
-      } as unknown as WriteTransaction<RepTxZeroData>,
-      schema,
-    ) as unknown as Transaction<Schema>;
-
-    expect(await tx2.query.issue.run()).toMatchInlineSnapshot(`
-      [
+    await check(repo, {store: dagStore, hash: syncHash}, async branches => {
+      const tx1 = new TransactionImpl(
         {
-          "closed": false,
-          "description": "",
-          "id": "1",
-          "ownerId": "",
-          "title": "foo",
+          reason: 'rebase',
+          has: () => false,
+          set: () => {},
+          zeroData: branches,
+        } as unknown as WriteTransaction<RepTxZeroData>,
+        schema,
+      ) as unknown as Transaction<Schema>;
+
+      await tx1.mutate.issue.insert({
+        closed: false,
+        description: '',
+        id: '1',
+        ownerId: '',
+        title: 'foo',
+      });
+
+      const tx2 = new TransactionImpl(
+        {
+          reason: 'rebase',
+          has: () => false,
+          set: () => {},
+          zeroData: branches,
+        } as unknown as WriteTransaction<RepTxZeroData>,
+        schema,
+      ) as unknown as Transaction<Schema>;
+
+      expect(await tx2.query.issue.run()).toEqual([
+        {
+          closed: false,
+          description: '',
+          id: '1',
+          ownerId: '',
+          title: 'foo',
         },
-      ]
-    `);
+      ]);
+    });
   });
+
+  async function check(
+    repo: IVMSourceRepo,
+    expectedHead: {
+      store: Store;
+      hash: Hash;
+    },
+    cb: (branches: RepTxZeroData) => void,
+  ) {
+    for (const reason of reasons) {
+      const branches = await repo.getSourcesForTransaction(
+        reason,
+        expectedHead,
+      );
+      cb(branches);
+    }
+  }
 });
