@@ -24,22 +24,54 @@ import {SYNC_HEAD_NAME} from '../../../replicache/src/sync/sync-head-name.ts';
 import type {InternalDiff} from '../../../replicache/src/btree/node.ts';
 
 /**
- * Provides handles to IVM sources at different heads.
+ * Provides handles to IVM sources at the `sync` and `main` heads to be used
+ * by mutators and queries.
  *
- * - sync always matches the server snapshot
- * - main is the client's current view of the data
+ * Initial mutations are run against the `main` head.
+ * All queries in the user's application also run against the `main` head.
+ *
+ * Rebases usually happen against the `sync` head. Rebases can happen for three reasons:
+ * 1. pullEnd
+ * 2. persist
+ * 3. refresh
+ *
+ * `pullEnd` and `persist` always rebased against the sync head.
+ * (is this correct for persist?)
+ *
+ * When the rebase is run, the caller receives a fork of the sync head.
+ * Given that, the rebase does not change the sync head held by this class but
+ * changes the fork used by the caller.
+ *
+ * The fork is discarded once the rebase completes. The `main`
+ * head will be updated via `experimentalWatch` to allow active queries
+ * on `main` to see the changes, if any.
+ *
+ * `refresh` is the special case. Refresh brings data from IDB into
+ * the current tab. The data in IDB may contain mutations from
+ * other clients that are not yet in the sync head. This means
+ * what we need to rebase our local changes into is not the sync head but
+ * some commit to is ahead of the sync head.
+ *
+ * `refresh` is handled by computing a diff from `syncHead` to `expectedHead`.
+ * `sync` is forked and the diff is applied to the fork. Mutations are then
+ * rebased against the fork.
+ *
+ * The two important methods on this class:
+ * - advanceSyncHead
+ * - getSourcesForTransaction
+ *
+ * advanceSyncHead is called on `pullEnd` to update the client to match the server state.
+ * getSourcesForTransaction is called by refresh, persist, pullEnd to get the IVM sources
+ * to use in the rebase.
  */
 export class IVMSourceRepo {
   readonly #main: IVMSourceBranch;
   readonly #tables: Record<string, TableSchema>;
 
   // We have a lock here because `refresh` and `maybePullEnd` could both
-  // be running simultaneously. We don't want to create the sync head twice.
+  // be running simultaneously. We don't want to create our sync head twice.
   readonly #initSyncHeadLock: Lock;
-
-  /**
-   * Sync is lazily created when the first response from the server is received.
-   */
+  // Sync is lazily created when it is first needed.
   #sync: IVMSyncBranch | undefined;
 
   constructor(tables: Record<string, TableSchema>) {
@@ -52,9 +84,29 @@ export class IVMSourceRepo {
     return this.#main;
   }
 
+  advanceSyncHead = async (
+    store: Store,
+    syncHeadHash: Hash,
+    patches: readonly Diff[],
+  ): Promise<void> => {
+    if (this.#sync === undefined) {
+      await this.#initSyncHead(store, syncHeadHash);
+    }
+    assert(this.#sync !== undefined);
+
+    if (this.#sync.hash === syncHeadHash) {
+      // If the hashes are the same, the sync head is already up to date.
+      return;
+    }
+
+    // Sync head was behind. Advance it via the provided diffs.
+    applyDiffs(patches, this.#sync);
+    this.#sync.hash = syncHeadHash;
+  };
+
   /**
-   * When replicache starts a rebase or mutation, it calls
-   * this method to create the IVM sources at the expected head.
+   * Gets the IVM sources for the specific transaction reason:
+   * initial, pullEnd, persist, or refresh.
    */
   getSourcesForTransaction(
     reason: DetailedReason,
@@ -67,10 +119,7 @@ export class IVMSourceRepo {
   ): MaybePromise<RepTxZeroData> {
     switch (reason) {
       case 'initial': {
-        assert(
-          expectedHead === undefined,
-          'initial must ron on main not on a custom head',
-        );
+        assert(expectedHead === undefined);
         // Mutators read from main and do not write to main for `initial` mutations.
         // Main is updated via `experimentalWatch` between each mutation.
         // There is no concept of running many custom mutators in the same transaction at the moment.
@@ -99,7 +148,7 @@ export class IVMSourceRepo {
 
         // On refresh the hashes may not match.
         // This is because IDB will have mutations included in it
-        // that are not yet in the sync head.
+        // (from other clients) that are not yet in the sync head.
         assert(reason === 'refresh');
         return this.#createSourcesForHead(expectedHead);
       }
@@ -124,6 +173,10 @@ export class IVMSourceRepo {
     // fork sync now so it cannot change while
     // we await the diffs.
     const fork = this.#sync.fork();
+    // the desired head is in fact the sync head
+    if (fork.hash === hash) {
+      return {read: fork, write: fork};
+    }
 
     const readFn = (dagRead: Read) =>
       diff(
@@ -183,39 +236,6 @@ export class IVMSourceRepo {
       });
     });
   }
-
-  advanceSyncHead = async (
-    store: Store,
-    syncHeadHash: Hash,
-    patches: readonly Diff[],
-  ): Promise<void> => {
-    /**
-     * The sync head may not exist yet as we do not create it on construction of Zero.
-     * One reason it is not created eagerly is that the `main` head must exist immediately
-     * on startup of Zero since a user can construct queries without awaiting. E.g.,
-     *
-     * ```ts
-     * const z = new Zero();
-     * z.query.issue...
-     * ```
-     *
-     * Since the main `IVM Sources` must exist immediately on construction of Zero,
-     * we cannot wait for `sync` to be populated then forked off into `main`.
-     */
-    if (this.#sync === undefined) {
-      await this.#initSyncHead(store, syncHeadHash);
-    }
-    assert(this.#sync !== undefined);
-
-    if (this.#sync.hash === syncHeadHash) {
-      // If the hashes are the same, the sync head is already up to date.
-      return;
-    }
-
-    // Sync head was behind. Advance it via the provided diffs.
-    applyDiffs(patches, this.#sync);
-    this.#sync.hash = syncHeadHash;
-  };
 }
 
 function applyDiffs(
