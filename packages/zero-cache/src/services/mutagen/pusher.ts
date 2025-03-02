@@ -84,8 +84,10 @@ class PushWorker {
   }
 
   async run() {
+    this.#lc.info?.('starting pusher');
     for (;;) {
       const task = await this.#queue.dequeue();
+      this.#lc.info?.('dequeued a push task');
       const rest = this.#queue.drain();
       const [pushes, terminate] = combinePushes([task, ...rest]);
       for (const push of pushes) {
@@ -99,6 +101,7 @@ class PushWorker {
   }
 
   async #processPush(entry: PusherEntry): Promise<MutationError | undefined> {
+    this.#lc.info?.('processing custom mutation');
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -117,6 +120,7 @@ class PushWorker {
       });
       // TODO: handle more varied response types from the user's API server
       if (!response.ok) {
+        this.#lc.error?.('failed to push', response);
         return [
           ErrorKind.MutationFailed,
           `API server failed to process mutation: ${response.status} ${response.statusText}`,
@@ -133,6 +137,7 @@ class PushWorker {
       ];
     }
 
+    this.#lc.info?.('processed a custom mutation');
     return undefined;
   }
 }
