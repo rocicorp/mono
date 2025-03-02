@@ -7,3 +7,4 @@ export type {
   ConnectionProvider,
   Row,
 } from './db.ts';
+export type {PushHandler} from './web.ts';
