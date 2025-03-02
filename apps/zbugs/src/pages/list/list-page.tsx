@@ -1,4 +1,5 @@
 import {escapeLike} from '@rocicorp/zero';
+import type {AdvancedQuery} from '@rocicorp/zero/advanced';
 import {useQuery} from '@rocicorp/zero/react';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
@@ -28,6 +29,7 @@ import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import type {ListContext} from '../../routes.ts';
 import {preload} from '../../zero-setup.ts';
+import type {Schema} from '../../../schema.ts';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -92,6 +94,16 @@ export function ListPage({onReady}: {onReady: () => void}) {
   for (const label of labels) {
     q = q.whereExists('labels', q => q.where('name', label));
   }
+
+  const pageSize = 100;
+  const [limit, setLimit] = useState(pageSize); // TODO: Calculate based on size of page - should be 3-5x visible page size.
+  const queryHash = (q as unknown as AdvancedQuery<Schema, 'issue'>).hash();
+  useEffect(() => {
+    setLimit(pageSize);
+    virtualizer.scrollToIndex(0);
+  }, [queryHash]);
+
+  q = q.limit(limit);
 
   const [issues, issuesResult] = useQuery(q);
   if (issues.length > 0 || issuesResult.type === 'complete') {
@@ -249,6 +261,18 @@ export function ListPage({onReady}: {onReady: () => void}) {
     getScrollElement: () => listRef.current,
   });
 
+  const virtualItems = virtualizer.getVirtualItems();
+  useEffect(() => {
+    const [lastItem] = virtualItems.reverse();
+    if (!lastItem) {
+      return;
+    }
+
+    if (lastItem.index >= limit - pageSize / 4) {
+      setLimit(limit + pageSize);
+    }
+  }, [limit, virtualItems]);
+
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
   const searchBox = useRef<HTMLHeadingElement>(null);
@@ -366,7 +390,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
               className="virtual-list"
               style={{height: virtualizer.getTotalSize()}}
             >
-              {virtualizer.getVirtualItems().map(virtualRow => (
+              {virtualItems.map(virtualRow => (
                 <Row
                   key={virtualRow.key + ''}
                   index={virtualRow.index}
