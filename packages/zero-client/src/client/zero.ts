@@ -397,7 +397,6 @@ export class Zero<
       onUpdateNeeded,
       onClientStateNotFound,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-      kvStore = 'idb',
       schema,
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
@@ -410,6 +409,17 @@ export class Zero<
       server,
       false /*options.enableAnalytics,*/, // Reenable analytics
     );
+
+    let {kvStore = 'idb'} = options as ZeroAdvancedOptions<S>;
+    if (kvStore === 'idb') {
+      if (!getBrowserGlobal('indexedDB')) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          'IndexedDB is not supported in this environment. Falling back to memory storage.',
+        );
+        kvStore = 'mem';
+      }
+    }
 
     if (hiddenTabDisconnectDelay < 0) {
       throw new Error(
