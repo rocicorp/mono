@@ -359,6 +359,7 @@ CREATE EVENT TRIGGER ${sharded(`${appID}_${tagID}`)}
   return triggers.join('');
 }
 
+// Exported for testing.
 export function dropEventTriggerStatements(
   appID: string,
   shardID: string | number,

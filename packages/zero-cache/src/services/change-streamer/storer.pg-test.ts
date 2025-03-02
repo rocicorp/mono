@@ -33,7 +33,11 @@ describe('change-streamer/storer', () => {
     await ensureReplicationConfig(
       lc,
       db,
-      {replicaVersion: REPLICA_VERSION, publications: []},
+      {
+        replicaVersion: REPLICA_VERSION,
+        publications: [],
+        watermark: REPLICA_VERSION,
+      },
       shard,
       true,
     );

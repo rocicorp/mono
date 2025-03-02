@@ -1,6 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {PostgresDB} from '../../../types/pg.ts';
-import {dropEventTriggerStatements} from './schema/ddl.ts';
 import {dropShard} from './schema/shard.ts';
 
 export async function decommissionShard(
@@ -13,11 +12,8 @@ export async function decommissionShard(
 
   lc.info?.(`Decommissioning zero shard ${shard}`);
   await db.begin(async tx => {
-    await tx.unsafe(dropEventTriggerStatements(appID, shardID));
-    lc.debug?.(`Dropped event triggers`);
-
     await tx.unsafe(dropShard(appID, shardID));
-    lc.debug?.(`Dropped upstream shard schema ${shard}`);
+    lc.debug?.(`Dropped upstream shard schema ${shard} and event triggers`);
 
     const slots = await tx<{pid: string | null}[]>`
     SELECT pg_terminate_backend(active_pid), active_pid as pid

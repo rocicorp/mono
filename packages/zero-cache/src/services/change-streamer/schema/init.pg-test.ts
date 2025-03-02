@@ -24,7 +24,7 @@ describe('change-streamer/schema/migration', () => {
     await ensureReplicationConfig(
       lc,
       db,
-      {replicaVersion: '123', publications: []},
+      {replicaVersion: '123', publications: [], watermark: '123'},
       shard,
       true,
     );

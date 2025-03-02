@@ -1,4 +1,12 @@
-import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type Mock,
+  test,
+  vi,
+} from 'vitest';
 import {h128} from '../../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
@@ -420,6 +428,8 @@ async function setup(permissions: PermissionsConfig | undefined) {
   const cvrDB = await testDBs.create('view_syncer_service_test');
   await initViewSyncerSchema(lc, cvrDB, SHARD);
 
+  const setTimeoutFn = vi.fn();
+
   const replicator = fakeReplicator(lc, replica);
   const stateChanges: Subscription<ReplicaState> = Subscription.create();
   const drainCoordinator = new DrainCoordinator();
@@ -442,6 +452,9 @@ async function setup(permissions: PermissionsConfig | undefined) {
     ),
     stateChanges,
     drainCoordinator,
+    undefined,
+    undefined,
+    setTimeoutFn,
   );
   if (permissions) {
     const json = JSON.stringify(permissions);
@@ -521,6 +534,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
     nextPoke,
     nextPokeParts,
     expectNoPokes,
+    setTimeoutFn,
   };
 }
 
@@ -564,6 +578,15 @@ describe('view-syncer/service', () => {
   let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
   let nextPokeParts: (client: Queue<Downstream>) => Promise<PokePartBody[]>;
   let expectNoPokes: (client: Queue<Downstream>) => Promise<void>;
+  let setTimeoutFn: Mock<typeof setTimeout>;
+
+  function callNextSetTimeout(delta: number) {
+    // Sanity check that the system time is the mocked time.
+    expect(vi.getRealSystemTime()).not.toBe(vi.getMockedSystemTime());
+    vi.setSystemTime(Date.now() + delta);
+    const fn = setTimeoutFn.mock.lastCall![0];
+    fn();
+  }
 
   const SYNC_CONTEXT: SyncContext = {
     clientID: 'foo',
@@ -591,6 +614,7 @@ describe('view-syncer/service', () => {
       nextPoke,
       nextPokeParts,
       expectNoPokes,
+      setTimeoutFn,
     } = await setup(permissionsAll));
   });
 
@@ -3330,9 +3354,10 @@ describe('view-syncer/service', () => {
     `);
   });
 
-  describe('expired queries', {timeout: 10_000}, () => {
+  describe('expired queries', () => {
     test('expired query is removed', async () => {
       const ttl = 100;
+      vi.setSystemTime(Date.now());
       const client = connect(SYNC_CONTEXT, [
         {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
       ]);
@@ -3500,7 +3525,7 @@ describe('view-syncer/service', () => {
 
       await expectNoPokes(client);
 
-      await sleep(ttl);
+      callNextSetTimeout(ttl);
 
       expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
         [
@@ -3551,6 +3576,7 @@ describe('view-syncer/service', () => {
 
     test('expired query is readded', async () => {
       const ttl = 100;
+      vi.setSystemTime(Date.now());
       const client = connect(SYNC_CONTEXT, [
         {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
       ]);
@@ -3718,7 +3744,7 @@ describe('view-syncer/service', () => {
 
       await expectNoPokes(client);
 
-      await sleep(ttl / 2);
+      callNextSetTimeout(ttl / 2);
 
       await vs.changeDesiredQueries(SYNC_CONTEXT, [
         'changeDesiredQueries',
@@ -3774,7 +3800,7 @@ describe('view-syncer/service', () => {
       // No got queries patch since we newer removed.
       await expectNoPokes(client);
 
-      await sleep(ttl);
+      callNextSetTimeout(ttl);
 
       await expectNoPokes(client);
 
@@ -3802,7 +3828,8 @@ describe('view-syncer/service', () => {
 
       await expectNoPokes(client);
 
-      await sleep(ttl * 2);
+      callNextSetTimeout(ttl * 2);
+
       expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
         [
           {
@@ -3850,6 +3877,7 @@ describe('view-syncer/service', () => {
 
     test('query is added twice with longer ttl', async () => {
       const ttl = 100;
+      vi.setSystemTime(Date.now());
       const client = connect(SYNC_CONTEXT, [
         {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
       ]);
@@ -4043,11 +4071,7 @@ describe('view-syncer/service', () => {
 
       await expectNoPokes(client);
 
-      await sleep(ttl);
-      await expectNoPokes(client);
-
-      await sleep(ttl);
-      await expectNoPokes(client);
+      vi.setSystemTime(Date.now() + ttl * 2);
 
       // Now delete it and make sure it takes 2 * ttl to get the got delete.
       await vs.changeDesiredQueries(SYNC_CONTEXT, [
@@ -4073,9 +4097,8 @@ describe('view-syncer/service', () => {
       `);
 
       await expectNoPokes(client);
-      await sleep(ttl);
-      await expectNoPokes(client);
-      await sleep(ttl);
+
+      callNextSetTimeout(2 * ttl);
 
       expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
         [
@@ -4126,6 +4149,7 @@ describe('view-syncer/service', () => {
 
     test('query is added twice with shorter ttl', async () => {
       const ttl = 100;
+      vi.setSystemTime(Date.now());
       const client = connect(SYNC_CONTEXT, [
         {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: ttl * 2},
       ]);
@@ -4277,11 +4301,7 @@ describe('view-syncer/service', () => {
       ]);
       await expectNoPokes(client);
 
-      await sleep(ttl);
-      await expectNoPokes(client);
-
-      await sleep(ttl);
-      await expectNoPokes(client);
+      vi.setSystemTime(Date.now() + 2 * ttl);
 
       // Now delete it and make sure it takes 2 * ttl to get the got delete.
       await vs.changeDesiredQueries(SYNC_CONTEXT, [
@@ -4307,9 +4327,7 @@ describe('view-syncer/service', () => {
       `);
 
       await expectNoPokes(client);
-      await sleep(ttl);
-      await expectNoPokes(client);
-      await sleep(ttl);
+      callNextSetTimeout(2 * ttl);
 
       expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
         [

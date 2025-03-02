@@ -38,6 +38,7 @@ describe('change-streamer/schema/tables', () => {
       {
         replicaVersion: '183',
         publications: ['zero_data', 'zero_metadata'],
+        watermark: '183',
       },
       shard,
       true,
@@ -76,6 +77,7 @@ describe('change-streamer/schema/tables', () => {
       {
         replicaVersion: '183',
         publications: ['zero_metadata', 'zero_data'],
+        watermark: '183',
       },
       shard,
       true,
@@ -133,6 +135,7 @@ describe('change-streamer/schema/tables', () => {
       {
         replicaVersion: '183',
         publications: ['zero_metadata', 'zero_data'],
+        watermark: '183',
       },
       shard,
       false,
@@ -146,6 +149,7 @@ describe('change-streamer/schema/tables', () => {
         {
           replicaVersion: '183',
           publications: ['zero_metadata', 'zero_data'],
+          watermark: '183',
         },
         shard,
         true,
@@ -159,6 +163,7 @@ describe('change-streamer/schema/tables', () => {
       {
         replicaVersion: '1g8',
         publications: ['zero_data', 'zero_metadata'],
+        watermark: '1g8',
       },
       shard,
       true,
@@ -182,5 +187,21 @@ describe('change-streamer/schema/tables', () => {
       ],
       ['rezo_8/cdc.changeLog']: [],
     });
+
+    // Different replica version at a non-initial watermark
+    // should trigger a reset.
+    await expect(
+      ensureReplicationConfig(
+        lc,
+        db,
+        {
+          replicaVersion: '1gg',
+          publications: ['zero_data', 'zero_metadata'],
+          watermark: '1zz',
+        },
+        shard,
+        true,
+      ),
+    ).rejects.toThrow(AutoResetSignal);
   });
 });

@@ -149,7 +149,7 @@ export async function initialSync(
       await copiers.done();
     }
 
-    await setInitialSchema(upstreamDB, shard, published);
+    await setInitialSchema(upstreamDB, shard, initialVersion, published);
 
     initReplicationState(tx, publications, initialVersion);
     initChangeLog(tx);
@@ -226,7 +226,7 @@ async function createReplicationSlot(
   // https://github.com/postgres/postgres/blob/5304fec4d8a141abe6f8f6f2a6862822ec1f3598/src/backend/replication/logical/tablesync.c#L1358
   if (dropExisting) {
     lc.info?.(`Dropping existing replication slot ${slotName}`);
-    await session.unsafe(`DROP_REPLICATION_SLOT ${slotName} WAIT`);
+    await session.unsafe(`DROP_REPLICATION_SLOT "${slotName}" WAIT`);
   }
   const slot = (
     await session.unsafe<ReplicationSlot[]>(

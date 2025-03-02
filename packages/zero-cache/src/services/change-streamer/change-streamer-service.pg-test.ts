@@ -26,6 +26,7 @@ import type {StatusMessage} from '../change-source/protocol/current/status.ts';
 import {
   getSubscriptionState,
   initReplicationState,
+  type SubscriptionState,
 } from '../replicator/schema/replication-state.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {initializeStreamer} from './change-streamer-service.ts';
@@ -38,12 +39,11 @@ import {
   AutoResetSignal,
   ensureReplicationConfig,
   type ChangeLogEntry,
-  type ReplicationConfig,
 } from './schema/tables.ts';
 
 describe('change-streamer/service', () => {
   let lc: LogContext;
-  let replicaConfig: ReplicationConfig;
+  let replicaConfig: SubscriptionState;
   let changeDB: PostgresDB;
   let streamer: ChangeStreamerService;
   let changes: Subscription<ChangeStreamMessage>;

@@ -21,7 +21,7 @@ import {initShardSchema} from './schema/init.ts';
 import {getPublicationInfo} from './schema/published.ts';
 import {UnsupportedTableSchemaError} from './schema/validation.ts';
 
-const APP_ID = 'zrohs';
+const APP_ID = '1';
 const SHARD_NUM = 18;
 
 const ZERO_SCHEMA_VERSIONS_SPEC: PublishedTableSpec = {
@@ -661,16 +661,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedIndexes: [
         {
-          columns: {
-            issueID: 'ASC',
-            orgID: 'ASC',
-          },
-          name: 'issues_pkey',
-          schema: 'public',
-          tableName: 'issues',
-          unique: true,
-        },
-        {
           columns: {lock: 'ASC'},
           name: 'permissions_pkey',
           schema: APP_ID,
@@ -692,6 +682,16 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'clients_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
+          unique: true,
+        },
+        {
+          columns: {
+            issueID: 'ASC',
+            orgID: 'ASC',
+          },
+          name: 'issues_pkey',
+          schema: 'public',
+          tableName: 'issues',
           unique: true,
         },
       ],
@@ -886,13 +886,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedIndexes: [
         {
-          columns: {userID: 'ASC'},
-          name: 'users_pkey',
-          schema: 'public',
-          tableName: 'users',
-          unique: true,
-        },
-        {
           columns: {lock: 'ASC'},
           name: 'permissions_pkey',
           schema: APP_ID,
@@ -914,6 +907,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'clients_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
+          unique: true,
+        },
+        {
+          columns: {userID: 'ASC'},
+          name: 'users_pkey',
+          schema: 'public',
+          tableName: 'users',
           unique: true,
         },
       ],
@@ -1028,13 +1028,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedIndexes: [
         {
-          columns: {userID: 'ASC'},
-          name: 'users_pkey',
-          schema: 'public',
-          tableName: 'users',
-          unique: true,
-        },
-        {
           columns: {lock: 'ASC'},
           name: 'permissions_pkey',
           schema: APP_ID,
@@ -1056,6 +1049,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'clients_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
+          unique: true,
+        },
+        {
+          columns: {userID: 'ASC'},
+          name: 'users_pkey',
+          schema: 'public',
+          tableName: 'users',
           unique: true,
         },
       ],
@@ -1212,26 +1212,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedIndexes: [
         {
-          columns: {
-            orgID: 'DESC',
-            other: 'ASC',
-          },
-          name: 'issues_orgID_other_idx',
-          schema: 'public',
-          tableName: 'issues',
-          unique: false,
-        },
-        {
-          columns: {
-            issueID: 'ASC',
-            orgID: 'ASC',
-          },
-          name: 'issues_pkey',
-          schema: 'public',
-          tableName: 'issues',
-          unique: true,
-        },
-        {
           columns: {lock: 'ASC'},
           name: 'permissions_pkey',
           schema: APP_ID,
@@ -1253,6 +1233,26 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'clients_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
+          unique: true,
+        },
+        {
+          columns: {
+            orgID: 'DESC',
+            other: 'ASC',
+          },
+          name: 'issues_orgID_other_idx',
+          schema: 'public',
+          tableName: 'issues',
+          unique: false,
+        },
+        {
+          columns: {
+            issueID: 'ASC',
+            orgID: 'ASC',
+          },
+          name: 'issues_pkey',
+          schema: 'public',
+          tableName: 'issues',
           unique: true,
         },
       ],
@@ -1316,13 +1316,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedIndexes: [
         {
-          columns: {id: 'ASC'},
-          name: 'giant_pkey',
-          schema: 'public',
-          tableName: 'giant',
-          unique: true,
-        },
-        {
           columns: {lock: 'ASC'},
           name: 'permissions_pkey',
           schema: APP_ID,
@@ -1344,6 +1337,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'clients_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
+          unique: true,
+        },
+        {
+          columns: {id: 'ASC'},
+          name: 'giant_pkey',
+          schema: 'public',
+          tableName: 'giant',
           unique: true,
         },
       ],
@@ -1400,7 +1400,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       );
 
       const result = await upstream.unsafe(
-        `SELECT * FROM ${APP_ID}_${SHARD_NUM}."shardConfig"`,
+        `SELECT * FROM "${APP_ID}_${SHARD_NUM}"."shardConfig"`,
       );
       const tableSpecs = Object.entries(c.published)
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
@@ -1413,6 +1413,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           tables: tableSpecs,
           indexes: c.replicatedIndexes,
         },
+        replicaVersion: WATERMARK_REGEX,
       });
 
       const {publications, tables} = await getPublicationInfo(
