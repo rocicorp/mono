@@ -87,23 +87,29 @@ export class IVMSourceRepo {
     return this.#main;
   }
 
-  advanceSyncHead = async (
-    store: Store,
-    syncHeadHash: Hash,
-    patches: readonly Diff[],
-  ): Promise<void> => {
+  advanceSyncHead = async (store: Store, syncHeadHash: Hash): Promise<void> => {
     if (this.#sync === undefined) {
       await this.#initSyncHead(store, syncHeadHash);
     }
-    assert(this.#sync !== undefined);
+    assert(this.#sync !== undefined, 'no sync head found');
 
     if (this.#sync.hash === syncHeadHash) {
       // If the hashes are the same, the sync head is already up to date.
       return;
     }
 
+    const diffs = await computeDiffs(
+      this.#sync.hash,
+      syncHeadHash,
+      store,
+      undefined,
+    );
+
     // Sync head was behind. Advance it via the provided diffs.
-    applyDiffs(patches, this.#sync);
+    if (diffs !== undefined) {
+      applyDiffs(diffs, this.#sync);
+    }
+
     this.#sync.hash = syncHeadHash;
   };
 
@@ -122,7 +128,10 @@ export class IVMSourceRepo {
   ): MaybePromise<RepTxZeroData> {
     switch (reason) {
       case 'initial': {
-        assert(expectedHead === undefined);
+        assert(
+          expectedHead === undefined,
+          'expected head should be undefined for initial',
+        );
         // Mutators read from main and do not write to main for `initial` mutations.
         // Main is updated via `experimentalWatch` between each mutation.
         // There is no concept of running many custom mutators in the same transaction at the moment.
@@ -152,7 +161,11 @@ export class IVMSourceRepo {
         // On refresh the hashes may not match.
         // This is because IDB will have mutations included in it
         // (from other clients) that are not yet in the sync head.
-        assert(reason === 'refresh');
+        // They may also not match on `persist` if we are persisting after a refresh
+        assert(
+          reason === 'refresh' || reason === 'persist',
+          'head should match for all reasons except refresh',
+        );
         return this.#createSourcesForHead(expectedHead);
       }
     }
@@ -181,23 +194,10 @@ export class IVMSourceRepo {
       return {read: fork, write: fork};
     }
 
-    const readFn = (dagRead: Read) =>
-      diff(
-        fork.hash,
-        hash,
-        dagRead,
-        {
-          shouldComputeDiffs: () => true,
-          shouldComputeDiffsForIndex(_name) {
-            return false;
-          },
-        },
-        FormatVersion.Latest,
-      );
-    const diffsFromSync =
-      read === undefined ? await withRead(store, readFn) : await readFn(read);
+    console.log('computing diffs from', fork.hash, 'to', hash);
 
-    const diffs = diffsFromSync.get('');
+    const diffs = await computeDiffs(fork.hash, hash, store, read);
+
     if (diffs === undefined) {
       return {read: fork, write: fork};
     }
@@ -208,6 +208,7 @@ export class IVMSourceRepo {
   }
 
   async #initSyncHead(store: Store, syncHeadHash: Hash | undefined) {
+    console.log('INIT SYNC HEAD', syncHeadHash, new Error());
     await this.#initSyncHeadLock.withLock(async () => {
       if (this.#sync !== undefined) {
         // sync head was created by someone else while we were waiting for the lock.
@@ -239,6 +240,31 @@ export class IVMSourceRepo {
       });
     });
   }
+}
+
+async function computeDiffs(
+  startHash: Hash,
+  endHash: Hash,
+  store: Store,
+  read: Read | undefined,
+): Promise<InternalDiff | undefined> {
+  const readFn = (dagRead: Read) =>
+    diff(
+      startHash,
+      endHash,
+      dagRead,
+      {
+        shouldComputeDiffs: () => true,
+        shouldComputeDiffsForIndex(_name) {
+          return false;
+        },
+      },
+      FormatVersion.Latest,
+    );
+  const diffsFromSync =
+    read === undefined ? await withRead(store, readFn) : await readFn(read);
+
+  return diffsFromSync.get('');
 }
 
 function applyDiffs(

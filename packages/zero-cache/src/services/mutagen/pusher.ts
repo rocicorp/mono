@@ -113,6 +113,7 @@ class PushWorker {
     }
 
     try {
+      this.#lc.info?.('FETCHING', this.#pushURL, JSON.stringify(entry.push));
       const response = await fetch(this.#pushURL, {
         method: 'POST',
         headers,

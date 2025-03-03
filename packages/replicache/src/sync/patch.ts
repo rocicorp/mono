@@ -23,34 +23,11 @@ export async function apply(
   lc: LogContext,
   dbWrite: Write,
   patch: readonly PatchOperationInternal[],
-): Promise<readonly Diff[]> {
-  const ret: Diff[] = [];
-  function pushChangeOrAdd(
-    key: string,
-    oldValue: FrozenJSONValue | undefined,
-    newValue: FrozenJSONValue,
-  ) {
-    if (oldValue === undefined) {
-      ret.push({
-        op: 'add',
-        key,
-        newValue,
-      });
-    } else {
-      ret.push({
-        op: 'change',
-        key,
-        oldValue,
-        newValue,
-      });
-    }
-  }
+): Promise<void> {
   for (const p of patch) {
     switch (p.op) {
       case 'put': {
-        const existing = await dbWrite.get(p.key);
         const frozen = deepFreeze(p.value);
-        pushChangeOrAdd(p.key, existing, frozen);
         await dbWrite.put(lc, p.key, frozen);
         break;
       }
@@ -79,7 +56,6 @@ export async function apply(
           addToEntries(p.merge);
         }
         const frozen = deepFreeze(Object.fromEntries(entries));
-        pushChangeOrAdd(p.key, existing, frozen);
         await dbWrite.put(lc, p.key, frozen);
 
         break;
@@ -90,21 +66,11 @@ export async function apply(
           continue;
         }
         await dbWrite.del(lc, p.key);
-        ret.push({
-          op: 'del',
-          key: p.key,
-          oldValue: existing,
-        });
         break;
       }
       case 'clear':
         await dbWrite.clear();
-        ret.push({
-          op: 'clear',
-        });
         break;
     }
   }
-
-  return ret;
 }
