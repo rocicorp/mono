@@ -1,22 +1,22 @@
 import {trace} from '@opentelemetry/api';
 import {Lock} from '@rocicorp/lock';
+import type {LogContext} from '@rocicorp/logger';
+import type {JWTPayload} from 'jose';
+import {startAsyncSpan, startSpan} from '../../../otel/src/span.ts';
+import {version} from '../../../otel/src/version.ts';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
+import type {Upstream} from '../../../zero-protocol/src/up.ts';
+import type {ConnectParams} from '../services/dispatcher/connect-params.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
+import type {Pusher} from '../services/mutagen/pusher.ts';
 import type {
   SyncContext,
   TokenData,
   ViewSyncer,
 } from '../services/view-syncer/view-syncer.ts';
 import type {HandlerResult, MessageHandler} from './connection.ts';
-import {version} from '../../../otel/src/version.ts';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
-import type {Upstream} from '../../../zero-protocol/src/up.ts';
-import {startAsyncSpan, startSpan} from '../../../otel/src/span.ts';
-import {unreachable} from '../../../shared/src/asserts.ts';
-import type {LogContext} from '@rocicorp/logger';
-import type {JWTPayload} from 'jose';
-import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
-import type {ConnectParams} from '../services/dispatcher/connect-params.ts';
-import type {Pusher} from '../services/mutagen/pusher.ts';
 
 const tracer = trace.getTracer('syncer-ws-server', version);
 
@@ -151,6 +151,12 @@ export class SyncerWsMessageHandler implements MessageHandler {
           stream,
         };
       }
+      case 'closeConnection':
+        await startAsyncSpan(tracer, 'connection.closeConnection', () =>
+          viewSyncer.closeConnection(this.#syncContext, msg),
+        );
+        break;
+
       default:
         unreachable(msgType);
     }

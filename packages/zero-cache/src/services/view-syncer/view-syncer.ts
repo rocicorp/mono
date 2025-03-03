@@ -21,6 +21,10 @@ import type {
   ChangeDesiredQueriesMessage,
 } from '../../../../zero-protocol/src/change-desired-queries.ts';
 import type {
+  CloseConnectionBody,
+  CloseConnectionMessage,
+} from '../../../../zero-protocol/src/close-connection.ts';
+import type {
   InitConnectionBody,
   InitConnectionMessage,
 } from '../../../../zero-protocol/src/connect.ts';
@@ -101,6 +105,7 @@ export interface ViewSyncer {
   ): Promise<void>;
 
   deleteClients(ctx: SyncContext, msg: DeleteClientsMessage): Promise<void>;
+  closeConnection(ctx: SyncContext, msg: CloseConnectionMessage): Promise<void>;
 }
 
 const DEFAULT_KEEPALIVE_MS = 5_000;
@@ -471,6 +476,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
   }
 
+  async closeConnection(
+    ctx: SyncContext,
+    msg: CloseConnectionMessage,
+  ): Promise<void> {
+    try {
+      await this.#runInLockForClient(ctx, msg, this.#closeConnection);
+    } catch (e) {
+      this.#lc.error?.('closeConnection failed', e);
+    }
+  }
+
   async #updatePatchesForDesiredQueries(
     lc: LogContext,
     cvr: CVRSnapshot,
@@ -543,12 +559,33 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     // Send 'deleteClients' to the clients.
     if (deletedClientIDs.length || deletedClientGroupIDs.length) {
-      lc.debug?.('deleting clients', clientIDs, clientGroupIDs);
-
       const clients = this.#getClients();
-      clients.forEach(c =>
-        c.sendDeleteClients(deletedClientIDs, deletedClientGroupIDs),
-      );
+      for (const client of clients) {
+        client.sendDeleteClients(lc, deletedClientIDs, deletedClientGroupIDs);
+      }
+    }
+  };
+
+  readonly #closeConnection = async (
+    lc: LogContext,
+    clientID: string,
+    _body: CloseConnectionBody,
+    cvr: CVRSnapshot,
+  ): Promise<void> => {
+    lc.debug?.('closing connection');
+
+    cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater =>
+      updater.deleteClient(clientID),
+    );
+
+    if (this.#pipelinesSynced) {
+      await this.#syncQueryPipelineSet(lc, cvr);
+    }
+
+    for (const client of this.#getClients()) {
+      if (client.clientID !== clientID) {
+        client.sendDeleteClients(lc, [clientID], []);
+      }
     }
   };
 

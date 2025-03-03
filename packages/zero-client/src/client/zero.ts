@@ -32,6 +32,7 @@ import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import type {CloseConnectionMessage} from '../../../zero-protocol/src/close-connection.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
 import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.ts';
@@ -257,6 +258,10 @@ export function getInternalReplicacheImplForTesting(
   assert(TESTING);
   return must(internalReplicacheImplMap.get(z));
 }
+
+const CLOSE_CODE_NORMAL = 1000;
+const CLOSE_CODE_GOING_AWAY = 1001;
+type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 
 export class Zero<
   const S extends Schema,
@@ -744,15 +749,41 @@ export class Zero<
     lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
 
     if (this.#connectionState !== ConnectionState.Disconnected) {
-      this.#disconnect(lc, {
-        client: 'ClientClosed',
-      });
+      let closeReason = JSON.stringify([
+        'closeConnection',
+        [],
+      ] satisfies CloseConnectionMessage);
+      if (closeReason.length > 123) {
+        lc.warn?.('Close reason is too long. Removing it.');
+        closeReason = '';
+      }
+      this.#disconnect(
+        lc,
+        {
+          client: 'ClientClosed',
+        },
+        CLOSE_CODE_NORMAL,
+        closeReason,
+      );
     }
     lc.debug?.('Aborting closeAbortController due to close()');
     this.#closeAbortController.abort();
     this.#metrics.stop();
     return this.#rep.close();
   }
+
+  #onPageHide = (e: PageTransitionEvent) => {
+    // When pagehide fires and persisted is true it means the page is going into
+    // the BFCache. If that happens the page might get restored and this client
+    // will be operational again. If that happens we do not want to remove the
+    // client from the server.
+    if (e.persisted) {
+      this.#lc.debug?.('Ignoring pagehide event because it was persisted');
+    } else {
+      this.#lc.debug?.('Closing client because we got a clean close');
+      this.close().catch(() => {});
+    }
+  };
 
   #onMessage = (e: MessageEvent<string>) => {
     const lc = this.#lc;
@@ -1084,6 +1115,8 @@ export class Zero<
     this.#socket = ws;
     this.#socketResolver.resolve(ws);
 
+    getBrowserGlobal('window')?.addEventListener('pagehide', this.#onPageHide);
+
     try {
       l.debug?.('Waiting for connection to be acknowledged');
       await this.#connectResolver.promise;
@@ -1096,7 +1129,12 @@ export class Zero<
     }
   }
 
-  #disconnect(l: LogContext, reason: DisconnectReason): void {
+  #disconnect(
+    l: LogContext,
+    reason: DisconnectReason,
+    closeCode?: CloseCode,
+    closeReason?: string,
+  ): void {
     if (this.#connectionState === ConnectionState.Connecting) {
       this.#connectErrorCount++;
     }
@@ -1161,10 +1199,15 @@ export class Zero<
     this.#socket?.removeEventListener('message', this.#onMessage);
     this.#socket?.removeEventListener('open', this.#onOpen);
     this.#socket?.removeEventListener('close', this.#onClose);
-    this.#socket?.close();
+    this.#socket?.close(closeCode, closeReason);
     this.#socket = undefined;
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
     this.#pokeHandler.handleDisconnect();
+
+    getBrowserGlobal('window')?.removeEventListener(
+      'pagehide',
+      this.#onPageHide,
+    );
   }
 
   #handlePokeStart(_lc: LogContext, pokeMessage: PokeStartMessage): void {

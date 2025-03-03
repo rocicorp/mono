@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import * as sinon from 'sinon';
-import {afterEach, beforeEach, expect, suite, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {setDeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {
@@ -343,7 +343,7 @@ const mockDeleteClientsManager = {
     }),
 } as unknown as DeleteClientsManager;
 
-suite('createSocket', () => {
+describe('createSocket', () => {
   const t = (
     socketURL: WSString,
     baseCookie: NullableVersion,
@@ -568,7 +568,7 @@ suite('createSocket', () => {
   );
 });
 
-suite('initConnection', () => {
+describe('initConnection', () => {
   test('not sent when connected message received but before ConnectionState.Connected', async () => {
     const r = zeroForTest();
     const mockSocket = await r.socket;
@@ -2189,7 +2189,7 @@ test('Constructing Zero with a negative hiddenTabDisconnectDelay option throws a
     );
 });
 
-suite('Disconnect on hide', () => {
+describe('Disconnect on hide', () => {
   type Case = {
     name: string;
     hiddenTabDisconnectDelay?: number | undefined;
@@ -2417,7 +2417,7 @@ test(ErrorKind.InvalidConnectionRequest, async () => {
   });
 });
 
-suite('Invalid Downstream message', () => {
+describe('Invalid Downstream message', () => {
   type Case = {
     name: string;
     duringPing: boolean;
@@ -2642,7 +2642,7 @@ test('the type of collection should be inferred from options with parse', () => 
   expect(commentQ).not.undefined;
 });
 
-suite('CRUD', () => {
+describe('CRUD', () => {
   const makeZero = () =>
     zeroForTest({
       schema: createSchema(1, {
@@ -2831,7 +2831,7 @@ suite('CRUD', () => {
   });
 });
 
-suite('CRUD with compound primary key', () => {
+describe('CRUD with compound primary key', () => {
   type Issue = {
     ids: string;
     idn: number;
@@ -3202,4 +3202,54 @@ test('Logging stack on close', async () => {
       ]),
     ]),
   );
+});
+
+test('Close should send a special close reason', async () => {
+  const z = zeroForTest();
+  const socket = await z.socket;
+  const close = (socket.close = vi.fn(socket.close));
+  await z.close();
+  expect(socket.closed).toBe(true);
+  expect(close).toHaveBeenCalledOnce();
+  expect(close).toHaveBeenCalledWith(
+    1000,
+    JSON.stringify(['closeConnection', []]),
+  );
+});
+
+describe('Should call close on pagehide', () => {
+  async function setup(persisted: boolean) {
+    const z = zeroForTest();
+    const zeroClose = (z.close = vi.fn(z.close));
+    const socket = await z.socket;
+    const socketClose = (socket.close = vi.fn(socket.close));
+    await z.triggerConnected();
+    await z.waitForConnectionState(ConnectionState.Connected);
+
+    window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted}));
+    return {z, socket, zeroClose, socketClose};
+  }
+
+  test('persisted: false', async () => {
+    const {z, socket, zeroClose, socketClose} = await setup(false);
+
+    expect(z.closed).toBe(true);
+    expect(socket.closed).toBe(true);
+    expect(zeroClose).toHaveBeenCalledOnce();
+    expect(zeroClose).toHaveBeenCalledWith();
+    expect(socketClose).toHaveBeenCalledOnce();
+    expect(socketClose).toHaveBeenCalledWith(
+      1000,
+      JSON.stringify(['closeConnection', []]),
+    );
+  });
+
+  test('persisted: true', async () => {
+    const {z, socket, zeroClose, socketClose} = await setup(true);
+
+    expect(z.closed).toBe(false);
+    expect(socket.closed).toBe(false);
+    expect(zeroClose).not.toHaveBeenCalled();
+    expect(socketClose).not.toHaveBeenCalled();
+  });
 });
