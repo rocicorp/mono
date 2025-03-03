@@ -72,6 +72,7 @@ export async function refresh(
   formatVersion: FormatVersion,
   zero: ZeroOption<unknown> | undefined,
 ): Promise<DiffsMap | undefined> {
+  console.log('REFRESH RUNNING');
   if (closed()) {
     return;
   }
@@ -233,6 +234,7 @@ export async function refresh(
 
         let newMemdagHeadHash = perdagClientGroupHeadHash;
         if (newMemdagMutations.length > 0) {
+          console.log('REFRESH GETTING ZERO DATA');
           const zeroData = await zero?.getRepTxData?.('refresh', {
             store: memdag,
             hash: newMemdagHeadHash,
@@ -258,6 +260,12 @@ export async function refresh(
           newMemdagHeadHash,
           memdagWrite,
         );
+
+        // TODO:
+        // can we diff base commits? Then fix the sync head?
+        // memdagBaseSnapshot is / should be old sync head
+        // newMemdagHeadCommit we can get baseSnapshot of to ffwd to
+
         const diffs = await diffCommits(
           memdagHeadCommit,
           newMemdagHeadCommit,
@@ -267,6 +275,7 @@ export async function refresh(
         );
 
         await memdagWrite.setHead(DEFAULT_HEAD_NAME, newMemdagHeadHash);
+        console.log('CHECK IF SYNC HEAD CHANGED?');
         return {
           type: 'complete',
           diffs,

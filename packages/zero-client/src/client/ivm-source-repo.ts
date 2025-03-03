@@ -111,6 +111,7 @@ export class IVMSourceRepo {
     }
 
     this.#sync.hash = syncHeadHash;
+    console.log('NEW SYNC HEAD HASH', syncHeadHash);
   };
 
   /**
@@ -126,6 +127,7 @@ export class IVMSourceRepo {
         }
       | undefined,
   ): MaybePromise<RepTxZeroData> {
+    console.log('GETTING SOURCES FOR TRANSACTION', reason, new Error());
     switch (reason) {
       case 'initial': {
         assert(
@@ -194,7 +196,7 @@ export class IVMSourceRepo {
       return {read: fork, write: fork};
     }
 
-    console.log('computing diffs from', fork.hash, 'to', hash);
+    console.log('create sources for head from', fork.hash, 'to', hash);
 
     const diffs = await computeDiffs(fork.hash, hash, store, read);
 
@@ -248,8 +250,13 @@ async function computeDiffs(
   store: Store,
   read: Read | undefined,
 ): Promise<InternalDiff | undefined> {
-  const readFn = (dagRead: Read) =>
-    diff(
+  console.log('COMPUTING DIFFS from', startHash, 'to', endHash, new Error());
+  const readFn = async (dagRead: Read) => {
+    console.log(
+      'SYNC HEAD HAS VIA NAME?',
+      await dagRead.getHead(SYNC_HEAD_NAME),
+    );
+    return diff(
       startHash,
       endHash,
       dagRead,
@@ -261,6 +268,7 @@ async function computeDiffs(
       },
       FormatVersion.Latest,
     );
+  };
   const diffsFromSync =
     read === undefined ? await withRead(store, readFn) : await readFn(read);
 
