@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import * as sinon from 'sinon';
-import {afterEach, beforeEach, describe, expect, suite, test, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {setDeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {
@@ -343,7 +343,7 @@ const mockDeleteClientsManager = {
     }),
 } as unknown as DeleteClientsManager;
 
-suite('createSocket', () => {
+describe('createSocket', () => {
   const t = (
     socketURL: WSString,
     baseCookie: NullableVersion,
@@ -568,7 +568,7 @@ suite('createSocket', () => {
   );
 });
 
-suite('initConnection', () => {
+describe('initConnection', () => {
   test('not sent when connected message received but before ConnectionState.Connected', async () => {
     const r = zeroForTest();
     const mockSocket = await r.socket;
@@ -2189,7 +2189,7 @@ test('Constructing Zero with a negative hiddenTabDisconnectDelay option throws a
     );
 });
 
-suite('Disconnect on hide', () => {
+describe('Disconnect on hide', () => {
   type Case = {
     name: string;
     hiddenTabDisconnectDelay?: number | undefined;
@@ -2417,7 +2417,7 @@ test(ErrorKind.InvalidConnectionRequest, async () => {
   });
 });
 
-suite('Invalid Downstream message', () => {
+describe('Invalid Downstream message', () => {
   type Case = {
     name: string;
     duringPing: boolean;
@@ -2642,7 +2642,7 @@ test('the type of collection should be inferred from options with parse', () => 
   expect(commentQ).not.undefined;
 });
 
-suite('CRUD', () => {
+describe('CRUD', () => {
   const makeZero = () =>
     zeroForTest({
       schema: createSchema(1, {
@@ -2831,7 +2831,7 @@ suite('CRUD', () => {
   });
 });
 
-suite('CRUD with compound primary key', () => {
+describe('CRUD with compound primary key', () => {
   type Issue = {
     ids: string;
     idn: number;
