@@ -49,8 +49,8 @@ function connect(
   const [{page_count: pageCount}] = replica.pragma<{page_count: number}>(
     'page_count',
   );
-  //eslint-disable-next-line @typescript-eslint/naming-convention
   const [{freelist_count: freelistCount}] = replica.pragma<{
+    //eslint-disable-next-line @typescript-eslint/naming-convention
     freelist_count: number;
   }>('freelist_count');
 
