@@ -104,6 +104,7 @@ fastify.get<{
 });
 
 fastify.post('/api/push', async function (request, reply) {
+  console.log('INVOKING PUSH HANDLER');
   const response = await pushHandler(
     {
       authorization: request.headers.authorization,
