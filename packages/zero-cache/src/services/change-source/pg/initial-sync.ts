@@ -16,7 +16,7 @@ import {
 import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import type {LexiVersion} from '../../../types/lexi-version.ts';
-import {liteValues} from '../../../types/lite.ts';
+import {liteValues, type LiteValueType} from '../../../types/lite.ts';
 import {liteTableName} from '../../../types/names.ts';
 import {pgClient, type PostgresDB} from '../../../types/pg.ts';
 import type {ShardConfig, ShardID} from '../../../types/shards.ts';
@@ -269,6 +269,12 @@ function createLiteIndices(tx: Database, indices: IndexSpec[]) {
   }
 }
 
+// Verified empirically that batches of 50 seem to be the sweet spot,
+// similar to the report in https://sqlite.org/forum/forumpost/8878a512d3652655
+//
+// Exported for testing.
+export const INSERT_BATCH_SIZE = 50;
+
 async function copy(
   lc: LogContext,
   table: PublishedTableSpec,
@@ -287,13 +293,16 @@ async function copy(
     ZERO_VERSION_COLUMN_NAME,
   ];
   const insertColumnList = insertColumns.map(c => id(c)).join(',');
-  const insertStmt = to.prepare(
-    `INSERT INTO "${tableName}" (${insertColumnList}) VALUES (${new Array(
-      insertColumns.length,
-    )
-      .fill('?')
-      .join(',')})`,
+
+  // (?,?,?,?,?)
+  const valuesSql = `(${new Array(insertColumns.length).fill('?').join(',')})`;
+  const insertSql = `INSERT INTO "${tableName}" (${insertColumnList}) VALUES ${valuesSql}`;
+  const insertStmt = to.prepare(insertSql);
+  // INSERT VALUES (?,?,?,?,?),... x INSERT_BATCH_SIZE
+  const insertBatchStmt = to.prepare(
+    insertSql + `,${valuesSql}`.repeat(INSERT_BATCH_SIZE - 1),
   );
+
   const filterConditions = Object.values(table.publications)
     .map(({rowFilter}) => rowFilter)
     .filter(f => !!f); // remove nulls
@@ -316,8 +325,17 @@ async function copy(
     // This allows the cursor to query the next batch from postgres before
     // the CPU is consumed by the previous batch (of inserts).
     prevBatch = runAfterIO(() => {
-      for (const row of rows) {
-        insertStmt.run([...liteValues(row, table), initialVersion]);
+      let i = 0;
+      for (; i + INSERT_BATCH_SIZE < rows.length; i += INSERT_BATCH_SIZE) {
+        const values: LiteValueType[] = [];
+        for (let j = i; j < i + INSERT_BATCH_SIZE; j++) {
+          values.push(...liteValues(rows[j], table), initialVersion);
+        }
+        insertBatchStmt.run(values);
+      }
+      // Remaining set of rows is < INSERT_BATCH_SIZE
+      for (; i < rows.length; i++) {
+        insertStmt.run([...liteValues(rows[i], table), initialVersion]);
       }
       totalRows += rows.length;
       lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);
