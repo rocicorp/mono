@@ -34,7 +34,7 @@ export default async function runWorker(
   const workerName = `${mode}-replicator`;
   const lc = createLogContext(config, {worker: workerName});
 
-  const replica = setupReplica(lc, fileMode, config.replicaFile);
+  const replica = setupReplica(lc, fileMode, config.replica.file);
 
   const changeStreamerPort = config.changeStreamerPort ?? config.port + 1;
   const changeStreamerURI =

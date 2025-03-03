@@ -87,6 +87,7 @@ test('parse options', () => {
         },
         "port": 4848,
         "push": {},
+        "replica": {},
         "shard": {
           "num": 0,
         },

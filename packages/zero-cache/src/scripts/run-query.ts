@@ -27,7 +27,7 @@ import {
 } from '../config/zero-config.ts';
 
 const options = {
-  replicaFile: zeroOptions.replicaFile,
+  replicaFile: zeroOptions.replica.file,
   debug: {
     ast: {
       type: v.string().optional(),

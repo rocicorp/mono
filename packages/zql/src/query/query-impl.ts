@@ -615,7 +615,7 @@ export class QueryImpl<
 
     const view = this.#delegate.batchViewUpdates(() =>
       (factory ?? arrayViewFactory)(
-        this,
+        this as Query<TSchema, TTable, TReturn>,
         input,
         this.format,
         onDestroy,

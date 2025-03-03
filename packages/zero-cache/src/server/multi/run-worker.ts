@@ -39,7 +39,7 @@ export async function runWorker(
         ['ZERO_PORT']: String(port),
         ['ZERO_CVR_DB']: config.cvr.db,
         ['ZERO_CHANGE_DB']: config.change.db,
-        ['ZERO_REPLICA_FILE']: config.replicaFile,
+        ['ZERO_REPLICA_FILE']: config.replica.file,
       },
     });
   }
