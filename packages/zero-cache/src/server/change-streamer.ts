@@ -29,7 +29,7 @@ export default async function runWorker(
     changeStreamerPort: port = config.port + 1,
     upstream,
     change,
-    replicaFile,
+    replica,
     initialSync,
   } = config;
   const lc = createLogContext(config, {worker: 'change-streamer'});
@@ -59,14 +59,14 @@ export default async function runWorker(
               lc,
               upstream.db,
               shard,
-              replicaFile,
+              replica.file,
               initialSync,
             )
           : await initializeCustomChangeSource(
               lc,
               upstream.db,
               shard,
-              replicaFile,
+              replica.file,
             );
 
       changeStreamer = await initializeStreamer(
@@ -81,15 +81,15 @@ export default async function runWorker(
       break;
     } catch (e) {
       if (first && e instanceof AutoResetSignal) {
-        lc.warn?.(`resetting replica ${replicaFile}`, e);
+        lc.warn?.(`resetting replica ${replica.file}`, e);
         // TODO: Make deleteLiteDB work with litestream. It will probably have to be
         //       a semantic wipe instead of a file delete.
-        deleteLiteDB(replicaFile);
+        deleteLiteDB(replica.file);
         continue; // execute again with a fresh initial-sync
       }
       if (e instanceof DatabaseInitError) {
         throw new Error(
-          `Cannot open ZERO_REPLICA_FILE at "${replicaFile}". Please check that the path is valid.`,
+          `Cannot open ZERO_REPLICA_FILE at "${replica.file}". Please check that the path is valid.`,
           {cause: e},
         );
       }

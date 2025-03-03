@@ -75,7 +75,7 @@ export default function runWorker(
   assert(config.cvr.maxConnsPerWorker);
   assert(config.upstream.maxConnsPerWorker);
 
-  const replicaFile = replicaFileName(config.replicaFile, fileMode);
+  const replicaFile = replicaFileName(config.replica.file, fileMode);
   lc.debug?.(`running view-syncer on ${replicaFile}`);
 
   const cvrDB = pgClient(lc, config.cvr.db, {

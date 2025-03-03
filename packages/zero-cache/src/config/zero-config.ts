@@ -238,13 +238,15 @@ export const zeroOptions = {
     },
   },
 
-  replicaFile: {
-    type: v.string(),
-    desc: [
-      `File path to the SQLite replica that zero-cache maintains.`,
-      `This can be lost, but if it is, zero-cache will have to re-replicate next`,
-      `time it starts up.`,
-    ],
+  replica: {
+    file: {
+      type: v.string(),
+      desc: [
+        `File path to the SQLite replica that zero-cache maintains.`,
+        `This can be lost, but if it is, zero-cache will have to re-replicate next`,
+        `time it starts up.`,
+      ],
+    },
   },
 
   log: logOptions,

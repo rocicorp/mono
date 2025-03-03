@@ -6,10 +6,7 @@ import {must} from '../../../../shared/src/must.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 
-type ZeroLitestreamConfig = Pick<
-  ZeroConfig,
-  'log' | 'replicaFile' | 'litestream'
->;
+type ZeroLitestreamConfig = Pick<ZeroConfig, 'log' | 'replica' | 'litestream'>;
 
 export async function restoreReplica(
   lc: LogContext,
@@ -63,7 +60,7 @@ function getLitestream(
     litestream: must(executable, `Missing --litestream-executable`),
     env: {
       ...process.env,
-      ['ZERO_REPLICA_FILE']: config.replicaFile,
+      ['ZERO_REPLICA_FILE']: config.replica.file,
       ['ZERO_LITESTREAM_BACKUP_URL']: must(backupURL),
       ['ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT']: String(
         minCheckpointPageCount,
@@ -96,7 +93,7 @@ async function tryRestore(config: ZeroLitestreamConfig) {
       '-if-replica-exists',
       '-parallelism',
       String(parallelism),
-      config.replicaFile,
+      config.replica.file,
     ],
     {env, stdio: 'inherit', windowsHide: true},
   );
@@ -112,7 +109,7 @@ async function tryRestore(config: ZeroLitestreamConfig) {
     }
   });
   await promise;
-  return existsSync(config.replicaFile);
+  return existsSync(config.replica.file);
 }
 
 export function startReplicaBackupProcess(
