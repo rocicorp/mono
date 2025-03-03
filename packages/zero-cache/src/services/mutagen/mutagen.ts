@@ -69,7 +69,7 @@ export class MutagenService implements Mutagen, Service {
     this.#lc = lc;
     this.#upstream = upstream;
     this.#shard = shard;
-    this.#replica = new Database(this.#lc, config.replicaFile, {
+    this.#replica = new Database(this.#lc, config.replica.file, {
       fileMustExist: true,
     });
     this.#writeAuthorizer = new WriteAuthorizerImpl(
