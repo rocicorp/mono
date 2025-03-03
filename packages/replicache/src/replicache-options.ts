@@ -4,12 +4,19 @@ import type {StoreProvider} from './kv/store.ts';
 import type {Puller} from './puller.ts';
 import type {Pusher} from './pusher.ts';
 import type {MutatorDefs, RequestOptions} from './types.ts';
+import type {DetailedReason} from './transactions.ts';
+import type {Hash} from './hash.ts';
+import type {Read, Store} from './dag/store.ts';
+import type {MaybePromise} from '../../shared/src/types.ts';
 
 /**
  * The options passed to {@link Replicache}.
  */
 
-export interface ReplicacheOptions<MD extends MutatorDefs> {
+export interface ReplicacheOptions<
+  MD extends MutatorDefs,
+  TZeroData = unknown,
+> {
   /**
    * This is the URL to the server endpoint dealing with the push updates. See
    * [Push Endpoint Reference](https://doc.replicache.dev/reference/server-push) for more
@@ -223,4 +230,24 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
    * instance.
    */
   clientMaxAgeMs?: number | undefined;
+
+  zero?: ZeroOption<TZeroData> | undefined;
 }
+
+export type ZeroOption<T> = {
+  /**
+   * When a refresh, persist, or pull end occurs zero must fork its IVM sources
+   * for use in rebase operations. Replicache will call zero at the start of
+   * these operations to get the current IVM sources.
+   */
+  getRepTxData(
+    reason: DetailedReason,
+    expectedHead:
+      | {
+          store: Store;
+          hash: Hash;
+          read?: Read;
+        }
+      | undefined,
+  ): MaybePromise<T>;
+};

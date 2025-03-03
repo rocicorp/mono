@@ -23,6 +23,7 @@ import {rejectIfClosed, throwIfClosed} from './transaction-closed-error.ts';
 export type TransactionEnvironment = 'client' | 'server';
 export type TransactionLocation = TransactionEnvironment;
 export type TransactionReason = 'initial' | 'rebase' | 'authoritative';
+export type DetailedReason = 'refresh' | 'persist' | 'pullEnd' | 'initial';
 
 /**
  * Basic deep readonly type. It works for {@link JSONValue}.
@@ -271,7 +272,7 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
  * {@link ReplicacheOptions.mutators} and allows read and write operations on the
  * database.
  */
-export interface WriteTransaction extends ReadTransaction {
+export interface WriteTransaction<TZeroData = unknown> extends ReadTransaction {
   /**
    * The ID of the mutation that is being applied.
    */
@@ -281,6 +282,8 @@ export interface WriteTransaction extends ReadTransaction {
    * The reason for the transaction. This can be `initial`, `rebase` or `authoriative`.
    */
   readonly reason: TransactionReason;
+
+  readonly zeroData: TZeroData;
 
   /**
    * Sets a single `value` in the database. The value will be frozen (using
@@ -300,19 +303,21 @@ export interface WriteTransaction extends ReadTransaction {
   del(key: string): Promise<boolean>;
 }
 
-export class WriteTransactionImpl
+export class WriteTransactionImpl<TZeroData = unknown>
   extends ReadTransactionImpl
-  implements WriteTransaction
+  implements WriteTransaction<TZeroData>
 {
   // use `declare` to specialize the type.
   declare readonly dbtx: Write;
   readonly reason: TransactionReason;
   readonly mutationID: number;
+  readonly zeroData: TZeroData;
 
   constructor(
     clientID: ClientID,
     mutationID: number,
     reason: TransactionReason,
+    zeroData: TZeroData,
     dbWrite: Write,
     lc: LogContext,
     rpcName = 'openWriteTransaction',
@@ -320,6 +325,7 @@ export class WriteTransactionImpl
     super(clientID, dbWrite, lc, rpcName);
     this.mutationID = mutationID;
     this.reason = reason;
+    this.zeroData = zeroData;
   }
 
   put(key: string, value: ReadonlyJSONValue): Promise<void> {

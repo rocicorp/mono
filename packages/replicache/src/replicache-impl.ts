@@ -76,7 +76,7 @@ import {refresh} from './persist/refresh.ts';
 import {ProcessScheduler} from './process-scheduler.ts';
 import type {Puller} from './puller.ts';
 import {type Pusher, PushError} from './pusher.ts';
-import type {ReplicacheOptions} from './replicache-options.ts';
+import type {ReplicacheOptions, ZeroOption} from './replicache-options.ts';
 import {
   getKVStoreProvider,
   httpStatusUnauthorized,
@@ -201,7 +201,7 @@ export interface ReplicacheImplOptions {
 }
 
 // eslint-disable-next-line @typescript-eslint/ban-types
-export class ReplicacheImpl<MD extends MutatorDefs = {}> {
+export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
   /** The URL to use when doing a pull request. */
   pullURL: string;
 
@@ -295,6 +295,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   readonly perdag: Store;
   readonly #idbDatabases: IDBDatabasesStore;
   readonly #lc: LogContext;
+  readonly #zero: ZeroOption<TZeroData> | undefined;
 
   readonly #closeAbortController = new AbortController();
 
@@ -387,7 +388,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   onRecoverMutations = (r: Promise<boolean>) => r;
 
   constructor(
-    options: ReplicacheOptions<MD>,
+    options: ReplicacheOptions<MD, TZeroData>,
     implOptions: ReplicacheImplOptions = {},
   ) {
     validateOptions(options);
@@ -416,6 +417,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       enableClientGroupForking = true,
       onClientsDeleted = () => {},
     } = implOptions;
+    this.#zero = options.zero;
     this.auth = auth ?? '';
     this.pullURL = pullURL;
     this.pushURL = pushURL;
@@ -763,6 +765,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       }
 
       // Replay.
+      const zeroData = await this.#zero?.getRepTxData?.('pullEnd', {
+        store: this.memdag,
+        hash: syncHead,
+      });
       for (const mutation of replayMutations) {
         // TODO(greg): I'm not sure why this was in Replicache#_mutate...
         // Ensure that we run initial pending subscribe functions before starting a
@@ -781,6 +787,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
             lc,
             isLocalMetaDD31(meta) ? meta.clientID : clientID,
             FormatVersion.Latest,
+            zeroData,
           ),
         );
       }
@@ -1176,6 +1183,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           this.#mutatorRegistry,
           () => this.#closed,
           FormatVersion.Latest,
+          this.#zero?.getRepTxData,
         );
       } catch (e) {
         if (e instanceof ClientStateNotFoundError) {
@@ -1210,6 +1218,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         this.#subscriptions,
         () => this.closed,
         FormatVersion.Latest,
+        this.#zero,
       );
     } catch (e) {
       if (e instanceof ClientStateNotFoundError) {
@@ -1490,6 +1499,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           clientID,
           await dbWrite.getMutationID(),
           'initial',
+          await this.#zero?.getRepTxData('initial', undefined),
           dbWrite,
           this.#lc,
         );

@@ -36,6 +36,7 @@ import {
   setClient,
 } from './clients.ts';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.ts';
+import type {ZeroOption} from '../replicache-options.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
@@ -65,6 +66,7 @@ export async function persistDD31(
   mutators: MutatorDefs,
   closed: () => boolean,
   formatVersion: FormatVersion,
+  getZeroData: ZeroOption<unknown>['getRepTxData'] | undefined,
   onGatherMemOnlyChunksForTest = () => Promise.resolve(),
 ): Promise<void> {
   if (closed()) {
@@ -141,6 +143,14 @@ export async function persistDD31(
     return;
   }
 
+  const zeroData =
+    getZeroData === undefined
+      ? undefined
+      : await getZeroData('persist', {
+          store: memdag,
+          hash: memdagBaseSnapshot.chunk.hash,
+        });
+
   let memdagBaseSnapshotPersisted = false;
   await withWrite(perdag, async perdagWrite => {
     const [mainClientGroup, latestPerdagMainClientGroupHeadCommit] =
@@ -209,6 +219,7 @@ export async function persistDD31(
           mutationIDs,
           lc,
           formatVersion,
+          zeroData,
         );
       }
     }
@@ -221,6 +232,7 @@ export async function persistDD31(
       mutationIDs,
       lc,
       formatVersion,
+      zeroData,
     );
 
     const newMainClientGroup = {
@@ -257,6 +269,7 @@ async function rebase(
   mutationIDs: Record<ClientID, number>,
   lc: LogContext,
   formatVersion: FormatVersion,
+  zeroData: unknown | undefined,
 ): Promise<Hash> {
   for (let i = mutations.length - 1; i >= 0; i--) {
     const mutationCommit = mutations[i];
@@ -276,6 +289,7 @@ async function rebase(
           lc,
           meta.clientID,
           formatVersion,
+          zeroData,
         )
       ).chunk.hash;
     }

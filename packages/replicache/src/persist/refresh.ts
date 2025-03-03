@@ -39,6 +39,7 @@ import {
   type ChunkWithSize,
   GatherNotCachedVisitor,
 } from './gather-not-cached-visitor.ts';
+import type {ZeroOption} from '../replicache-options.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
@@ -69,6 +70,7 @@ export async function refresh(
   diffConfig: DiffComputationConfig,
   closed: () => boolean,
   formatVersion: FormatVersion,
+  zero: ZeroOption<unknown> | undefined,
 ): Promise<DiffsMap | undefined> {
   if (closed()) {
     return;
@@ -230,18 +232,26 @@ export async function refresh(
         await Promise.all(ps);
 
         let newMemdagHeadHash = perdagClientGroupHeadHash;
-        for (let i = newMemdagMutations.length - 1; i >= 0; i--) {
-          newMemdagHeadHash = (
-            await rebaseMutationAndPutCommit(
-              newMemdagMutations[i],
-              memdagWrite,
-              newMemdagHeadHash,
-              mutators,
-              lc,
-              newMemdagMutations[i].meta.clientID,
-              formatVersion,
-            )
-          ).chunk.hash;
+        if (newMemdagMutations.length > 0) {
+          const zeroData = await zero?.getRepTxData?.('refresh', {
+            store: memdag,
+            hash: newMemdagHeadHash,
+            read: memdagWrite,
+          });
+          for (let i = newMemdagMutations.length - 1; i >= 0; i--) {
+            newMemdagHeadHash = (
+              await rebaseMutationAndPutCommit(
+                newMemdagMutations[i],
+                memdagWrite,
+                newMemdagHeadHash,
+                mutators,
+                lc,
+                newMemdagMutations[i].meta.clientID,
+                formatVersion,
+                zeroData,
+              )
+            ).chunk.hash;
+          }
         }
 
         const newMemdagHeadCommit = await commitFromHash(
