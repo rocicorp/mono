@@ -15,7 +15,12 @@ import {
   initDB as initLiteDB,
 } from '../../../test/lite.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
-import {initialSync, replicationSlot} from './initial-sync.ts';
+import {ZERO_VERSION_COLUMN_NAME} from '../../replicator/schema/replication-state.ts';
+import {
+  initialSync,
+  INSERT_BATCH_SIZE,
+  replicationSlot,
+} from './initial-sync.ts';
 import {fromLexiVersion} from './lsn.ts';
 import {initShardSchema} from './schema/init.ts';
 import {getPublicationInfo} from './schema/published.ts';
@@ -812,6 +817,184 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         `_${APP_ID}_metadata_${SHARD_NUM}`,
         `_${APP_ID}_public_${SHARD_NUM}`,
       ],
+    },
+    {
+      name: 'batch inserts',
+      setupUpstreamQuery: `
+        CREATE TABLE foo(
+          "id" TEXT PRIMARY KEY,
+          "bigint" BIGINT,
+          "timestamp" TIMESTAMPTZ,
+          "bytes" BYTEA,
+          "jsonb" JSONB
+        );
+      `,
+      published: {
+        [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
+        ['public.foo']: {
+          columns: {
+            id: {
+              pos: 1,
+              characterMaximumLength: null,
+              dataType: 'text',
+              typeOID: 25,
+              notNull: true,
+              dflt: null,
+            },
+            bigint: {
+              pos: 2,
+              characterMaximumLength: null,
+              dataType: 'int8',
+              typeOID: 20,
+              notNull: false,
+              dflt: null,
+            },
+            timestamp: {
+              pos: 3,
+              characterMaximumLength: null,
+              dataType: 'timestamptz',
+              typeOID: 1184,
+              notNull: false,
+              dflt: null,
+            },
+            bytes: {
+              pos: 4,
+              characterMaximumLength: null,
+              dataType: 'bytea',
+              typeOID: 17,
+              notNull: false,
+              dflt: null,
+            },
+            jsonb: {
+              pos: 5,
+              characterMaximumLength: null,
+              dataType: 'jsonb',
+              typeOID: 3802,
+              notNull: false,
+              dflt: null,
+            },
+          },
+          oid: expect.any(Number),
+          name: 'foo',
+          primaryKey: ['id'],
+          schema: 'public',
+          publications: {[`_${APP_ID}_public_${SHARD_NUM}`]: {rowFilter: null}},
+        },
+      },
+      replicatedSchema: {
+        [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        ['foo']: {
+          columns: {
+            id: {
+              pos: 1,
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              notNull: false,
+              dflt: null,
+            },
+            bigint: {
+              pos: 2,
+              characterMaximumLength: null,
+              dataType: 'int8',
+              notNull: false,
+              dflt: null,
+            },
+            timestamp: {
+              pos: 3,
+              characterMaximumLength: null,
+              dataType: 'timestamptz',
+              notNull: false,
+              dflt: null,
+            },
+            bytes: {
+              pos: 4,
+              characterMaximumLength: null,
+              dataType: 'bytea',
+              notNull: false,
+              dflt: null,
+            },
+            jsonb: {
+              pos: 5,
+              characterMaximumLength: null,
+              dataType: 'jsonb',
+              notNull: false,
+              dflt: null,
+            },
+            ['_0_version']: {
+              pos: 6,
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              notNull: false,
+              dflt: null,
+            },
+          },
+          name: 'foo',
+        },
+      },
+      replicatedIndexes: [
+        {
+          columns: {lock: 'ASC'},
+          name: 'permissions_pkey',
+          schema: APP_ID,
+          tableName: 'permissions',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
+          name: 'schemaVersions_pkey',
+          schema: APP_ID,
+          tableName: 'schemaVersions',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+          },
+          name: 'clients_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'clients',
+          unique: true,
+        },
+        {
+          columns: {id: 'ASC'},
+          name: 'foo_pkey',
+          schema: 'public',
+          tableName: 'foo',
+          unique: true,
+        },
+      ],
+      resultingPublications: [
+        `_${APP_ID}_metadata_${SHARD_NUM}`,
+        `_${APP_ID}_public_${SHARD_NUM}`,
+      ],
+      upstream: {
+        foo: Array.from(
+          {length: Math.floor(INSERT_BATCH_SIZE * 2.23)},
+          (_, i) => ({
+            id: '' + i,
+            bigint: BigInt(Number.MAX_SAFE_INTEGER) + BigInt(i),
+            timestamp: new Date(Date.UTC(2025, 0, 1, 0, 0, i)).toISOString(),
+            bytes: Buffer.from('hello' + i),
+            jsonb: {foo: i},
+          }),
+        ),
+      },
+      replicatedData: {
+        foo: Array.from(
+          {length: Math.floor(INSERT_BATCH_SIZE * 2.23)},
+          (_, i) => ({
+            id: '' + i,
+            bigint: BigInt(Number.MAX_SAFE_INTEGER) + BigInt(i),
+            timestamp: BigInt(Date.UTC(2025, 0, 1, 0, 0, i)),
+            bytes: Buffer.from('hello' + i),
+            jsonb: JSON.stringify({foo: i}),
+            [ZERO_VERSION_COLUMN_NAME]: WATERMARK_REGEX,
+          }),
+        ),
+      },
     },
     {
       name: 'existing partial publication',
