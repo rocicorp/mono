@@ -10,10 +10,20 @@ import {version} from '../../otel/src/version.ts';
 
 const tracer = trace.getTracer('view-syncer', version);
 
+// https://www.sqlite.org/pragma.html#pragma_auto_vacuum
+const AUTO_VACUUM_INCREMENTAL = 2;
+
+const MB = 1024 * 1024;
+
+function mb(bytes: number): string {
+  return (bytes / MB).toFixed(2);
+}
+
 export class Database {
   readonly #db: SQLite3Database.Database;
   readonly #threshold: number;
   readonly #lc: LogContext;
+  readonly #pageSize: number;
 
   constructor(
     lc: LogContext,
@@ -25,6 +35,11 @@ export class Database {
       this.#lc = lc.withContext('class', 'Database').withContext('path', path);
       this.#db = new SQLite3Database(path, options);
       this.#threshold = slowQueryThreshold;
+
+      const [{page_size: pageSize}] =
+        //eslint-disable-next-line @typescript-eslint/naming-convention
+        this.pragma<{page_size: number}>('page_size');
+      this.#pageSize = pageSize;
     } catch (cause) {
       throw new DatabaseInitError(String(cause), {cause});
     }
@@ -48,8 +63,57 @@ export class Database {
     this.#run('exec', sql, () => this.#db.exec(sql));
   }
 
-  pragma(sql: string): unknown {
-    return this.#run('pragma', sql, () => this.#db.pragma(sql));
+  pragma<T = unknown>(sql: string): T[] {
+    return this.#run<T[]>('pragma', sql, () => this.#db.pragma(sql) as T[]);
+  }
+
+  #bytes(pages: number) {
+    return pages * this.#pageSize;
+  }
+
+  compact(freeableBytesThreshold: number) {
+    const [{freelist_count: freelistCount}] =
+      //eslint-disable-next-line @typescript-eslint/naming-convention
+      this.pragma<{freelist_count: number}>('freelist_count');
+
+    const freeable = this.#bytes(freelistCount);
+    if (freeable < freeableBytesThreshold) {
+      this.#lc.debug?.(
+        `Not compacting ${this.#db.name}: ${mb(freeable)} freeable MB`,
+      );
+      return;
+    }
+    const [{auto_vacuum: autoVacuumMode}] =
+      //eslint-disable-next-line @typescript-eslint/naming-convention
+      this.pragma<{auto_vacuum: number}>('auto_vacuum');
+    if (autoVacuumMode !== AUTO_VACUUM_INCREMENTAL) {
+      this.#lc.warn?.(
+        `Cannot compact ${mb(freeable)} MB of ` +
+          `${this.#db.name} because AUTO_VACUUM mode is ${autoVacuumMode}.`,
+      );
+      return;
+    }
+    const start = Date.now();
+    const [{page_count: pageCountBefore}] =
+      //eslint-disable-next-line @typescript-eslint/naming-convention
+      this.pragma<{page_count: number}>('page_count');
+
+    this.pragma('incremental_vacuum');
+
+    const [{page_count: pageCountAfter}] =
+      //eslint-disable-next-line @typescript-eslint/naming-convention
+      this.pragma<{page_count: number}>('page_count');
+
+    this.#lc.info?.(
+      `Compacted ${this.#db.name} from ` +
+        `${mb(this.#bytes(pageCountBefore))} MB to ` +
+        `${mb(this.#bytes(pageCountAfter))} MB ` +
+        `(${Date.now() - start} ms)`,
+    );
+  }
+
+  unsafeMode(unsafe: boolean) {
+    this.#db.unsafeMode(unsafe);
   }
 
   #run<T>(method: string, sql: string, fn: () => T): T {

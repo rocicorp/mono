@@ -35,6 +35,7 @@ export const CREATE_STORAGE_TABLE = `
 
 const defaultOptions = {
   commitInterval: 5_000,
+  compactionThresholdBytes: 50 * 1024 * 1024,
 };
 
 export class DatabaseStorage {
@@ -49,9 +50,11 @@ export class DatabaseStorage {
     // `locking_mode` is set to `EXCLUSIVE` for performance. Similarly, since
     // durability is not important, `synchronous` is set to `OFF` for performance.
     const db = new Database(lc, path);
-    db.pragma('journal_mode = WAL');
-    db.pragma('synchronous = OFF');
     db.pragma('locking_mode = EXCLUSIVE');
+    db.pragma('foreign_keys = OFF');
+    db.pragma('journal_mode = OFF');
+    db.pragma('synchronous = OFF');
+    db.pragma('auto_vacuum = INCREMENTAL');
 
     db.prepare(CREATE_STORAGE_TABLE).run();
     lc.debug?.(`Created DatabaseStorage backed by ${path}`);
@@ -160,8 +163,9 @@ export class DatabaseStorage {
     const destroy = () => {
       this.#stmts.clear.run(cgID);
       this.#checkpoint();
+      this.#db.compact(this.#options.compactionThresholdBytes);
     };
-    destroy();
+    this.#stmts.clear.run(cgID);
 
     let nextOpID = 1;
     return {

@@ -1,6 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
 import {expect, test, vi} from 'vitest';
-import {TestLogSink} from '../../shared/src/logging-test-utils.ts';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../shared/src/logging-test-utils.ts';
 import {Database} from './db.ts';
 
 test('slow queries are logged', () => {
@@ -27,6 +30,11 @@ test('slow queries are logged', () => {
   }
 
   expect(sink.messages).toEqual([
+    [
+      'warn',
+      {class: 'Database', path: ':memory:', method: 'pragma'},
+      ['Slow query', 0],
+    ],
     [
       'warn',
       {class: 'Database', path: ':memory:', method: 'exec'},
@@ -142,4 +150,34 @@ test('sql errors are annotated with sql', () => {
     result = String(e);
   }
   expect(result).toBe('SqliteError: near "&": syntax error: &Df6(&');
+});
+
+test('compaction', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.pragma('auto_vacuum = INCREMENTAL');
+  db.exec(`CREATE TABLE foo(val text);`);
+
+  function pageCount() {
+    let [{page_count: n}] = db.pragma<{page_count: number}>('page_count');
+    return n;
+  }
+  const startingPageCount = pageCount();
+
+  const pageOfText = 'a'.repeat(4000); // Takes about one page_size (4096 bytes)
+  const stmt = db.prepare('INSERT INTO foo (val) VALUES (?)');
+  for (let i = 0; i < 10; i++) {
+    stmt.run(pageOfText);
+  }
+
+  expect(pageCount()).toBe(10 + startingPageCount);
+  db.compact(0); // Threshold is low, but nothing to compact.
+  expect(pageCount()).toBe(10 + startingPageCount);
+
+  db.prepare('DELETE FROM foo').run();
+
+  db.compact(11 * 4096); // Threshold too high.
+  expect(pageCount()).toBe(10 + startingPageCount);
+
+  db.compact(10 * 4096); // Threshold met.
+  expect(pageCount()).toBe(startingPageCount);
 });
