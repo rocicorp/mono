@@ -97,7 +97,6 @@ import {
 } from './subscriptions.ts';
 import * as HandlePullResponseResultEnum from './sync/handle-pull-response-result-type-enum.ts';
 import type {ClientGroupID, ClientID} from './sync/ids.ts';
-import type {Diff} from './sync/patch.ts';
 import {PullError} from './sync/pull-error.ts';
 import {beginPullV1, handlePullResponseV1, maybeEndPull} from './sync/pull.ts';
 import {push, PUSH_VERSION_DD31} from './sync/push.ts';
@@ -737,10 +736,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
     resolve();
   }
 
-  async maybeEndPull(syncHead: Hash, requestID: string): Promise<void> {
+  async maybeEndPull(syncHead: Hash, requestID: string): Promise<Hash> {
     for (;;) {
       if (this.#closed) {
-        return;
+        return syncHead;
       }
 
       await this.#ready;
@@ -761,7 +760,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
         // All done.
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
-        return;
+        return syncHead;
       }
 
       // Replay.
@@ -1067,11 +1066,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
    */
   async poke(
     poke: PokeInternal,
-    pullApplied: (
-      store: Store,
-      syncHead: Hash,
-      patches: readonly Diff[],
-    ) => Promise<void>,
+    pullApplied: (store: Store, syncHead: Hash) => Promise<void>,
   ): Promise<void> {
     await this.#ready;
     // TODO(MP) Previously we created a request ID here and included it with the
@@ -1108,10 +1103,18 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
     );
 
     switch (result.type) {
-      case HandlePullResponseResultEnum.Applied:
-        await pullApplied(this.memdag, result.syncHead, result.diffs);
-        await this.maybeEndPull(result.syncHead, requestID);
+      case HandlePullResponseResultEnum.Applied: {
+        await pullApplied(this.memdag, result.syncHead);
+        const maybeNewSyncHead = await this.maybeEndPull(
+          result.syncHead,
+          requestID,
+        );
+        if (result.syncHead !== maybeNewSyncHead) {
+          console.log('MAYBE END PULL...');
+          await pullApplied(this.memdag, maybeNewSyncHead);
+        }
         break;
+      }
       case HandlePullResponseResultEnum.CookieMismatch:
         throw new Error(
           'unexpected base cookie for poke: ' + JSON.stringify(poke),

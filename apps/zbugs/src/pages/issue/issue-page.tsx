@@ -170,7 +170,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const [editing, setEditing] = useState<typeof displayed | null>(null);
   const [edits, setEdits] = useState<Partial<typeof displayed>>({});
   useEffect(() => {
-    if (displayed?.shortID !== undefined && idField !== 'shortID') {
+    if (displayed?.shortID != null && idField !== 'shortID') {
       navigate(links.issue(displayed), {
         replace: true,
         state: zbugsHistoryState,
