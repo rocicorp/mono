@@ -866,6 +866,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         transformationHash => !desiredQueries.has(transformationHash),
       );
 
+      for (const q of addQueries) {
+        lc.debug?.(
+          'ViewSyncer adding query',
+          q.ast,
+          'transformed from',
+          cvr.queries[q.id].ast,
+        );
+      }
+
       if (
         addQueries.length > 0 ||
         removeQueries.length > 0 ||
