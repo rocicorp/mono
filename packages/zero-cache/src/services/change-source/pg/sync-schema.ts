@@ -7,6 +7,10 @@ import {
 } from '../../../db/migration-lite.ts';
 import type {ShardConfig} from '../../../types/shards.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
+import {
+  CREATE_RUNTIME_EVENTS_TABLE,
+  recordEvent,
+} from '../../replicator/schema/replication-state.ts';
 import {initialSync, type InitialSyncOptions} from './initial-sync.ts';
 
 export async function initSyncSchema(
@@ -30,6 +34,15 @@ export async function initSyncSchema(
         throw new AutoResetSignal('upgrading replica to new schema');
       },
       minSafeVersion: 3,
+    },
+
+    5: {
+      migrateSchema: (_, db) => {
+        db.exec(CREATE_RUNTIME_EVENTS_TABLE);
+      },
+      migrateData: (_, db) => {
+        recordEvent(db, 'upgrade');
+      },
     },
   };
 

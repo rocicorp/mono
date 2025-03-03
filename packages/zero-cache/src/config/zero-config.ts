@@ -87,6 +87,29 @@ export const shardOptions = {
   },
 };
 
+const replicaOptions = {
+  file: {
+    type: v.string(),
+    desc: [
+      `File path to the SQLite replica that zero-cache maintains.`,
+      `This can be lost, but if it is, zero-cache will have to re-replicate next`,
+      `time it starts up.`,
+    ],
+  },
+
+  vacuumIntervalHours: {
+    type: v.number().optional(),
+    desc: [
+      `Performs a VACUUM at server startup if the specified number of hours has elapsed`,
+      `since the last VACUUM (or initial-sync). The VACUUM operation is heavyweight`,
+      `and requires double the size of the db in disk space. If unspecified, VACUUM`,
+      `operations are not performed.`,
+    ],
+  },
+};
+
+export type ReplicaOptions = Config<typeof replicaOptions>;
+
 const perUserMutationLimit = {
   max: {
     type: v.number().optional(),
@@ -238,16 +261,7 @@ export const zeroOptions = {
     },
   },
 
-  replica: {
-    file: {
-      type: v.string(),
-      desc: [
-        `File path to the SQLite replica that zero-cache maintains.`,
-        `This can be lost, but if it is, zero-cache will have to re-replicate next`,
-        `time it starts up.`,
-      ],
-    },
-  },
+  replica: replicaOptions,
 
   log: logOptions,
 

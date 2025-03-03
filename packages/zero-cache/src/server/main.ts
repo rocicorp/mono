@@ -122,19 +122,23 @@ export default async function runWorker(
 
   if (runChangeStreamer && litestream) {
     // Start a backup replicator and corresponding litestream backup process.
+    const {promise: backupReady, resolve} = resolver();
     const mode: ReplicaFileMode = 'backup';
     loadWorker('./server/replicator.ts', 'supporting', mode, mode).once(
       // Wait for the Replicator's first message (i.e. "ready") before starting
       // litestream backup in order to avoid contending on the lock when the
       // replicator first prepares the db file.
       'message',
-      () =>
+      () => {
         processes.addSubprocess(
           startReplicaBackupProcess(config),
           'supporting',
           'litestream',
-        ),
+        );
+        resolve();
+      },
     );
+    await backupReady;
   }
 
   const syncers: Worker[] = [];

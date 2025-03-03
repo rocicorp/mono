@@ -1,6 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import * as v from '../../../shared/src/valita.ts';
 import {Database} from '../../../zqlite/src/db.ts';
+import type {ReplicaOptions} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {Notifier} from '../services/replicator/notifier.ts';
 import type {
@@ -8,6 +9,10 @@ import type {
   ReplicaStateNotifier,
   Replicator,
 } from '../services/replicator/replicator.ts';
+import {
+  getAscendingEvents,
+  recordEvent,
+} from '../services/replicator/schema/replication-state.ts';
 import type {Worker} from '../types/processes.ts';
 
 export const replicaFileModeSchema = v.union(
@@ -22,23 +27,35 @@ export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
   return mode === 'serving-copy' ? `${replicaFile}-serving-copy` : replicaFile;
 }
 
+const MILLIS_PER_HOUR = 1000 * 60 * 60;
+
 function connect(
   lc: LogContext,
-  replicaDbFile: string,
+  {file, vacuumIntervalHours}: ReplicaOptions,
   walMode: 'wal' | 'wal2',
 ): Database {
-  const replica = new Database(lc, replicaDbFile);
+  const replica = new Database(lc, file);
+  const start = Date.now();
 
-  const [{journal_mode: mode}] = replica.pragma('journal_mode') as {
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    journal_mode: string;
-  }[];
+  // Start by folding any (e.g. restored) WAL(2) files into the main db.
+  replica.pragma('journal_mode = delete');
 
-  if (mode !== walMode) {
-    lc.info?.(`switching ${replicaDbFile} from ${mode} to ${walMode} mode`);
-    replica.pragma('journal_mode = delete');
-    replica.pragma(`journal_mode = ${walMode}`);
+  // Check for the VACUUM threshold.
+  const events = getAscendingEvents(replica);
+  lc.debug?.(`Runtime events for ${file}`, {events});
+  if (vacuumIntervalHours !== undefined) {
+    const millisSinceLastEvent =
+      Date.now() - (events.at(-1)?.timestamp.getTime() ?? 0);
+    if (millisSinceLastEvent / MILLIS_PER_HOUR > vacuumIntervalHours) {
+      lc.info?.(`Performing maintenance VACUUM on ${file}`);
+      replica.exec('VACUUM');
+      recordEvent(replica, 'vacuum');
+      lc.info?.(`VACUUM completed (${Date.now() - start} ms)`);
+    }
   }
+
+  lc.info?.(`setting ${file} to ${walMode} mode`);
+  replica.pragma(`journal_mode = ${walMode}`);
 
   // Set a busy timeout at litestream's recommended 5 seconds:
   // (https://litestream.io/tips/#busy-timeout).
@@ -49,23 +66,21 @@ function connect(
   // that may contend with each other and with the replicator for the lock.
   replica.pragma('busy_timeout = 5000');
 
-  replica.pragma('synchronous = NORMAL');
-  replica.exec('VACUUM');
   replica.pragma('optimize = 0x10002');
-  lc.info?.(`vacuumed and optimized ${replicaDbFile}`);
+  lc.info?.(`optimized ${file}`);
   return replica;
 }
 
 export function setupReplica(
   lc: LogContext,
   mode: ReplicaFileMode,
-  replicaDbFile: string,
+  replicaOptions: ReplicaOptions,
 ): Database {
   lc.info?.(`setting up ${mode} replica`);
 
   switch (mode) {
     case 'backup': {
-      const replica = connect(lc, replicaDbFile, 'wal');
+      const replica = connect(lc, replicaOptions, 'wal');
       // https://litestream.io/tips/#disable-autocheckpoints-for-high-write-load-servers
       replica.pragma('wal_autocheckpoint = 0');
       return replica;
@@ -74,21 +89,22 @@ export function setupReplica(
     case 'serving-copy': {
       // In 'serving-copy' mode, the original file is being used for 'backup'
       // mode, so we make a copy for servicing sync requests.
-      const copyLocation = replicaFileName(replicaDbFile, mode);
+      const {file} = replicaOptions;
+      const copyLocation = replicaFileName(file, mode);
       deleteLiteDB(copyLocation);
 
       const start = Date.now();
-      lc.info?.(`copying ${replicaDbFile} to ${copyLocation}`);
-      const replica = connect(lc, replicaDbFile, 'wal');
+      lc.info?.(`copying ${file} to ${copyLocation}`);
+      const replica = new Database(lc, file);
       replica.prepare(`VACUUM INTO ?`).run(copyLocation);
       replica.close();
       lc.info?.(`finished copy (${Date.now() - start} ms)`);
 
-      return connect(lc, copyLocation, 'wal2');
+      return connect(lc, {...replicaOptions, file: copyLocation}, 'wal2');
     }
 
     case 'serving':
-      return connect(lc, replicaDbFile, 'wal2');
+      return connect(lc, replicaOptions, 'wal2');
 
     default:
       throw new Error(`Invalid ReplicaMode ${mode}`);
