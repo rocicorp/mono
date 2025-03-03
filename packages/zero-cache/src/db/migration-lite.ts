@@ -69,6 +69,7 @@ export async function runSchemaMigrations(
     randInt(0, Number.MAX_SAFE_INTEGER).toString(36),
   );
   const db = new Database(log, dbPath);
+  db.unsafeMode(true); // Enables journal_mode = OFF
   db.pragma('locking_mode = EXCLUSIVE');
   db.pragma('foreign_keys = OFF');
   db.pragma('journal_mode = OFF');
@@ -141,6 +142,7 @@ export async function runSchemaMigrations(
     }
 
     db.pragma('synchronous = NORMAL');
+    db.unsafeMode(false);
 
     assert(versions.dataVersion === codeVersion);
     log.info?.(

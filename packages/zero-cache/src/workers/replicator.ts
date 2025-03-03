@@ -28,6 +28,7 @@ export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
 }
 
 const MILLIS_PER_HOUR = 1000 * 60 * 60;
+const MB = 1024 * 1024;
 
 function connect(
   lc: LogContext,
@@ -40,16 +41,38 @@ function connect(
   // Start by folding any (e.g. restored) WAL(2) files into the main db.
   replica.pragma('journal_mode = delete');
 
+  //eslint-disable-next-line @typescript-eslint/naming-convention
+  const [{page_size: pageSize}] = replica.pragma<{page_size: number}>(
+    'page_size',
+  );
+  //eslint-disable-next-line @typescript-eslint/naming-convention
+  const [{page_count: pageCount}] = replica.pragma<{page_count: number}>(
+    'page_count',
+  );
+  //eslint-disable-next-line @typescript-eslint/naming-convention
+  const [{freelist_count: freelistCount}] = replica.pragma<{
+    freelist_count: number;
+  }>('freelist_count');
+
+  const dbSize = ((pageCount * pageSize) / MB).toFixed(2);
+  const freelistSize = ((freelistCount * pageSize) / MB).toFixed(2);
+
+  // TODO: Consider adding a freelist size or ratio based vacuum trigger.
+  lc.info?.(`Size of db ${file}: ${dbSize} MB (${freelistSize} MB freeable)`);
+
   // Check for the VACUUM threshold.
   const events = getAscendingEvents(replica);
-  lc.debug?.(`Runtime events for ${file}`, {events});
+  lc.debug?.(`Runtime events for db ${file}`, {events});
   if (vacuumIntervalHours !== undefined) {
     const millisSinceLastEvent =
       Date.now() - (events.at(-1)?.timestamp.getTime() ?? 0);
     if (millisSinceLastEvent / MILLIS_PER_HOUR > vacuumIntervalHours) {
       lc.info?.(`Performing maintenance VACUUM on ${file}`);
+      replica.unsafeMode(true);
+      replica.pragma('journal_mode = OFF');
       replica.exec('VACUUM');
       recordEvent(replica, 'vacuum');
+      replica.unsafeMode(false);
       lc.info?.(`VACUUM completed (${Date.now() - start} ms)`);
     }
   }
