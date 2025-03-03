@@ -1199,6 +1199,141 @@ describe('view-syncer/service', () => {
     `);
   });
 
+  test('close connection', async () => {
+    const client1 = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'issues-hash', ast: ISSUES_QUERY},
+    ]);
+
+    const ctx2 = {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'};
+    const client2 = connect(ctx2, [
+      {op: 'put', hash: 'users-hash', ast: USERS_QUERY},
+    ]);
+
+    await nextPoke(client1);
+    await nextPoke(client2);
+
+    stateChanges.push({state: 'version-ready'});
+
+    await nextPoke(client1);
+    await nextPoke(client1);
+
+    await nextPoke(client2);
+    await nextPoke(client2);
+
+    expect(
+      await cvrDB`SELECT * from "this_app_2/cvr".clients`,
+    ).toMatchInlineSnapshot(
+      `
+      Result [
+        {
+          "clientGroupID": "9876",
+          "clientID": "foo",
+          "deleted": false,
+          "patchVersion": "00:01",
+        },
+        {
+          "clientGroupID": "9876",
+          "clientID": "bar",
+          "deleted": false,
+          "patchVersion": "00:02",
+        },
+      ]
+    `,
+    );
+
+    expect(await cvrDB`SELECT * from "this_app_2/cvr".desires`)
+      .toMatchInlineSnapshot(`
+        Result [
+          {
+            "clientGroupID": "9876",
+            "clientID": "foo",
+            "deleted": false,
+            "expiresAt": null,
+            "inactivatedAt": null,
+            "patchVersion": "00:01",
+            "queryHash": "issues-hash",
+            "ttl": null,
+          },
+          {
+            "clientGroupID": "9876",
+            "clientID": "bar",
+            "deleted": false,
+            "expiresAt": null,
+            "inactivatedAt": null,
+            "patchVersion": "00:02",
+            "queryHash": "users-hash",
+            "ttl": null,
+          },
+        ]
+      `);
+
+    await vs.closeConnection(ctx2, ['closeConnection', []]);
+
+    expect(await nextPokeParts(client1)).toMatchInlineSnapshot(`
+      [
+        {
+          "desiredQueriesPatches": {
+            "bar": [
+              {
+                "hash": "users-hash",
+                "op": "del",
+              },
+            ],
+          },
+          "pokeID": "01:01",
+        },
+      ]
+    `);
+
+    expect(await nextPokeParts(client1)).toMatchInlineSnapshot(`
+      [
+        {
+          "gotQueriesPatch": [
+            {
+              "hash": "users-hash",
+              "op": "del",
+            },
+          ],
+          "pokeID": "01:02",
+          "rowsPatch": [
+            {
+              "id": {
+                "id": "100",
+              },
+              "op": "del",
+              "tableName": "users",
+            },
+            {
+              "id": {
+                "id": "101",
+              },
+              "op": "del",
+              "tableName": "users",
+            },
+            {
+              "id": {
+                "id": "102",
+              },
+              "op": "del",
+              "tableName": "users",
+            },
+          ],
+        },
+      ]
+    `);
+    expect(await client1.dequeue()).toMatchInlineSnapshot(`
+      [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "bar",
+          ],
+        },
+      ]
+    `);
+    await expectNoPokes(client1);
+  });
+
   test('initial hydration, rows in multiple queries', async () => {
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},

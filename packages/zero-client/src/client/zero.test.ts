@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import * as sinon from 'sinon';
-import {afterEach, beforeEach, expect, suite, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, suite, test, vi} from 'vitest';
 import {setDeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {
@@ -3202,4 +3202,54 @@ test('Logging stack on close', async () => {
       ]),
     ]),
   );
+});
+
+test('Close should send a special close reason', async () => {
+  const z = zeroForTest();
+  const socket = await z.socket;
+  const close = (socket.close = vi.fn(socket.close));
+  await z.close();
+  expect(socket.closed).toBe(true);
+  expect(close).toHaveBeenCalledOnce();
+  expect(close).toHaveBeenCalledWith(
+    1000,
+    JSON.stringify(['closeConnection', []]),
+  );
+});
+
+describe('Should call close on pagehide', () => {
+  async function setup(persisted: boolean) {
+    const z = zeroForTest();
+    const zeroClose = (z.close = vi.fn(z.close));
+    const socket = await z.socket;
+    const socketClose = (socket.close = vi.fn(socket.close));
+    await z.triggerConnected();
+    await z.waitForConnectionState(ConnectionState.Connected);
+
+    window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted}));
+    return {z, socket, zeroClose, socketClose};
+  }
+
+  test('persisted: false', async () => {
+    const {z, socket, zeroClose, socketClose} = await setup(false);
+
+    expect(z.closed).toBe(true);
+    expect(socket.closed).toBe(true);
+    expect(zeroClose).toHaveBeenCalledOnce();
+    expect(zeroClose).toHaveBeenCalledWith();
+    expect(socketClose).toHaveBeenCalledOnce();
+    expect(socketClose).toHaveBeenCalledWith(
+      1000,
+      JSON.stringify(['closeConnection', []]),
+    );
+  });
+
+  test('persisted: true', async () => {
+    const {z, socket, zeroClose, socketClose} = await setup(true);
+
+    expect(z.closed).toBe(false);
+    expect(socket.closed).toBe(false);
+    expect(zeroClose).not.toHaveBeenCalled();
+    expect(socketClose).not.toHaveBeenCalled();
+  });
 });

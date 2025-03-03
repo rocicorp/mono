@@ -268,6 +268,7 @@ export class ClientHandler {
   }
 
   sendDeleteClients(
+    lc: LogContext,
     deletedClientIDs: string[],
     deletedClientGroupIDs: string[],
   ): void {
@@ -278,6 +279,7 @@ export class ClientHandler {
     if (deletedClientGroupIDs.length > 0) {
       deleteClientsBody.clientGroupIDs = deletedClientGroupIDs;
     }
+    lc.debug?.('sending deleteClients', deleteClientsBody);
     this.#downstream.push(['deleteClients', deleteClientsBody]);
   }
 

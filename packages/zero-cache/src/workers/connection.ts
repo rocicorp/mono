@@ -1,7 +1,12 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket from 'ws';
+import {assert} from '../../../shared/src/asserts.ts';
 import * as valita from '../../../shared/src/valita.ts';
+import {
+  closeConnectionMessageSchema,
+  type CloseConnectionMessage,
+} from '../../../zero-protocol/src/close-connection.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
@@ -15,7 +20,6 @@ import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
 import type {ConnectParams} from '../services/dispatcher/connect-params.ts';
 import {findErrorForClient, getLogLevel} from '../types/error-for-client.ts';
 import type {Source} from '../types/streams.ts';
-import {assert} from '../../../shared/src/asserts.ts';
 
 export type HandlerResult =
   | {
@@ -162,35 +166,56 @@ export class Connection {
         this.send(['pong', {}] satisfies PongMessage);
         return;
       }
+
       const result = await this.#messageHandler.handleMessage(msg);
-      switch (result.type) {
-        case 'fatal':
-          this.#closeWithError(result.error);
-          break;
-        case 'ok':
-          break;
-        case 'stream': {
-          assert(
-            this.#outboundStream === undefined,
-            'Outbound stream already set for this connection!',
-          );
-          this.#outboundStream = result.stream;
-          void this.#proxyOutbound(result.stream);
-          break;
-        }
-        case 'transient': {
-          for (const error of result.errors) {
-            this.sendError(error);
-          }
-        }
-      }
+      return this.#handleMessageResult(result);
     } catch (e) {
       this.#closeWithThrown(e);
     }
   };
 
-  #handleClose = (e: CloseEvent) => {
+  #handleMessageResult(result: HandlerResult): void {
+    switch (result.type) {
+      case 'fatal':
+        this.#closeWithError(result.error);
+        break;
+      case 'ok':
+        break;
+      case 'stream': {
+        assert(
+          this.#outboundStream === undefined,
+          'Outbound stream already set for this connection!',
+        );
+        this.#outboundStream = result.stream;
+        void this.#proxyOutbound(result.stream);
+        break;
+      }
+      case 'transient': {
+        for (const error of result.errors) {
+          this.sendError(error);
+        }
+      }
+    }
+  }
+
+  #handleClose = async (e: CloseEvent) => {
     const {code, reason, wasClean} = e;
+    // Normal closure
+    if (code === 1000) {
+      let msg: CloseConnectionMessage | undefined;
+      try {
+        const data = JSON.parse(reason);
+        msg = valita.parse(data, closeConnectionMessageSchema);
+      } catch {
+        // failed to to parse reason as JSON.
+        this.#lc.warn?.(`failed to parse message "${reason}": ${String(e)}`);
+        return;
+      }
+
+      const result = await this.#messageHandler.handleMessage(msg);
+      this.#handleMessageResult(result);
+    }
+
     this.close('WebSocket close event', {code, reason, wasClean});
   };
 
