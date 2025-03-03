@@ -1,15 +1,14 @@
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {SchemaQuery} from '../../zql/src/mutate/custom.ts';
-import type {DBTransaction} from './db.ts';
+import {first} from '../../shared/src/iterables.ts';
+import {compile} from '../../z2s/src/compiler.ts';
+import {formatPg} from '../../z2s/src/sql.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
+import type {SchemaQuery} from '../../zql/src/mutate/custom.ts';
 import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import type {HumanReadable, PullRow, Query} from '../../zql/src/query/query.ts';
 import type {TypedView} from '../../zql/src/query/typed-view.ts';
-import {formatPg} from '../../z2s/src/sql.ts';
-import {compile} from '../../z2s/src/compiler.ts';
-import {assert} from '../../shared/src/asserts.ts';
-import {first} from '../../shared/src/iterables.ts';
+import type {DBTransaction} from './db.ts';
 
 export function makeSchemaQuery<S extends Schema>(
   schema: S,
@@ -62,7 +61,7 @@ export class Z2SQuery<
     ast: AST = {table: tableName},
     format?: Format | undefined,
   ) {
-    super(schema, tableName, ast, undefined, format);
+    super(schema, tableName, ast, format);
     this.#dbTransaction = dbTransaction;
   }
 
@@ -76,10 +75,8 @@ export class Z2SQuery<
     schema: TSchema,
     tableName: TTable,
     ast: AST,
-    ttl: number | undefined,
     format: Format | undefined,
-  ): Query<TSchema, TTable, TReturn> {
-    assert(ttl === undefined, 'TTL is not supported in Z2S');
+  ): Z2SQuery<TSchema, TTable, TReturn> {
     return new Z2SQuery(schema, tableName, this.#dbTransaction, ast, format);
   }
 

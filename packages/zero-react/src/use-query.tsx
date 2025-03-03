@@ -17,20 +17,35 @@ export type QueryResult<TReturn> = readonly [
   QueryResultDetails,
 ];
 
+export type UseQueryOptions = {
+  enabled?: boolean | undefined;
+  /**
+   * Time to live. This determines how long to cache the results of this query.
+   * If undefined (or 0) the query will be cached as long as it is not removed and
+   * there is enough space
+   */
+  ttl?: number | undefined;
+};
+
 export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
-  q: Query<TSchema, TTable, TReturn>,
-  enable: boolean = true,
+  query: Query<TSchema, TTable, TReturn>,
+  options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
+  let enabled = true;
+  let ttl: number | undefined;
+  if (typeof options === 'boolean') {
+    enabled = options;
+  } else if (options) {
+    ({enabled = true, ttl} = options);
+  }
+  const advancedQuery = query as AdvancedQuery<TSchema, TTable, TReturn>;
+
   const z = useZero();
-  const view = viewStore.getView(
-    z.clientID,
-    q as AdvancedQuery<TSchema, TTable, TReturn>,
-    enable,
-  );
+  const view = viewStore.getView(z.clientID, advancedQuery, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
     view.subscribeReactInternals,
@@ -164,6 +179,7 @@ export class ViewStore {
     clientID: string,
     query: AdvancedQuery<TSchema, TTable, TReturn>,
     enabled: boolean,
+    ttl: number | undefined,
   ): {
     getSnapshot: () => QueryResult<TReturn>;
     subscribeReactInternals: (internals: () => void) => () => void;
@@ -180,6 +196,7 @@ export class ViewStore {
     if (!existing) {
       existing = new ViewWrapper(
         query,
+        ttl,
         view => {
           const lastView = this.#views.get(hash);
           // I don't think this can happen
@@ -238,17 +255,20 @@ class ViewWrapper<
   readonly #query: AdvancedQuery<TSchema, TTable, TReturn>;
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
+  readonly #ttl: number | undefined;
 
   constructor(
     query: AdvancedQuery<TSchema, TTable, TReturn>,
+    ttl: number | undefined,
     onMaterialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
     onDematerialized: () => void,
   ) {
-    this.#snapshot = getDefaultSnapshot(query.format.singular);
+    this.#query = query;
+    this.#ttl = ttl;
     this.#onMaterialized = onMaterialized;
     this.#onDematerialized = onDematerialized;
+    this.#snapshot = getDefaultSnapshot(query.format.singular);
     this.#reactInternals = new Set();
-    this.#query = query;
     this.#materializeIfNeeded();
   }
 
@@ -271,7 +291,7 @@ class ViewWrapper<
       return;
     }
 
-    this.#view = this.#query.materialize();
+    this.#view = this.#query.materialize(this.#ttl);
     this.#view.addListener(this.#onData);
 
     this.#onMaterialized(this);

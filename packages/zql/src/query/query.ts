@@ -186,15 +186,23 @@ export interface Query<
 
   one(): Query<TSchema, TTable, TReturn | undefined>;
 
-  materialize(): TypedView<HumanReadable<TReturn>>;
+  materialize(ttl?: number): TypedView<HumanReadable<TReturn>>;
 
   run(): Promise<HumanReadable<TReturn>>;
 
-  preload(): {
+  preload(options?: PreloadOptions): {
     cleanup: () => void;
     complete: Promise<void>;
   };
 }
+
+export type PreloadOptions = {
+  /**
+   * Time To Live. This is the amount of time to keep the rows associated with
+   * this query after {@linkcode cleanup} has been called.
+   */
+  ttl?: number | undefined;
+};
 
 export type HumanReadable<T> = undefined extends T ? Expand<T> : Expand<T>[];
 // Note: opaque types expand incorrectly.

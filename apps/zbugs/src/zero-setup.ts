@@ -1,4 +1,5 @@
 import {Zero} from '@rocicorp/zero';
+import {days} from '../../../packages/shared/src/time.ts';
 import {type Schema, schema} from '../schema.ts';
 import {Atom} from './atom.ts';
 import {clearJwt, getJwt, getRawJwt} from './jwt.ts';
@@ -62,7 +63,7 @@ export function preload(z: Zero<Schema>) {
     .related('labels')
     .related('viewState', q => q.where('userID', z.userID));
 
-  const {cleanup, complete} = baseIssueQuery.preload();
+  const {cleanup, complete} = baseIssueQuery.preload({ttl: 0});
   complete.then(() => {
     mark('preload complete');
     cleanup();
@@ -77,11 +78,11 @@ export function preload(z: Zero<Schema>) {
           .limit(INITIAL_COMMENT_LIMIT)
           .orderBy('created', 'desc'),
       )
-      .preload();
+      .preload({ttl: days(1)});
   });
 
-  z.query.user.preload();
-  z.query.label.preload();
+  z.query.user.preload({ttl: days(1)});
+  z.query.label.preload({ttl: days(1)});
 }
 
 // To enable accessing zero in the devtools easily.
