@@ -741,6 +741,8 @@ export class Zero<
   close(): Promise<void> {
     const lc = this.#lc.withContext('close');
 
+    lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
+
     if (this.#connectionState !== ConnectionState.Disconnected) {
       this.#disconnect(lc, {
         client: 'ClientClosed',

@@ -40,6 +40,7 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import * as ConnectionState from './connection-state-enum.ts';
+import type {CustomMutatorDefs} from './custom.ts';
 import type {DeleteClientsManager} from './delete-clients-manager.ts';
 import type {WSString} from './http-string.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
@@ -63,7 +64,6 @@ import {
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
 } from './zero.ts';
-import type {CustomMutatorDefs} from './custom.ts';
 
 let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
@@ -3177,4 +3177,29 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   });
 
   expect(issueView.data).toEqual([{id: 'c', title: 'C'}]);
+});
+
+test('Logging stack on close', async () => {
+  const z = zeroForTest({logLevel: 'debug'});
+  await z.triggerConnected();
+  const mockSocket = await z.socket;
+  mockSocket.messages.length = 0;
+
+  await z.close();
+
+  expect(z.testLogSink.messages).toEqual(
+    expect.arrayContaining([
+      expect.arrayContaining([
+        'debug',
+        expect.objectContaining({
+          clientID: expect.any(String),
+          close: undefined,
+        }),
+        expect.arrayContaining([
+          'Closing Zero instance. Stack:',
+          expect.stringMatching(/(close).+(zero\.test\.ts)/s),
+        ]),
+      ]),
+    ]),
+  );
 });
