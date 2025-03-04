@@ -556,6 +556,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
 
     // Now we have a profileID, a clientID, a clientGroupID and DB!
     resolveReady();
+    // ~~ TODO: invoke init from zero option?
 
     if (this.#enablePullAndPushInOpen) {
       this.pull().catch(noop);
