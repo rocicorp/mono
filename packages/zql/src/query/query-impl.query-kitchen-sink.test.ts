@@ -500,7 +500,7 @@ describe('kitchen sink query', () => {
               "type": "and",
             },
           },
-          "ttl": undefined,
+          "ttl": 10000,
         },
       ]
     `);

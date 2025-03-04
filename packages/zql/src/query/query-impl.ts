@@ -31,13 +31,14 @@ import {
   type ExpressionFactory,
 } from './expression.ts';
 import type {AdvancedQuery} from './query-internal.ts';
-import type {
-  GetFilterType,
-  HumanReadable,
-  Operator,
-  PreloadOptions,
-  PullRow,
-  Query,
+import {
+  DEFAULT_TTL,
+  type GetFilterType,
+  type HumanReadable,
+  type Operator,
+  type PreloadOptions,
+  type PullRow,
+  type Query,
 } from './query.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -74,7 +75,7 @@ export type GotCallback = (got: boolean) => void;
 export interface QueryDelegate extends BuilderDelegate {
   addServerQuery(
     ast: AST,
-    ttl?: number | undefined,
+    ttl: number,
     gotCallback?: GotCallback | undefined,
   ): () => void;
   onTransactionCommit(cb: CommitListener): () => void;
@@ -586,13 +587,13 @@ export class QueryImpl<
 
   materialize<T>(
     factoryOrTTL?: ViewFactory<TSchema, TTable, TReturn, T> | number,
-    ttl?: number,
+    ttl: number = DEFAULT_TTL,
   ): T {
     let factory: ViewFactory<TSchema, TTable, TReturn, T> | undefined;
     if (typeof factoryOrTTL === 'function') {
       factory = factoryOrTTL;
     } else {
-      ttl = factoryOrTTL;
+      ttl = factoryOrTTL ?? DEFAULT_TTL;
     }
     const ast = this._completeAst();
     const queryCompleteResolver = resolver<true>();
@@ -642,11 +643,15 @@ export class QueryImpl<
   } {
     const {resolve, promise: complete} = resolver<void>();
     const ast = this._completeAst();
-    const unsub = this.#delegate.addServerQuery(ast, options?.ttl, got => {
-      if (got) {
-        resolve();
-      }
-    });
+    const unsub = this.#delegate.addServerQuery(
+      ast,
+      options?.ttl ?? DEFAULT_TTL,
+      got => {
+        if (got) {
+          resolve();
+        }
+      },
+    );
     return {
       cleanup: unsub,
       complete,
