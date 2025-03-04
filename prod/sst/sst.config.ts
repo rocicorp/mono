@@ -65,7 +65,7 @@ export default $config({
       ZERO_REPLICA_FILE: IS_EBS_STAGE
         ? "/data/sync-replica.db"
         : "sync-replica.db",
-      ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250219-01`,
+      ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250303-00`,
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
       ZERO_APP_ID: process.env.ZERO_APP_ID || "zero",
     };
@@ -264,7 +264,10 @@ export default $config({
         {
           handler: "../functions/src/permissions.deploy",
           vpc,
-          environment: { ["ZERO_UPSTREAM_DB"]: process.env.ZERO_UPSTREAM_DB },
+          environment: {
+            ["ZERO_UPSTREAM_DB"]: process.env.ZERO_UPSTREAM_DB,
+            ["ZERO_APP_ID"]: process.env.ZERO_APP_ID,
+          },
           copyFiles: [
             { from: "../../apps/zbugs/schema.ts", to: "./schema.ts" },
           ],
@@ -289,7 +292,10 @@ export default $config({
           // Pulumi operates with cwd at the package root.
           dir: join(process.cwd(), "../../packages/zero/"),
           create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
-          environment: { ["ZERO_UPSTREAM_DB"]: process.env.ZERO_UPSTREAM_DB },
+          environment: {
+            ["ZERO_UPSTREAM_DB"]: process.env.ZERO_UPSTREAM_DB,
+            ["ZERO_APP_ID"]: process.env.ZERO_APP_ID,
+          },
           // Run the Command on every deploy.
           triggers: [Date.now()],
         },
