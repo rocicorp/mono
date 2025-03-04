@@ -78,7 +78,7 @@
     "vite-bundle-analyzer": "^0.16.0",
     "vite-plugin-svgr": "^4.2.0",
     "vite-tsconfig-paths": "^5.0.1",
-    "vitest": "^2.1.5"
+    "vitest": "^3.0.7"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"

@@ -10,7 +10,7 @@
     "@rocicorp/prettier-config": "^0.2.0",
     "replicache": "15.2.1",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.5"
+    "vitest": "^3.0.7"
   },
   "scripts": {
     "test": "vitest run",

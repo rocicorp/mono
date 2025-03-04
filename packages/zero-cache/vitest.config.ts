@@ -9,7 +9,7 @@ export default defineConfig({
   define,
   esbuild,
   test: {
-    reporters: 'basic',
+    silent: true,
     coverage: {
       enabled: !ci, // Don't run coverage in continuous integration.
       reporter: [['html'], ['clover', {file: 'coverage.xml'}]],

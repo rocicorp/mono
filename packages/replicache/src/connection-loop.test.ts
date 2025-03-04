@@ -1,6 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {type SinonFakeTimers, useFakeTimers} from 'sinon';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.ts';
 import {promiseTrue} from '../../shared/src/resolved-promises.ts';
 import {sleep} from '../../shared/src/sleep.ts';
@@ -12,24 +11,22 @@ import {
   MIN_DELAY_MS,
 } from './connection-loop.ts';
 
-let clock: SinonFakeTimers;
+let loop: ConnectionLoop | undefined;
+
 beforeEach(() => {
-  clock = useFakeTimers(0);
+  vi.useFakeTimers({now: 0});
+  return () => {
+    vi.useRealTimers();
+    loop?.close();
+    loop = undefined;
+  };
 });
 
 async function tickUntilTimeIs(t: number) {
   while (Date.now() < t) {
-    await clock.tickAsync(50);
+    await vi.advanceTimersByTimeAsync(50);
   }
 }
-
-afterEach(() => {
-  clock.restore();
-  loop?.close();
-  loop = undefined;
-});
-
-let loop: ConnectionLoop | undefined;
 
 function send(now = false) {
   if (!loop) {
@@ -91,18 +88,18 @@ test('basic sequential by awaiting', async () => {
   loop = createLoop({requestTime, debounceDelay});
 
   send();
-  await clock.runAllAsync();
-  expect(Date.now()).to.equal(requestTime + debounceDelay);
+  await vi.runAllTimersAsync();
+  expect(Date.now()).toBe(requestTime + debounceDelay);
 
-  expect(log).to.deep.equal(['send:0:3', 'true:0:203']);
-
-  send();
-  await clock.runAllAsync();
+  expect(log).toEqual(['send:0:3', 'true:0:203']);
 
   send();
-  await clock.runAllAsync();
+  await vi.runAllTimersAsync();
 
-  expect(log).to.deep.equal([
+  send();
+  await vi.runAllTimersAsync();
+
+  expect(log).toEqual([
     'send:0:3',
     'true:0:203',
     'send:1:206',
@@ -121,30 +118,25 @@ test('debounce', async () => {
   });
 
   send();
-  expect(log).to.deep.equal([]);
-  await clock.tickAsync(20);
+  expect(log).toEqual([]);
+  await vi.advanceTimersByTimeAsync(20);
   send();
-  expect(log).to.deep.equal([]);
+  expect(log).toEqual([]);
 
-  await clock.tickAsync(20);
+  await vi.advanceTimersByTimeAsync(20);
   send();
-  expect(log).to.deep.equal([]);
+  expect(log).toEqual([]);
 
-  await clock.tickAsync(20);
+  await vi.advanceTimersByTimeAsync(20);
   send();
-  expect(log).to.deep.equal(['send:0:50']);
+  expect(log).toEqual(['send:0:50']);
 
-  await clock.tickAsync(40);
-  expect(log).to.deep.equal(['send:0:50', 'true:0:100']);
+  await vi.advanceTimersByTimeAsync(40);
+  expect(log).toEqual(['send:0:50', 'true:0:100']);
 
-  await clock.runAllAsync();
+  await vi.runAllTimersAsync();
 
-  expect(log).to.deep.equal([
-    'send:0:50',
-    'true:0:100',
-    'send:1:110',
-    'true:1:160',
-  ]);
+  expect(log).toEqual(['send:0:50', 'true:0:100', 'send:1:110', 'true:1:160']);
 });
 
 test('sync calls collapsed', async () => {
@@ -156,21 +148,21 @@ test('sync calls collapsed', async () => {
   });
 
   send();
-  expect(log).to.deep.equal([]);
+  expect(log).toEqual([]);
   send();
-  expect(log).to.deep.equal([]);
+  expect(log).toEqual([]);
   send();
-  expect(log).to.deep.equal([]);
+  expect(log).toEqual([]);
 
-  await clock.tickAsync(debounceDelay);
-  expect(Date.now()).to.equal(debounceDelay);
+  await vi.advanceTimersByTimeAsync(debounceDelay);
+  expect(Date.now()).toBe(debounceDelay);
 
-  expect(log).to.deep.equal(['send:0:5']);
+  expect(log).toEqual(['send:0:5']);
 
-  await clock.tickAsync(requestTime);
-  expect(Date.now()).to.equal(debounceDelay + requestTime);
+  await vi.advanceTimersByTimeAsync(requestTime);
+  expect(Date.now()).toBe(debounceDelay + requestTime);
 
-  expect(log).to.deep.equal(['send:0:5', 'true:0:55']);
+  expect(log).toEqual(['send:0:5', 'true:0:55']);
 });
 
 test('concurrent connections', async () => {
@@ -188,29 +180,29 @@ test('concurrent connections', async () => {
 
   send();
 
-  await clock.runToLastAsync();
-  expect(Date.now()).to.equal(debounceDelay);
+  await vi.advanceTimersToNextTimerAsync();
+  expect(Date.now()).toBe(debounceDelay);
 
-  expect(log).to.deep.equal(['send:0:5']);
+  expect(log).toEqual(['send:0:5']);
   send();
-  expect(log).to.deep.equal(['send:0:5']);
+  expect(log).toEqual(['send:0:5']);
 
-  await clock.tickAsync(minDelay);
-  expect(Date.now()).to.equal(debounceDelay + minDelay);
+  await vi.advanceTimersByTimeAsync(minDelay);
+  expect(Date.now()).toBe(debounceDelay + minDelay);
 
-  expect(log).to.deep.equal(['send:0:5', 'send:1:35']);
-
-  send();
-  await clock.tickAsync(minDelay);
-  expect(Date.now()).to.equal(debounceDelay + 2 * minDelay);
-
-  expect(log).to.deep.equal(['send:0:5', 'send:1:35', 'send:2:65']);
+  expect(log).toEqual(['send:0:5', 'send:1:35']);
 
   send();
-  await clock.tickAsync(minDelay);
-  expect(Date.now()).to.equal(debounceDelay + 3 * minDelay);
+  await vi.advanceTimersByTimeAsync(minDelay);
+  expect(Date.now()).toBe(debounceDelay + 2 * minDelay);
 
-  expect(log).to.deep.equal([
+  expect(log).toEqual(['send:0:5', 'send:1:35', 'send:2:65']);
+
+  send();
+  await vi.advanceTimersByTimeAsync(minDelay);
+  expect(Date.now()).toBe(debounceDelay + 3 * minDelay);
+
+  expect(log).toEqual([
     'send:0:5',
     'send:1:35',
     'send:2:65',
@@ -218,10 +210,10 @@ test('concurrent connections', async () => {
     'send:3:95',
   ]);
 
-  await clock.tickAsync(minDelay);
-  expect(Date.now()).to.equal(4 * minDelay + debounceDelay);
+  await vi.advanceTimersByTimeAsync(minDelay);
+  expect(Date.now()).toBe(4 * minDelay + debounceDelay);
 
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     'send:0:5',
     'send:1:35',
     'send:2:65',
@@ -230,10 +222,10 @@ test('concurrent connections', async () => {
     'true:1:125',
   ]);
 
-  await clock.tickAsync(minDelay);
-  expect(Date.now()).to.equal(5 * minDelay + debounceDelay);
+  await vi.advanceTimersByTimeAsync(minDelay);
+  expect(Date.now()).toBe(5 * minDelay + debounceDelay);
 
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     'send:0:5',
     'send:1:35',
     'send:2:65',
@@ -243,10 +235,10 @@ test('concurrent connections', async () => {
     'true:2:155',
   ]);
 
-  await clock.tickAsync(minDelay);
-  expect(Date.now()).to.equal(6 * minDelay + debounceDelay);
+  await vi.advanceTimersByTimeAsync(minDelay);
+  expect(Date.now()).toBe(6 * minDelay + debounceDelay);
 
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     'send:0:5',
     'send:1:35',
     'send:2:65',
@@ -270,19 +262,19 @@ test('maxConnections 1', async () => {
   });
 
   send();
-  await clock.runToLastAsync();
+  await vi.advanceTimersToNextTimerAsync();
 
-  expect(log).to.deep.equal(['send:0:5']);
-
-  send();
-  await clock.tickAsync(requestTime);
-
-  expect(log).to.deep.equal(['send:0:5', 'true:0:95', 'send:1:95']);
+  expect(log).toEqual(['send:0:5']);
 
   send();
-  await clock.tickAsync(requestTime);
+  await vi.advanceTimersByTimeAsync(requestTime);
 
-  expect(log).to.deep.equal([
+  expect(log).toEqual(['send:0:5', 'true:0:95', 'send:1:95']);
+
+  send();
+  await vi.advanceTimersByTimeAsync(requestTime);
+
+  expect(log).toEqual([
     'send:0:5',
     'true:0:95',
     'send:1:95',
@@ -290,9 +282,9 @@ test('maxConnections 1', async () => {
     'send:2:185',
   ]);
 
-  await clock.tickAsync(requestTime);
+  await vi.advanceTimersByTimeAsync(requestTime);
 
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     'send:0:5',
     'true:0:95',
     'send:1:95',
@@ -323,21 +315,21 @@ test('Adjust delay', async () => {
 
   // 0
   send();
-  await clock.runToLastAsync();
+  await vi.advanceTimersToNextTimerAsync();
 
   // 1
   send();
-  await clock.tickAsync(30);
+  await vi.advanceTimersByTimeAsync(30);
 
   // 2
   send();
-  await clock.tickAsync(30);
+  await vi.advanceTimersByTimeAsync(30);
 
   // 3
   send();
-  await clock.tickAsync(50);
+  await vi.advanceTimersByTimeAsync(50);
 
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     'send:0:5',
     'send:1:35',
     'send:2:65',
@@ -347,18 +339,18 @@ test('Adjust delay', async () => {
 
   // 4
   send();
-  await clock.tickAsync(50);
+  await vi.advanceTimersByTimeAsync(50);
 
   // 5
   send();
-  await clock.tickAsync(50);
+  await vi.advanceTimersByTimeAsync(50);
 
   // 6
   send();
-  await clock.tickAsync(50);
+  await vi.advanceTimersByTimeAsync(50);
 
-  await clock.runAllAsync();
-  expect(log).to.deep.equal([
+  await vi.runAllTimersAsync();
+  expect(log).toEqual([
     'send:0:5',
     'send:1:35',
     'send:2:65',
@@ -399,21 +391,21 @@ for (const errorKind of [false, 'throw'] as const) {
 
     while (requestCount < 10) {
       send();
-      await clock.tickAsync(30);
+      await vi.advanceTimersByTimeAsync(30);
     }
 
     // 61685 is when the first success after a bunch of errors. Schedule a send
     // before this request comes back.
-    await clock.tickAsync(61685 - 30 - Date.now());
+    await vi.advanceTimersByTimeAsync(61685 - 30 - Date.now());
 
     while (requestCount < 22) {
       send();
-      await clock.tickAsync(30);
+      await vi.advanceTimersByTimeAsync(30);
     }
 
-    await clock.runAllAsync();
+    await vi.runAllTimersAsync();
 
-    expect(log).to.deep.equal([
+    expect(log).toEqual([
       'send:0:5',
       'send:1:35',
       'send:2:65',
@@ -488,24 +480,24 @@ for (const errorKind of [false, 'throw'] as const) {
 
     while (requestCount < 5) {
       send();
-      await clock.tickAsync(10);
+      await vi.advanceTimersByTimeAsync(10);
     }
 
     while (requestCount < 8) {
       send();
-      await clock.tickAsync(10);
+      await vi.advanceTimersByTimeAsync(10);
     }
 
     minDelayMs = 40;
 
     while (requestCount < 10) {
       send();
-      await clock.tickAsync(10);
+      await vi.advanceTimersByTimeAsync(10);
     }
 
-    await clock.runAllAsync();
+    await vi.runAllTimersAsync();
 
-    expect(log).to.deep.equal([
+    expect(log).toEqual([
       'send:0:5',
       'false-or-throw:0:55',
       'send:1:85',
@@ -542,24 +534,24 @@ test('watchdog timer', async () => {
     requestTime,
   });
 
-  await clock.tickAsync(watchdogTimer);
+  await vi.advanceTimersByTimeAsync(watchdogTimer);
 
-  expect(log).to.deep.equal([]);
+  expect(log).toEqual([]);
 
-  await clock.tickAsync(debounceDelay);
+  await vi.advanceTimersByTimeAsync(debounceDelay);
 
-  expect(log).to.deep.equal(['send:0:1010']);
+  expect(log).toEqual(['send:0:1010']);
 
-  await clock.tickAsync(requestTime);
-  expect(log).to.deep.equal(['send:0:1010', 'true:0:1110']);
+  await vi.advanceTimersByTimeAsync(requestTime);
+  expect(log).toEqual(['send:0:1010', 'true:0:1110']);
 
-  await clock.tickAsync(watchdogTimer);
+  await vi.advanceTimersByTimeAsync(watchdogTimer);
 
-  expect(log).to.deep.equal(['send:0:1010', 'true:0:1110', 'send:1:2020']);
+  expect(log).toEqual(['send:0:1010', 'true:0:1110', 'send:1:2020']);
 
-  await clock.tickAsync(requestTime);
+  await vi.advanceTimersByTimeAsync(requestTime);
 
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     'send:0:1010',
     'true:0:1110',
     'send:1:2020',
@@ -577,25 +569,25 @@ test('watchdog timer again', async () => {
     requestTime,
   });
 
-  await clock.tickAsync(500);
+  await vi.advanceTimersByTimeAsync(500);
   send();
 
-  expect(log).to.deep.equal([]);
+  expect(log).toEqual([]);
 
-  await clock.tickAsync(debounceDelay);
+  await vi.advanceTimersByTimeAsync(debounceDelay);
 
-  expect(log).to.deep.equal(['send:0:510']);
+  expect(log).toEqual(['send:0:510']);
 
-  await clock.tickAsync(requestTime);
-  expect(log).to.deep.equal(['send:0:510', 'true:0:610']);
+  await vi.advanceTimersByTimeAsync(requestTime);
+  expect(log).toEqual(['send:0:510', 'true:0:610']);
 
-  await clock.tickAsync(watchdogTimer);
+  await vi.advanceTimersByTimeAsync(watchdogTimer);
 
-  expect(log).to.deep.equal(['send:0:510', 'true:0:610', 'send:1:1520']);
+  expect(log).toEqual(['send:0:510', 'true:0:610', 'send:1:1520']);
 
-  await clock.tickAsync(requestTime);
+  await vi.advanceTimersByTimeAsync(requestTime);
 
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     'send:0:510',
     'true:0:610',
     'send:1:1520',
@@ -622,24 +614,24 @@ test('mutate minDelayMs', async () => {
 
   while (Date.now() < 200) {
     send();
-    await clock.tickAsync(25);
+    await vi.advanceTimersByTimeAsync(25);
   }
 
   minDelayMs = 500;
 
   while (Date.now() < 2000) {
     send();
-    await clock.tickAsync(50);
+    await vi.advanceTimersByTimeAsync(50);
   }
 
   minDelayMs = 20;
 
   while (Date.now() < 2400) {
     send();
-    await clock.tickAsync(10);
+    await vi.advanceTimersByTimeAsync(10);
   }
 
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     0, 50, 100, 150, 200, 250, 750, 1250, 1750, 2250, 2270, 2290, 2310, 2330,
     2350, 2370, 2390,
   ]);
@@ -664,42 +656,40 @@ test('Send now', async () => {
   send();
   await tickUntilTimeIs(50);
 
-  expect(log).to.deep.equal([50]);
+  expect(log).toEqual([50]);
 
   // Take minDelayMs into account
   send();
   await tickUntilTimeIs(250);
-  expect(log).to.deep.equal([50, 250]);
+  expect(log).toEqual([50, 250]);
 
   // send now should ignore both minDelayMs and debounceDelay
   send(true);
   await tickUntilTimeIs(450);
-  expect(log).to.deep.equal([50, 250, 250]);
+  expect(log).toEqual([50, 250, 250]);
 
   nextInvokeSendResult = false;
   send();
   await tickUntilTimeIs(500);
-  expect(log).to.deep.equal([50, 250, 250, 500]);
+  expect(log).toEqual([50, 250, 250, 500]);
 
   await tickUntilTimeIs(1900);
-  expect(log).to.deep.equal([50, 250, 250, 500, 700, 1100, 1900]);
+  expect(log).toEqual([50, 250, 250, 500, 700, 1100, 1900]);
 
   // Keep trying with exponential backoff, hitting maxDelayMs
   await tickUntilTimeIs(2900);
-  expect(log).to.deep.equal([50, 250, 250, 500, 700, 1100, 1900, 2900]);
+  expect(log).toEqual([50, 250, 250, 500, 700, 1100, 1900, 2900]);
 
   // Even when there are errors and we have exponential backoff, send now should
   // send immediately.
   send(true);
   await tickUntilTimeIs(3900);
-  expect(log).to.deep.equal([
-    50, 250, 250, 500, 700, 1100, 1900, 2900, 2900, 3900,
-  ]);
+  expect(log).toEqual([50, 250, 250, 500, 700, 1100, 1900, 2900, 2900, 3900]);
 
   nextInvokeSendResult = true;
   send(true);
   await tickUntilTimeIs(10_000);
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     50, 250, 250, 500, 700, 1100, 1900, 2900, 2900, 3900, 3900,
   ]);
 });
@@ -730,7 +720,7 @@ test('Send promise', async () => {
   const p2 = loop.send(false);
   await tickUntilTimeIs(250);
   const err = await p2;
-  expect(err?.error).to.equal(expectedError);
+  expect(err?.error).toBe(expectedError);
 
   nextInvokeSendResult = false;
   const p3 = loop.send(false);
@@ -898,10 +888,10 @@ describe('With Document Visibility Watcher', () => {
       }
 
       while (actualSendTimes.length < expectedSendTimes.length) {
-        await clock.tickAsync(10);
+        await vi.advanceTimersByTimeAsync(10);
       }
 
-      expect(actualSendTimes).to.deep.equal(expectedSendTimes);
+      expect(actualSendTimes).toEqual(expectedSendTimes);
     });
   }
 });

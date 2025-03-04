@@ -1,6 +1,13 @@
 import {LogContext} from '@rocicorp/logger';
-import sinon from 'sinon';
-import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+  type Mock,
+} from 'vitest';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import {
   FALLBACK_RELOAD_INTERVAL_MS,
@@ -19,7 +26,7 @@ describe('reloadWithReason', () => {
   let sink: TestLogSink = new TestLogSink();
   let lc: LogContext;
   let storage: Record<string, string>;
-  let reload: sinon.SinonSpy;
+  let reload: Mock<() => void>;
   const now = 12300000;
 
   beforeEach(() => {
@@ -28,22 +35,21 @@ describe('reloadWithReason', () => {
       'sessionStorage',
     )!;
 
-    vi.useFakeTimers();
-    vi.setSystemTime(now);
+    vi.useFakeTimers({now});
 
     sink = new TestLogSink();
     lc = new LogContext('debug', {foo: 'bar'}, sink);
-    reload = sinon.fake();
+    reload = vi.fn();
 
     storage = {};
-    sinon.replaceGetter(globalThis, 'sessionStorage', () =>
+    vi.spyOn(globalThis, 'sessionStorage', 'get').mockImplementation(() =>
       storageMock(storage),
     );
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
-    sinon.restore();
 
     Object.defineProperty(
       globalThis,
@@ -64,9 +70,9 @@ describe('reloadWithReason', () => {
     }
   `);
 
-    expect(reload.calledOnce).equal(false);
+    expect(reload).not.toBeCalled();
     vi.advanceTimersByTime(0);
-    expect(reload.calledOnce).equal(true);
+    expect(reload).toHaveBeenCalledOnce();
 
     expect(sink.messages[0]).toMatchInlineSnapshot(`
     [
@@ -140,9 +146,11 @@ describe('reloadWithReason', () => {
       expect(JSON.parse(storage[RELOAD_BACKOFF_STATE_KEY])).toEqual(next);
 
       // Fire (and thus clear) the timer.
-      expect(reload.calledOnce).equal(false);
-      vi.advanceTimersToNextTimer();
-      expect(reload.calledOnce).equal(true);
+      expect(reload).not.toHaveBeenCalled();
+      vi.runOnlyPendingTimers();
+      expect(reload).toHaveBeenCalledOnce();
+
+      vi.runAllTimers();
     },
   );
 
@@ -153,12 +161,12 @@ describe('reloadWithReason', () => {
     const sink = new TestLogSink();
     const lc = new LogContext('debug', {foo: 'bar'}, sink);
 
-    const reload = sinon.fake();
+    const reload = vi.fn();
     reloadWithReason(lc, reload, 'my reason');
 
-    expect(reload.calledOnce).equal(false);
+    expect(reload).not.toHaveBeenCalled();
     vi.advanceTimersByTime(FALLBACK_RELOAD_INTERVAL_MS);
-    expect(reload.calledOnce).equal(true);
+    expect(reload).toHaveBeenCalledOnce();
 
     expect(sink.messages).toMatchInlineSnapshot(`
       [
