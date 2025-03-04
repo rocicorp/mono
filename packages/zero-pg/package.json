@@ -23,6 +23,6 @@
     "@rocicorp/logger": "^5.3.0"
   },
   "devDependencies": {
-    "vitest": "^2.1.5"
+    "vitest": "^3.0.7"
   }
 }

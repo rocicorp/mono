@@ -18,7 +18,7 @@
     "@rocicorp/logger": "^5.3.0",
     "@rocicorp/prettier-config": "^0.2.0",
     "typescript": "^5.7.3",
-    "vitest": "^2.1.5"
+    "vitest": "^3.0.7"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"
