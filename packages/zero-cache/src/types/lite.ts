@@ -49,9 +49,10 @@ export function liteRow(row: RowValue, table: LiteTableSpec): LiteRow {
 export function liteValues(
   row: RowValue,
   table: LiteTableSpec,
+  jsonAsString?: 'json-as-string',
 ): LiteValueType[] {
   return Object.entries(row).map(([col, val]) =>
-    liteValue(val, columnType(col, table)),
+    liteValue(val, columnType(col, table), jsonAsString),
   );
 }
 
@@ -68,13 +69,19 @@ export function liteValues(
 export function liteValue(
   val: PostgresValueType,
   pgType: string,
+  jsonAsString?: 'json-as-string',
 ): LiteValueType {
   if (val instanceof Uint8Array || val === null) {
     return val;
   }
   const valueType = dataTypeToZqlValueType(pgType);
   if (valueType === 'json') {
-    return stringify(val); // JSON values are stored as stringified strings.
+    if (jsonAsString && typeof val === 'string') {
+      // JSON and JSONB values are already strings if the JSON was not parsed.
+      return val;
+    }
+    // Non-JSON/JSONB values will always appear as objects / arrays.
+    return stringify(val);
   }
   const obj = toLiteValue(val);
   return obj && typeof obj === 'object' ? stringify(obj) : obj;
