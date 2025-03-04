@@ -40,8 +40,12 @@ export function warnIfDataTypeSupported(
   }
 }
 
-// e.g. true, false, 1234, 1234.5678
-const SIMPLE_TOKEN_EXPRESSION_REGEX = /^([^']+)$/;
+// As per https://www.sqlite.org/lang_altertable.html#altertabaddcol,
+// expressions with parentheses are disallowed ...
+const SIMPLE_TOKEN_EXPRESSION_REGEX = /^[^'()]+$/; // e.g. true, false, 1234, 1234.5678
+
+// as well as current_time, current_date, and current_timestamp ...
+const UNSUPPORTED_TOKENS = /\b(current_time|current_date|current_timestamp)\b/i;
 
 // For strings and certain incarnations of primitives (e.g. integers greater
 // than 2^31-1, Postgres' nodeToString() represents the values as type-casted
@@ -51,7 +55,8 @@ const SIMPLE_TOKEN_EXPRESSION_REGEX = /^([^']+)$/;
 // care about them.
 const STRING_EXPRESSION_REGEX = /^('.*')::[^']+$/;
 
-function mapPostgresToLiteDefault(
+// Exported for testing.
+export function mapPostgresToLiteDefault(
   table: string,
   column: string,
   dataType: string,
@@ -59,6 +64,11 @@ function mapPostgresToLiteDefault(
 ) {
   if (!defaultExpression) {
     return null;
+  }
+  if (UNSUPPORTED_TOKENS.test(defaultExpression)) {
+    throw new UnsupportedColumnDefaultError(
+      `Cannot ADD a column with CURRENT_TIME, CURRENT_DATE, or CURRENT_TIMESTAMP`,
+    );
   }
   if (SIMPLE_TOKEN_EXPRESSION_REGEX.test(defaultExpression)) {
     if (dataTypeToZqlValueType(dataType) === 'boolean') {
@@ -68,7 +78,7 @@ function mapPostgresToLiteDefault(
   }
   const match = STRING_EXPRESSION_REGEX.exec(defaultExpression);
   if (!match) {
-    throw new Error(
+    throw new UnsupportedColumnDefaultError(
       `Unsupported default value for ${table}.${column}: ${defaultExpression}`,
     );
   }
@@ -135,4 +145,8 @@ export function mapPostgresToLiteIndex(index: IndexSpec): LiteIndexSpec {
     name: liteTableName({schema, name}),
     ...liteIndex,
   };
+}
+
+export class UnsupportedColumnDefaultError extends Error {
+  readonly name = 'UnsupportedColumnDefaultError';
 }

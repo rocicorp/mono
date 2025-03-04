@@ -27,6 +27,7 @@ import {
 import {sleep} from '../../../../../shared/src/sleep.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
+import {mapPostgresToLiteColumn} from '../../../db/pg-to-lite.ts';
 import {ShortLivedClient} from '../../../db/short-lived-client.ts';
 import type {
   ColumnSpec,
@@ -696,7 +697,14 @@ class ChangeMaker {
     // ADD
     for (const id of added) {
       const {name, ...spec} = must(newColumns.get(id));
-      changes.push({tag: 'add-column', table, column: {name, spec}});
+      const column = {name, spec};
+      try {
+        // Validate that the ChangeProcessor will accept the column change.
+        mapPostgresToLiteColumn(table.name, column);
+      } catch (cause) {
+        throw new UnsupportedSchemaChangeError({cause});
+      }
+      changes.push({tag: 'add-column', table, column});
     }
     return changes;
   }
@@ -872,9 +880,10 @@ class SSLUnsupportedError extends Error {}
 export class UnsupportedSchemaChangeError extends Error {
   readonly name = 'UnsupportedSchemaChangeError';
 
-  constructor() {
+  constructor(options?: ErrorOptions) {
     super(
       'Replication halted. Schema changes cannot be reliably replicated without event trigger support. Resync the replica to recover.',
+      options,
     );
   }
 }
