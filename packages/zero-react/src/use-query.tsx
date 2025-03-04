@@ -20,12 +20,14 @@ export type QueryResult<TReturn> = readonly [
 export type UseQueryOptions = {
   enabled?: boolean | undefined;
   /**
-   * Time to live. This determines how long to cache the results of this query.
-   * If undefined (or 0) the query will be cached as long as it is not removed and
-   * there is enough space
+   * Time to live (TTL) in seconds. Controls how long query results are cached
+   * after the query is removed. During this time, Zero continues to sync the query.
+   * Default is 10 seconds.
    */
   ttl?: number | undefined;
 };
+
+const DEFAULT_TTL = 10_000;
 
 export function useQuery<
   TSchema extends Schema,
@@ -40,7 +42,7 @@ export function useQuery<
   if (typeof options === 'boolean') {
     enabled = options;
   } else if (options) {
-    ({enabled = true, ttl} = options);
+    ({enabled = true, ttl = DEFAULT_TTL} = options);
   }
   const advancedQuery = query as AdvancedQuery<TSchema, TTable, TReturn>;
 
