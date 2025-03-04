@@ -529,6 +529,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         client.sendDeleteClients(lc, [clientID], []);
       }
     }
+
+    this.#scheduleExpireEviction(lc, cvr);
+    await this.#evictInactiveQueries(lc, cvr);
   };
 
   /**

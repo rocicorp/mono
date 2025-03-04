@@ -993,13 +993,16 @@ describe('view-syncer/service', () => {
   });
 
   test('delete client', async () => {
+    const ttl = 100;
+    vi.setSystemTime(Date.UTC(2025, 2, 4));
+
     const {queue: client1} = connectWithQueueAndSource(SYNC_CONTEXT, [
-      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
     ]);
 
     const {queue: client2, source: connectSource2} = connectWithQueueAndSource(
       {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'},
-      [{op: 'put', hash: 'query-hash2', ast: USERS_QUERY}],
+      [{op: 'put', hash: 'query-hash2', ast: USERS_QUERY, ttl}],
     );
 
     await nextPoke(client1);
@@ -1014,48 +1017,39 @@ describe('view-syncer/service', () => {
     await nextPoke(client2);
 
     expect(
-      await cvrDB`SELECT * from "this_app_2/cvr".clients`,
+      await cvrDB`SELECT "clientID", "deleted" from "this_app_2/cvr".clients`,
     ).toMatchInlineSnapshot(
       `
       Result [
         {
-          "clientGroupID": "9876",
           "clientID": "foo",
           "deleted": false,
-          "patchVersion": "00:01",
         },
         {
-          "clientGroupID": "9876",
           "clientID": "bar",
           "deleted": false,
-          "patchVersion": "00:02",
         },
       ]
     `,
     );
 
-    expect(await cvrDB`SELECT * from "this_app_2/cvr".desires`)
-      .toMatchInlineSnapshot(`
+    expect(
+      await cvrDB`SELECT "clientID", "deleted", "queryHash", "ttl", "inactivatedAt" from "this_app_2/cvr".desires`,
+    ).toMatchInlineSnapshot(`
       Result [
         {
-          "clientGroupID": "9876",
           "clientID": "foo",
           "deleted": false,
-          "expiresAt": null,
           "inactivatedAt": null,
-          "patchVersion": "00:01",
           "queryHash": "query-hash1",
-          "ttl": null,
+          "ttl": "00:01:40",
         },
         {
-          "clientGroupID": "9876",
           "clientID": "bar",
           "deleted": false,
-          "expiresAt": null,
           "inactivatedAt": null,
-          "patchVersion": "00:02",
           "queryHash": "query-hash2",
-          "ttl": null,
+          "ttl": "00:01:40",
         },
       ]
     `);
@@ -1067,95 +1061,19 @@ describe('view-syncer/service', () => {
       {clientIDs: ['bar', 'no-such-client']},
     ]);
 
-    expect(await nextPoke(client1)).toMatchInlineSnapshot(`
+    expect(await nextPokeParts(client1)).toMatchInlineSnapshot(`
       [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "01",
-            "cookie": "01:01",
-            "pokeID": "01:01",
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "desiredQueriesPatches": {
-              "bar": [
-                {
-                  "hash": "query-hash2",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "01:01",
-            "pokeID": "01:01",
-          },
-        ],
-      ]
-    `);
-    expect(await nextPoke(client1)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "01:01",
-            "cookie": "01:02",
-            "pokeID": "01:02",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "gotQueriesPatch": [
+        {
+          "desiredQueriesPatches": {
+            "bar": [
               {
                 "hash": "query-hash2",
                 "op": "del",
               },
             ],
-            "pokeID": "01:02",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "100",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "101",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "102",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-            ],
           },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "01:02",
-            "pokeID": "01:02",
-          },
-        ],
+          "pokeID": "01:01",
+        },
       ]
     `);
 
@@ -1171,42 +1089,115 @@ describe('view-syncer/service', () => {
       ]
     `);
 
-    expect(await cvrDB`SELECT * from "this_app_2/cvr".clients`)
-      .toMatchInlineSnapshot(`
+    await expectNoPokes(client1);
+
+    expect(
+      await cvrDB`SELECT "clientID", "deleted" from "this_app_2/cvr".clients`,
+    ).toMatchInlineSnapshot(
+      `
       Result [
         {
-          "clientGroupID": "9876",
           "clientID": "foo",
           "deleted": false,
-          "patchVersion": "00:01",
+        },
+      ]
+    `,
+    );
+
+    expect(
+      await cvrDB`SELECT "clientID", "deleted", "queryHash", "ttl", "inactivatedAt" from "this_app_2/cvr".desires`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "foo",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hash1",
+          "ttl": "00:01:40",
+        },
+        {
+          "clientID": "bar",
+          "deleted": true,
+          "inactivatedAt": 1741046400000,
+          "queryHash": "query-hash2",
+          "ttl": "00:01:40",
         },
       ]
     `);
-    expect(await cvrDB`SELECT * from "this_app_2/cvr".desires`)
-      .toMatchInlineSnapshot(`
+
+    callNextSetTimeout(ttl);
+
+    expect(await nextPokeParts(client1)).toMatchInlineSnapshot(`
+      [
+        {
+          "gotQueriesPatch": [
+            {
+              "hash": "query-hash2",
+              "op": "del",
+            },
+          ],
+          "pokeID": "01:02",
+          "rowsPatch": [
+            {
+              "id": {
+                "id": "100",
+              },
+              "op": "del",
+              "tableName": "users",
+            },
+            {
+              "id": {
+                "id": "101",
+              },
+              "op": "del",
+              "tableName": "users",
+            },
+            {
+              "id": {
+                "id": "102",
+              },
+              "op": "del",
+              "tableName": "users",
+            },
+          ],
+        },
+      ]
+    `);
+
+    await expectNoPokes(client1);
+
+    expect(
+      await cvrDB`SELECT "clientID", "deleted", "queryHash", "ttl", "inactivatedAt" from "this_app_2/cvr".desires`,
+    ).toMatchInlineSnapshot(`
       Result [
         {
-          "clientGroupID": "9876",
           "clientID": "foo",
           "deleted": false,
-          "expiresAt": null,
           "inactivatedAt": null,
-          "patchVersion": "00:01",
           "queryHash": "query-hash1",
-          "ttl": null,
+          "ttl": "00:01:40",
+        },
+        {
+          "clientID": "bar",
+          "deleted": true,
+          "inactivatedAt": 1741046400000,
+          "queryHash": "query-hash2",
+          "ttl": "00:01:40",
         },
       ]
     `);
   });
 
   test('close connection', async () => {
+    const ttl = 100;
+    vi.setSystemTime(Date.UTC(2025, 2, 4));
     const client1 = connect(SYNC_CONTEXT, [
-      {op: 'put', hash: 'issues-hash', ast: ISSUES_QUERY},
+      {op: 'put', hash: 'issues-hash', ast: ISSUES_QUERY2, ttl},
     ]);
 
     const ctx2 = {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'};
     const client2 = connect(ctx2, [
-      {op: 'put', hash: 'users-hash', ast: USERS_QUERY},
+      {op: 'put', hash: 'users-hash', ast: USERS_QUERY, ttl},
     ]);
 
     await nextPoke(client1);
@@ -1221,53 +1212,61 @@ describe('view-syncer/service', () => {
     await nextPoke(client2);
 
     expect(
-      await cvrDB`SELECT * from "this_app_2/cvr".clients`,
+      await cvrDB`SELECT "clientID", "deleted" from "this_app_2/cvr".clients`,
     ).toMatchInlineSnapshot(
       `
       Result [
         {
-          "clientGroupID": "9876",
           "clientID": "foo",
           "deleted": false,
-          "patchVersion": "00:01",
         },
         {
-          "clientGroupID": "9876",
           "clientID": "bar",
           "deleted": false,
-          "patchVersion": "00:02",
         },
       ]
     `,
     );
 
-    expect(await cvrDB`SELECT * from "this_app_2/cvr".desires`)
-      .toMatchInlineSnapshot(`
-        Result [
-          {
-            "clientGroupID": "9876",
-            "clientID": "foo",
-            "deleted": false,
-            "expiresAt": null,
-            "inactivatedAt": null,
-            "patchVersion": "00:01",
-            "queryHash": "issues-hash",
-            "ttl": null,
-          },
-          {
-            "clientGroupID": "9876",
-            "clientID": "bar",
-            "deleted": false,
-            "expiresAt": null,
-            "inactivatedAt": null,
-            "patchVersion": "00:02",
-            "queryHash": "users-hash",
-            "ttl": null,
-          },
-        ]
-      `);
+    expect(
+      await cvrDB`SELECT "clientID", "queryHash", "inactivatedAt", "deleted" from "this_app_2/cvr".desires`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "foo",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "issues-hash",
+        },
+        {
+          "clientID": "bar",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "users-hash",
+        },
+      ]
+    `);
 
     await vs.closeConnection(ctx2, ['closeConnection', []]);
+
+    expect(
+      await cvrDB`SELECT "clientID", "queryHash", "inactivatedAt", "deleted" from "this_app_2/cvr".desires`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "foo",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "issues-hash",
+        },
+        {
+          "clientID": "bar",
+          "deleted": true,
+          "inactivatedAt": 1741046400000,
+          "queryHash": "users-hash",
+        },
+      ]
+    `);
 
     expect(await nextPokeParts(client1)).toMatchInlineSnapshot(`
       [
@@ -1284,6 +1283,50 @@ describe('view-syncer/service', () => {
         },
       ]
     `);
+
+    expect(await client1.dequeue()).toMatchInlineSnapshot(`
+      [
+        "deleteClients",
+        {
+          "clientIDs": [
+            "bar",
+          ],
+        },
+      ]
+    `);
+
+    await expectNoPokes(client1);
+
+    expect(
+      await cvrDB`SELECT "clientID", "queryHash", "inactivatedAt", "deleted" from "this_app_2/cvr".desires`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "foo",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "issues-hash",
+        },
+        {
+          "clientID": "bar",
+          "deleted": true,
+          "inactivatedAt": 1741046400000,
+          "queryHash": "users-hash",
+        },
+      ]
+    `);
+    expect(
+      await cvrDB`SELECT "clientID", "deleted" from "this_app_2/cvr".clients`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "foo",
+          "deleted": false,
+        },
+      ]
+    `);
+
+    callNextSetTimeout(ttl);
 
     expect(await nextPokeParts(client1)).toMatchInlineSnapshot(`
       [
@@ -1321,17 +1364,23 @@ describe('view-syncer/service', () => {
         },
       ]
     `);
-    expect(await client1.dequeue()).toMatchInlineSnapshot(`
-      [
-        "deleteClients",
+
+    await expectNoPokes(client1);
+
+    expect(
+      await cvrDB`SELECT "queryHash", "deleted" from "this_app_2/cvr".queries WHERE "internal" IS DISTINCT FROM TRUE`,
+    ).toMatchInlineSnapshot(`
+      Result [
         {
-          "clientIDs": [
-            "bar",
-          ],
+          "deleted": false,
+          "queryHash": "issues-hash",
+        },
+        {
+          "deleted": true,
+          "queryHash": "users-hash",
         },
       ]
     `);
-    await expectNoPokes(client1);
   });
 
   test('initial hydration, rows in multiple queries', async () => {
