@@ -85,7 +85,7 @@ describe('tables/published', () => {
         handle text DEFAULT null,
         address text[],
         boolean BOOL DEFAULT 'false',
-        int int8 DEFAULT 2147483647,
+        int int8 DEFAULT (2147483647 + 2),
         flt FLOAT8 DEFAULT 123.456,
         bigint int8 DEFAULT 2147483648,
         timez TIMESTAMPTZ[],
@@ -159,7 +159,7 @@ describe('tables/published', () => {
                 dataType: 'int8',
                 typeOID: 20,
                 notNull: false,
-                dflt: '2147483647',
+                dflt: '(2147483647 + 2)',
               },
               flt: {
                 pos: 6,

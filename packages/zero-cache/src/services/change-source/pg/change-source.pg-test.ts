@@ -529,7 +529,23 @@ describe('change-source/pg', {timeout: 30000}, () => {
     stream.changes.cancel();
   });
 
-  test('bad schema change error', async () => {
+  test.each([
+    [
+      'UnsupportedTableSchemaError: Table "invalid/character\\$" has invalid characters.',
+      `
+        ALTER TABLE foo RENAME TO "invalid/character$";
+        INSERT INTO "invalid/character$"(id) VALUES('world');
+      `,
+    ],
+    [
+      'UnsupportedSchemaChangeError: Replication halted',
+      `ALTER TABLE foo ADD bar TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP`,
+    ],
+    [
+      'UnsupportedSchemaChangeError: Replication halted',
+      `ALTER TABLE foo ADD pubid INT DEFAULT random()`,
+    ],
+  ])('bad schema change error: %s', async (errMsg, stmt) => {
     const {changes} = await startStream('00');
     try {
       const downstream = drainToQueue(changes);
@@ -555,8 +571,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
       // effectively freeze replication.
       await upstream.begin(async tx => {
         await tx`INSERT INTO foo(id) VALUES('wide')`;
-        await tx`ALTER TABLE foo RENAME TO "invalid/character$"`;
-        await tx`INSERT INTO "invalid/character$"(id) VALUES('world')`;
+        await tx.unsafe(stmt);
       });
 
       // The transaction should be rolled back.
@@ -573,16 +588,15 @@ describe('change-source/pg', {timeout: 30000}, () => {
         'rollback',
         {tag: 'rollback'},
       ]);
+      expect(await downstream.dequeue()).toMatchObject([
+        'control',
+        {tag: 'reset-required'},
+      ]);
 
       expect(logSink.messages[0]).toMatchObject([
         'error',
         {component: 'change-source'},
-        [
-          expect.stringMatching(
-            'UnsupportedTableSchemaError: Table "invalid/character\\$" has invalid characters.',
-          ),
-          {tag: 'message'},
-        ],
+        [expect.stringMatching(errMsg), {tag: 'message'}],
       ]);
     } finally {
       changes.cancel();
