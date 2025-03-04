@@ -17,11 +17,10 @@ import {readFromHash} from '../../../replicache/src/db/read.ts';
 import type {DetailedReason} from '../../../replicache/src/transactions.ts';
 import type {RepTxZeroData} from './custom.ts';
 import {diff} from '../../../replicache/src/sync/diff.ts';
-import type {MaybePromise} from '../../../shared/src/types.ts';
-import {Lock} from '@rocicorp/lock';
 import {assert} from '../../../shared/src/asserts.ts';
 import {SYNC_HEAD_NAME} from '../../../replicache/src/sync/sync-head-name.ts';
 import type {InternalDiff} from '../../../replicache/src/btree/node.ts';
+import {resolver} from '@rocicorp/resolver';
 
 /**
  * Provides handles to IVM sources at the `sync` and `main` heads to be used
@@ -67,62 +66,33 @@ import type {InternalDiff} from '../../../replicache/src/btree/node.ts';
 export class IVMSourceRepo {
   readonly #main: IVMSourceBranch;
   readonly #tables: Record<string, TableSchema>;
-
-  // We have a lock here because `refresh` and `maybePullEnd` could both
-  // be running simultaneously. We don't want to create our sync head twice.
-  readonly #initSyncHeadLock: Lock;
-  // Sync is lazily created when it is first needed.
-  #sync: IVMSyncBranch | undefined;
+  readonly #mainInitializedPromise: Promise<boolean>;
+  #mainInitialized: boolean;
+  readonly #resolveMainInitialized: (value: boolean) => void;
 
   constructor(tables: Record<string, TableSchema>) {
     this.#main = new IVMSourceBranch(tables, undefined);
     this.#tables = tables;
-    this.#initSyncHeadLock = new Lock();
+    const {promise, resolve} = resolver<boolean>();
+    this.#mainInitializedPromise = promise;
+    this.#mainInitialized = false;
+    this.#resolveMainInitialized = resolve;
   }
 
   get main() {
     return this.#main;
   }
 
-  advanceSyncHead = async (store: Store, syncHeadHash: Hash): Promise<void> => {
-    if (this.#sync === undefined) {
-      await this.#initSyncHead(store, syncHeadHash);
-    }
-    assert(this.#sync !== undefined, 'no sync head found');
-
-    if (this.#sync.hash === syncHeadHash) {
-      // If the hashes are the same, the sync head is already up to date.
-      return;
-    }
-
-    const diffs = await computeDiffs(
-      this.#sync.hash,
-      syncHeadHash,
-      store,
-      undefined,
-    );
-
-    // Sync head was behind. Advance it via the provided diffs.
-    if (diffs !== undefined) {
-      applyDiffs(diffs, this.#sync);
-    }
-
-    this.#sync.hash = syncHeadHash;
-  };
-
   /**
    * Gets the IVM sources for the specific transaction reason:
    * initial, pullEnd, persist, or refresh.
    */
-  getSourcesForTransaction(
+  async getSourcesForTransaction(
     reason: DetailedReason,
-    expectedHead:
-      | {
-          store: Store;
-          hash: Hash;
-        }
-      | undefined,
-  ): MaybePromise<RepTxZeroData> {
+    store: Store,
+    expectedHead: Hash,
+    desiredHead: Hash,
+  ): Promise<RepTxZeroData> {
     switch (reason) {
       case 'initial': {
         assert(
@@ -141,42 +111,32 @@ export class IVMSourceRepo {
       case 'persist':
       case 'pullEnd':
       case 'refresh': {
-        assert(
-          expectedHead !== undefined,
-          () => 'expectedHead must be specified for ' + reason,
-        );
-        if (this.#sync === undefined) {
-          return this.#createSourcesForHead(expectedHead);
+        if (this.#mainInitialized === false) {
+          await this.#mainInitializedPromise;
         }
 
-        if (this.#sync.hash === expectedHead.hash) {
-          // If the hashes are the same, the sync head is already up to date.
-          const fork = this.#sync.fork();
+        assert(
+          expectedHead === this.#main.hash && expectedHead !== undefined,
+          () =>
+            `expected head must be defined for ${reason} and match the main head. Got: ${expectedHead}, expected: ${
+              this.#main.hash
+            }`,
+        );
+
+        if (this.#main.hash === desiredHead) {
+          const fork = this.#main.fork();
           return {read: fork, write: fork};
         }
 
-        // On refresh the hashes may not match.
-        // This is because IDB will have mutations included in it
-        // (from other clients) that are not yet in the sync head.
-        // They may also not match on `persist` if we are persisting after a refresh
-        assert(
-          reason === 'refresh' || reason === 'persist',
-          'head should match for all reasons except refresh',
-        );
-        return this.#createSourcesForHead(expectedHead);
+        return this.#createSourcesForHead(desiredHead, store);
       }
     }
   }
 
-  async #createSourcesForHead({
-    store,
-    hash,
-    read,
-  }: {
-    store: Store;
-    hash: Hash;
-    read?: Read;
-  }): Promise<RepTxZeroData> {
+  async #createSourcesForHead(
+    desiredHead: Hash,
+    store: Store,
+  ): Promise<RepTxZeroData> {
     // If the sync head does not exist yet, create it.
     // It will be fast-forwarded to the desired head.
     if (this.#sync === undefined) {
