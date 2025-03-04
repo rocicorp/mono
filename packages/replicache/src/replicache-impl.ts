@@ -766,7 +766,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
       }
 
       // Replay.
-      const zeroData = await this.#zero?.getRepTxData?.('pullEnd', {
+      const zeroData = await this.#zero?.getTxData?.('pullEnd', {
         store: this.memdag,
         hash: syncHead,
       });
@@ -1188,7 +1188,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
           this.#mutatorRegistry,
           () => this.#closed,
           FormatVersion.Latest,
-          this.#zero?.getRepTxData,
+          this.#zero?.getTxData,
         );
       } catch (e) {
         if (e instanceof ClientStateNotFoundError) {
@@ -1505,7 +1505,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
           clientID,
           await dbWrite.getMutationID(),
           'initial',
-          await this.#zero?.getRepTxData('initial', undefined),
+          await this.#zero?.getTxData('initial', undefined),
           dbWrite,
           this.#lc,
         );

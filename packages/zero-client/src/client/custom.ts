@@ -80,10 +80,7 @@ export type MakeCustomMutatorInterface<
   ? (...args: Args) => Promise<void>
   : never;
 
-export type RepTxZeroData = {
-  readonly read: IVMSourceBranch;
-  readonly write: IVMSourceBranch | undefined;
-};
+export type RepTxZeroData = IVMSourceBranch;
 
 export class TransactionImpl implements Transaction<Schema> {
   constructor(repTx: WriteTransaction<RepTxZeroData>, schema: Schema) {
@@ -99,9 +96,9 @@ export class TransactionImpl implements Transaction<Schema> {
       // Mutators do not write to the main IVM sources during optimistic mutations
       // so we pass undefined here.
       // ExperimentalWatch handles updating main.
-      repTx.zeroData.write,
+      repTx.zeroData,
     );
-    this.query = makeSchemaQuery(schema, repTx.zeroData.read);
+    this.query = makeSchemaQuery(schema, repTx.zeroData);
   }
 
   readonly clientID: ClientID;

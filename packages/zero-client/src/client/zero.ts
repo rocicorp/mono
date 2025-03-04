@@ -485,7 +485,7 @@ export class Zero<
       licenseKey: 'zero-client-static-key',
       kvStore,
       zero: {
-        getRepTxData: (reason, customHead) =>
+        getTxData: (reason, customHead) =>
           this.#ivmSources.getSourcesForTransaction(reason, customHead),
       },
     };

@@ -14,22 +14,16 @@ import {diff} from '../../../replicache/src/sync/diff.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {InternalDiff} from '../../../replicache/src/btree/node.ts';
 import {resolver} from '@rocicorp/resolver';
+import type {MaybePromise} from '../../../shared/src/types.ts';
 
 /**
  *
  */
 export class IVMSourceRepo {
   readonly #main: IVMSourceBranch;
-  readonly #mainInitializedPromise: Promise<boolean>;
-  #mainInitialized: boolean;
-  readonly #resolveMainInitialized: (value: boolean) => void;
 
   constructor(tables: Record<string, TableSchema>) {
     this.#main = new IVMSourceBranch(tables, undefined);
-    const {promise, resolve} = resolver<boolean>();
-    this.#mainInitializedPromise = promise;
-    this.#mainInitialized = false;
-    this.#resolveMainInitialized = resolve;
   }
 
   get main() {
@@ -40,69 +34,42 @@ export class IVMSourceRepo {
    * Gets the IVM sources for the specific transaction reason:
    * initial, pullEnd, persist, or refresh.
    */
-  async getSourcesForTransaction(
+  getSourcesForTransaction(
     reason: DetailedReason,
     store: Store,
     expectedHead: Hash,
     desiredHead: Hash,
-  ): Promise<RepTxZeroData> {
-    switch (reason) {
-      case 'initial': {
-        assert(
-          expectedHead === undefined,
-          'expected head should be undefined for initial',
-        );
-        // Mutators read from main and do not write to main for `initial` mutations.
-        // Main is updated via `experimentalWatch` between each mutation.
-        // There is no concept of running many custom mutators in the same transaction at the moment.
-        // If that changes we'll have to revisit.
-        return {
-          read: this.#main,
-          write: undefined,
-        };
-      }
-      case 'persist':
-      case 'pullEnd':
-      case 'refresh': {
-        if (this.#mainInitialized === false) {
-          await this.#mainInitializedPromise;
-        }
-
-        const fork = this.#main.fork();
-        assert(
-          expectedHead === fork.hash && expectedHead !== undefined,
-          () =>
-            `expected head must be defined for ${reason} and match the main head. Got: ${expectedHead}, expected: ${
-              this.#main.hash
-            }`,
-        );
-
-        if (fork.hash === desiredHead) {
-          return {read: fork, write: fork};
-        }
-
-        return this.#patchSourceForHead(desiredHead, store, fork);
-      }
-    }
-  }
-
-  async #patchSourceForHead(
-    desiredHead: Hash,
-    store: Store,
-    fork: IVMSourceBranch,
-  ): Promise<RepTxZeroData> {
-    const diffs = await computeDiffs(
-      must(fork.hash),
-      desiredHead,
-      store,
-      undefined,
+  ): MaybePromise<RepTxZeroData> {
+    const fork = this.#main.fork();
+    assert(
+      expectedHead === fork.hash,
+      () =>
+        `expected head must match the main head. Got: ${expectedHead}, expected: ${fork.hash} for reason: ${reason}`,
     );
-    if (!diffs) {
-      return {read: fork, write: fork};
+    if (fork.hash === desiredHead) {
+      return fork;
     }
-    applyDiffs(diffs, fork);
-    return {read: fork, write: fork};
+
+    return patchSource(desiredHead, store, fork);
   }
+}
+
+async function patchSource(
+  desiredHead: Hash,
+  store: Store,
+  fork: IVMSourceBranch,
+) {
+  const diffs = await computeDiffs(
+    must(fork.hash),
+    desiredHead,
+    store,
+    undefined,
+  );
+  if (!diffs) {
+    return fork;
+  }
+  applyDiffs(diffs, fork);
+  return fork;
 }
 
 async function computeDiffs(
@@ -168,6 +135,8 @@ function applyDiffs(patches: InternalDiff, branch: IVMSourceBranch) {
 export class IVMSourceBranch {
   readonly #sources: Map<string, MemorySource | undefined>;
   readonly #tables: Record<string, TableSchema>;
+  readonly ready: Promise<boolean>;
+  readonly #resolveReady: (value: boolean) => void;
   hash: Hash | undefined;
 
   constructor(
@@ -178,6 +147,13 @@ export class IVMSourceBranch {
     this.#tables = tables;
     this.#sources = sources;
     this.hash = hash;
+    const {promise, resolve} = resolver<boolean>();
+    this.ready = promise;
+    this.#resolveReady = resolve;
+  }
+
+  resolveReady() {
+    this.#resolveReady(true);
   }
 
   getSource(name: string): MemorySource | undefined {

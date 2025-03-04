@@ -233,7 +233,7 @@ export async function refresh(
 
         let newMemdagHeadHash = perdagClientGroupHeadHash;
         if (newMemdagMutations.length > 0) {
-          const zeroData = await zero?.getRepTxData?.('refresh', {
+          const zeroData = await zero?.getTxData?.('refresh', {
             store: memdag,
             hash: newMemdagHeadHash,
             read: memdagWrite,
