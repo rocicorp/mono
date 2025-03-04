@@ -758,6 +758,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
 
       if (!replayMutations || replayMutations.length === 0) {
         // All done.
+        // ~~ TODO: call `zeroOption` to advance main
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return syncHead;
@@ -1233,6 +1234,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
       }
     }
     if (diffs !== undefined) {
+      // ~~ TODO: call `zeroOption` to advance main
       await this.#subscriptions.fire(diffs);
     }
   }
@@ -1519,6 +1521,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
 
         // Send is not supposed to reject
         this.#pushConnectionLoop.send(false).catch(() => void 0);
+        // ~~ TODO: call `zeroOption` to advance main
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return result;
