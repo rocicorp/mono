@@ -58,7 +58,13 @@ export async function initialSync(
     );
   }
   const {tableCopyWorkers: numWorkers, rowBatchSize} = syncOptions;
-  const upstreamDB = pgClient(lc, upstreamURI, {max: numWorkers});
+  const upstreamDB = pgClient(lc, upstreamURI);
+  const copyPool = pgClient(
+    lc,
+    upstreamURI,
+    {max: numWorkers},
+    'json-as-string',
+  );
   const replicationSession = pgClient(lc, upstreamURI, {
     ['fetch_types']: false, // Necessary for the streaming protocol
     connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
@@ -117,13 +123,14 @@ export async function initialSync(
     const start = Date.now();
     let numTables: number;
     let numRows: number;
-    const copiers = startTableCopyWorkers(lc, upstreamDB, snapshot, numWorkers);
+    const copiers = startTableCopyWorkers(lc, copyPool, snapshot, numWorkers);
     let published: PublicationInfo;
     try {
       // Retrieve the published schema at the consistent_point.
-      published = await copiers.processReadTask(db =>
-        getPublicationInfo(db, publications),
-      );
+      published = await upstreamDB.begin(Mode.READONLY, async db => {
+        await db.unsafe(`SET TRANSACTION SNAPSHOT '${snapshot}'`);
+        return getPublicationInfo(db, publications);
+      });
       // Note: If this throws, initial-sync is aborted.
       validatePublications(lc, published);
 
@@ -161,6 +168,7 @@ export async function initialSync(
   } finally {
     await replicationSession.end();
     await upstreamDB.end();
+    await copyPool.end();
   }
 }
 
@@ -329,13 +337,19 @@ async function copy(
       for (; i + INSERT_BATCH_SIZE < rows.length; i += INSERT_BATCH_SIZE) {
         const values: LiteValueType[] = [];
         for (let j = i; j < i + INSERT_BATCH_SIZE; j++) {
-          values.push(...liteValues(rows[j], table), initialVersion);
+          values.push(
+            ...liteValues(rows[j], table, 'json-as-string'),
+            initialVersion,
+          );
         }
         insertBatchStmt.run(values);
       }
       // Remaining set of rows is < INSERT_BATCH_SIZE
       for (; i < rows.length; i++) {
-        insertStmt.run([...liteValues(rows[i], table), initialVersion]);
+        insertStmt.run([
+          ...liteValues(rows[i], table, 'json-as-string'),
+          initialVersion,
+        ]);
       }
       totalRows += rows.length;
       lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);

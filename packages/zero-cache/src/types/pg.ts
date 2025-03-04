@@ -41,6 +41,9 @@ export function registerPostgresTypeParsers() {
   // Store dates as the epoch milliseconds at UTC midnight of the date.
   setTypeParser(builtins.DATE, dateToUTCMidnight);
   setTypeParser(builtinsDATEARRAY, val => array.parse(val, dateToUTCMidnight));
+
+  // TODO: Override JSON parsing and replicate as strings to eliminate the
+  //       parse/serialize overhead.
 }
 
 const WITH_HH_MM_TIMEZONE = /[+-]\d\d:\d\d$/;
@@ -116,8 +119,14 @@ function dateToUTCMidnight(date: string): number {
  */
 export type PostgresValueType = JSONValue | Uint8Array;
 
-/** Configures types for the Postgres.js client library (`postgres`). */
-export const postgresTypeConfig = () => ({
+/**
+ * Configures types for the Postgres.js client library (`postgres`).
+ *
+ * @param jsonAsString Keep JSON / JSONB values as strings instead of parsing.
+ */
+export const postgresTypeConfig = (
+  jsonAsString?: 'json-as-string' | undefined,
+) => ({
   // Type the type IDs as `number` so that Typescript doesn't complain about
   // referencing external types during type inference.
   types: {
@@ -126,7 +135,7 @@ export const postgresTypeConfig = () => ({
       to: builtins.JSON as number,
       from: [builtins.JSON, builtins.JSONB] as number[],
       serialize: BigIntJSON.stringify,
-      parse: BigIntJSON.parse,
+      parse: jsonAsString ? (x: string) => x : BigIntJSON.parse,
     },
     // Timestamps are converted to PreciseDate objects.
     timestamp: {
@@ -172,6 +181,7 @@ export function pgClient(
     bigint: PostgresType<bigint>;
     json: PostgresType<JSONValue>;
   }>,
+  jsonAsString?: 'json-as-string',
 ): PostgresDB {
   const onnotice = (n: Notice) => {
     // https://www.postgresql.org/docs/current/plpgsql-errors-and-messages.html#PLPGSQL-STATEMENTS-RAISE
@@ -198,7 +208,7 @@ export function pgClient(
   // Set connections to expire between 5 and 10 minutes to free up state on PG.
   const maxLifetimeSeconds = randInt(5 * 60, 10 * 60);
   return postgres(connectionURI, {
-    ...postgresTypeConfig(),
+    ...postgresTypeConfig(jsonAsString),
     onnotice,
     ['max_lifetime']: maxLifetimeSeconds,
     ['connect_timeout']: 60, // scale-from-zero dbs need more than 30 seconds
