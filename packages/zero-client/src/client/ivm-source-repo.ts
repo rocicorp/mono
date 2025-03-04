@@ -118,15 +118,17 @@ export class IVMSourceRepo {
    * Gets the IVM sources for the specific transaction reason:
    * initial, pullEnd, persist, or refresh.
    */
-  getSourcesForTransaction(
+  async getSourcesForTransaction(
     reason: DetailedReason,
     expectedHead:
       | {
           store: Store;
           hash: Hash;
+          read?: Read;
+          tryCrazyDiff?: [Hash, Hash];
         }
       | undefined,
-  ): MaybePromise<RepTxZeroData> {
+  ): Promise<RepTxZeroData> {
     console.log('GETTING SOURCES FOR TRANSACTION', reason, new Error());
     switch (reason) {
       case 'initial': {
@@ -152,6 +154,17 @@ export class IVMSourceRepo {
         );
         if (this.#sync === undefined) {
           return this.#createSourcesForHead(expectedHead);
+        }
+
+        if (expectedHead.tryCrazyDiff) {
+          console.log('CRAZY DIFF');
+          const difference = await computeDiffs(
+            expectedHead.tryCrazyDiff[0],
+            expectedHead.tryCrazyDiff[1],
+            expectedHead.store,
+            undefined,
+          );
+          console.log('CRAZY DIFF COMPLETE', difference);
         }
 
         if (this.#sync.hash === expectedHead.hash) {

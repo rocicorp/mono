@@ -247,6 +247,7 @@ export type ZeroOption<T> = {
           store: Store;
           hash: Hash;
           read?: Read;
+          tryCrazyDiff?: [Hash, Hash];
         }
       | undefined,
   ): MaybePromise<T>;
