@@ -14,11 +14,11 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "peerDependencies": {
-    "solid-js": "^1.0.0"
+    "solid-js": "^1.9.4"
   },
   "devDependencies": {
     "@solidjs/testing-library": "^0.8.10",
-    "solid-js": "^1.0.0",
+    "solid-js": "^1.9.4",
     "zero-advanced": "0.0.0"
   }
 }
