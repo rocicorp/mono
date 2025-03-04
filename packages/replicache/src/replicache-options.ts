@@ -6,7 +6,6 @@ import type {Pusher} from './pusher.ts';
 import type {MutatorDefs, RequestOptions} from './types.ts';
 import type {DetailedReason} from './transactions.ts';
 import type {Hash} from './hash.ts';
-import type {Read, Store} from './dag/store.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
 
 /**
@@ -240,14 +239,9 @@ export type ZeroOption<T> = {
    * for use in rebase operations. Replicache will call zero at the start of
    * these operations to get the current IVM sources.
    */
-  getRepTxData(
+  getTxData(
     reason: DetailedReason,
-    expectedHead:
-      | {
-          store: Store;
-          hash: Hash;
-          read?: Read;
-        }
-      | undefined,
+    expectedHead: Hash,
+    desiredHead: Hash,
   ): MaybePromise<T>;
 };
