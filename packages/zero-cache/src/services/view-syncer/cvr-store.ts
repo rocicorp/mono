@@ -202,7 +202,7 @@ export class CVRStore {
            WHERE "clientGroupID" = ${id}`,
         tx<QueriesRow[]>`
         SELECT * FROM ${this.#cvr('queries')} 
-          WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
+          WHERE "clientGroupID" = ${id} AND deleted IS DISTINCT FROM true`,
         tx<DesiresRow[]>`SELECT 
           "clientGroupID",
           "clientID",
