@@ -132,6 +132,7 @@ async function computeDiffs(
 
 function applyDiffs(patches: InternalDiff, branch: IVMSourceBranch) {
   // TODO: binary search for the first patch that is prefixed with ENTITIES_KEY_PREFIX
+  // see code in subscriptions.ts
   // TODO: break as soon as one does not start with that prefix.
   for (const patch of patches) {
     const {key} = patch;

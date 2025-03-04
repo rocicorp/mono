@@ -1,6 +1,5 @@
 import {LogContext, type LogLevel} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
-import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
@@ -99,7 +98,6 @@ import {
   toWSString,
 } from './http-string.ts';
 import {IVMSourceRepo} from './ivm-source-repo.ts';
-import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
   DID_NOT_CONNECT_VALUE,
@@ -584,14 +582,6 @@ export class Zero<
       this.#ivmSources.main,
       (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
       batchViewUpdates,
-    );
-
-    rep.experimentalWatch(
-      diff => this.#zeroContext.processChanges(diff as NoIndexDiff),
-      {
-        prefix: ENTITIES_KEY_PREFIX,
-        initialValuesInFirstDiff: true,
-      },
     );
 
     this.query = this.#registerQueries(schema);
