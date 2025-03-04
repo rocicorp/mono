@@ -149,14 +149,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #authData: JWTPayload | undefined;
 
   /**
-   * The {@linkcode maxRowCount} is used for the eviction of queries when the
-   * number of rows in the CVR exceeds this value. The eviction process will
-   * remove queries that are inactive.
+   * The {@linkcode maxRowCount} is used for the eviction of inactive queries.
+   * An inactive query is a query that is no longer desired but is kept alive
+   * due to its TTL. When the number of rows in the CVR exceeds
+   * {@linkcode maxRowCount} we keep removing inactive queries (even if they are
+   * not expired yet) until the actual row count is below the max row count.
+   *
+   * There is no guarantee that the number of rows in the CVR will be below this
+   * if there are active queries that have a lot of rows.
    */
   maxRowCount: number;
 
   #expiredQueriesTimer: ReturnType<typeof setTimeout> | 0 = 0;
-  #nextExpiredQueryTime: number | 0 = 0;
+  #nextExpiredQueryTime: number = 0;
   readonly #setTimeout: SetTimeout;
 
   constructor(
@@ -252,7 +257,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           if (this.#pipelinesSynced) {
             const result = await this.#advancePipelines(lc, cvr);
             if (result === 'success') {
-              // evict here or in #advancePipelines?
               return;
             }
             lc.info?.(`resetting pipelines: ${result.message}`);

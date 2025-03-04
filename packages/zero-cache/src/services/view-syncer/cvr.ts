@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {compareUTF8} from 'compare-utf8';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {must} from '../../../../shared/src/must.ts';
@@ -8,6 +7,7 @@ import {
   intersection,
   union,
 } from '../../../../shared/src/set-utils.ts';
+import {stringCompare} from '../../../../shared/src/string-compare.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {stringify, type JSONObject} from '../../types/bigint-json.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
@@ -244,7 +244,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       return patches;
     }
     const newVersion = this._ensureNewVersion();
-    client.desiredQueryIDs = [...union(current, needed)].sort(compareUTF8);
+    client.desiredQueryIDs = [...union(current, needed)].sort(stringCompare);
 
     for (const id of needed) {
       const {ast, ttl} = must(queries.find(({hash}) => hash === id));
@@ -288,7 +288,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     queryHashes: string[],
     now: number,
   ): PatchToVersion[] {
-    return this.#deleteQueries(clientID, queryHashes, now, false);
+    return this.#deleteQueries(clientID, queryHashes, now);
   }
 
   /**
@@ -306,36 +306,27 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     clientID: string,
     queryHashes: string[],
   ): PatchToVersion[] {
-    return this.#deleteQueries(clientID, queryHashes, undefined, false);
-  }
-
-  deleteQueries(clientID: string, queryHashes: string[]): PatchToVersion[] {
-    return this.#deleteQueries(clientID, queryHashes, undefined, true);
+    return this.#deleteQueries(clientID, queryHashes, undefined);
   }
 
   #deleteQueries(
     clientID: string,
     queryHashes: string[],
     inactivatedAt: number | undefined,
-    force: boolean,
   ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
     const client = this.#ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
     const unwanted = new Set(queryHashes);
     const remove = intersection(unwanted, current);
-    if (force) {
-      // If force remove all queryHashes even when they are not desired...
-      for (const hash of queryHashes) {
-        remove.add(hash);
-      }
-    }
     if (remove.size === 0) {
       return patches;
     }
 
     const newVersion = this._ensureNewVersion();
-    client.desiredQueryIDs = [...difference(current, remove)].sort(compareUTF8);
+    client.desiredQueryIDs = [...difference(current, remove)].sort(
+      stringCompare,
+    );
 
     for (const id of remove) {
       const query = this._cvr.queries[id];
@@ -380,12 +371,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
   clearDesiredQueries(clientID: string): PatchToVersion[] {
     const client = this.#ensureClient(clientID);
-    return this.#deleteQueries(
-      clientID,
-      client.desiredQueryIDs,
-      undefined,
-      false,
-    );
+    return this.#deleteQueries(clientID, client.desiredQueryIDs, undefined);
   }
 
   deleteClient(clientID: string): PatchToVersion[] {

@@ -1,28 +1,28 @@
-import {trace} from '@opentelemetry/api';
-import type {LogContext} from '@rocicorp/logger';
-import type {MaybeRow, PendingQuery} from 'postgres';
-import {startAsyncSpan} from '../../../../otel/src/span.ts';
-import {version} from '../../../../otel/src/version.ts';
-import {assert} from '../../../../shared/src/asserts.ts';
-import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
-import {CustomKeySet} from '../../../../shared/src/custom-key-set.ts';
+import { trace } from '@opentelemetry/api';
+import type { LogContext } from '@rocicorp/logger';
+import type { MaybeRow, PendingQuery } from 'postgres';
+import { startAsyncSpan } from '../../../../otel/src/span.ts';
+import { version } from '../../../../otel/src/version.ts';
+import { assert } from '../../../../shared/src/asserts.ts';
+import { CustomKeyMap } from '../../../../shared/src/custom-key-map.ts';
+import { CustomKeySet } from '../../../../shared/src/custom-key-set.ts';
 import {
   deepEqual,
   type ReadonlyJSONValue,
 } from '../../../../shared/src/json.ts';
-import {must} from '../../../../shared/src/must.ts';
-import {sleep} from '../../../../shared/src/sleep.ts';
-import {astSchema} from '../../../../zero-protocol/src/ast.ts';
+import { must } from '../../../../shared/src/must.ts';
+import { sleep } from '../../../../shared/src/sleep.ts';
+import { astSchema } from '../../../../zero-protocol/src/ast.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import * as Mode from '../../db/mode-enum.ts';
-import {TransactionPool} from '../../db/transaction-pool.ts';
-import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
-import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
-import {rowIDString} from '../../types/row-key.ts';
-import {cvrSchema, type ShardID} from '../../types/shards.ts';
-import type {Patch, PatchToVersion} from './client-handler.ts';
-import type {CVR, CVRSnapshot} from './cvr.ts';
-import {RowRecordCache} from './row-record-cache.ts';
+import { TransactionPool } from '../../db/transaction-pool.ts';
+import { ErrorForClient, ErrorWithLevel } from '../../types/error-for-client.ts';
+import type { PostgresDB, PostgresTransaction } from '../../types/pg.ts';
+import { rowIDString } from '../../types/row-key.ts';
+import { cvrSchema, type ShardID } from '../../types/shards.ts';
+import type { Patch, PatchToVersion } from './client-handler.ts';
+import type { CVR, CVRSnapshot } from './cvr.ts';
+import { RowRecordCache } from './row-record-cache.ts';
 import {
   type ClientsRow,
   type DesiresRow,
@@ -202,7 +202,7 @@ export class CVRStore {
            WHERE "clientGroupID" = ${id}`,
         tx<QueriesRow[]>`
         SELECT * FROM ${this.#cvr('queries')} 
-          WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
+          WHERE "clientGroupID" = ${id} AND deleted IS DISTINCT FROM true`,
         tx<DesiresRow[]>`SELECT 
           "clientGroupID",
           "clientID",
