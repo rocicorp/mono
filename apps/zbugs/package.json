@@ -62,7 +62,7 @@
     "@types/react": "^18.3.18",
     "@types/react-dom": "18.3.5",
     "@typescript-eslint/eslint-plugin": "^5.16.0",
-    "@vitejs/plugin-react": "^4.2.1",
+    "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^8.15.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-react-hooks": "^4.6.0",
@@ -74,10 +74,10 @@
     "tsx": "^4.19.1",
     "typescript": "^5.7.3",
     "universal-user-agent": "^7.0.2",
-    "vite": "^5.4.9",
-    "vite-bundle-analyzer": "^0.16.0",
-    "vite-plugin-svgr": "^4.2.0",
-    "vite-tsconfig-paths": "^5.0.1",
+    "vite": "^6.2.0",
+    "vite-bundle-analyzer": "^0.17.1",
+    "vite-plugin-svgr": "^4.3.0",
+    "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.0.7"
   },
   "eslintConfig": {
