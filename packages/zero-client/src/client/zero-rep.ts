@@ -47,12 +47,12 @@ export class ZeroRep {
     });
   }
 
-  async getTxData(
+  getTxData = async (
     reason: DetailedReason,
     expectedHead: Hash,
     desiredHead: Hash,
     read: Read | undefined,
-  ): Promise<IVMSourceBranch> {
+  ): Promise<IVMSourceBranch> => {
     await this.#ivmSources.main.ready;
     return this.#ivmSources.getSourcesForTransaction(
       reason,
@@ -61,21 +61,21 @@ export class ZeroRep {
       desiredHead,
       read,
     );
-  }
+  };
 
-  async advance(hash: Hash, diffs: InternalDiff): Promise<void> {
+  advance = async (hash: Hash, diffs: InternalDiff): Promise<void> => {
     await this.#ivmSources.main.ready;
     this.#context.processChanges(
       entityDiffs(diffs),
       () => (this.#ivmSources.main.hash = hash),
     );
-  }
+  };
 }
 
 function* entityDiffs(diffs: InternalDiff) {
   for (
     let i = diffBinarySearch(diffs, ENTITIES_KEY_PREFIX, diff => diff.key);
-    i < length;
+    i < diffs.length;
     i++
   ) {
     if (diffs[i].key.startsWith(ENTITIES_KEY_PREFIX)) {

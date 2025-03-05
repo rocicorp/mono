@@ -42,6 +42,7 @@ export class IVMSourceRepo {
     read: Read | undefined,
   ): MaybePromise<RepTxZeroData> {
     const fork = this.#main.fork();
+
     assert(
       expectedHead === fork.hash,
       () =>
