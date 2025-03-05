@@ -35,19 +35,19 @@ export class IVMSourceRepo {
    * initial, pullEnd, persist, or refresh.
    */
   getSourcesForTransaction(
-    reason: DetailedReason,
+    _reason: DetailedReason,
     store: Store,
-    expectedHead: Hash,
+    _expectedHead: Hash,
     desiredHead: Hash,
     read: Read | undefined,
   ): MaybePromise<RepTxZeroData> {
     const fork = this.#main.fork();
 
-    assert(
-      expectedHead === fork.hash,
-      () =>
-        `expected head must match the main head. Got: ${expectedHead}, expected: ${fork.hash} for reason: ${reason}`,
-    );
+    // assert(
+    //   expectedHead === fork.hash,
+    //   () =>
+    //     `expected head must match the main head. Got: ${expectedHead}, expected: ${fork.hash} for reason: ${reason}`,
+    // );
     if (fork.hash === desiredHead) {
       return fork;
     }

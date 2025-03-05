@@ -147,6 +147,8 @@ export async function persistDD31(
     return;
   }
 
+  // TODO: do memdag reads outside of perdag withWrite tx.
+
   let memdagBaseSnapshotPersisted = false;
   await withWrite(perdag, async perdagWrite => {
     const [mainClientGroup, latestPerdagMainClientGroupHeadCommit] =

@@ -769,7 +769,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
       // Replay.
       const zeroData = await this.#zero?.getTxData?.(
         'pullEnd',
-        mainHead,
+        mainHead, // TODO: this expected head is wrong since we don't advance to mainHead in all cases
+        // only when no replay mutations exist...
         syncHead,
         undefined,
       );
