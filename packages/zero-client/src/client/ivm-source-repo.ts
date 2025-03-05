@@ -15,10 +15,6 @@ import {assert} from '../../../shared/src/asserts.ts';
 import type {InternalDiff} from '../../../replicache/src/btree/node.ts';
 import {resolver} from '@rocicorp/resolver';
 import type {MaybePromise} from '../../../shared/src/types.ts';
-import {
-  commitFromHead,
-  DEFAULT_HEAD_NAME,
-} from '../../../replicache/src/db/commit.ts';
 
 /**
  *
@@ -66,22 +62,10 @@ async function patchSource(
   fork: IVMSourceBranch,
   read: Read | undefined,
 ) {
-  const defaultHash = await withRead(store, dagRead =>
-    commitFromHead(DEFAULT_HEAD_NAME, dagRead),
-  );
-  console.log(
-    'PATCHING DEFAULT',
-    defaultHash.chunk.hash,
-    'FROM',
-    fork.hash,
-    'TO',
-    desiredHead,
-  );
   const diffs = await computeDiffs(must(fork.hash), desiredHead, store, read);
   if (!diffs) {
     return fork;
   }
-  console.log('PATCH SOURCE', diffs);
   applyDiffs(diffs, fork);
   return fork;
 }
@@ -105,10 +89,11 @@ async function computeDiffs(
       },
       FormatVersion.Latest,
     );
-  const diffsFromSync =
+
+  const diffs =
     read === undefined ? await withRead(store, readFn) : await readFn(read);
 
-  return diffsFromSync.get('');
+  return diffs.get('');
 }
 
 function applyDiffs(patches: InternalDiff, branch: IVMSourceBranch) {

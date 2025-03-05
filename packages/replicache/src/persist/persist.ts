@@ -73,8 +73,6 @@ export async function persistDD31(
     return;
   }
 
-  getZeroData = undefined;
-
   const [perdagLMID, perdagBaseSnapshot, mainClientGroupID] = await withRead(
     perdag,
     async perdagRead => {
@@ -152,7 +150,31 @@ export async function persistDD31(
   // TODO: do memdag reads outside of perdag withWrite tx.
   // or perdag write nested in memdag read possible?
 
+  // option 1:
+  // - do the diff against memdagBaseSnapshot outside the `withWrite`
+  //   this works for the case where the memdagSnapshot is newer than perdag.
+  //
+  // Then comes the case where the memdagSnapshot is equal or less than
+  // the perdag snapshot.
+  //
+  // Problem:
+  // We need to read from memdag within a perdag idb transaction
+  // so that the perdag does not move forward while calculating the new IVM head
+  // - We can busy loop creating heads and entering perdag tx until the
+  // bases match.
+  // -
+
   let memdagBaseSnapshotPersisted = false;
+  const zeroDataFromMemdagBaseSnapshot =
+    getZeroData === undefined
+      ? undefined
+      : await getZeroData(
+          'persist',
+          memdagHeadCommit.chunk.hash,
+          memdagBaseSnapshot.chunk.hash,
+          undefined,
+        );
+
   await withWrite(perdag, async perdagWrite => {
     const [mainClientGroup, latestPerdagMainClientGroupHeadCommit] =
       await getClientGroupInfo(perdagWrite, mainClientGroupID);
@@ -168,7 +190,6 @@ export async function persistDD31(
     };
     let {lastServerAckdMutationIDs} = mainClientGroup;
 
-    let zeroData: unknown | undefined;
     if (gatheredChunks) {
       // check if memdag snapshot still newer than perdag snapshot
 
@@ -205,15 +226,6 @@ export async function persistDD31(
         // Rebase local mutations from perdag main client group onto new
         // snapshot
         newMainClientGroupHeadHash = memdagBaseSnapshot.chunk.hash;
-        zeroData =
-          getZeroData === undefined
-            ? undefined
-            : await getZeroData(
-                'persist',
-                memdagHeadCommit.chunk.hash,
-                newMainClientGroupHeadHash,
-                undefined,
-              );
         const mainClientGroupLocalMutations = await localMutationsDD31(
           mainClientGroup.headHash,
           perdagWrite,
@@ -230,24 +242,24 @@ export async function persistDD31(
           mutationIDs,
           lc,
           formatVersion,
-          zeroData,
+          zeroDataFromMemdagBaseSnapshot,
         );
       }
     }
 
-    // if zeroData is not set it is because
-    // the memdag snapshot was not newer than the perdag snapshot
-    if (zeroData === undefined) {
-      zeroData =
-        getZeroData === undefined
-          ? undefined
-          : await getZeroData(
-              'refresh',
-              memdagHeadCommit.chunk.hash,
-              newMainClientGroupHeadHash,
-              undefined,
-            );
-    }
+    let zeroDataFromPerdagBaseSnapshot: unknown;
+    // ~~ cannot do this yet due to write auto-committing.
+    // if (!memdagBaseSnapshotPersisted) {
+    //   zeroDataFromPerdagBaseSnapshot =
+    //     getZeroData === undefined
+    //       ? undefined
+    //       : await getZeroData(
+    //           'persist',
+    //           memdagHeadCommit.chunk.hash,
+    //           newMainClientGroupHeadHash,
+    //           undefined,
+    //         );
+    // }
 
     // rebase new memdag mutations onto perdag
     newMainClientGroupHeadHash = await rebase(
@@ -258,7 +270,7 @@ export async function persistDD31(
       mutationIDs,
       lc,
       formatVersion,
-      zeroData,
+      zeroDataFromPerdagBaseSnapshot,
     );
 
     const newMainClientGroup = {
