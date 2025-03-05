@@ -97,7 +97,7 @@ import {
   appendPath,
   toWSString,
 } from './http-string.ts';
-import {IVMSourceRepo} from './ivm-source-repo.ts';
+import {IVMSourceBranch} from './ivm-branch.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
@@ -280,7 +280,7 @@ export class Zero<
 
   readonly #pokeHandler: PokeHandler;
   readonly #queryManager: QueryManager;
-  readonly #ivmSources: IVMSourceRepo;
+  readonly #ivmMain: IVMSourceBranch;
   readonly #clientToServer: NameMapper;
   readonly #deleteClientsManager: DeleteClientsManager;
 
@@ -445,7 +445,7 @@ export class Zero<
     const replicacheMutators = {
       [CRUD_MUTATION_NAME]: makeCRUDMutator(schema),
     };
-    this.#ivmSources = new IVMSourceRepo(schema.tables);
+    this.#ivmMain = new IVMSourceBranch(schema.tables);
 
     for (const [namespace, mutatorsForNamespace] of Object.entries(
       options.mutators ?? {},
@@ -568,7 +568,7 @@ export class Zero<
     );
 
     this.#zeroContext = new ZeroContext(
-      this.#ivmSources.main,
+      this.#ivmMain,
       (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
       batchViewUpdates,
     );

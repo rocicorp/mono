@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {IVMSourceBranch, IVMSourceRepo} from './ivm-source-repo.ts';
+import {initFromStore, IVMSourceBranch} from './ivm-branch.ts';
 import {
   schema,
   type Issue,
@@ -18,6 +18,7 @@ import type {Diff} from '../../../replicache/src/sync/patch.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
 import {createDb} from './test/create-db.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {Hash} from '../../../replicache/src/hash.ts';
 
 test('fork', () => {
   const main = new IVMSourceBranch({
@@ -108,9 +109,9 @@ test('fork', () => {
 
 let timestamp = 42;
 const lc = createSilentLogContext();
-describe('advanceSyncHead', () => {
-  test("sync head is initialized to match replicache's sync head", async () => {
-    const repo = new IVMSourceRepo(schema.tables);
+describe('advance', () => {
+  test('initFromStore', async () => {
+    const branch = new IVMSourceBranch(schema.tables);
     const {dagStore, syncHash} = await createDb(
       [
         [
@@ -126,100 +127,14 @@ describe('advanceSyncHead', () => {
       ],
       timestamp++,
     );
-    await repo.advanceSyncHead(dagStore, syncHash, []);
+    await initFromStore(branch, syncHash, dagStore);
 
     expect([
-      ...must(repo.rebase.getSource('issue'))
+      ...must(branch.getSource('issue'))
         .connect([['id', 'asc']])
         .fetch({}),
     ]).toMatchInlineSnapshot(`
       [
-        {
-          "relationships": {},
-          "row": {
-            "closed": false,
-            "description": "test",
-            "id": "sdf",
-            "ownerId": null,
-            "title": "test",
-          },
-        },
-      ]
-    `);
-  });
-
-  test('sync is advanced via diffs when already initialized', async () => {
-    const repo = new IVMSourceRepo(schema.tables);
-    const {dagStore, syncHash} = await createDb(
-      [
-        [
-          `${ENTITIES_KEY_PREFIX}issue/sdf`,
-          {
-            id: 'sdf',
-            title: 'test',
-            description: 'test',
-            closed: false,
-            ownerId: null,
-          },
-        ],
-      ],
-      timestamp++,
-    );
-
-    // initialize the sync head
-    await repo.advanceSyncHead(dagStore, syncHash, []);
-
-    // write something to the db that will not be included in diffs and should not be in the ivm sync head for
-    // that reason. This would never happen in practice.
-    const w = await newWriteLocal(
-      syncHash,
-      'mutator_name',
-      JSON.stringify([]),
-      null,
-      await dagStore.write(),
-      timestamp++,
-      'client-id',
-      FormatVersion.Latest,
-    );
-    await w.put(lc, `${ENTITIES_KEY_PREFIX}issue/abc`, {
-      id: 'abc',
-      title: 'test',
-      description: 'test',
-      closed: false,
-      ownerId: null,
-    } as unknown as FrozenJSONValue);
-    await w.commit(SYNC_HEAD_NAME);
-
-    await repo.advanceSyncHead(dagStore, syncHash, [
-      {
-        op: 'add',
-        key: `${ENTITIES_KEY_PREFIX}issue/def`,
-        newValue: {
-          id: 'def',
-          title: 'test',
-          description: 'test',
-          closed: false,
-          ownerId: null,
-        } as unknown as FrozenJSONValue,
-      },
-    ]);
-
-    expect([
-      ...must(repo.rebase.getSource('issue'))
-        .connect([['id', 'asc']])
-        .fetch({}),
-    ]).toMatchInlineSnapshot(`
-      [
-        {
-          "relationships": {},
-          "row": {
-            "closed": false,
-            "description": "test",
-            "id": "def",
-            "ownerId": null,
-            "title": "test",
-          },
-        },
         {
           "relationships": {},
           "row": {
@@ -425,16 +340,150 @@ describe('advanceSyncHead', () => {
       },
       // remove existing data
     ] satisfies DiffCase[])('$name', async ({initial, diffs, expected}) => {
-      const repo = new IVMSourceRepo(schema.tables);
+      const branch = new IVMSourceBranch(schema.tables);
       const {dagStore, syncHash} = await createDb(initial, timestamp++);
-      await repo.advanceSyncHead(dagStore, syncHash, []);
+      await initFromStore(branch, syncHash, dagStore);
 
-      await repo.advanceSyncHead(dagStore, syncHash, diffs);
+      const w = await newWriteLocal(
+        syncHash,
+        'mutator_name',
+        JSON.stringify([]),
+        null,
+        await dagStore.write(),
+        timestamp++,
+        'client-id',
+        FormatVersion.Latest,
+      );
+      await Promise.all(
+        diffs.map(async diff => {
+          switch (diff.op) {
+            case 'add':
+              await w.put(lc, diff.key, diff.newValue);
+              break;
+            case 'change':
+              await w.put(lc, diff.key, diff.newValue);
+              break;
+            case 'del':
+              await w.del(lc, diff.key);
+              break;
+          }
+        }),
+      );
+      const head = await w.commit(SYNC_HEAD_NAME);
+
+      await branch.advance(syncHash, head, diffs);
       expect([
-        ...must(repo.rebase.getSource('issue'))
+        ...must(branch.getSource('issue'))
           .connect([['id', 'asc']])
           .fetch({}),
       ]).toEqual(expected);
     });
+  });
+});
+
+describe('forkToHead', () => {
+  test('throws on hash mismatch', async () => {
+    const branch = new IVMSourceBranch(schema.tables);
+    const {dagStore, syncHash} = await createDb([], timestamp++);
+    await initFromStore(branch, syncHash, dagStore);
+    await expect(() =>
+      branch.forkToHead(dagStore, 'wrong-hash' as Hash, syncHash),
+    ).rejects.toThrow(
+      `Expected head must match the main head. Got: wrong-hash, expected: fake000000000000000002`,
+    );
+  });
+
+  test('handles when desiredHead is the same as expectedHead', async () => {
+    const branch = new IVMSourceBranch(schema.tables);
+    const {dagStore, syncHash} = await createDb(
+      [
+        [
+          `${ENTITIES_KEY_PREFIX}issue/sdf`,
+          {
+            id: 'sdf',
+            title: 'test',
+            description: 'test',
+            closed: false,
+            ownerId: null,
+          },
+        ],
+      ],
+      timestamp++,
+    );
+    await initFromStore(branch, syncHash, dagStore);
+    await branch.forkToHead(dagStore, syncHash, syncHash);
+    expect([
+      ...must(branch.getSource('issue'))
+        .connect([['id', 'asc']])
+        .fetch({}),
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "closed": false,
+            "description": "test",
+            "id": "sdf",
+            "ownerId": null,
+            "title": "test",
+          },
+        },
+      ]
+    `);
+  });
+
+  test('returns a fork that matches the desired head', async () => {
+    const branch = new IVMSourceBranch(schema.tables);
+    const {dagStore, syncHash} = await createDb([], timestamp++);
+    await initFromStore(branch, syncHash, dagStore);
+
+    const w = await newWriteLocal(
+      syncHash,
+      'mutator_name',
+      JSON.stringify([]),
+      null,
+      await dagStore.write(),
+      timestamp++,
+      'client-id',
+      FormatVersion.Latest,
+    );
+    await w.put(lc, `${ENTITIES_KEY_PREFIX}issue/sdf`, {
+      id: 'sdf',
+      title: 'test',
+      description: 'test',
+      closed: false,
+      ownerId: null,
+    } as unknown as FrozenJSONValue);
+    const head = await w.commit(SYNC_HEAD_NAME);
+
+    const fork = await branch.forkToHead(dagStore, syncHash, head);
+    expect([
+      ...must(fork.getSource('issue'))
+        .connect([['id', 'asc']])
+        .fetch({}),
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "closed": false,
+            "description": "test",
+            "id": "sdf",
+            "ownerId": null,
+            "title": "test",
+          },
+        },
+      ]
+    `);
+
+    // can also re-wind the fork to the original head
+    const fork2 = await fork.forkToHead(dagStore, head, syncHash);
+    expect([
+      ...must(fork2.getSource('issue'))
+        .connect([['id', 'asc']])
+        .fetch({}),
+    ]).toMatchInlineSnapshot(`
+      []
+    `);
   });
 });
