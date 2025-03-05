@@ -97,7 +97,6 @@ import {
 } from './subscriptions.ts';
 import * as HandlePullResponseResultEnum from './sync/handle-pull-response-result-type-enum.ts';
 import type {ClientGroupID, ClientID} from './sync/ids.ts';
-import type {Diff} from './sync/patch.ts';
 import {PullError} from './sync/pull-error.ts';
 import {beginPullV1, handlePullResponseV1, maybeEndPull} from './sync/pull.ts';
 import {push, PUSH_VERSION_DD31} from './sync/push.ts';
@@ -1058,14 +1057,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    *
    * @experimental This method is under development and its semantics will change.
    */
-  async poke(
-    poke: PokeInternal,
-    pullApplied: (
-      store: Store,
-      syncHead: Hash,
-      patches: readonly Diff[],
-    ) => Promise<void>,
-  ): Promise<void> {
+  async poke(poke: PokeInternal): Promise<void> {
     await this.#ready;
     // TODO(MP) Previously we created a request ID here and included it with the
     // PullRequest to the server so we could tie events across client and server
@@ -1102,7 +1094,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
     switch (result.type) {
       case HandlePullResponseResultEnum.Applied:
-        await pullApplied(this.memdag, result.syncHead, result.diffs);
         await this.maybeEndPull(result.syncHead, requestID);
         break;
       case HandlePullResponseResultEnum.CookieMismatch:

@@ -454,7 +454,7 @@ export class Zero<
         mutatorsForNamespace as Record<string, CustomMutatorImpl<Schema>>,
       )) {
         (replicacheMutators as MutatorDefs)[customMutatorKey(namespace, name)] =
-          makeReplicacheMutator(mutator, schema, this.#ivmSources);
+          makeReplicacheMutator(mutator, schema);
       }
     }
 
@@ -597,7 +597,7 @@ export class Zero<
     this.#metrics.tags.push(`version:${this.version}`);
 
     this.#pokeHandler = new PokeHandler(
-      poke => this.#rep.poke(poke, this.#ivmSources.advanceSyncHead),
+      poke => this.#rep.poke(poke),
       () => this.#onPokeError(),
       rep.clientID,
       schema,

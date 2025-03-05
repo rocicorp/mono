@@ -371,7 +371,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
    * @experimental This method is under development and its semantics will change.
    */
   poke(poke: Poke): Promise<void> {
-    return this.#impl.poke(poke, () => Promise.resolve());
+    return this.#impl.poke(poke);
   }
 
   /**
