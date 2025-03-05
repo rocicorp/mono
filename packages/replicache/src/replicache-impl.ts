@@ -122,6 +122,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.ts';
+import type {DiffsMap} from './sync/diff.ts';
 
 declare const TESTING: boolean;
 
@@ -556,7 +557,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
 
     // Now we have a profileID, a clientID, a clientGroupID and DB!
     resolveReady();
-    // ~~ TODO: invoke init from zero option?
+    await this.#zero?.init?.(headHash, this.memdag);
 
     if (this.#enablePullAndPushInOpen) {
       this.pull().catch(noop);
@@ -748,7 +749,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
       const lc = this.#lc
         .withContext('maybeEndPull')
         .withContext('requestID', requestID);
-      const {replayMutations, diffs} = await maybeEndPull<LocalMeta>(
+      const {replayMutations, diffs, mainHead} = await maybeEndPull<LocalMeta>(
         this.memdag,
         lc,
         syncHead,
@@ -759,17 +760,19 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
 
       if (!replayMutations || replayMutations.length === 0) {
         // All done.
-        // ~~ TODO: call `zeroOption` to advance main
+        await this.#zero?.advance?.(mainHead, diffs.get('') ?? []);
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return syncHead;
       }
 
       // Replay.
-      const zeroData = await this.#zero?.getTxData?.('pullEnd', {
-        store: this.memdag,
-        hash: syncHead,
-      });
+      const zeroData = await this.#zero?.getTxData?.(
+        'pullEnd',
+        mainHead,
+        syncHead,
+        undefined,
+      );
       for (const mutation of replayMutations) {
         // TODO(greg): I'm not sure why this was in Replicache#_mutate...
         // Ensure that we run initial pending subscribe functions before starting a
@@ -1066,10 +1069,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
    *
    * @experimental This method is under development and its semantics will change.
    */
-  async poke(
-    poke: PokeInternal,
-    pullApplied: (store: Store, syncHead: Hash) => Promise<void>,
-  ): Promise<void> {
+  async poke(poke: PokeInternal): Promise<void> {
     await this.#ready;
     // TODO(MP) Previously we created a request ID here and included it with the
     // PullRequest to the server so we could tie events across client and server
@@ -1106,15 +1106,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
 
     switch (result.type) {
       case HandlePullResponseResultEnum.Applied: {
-        await pullApplied(this.memdag, result.syncHead);
-        const maybeNewSyncHead = await this.maybeEndPull(
-          result.syncHead,
-          requestID,
-        );
-        if (result.syncHead !== maybeNewSyncHead) {
-          console.log('MAYBE END PULL...');
-          await pullApplied(this.memdag, maybeNewSyncHead);
-        }
+        await this.maybeEndPull(result.syncHead, requestID);
         break;
       }
       case HandlePullResponseResultEnum.CookieMismatch:
@@ -1212,9 +1204,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
     if (this.#closed) {
       return;
     }
-    let diffs;
+    let refreshResult: [Hash, DiffsMap] | undefined;
     try {
-      diffs = await refresh(
+      refreshResult = await refresh(
         this.#lc,
         this.memdag,
         this.perdag,
@@ -1234,9 +1226,12 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
         throw e;
       }
     }
-    if (diffs !== undefined) {
-      // ~~ TODO: call `zeroOption` to advance main
-      await this.#subscriptions.fire(diffs);
+    if (refreshResult !== undefined) {
+      await this.#zero?.advance(
+        refreshResult[0],
+        refreshResult[1].get('') ?? [],
+      );
+      await this.#subscriptions.fire(refreshResult[1]);
     }
   }
 
@@ -1505,7 +1500,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
           clientID,
           await dbWrite.getMutationID(),
           'initial',
-          await this.#zero?.getTxData('initial', undefined),
+          await this.#zero?.getTxData('initial', headHash, headHash, dagWrite),
           dbWrite,
           this.#lc,
         );
@@ -1522,7 +1517,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
 
         // Send is not supposed to reject
         this.#pushConnectionLoop.send(false).catch(() => void 0);
-        // ~~ TODO: call `zeroOption` to advance main
+        await this.#zero?.advance?.(headHash, diffs.get('') ?? []);
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return result;

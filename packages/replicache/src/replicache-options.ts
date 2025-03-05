@@ -7,6 +7,8 @@ import type {MutatorDefs, RequestOptions} from './types.ts';
 import type {DetailedReason} from './transactions.ts';
 import type {Hash} from './hash.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
+import type {Read, Store} from './dag/store.ts';
+import type {InternalDiff} from './btree/node.ts';
 
 /**
  * The options passed to {@link Replicache}.
@@ -234,6 +236,8 @@ export interface ReplicacheOptions<
 }
 
 export type ZeroOption<T> = {
+  init(hash: Hash, store: Store): Promise<void>;
+
   /**
    * When a refresh, persist, or pull end occurs zero must fork its IVM sources
    * for use in rebase operations. Replicache will call zero at the start of
@@ -243,5 +247,8 @@ export type ZeroOption<T> = {
     reason: DetailedReason,
     expectedHead: Hash,
     desiredHead: Hash,
+    read: Read | undefined,
   ): MaybePromise<T>;
+
+  advance(hash: Hash, changes: InternalDiff): Promise<void>;
 };
