@@ -760,7 +760,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
 
       if (!replayMutations || replayMutations.length === 0) {
         // All done.
-        await this.#zero?.advance?.(mainHead, diffs.get('') ?? []);
+        await this.#zero?.advance(mainHead, diffs.get('') ?? []);
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return;
@@ -1517,7 +1517,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
 
         // Send is not supposed to reject
         this.#pushConnectionLoop.send(false).catch(() => void 0);
-        await this.#zero?.advance?.(headHash, diffs.get('') ?? []);
+        await this.#zero?.advance(headHash, diffs.get('') ?? []);
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return result;
