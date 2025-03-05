@@ -12,6 +12,7 @@ import type {IVMSourceBranch, IVMSourceRepo} from './ivm-source-repo.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {DetailedReason} from '../../../replicache/src/transactions.ts';
+import {diffBinarySearch} from '../../../replicache/src/subscriptions.ts';
 
 export class ZeroRep {
   readonly #context: ZeroContext;
@@ -62,11 +63,25 @@ export class ZeroRep {
     );
   }
 
-  async advance(hash: Hash, changes: InternalDiff): Promise<void> {
+  async advance(hash: Hash, diffs: InternalDiff): Promise<void> {
     await this.#ivmSources.main.ready;
     this.#context.processChanges(
-      changes,
+      entityDiffs(diffs),
       () => (this.#ivmSources.main.hash = hash),
     );
+  }
+}
+
+function* entityDiffs(diffs: InternalDiff) {
+  for (
+    let i = diffBinarySearch(diffs, ENTITIES_KEY_PREFIX, diff => diff.key);
+    i < length;
+    i++
+  ) {
+    if (diffs[i].key.startsWith(ENTITIES_KEY_PREFIX)) {
+      yield diffs[i];
+    } else {
+      break;
+    }
   }
 }

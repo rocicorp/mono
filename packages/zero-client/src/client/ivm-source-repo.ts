@@ -23,7 +23,7 @@ export class IVMSourceRepo {
   readonly #main: IVMSourceBranch;
 
   constructor(tables: Record<string, TableSchema>) {
-    this.#main = new IVMSourceBranch(tables, undefined);
+    this.#main = new IVMSourceBranch(tables);
   }
 
   get main() {
@@ -138,7 +138,7 @@ export class IVMSourceBranch {
 
   constructor(
     tables: Record<string, TableSchema>,
-    hash: Hash | undefined,
+    hash?: Hash | undefined,
     sources: Map<string, MemorySource | undefined> = new Map(),
   ) {
     this.#tables = tables;
@@ -150,6 +150,7 @@ export class IVMSourceBranch {
   }
 
   resolveReady() {
+    assert(this.hash !== undefined, 'hash must be set before resolving');
     this.#resolveReady(true);
   }
 

@@ -181,7 +181,7 @@ describe('refresh', () => {
     await makePerdagChainAndSetClientsAndClientGroup(perdag, clientID, 1);
     await makeMemdagChain(memdag, clientID, 1);
 
-    const diffs = await refresh(
+    const refreshResult = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -192,8 +192,8 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    assert(diffs);
-    expect(Object.fromEntries(diffs)).to.deep.equal({});
+    assert(refreshResult);
+    expect(Object.fromEntries(refreshResult[1])).to.deep.equal({});
     const hashes = [
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     ];
@@ -231,7 +231,7 @@ describe('refresh', () => {
     });
     await makeMemdagChain(memdag, clientID, 1);
 
-    const diffs = await refresh(
+    const refreshResult = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -242,12 +242,12 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    assert(diffs);
+    assert(refreshResult);
     const hashes = [
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     ];
 
-    expect(Object.fromEntries(diffs)).to.deep.equal({});
+    expect(Object.fromEntries(refreshResult[1])).to.deep.equal({});
 
     await assertRefreshHashes(perdag, clientID, hashes);
   });
@@ -268,7 +268,7 @@ describe('refresh', () => {
     );
     await memdagChainBuilder.addLocal(clientID, []);
 
-    const diffs = await refresh(
+    const refreshResult = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -279,9 +279,9 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    assert(diffs);
+    assert(refreshResult);
 
-    expect(Object.fromEntries(diffs)).to.deep.equal({
+    expect(Object.fromEntries(refreshResult[1])).to.deep.equal({
       '': [
         {
           key: 'from mutator_name_3',
@@ -379,7 +379,7 @@ describe('refresh', () => {
     await memdagChainBuilder.addLocal(clientID, []);
     await memdagChainBuilder.addLocal(clientID, []);
 
-    const diffs = await refresh(
+    const refreshResult = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -390,8 +390,8 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    assert(diffs);
-    expect(Object.fromEntries(diffs)).to.deep.equal({
+    assert(refreshResult);
+    expect(Object.fromEntries(refreshResult[1])).to.deep.equal({
       '': [
         {
           key: 'from mutator_name_3',
@@ -443,7 +443,7 @@ describe('refresh', () => {
     await memdagChainBuilder.addLocal(clientID1, []);
     await memdagChainBuilder.addLocal(clientID1, []);
 
-    const diffs = await refresh(
+    const refreshResult = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -454,8 +454,8 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    assert(diffs);
-    expect(Object.fromEntries(diffs)).to.deep.equal({
+    assert(refreshResult);
+    expect(Object.fromEntries(refreshResult[1])).to.deep.equal({
       '': [
         {
           key: 'from mutator_name_3',
@@ -817,7 +817,7 @@ describe('refresh', () => {
       });
     }
 
-    const diffs = await refresh(
+    const refreshResult = await refresh(
       new LogContext(),
       memdag,
       perdag,
@@ -830,8 +830,8 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    assert(diffs);
-    expect(Object.fromEntries(diffs)).to.deep.equal({
+    assert(refreshResult);
+    expect(Object.fromEntries(refreshResult[1])).to.deep.equal({
       '': [{key: 'c', newValue: 3, op: 'add'}],
     });
 
