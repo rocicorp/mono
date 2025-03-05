@@ -1,8 +1,8 @@
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import {wrapIterable} from '../../../shared/src/iterables.ts';
-import {type Read, type Store} from '../../../replicache/src/dag/store.ts';
-import {withRead} from '../../../replicache/src/with-transactions.ts';
+import {type Read} from '../../../replicache/src/dag/store.ts';
+import {using, withRead} from '../../../replicache/src/with-transactions.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
 import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
@@ -10,11 +10,12 @@ import {must} from '../../../shared/src/must.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {DetailedReason} from '../../../replicache/src/transactions.ts';
 import type {RepTxZeroData} from './custom.ts';
-import {diff} from '../../../replicache/src/sync/diff.ts';
+import {diff, DiffsMap} from '../../../replicache/src/sync/diff.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {InternalDiff} from '../../../replicache/src/btree/node.ts';
 import {resolver} from '@rocicorp/resolver';
 import type {MaybePromise} from '../../../shared/src/types.ts';
+import type {LazyStore} from '../../../replicache/src/dag/lazy-store.ts';
 
 /**
  *
@@ -36,13 +37,17 @@ export class IVMSourceRepo {
    */
   getSourcesForTransaction(
     _reason: DetailedReason,
-    store: Store,
+    store: LazyStore,
     _expectedHead: Hash,
     desiredHead: Hash,
+    // TODO: document this sourceRead and read stuff
+    // maybe we can figure out a cleaner construct
     read: Read | undefined,
+    sourceRead?: Read | undefined,
   ): MaybePromise<RepTxZeroData> {
     const fork = this.#main.fork();
 
+    // We need to fix `maybeEndPull` as it passes the incorrect expected head at the moment.
     // assert(
     //   expectedHead === fork.hash,
     //   () =>
@@ -52,17 +57,24 @@ export class IVMSourceRepo {
       return fork;
     }
 
-    return patchSource(desiredHead, store, fork, read);
+    return patchSource(desiredHead, store, fork, read, sourceRead);
   }
 }
 
 async function patchSource(
   desiredHead: Hash,
-  store: Store,
+  store: LazyStore,
   fork: IVMSourceBranch,
   read: Read | undefined,
+  sourceRead: Read | undefined,
 ) {
-  const diffs = await computeDiffs(must(fork.hash), desiredHead, store, read);
+  const diffs = await computeDiffs(
+    must(fork.hash),
+    desiredHead,
+    store,
+    read,
+    sourceRead,
+  );
   if (!diffs) {
     return fork;
   }
@@ -73,8 +85,9 @@ async function patchSource(
 async function computeDiffs(
   startHash: Hash,
   endHash: Hash,
-  store: Store,
+  store: LazyStore,
   read: Read | undefined,
+  sourceRead: Read | undefined,
 ): Promise<InternalDiff | undefined> {
   const readFn = (dagRead: Read) =>
     diff(
@@ -90,8 +103,14 @@ async function computeDiffs(
       FormatVersion.Latest,
     );
 
-  const diffs =
-    read === undefined ? await withRead(store, readFn) : await readFn(read);
+  let diffs: DiffsMap;
+  if (sourceRead) {
+    diffs = await using(store.read(Promise.resolve(sourceRead)), readFn);
+  } else if (read) {
+    diffs = await readFn(read);
+  } else {
+    diffs = await withRead(store, readFn);
+  }
 
   return diffs.get('');
 }

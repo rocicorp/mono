@@ -248,6 +248,7 @@ export type ZeroOption<T> = {
     expectedHead: Hash,
     desiredHead: Hash,
     read: Read | undefined,
+    sourceRead?: Read | undefined,
   ): MaybePromise<T>;
 
   advance(hash: Hash, changes: InternalDiff): Promise<void>;

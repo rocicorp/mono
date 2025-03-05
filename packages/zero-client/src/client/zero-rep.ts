@@ -2,7 +2,7 @@ import type {
   InternalDiff,
   InternalDiffOperation,
 } from '../../../replicache/src/btree/node.ts';
-import type {Read, Store} from '../../../replicache/src/dag/store.ts';
+import type {Read} from '../../../replicache/src/dag/store.ts';
 import {readFromHash} from '../../../replicache/src/db/read.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import {withRead} from '../../../replicache/src/with-transactions.ts';
@@ -13,18 +13,19 @@ import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {DetailedReason} from '../../../replicache/src/transactions.ts';
 import {diffBinarySearch} from '../../../replicache/src/subscriptions.ts';
+import type {LazyStore} from '../../../replicache/src/dag/lazy-store.ts';
 
 export class ZeroRep {
   readonly #context: ZeroContext;
   readonly #ivmSources: IVMSourceRepo;
-  #store: Store | undefined;
+  #store: LazyStore | undefined;
 
   constructor(context: ZeroContext, ivmSources: IVMSourceRepo) {
     this.#context = context;
     this.#ivmSources = ivmSources;
   }
 
-  async init(hash: Hash, store: Store) {
+  async init(hash: Hash, store: LazyStore) {
     const diffs: InternalDiffOperation[] = [];
     await withRead(store, async dagRead => {
       const read = await readFromHash(hash, dagRead, FormatVersion.Latest);
@@ -52,6 +53,7 @@ export class ZeroRep {
     expectedHead: Hash,
     desiredHead: Hash,
     read: Read | undefined,
+    sourceRead?: Read | undefined,
   ): Promise<IVMSourceBranch> => {
     await this.#ivmSources.main.ready;
     return this.#ivmSources.getSourcesForTransaction(
@@ -60,6 +62,7 @@ export class ZeroRep {
       expectedHead,
       desiredHead,
       read,
+      sourceRead,
     );
   };
 

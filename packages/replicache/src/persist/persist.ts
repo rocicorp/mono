@@ -248,18 +248,18 @@ export async function persistDD31(
     }
 
     let zeroDataFromPerdagBaseSnapshot: unknown;
-    // ~~ cannot do this yet due to write auto-committing.
-    // if (!memdagBaseSnapshotPersisted) {
-    //   zeroDataFromPerdagBaseSnapshot =
-    //     getZeroData === undefined
-    //       ? undefined
-    //       : await getZeroData(
-    //           'persist',
-    //           memdagHeadCommit.chunk.hash,
-    //           newMainClientGroupHeadHash,
-    //           undefined,
-    //         );
-    // }
+    if (!memdagBaseSnapshotPersisted) {
+      zeroDataFromPerdagBaseSnapshot =
+        getZeroData === undefined
+          ? undefined
+          : await getZeroData(
+              'persist',
+              memdagHeadCommit.chunk.hash,
+              newMainClientGroupHeadHash,
+              undefined,
+              perdagWrite,
+            );
+    }
 
     // rebase new memdag mutations onto perdag
     newMainClientGroupHeadHash = await rebase(
