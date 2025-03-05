@@ -50,6 +50,7 @@ export class DatabaseStorage {
     // `locking_mode` is set to `EXCLUSIVE` for performance. Similarly, since
     // durability is not important, `synchronous` is set to `OFF` for performance.
     const db = new Database(lc, path);
+    db.unsafeMode(true); // Allows journal_mode = OFF
     db.pragma('locking_mode = EXCLUSIVE');
     db.pragma('foreign_keys = OFF');
     db.pragma('journal_mode = OFF');
