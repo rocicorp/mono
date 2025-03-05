@@ -28,7 +28,7 @@ test('mapEntries', () => {
     bar: 'baz',
   };
 
-  expect(stringify(mapEntries(obj, ([k, v]) => [v, k]))).toMatchInlineSnapshot(`
+  expect(stringify(mapEntries(obj, (k, v) => [v, k]))).toMatchInlineSnapshot(`
     "{
       "doo": "boo",
       "bar": "foo",

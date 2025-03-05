@@ -16,15 +16,12 @@ export function mapValues<T, U>(
  */
 export function mapEntries<T, U>(
   input: Record<string, T>,
-  mapper: (
-    entry: [key: string, val: T],
-    index: number,
-  ) => [key: string, val: U],
+  mapper: (key: string, val: T, index: number) => [key: string, val: U],
 ): Record<string, U> {
   const output: Record<string, U> = {};
   let i = 0;
   for (const key in input) {
-    const [k, v] = mapper([key, input[key]], i++);
+    const [k, v] = mapper(key, input[key], i++);
     output[k] = v;
   }
   return output;
