@@ -72,27 +72,28 @@ export default function runWorker(
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
-  assert(config.cvr.maxConnsPerWorker);
-  assert(config.upstream.maxConnsPerWorker);
+  const {cvr, upstream} = config;
+  assert(cvr.maxConnsPerWorker);
+  assert(upstream.maxConnsPerWorker);
 
   const replicaFile = replicaFileName(config.replica.file, fileMode);
   lc.debug?.(`running view-syncer on ${replicaFile}`);
 
-  const cvrDB = pgClient(lc, config.cvr.db, {
-    max: config.cvr.maxConnsPerWorker,
+  const cvrDB = pgClient(lc, cvr.db ?? upstream.db, {
+    max: cvr.maxConnsPerWorker,
     connection: {['application_name']: `zero-sync-worker-${pid}-cvr`},
   });
 
-  const upstreamDB = pgClient(lc, config.upstream.db, {
-    max: config.upstream.maxConnsPerWorker,
+  const upstreamDB = pgClient(lc, upstream.db, {
+    max: upstream.maxConnsPerWorker,
     connection: {['application_name']: `zero-sync-worker-${pid}-upstream`},
   });
 
   const dbWarmup = Promise.allSettled([
-    ...Array.from({length: config.cvr.maxConnsPerWorker}, () =>
+    ...Array.from({length: cvr.maxConnsPerWorker}, () =>
       cvrDB`SELECT 1`.simple().execute(),
     ),
-    ...Array.from({length: config.upstream.maxConnsPerWorker}, () =>
+    ...Array.from({length: upstream.maxConnsPerWorker}, () =>
       upstreamDB`SELECT 1`.simple().execute(),
     ),
   ]);

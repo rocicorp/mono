@@ -285,12 +285,11 @@ test('zero-cache --help', () => {
        ZERO_PUSH_API_KEY env                                                                                                                                      
                                                                 An optional secret used to authorize zero-cache to call the API server.                           
                                                                                                                                                                   
-     --cvr-db string                                            required                                                                                          
+     --cvr-db string                                            optional                                                                                          
        ZERO_CVR_DB env                                                                                                                                            
-                                                                A separate Postgres database we use to store CVRs. CVRs (client view records)                     
-                                                                keep track of which clients have which data. This is how we know what diff to                     
-                                                                send on reconnect. It can be same database as above, but it makes most sense                      
-                                                                for it to be a separate "database" in the same postgres "cluster".                                
+                                                                The Postgres database used to store CVRs. CVRs (client view records) keep track                   
+                                                                of the data synced to clients in order to determine the diff to send on reconnect.                
+                                                                If unspecified, the upstream-db will be used.                                                     
                                                                                                                                                                   
      --cvr-max-conns number                                     default: 30                                                                                       
        ZERO_CVR_MAX_CONNS env                                                                                                                                     
@@ -305,9 +304,11 @@ test('zero-cache --help', () => {
                                                                 Track and log the number of rows considered by each query in the system.                          
                                                                 This is useful for debugging and performance tuning.                                              
                                                                                                                                                                   
-     --change-db string                                         required                                                                                          
+     --change-db string                                         optional                                                                                          
        ZERO_CHANGE_DB env                                                                                                                                         
-                                                                Yet another Postgres database, used to store a replication log.                                   
+                                                                The Postgres database used to store recent replication log entries, in order                      
+                                                                to sync multiple view-syncers without requiring multiple replication slots on                     
+                                                                the upstream database. If unspecified, the upstream-db will be used.                              
                                                                                                                                                                   
      --change-max-conns number                                  default: 5                                                                                        
        ZERO_CHANGE_MAX_CONNS env                                                                                                                                  

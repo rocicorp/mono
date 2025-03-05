@@ -211,12 +211,11 @@ export const zeroOptions = {
 
   cvr: {
     db: {
-      type: v.string(),
+      type: v.string().optional(),
       desc: [
-        `A separate Postgres database we use to store CVRs. CVRs (client view records)`,
-        `keep track of which clients have which data. This is how we know what diff to`,
-        `send on reconnect. It can be same database as above, but it makes most sense`,
-        `for it to be a separate "database" in the same postgres "cluster".`,
+        `The Postgres database used to store CVRs. CVRs (client view records) keep track`,
+        `of the data synced to clients in order to determine the diff to send on reconnect.`,
+        `If unspecified, the {bold upstream-db} will be used.`,
       ],
     },
 
@@ -247,8 +246,12 @@ export const zeroOptions = {
 
   change: {
     db: {
-      type: v.string(),
-      desc: [`Yet another Postgres database, used to store a replication log.`],
+      type: v.string().optional(),
+      desc: [
+        `The Postgres database used to store recent replication log entries, in order`,
+        `to sync multiple view-syncers without requiring multiple replication slots on`,
+        `the upstream database. If unspecified, the {bold upstream-db} will be used.`,
+      ],
     },
 
     maxConns: {
