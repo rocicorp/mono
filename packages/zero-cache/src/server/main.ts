@@ -111,7 +111,8 @@ export default async function runWorker(
     // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
     // but it is done here in the main thread because it is wasteful to have all of
     // the Syncers attempt the migration in parallel.
-    const cvrDB = pgClient(lc, config.cvr.db);
+    const {cvr, upstream} = config;
+    const cvrDB = pgClient(lc, cvr.db ?? upstream.db);
     await initViewSyncerSchema(lc, cvrDB, shard);
     void cvrDB.end();
   }

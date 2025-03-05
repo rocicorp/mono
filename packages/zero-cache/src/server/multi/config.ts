@@ -78,11 +78,9 @@ const tenantSchema = v.object({
     })
     .optional(),
   env: zeroEnvSchema.partial().extend({
-    // Keep these as required fields. Note that ZERO_UPSTREAM_DB is optional as
+    // Keep this as a required field. Note that ZERO_UPSTREAM_DB is optional as
     // it can be shared provided that each tenant has its own ZERO_APP_ID.
     ['ZERO_REPLICA_FILE']: v.string(),
-    ['ZERO_CVR_DB']: v.string(),
-    ['ZERO_CHANGE_DB']: v.string(),
   }),
 });
 

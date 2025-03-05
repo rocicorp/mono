@@ -35,7 +35,7 @@ export default async function runWorker(
   const lc = createLogContext(config, {worker: 'change-streamer'});
 
   // Kick off DB connection warmup in the background.
-  const changeDB = pgClient(lc, change.db, {
+  const changeDB = pgClient(lc, change.db ?? upstream.db, {
     max: change.maxConns,
     connection: {['application_name']: 'zero-change-streamer'},
   });
