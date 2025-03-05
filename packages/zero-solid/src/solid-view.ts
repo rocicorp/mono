@@ -11,15 +11,15 @@ import {
   type Format,
   type HumanReadable,
   type Input,
+  type Node,
   type Output,
   type Query,
+  type ResultType,
+  type Stream,
+  type ViewChange,
   type ViewFactory,
 } from '../../zero-advanced/src/mod.js';
 import type {Schema} from '../../zero-schema/src/mod.js';
-import type {ResultType} from '../../zql/src/query/typed-view.js';
-import type {Node} from '../../zql/src/ivm/data.ts';
-import type {ViewChange} from '../../zql/src/ivm/view-apply-change.ts';
-import type {Stream} from '../../zql/src/ivm/stream.ts';
 
 export type QueryResultDetails = {
   readonly type: ResultType;
@@ -48,6 +48,7 @@ export class SolidView<V> implements Output {
   // optimization reduced #applyChanges time from 743ms to 133ms.
   #builderRoot: Entry | undefined;
   #pendingChanges: ViewChange[] = [];
+  readonly #refCountMap = new WeakMap<Entry, number>();
 
   constructor(
     input: Input,
@@ -147,7 +148,14 @@ export class SolidView<V> implements Output {
   }
 
   #applyChangeToRoot(change: ViewChange, root: Entry) {
-    applyChange(root, change, this.#input.getSchema(), '', this.#format);
+    applyChange(
+      root,
+      change,
+      this.#input.getSchema(),
+      '',
+      this.#format,
+      this.#refCountMap,
+    );
   }
 
   #createEmptyRoot(): Entry {

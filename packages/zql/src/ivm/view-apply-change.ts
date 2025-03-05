@@ -2,7 +2,6 @@ import {
   assert,
   assertArray,
   assertObject,
-  assertUndefined,
   unreachable,
 } from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -55,6 +54,7 @@ export function applyChange(
   schema: SourceSchema,
   relationship: string,
   format: Format,
+  refCountMap: WeakMap<Entry, number>,
 ) {
   if (schema.isHidden) {
     switch (change.type) {
@@ -71,6 +71,7 @@ export function applyChange(
               childSchema,
               relationship,
               format,
+              refCountMap,
             );
           }
         }
@@ -91,6 +92,7 @@ export function applyChange(
           childSchema,
           relationship,
           format,
+          refCountMap,
         );
         return;
       }
@@ -107,17 +109,34 @@ export function applyChange(
         ...change.node.row,
       };
       if (singular) {
-        assertUndefined(
-          parentEntry[relationship],
-          'single output already exists',
-        );
-        parentEntry[relationship] = newEntry;
+        const oldEntry = parentEntry[relationship] as Entry | undefined;
+        if (oldEntry !== undefined) {
+          // adding same again.
+          const rc = must(refCountMap.get(oldEntry));
+          refCountMap.delete(oldEntry);
+          // @ts-expect-error parentEntry is readonly
+          parentEntry[relationship] = newEntry;
+          refCountMap.set(newEntry, rc + 1);
+        } else {
+          // @ts-expect-error parentEntry is readonly
+          parentEntry[relationship] = newEntry;
+          refCountMap.set(newEntry, 1);
+        }
       } else {
         const view = getChildEntryList(parentEntry, relationship);
         const {pos, found} = binarySearch(view, newEntry, schema.compareRows);
-        assert(!found, 'node already exists');
+
+        let deleteCount = 0;
+        let rc = 1;
+        if (found) {
+          deleteCount = 1;
+          rc = must(refCountMap.get(view[pos])) + 1;
+          refCountMap.delete(view[pos]);
+        }
+
         // @ts-expect-error view is readonly
-        view.splice(pos, 0, newEntry);
+        view.splice(pos, deleteCount, newEntry);
+        refCountMap.set(newEntry, rc);
       }
       for (const [relationship, children] of Object.entries(
         change.node.relationships,
@@ -130,6 +149,7 @@ export function applyChange(
         }
 
         const newView = childFormat.singular ? undefined : ([] as EntryList);
+        // @ts-expect-error newEntry is readonly
         newEntry[relationship] = newView;
         for (const node of children()) {
           applyChange(
@@ -138,6 +158,7 @@ export function applyChange(
             childSchema,
             relationship,
             childFormat,
+            refCountMap,
           );
         }
       }
@@ -146,7 +167,14 @@ export function applyChange(
     case 'remove': {
       if (singular) {
         assertObject(parentEntry[relationship]);
-        parentEntry[relationship] = undefined;
+        const rc = must(refCountMap.get(parentEntry[relationship]));
+        if (rc === 1) {
+          refCountMap.delete(parentEntry[relationship]);
+          // @ts-expect-error parentEntry is readonly
+          parentEntry[relationship] = undefined;
+        } else {
+          refCountMap.set(parentEntry[relationship], rc - 1);
+        }
       } else {
         const view = getChildEntryList(parentEntry, relationship);
         const {pos, found} = binarySearch(
@@ -155,8 +183,14 @@ export function applyChange(
           schema.compareRows,
         );
         assert(found, 'node does not exist');
-        // @ts-expect-error view is readonly
-        view.splice(pos, 1);
+        const rc = must(refCountMap.get(view[pos]));
+        if (rc === 1) {
+          refCountMap.delete(view[pos]);
+          // @ts-expect-error view is readonly
+          view.splice(pos, 1);
+        } else {
+          refCountMap.set(view[pos], rc - 1);
+        }
       }
       // Needed to ensure cleanup of operator state is fully done.
       drainStreams(change.node);
@@ -189,6 +223,7 @@ export function applyChange(
           childSchema,
           change.child.relationshipName,
           childFormat,
+          refCountMap,
         );
       }
       break;
@@ -196,6 +231,7 @@ export function applyChange(
     case 'edit': {
       if (singular) {
         assertObject(parentEntry[relationship]);
+        // @ts-expect-error parentEntry is readonly
         parentEntry[relationship] = {
           ...parentEntry[relationship],
           ...change.node.row,
@@ -211,11 +247,14 @@ export function applyChange(
             schema.compareRows,
           );
           assert(found, 'node does not exists');
+          const rc = must(refCountMap.get(view[pos]));
+          refCountMap.delete(view[pos]);
           view[pos] = makeEntryPreserveRelationships(
             change.node.row,
             view[pos],
             schema.relationships,
           );
+          refCountMap.set(view[pos], rc);
         } else {
           // Remove
           const {pos, found} = binarySearch(
@@ -280,6 +319,7 @@ function makeEntryPreserveRelationships(
   const result: Entry = {...row};
   for (const relationship in relationships) {
     assert(!(relationship in row), 'Relationship already exists');
+    // @ts-expect-error entry is readonly
     result[relationship] = entry[relationship];
   }
   return result;

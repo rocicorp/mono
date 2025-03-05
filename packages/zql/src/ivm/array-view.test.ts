@@ -1,6 +1,8 @@
 import {expect, test} from 'vitest';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
 import {assertArray, unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {stringCompare} from '../../../shared/src/string-compare.ts';
 import {ArrayView} from './array-view.ts';
 import type {Change} from './change.ts';
@@ -10,8 +12,6 @@ import type {Input} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {Take} from './take.ts';
 import {createSource} from './test/source-factory.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
 
 const lc = createSilentLogContext();
 const logConfig: LogConfig = {
@@ -115,11 +115,11 @@ test('single-format', () => {
   expect(data).toEqual({a: 1, b: 'a'});
   expect(callCount).toBe(1);
 
-  // trying to add another element should be an error
+  // trying to add another element should NOT be an error
   // pipeline should have been configured with a limit of one
-  expect(() => ms.push({row: {a: 2, b: 'b'}, type: 'add'})).toThrow(
-    'single output already exists',
-  );
+  expect(() => ms.push({row: {a: 2, b: 'b'}, type: 'add'})).not.toThrow();
+  // Remove again to get ref count down to 1.
+  ms.push({row: {a: 2, b: 'b'}, type: 'remove'});
 
   ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
 
