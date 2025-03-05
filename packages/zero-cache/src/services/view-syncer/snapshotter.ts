@@ -242,6 +242,7 @@ function getSchemaVersions(db: StatementRunner, appID: string): SchemaVersions {
 class Snapshot {
   static create(lc: LogContext, dbFile: string, appID: string) {
     const conn = new Database(lc, dbFile);
+    conn.unsafeMode(true);
     conn.pragma('synchronous = OFF'); // Applied changes are ephemeral; COMMIT is never called.
     const [{journal_mode: mode}] = conn.pragma('journal_mode') as [
       // eslint-disable-next-line @typescript-eslint/naming-convention
