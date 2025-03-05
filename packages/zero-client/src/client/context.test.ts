@@ -9,7 +9,7 @@ import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import {type AddQuery, ZeroContext} from './context.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
-import {IVMSourceBranch} from './ivm-source-repo.ts';
+import {IVMSourceBranch} from './ivm-branch.ts';
 
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();

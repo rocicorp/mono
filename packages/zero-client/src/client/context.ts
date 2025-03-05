@@ -10,7 +10,7 @@ import type {
   GotCallback,
   QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
-import {type IVMSourceBranch} from './ivm-source-repo.ts';
+import {type IVMSourceBranch} from './ivm-branch.ts';
 import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 
 export type AddQuery = (
@@ -85,6 +85,7 @@ export class ZeroContext implements QueryDelegate {
 
   processChanges(changes: NoIndexDiff) {
     this.batchViewUpdates(() => {
+      // This will eventually call `this.#mainSources.advance` directly
       try {
         for (const diff of changes) {
           const {key} = diff;
