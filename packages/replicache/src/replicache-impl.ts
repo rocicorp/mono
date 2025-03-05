@@ -1508,7 +1508,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
         const result: R = await mutatorImpl(tx, args);
         throwIfClosed(dbWrite);
         const lastMutationID = await dbWrite.getMutationID();
-        const diffs = await dbWrite.commitWithDiffs(
+        const [diffs, newHead] = await dbWrite.commitWithDiffs(
           DEFAULT_HEAD_NAME,
           this.#subscriptions,
         );
@@ -1518,7 +1518,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
 
         // Send is not supposed to reject
         this.#pushConnectionLoop.send(false).catch(() => void 0);
-        await this.#zero?.advance(headHash, diffs.get('') ?? []);
+        await this.#zero?.advance(newHead, diffs.get('') ?? []);
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return result;

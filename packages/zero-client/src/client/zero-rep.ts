@@ -65,6 +65,7 @@ export class ZeroRep {
 
   advance = async (hash: Hash, diffs: InternalDiff): Promise<void> => {
     await this.#ivmSources.main.ready;
+    console.log('ADVANCE', hash, diffs);
     this.#context.processChanges(
       entityDiffs(diffs),
       () => (this.#ivmSources.main.hash = hash),

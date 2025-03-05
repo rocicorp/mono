@@ -73,6 +73,8 @@ export async function persistDD31(
     return;
   }
 
+  getZeroData = undefined;
+
   const [perdagLMID, perdagBaseSnapshot, mainClientGroupID] = await withRead(
     perdag,
     async perdagRead => {
@@ -148,6 +150,7 @@ export async function persistDD31(
   }
 
   // TODO: do memdag reads outside of perdag withWrite tx.
+  // or perdag write nested in memdag read possible?
 
   let memdagBaseSnapshotPersisted = false;
   await withWrite(perdag, async perdagWrite => {
