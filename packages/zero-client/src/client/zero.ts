@@ -131,6 +131,7 @@ import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {ZeroRep} from './zero-rep.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -464,6 +465,12 @@ export class Zero<
 
     this.storageKey = storageKey ?? '';
 
+    this.#zeroContext = new ZeroContext(
+      this.#ivmSources.main,
+      (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
+      batchViewUpdates,
+    );
+
     const replicacheOptions: ReplicacheOptions<
       WithCRUD<MutatorDefs>,
       RepTxZeroData
@@ -484,10 +491,7 @@ export class Zero<
       },
       licenseKey: 'zero-client-static-key',
       kvStore,
-      zero: {
-        getTxData: (reason, customHead) =>
-          this.#ivmSources.getSourcesForTransaction(reason, customHead),
-      },
+      zero: new ZeroRep(this.#zeroContext, this.#ivmSources),
     };
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
@@ -578,12 +582,6 @@ export class Zero<
       this.#lc,
     );
 
-    this.#zeroContext = new ZeroContext(
-      this.#ivmSources.main,
-      (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
-      batchViewUpdates,
-    );
-
     this.query = this.#registerQueries(schema);
 
     reportReloadReason(this.#lc);
@@ -600,7 +598,7 @@ export class Zero<
     this.#metrics.tags.push(`version:${this.version}`);
 
     this.#pokeHandler = new PokeHandler(
-      poke => this.#rep.poke(poke, this.#ivmSources.advanceSyncHead),
+      poke => this.#rep.poke(poke),
       () => this.#onPokeError(),
       rep.clientID,
       schema,

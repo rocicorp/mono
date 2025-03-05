@@ -39,6 +39,7 @@ export class IVMSourceRepo {
     store: Store,
     expectedHead: Hash,
     desiredHead: Hash,
+    read: Read | undefined,
   ): MaybePromise<RepTxZeroData> {
     const fork = this.#main.fork();
     assert(
@@ -50,7 +51,7 @@ export class IVMSourceRepo {
       return fork;
     }
 
-    return patchSource(desiredHead, store, fork);
+    return patchSource(desiredHead, store, fork, read);
   }
 }
 
@@ -58,13 +59,9 @@ async function patchSource(
   desiredHead: Hash,
   store: Store,
   fork: IVMSourceBranch,
+  read: Read | undefined,
 ) {
-  const diffs = await computeDiffs(
-    must(fork.hash),
-    desiredHead,
-    store,
-    undefined,
-  );
+  const diffs = await computeDiffs(must(fork.hash), desiredHead, store, read);
   if (!diffs) {
     return fork;
   }

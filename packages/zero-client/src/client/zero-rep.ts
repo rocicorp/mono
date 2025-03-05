@@ -1,8 +1,8 @@
 import type {
-  DiffOperation,
   InternalDiff,
+  InternalDiffOperation,
 } from '../../../replicache/src/btree/node.ts';
-import type {Store} from '../../../replicache/src/dag/store.ts';
+import type {Read, Store} from '../../../replicache/src/dag/store.ts';
 import {readFromHash} from '../../../replicache/src/db/read.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import {withRead} from '../../../replicache/src/with-transactions.ts';
@@ -24,7 +24,7 @@ export class ZeroRep {
   }
 
   async init(hash: Hash, store: Store) {
-    const diffs: DiffOperation<string>[] = [];
+    const diffs: InternalDiffOperation[] = [];
     await withRead(store, async dagRead => {
       const read = await readFromHash(hash, dagRead, FormatVersion.Latest);
       for await (const entry of read.map.scan(ENTITIES_KEY_PREFIX)) {
@@ -50,6 +50,7 @@ export class ZeroRep {
     reason: DetailedReason,
     expectedHead: Hash,
     desiredHead: Hash,
+    read: Read | undefined,
   ): Promise<IVMSourceBranch> {
     await this.#ivmSources.main.ready;
     return this.#ivmSources.getSourcesForTransaction(
@@ -57,6 +58,7 @@ export class ZeroRep {
       must(this.#store),
       expectedHead,
       desiredHead,
+      read,
     );
   }
 

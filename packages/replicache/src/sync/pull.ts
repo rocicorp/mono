@@ -313,6 +313,7 @@ export function maybeEndPull<M extends LocalMeta>(
   syncHead: Hash;
   replayMutations: Commit<M>[];
   diffs: DiffsMap;
+  mainHead: Hash;
 }> {
   return withWriteNoImplicitCommit(store, async dagWrite => {
     const dagRead = dagWrite;
@@ -380,6 +381,7 @@ export function maybeEndPull<M extends LocalMeta>(
     if (pending.length > 0) {
       return {
         syncHead: syncHeadHash,
+        mainHead: mainHeadHash,
         replayMutations: pending,
         // The changed keys are not reported when further replays are
         // needed. The diffs will be reported at the end when there
@@ -456,6 +458,7 @@ export function maybeEndPull<M extends LocalMeta>(
       syncHead: syncHeadHash,
       replayMutations: [],
       diffs: diffsMap,
+      mainHead: mainHeadHash,
     };
   });
 }
