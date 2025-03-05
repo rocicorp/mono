@@ -738,10 +738,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
     resolve();
   }
 
-  async maybeEndPull(syncHead: Hash, requestID: string): Promise<Hash> {
+  async maybeEndPull(syncHead: Hash, requestID: string): Promise<void> {
     for (;;) {
       if (this.#closed) {
-        return syncHead;
+        return;
       }
 
       await this.#ready;
@@ -763,7 +763,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}, TZeroData = unknown> {
         await this.#zero?.advance?.(mainHead, diffs.get('') ?? []);
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
-        return syncHead;
+        return;
       }
 
       // Replay.

@@ -114,24 +114,27 @@ test('processChanges', () => {
     ]),
   );
 
-  context.processChanges([
-    {
-      key: `${ENTITIES_KEY_PREFIX}t1/e1`,
-      op: 'add',
-      newValue: {id: 'e1', name: 'name1'},
-    },
-    {
-      key: `${ENTITIES_KEY_PREFIX}t1/e2`,
-      op: 'add',
-      newValue: {id: 'e2', name: 'name2'},
-    },
-    {
-      key: `${ENTITIES_KEY_PREFIX}t1/e1`,
-      op: 'change',
-      oldValue: {id: 'e1', name: 'name1'},
-      newValue: {id: 'e1', name: 'name1.1'},
-    },
-  ]);
+  context.processChanges(
+    [
+      {
+        key: `${ENTITIES_KEY_PREFIX}t1/e1`,
+        op: 'add',
+        newValue: {id: 'e1', name: 'name1'},
+      },
+      {
+        key: `${ENTITIES_KEY_PREFIX}t1/e2`,
+        op: 'add',
+        newValue: {id: 'e2', name: 'name2'},
+      },
+      {
+        key: `${ENTITIES_KEY_PREFIX}t1/e1`,
+        op: 'change',
+        oldValue: {id: 'e1', name: 'name1'},
+        newValue: {id: 'e1', name: 'name1.1'},
+      },
+    ],
+    () => {},
+  );
 
   expect(out.pushes).toEqual([
     {type: 'add', node: {row: {id: 'e1', name: 'name1'}, relationships: {}}},
@@ -178,24 +181,27 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
   );
 
   expect(batchViewUpdatesCalls).toBe(0);
-  context.processChanges([
-    {
-      key: `${ENTITIES_KEY_PREFIX}t1/e1`,
-      op: 'add',
-      newValue: {id: 'e1', name: 'name1'},
-    },
-    {
-      key: `${ENTITIES_KEY_PREFIX}t1/e2`,
-      op: 'add',
-      newValue: {id: 'e2', name: 'name2'},
-    },
-    {
-      key: `${ENTITIES_KEY_PREFIX}t1/e1`,
-      op: 'change',
-      oldValue: {id: 'e1', name: 'name1'},
-      newValue: {id: 'e1', name: 'name1.1'},
-    },
-  ]);
+  context.processChanges(
+    [
+      {
+        key: `${ENTITIES_KEY_PREFIX}t1/e1`,
+        op: 'add',
+        newValue: {id: 'e1', name: 'name1'},
+      },
+      {
+        key: `${ENTITIES_KEY_PREFIX}t1/e2`,
+        op: 'add',
+        newValue: {id: 'e2', name: 'name2'},
+      },
+      {
+        key: `${ENTITIES_KEY_PREFIX}t1/e1`,
+        op: 'change',
+        oldValue: {id: 'e1', name: 'name1'},
+        newValue: {id: 'e1', name: 'name1.1'},
+      },
+    ],
+    () => {},
+  );
   expect(batchViewUpdatesCalls).toBe(1);
 });
 
@@ -274,7 +280,7 @@ test('transactions', () => {
     ++transactions;
   });
 
-  context.processChanges(changes);
+  context.processChanges(changes, () => {});
 
   expect(transactions).toEqual(1);
   const result = out.fetch({});
