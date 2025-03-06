@@ -122,7 +122,6 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.ts';
-import type {DiffsMap} from './sync/diff.ts';
 
 declare const TESTING: boolean;
 
@@ -756,31 +755,31 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       const lc = this.#lc
         .withContext('maybeEndPull')
         .withContext('requestID', requestID);
-      const {replayMutations, diffs, mainHead} = await maybeEndPull<LocalMeta>(
-        this.memdag,
-        lc,
-        syncHead,
-        clientID,
-        this.#subscriptions,
-        FormatVersion.Latest,
-      );
+      const {replayMutations, diffs, oldMainHead, mainHead} =
+        await maybeEndPull<LocalMeta>(
+          this.memdag,
+          lc,
+          syncHead,
+          clientID,
+          this.#subscriptions,
+          FormatVersion.Latest,
+        );
 
       if (!replayMutations || replayMutations.length === 0) {
         // All done.
-        await this.#zero?.advance(mainHead, diffs.get('') ?? []);
+        // Having any `await` before calling `subscriptions.fire` would be problematic
+        // as it would open a window where diffs could get out of order.
+        // Hence we do not await `zero.advance` here.
+        this.#zero
+          ?.advance(oldMainHead, mainHead, diffs.get('') ?? [])
+          .catch(e => this.#lc.error?.('Error advancing zero', e));
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return;
       }
 
       // Replay.
-      const zeroData = await this.#zero?.getTxData?.(
-        mainHead, // TODO: this mainHead is incorrect since
-        // minaHead is advanced in replicache but not in IVM.
-        // We don't advance in IVM until all replay mutations are done.
-        // In `if` above. We need to keep around an expected `mainHead`...
-        syncHead,
-      );
+      const zeroData = await this.#zero?.getTxData?.(oldMainHead, syncHead);
       for (const mutation of replayMutations) {
         // TODO(greg): I'm not sure why this was in Replicache#_mutate...
         // Ensure that we run initial pending subscribe functions before starting a
@@ -1211,7 +1210,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     if (this.#closed) {
       return;
     }
-    let refreshResult: [Hash, DiffsMap] | undefined;
+    let refreshResult: Awaited<ReturnType<typeof refresh>>;
     try {
       refreshResult = await refresh(
         this.#lc,
@@ -1234,11 +1233,14 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       }
     }
     if (refreshResult !== undefined) {
-      await this.#zero?.advance(
-        refreshResult[0],
-        refreshResult[1].get('') ?? [],
-      );
-      await this.#subscriptions.fire(refreshResult[1]);
+      this.#zero
+        ?.advance(
+          refreshResult.oldHead,
+          refreshResult.newHead,
+          refreshResult.diffs.get('') ?? [],
+        )
+        .catch(e => this.#lc.error?.('Error advancing zero', e));
+      await this.#subscriptions.fire(refreshResult.diffs);
     }
   }
 
@@ -1524,7 +1526,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
         // Send is not supposed to reject
         this.#pushConnectionLoop.send(false).catch(() => void 0);
-        await this.#zero?.advance(newHead, diffs.get('') ?? []);
+        this.#zero
+          ?.advance(headHash, newHead, diffs.get('') ?? [])
+          .catch(e => this.#lc.error?.('Error advancing zero', e));
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return result;

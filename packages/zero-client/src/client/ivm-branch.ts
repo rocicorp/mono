@@ -8,14 +8,17 @@ import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
 import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import {diff} from '../../../replicache/src/sync/diff.ts';
+import {diff, DiffsMap} from '../../../replicache/src/sync/diff.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {
   InternalDiff,
   InternalDiffOperation,
+  NoIndexDiff,
 } from '../../../replicache/src/btree/node.ts';
 import {diffBinarySearch} from '../../../replicache/src/subscriptions.ts';
 import {readFromHash} from '../../../replicache/src/db/read.ts';
+import {resolver} from '@rocicorp/resolver';
+import type {ZeroReadOptions} from '../../../replicache/src/replicache-options.ts';
 
 /**
  * Replicache needs to rebase mutations onto different
@@ -36,6 +39,8 @@ import {readFromHash} from '../../../replicache/src/db/read.ts';
 export class IVMSourceBranch {
   readonly #sources: Map<string, MemorySource | undefined>;
   readonly #tables: Record<string, TableSchema>;
+  readonly #resolveReady: () => void;
+  readonly #ready: Promise<void>;
   hash: Hash | undefined;
 
   constructor(
@@ -46,6 +51,18 @@ export class IVMSourceBranch {
     this.#tables = tables;
     this.#sources = sources;
     this.hash = hash;
+    const {resolve, promise} = resolver<void>();
+    this.#resolveReady = resolve;
+    this.#ready = promise;
+  }
+
+  resolveReady() {
+    assert(this.hash !== undefined, 'Hash must be set');
+    this.#resolveReady();
+  }
+
+  get ready(): Promise<void> {
+    return this.#ready;
   }
 
   getSource(name: string): MemorySource | undefined {
@@ -69,7 +86,7 @@ export class IVMSourceBranch {
    * Mutates the current branch, advancing it to the new head
    * by applying the given diffs.
    */
-  advance(expectedHead: Hash | undefined, newHead: Hash, diffs: InternalDiff) {
+  advance(expectedHead: Hash | undefined, newHead: Hash, diffs: NoIndexDiff) {
     assert(
       this.hash === expectedHead,
       () =>
@@ -87,6 +104,7 @@ export class IVMSourceBranch {
     store: Store,
     expectedHead: Hash,
     desiredHead: Hash,
+    readOptions?: ZeroReadOptions | undefined,
   ): Promise<IVMSourceBranch> {
     const fork = this.fork();
 
@@ -99,7 +117,7 @@ export class IVMSourceBranch {
       return fork;
     }
 
-    await patchBranch(desiredHead, store, fork);
+    await patchBranch(desiredHead, store, fork, readOptions);
     fork.hash = desiredHead;
     return fork;
   }
@@ -153,8 +171,14 @@ async function patchBranch(
   desiredHead: Hash,
   store: Store,
   fork: IVMSourceBranch,
+  readOptions: ZeroReadOptions | undefined,
 ) {
-  const diffs = await computeDiffs(must(fork.hash), desiredHead, store);
+  const diffs = await computeDiffs(
+    must(fork.hash),
+    desiredHead,
+    store,
+    readOptions,
+  );
   if (!diffs) {
     return;
   }
@@ -165,6 +189,7 @@ async function computeDiffs(
   startHash: Hash,
   endHash: Hash,
   store: Store,
+  readOptions: ZeroReadOptions | undefined,
 ): Promise<InternalDiff | undefined> {
   const readFn = (dagRead: Read) =>
     diff(
@@ -180,12 +205,18 @@ async function computeDiffs(
       FormatVersion.Latest,
     );
 
-  const diffs = await withRead(store, readFn);
+  let diffs: DiffsMap;
+  // openLazySourceRead handling coming in next PR
+  if (readOptions?.openLazyRead) {
+    diffs = await readFn(readOptions.openLazyRead);
+  } else {
+    diffs = await withRead(store, readFn);
+  }
 
   return diffs.get('');
 }
 
-function applyDiffs(diffs: InternalDiff, branch: IVMSourceBranch) {
+function applyDiffs(diffs: NoIndexDiff, branch: IVMSourceBranch) {
   for (
     let i = diffBinarySearch(diffs, ENTITIES_KEY_PREFIX, diff => diff.key);
     i < diffs.length;

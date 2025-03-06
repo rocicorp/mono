@@ -253,11 +253,16 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
  */
 export interface ZeroTxData {}
 
+export type ZeroReadOptions = {
+  openLazyRead?: Read | undefined;
+  openLazySourceRead?: Read | undefined;
+};
+
 /**
  * Minimal interface that Replicache needs to communicate with Zero.
  * Prevents us from creating any direct dependencies on Zero.
  */
-export type ZeroOption = {
+export interface ZeroOption {
   /**
    * Allow Zero to initialize its IVM state from the given hash and dag.
    */
@@ -274,16 +279,15 @@ export type ZeroOption = {
   getTxData(
     expectedHead: Hash,
     desiredHead: Hash,
-    readOptions?:
-      | {
-          openLazyRead?: Read | undefined;
-          openLazySourceRead?: Read | undefined;
-        }
-      | undefined,
+    readOptions?: ZeroReadOptions | undefined,
   ): Promise<ZeroTxData>;
 
   /**
    * When Replicache's main head moves forward, Zero must advance its IVM state.
    */
-  advance(hash: Hash, changes: InternalDiff): Promise<void>;
-};
+  advance(
+    expectedHash: Hash,
+    newHash: Hash,
+    changes: InternalDiff,
+  ): Promise<void>;
+}

@@ -1,7 +1,7 @@
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import type {Hash} from '../../../replicache/src/hash.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Storage} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
@@ -11,7 +11,6 @@ import type {
   QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
-import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 
 export type AddQuery = (
   ast: AST,
@@ -83,51 +82,16 @@ export class ZeroContext implements QueryDelegate {
     return result as T;
   }
 
-  processChanges(changes: NoIndexDiff) {
+  processChanges(
+    expectedHead: Hash | undefined,
+    newHead: Hash,
+    changes: NoIndexDiff,
+    onProcessed: () => void = () => {},
+  ) {
     this.batchViewUpdates(() => {
-      // This will eventually call `this.#mainSources.advance` directly
       try {
-        for (const diff of changes) {
-          const {key} = diff;
-          assert(key.startsWith(ENTITIES_KEY_PREFIX));
-          const name = sourceNameFromKey(key);
-          const source = this.getSource(name);
-          if (!source) {
-            continue;
-          }
-
-          switch (diff.op) {
-            case 'del':
-              assert(typeof diff.oldValue === 'object');
-              source.push({
-                type: 'remove',
-                row: diff.oldValue as Row,
-              });
-              break;
-            case 'add':
-              assert(typeof diff.newValue === 'object');
-              source.push({
-                type: 'add',
-                row: diff.newValue as Row,
-              });
-              break;
-            case 'change':
-              assert(typeof diff.newValue === 'object');
-              assert(typeof diff.oldValue === 'object');
-
-              // Edit changes are not yet supported everywhere. For now we only
-              // generate them in tests.
-              source.push({
-                type: 'edit',
-                row: diff.newValue as Row,
-                oldRow: diff.oldValue as Row,
-              });
-
-              break;
-            default:
-              unreachable(diff);
-          }
-        }
+        this.#mainSources.advance(expectedHead, newHead, changes);
+        onProcessed();
       } finally {
         this.#endTransaction();
       }
