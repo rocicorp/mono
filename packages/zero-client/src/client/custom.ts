@@ -20,6 +20,9 @@ import {
   WriteTransactionImpl,
   zeroData,
 } from '../../../replicache/src/transactions.ts';
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
+import {ZeroContext} from './context.ts';
 
 /**
  * An instance of this is passed to custom mutator implementations and
@@ -93,9 +96,18 @@ export class TransactionImpl implements Transaction<Schema> {
     this.mutate = makeSchemaCRUD(
       schema,
       repTx,
-      castedRepTx[zeroData] as undefined | IVMSourceBranch,
+      must(
+        castedRepTx[zeroData],
+        'zero was not set on replicache internal options!',
+      ) as IVMSourceBranch,
     );
-    this.query = {};
+    this.query = makeSchemaQuery(
+      schema,
+      must(
+        castedRepTx[zeroData],
+        'zero was not set on replicache internal options!',
+      ) as IVMSourceBranch,
+    );
   }
 
   readonly clientID: ClientID;
@@ -126,6 +138,22 @@ function makeSchemaCRUD(
     mutate[name] = makeTableCRUD(schema, name, tx, ivmBranch);
   }
   return mutate;
+}
+
+function makeSchemaQuery(schema: Schema, ivmBranch: IVMSourceBranch) {
+  const rv = {} as Record<string, Query<Schema, string>>;
+  const context = new ZeroContext(
+    undefined,
+    ivmBranch,
+    () => () => {},
+    applyViewUpdates => applyViewUpdates(),
+  );
+
+  for (const name of Object.keys(schema.tables)) {
+    rv[name] = newQuery(context, schema, name);
+  }
+
+  return rv as SchemaQuery<Schema>;
 }
 
 function makeTableCRUD(

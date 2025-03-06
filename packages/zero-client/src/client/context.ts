@@ -33,17 +33,17 @@ export class ZeroContext implements QueryDelegate {
   readonly #addQuery: AddQuery;
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
-  readonly #lc: LogContext;
+  readonly #lc: LogContext | undefined;
 
   readonly staticQueryParameters = undefined;
 
   constructor(
-    lc: LogContext,
+    lc: LogContext | undefined,
     mainSources: IVMSourceBranch,
     addQuery: AddQuery,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
   ) {
-    this.#lc = lc.withContext('ZeroContext');
+    this.#lc = lc?.withContext('ZeroContext');
     this.#mainSources = mainSources;
     this.#addQuery = addQuery;
     this.#batchViewUpdates = batchViewUpdates;
@@ -110,7 +110,7 @@ export class ZeroContext implements QueryDelegate {
         // We should not fatal the inner-workings of Zero due to the user's application
         // code throwing an error.
         // Hence we wrap notifications in a try-catch block.
-        this.#lc.error?.(
+        this.#lc?.error?.(
           'Failed notifying a commit listener of IVM updates',
           e,
         );
