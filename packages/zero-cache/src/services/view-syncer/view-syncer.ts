@@ -25,6 +25,7 @@ import type {
 import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import type {Upstream} from '../../../../zero-protocol/src/up.ts';
 import {transformAndHashQuery} from '../../auth/read-authorizer.ts';
 import {stringify} from '../../types/bigint-json.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
@@ -590,7 +591,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #handleConfigUpdate = (
     lc: LogContext,
     clientID: string,
-    cmd: string,
+    cmd: Upstream[0],
     {deleted, desiredQueriesPatch}: Partial<InitConnectionBody>,
     cvr: CVRSnapshot,
   ) =>
@@ -629,10 +630,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         if (deleted?.clientIDs?.length || deleted?.clientGroupIDs?.length) {
           if (deleted?.clientIDs) {
             for (const cid of deleted.clientIDs) {
-              assert(
-                cmd === 'closeConnection' || cid !== clientID,
-                'cannot delete self',
-              );
+              if (cmd === 'closeConnection') {
+                assert(cid === clientID, 'cannot close other clients');
+              } else {
+                assert(cid !== clientID, 'cannot delete self');
+              }
               const patchesDueToClient = updater.deleteClient(cid);
               patches.push(...patchesDueToClient);
               deletedClientIDs.push(cid);
