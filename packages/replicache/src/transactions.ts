@@ -272,8 +272,7 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
  * {@link ReplicacheOptions.mutators} and allows read and write operations on the
  * database.
  */
-export interface WriteTransaction<TZeroData extends ZeroTxData = ZeroTxData>
-  extends ReadTransaction {
+export interface WriteTransaction extends ReadTransaction {
   /**
    * The ID of the mutation that is being applied.
    */
@@ -283,8 +282,6 @@ export interface WriteTransaction<TZeroData extends ZeroTxData = ZeroTxData>
    * The reason for the transaction. This can be `initial`, `rebase` or `authoriative`.
    */
   readonly reason: TransactionReason;
-
-  readonly zeroData: TZeroData | undefined;
 
   /**
    * Sets a single `value` in the database. The value will be frozen (using
@@ -304,21 +301,25 @@ export interface WriteTransaction<TZeroData extends ZeroTxData = ZeroTxData>
   del(key: string): Promise<boolean>;
 }
 
-export class WriteTransactionImpl<TZeroData extends ZeroTxData = ZeroTxData>
+// Internal symbol, not exported by Replicache
+// but accessible to Zero.
+export const zeroData = Symbol();
+
+export class WriteTransactionImpl
   extends ReadTransactionImpl
-  implements WriteTransaction<TZeroData>
+  implements WriteTransaction
 {
   // use `declare` to specialize the type.
   declare readonly dbtx: Write;
   readonly reason: TransactionReason;
   readonly mutationID: number;
-  readonly zeroData: TZeroData | undefined;
+  readonly [zeroData]: ZeroTxData | undefined;
 
   constructor(
     clientID: ClientID,
     mutationID: number,
     reason: TransactionReason,
-    zeroData: TZeroData | undefined,
+    zData: ZeroTxData | undefined,
     dbWrite: Write,
     lc: LogContext,
     rpcName = 'openWriteTransaction',
@@ -326,7 +327,7 @@ export class WriteTransactionImpl<TZeroData extends ZeroTxData = ZeroTxData>
     super(clientID, dbWrite, lc, rpcName);
     this.mutationID = mutationID;
     this.reason = reason;
-    this.zeroData = zeroData;
+    this[zeroData] = zData;
   }
 
   put(key: string, value: ReadonlyJSONValue): Promise<void> {

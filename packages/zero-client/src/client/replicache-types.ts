@@ -1,4 +1,3 @@
-import type {ZeroTxData} from '../../../replicache/src/replicache-options.ts';
 import type {
   ReadTransaction as ReplicacheReadTransaction,
   WriteTransaction as ReplicacheWriteTransaction,
@@ -35,8 +34,7 @@ export interface ReadTransaction extends ReplicacheReadTransaction {
   readonly env?: Env | undefined;
 }
 
-export interface WriteTransaction<T extends ZeroTxData = ZeroTxData>
-  extends ReplicacheWriteTransaction<T> {
+export interface WriteTransaction extends ReplicacheWriteTransaction {
   /**
    * When a mutator is run on the server, the `AuthData` for the connection
    * that pushed the mutation (i.e. the `AuthData` returned by the

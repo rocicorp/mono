@@ -76,7 +76,7 @@ import {refresh} from './persist/refresh.ts';
 import {ProcessScheduler} from './process-scheduler.ts';
 import type {Puller} from './puller.ts';
 import {type Pusher, PushError} from './pusher.ts';
-import type {ReplicacheOptions} from './replicache-options.ts';
+import type {ReplicacheOptions, ZeroOption} from './replicache-options.ts';
 import {
   getKVStoreProvider,
   httpStatusUnauthorized,
@@ -197,6 +197,13 @@ export interface ReplicacheImplOptions {
    * Callback for when Replicache has deleted clients.
    */
   onClientsDeleted?: OnClientsDeleted | undefined;
+
+  /**
+   * Internal option used by Zero.
+   * Replicache will call this to and, if zero is enabled, will
+   * invoke various hooks to allow Zero the keep IVM in sync with Replicache's b-trees.
+   */
+  zero?: ZeroOption | undefined;
 }
 
 // eslint-disable-next-line @typescript-eslint/ban-types
