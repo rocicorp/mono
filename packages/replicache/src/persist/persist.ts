@@ -36,7 +36,7 @@ import {
   setClient,
 } from './clients.ts';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.ts';
-import type {ZeroOption} from '../replicache-options.ts';
+import type {ZeroOption, ZeroTxData} from '../replicache-options.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
@@ -66,7 +66,7 @@ export async function persistDD31(
   mutators: MutatorDefs,
   closed: () => boolean,
   formatVersion: FormatVersion,
-  _getZeroData: ZeroOption['getTxData'] | undefined,
+  getZeroData: ZeroOption['getTxData'] | undefined,
   onGatherMemOnlyChunksForTest = () => Promise.resolve(),
 ): Promise<void> {
   if (closed()) {
@@ -144,6 +144,11 @@ export async function persistDD31(
   }
 
   let memdagBaseSnapshotPersisted = false;
+  const zeroDataForMemdagBaseSnapshot =
+    getZeroData === undefined
+      ? undefined
+      : await getZeroData('rebase', memdagBaseSnapshot.chunk.hash);
+
   await withWrite(perdag, async perdagWrite => {
     const [mainClientGroup, latestPerdagMainClientGroupHeadCommit] =
       await getClientGroupInfo(perdagWrite, mainClientGroupID);
@@ -211,9 +216,21 @@ export async function persistDD31(
           mutationIDs,
           lc,
           formatVersion,
+          zeroDataForMemdagBaseSnapshot,
         );
       }
     }
+
+    let zeroDataForPerdagHeadCommit: ZeroTxData | undefined;
+    if (!memdagBaseSnapshotPersisted) {
+      zeroDataForPerdagHeadCommit =
+        getZeroData === undefined
+          ? undefined
+          : await getZeroData('rebase', newMainClientGroupHeadHash, {
+              openLazySourceRead: perdagWrite,
+            });
+    }
+
     // rebase new memdag mutations onto perdag
     newMainClientGroupHeadHash = await rebase(
       newMemdagMutations,
@@ -223,6 +240,7 @@ export async function persistDD31(
       mutationIDs,
       lc,
       formatVersion,
+      zeroDataForPerdagHeadCommit ?? zeroDataForMemdagBaseSnapshot,
     );
 
     const newMainClientGroup = {
@@ -259,6 +277,7 @@ async function rebase(
   mutationIDs: Record<ClientID, number>,
   lc: LogContext,
   formatVersion: FormatVersion,
+  zeroData: ZeroTxData | undefined,
 ): Promise<Hash> {
   for (let i = mutations.length - 1; i >= 0; i--) {
     const mutationCommit = mutations[i];
@@ -278,7 +297,7 @@ async function rebase(
           lc,
           meta.clientID,
           formatVersion,
-          undefined,
+          zeroData,
         )
       ).chunk.hash;
     }
