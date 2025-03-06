@@ -11,6 +11,7 @@ import {type AddQuery, ZeroContext} from './context.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {LogContext} from '@rocicorp/logger';
+import type {Hash} from '../../../replicache/src/hash.ts';
 
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();
@@ -119,7 +120,7 @@ test('processChanges', () => {
     ]),
   );
 
-  context.processChanges([
+  context.processChanges(undefined, 'ahash' as Hash, [
     {
       key: `${ENTITIES_KEY_PREFIX}t1/e1`,
       op: 'add',
@@ -185,7 +186,7 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
   );
 
   expect(batchViewUpdatesCalls).toBe(0);
-  context.processChanges([
+  context.processChanges(undefined, 'ahash' as Hash, [
     {
       key: `${ENTITIES_KEY_PREFIX}t1/e1`,
       op: 'add',
@@ -283,7 +284,7 @@ test('transactions', () => {
     ++transactions;
   });
 
-  context.processChanges(changes);
+  context.processChanges(undefined, 'ahash' as Hash, changes);
 
   expect(transactions).toEqual(1);
   const result = out.fetch({});

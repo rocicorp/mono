@@ -55,6 +55,7 @@ type RefreshResult =
       type: 'complete';
       diffs: DiffsMap;
       newPerdagClientHeadHash: Hash;
+      oldHead: Hash;
       newHead: Hash;
     };
 
@@ -72,7 +73,7 @@ export async function refresh(
   closed: () => boolean,
   formatVersion: FormatVersion,
   zero: ZeroOption | undefined,
-): Promise<[Hash, DiffsMap] | undefined> {
+): Promise<{oldHead: Hash; newHead: Hash; diffs: DiffsMap} | undefined> {
   if (closed()) {
     return;
   }
@@ -235,9 +236,11 @@ export async function refresh(
         let newMemdagHeadHash = perdagClientGroupHeadHash;
         if (newMemdagMutations.length > 0) {
           const zeroData = await zero?.getTxData?.(
-            memdagHeadCommit.chunk.hash,
+            'rebase',
             newMemdagHeadHash,
-            {openLazyRead: memdagWrite},
+            {
+              openLazyRead: memdagWrite,
+            },
           );
           for (let i = newMemdagMutations.length - 1; i >= 0; i--) {
             newMemdagHeadHash = (
@@ -271,6 +274,7 @@ export async function refresh(
         return {
           type: 'complete',
           diffs,
+          oldHead: memdagHeadCommit.chunk.hash,
           newHead: newMemdagHeadHash,
           newPerdagClientHeadHash: perdagClientGroupHeadHash,
         } as const;
@@ -301,7 +305,11 @@ export async function refresh(
     return undefined;
   }
   await setRefreshHashes([result.newPerdagClientHeadHash]);
-  return [result.newHead, result.diffs];
+  return {
+    oldHead: result.oldHead,
+    newHead: result.newHead,
+    diffs: result.diffs,
+  };
 }
 
 function shouldAbortRefresh(

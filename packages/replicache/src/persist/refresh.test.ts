@@ -193,7 +193,7 @@ describe('refresh', () => {
       undefined,
     );
     assert(refreshResult);
-    expect(Object.fromEntries(refreshResult[1])).to.deep.equal({});
+    expect(Object.fromEntries(refreshResult.diffs)).to.deep.equal({});
     const hashes = [
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     ];
@@ -247,7 +247,7 @@ describe('refresh', () => {
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     ];
 
-    expect(Object.fromEntries(refreshResult[1])).to.deep.equal({});
+    expect(Object.fromEntries(refreshResult.diffs)).to.deep.equal({});
 
     await assertRefreshHashes(perdag, clientID, hashes);
   });
@@ -281,7 +281,7 @@ describe('refresh', () => {
     );
     assert(refreshResult);
 
-    expect(Object.fromEntries(refreshResult[1])).to.deep.equal({
+    expect(Object.fromEntries(refreshResult.diffs)).to.deep.equal({
       '': [
         {
           key: 'from mutator_name_3',
@@ -391,7 +391,7 @@ describe('refresh', () => {
       undefined,
     );
     assert(refreshResult);
-    expect(Object.fromEntries(refreshResult[1])).to.deep.equal({
+    expect(Object.fromEntries(refreshResult.diffs)).to.deep.equal({
       '': [
         {
           key: 'from mutator_name_3',
@@ -455,7 +455,7 @@ describe('refresh', () => {
       undefined,
     );
     assert(refreshResult);
-    expect(Object.fromEntries(refreshResult[1])).to.deep.equal({
+    expect(Object.fromEntries(refreshResult.diffs)).to.deep.equal({
       '': [
         {
           key: 'from mutator_name_3',
@@ -831,7 +831,7 @@ describe('refresh', () => {
       undefined,
     );
     assert(refreshResult);
-    expect(Object.fromEntries(refreshResult[1])).to.deep.equal({
+    expect(Object.fromEntries(refreshResult.diffs)).to.deep.equal({
       '': [{key: 'c', newValue: 3, op: 'add'}],
     });
 
