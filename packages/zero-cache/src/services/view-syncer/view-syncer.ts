@@ -17,10 +17,7 @@ import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/change-desired-queries.ts';
-import type {
-  CloseConnectionBody,
-  CloseConnectionMessage,
-} from '../../../../zero-protocol/src/close-connection.ts';
+import type {CloseConnectionMessage} from '../../../../zero-protocol/src/close-connection.ts';
 import type {
   InitConnectionBody,
   InitConnectionMessage,
@@ -515,28 +512,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     return this.#cvr;
   }
-
-  readonly #closeConnection = async (
-    lc: LogContext,
-    clientID: string,
-    _body: CloseConnectionBody,
-    cvr: CVRSnapshot,
-  ): Promise<void> => {
-    lc.debug?.('closing connection');
-
-    await this.#updateCVRConfig(lc, cvr, updater =>
-      updater.deleteClient(clientID),
-    );
-
-    for (const client of this.#getClients()) {
-      if (client.clientID !== clientID) {
-        client.sendDeleteClients(lc, [clientID], []);
-      }
-    }
-
-    this.#scheduleExpireEviction(lc, cvr);
-    await this.#evictInactiveQueries(lc, cvr);
-  };
 
   /**
    * Runs the given `fn` to process the `msg` from within the `#lock`,
