@@ -5,17 +5,27 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {ClientID} from '../types/client-state.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
 import type {WriteTransaction} from './replicache-types.ts';
+import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {
-  ClientTransaction,
   DeleteID,
   InsertValue,
   SchemaCRUD,
   SchemaQuery,
   TableCRUD,
-  Transaction,
+  TransactionBase,
   UpdateValue,
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
+
+/**
+ * An instance of this is passed to custom mutator implementations and
+ * allows reading and writing to the database and IVM at the head
+ * at which the mutator is being applied.
+ */
+export interface Transaction<S extends Schema> extends TransactionBase<S> {
+  readonly location: 'client';
+  readonly reason: 'optimistic' | 'rebase';
+}
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
@@ -67,15 +77,15 @@ export type MakeCustomMutatorInterface<
   ? (...args: Args) => Promise<void>
   : never;
 
-export class TransactionImpl implements ClientTransaction<Schema> {
-  constructor(repTx: WriteTransaction, schema: Schema) {
+export class TransactionImpl implements Transaction<Schema> {
+  constructor(repTx: WriteTransaction<IVMSourceBranch>, schema: Schema) {
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
     this.clientID = repTx.clientID;
     this.mutationID = repTx.mutationID;
     this.reason = repTx.reason === 'initial' ? 'optimistic' : 'rebase';
     // ~ Note: we will likely need to leverage proxies one day to create
     // ~ crud mutators and queries on demand for users with very large schemas.
-    this.mutate = makeSchemaCRUD(schema, repTx);
+    this.mutate = makeSchemaCRUD(schema, repTx, repTx.zeroData);
     this.query = {};
   }
 
@@ -91,16 +101,23 @@ export function makeReplicacheMutator(
   mutator: CustomMutatorImpl<Schema>,
   schema: Schema,
 ) {
-  return (repTx: WriteTransaction, args: ReadonlyJSONValue): Promise<void> => {
+  return (
+    repTx: WriteTransaction<IVMSourceBranch>,
+    args: ReadonlyJSONValue,
+  ): Promise<void> => {
     const tx = new TransactionImpl(repTx, schema);
     return mutator(tx, args);
   };
 }
 
-function makeSchemaCRUD(schema: Schema, tx: WriteTransaction) {
+function makeSchemaCRUD(
+  schema: Schema,
+  tx: WriteTransaction,
+  ivmBranch: IVMSourceBranch | undefined,
+) {
   const mutate: Record<string, TableCRUD<TableSchema>> = {};
   for (const [name] of Object.entries(schema.tables)) {
-    mutate[name] = makeTableCRUD(schema, name, tx);
+    mutate[name] = makeTableCRUD(schema, name, tx, ivmBranch);
   }
   return mutate;
 }
@@ -109,6 +126,7 @@ function makeTableCRUD(
   schema: Schema,
   tableName: string,
   tx: WriteTransaction,
+  ivmBranch: IVMSourceBranch | undefined,
 ) {
   const table = must(schema.tables[tableName]);
   const {primaryKey} = table;
@@ -118,28 +136,28 @@ function makeTableCRUD(
         tx,
         {op: 'insert', tableName, primaryKey, value},
         schema,
-        undefined,
+        ivmBranch,
       ),
     upsert: (value: UpsertValue<TableSchema>) =>
       upsertImpl(
         tx,
         {op: 'upsert', tableName, primaryKey, value},
         schema,
-        undefined,
+        ivmBranch,
       ),
     update: (value: UpdateValue<TableSchema>) =>
       updateImpl(
         tx,
         {op: 'update', tableName, primaryKey, value},
         schema,
-        undefined,
+        ivmBranch,
       ),
     delete: (id: DeleteID<TableSchema>) =>
       deleteImpl(
         tx,
         {op: 'delete', tableName, primaryKey, value: id},
         schema,
-        undefined,
+        ivmBranch,
       ),
   };
 }

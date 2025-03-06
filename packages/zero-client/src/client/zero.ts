@@ -130,6 +130,8 @@ import {
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
+import type {WriteTransaction} from './replicache-types.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -454,7 +456,10 @@ export class Zero<
         mutatorsForNamespace as Record<string, CustomMutatorImpl<Schema>>,
       )) {
         (replicacheMutators as MutatorDefs)[customMutatorKey(namespace, name)] =
-          makeReplicacheMutator(mutator, schema);
+          makeReplicacheMutator(mutator, schema) as (
+            repTx: WriteTransaction,
+            args: ReadonlyJSONValue,
+          ) => Promise<void>;
       }
     }
 
