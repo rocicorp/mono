@@ -33,8 +33,8 @@ export const relationSchema = v.object({
   // * `keyColumns` contain all of the columns in the table.
   // * the `key` of the Delete and Update messages represent the full row.
   //
-  // It is the replicator's responsibility must convert these to an
-  // appropriate lookup key.
+  // The replicator handles these tables by extracting a row key from
+  // the full row based on the table's PRIMARY KEY or UNIQUE INDEX.
   replicaIdentity: v
     .union(
       v.literal('default'),
