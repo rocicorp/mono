@@ -484,6 +484,7 @@ export class Zero<
     };
 
     this.#zeroContext = new ZeroContext(
+      new LogContext(logOptions.logLevel, {}, logOptions.logSink),
       this.#ivmMain,
       (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
       batchViewUpdates,
