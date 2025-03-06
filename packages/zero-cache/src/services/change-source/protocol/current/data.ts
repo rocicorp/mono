@@ -43,9 +43,6 @@ export const relationSchema = v.object({
       v.literal('index'),
     )
     .optional(),
-
-  // Deprecated tags will be removed in a later release.
-  tag: v.literal('relation').optional(),
 });
 
 export const rowSchema = v.record(jsonValueSchema);
