@@ -15,7 +15,7 @@ import type {Store} from './dag/store.ts';
 
 export interface ReplicacheOptions<
   MD extends MutatorDefs,
-  TZeroData = unknown,
+  TZeroData extends ZeroTxData = ZeroTxData,
 > {
   /**
    * This is the URL to the server endpoint dealing with the push updates. See
@@ -239,11 +239,13 @@ export interface ReplicacheOptions<
   zero?: ZeroOption<TZeroData> | undefined;
 }
 
+export interface ZeroTxData {}
+
 /**
  * Minimal interface that Replicache needs to communicate with Zero.
  * Prevents us from creating any direct dependencies on Zero.
  */
-export type ZeroOption<T> = {
+export type ZeroOption<T extends ZeroTxData> = {
   /**
    * Allow Zero to initialize its IVM state from the given hash and store.
    */
