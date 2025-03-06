@@ -229,6 +229,7 @@ describe('rebaseMutationAndCommit', () => {
           new LogContext(),
           fixture.clientID,
           fixture.formatVersion,
+          undefined,
         ),
     );
     expect(fixture.testMutator1CallCount).to.equal(1);
@@ -256,6 +257,7 @@ describe('rebaseMutationAndCommit', () => {
           new LogContext(),
           fixture.clientID,
           fixture.formatVersion,
+          undefined,
         ),
     );
     expect(fixture.testMutator1CallCount).to.equal(1);
@@ -291,6 +293,7 @@ describe('rebaseMutationAndCommit', () => {
           new LogContext(),
           fixture.clientID,
           fixture.formatVersion,
+          undefined,
         ),
     );
     await withRead(fixture.store, async read => {
@@ -329,6 +332,7 @@ describe('rebaseMutationAndPutCommit', () => {
           new LogContext(),
           fixture.clientID,
           fixture.formatVersion,
+          undefined,
         );
         await fixture.expectRebasedCommit1(
           commit,
@@ -363,6 +367,7 @@ describe('rebaseMutationAndPutCommit', () => {
           new LogContext(),
           fixture.clientID,
           fixture.formatVersion,
+          undefined,
         );
         await fixture.expectRebasedCommit2(
           commit,
@@ -407,6 +412,7 @@ describe('rebaseMutationAndPutCommit', () => {
           new LogContext(),
           fixture.clientID,
           fixture.formatVersion,
+          undefined,
         );
         await fixture.expectRebasedCommit(
           commit,
@@ -473,6 +479,7 @@ async function testThrowsErrorOnClientIDMismatch(
             new LogContext(),
             'wrong_client_id',
             formatVersion,
+            undefined,
           )
         : await rebaseMutationAndPutCommit(
             localCommit,
@@ -484,6 +491,7 @@ async function testThrowsErrorOnClientIDMismatch(
             new LogContext(),
             'wrong_client_id',
             formatVersion,
+            undefined,
           );
     } catch (expected) {
       expect(formatVersion).to.be.greaterThanOrEqual(FormatVersion.DD31);
@@ -541,6 +549,7 @@ async function testThrowsErrorOnMutationIDMismatch(
             new LogContext(),
             clientID,
             formatVersion,
+            undefined,
           )
         : await rebaseMutationAndPutCommit(
             localCommit2,
@@ -550,6 +559,7 @@ async function testThrowsErrorOnMutationIDMismatch(
             new LogContext(),
             clientID,
             formatVersion,
+            undefined,
           );
     } catch (e) {
       expectedError = e;
