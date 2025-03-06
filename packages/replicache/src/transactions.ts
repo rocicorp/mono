@@ -19,6 +19,7 @@ import {
 import type {ScanSubscriptionInfo} from './subscriptions.ts';
 import type {ClientID} from './sync/ids.ts';
 import {rejectIfClosed, throwIfClosed} from './transaction-closed-error.ts';
+import type {ZeroTxData} from './replicache-options.ts';
 
 export type TransactionEnvironment = 'client' | 'server';
 export type TransactionLocation = TransactionEnvironment;
@@ -271,7 +272,8 @@ export class SubscriptionTransactionWrapper implements ReadTransaction {
  * {@link ReplicacheOptions.mutators} and allows read and write operations on the
  * database.
  */
-export interface WriteTransaction<TZeroData = unknown> extends ReadTransaction {
+export interface WriteTransaction<TZeroData extends ZeroTxData = ZeroTxData>
+  extends ReadTransaction {
   /**
    * The ID of the mutation that is being applied.
    */
@@ -282,7 +284,7 @@ export interface WriteTransaction<TZeroData = unknown> extends ReadTransaction {
    */
   readonly reason: TransactionReason;
 
-  readonly zeroData: TZeroData;
+  readonly zeroData: TZeroData | undefined;
 
   /**
    * Sets a single `value` in the database. The value will be frozen (using
@@ -302,7 +304,7 @@ export interface WriteTransaction<TZeroData = unknown> extends ReadTransaction {
   del(key: string): Promise<boolean>;
 }
 
-export class WriteTransactionImpl<TZeroData = unknown>
+export class WriteTransactionImpl<TZeroData extends ZeroTxData = ZeroTxData>
   extends ReadTransactionImpl
   implements WriteTransaction<TZeroData>
 {
@@ -310,13 +312,13 @@ export class WriteTransactionImpl<TZeroData = unknown>
   declare readonly dbtx: Write;
   readonly reason: TransactionReason;
   readonly mutationID: number;
-  readonly zeroData: TZeroData;
+  readonly zeroData: TZeroData | undefined;
 
   constructor(
     clientID: ClientID,
     mutationID: number,
     reason: TransactionReason,
-    zeroData: TZeroData,
+    zeroData: TZeroData | undefined,
     dbWrite: Write,
     lc: LogContext,
     rpcName = 'openWriteTransaction',
