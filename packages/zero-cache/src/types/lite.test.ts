@@ -115,12 +115,13 @@ describe('types/lite', () => {
       },
     ],
   ])('liteRow: %s', (input, output, table) => {
-    const lite = liteRow(input, table);
+    const {row: lite, numCols} = liteRow(input, table);
     if (output) {
       expect(lite).toEqual(output);
     } else {
       expect(lite).toBe(input); // toBe => identity (i.e. no copy)
     }
+    expect(numCols).toBe(Object.keys(input).length);
   });
 
   test('values', () => {

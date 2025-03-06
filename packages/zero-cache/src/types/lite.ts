@@ -24,9 +24,15 @@ function columnType(col: string, table: LiteTableSpec) {
  * Creates a LiteRow from the supplied RowValue. A copy of the `row`
  * is made only if a value conversion is performed.
  */
-export function liteRow(row: RowValue, table: LiteTableSpec): LiteRow {
+export function liteRow(
+  row: RowValue,
+  table: LiteTableSpec,
+): {row: LiteRow; numCols: number} {
   let copyNeeded = false;
+  let numCols = 0;
+
   for (const key in row) {
+    numCols++;
     const val = row[key];
     const liteVal = liteValue(val, columnType(key, table));
     if (val !== liteVal) {
@@ -35,15 +41,16 @@ export function liteRow(row: RowValue, table: LiteTableSpec): LiteRow {
     }
   }
   if (!copyNeeded) {
-    return row as unknown as LiteRow;
+    return {row: row as unknown as LiteRow, numCols: numCols};
   }
   // Slow path for when a conversion is needed.
-  return Object.fromEntries(
-    Object.entries(row).map(([key, val]) => [
-      key,
-      liteValue(val, columnType(key, table)),
-    ]),
-  );
+  numCols = 0;
+  const converted: Record<string, LiteValueType> = {};
+  for (const key in row) {
+    numCols++;
+    converted[key] = liteValue(row[key], columnType(key, table));
+  }
+  return {row: converted, numCols: numCols};
 }
 
 export function liteValues(

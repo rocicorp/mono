@@ -43,6 +43,11 @@ describe('replicator/incremental-sync', () => {
   };
 
   const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+  const full = new ReplicationMessages(
+    {full: ['id', 'bool', 'desc']},
+    'public',
+    'full',
+  );
   const orgIssues = new ReplicationMessages({
     issues: ['orgID', 'issueID', 'bool'],
   });
@@ -458,6 +463,77 @@ describe('replicator/incremental-sync', () => {
             table: 'foo',
             op: 's',
             rowKey: '{"id":101}',
+          },
+        ],
+      },
+    },
+    {
+      name: 'replica identity full',
+      setup: `
+      CREATE TABLE full(
+        id "INTEGER|NOT_NULL",
+        bool BOOL,
+        desc TEXT,
+        _0_version TEXT
+      );
+      CREATE UNIQUE INDEX full_pk ON full (id ASC);
+      `,
+      downstream: [
+        ['begin', full.begin(), {commitWatermark: '06'}],
+        ['data', full.insert('full', {id: 123, bool: true, desc: null})],
+        ['data', full.insert('full', {id: 456, bool: false, desc: null})],
+        ['data', full.insert('full', {id: 789, bool: false, desc: null})],
+        ['commit', full.commit(), {watermark: '06'}],
+
+        ['begin', full.begin(), {commitWatermark: '0b'}],
+        [
+          'data',
+          full.update(
+            'full',
+            {id: 123, bool: false, desc: 'foobar'},
+            {id: 123, bool: true, desc: null},
+          ),
+        ],
+        [
+          'data',
+          full.update(
+            'full',
+            {id: 987, bool: true, desc: 'barfoo'},
+            {id: 456, bool: false, desc: null},
+          ),
+        ],
+        ['data', full.delete('full', {id: 789, bool: false, desc: null})],
+        ['commit', issues.commit(), {watermark: '0b'}],
+      ],
+      data: {
+        full: [
+          {id: 123n, bool: 0n, desc: 'foobar', ['_0_version']: '0b'},
+          {id: 987n, bool: 1n, desc: 'barfoo', ['_0_version']: '0b'},
+        ],
+        ['_zero.changeLog']: [
+          {
+            op: 's',
+            rowKey: '{"id":123}',
+            stateVersion: '0b',
+            table: 'full',
+          },
+          {
+            op: 'd',
+            rowKey: '{"id":456}',
+            stateVersion: '0b',
+            table: 'full',
+          },
+          {
+            op: 'd',
+            rowKey: '{"id":789}',
+            stateVersion: '0b',
+            table: 'full',
+          },
+          {
+            op: 's',
+            rowKey: '{"id":987}',
+            stateVersion: '0b',
+            table: 'full',
           },
         ],
       },

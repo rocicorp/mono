@@ -466,6 +466,68 @@ describe('change-source/pg', {timeout: 30000}, () => {
     },
   );
 
+  test('replica identity full', async () => {
+    await withTriggers();
+    const {replicaVersion} = getSubscriptionState(
+      new StatementRunner(replicaDbFile.connect(lc)),
+    );
+
+    const {changes} = await startStream('00');
+    const downstream = drainToQueue(changes);
+
+    await upstream.begin(async tx => {
+      await tx`ALTER TABLE foo REPLICA IDENTITY FULL`;
+      await tx`INSERT INTO foo(id, int) VALUES('hello', 1)`;
+      await tx`INSERT INTO foo(id, int) VALUES('world', 2)`;
+      await tx`UPDATE foo SET id = 'bello' WHERE id = 'hello'`;
+      await tx`DELETE FROM foo WHERE id = 'world'`;
+    });
+
+    const begin1 = (await downstream.dequeue()) as Begin;
+    expect(begin1).toMatchObject([
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+    expect(begin1[2].commitWatermark > replicaVersion).toBe(true);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        relation: {replicaIdentity: 'full'},
+        new: {id: 'hello', int: 1},
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        relation: {replicaIdentity: 'full'},
+        new: {id: 'world', int: 2},
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'update',
+        relation: {replicaIdentity: 'full'},
+        new: {id: 'bello', int: 1},
+        key: {id: 'hello', int: 1},
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'delete',
+        relation: {replicaIdentity: 'full'},
+        key: {id: 'world', int: 2},
+      },
+    ]);
+
+    const commit1 = (await downstream.dequeue()) as Commit;
+    expect(commit1[2].watermark).toEqual(begin1[2].commitWatermark);
+  });
+
   test('set replica identity using index', async () => {
     const stream = await startStream('00');
     const changes = drainToQueue(stream.changes);

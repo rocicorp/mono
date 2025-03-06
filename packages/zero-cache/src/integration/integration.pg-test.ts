@@ -76,7 +76,8 @@ const permissions = await definePermissions(schema, () => ({
 // Note: The NULL unicode character \u0000 is specifically used to verify
 //       end-to-end JSON compatibility. In particular, any intermediate
 //       JSONB storage of row contents would not be able to handle it.
-const INITIAL_PG_SETUP = `
+function initialPGSetup(replicaIdentity = 'DEFAULT') {
+  return `
       CREATE TABLE foo(
         id TEXT PRIMARY KEY, 
         far_id TEXT,
@@ -86,6 +87,7 @@ const INITIAL_PG_SETUP = `
         j3 JSON,
         j4 JSON
       );
+      ALTER TABLE foo REPLICA IDENTITY ${replicaIdentity};
       INSERT INTO foo(id, far_id, b, j1, j2, j3, j4) 
         VALUES (
           'bar',
@@ -115,8 +117,9 @@ const INITIAL_PG_SETUP = `
         permissions,
       )}', '${h128(JSON.stringify(permissions)).toString(16)}');
       `;
+}
 
-// Keep this in sync with the INITIAL_PG_SETUP
+// Keep this in sync with the initialPGSetup
 const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
   ['begin', {tag: 'begin'}, {commitWatermark: '101'}],
   [
@@ -424,8 +427,6 @@ describe('integration', {timeout: 30000}, () => {
     customChangeSourceURI =
       (await customBackend.listen({port: 0})) + CHANGE_SOURCE_PATH;
 
-    await upDB.unsafe(INITIAL_PG_SETUP);
-
     port = randInt(5000, 16000);
     port2 = randInt(5000, 16000);
 
@@ -517,7 +518,8 @@ describe('integration', {timeout: 30000}, () => {
   const WATERMARK_REGEX = /[0-9a-z]{4,}/;
 
   test.each([
-    ['single-node standalone', 'pg', () => [env]],
+    ['single-node standalone', 'pg', () => [env], undefined],
+    ['replica identity full', 'pg', () => [env], 'FULL'],
     [
       'single-node multi-tenant direct-dispatch',
       'pg',
@@ -530,6 +532,7 @@ describe('integration', {timeout: 30000}, () => {
           }),
         },
       ],
+      undefined,
     ],
     [
       'single-node multi-tenant, double-dispatch',
@@ -549,6 +552,7 @@ describe('integration', {timeout: 30000}, () => {
           }),
         },
       ],
+      undefined,
     ],
     [
       'multi-node standalone',
@@ -567,6 +571,7 @@ describe('integration', {timeout: 30000}, () => {
           ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
         },
       ],
+      undefined,
     ],
     [
       'multi-node multi-tenant',
@@ -608,6 +613,7 @@ describe('integration', {timeout: 30000}, () => {
           }),
         },
       ],
+      undefined,
     ],
     [
       'single-node standalone',
@@ -619,10 +625,14 @@ describe('integration', {timeout: 30000}, () => {
           ['ZERO_UPSTREAM_TYPE']: 'custom',
         },
       ],
+      undefined,
     ],
-  ] satisfies [string, 'pg' | 'custom', () => Envs][])(
+  ] satisfies [string, 'pg' | 'custom', () => Envs, 'FULL' | undefined][])(
     '%s (%s)',
-    async (_name, backend, makeEnvs) => {
+    async (_name, backend, makeEnvs, replicaIdentity) => {
+      if (backend === 'pg') {
+        await upDB.unsafe(initialPGSetup(replicaIdentity));
+      }
       await startZero(makeEnvs());
 
       const downstream = new Queue<unknown>();
@@ -760,7 +770,6 @@ describe('integration', {timeout: 30000}, () => {
                 ['far_id']: 'not_baz',
               },
               key: null,
-              old: null,
             },
           ],
           ['commit', {tag: 'commit'}, {watermark: '102'}],

@@ -495,17 +495,23 @@ class ChangeMaker {
         ];
 
       case 'delete': {
-        const key = msg.key ?? msg.old;
-        if (!key) {
+        if (!(msg.key ?? msg.old)) {
           throw new Error(
             `Invalid DELETE msg (missing key): ${stringify(msg)}`,
           );
         }
-        return [['data', msg.key ? (msg as MessageDelete) : {...msg, key}]];
+        // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-DELETE
+        return [
+          ['data', msg.old ? {...msg, key: msg.old} : (msg as MessageDelete)],
+        ];
+      }
+
+      case 'update': {
+        // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-UPDATE
+        return [['data', msg.old ? {...msg, key: msg.old} : msg]];
       }
 
       case 'insert':
-      case 'update':
       case 'truncate':
         return [['data', msg]];
 
