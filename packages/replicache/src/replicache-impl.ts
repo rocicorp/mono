@@ -122,7 +122,6 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.ts';
-import type {DiffsMap} from './sync/diff.ts';
 
 declare const TESTING: boolean;
 
@@ -563,8 +562,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     );
 
     // Now we have a profileID, a clientID, a clientGroupID and DB!
-    resolveReady();
     await this.#zero?.init(headHash, this.memdag);
+    resolveReady();
 
     if (this.#enablePullAndPushInOpen) {
       this.pull().catch(noop);
@@ -756,31 +755,26 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       const lc = this.#lc
         .withContext('maybeEndPull')
         .withContext('requestID', requestID);
-      const {replayMutations, diffs, mainHead} = await maybeEndPull<LocalMeta>(
-        this.memdag,
-        lc,
-        syncHead,
-        clientID,
-        this.#subscriptions,
-        FormatVersion.Latest,
-      );
+      const {replayMutations, diffs, oldMainHead, mainHead} =
+        await maybeEndPull<LocalMeta>(
+          this.memdag,
+          lc,
+          syncHead,
+          clientID,
+          this.#subscriptions,
+          FormatVersion.Latest,
+        );
 
       if (!replayMutations || replayMutations.length === 0) {
         // All done.
-        await this.#zero?.advance(mainHead, diffs.get('') ?? []);
+        this.#zero?.advance(oldMainHead, mainHead, diffs.get('') ?? []);
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return;
       }
 
       // Replay.
-      const zeroData = await this.#zero?.getTxData?.(
-        mainHead, // TODO: this mainHead is incorrect since
-        // minaHead is advanced in replicache but not in IVM.
-        // We don't advance in IVM until all replay mutations are done.
-        // In `if` above. We need to keep around an expected `mainHead`...
-        syncHead,
-      );
+      const zeroData = await this.#zero?.getTxData?.('rebase', syncHead);
       for (const mutation of replayMutations) {
         // TODO(greg): I'm not sure why this was in Replicache#_mutate...
         // Ensure that we run initial pending subscribe functions before starting a
@@ -1211,7 +1205,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     if (this.#closed) {
       return;
     }
-    let refreshResult: [Hash, DiffsMap] | undefined;
+    let refreshResult: Awaited<ReturnType<typeof refresh>>;
     try {
       refreshResult = await refresh(
         this.#lc,
@@ -1234,11 +1228,12 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       }
     }
     if (refreshResult !== undefined) {
-      await this.#zero?.advance(
-        refreshResult[0],
-        refreshResult[1].get('') ?? [],
+      this.#zero?.advance(
+        refreshResult.oldHead,
+        refreshResult.newHead,
+        refreshResult.diffs.get('') ?? [],
       );
-      await this.#subscriptions.fire(refreshResult[1]);
+      await this.#subscriptions.fire(refreshResult.diffs);
     }
   }
 
@@ -1507,7 +1502,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           clientID,
           await dbWrite.getMutationID(),
           'initial',
-          undefined,
+          await this.#zero?.getTxData('initial', headHash, {
+            openLazyRead: dagWrite,
+          }),
           dbWrite,
           this.#lc,
         );
@@ -1521,10 +1518,10 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
         // Update this after the commit in case the commit fails.
         this.lastMutationID = lastMutationID;
+        this.#zero?.advance(headHash, newHead, diffs.get('') ?? []);
 
         // Send is not supposed to reject
         this.#pushConnectionLoop.send(false).catch(() => void 0);
-        await this.#zero?.advance(newHead, diffs.get('') ?? []);
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return result;

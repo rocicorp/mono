@@ -93,7 +93,12 @@ export class TransactionImpl implements Transaction<Schema> {
     this.mutate = makeSchemaCRUD(
       schema,
       repTx,
-      castedRepTx[zeroData] as undefined | IVMSourceBranch,
+      repTx.reason === 'initial'
+        ? undefined
+        : (must(
+            castedRepTx[zeroData],
+            'zero was not set on replicache internal options!',
+          ) as IVMSourceBranch),
     );
     this.query = {};
   }
