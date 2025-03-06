@@ -5,7 +5,6 @@ import type {Puller} from './puller.ts';
 import type {Pusher} from './pusher.ts';
 import type {MutatorDefs, RequestOptions} from './types.ts';
 import type {Hash} from './hash.ts';
-import type {MaybePromise} from '../../shared/src/types.ts';
 import type {InternalDiff} from './btree/node.ts';
 import type {Store} from './dag/store.ts';
 
@@ -13,10 +12,7 @@ import type {Store} from './dag/store.ts';
  * The options passed to {@link Replicache}.
  */
 
-export interface ReplicacheOptions<
-  MD extends MutatorDefs,
-  TZeroData extends ZeroTxData = ZeroTxData,
-> {
+export interface ReplicacheOptions<MD extends MutatorDefs> {
   /**
    * This is the URL to the server endpoint dealing with the push updates. See
    * [Push Endpoint Reference](https://doc.replicache.dev/reference/server-push) for more
@@ -230,24 +226,40 @@ export interface ReplicacheOptions<
    * instance.
    */
   clientMaxAgeMs?: number | undefined;
-
-  /**
-   * Internal option used by Zero.
-   * Replicache will call this to and, if zero is enabled, will
-   * invoke various hooks to allow Zero the keep IVM in sync with Replicache's b-trees.
-   */
-  zero?: ZeroOption<TZeroData> | undefined;
 }
 
+/**
+ * Replicache calls the `ZeroOption` to create a new
+ * IVM branch at the correct head. This branch
+ * is tacked onto Replicache's `WriteTransaction`
+ * which is passed to the mutators.
+ *
+ * Replicache shouldn't depend on Zero directly, so
+ * we define a minimal interface as a placeholder.
+ *
+ * Zero will cast `ZeroTxData` to `IVMSourceBranch`
+ * inside of it's `Transaction` object.
+ *
+ * ```ts
+ * const zeroData = await zeroOption.getTxData(expectedHead, desiredHead);
+ * const tx = new WriteTransaction(
+ *   zeroData,
+ * );
+ * await mutatorImpl(tx, args);
+ * ```
+ *
+ * `mutatorImpl` is a function that was created by Zero
+ *
+ */
 export interface ZeroTxData {}
 
 /**
  * Minimal interface that Replicache needs to communicate with Zero.
  * Prevents us from creating any direct dependencies on Zero.
  */
-export type ZeroOption<T extends ZeroTxData> = {
+export type ZeroOption = {
   /**
-   * Allow Zero to initialize its IVM state from the given hash and store.
+   * Allow Zero to initialize its IVM state from the given hash and dag.
    */
   init(hash: Hash, store: Store): Promise<void>;
 
@@ -259,7 +271,7 @@ export type ZeroOption<T extends ZeroTxData> = {
    * The data returned by `getTxData` will be available on the Replicache transaction
    * object for use in Zero's mutators.
    */
-  getTxData(expectedHead: Hash, desiredHead: Hash): MaybePromise<T>;
+  getTxData(expectedHead: Hash, desiredHead: Hash): Promise<ZeroTxData>;
 
   /**
    * When Replicache's main head moves forward, Zero must advance its IVM state.

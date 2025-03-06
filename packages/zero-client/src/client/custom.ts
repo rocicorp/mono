@@ -16,6 +16,10 @@ import type {
   UpdateValue,
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
+import {
+  WriteTransactionImpl,
+  zeroData,
+} from '../../../replicache/src/transactions.ts';
 
 /**
  * An instance of this is passed to custom mutator implementations and
@@ -78,14 +82,19 @@ export type MakeCustomMutatorInterface<
   : never;
 
 export class TransactionImpl implements Transaction<Schema> {
-  constructor(repTx: WriteTransaction<IVMSourceBranch>, schema: Schema) {
+  constructor(repTx: WriteTransaction, schema: Schema) {
+    const castedRepTx = repTx as WriteTransactionImpl;
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
     this.clientID = repTx.clientID;
     this.mutationID = repTx.mutationID;
     this.reason = repTx.reason === 'initial' ? 'optimistic' : 'rebase';
     // ~ Note: we will likely need to leverage proxies one day to create
     // ~ crud mutators and queries on demand for users with very large schemas.
-    this.mutate = makeSchemaCRUD(schema, repTx, repTx.zeroData);
+    this.mutate = makeSchemaCRUD(
+      schema,
+      repTx,
+      castedRepTx[zeroData] as undefined | IVMSourceBranch,
+    );
     this.query = {};
   }
 
@@ -101,10 +110,7 @@ export function makeReplicacheMutator(
   mutator: CustomMutatorImpl<Schema>,
   schema: Schema,
 ) {
-  return (
-    repTx: WriteTransaction<IVMSourceBranch>,
-    args: ReadonlyJSONValue,
-  ): Promise<void> => {
+  return (repTx: WriteTransaction, args: ReadonlyJSONValue): Promise<void> => {
     const tx = new TransactionImpl(repTx, schema);
     return mutator(tx, args);
   };
