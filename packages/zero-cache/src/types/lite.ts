@@ -41,7 +41,7 @@ export function liteRow(
     }
   }
   if (!copyNeeded) {
-    return {row: row as unknown as LiteRow, numCols: numCols};
+    return {row: row as unknown as LiteRow, numCols};
   }
   // Slow path for when a conversion is needed.
   numCols = 0;
@@ -50,7 +50,7 @@ export function liteRow(
     numCols++;
     converted[key] = liteValue(row[key], columnType(key, table));
   }
-  return {row: converted, numCols: numCols};
+  return {row: converted, numCols};
 }
 
 export function liteValues(
