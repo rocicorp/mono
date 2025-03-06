@@ -29,8 +29,12 @@ export const relationSchema = v.object({
   name: v.string(),
   keyColumns: v.array(v.string()),
 
-  // Deprecated tags will be removed in a later release.
-  tag: v.literal('relation').optional(),
+  // PG-specific. When replicaIdentity is 'full':
+  // * `keyColumns` contain all of the columns in the table.
+  // * the `key` of the Delete and Update messages represent the full row.
+  //
+  // The replicator handles these tables by extracting a row key from
+  // the full row based on the table's PRIMARY KEY or UNIQUE INDEX.
   replicaIdentity: v
     .union(
       v.literal('default'),
@@ -52,14 +56,16 @@ export const insertSchema = v.object({
 export const updateSchema = v.object({
   tag: v.literal('update'),
   relation: relationSchema,
+  // key is present if the update changed the key of the row, or if the
+  // table's replicaIdentity === 'full'
   key: rowSchema.nullable(),
-  old: rowSchema.nullable(),
   new: rowSchema,
 });
 
 export const deleteSchema = v.object({
   tag: v.literal('delete'),
   relation: relationSchema,
+  // key is the full row if replicaIdentity === 'full'
   key: rowSchema,
 });
 
