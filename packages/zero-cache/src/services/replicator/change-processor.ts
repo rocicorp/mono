@@ -8,7 +8,11 @@ import {
   createIndexStatement,
   createTableStatement,
 } from '../../db/create.ts';
-import {listIndexes, listTables} from '../../db/lite-tables.ts';
+import {
+  computeZqlSpecs,
+  listIndexes,
+  listTables,
+} from '../../db/lite-tables.ts';
 import {
   mapPostgresToLite,
   mapPostgresToLiteColumn,
@@ -18,7 +22,7 @@ import type {LiteTableSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
 import {stringify} from '../../types/bigint-json.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
-import {liteRow, type LiteRowKey} from '../../types/lite.ts';
+import {liteRow, type LiteRow, type LiteRowKey} from '../../types/lite.ts';
 import {liteTableName} from '../../types/names.ts';
 import {id} from '../../types/sql.ts';
 import type {
@@ -31,6 +35,7 @@ import type {
   MessageCommit,
   MessageDelete,
   MessageInsert,
+  MessageRelation,
   MessageTruncate,
   MessageUpdate,
   TableCreate,
@@ -314,7 +319,17 @@ class TransactionProcessor {
 
   #reloadTableSpecs() {
     this.#tableSpecs.clear();
-    for (const spec of listTables(this.#db.db)) {
+    // zqlSpecs include the primary key derived from unique indexes
+    const zqlSpecs = computeZqlSpecs(this.#lc, this.#db.db);
+    for (let spec of listTables(this.#db.db)) {
+      if (!spec.primaryKey) {
+        spec = {
+          ...spec,
+          primaryKey: [
+            ...(zqlSpecs.get(spec.name)?.tableSpec.primaryKey ?? []),
+          ],
+        };
+      }
       this.#tableSpecs.set(spec.name, spec);
     }
   }
@@ -323,11 +338,31 @@ class TransactionProcessor {
     return must(this.#tableSpecs.get(name), `Unknown table ${name}`);
   }
 
+  #getKey(
+    {row, numCols}: {row: LiteRow; numCols: number},
+    {relation}: {relation: MessageRelation},
+  ): LiteRowKey {
+    const keyColumns =
+      relation.replicaIdentity !== 'full'
+        ? relation.keyColumns // already a suitable key
+        : this.#tableSpec(liteTableName(relation)).primaryKey;
+    if (!keyColumns?.length) {
+      throw new Error(
+        `Cannot replicate table "${relation.name}" without a PRIMARY KEY or UNIQUE INDEX`,
+      );
+    }
+    // For the common case (replica identity default), the row is already the
+    // key for deletes and updates, in which case a new object can be avoided.
+    return numCols === keyColumns.length
+      ? row
+      : Object.fromEntries(keyColumns.map(col => [col, row[col]]));
+  }
+
   processInsert(insert: MessageInsert) {
     const table = liteTableName(insert.relation);
     const newRow = liteRow(insert.new, this.#tableSpec(table));
     const row = {
-      ...newRow,
+      ...newRow.row,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
     };
     const columns = Object.keys(row).map(c => id(c));
@@ -349,9 +384,7 @@ class TransactionProcessor {
       //  loaded via hydration.)
       return;
     }
-    const key = Object.fromEntries(
-      insert.relation.keyColumns.map(col => [col, newRow[col]]),
-    );
+    const key = this.#getKey(newRow, insert);
     this.#logSetOp(table, key);
   }
 
@@ -359,16 +392,14 @@ class TransactionProcessor {
     const table = liteTableName(update.relation);
     const newRow = liteRow(update.new, this.#tableSpec(table));
     const row = {
-      ...newRow,
+      ...newRow.row,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
     };
     // update.key is set with the old values if the key has changed.
     const oldKey = update.key
-      ? liteRow(update.key, this.#tableSpec(table))
+      ? this.#getKey(liteRow(update.key, this.#tableSpec(table)), update)
       : null;
-    const newKey = Object.fromEntries(
-      update.relation.keyColumns.map(col => [col, newRow[col]]),
-    );
+    const newKey = this.#getKey(newRow, update);
     const currKey = oldKey ?? newKey;
     const setExprs = Object.keys(row).map(col => `${id(col)}=?`);
     const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
@@ -390,7 +421,7 @@ class TransactionProcessor {
 
   processDelete(del: MessageDelete) {
     const table = liteTableName(del.relation);
-    const rowKey = liteRow(del.key, this.#tableSpec(table));
+    const rowKey = this.#getKey(liteRow(del.key, this.#tableSpec(table)), del);
 
     const conds = Object.keys(rowKey).map(col => `${id(col)}=?`);
     this.#db.run(

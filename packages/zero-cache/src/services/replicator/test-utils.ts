@@ -64,14 +64,18 @@ export class ReplicationMessages<
 > {
   readonly #tables = new Map<string, MessageRelation>();
 
-  constructor(tablesAndKeys: TablesAndKeys, schema = 'public') {
+  constructor(
+    tablesAndKeys: TablesAndKeys,
+    schema = 'public',
+    replicaIdentity: 'default' | 'full' = 'default',
+  ) {
     for (const [table, k] of Object.entries(tablesAndKeys)) {
       const keys = typeof k === 'string' ? [k] : [...k];
       const relation = {
         tag: 'relation',
         schema,
         name: table,
-        replicaIdentity: 'default',
+        replicaIdentity,
         keyColumns: keys,
       } as const;
       this.#tables.set(table, relation);
@@ -105,7 +109,6 @@ export class ReplicationMessages<
       relation: this.#relationOrFail(table),
       new: row,
       key: oldKey ?? null,
-      old: null,
     };
   }
 
