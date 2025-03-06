@@ -36,7 +36,7 @@ import {
   setClient,
 } from './clients.ts';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.ts';
-import type {ZeroOption} from '../replicache-options.ts';
+import type {ZeroOption, ZeroTxData} from '../replicache-options.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
@@ -66,7 +66,7 @@ export async function persistDD31(
   mutators: MutatorDefs,
   closed: () => boolean,
   formatVersion: FormatVersion,
-  _getZeroData: ZeroOption['getTxData'] | undefined,
+  getZeroData: ZeroOption['getTxData'] | undefined,
   onGatherMemOnlyChunksForTest = () => Promise.resolve(),
 ): Promise<void> {
   if (closed()) {
@@ -105,45 +105,57 @@ export async function persistDD31(
   if (closed()) {
     return;
   }
-  const [newMemdagMutations, memdagBaseSnapshot, gatheredChunks] =
-    await withRead(memdag, async memdagRead => {
-      const memdagHeadCommit = await commitFromHead(
-        DEFAULT_HEAD_NAME,
-        memdagRead,
-      );
-      const newMutations = await localMutationsGreaterThan(
-        memdagHeadCommit,
-        {[clientID]: perdagLMID || 0},
-        memdagRead,
-      );
-      const memdagBaseSnapshot = await baseSnapshotFromCommit(
-        memdagHeadCommit,
-        memdagRead,
-      );
-      assertSnapshotCommitDD31(memdagBaseSnapshot);
+  const [
+    newMemdagMutations,
+    memdagBaseSnapshot,
+    gatheredChunks,
+    memdagHeadCommit,
+  ] = await withRead(memdag, async memdagRead => {
+    const memdagHeadCommit = await commitFromHead(
+      DEFAULT_HEAD_NAME,
+      memdagRead,
+    );
+    const newMutations = await localMutationsGreaterThan(
+      memdagHeadCommit,
+      {[clientID]: perdagLMID || 0},
+      memdagRead,
+    );
+    const memdagBaseSnapshot = await baseSnapshotFromCommit(
+      memdagHeadCommit,
+      memdagRead,
+    );
+    assertSnapshotCommitDD31(memdagBaseSnapshot);
 
-      let gatheredChunks: ReadonlyMap<Hash, Chunk> | undefined;
-      if (
-        compareCookiesForSnapshots(memdagBaseSnapshot, perdagBaseSnapshot) > 0
-      ) {
-        await onGatherMemOnlyChunksForTest();
-        // Might need to persist snapshot, we will have to double check
-        // after gathering the snapshot chunks from memdag
-        const memdagBaseSnapshotHash = memdagBaseSnapshot.chunk.hash;
-        // Gather all memory only chunks from base snapshot on the memdag.
-        const visitor = new GatherMemoryOnlyVisitor(memdagRead);
-        await visitor.visit(memdagBaseSnapshotHash);
-        gatheredChunks = visitor.gatheredChunks;
-      }
+    let gatheredChunks: ReadonlyMap<Hash, Chunk> | undefined;
+    if (
+      compareCookiesForSnapshots(memdagBaseSnapshot, perdagBaseSnapshot) > 0
+    ) {
+      await onGatherMemOnlyChunksForTest();
+      // Might need to persist snapshot, we will have to double check
+      // after gathering the snapshot chunks from memdag
+      const memdagBaseSnapshotHash = memdagBaseSnapshot.chunk.hash;
+      // Gather all memory only chunks from base snapshot on the memdag.
+      const visitor = new GatherMemoryOnlyVisitor(memdagRead);
+      await visitor.visit(memdagBaseSnapshotHash);
+      gatheredChunks = visitor.gatheredChunks;
+    }
 
-      return [newMutations, memdagBaseSnapshot, gatheredChunks];
-    });
+    return [newMutations, memdagBaseSnapshot, gatheredChunks, memdagHeadCommit];
+  });
 
   if (closed()) {
     return;
   }
 
   let memdagBaseSnapshotPersisted = false;
+  const zeroDataForMemdagBaseSnapshot =
+    getZeroData === undefined
+      ? undefined
+      : await getZeroData(
+          memdagHeadCommit.chunk.hash,
+          memdagBaseSnapshot.chunk.hash,
+        );
+
   await withWrite(perdag, async perdagWrite => {
     const [mainClientGroup, latestPerdagMainClientGroupHeadCommit] =
       await getClientGroupInfo(perdagWrite, mainClientGroupID);
@@ -211,9 +223,25 @@ export async function persistDD31(
           mutationIDs,
           lc,
           formatVersion,
+          zeroDataForMemdagBaseSnapshot,
         );
       }
     }
+
+    let zeroDataForPerdagHeadCommit: ZeroTxData | undefined;
+    if (!memdagBaseSnapshotPersisted) {
+      zeroDataForPerdagHeadCommit =
+        getZeroData === undefined
+          ? undefined
+          : await getZeroData(
+              memdagHeadCommit.chunk.hash,
+              newMainClientGroupHeadHash,
+              {
+                openLazySourceRead: perdagWrite,
+              },
+            );
+    }
+
     // rebase new memdag mutations onto perdag
     newMainClientGroupHeadHash = await rebase(
       newMemdagMutations,
@@ -223,6 +251,7 @@ export async function persistDD31(
       mutationIDs,
       lc,
       formatVersion,
+      zeroDataForPerdagHeadCommit ?? zeroDataForMemdagBaseSnapshot,
     );
 
     const newMainClientGroup = {
@@ -259,6 +288,7 @@ async function rebase(
   mutationIDs: Record<ClientID, number>,
   lc: LogContext,
   formatVersion: FormatVersion,
+  zeroData: ZeroTxData | undefined,
 ): Promise<Hash> {
   for (let i = mutations.length - 1; i >= 0; i--) {
     const mutationCommit = mutations[i];
@@ -278,7 +308,7 @@ async function rebase(
           lc,
           meta.clientID,
           formatVersion,
-          undefined,
+          zeroData,
         )
       ).chunk.hash;
     }
