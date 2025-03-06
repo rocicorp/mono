@@ -157,10 +157,6 @@ CREATE TABLE ${schema(shard)}.desires (
 
   PRIMARY KEY ("clientGroupID", "clientID", "queryHash"),
 
-  CONSTRAINT fk_desires_client
-    FOREIGN KEY("clientGroupID", "clientID")
-    REFERENCES ${ident(cvrSchema(shard))}.clients("clientGroupID", "clientID"),
-
   CONSTRAINT fk_desires_query
     FOREIGN KEY("clientGroupID", "queryHash")
     REFERENCES ${ident(cvrSchema(shard))}.queries("clientGroupID", "queryHash")

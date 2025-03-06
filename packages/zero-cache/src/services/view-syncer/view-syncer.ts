@@ -17,10 +17,7 @@ import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/change-desired-queries.ts';
-import type {
-  CloseConnectionBody,
-  CloseConnectionMessage,
-} from '../../../../zero-protocol/src/close-connection.ts';
+import type {CloseConnectionMessage} from '../../../../zero-protocol/src/close-connection.ts';
 import type {
   InitConnectionBody,
   InitConnectionMessage,
@@ -28,6 +25,7 @@ import type {
 import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import type {Upstream} from '../../../../zero-protocol/src/up.ts';
 import {transformAndHashQuery} from '../../auth/read-authorizer.ts';
 import {stringify} from '../../types/bigint-json.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
@@ -470,7 +468,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     msg: CloseConnectionMessage,
   ): Promise<void> {
     try {
-      await this.#runInLockForClient(ctx, msg, this.#closeConnection);
+      await this.#runInLockForClient(
+        ctx,
+        [msg[0], {deleted: {clientIDs: [ctx.clientID]}}],
+        this.#handleConfigUpdate,
+      );
     } catch (e) {
       this.#lc.error?.('closeConnection failed', e);
     }
@@ -512,25 +514,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return this.#cvr;
   }
 
-  readonly #closeConnection = async (
-    lc: LogContext,
-    clientID: string,
-    _body: CloseConnectionBody,
-    cvr: CVRSnapshot,
-  ): Promise<void> => {
-    lc.debug?.('closing connection');
-
-    await this.#updateCVRConfig(lc, cvr, updater =>
-      updater.deleteClient(clientID),
-    );
-
-    for (const client of this.#getClients()) {
-      if (client.clientID !== clientID) {
-        client.sendDeleteClients(lc, [clientID], []);
-      }
-    }
-  };
-
   /**
    * Runs the given `fn` to process the `msg` from within the `#lock`,
    * optionally adding the `newClient` if supplied.
@@ -541,6 +524,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     fn: (
       lc: LogContext,
       clientID: string,
+      cmd: M[0],
       body: B,
       cvr: CVRSnapshot,
     ) => Promise<void>,
@@ -574,7 +558,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             }
 
             lc.debug?.(cmd, body);
-            return fn(lc, clientID, body, cvr);
+            return fn(lc, clientID, cmd, body, cvr);
           });
         } catch (e) {
           const lc = this.#lc
@@ -607,6 +591,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #handleConfigUpdate = (
     lc: LogContext,
     clientID: string,
+    cmd: Upstream[0],
     {deleted, desiredQueriesPatch}: Partial<InitConnectionBody>,
     cvr: CVRSnapshot,
   ) =>
@@ -645,7 +630,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         if (deleted?.clientIDs?.length || deleted?.clientGroupIDs?.length) {
           if (deleted?.clientIDs) {
             for (const cid of deleted.clientIDs) {
-              assert(cid !== clientID, 'cannot delete self');
+              if (cmd === 'closeConnection') {
+                assert(cid === clientID, 'cannot close other clients');
+              } else {
+                assert(cid !== clientID, 'cannot delete self');
+              }
               const patchesDueToClient = updater.deleteClient(cid);
               patches.push(...patchesDueToClient);
               deletedClientIDs.push(cid);

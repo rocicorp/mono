@@ -467,13 +467,11 @@ export class CVRStore {
   }
 
   deleteClient(clientID: string) {
-    for (const name of ['desires', 'clients'] as const) {
-      this.#writes.add({
-        stats: {[name]: 1},
-        write: tx =>
-          tx`DELETE FROM ${this.#cvr(name)} WHERE "clientID" = ${clientID}`,
-      });
-    }
+    this.#writes.add({
+      stats: {clients: 1},
+      write: tx =>
+        tx`DELETE FROM ${this.#cvr('clients')} WHERE "clientID" = ${clientID}`,
+    });
   }
 
   deleteClientGroup(clientGroupID: string) {
