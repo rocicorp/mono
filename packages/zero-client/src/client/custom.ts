@@ -20,6 +20,10 @@ import {
   WriteTransactionImpl,
   zeroData,
 } from '../../../replicache/src/transactions.ts';
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
+import {ZeroContext} from './context.ts';
+import type {LogContext} from '@rocicorp/logger';
 
 /**
  * An instance of this is passed to custom mutator implementations and
@@ -82,7 +86,12 @@ export type MakeCustomMutatorInterface<
   : never;
 
 export class TransactionImpl implements Transaction<Schema> {
-  constructor(repTx: WriteTransaction, schema: Schema) {
+  constructor(
+    lc: LogContext,
+    repTx: WriteTransaction,
+    schema: Schema,
+    slowMaterializeThreshold: number,
+  ) {
     const castedRepTx = repTx as WriteTransactionImpl;
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
     this.clientID = repTx.clientID;
@@ -105,7 +114,15 @@ export class TransactionImpl implements Transaction<Schema> {
             'zero was not set on replicache internal options!',
           ) as IVMSourceBranch),
     );
-    this.query = {};
+    this.query = makeSchemaQuery(
+      lc,
+      schema,
+      must(
+        castedRepTx[zeroData],
+        'zero was not set on replicache internal options!',
+      ) as IVMSourceBranch,
+      slowMaterializeThreshold,
+    );
   }
 
   readonly clientID: ClientID;
@@ -117,11 +134,13 @@ export class TransactionImpl implements Transaction<Schema> {
 }
 
 export function makeReplicacheMutator(
+  lc: LogContext,
   mutator: CustomMutatorImpl<Schema>,
   schema: Schema,
+  slowMaterializeThreshold: number,
 ) {
   return (repTx: WriteTransaction, args: ReadonlyJSONValue): Promise<void> => {
-    const tx = new TransactionImpl(repTx, schema);
+    const tx = new TransactionImpl(lc, repTx, schema, slowMaterializeThreshold);
     return mutator(tx, args);
   };
 }
@@ -136,6 +155,28 @@ function makeSchemaCRUD(
     mutate[name] = makeTableCRUD(schema, name, tx, ivmBranch);
   }
   return mutate;
+}
+
+function makeSchemaQuery(
+  lc: LogContext,
+  schema: Schema,
+  ivmBranch: IVMSourceBranch,
+  slowMaterializeThreshold: number,
+) {
+  const rv = {} as Record<string, Query<Schema, string>>;
+  const context = new ZeroContext(
+    lc,
+    ivmBranch,
+    () => () => {},
+    applyViewUpdates => applyViewUpdates(),
+    slowMaterializeThreshold,
+  );
+
+  for (const name of Object.keys(schema.tables)) {
+    rv[name] = newQuery(context, schema, name);
+  }
+
+  return rv as SchemaQuery<Schema>;
 }
 
 function makeTableCRUD(
