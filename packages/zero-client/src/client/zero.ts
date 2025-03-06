@@ -454,6 +454,7 @@ export class Zero<
     };
     this.#ivmMain = new IVMSourceBranch(schema.tables);
 
+    const lc = new LogContext(logOptions.logLevel, {}, logOptions.logSink);
     for (const [namespace, mutatorsForNamespace] of Object.entries(
       options.mutators ?? {},
     )) {
@@ -461,7 +462,12 @@ export class Zero<
         mutatorsForNamespace as Record<string, CustomMutatorImpl<Schema>>,
       )) {
         (replicacheMutators as MutatorDefs)[customMutatorKey(namespace, name)] =
-          makeReplicacheMutator(mutator, schema) as (
+          makeReplicacheMutator(
+            lc,
+            mutator,
+            schema,
+            slowMaterializeThreshold,
+          ) as (
             repTx: WriteTransaction,
             args: ReadonlyJSONValue,
           ) => Promise<void>;
@@ -492,7 +498,6 @@ export class Zero<
       kvStore,
     };
 
-    const lc = new LogContext(logOptions.logLevel, {}, logOptions.logSink);
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
