@@ -470,7 +470,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     msg: CloseConnectionMessage,
   ): Promise<void> {
     try {
-      await this.#runInLockForClient(ctx, msg, this.#closeConnection);
+      await this.#runInLockForClient(
+        ctx,
+        [msg[0], {deleted: {clientIDs: [ctx.clientID]}}],
+        this.#handleConfigUpdate,
+      );
     } catch (e) {
       this.#lc.error?.('closeConnection failed', e);
     }
@@ -544,6 +548,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     fn: (
       lc: LogContext,
       clientID: string,
+      cmd: M[0],
       body: B,
       cvr: CVRSnapshot,
     ) => Promise<void>,
@@ -577,7 +582,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             }
 
             lc.debug?.(cmd, body);
-            return fn(lc, clientID, body, cvr);
+            return fn(lc, clientID, cmd, body, cvr);
           });
         } catch (e) {
           const lc = this.#lc
@@ -610,6 +615,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #handleConfigUpdate = (
     lc: LogContext,
     clientID: string,
+    cmd: string,
     {deleted, desiredQueriesPatch}: Partial<InitConnectionBody>,
     cvr: CVRSnapshot,
   ) =>
@@ -648,7 +654,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         if (deleted?.clientIDs?.length || deleted?.clientGroupIDs?.length) {
           if (deleted?.clientIDs) {
             for (const cid of deleted.clientIDs) {
-              assert(cid !== clientID, 'cannot delete self');
+              assert(
+                cmd === 'closeConnection' || cid !== clientID,
+                'cannot delete self',
+              );
               const patchesDueToClient = updater.deleteClient(cid);
               patches.push(...patchesDueToClient);
               deletedClientIDs.push(cid);
