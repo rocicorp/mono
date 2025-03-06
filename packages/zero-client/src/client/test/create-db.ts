@@ -12,6 +12,7 @@ import {SYNC_HEAD_NAME} from '../../../../replicache/src/sync/sync-head-name.ts'
 import * as FormatVersion from '../../../../replicache/src/format-version-enum.ts';
 import {newWriteLocal} from '../../../../replicache/src/db/write.ts';
 import type {FrozenJSONValue} from '../../../../replicache/src/frozen-json.ts';
+import type {LazyStore} from '../../../../replicache/src/dag/lazy-store.ts';
 
 const lc = createSilentLogContext();
 export async function createDb(
@@ -45,5 +46,5 @@ export async function createDb(
   );
   const syncHash = await w.commit(SYNC_HEAD_NAME);
 
-  return {dagStore, syncHash};
+  return {dagStore: dagStore as unknown as LazyStore, syncHash};
 }

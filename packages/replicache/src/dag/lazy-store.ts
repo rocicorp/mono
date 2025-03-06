@@ -159,7 +159,7 @@ export class LazyStore implements Store {
     this.#assertValidHash = assertValidHash;
   }
 
-  async read(): Promise<LazyRead> {
+  async read(sourceRead?: Read): Promise<LazyRead> {
     const release = await this.#rwLock.read();
     return new LazyRead(
       this.#heads,
@@ -168,6 +168,7 @@ export class LazyStore implements Store {
       this.#sourceStore,
       release,
       this.#assertValidHash,
+      sourceRead,
     );
   }
 
@@ -215,6 +216,7 @@ export class LazyRead implements Read {
   readonly #release: () => void;
   #closed = false;
   readonly assertValidHash: (hash: Hash) => void;
+  readonly #sourceReadOwnedByCaller: boolean;
 
   constructor(
     heads: Map<string, Hash>,
@@ -223,6 +225,11 @@ export class LazyRead implements Read {
     sourceStore: Store,
     release: () => void,
     assertValidHash: (hash: Hash) => void,
+    // If the lazyRead is being run in the context of an existing
+    // read, or write, from the perdag then we must use _that_
+    // transaction's read. Trying to open our own `sourceRead` will
+    // cause the outer transaction to auto-commit.
+    sourceRead?: Read | undefined,
   ) {
     this._heads = heads;
     this._memOnlyChunks = memOnlyChunks;
@@ -230,6 +237,9 @@ export class LazyRead implements Read {
     this._sourceStore = sourceStore;
     this.#release = release;
     this.assertValidHash = assertValidHash;
+    this.#sourceRead =
+      sourceRead !== undefined ? Promise.resolve(sourceRead) : undefined;
+    this.#sourceReadOwnedByCaller = sourceRead !== undefined;
   }
 
   isMemOnlyChunkHash(hash: Hash): boolean {
@@ -266,12 +276,14 @@ export class LazyRead implements Read {
   release(): void {
     if (!this.#closed) {
       this.#release();
-      this.#sourceRead
-        ?.then(read => read.release())
-        // If creation of the read failed there is nothing to release.
-        // Catch to avoid `Uncaught (in promise)` errors being reported.
-        // eslint-disable-next-line @typescript-eslint/no-empty-function
-        .catch(_ => {});
+      if (!this.#sourceReadOwnedByCaller) {
+        this.#sourceRead
+          ?.then(read => read.release())
+          // If creation of the read failed there is nothing to release.
+          // Catch to avoid `Uncaught (in promise)` errors being reported.
+          // eslint-disable-next-line @typescript-eslint/no-empty-function
+          .catch(_ => {});
+      }
       this.#closed = true;
     }
   }
