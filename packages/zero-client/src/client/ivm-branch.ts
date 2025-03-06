@@ -8,14 +8,17 @@ import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
 import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import {diff} from '../../../replicache/src/sync/diff.ts';
+import {diff, DiffsMap} from '../../../replicache/src/sync/diff.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {
   InternalDiff,
   InternalDiffOperation,
+  NoIndexDiff,
 } from '../../../replicache/src/btree/node.ts';
 import {diffBinarySearch} from '../../../replicache/src/subscriptions.ts';
 import {readFromHash} from '../../../replicache/src/db/read.ts';
+import type {ZeroReadOptions} from '../../../replicache/src/replicache-options.ts';
+import type {TransactionReason} from '../../../replicache/src/transactions.ts';
 
 /**
  * Replicache needs to rebase mutations onto different
@@ -69,7 +72,7 @@ export class IVMSourceBranch {
    * Mutates the current branch, advancing it to the new head
    * by applying the given diffs.
    */
-  advance(expectedHead: Hash | undefined, newHead: Hash, diffs: InternalDiff) {
+  advance(expectedHead: Hash | undefined, newHead: Hash, diffs: NoIndexDiff) {
     assert(
       this.hash === expectedHead,
       () =>
@@ -84,22 +87,26 @@ export class IVMSourceBranch {
    * Fork the branch and patch it up to match the desired head.
    */
   async forkToHead(
+    reason: TransactionReason,
     store: Store,
-    expectedHead: Hash,
     desiredHead: Hash,
+    readOptions?: ZeroReadOptions | undefined,
   ): Promise<IVMSourceBranch> {
+    if (reason === 'initial') {
+      assert(
+        this.hash === desiredHead,
+        'main branch must be at desired head for `initial`',
+      );
+      return this;
+    }
+
     const fork = this.fork();
 
-    assert(
-      expectedHead === fork.hash,
-      () =>
-        `Expected head must match the main head. Got: ${expectedHead}, expected: ${fork.hash}`,
-    );
     if (fork.hash === desiredHead) {
       return fork;
     }
 
-    await patchBranch(desiredHead, store, fork);
+    await patchBranch(desiredHead, store, fork, readOptions);
     fork.hash = desiredHead;
     return fork;
   }
@@ -153,8 +160,14 @@ async function patchBranch(
   desiredHead: Hash,
   store: Store,
   fork: IVMSourceBranch,
+  readOptions: ZeroReadOptions | undefined,
 ) {
-  const diffs = await computeDiffs(must(fork.hash), desiredHead, store);
+  const diffs = await computeDiffs(
+    must(fork.hash),
+    desiredHead,
+    store,
+    readOptions,
+  );
   if (!diffs) {
     return;
   }
@@ -165,6 +178,7 @@ async function computeDiffs(
   startHash: Hash,
   endHash: Hash,
   store: Store,
+  readOptions: ZeroReadOptions | undefined,
 ): Promise<InternalDiff | undefined> {
   const readFn = (dagRead: Read) =>
     diff(
@@ -180,12 +194,18 @@ async function computeDiffs(
       FormatVersion.Latest,
     );
 
-  const diffs = await withRead(store, readFn);
+  let diffs: DiffsMap;
+  // openLazySourceRead handling coming in next PR
+  if (readOptions?.openLazyRead) {
+    diffs = await readFn(readOptions.openLazyRead);
+  } else {
+    diffs = await withRead(store, readFn);
+  }
 
   return diffs.get('');
 }
 
-function applyDiffs(diffs: InternalDiff, branch: IVMSourceBranch) {
+function applyDiffs(diffs: NoIndexDiff, branch: IVMSourceBranch) {
   for (
     let i = diffBinarySearch(diffs, ENTITIES_KEY_PREFIX, diff => diff.key);
     i < diffs.length;

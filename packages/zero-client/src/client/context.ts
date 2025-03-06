@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import type {Hash} from '../../../replicache/src/hash.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Input, Storage} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
@@ -13,16 +13,11 @@ import type {
 } from '../../../zql/src/query/query-impl.ts';
 import type {TTL} from '../../../zql/src/query/ttl.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
-import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 import type {QueryManager} from './query-manager.ts';
 
-export type AddQuery = (
-  ast: AST,
-  ttl: TTL,
-  gotCallback: GotCallback | undefined,
-) => () => void;
+export type AddQuery = QueryManager['add'];
 
-export type UpdateQuery = (ast: AST, ttl: TTL) => void;
+export type UpdateQuery = QueryManager['update'];
 
 /**
  * ZeroContext glues together zql and Replicache. It listens to changes in
@@ -35,7 +30,8 @@ export class ZeroContext implements QueryDelegate {
   // pipelines *synchronously* and the core Replicache infra is all async. So
   // that needs to be fixed.
   readonly #mainSources: IVMSourceBranch;
-  readonly #queryManager: QueryManager;
+  readonly #addQuery: AddQuery;
+  readonly #updateQuery: UpdateQuery;
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
@@ -46,12 +42,15 @@ export class ZeroContext implements QueryDelegate {
   constructor(
     lc: LogContext,
     mainSources: IVMSourceBranch,
-    queryManager: QueryManager,
+    addQuery: AddQuery,
+    updateQuery: UpdateQuery,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
     slowMaterializeThreshold: number,
   ) {
     this.#mainSources = mainSources;
-    this.#queryManager = queryManager;
+    this.#addQuery = addQuery;
+    this.#updateQuery = updateQuery;
+
     this.#batchViewUpdates = batchViewUpdates;
     this.lc = lc;
     this.slowMaterializeThreshold = slowMaterializeThreshold;
@@ -62,11 +61,11 @@ export class ZeroContext implements QueryDelegate {
   }
 
   addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback | undefined) {
-    return this.#queryManager.add(ast, ttl, gotCallback);
+    return this.#addQuery(ast, ttl, gotCallback);
   }
 
   updateServerQuery(ast: AST, ttl: TTL): void {
-    this.#queryManager.update(ast, ttl);
+    this.#updateQuery(ast, ttl);
   }
 
   onQueryMaterialized(hash: string, ast: AST, duration: number): void {
@@ -119,51 +118,14 @@ export class ZeroContext implements QueryDelegate {
     return result as T;
   }
 
-  processChanges(changes: NoIndexDiff) {
+  processChanges(
+    expectedHead: Hash | undefined,
+    newHead: Hash,
+    changes: NoIndexDiff,
+  ) {
     this.batchViewUpdates(() => {
-      // This will eventually call `this.#mainSources.advance` directly
       try {
-        for (const diff of changes) {
-          const {key} = diff;
-          assert(key.startsWith(ENTITIES_KEY_PREFIX));
-          const name = sourceNameFromKey(key);
-          const source = this.getSource(name);
-          if (!source) {
-            continue;
-          }
-
-          switch (diff.op) {
-            case 'del':
-              assert(typeof diff.oldValue === 'object');
-              source.push({
-                type: 'remove',
-                row: diff.oldValue as Row,
-              });
-              break;
-            case 'add':
-              assert(typeof diff.newValue === 'object');
-              source.push({
-                type: 'add',
-                row: diff.newValue as Row,
-              });
-              break;
-            case 'change':
-              assert(typeof diff.newValue === 'object');
-              assert(typeof diff.oldValue === 'object');
-
-              // Edit changes are not yet supported everywhere. For now we only
-              // generate them in tests.
-              source.push({
-                type: 'edit',
-                row: diff.newValue as Row,
-                oldRow: diff.oldValue as Row,
-              });
-
-              break;
-            default:
-              unreachable(diff);
-          }
-        }
+        this.#mainSources.advance(expectedHead, newHead, changes);
       } finally {
         this.#endTransaction();
       }
@@ -172,7 +134,17 @@ export class ZeroContext implements QueryDelegate {
 
   #endTransaction() {
     for (const listener of this.#commitListeners) {
-      listener();
+      try {
+        listener();
+      } catch (e) {
+        // We should not fatal the inner-workings of Zero due to the user's application
+        // code throwing an error.
+        // Hence we wrap notifications in a try-catch block.
+        this.lc?.error?.(
+          'Failed notifying a commit listener of IVM updates',
+          e,
+        );
+      }
     }
   }
 }
