@@ -2,7 +2,7 @@ import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import {wrapIterable} from '../../../shared/src/iterables.ts';
 import {type Read, type Store} from '../../../replicache/src/dag/store.ts';
-import {withRead} from '../../../replicache/src/with-transactions.ts';
+import {using, withRead} from '../../../replicache/src/with-transactions.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
 import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
@@ -19,6 +19,7 @@ import {diffBinarySearch} from '../../../replicache/src/subscriptions.ts';
 import {readFromHash} from '../../../replicache/src/db/read.ts';
 import type {ZeroReadOptions} from '../../../replicache/src/replicache-options.ts';
 import type {TransactionReason} from '../../../replicache/src/transactions.ts';
+import type {LazyStore} from '../../../replicache/src/dag/lazy-store.ts';
 
 /**
  * Replicache needs to rebase mutations onto different
@@ -88,7 +89,7 @@ export class IVMSourceBranch {
    */
   async forkToHead(
     reason: TransactionReason,
-    store: Store,
+    store: LazyStore,
     desiredHead: Hash,
     readOptions?: ZeroReadOptions | undefined,
   ): Promise<IVMSourceBranch> {
@@ -158,7 +159,7 @@ export async function initFromStore(
 
 async function patchBranch(
   desiredHead: Hash,
-  store: Store,
+  store: LazyStore,
   fork: IVMSourceBranch,
   readOptions: ZeroReadOptions | undefined,
 ) {
@@ -177,7 +178,7 @@ async function patchBranch(
 async function computeDiffs(
   startHash: Hash,
   endHash: Hash,
-  store: Store,
+  store: LazyStore,
   readOptions: ZeroReadOptions | undefined,
 ): Promise<InternalDiff | undefined> {
   const readFn = (dagRead: Read) =>
@@ -195,8 +196,9 @@ async function computeDiffs(
     );
 
   let diffs: DiffsMap;
-  // openLazySourceRead handling coming in next PR
-  if (readOptions?.openLazyRead) {
+  if (readOptions?.openLazySourceRead) {
+    diffs = await using(store.read(readOptions.openLazySourceRead), readFn);
+  } else if (readOptions?.openLazyRead) {
     diffs = await readFn(readOptions.openLazyRead);
   } else {
     diffs = await withRead(store, readFn);

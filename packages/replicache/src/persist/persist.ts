@@ -145,9 +145,7 @@ export async function persistDD31(
 
   let memdagBaseSnapshotPersisted = false;
   const zeroDataForMemdagBaseSnapshot =
-    getZeroData === undefined
-      ? undefined
-      : await getZeroData('rebase', memdagBaseSnapshot.chunk.hash);
+    getZeroData && (await getZeroData('rebase', memdagBaseSnapshot.chunk.hash));
 
   await withWrite(perdag, async perdagWrite => {
     const [mainClientGroup, latestPerdagMainClientGroupHeadCommit] =
@@ -224,11 +222,10 @@ export async function persistDD31(
     let zeroDataForPerdagHeadCommit: ZeroTxData | undefined;
     if (!memdagBaseSnapshotPersisted) {
       zeroDataForPerdagHeadCommit =
-        getZeroData === undefined
-          ? undefined
-          : await getZeroData('rebase', newMainClientGroupHeadHash, {
-              openLazySourceRead: perdagWrite,
-            });
+        getZeroData &&
+        (await getZeroData('rebase', newMainClientGroupHeadHash, {
+          openLazySourceRead: perdagWrite,
+        }));
     }
 
     // rebase new memdag mutations onto perdag
