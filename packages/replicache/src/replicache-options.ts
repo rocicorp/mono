@@ -4,12 +4,19 @@ import type {StoreProvider} from './kv/store.ts';
 import type {Puller} from './puller.ts';
 import type {Pusher} from './pusher.ts';
 import type {MutatorDefs, RequestOptions} from './types.ts';
+import type {Hash} from './hash.ts';
+import type {MaybePromise} from '../../shared/src/types.ts';
+import type {InternalDiff} from './btree/node.ts';
+import type {Store} from './dag/store.ts';
 
 /**
  * The options passed to {@link Replicache}.
  */
 
-export interface ReplicacheOptions<MD extends MutatorDefs> {
+export interface ReplicacheOptions<
+  MD extends MutatorDefs,
+  TZeroData = unknown,
+> {
   /**
    * This is the URL to the server endpoint dealing with the push updates. See
    * [Push Endpoint Reference](https://doc.replicache.dev/reference/server-push) for more
@@ -223,4 +230,37 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
    * instance.
    */
   clientMaxAgeMs?: number | undefined;
+
+  /**
+   * Internal option used by Zero.
+   * Replicache will call this to and, if zero is enabled, will
+   * invoke various hooks to allow Zero the keep IVM in sync with Replicache's b-trees.
+   */
+  zero?: ZeroOption<TZeroData> | undefined;
 }
+
+/**
+ * Minimal interface that Replicache needs to communicate with Zero.
+ * Prevents us from creating any direct dependencies on Zero.
+ */
+export type ZeroOption<T> = {
+  /**
+   * Allow Zero to initialize its IVM state from the given hash and store.
+   */
+  init(hash: Hash, store: Store): Promise<void>;
+
+  /**
+   * When a refresh, persist, or pullEnd occurs Zero must fork its IVM sources
+   * for use in rebase operations. Replicache will call zero during these
+   * operations so it can fork its IVM state to the desired head.
+   *
+   * The data returned by `getTxData` will be available on the Replicache transaction
+   * object for use in Zero's mutators.
+   */
+  getTxData(expectedHead: Hash, desiredHead: Hash): MaybePromise<T>;
+
+  /**
+   * When Replicache's main head moves forward, Zero must advance its IVM state.
+   */
+  advance(hash: Hash, changes: InternalDiff): Promise<void>;
+};
