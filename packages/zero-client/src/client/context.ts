@@ -140,10 +140,7 @@ export class ZeroContext implements QueryDelegate {
         // We should not fatal the inner-workings of Zero due to the user's application
         // code throwing an error.
         // Hence we wrap notifications in a try-catch block.
-        this.lc?.error?.(
-          'Failed notifying a commit listener of IVM updates',
-          e,
-        );
+        this.lc.error?.('Failed notifying a commit listener of IVM updates', e);
       }
     }
   }
