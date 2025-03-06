@@ -491,7 +491,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
   }
 
-  async #updatePatchesForDesiredQueries(
+  async #updateCVRConfig(
     lc: LogContext,
     cvr: CVRSnapshot,
     fn: (updater: CVRConfigDrivenUpdater) => PatchToVersion[],
@@ -520,6 +520,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       pokers.forEach(poker => poker.end(newCVR.version));
     }
 
+    if (this.#pipelinesSynced) {
+      await this.#syncQueryPipelineSet(lc, this.#cvr);
+    }
+
     return this.#cvr;
   }
 
@@ -534,8 +538,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const deletedClientGroupIDs: string[] = [];
 
     if (clientIDs?.length || clientGroupIDs?.length) {
-      // cvr = ... For #syncQueryPipelineSet().
-      cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater => {
+      await this.#updateCVRConfig(lc, cvr, updater => {
         const patches: PatchToVersion[] = [];
         if (clientIDs) {
           for (const cid of clientIDs) {
@@ -557,10 +560,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       });
     }
 
-    if (this.#pipelinesSynced) {
-      await this.#syncQueryPipelineSet(lc, cvr);
-    }
-
     // Send 'deleteClients' to the clients.
     if (deletedClientIDs.length || deletedClientGroupIDs.length) {
       const clients = this.#getClients();
@@ -578,13 +577,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Promise<void> => {
     lc.debug?.('closing connection');
 
-    cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater =>
+    await this.#updateCVRConfig(lc, cvr, updater =>
       updater.deleteClient(clientID),
     );
-
-    if (this.#pipelinesSynced) {
-      await this.#syncQueryPipelineSet(lc, cvr);
-    }
 
     for (const client of this.#getClients()) {
       if (client.clientID !== clientID) {
@@ -677,7 +672,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (desiredQueriesPatch.length) {
         lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
         // cvr = ... For #syncQueryPipelineSet().
-        cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater => {
+        cvr = await this.#updateCVRConfig(lc, cvr, updater => {
           const now = Date.now();
           const patches: PatchToVersion[] = [];
           for (const patch of desiredQueriesPatch) {
@@ -701,10 +696,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
           return patches;
         });
-      }
-
-      if (this.#pipelinesSynced) {
-        await this.#syncQueryPipelineSet(lc, cvr);
       }
 
       this.#scheduleExpireEviction(lc, cvr);
