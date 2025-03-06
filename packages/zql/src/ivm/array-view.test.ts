@@ -115,11 +115,14 @@ test('single-format', () => {
   expect(data).toEqual({a: 1, b: 'a'});
   expect(callCount).toBe(1);
 
-  // trying to add another element should NOT be an error
+  // trying to add another element should be an error
   // pipeline should have been configured with a limit of one
-  expect(() => ms.push({row: {a: 2, b: 'b'}, type: 'add'})).not.toThrow();
-  // Remove again to get ref count down to 1.
-  ms.push({row: {a: 2, b: 'b'}, type: 'remove'});
+  expect(() => ms.push({row: {a: 2, b: 'b'}, type: 'add'})).toThrow(
+    'single output already exists',
+  );
+
+  // Adding the same element is not an error in the ArrayView but it is an error
+  // in the Source. This case is tested in view-apply-change.ts.
 
   ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
 

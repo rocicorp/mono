@@ -179,14 +179,15 @@ export function applyChange(
     }
     case 'remove': {
       if (singular) {
-        assertObject(parentEntry[relationship]);
-        const rc = must(refCountMap.get(parentEntry[relationship]));
+        const oldEntry = parentEntry[relationship] as Entry | undefined;
+        assert(oldEntry !== undefined, 'node does not exist');
+        const rc = must(refCountMap.get(oldEntry));
         if (rc === 1) {
-          refCountMap.delete(parentEntry[relationship]);
+          refCountMap.delete(oldEntry);
           // @ts-expect-error parentEntry is readonly
           parentEntry[relationship] = undefined;
         } else {
-          refCountMap.set(parentEntry[relationship], rc - 1);
+          refCountMap.set(oldEntry, rc - 1);
         }
       } else {
         const view = getChildEntryList(parentEntry, relationship);
