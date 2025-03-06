@@ -312,6 +312,7 @@ export function maybeEndPull<M extends LocalMeta>(
 ): Promise<{
   syncHead: Hash;
   mainHead: Hash;
+  oldMainHead: Hash;
   replayMutations: Commit<M>[];
   diffs: DiffsMap;
 }> {
@@ -336,7 +337,7 @@ export function maybeEndPull<M extends LocalMeta>(
     // TODO: In DD31, it is expected that a newer snapshot might have appeared
     // on the main chain. In that case, we just abort this pull.
     const syncSnapshot = await baseSnapshotFromHash(syncHeadHash, dagRead);
-    let mainHeadHash = await dagRead.getHead(DEFAULT_HEAD_NAME);
+    const mainHeadHash = await dagRead.getHead(DEFAULT_HEAD_NAME);
     if (mainHeadHash === undefined) {
       throw new Error('Missing main head');
     }
@@ -381,6 +382,7 @@ export function maybeEndPull<M extends LocalMeta>(
     if (pending.length > 0) {
       return {
         syncHead: syncHeadHash,
+        oldMainHead: mainHeadHash,
         mainHead: mainHeadHash,
         replayMutations: pending,
         // The changed keys are not reported when further replays are
@@ -425,7 +427,7 @@ export function maybeEndPull<M extends LocalMeta>(
     ]);
     await dagWrite.commit();
     // main head was set to sync head
-    mainHeadHash = syncHeadHash;
+    const newMainHeadHash = syncHeadHash;
 
     if (lc.debug) {
       const [oldLastMutationID, oldCookie] = snapshotMetaParts(
@@ -458,7 +460,8 @@ export function maybeEndPull<M extends LocalMeta>(
 
     return {
       syncHead: syncHeadHash,
-      mainHead: mainHeadHash,
+      oldMainHead: mainHeadHash,
+      mainHead: newMainHeadHash,
       replayMutations: [],
       diffs: diffsMap,
     };

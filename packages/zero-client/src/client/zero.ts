@@ -1,6 +1,5 @@
 import {LogContext, type LogLevel} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
-import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
@@ -103,7 +102,6 @@ import {
   toWSString,
 } from './http-string.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
-import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
   DID_NOT_CONNECT_VALUE,
@@ -136,6 +134,7 @@ import {
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
+import {ZeroRep} from './zero-rep.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -492,11 +491,21 @@ export class Zero<
       licenseKey: 'zero-client-static-key',
       kvStore,
     };
+
+    this.#zeroContext = new ZeroContext(
+      new LogContext(logOptions.logLevel, {}, logOptions.logSink),
+      this.#ivmMain,
+      (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
+      batchViewUpdates,
+      slowMaterializeThreshold,
+    );
+
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
       enableMutationRecovery: false,
       onClientsDeleted: (clientIDs, clientGroupIDs) =>
         this.#deleteClientsManager.onClientsDeleted(clientIDs, clientGroupIDs),
+      zero: new ZeroRep(this.#zeroContext, this.#ivmMain),
     };
 
     const rep = new ReplicacheImpl(replicacheOptions, replicacheImplOptions);
@@ -579,22 +588,6 @@ export class Zero<
       msg => this.#send(msg),
       rep.perdag,
       this.#lc,
-    );
-
-    this.#zeroContext = new ZeroContext(
-      this.#lc,
-      this.#ivmMain,
-      (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
-      batchViewUpdates,
-      slowMaterializeThreshold,
-    );
-
-    rep.experimentalWatch(
-      diff => this.#zeroContext.processChanges(diff as NoIndexDiff),
-      {
-        prefix: ENTITIES_KEY_PREFIX,
-        initialValuesInFirstDiff: true,
-      },
     );
 
     this.query = this.#registerQueries(schema);
