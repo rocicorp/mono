@@ -27,7 +27,7 @@ async function run() {
     process.argv.slice(2),
     'ZERO_',
   );
-  const db = postgres(upstream.db, {max: Math.min(1, qps / 10)});
+  const db = postgres(upstream.db, {max: Math.max(1, qps / 10)});
 
   const assignments = [`${id(perturb.key)} = ${id(perturb.key)}`];
   perturb.bools?.forEach(col =>

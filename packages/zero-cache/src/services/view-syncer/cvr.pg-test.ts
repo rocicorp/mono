@@ -1,4 +1,4 @@
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
@@ -4555,6 +4555,7 @@ describe('view-syncer/cvr', () => {
   });
 
   test('deleteClient', async () => {
+    vi.setSystemTime(Date.UTC(2024, 2, 6));
     const initialState: DBState = {
       instances: [
         {
@@ -4681,7 +4682,7 @@ describe('view-syncer/cvr', () => {
       lc,
       true,
       LAST_CONNECT,
-      Date.UTC(2024, 3, 23, 1),
+      Date.now(),
     );
     expect(updated).toMatchInlineSnapshot(`
       {
@@ -4700,7 +4701,7 @@ describe('view-syncer/cvr', () => {
           },
         },
         "id": "abc123",
-        "lastActive": 1713834000000,
+        "lastActive": 1709683200000,
         "queries": {
           "oneHash": {
             "ast": {
@@ -4713,6 +4714,14 @@ describe('view-syncer/cvr', () => {
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
+                },
+              },
+              "client-b": {
+                "inactivatedAt": 1709683200000,
+                "ttl": undefined,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1aa",
                 },
               },
               "client-c": {
@@ -4740,12 +4749,12 @@ describe('view-syncer/cvr', () => {
     expect(flushed).toMatchInlineSnapshot(`
       {
         "clients": 1,
-        "desires": 2,
+        "desires": 1,
         "instances": 2,
         "queries": 1,
         "rows": 0,
         "rowsDeferred": 0,
-        "statements": 7,
+        "statements": 6,
       }
     `);
 
@@ -4784,12 +4793,21 @@ describe('view-syncer/cvr', () => {
             "queryHash": "oneHash",
             "ttl": null,
           },
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-b",
+            "deleted": true,
+            "inactivatedAt": 1709683200000,
+            "patchVersion": "1aa:01",
+            "queryHash": "oneHash",
+            "ttl": null,
+          },
         ],
         "instances": Result [
           {
             "clientGroupID": "abc123",
             "grantedAt": 1709251200000,
-            "lastActive": 1713834000000,
+            "lastActive": 1709683200000,
             "owner": "my-task",
             "replicaVersion": "120",
             "version": "1aa:01",
@@ -5067,6 +5085,15 @@ describe('view-syncer/cvr', () => {
           {
             "clientGroupID": "abc123",
             "clientID": "client-a",
+            "deleted": null,
+            "inactivatedAt": null,
+            "patchVersion": "1a9:01",
+            "queryHash": "oneHash",
+            "ttl": null,
+          },
+          {
+            "clientGroupID": "def456",
+            "clientID": "client-b",
             "deleted": null,
             "inactivatedAt": null,
             "patchVersion": "1a9:01",

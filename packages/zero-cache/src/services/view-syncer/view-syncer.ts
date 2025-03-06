@@ -16,24 +16,16 @@ import {hasOwn} from '../../../../shared/src/has-own.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
-import type {
-  ChangeDesiredQueriesBody,
-  ChangeDesiredQueriesMessage,
-} from '../../../../zero-protocol/src/change-desired-queries.ts';
-import type {
-  CloseConnectionBody,
-  CloseConnectionMessage,
-} from '../../../../zero-protocol/src/close-connection.ts';
+import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/change-desired-queries.ts';
+import type {CloseConnectionMessage} from '../../../../zero-protocol/src/close-connection.ts';
 import type {
   InitConnectionBody,
   InitConnectionMessage,
 } from '../../../../zero-protocol/src/connect.ts';
-import type {
-  DeleteClientsBody,
-  DeleteClientsMessage,
-} from '../../../../zero-protocol/src/delete-clients.ts';
+import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import type {Upstream} from '../../../../zero-protocol/src/up.ts';
 import {transformAndHashQuery} from '../../auth/read-authorizer.ts';
 import {stringify} from '../../types/bigint-json.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
@@ -441,7 +433,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       void this.#runInLockForClient(
         ctx,
         initConnectionMessage,
-        this.#handleInitConnection,
+        this.#handleConfigUpdate,
         newClient,
       ).catch(e => newClient.fail(e));
 
@@ -449,24 +441,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
-  readonly #handleInitConnection = async (
-    lc: LogContext,
-    clientID: string,
-    body: InitConnectionBody,
-    cvr: CVRSnapshot,
-  ): Promise<void> => {
-    const {deleted} = body;
-    if (deleted && (deleted.clientIDs || deleted.clientGroupIDs)) {
-      await this.#deleteClients(lc, clientID, deleted, cvr);
-    }
-    await this.#patchQueries(lc, clientID, body, cvr);
-  };
-
   async changeDesiredQueries(
     ctx: SyncContext,
     msg: ChangeDesiredQueriesMessage,
   ): Promise<void> {
-    await this.#runInLockForClient(ctx, msg, this.#patchQueries);
+    await this.#runInLockForClient(ctx, msg, this.#handleConfigUpdate);
   }
 
   async deleteClients(
@@ -474,7 +453,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     msg: DeleteClientsMessage,
   ): Promise<void> {
     try {
-      await this.#runInLockForClient(ctx, msg, this.#deleteClients);
+      await this.#runInLockForClient(
+        ctx,
+        [msg[0], {deleted: msg[1]}],
+        this.#handleConfigUpdate,
+      );
     } catch (e) {
       this.#lc.error?.('deleteClients failed', e);
     }
@@ -485,13 +468,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     msg: CloseConnectionMessage,
   ): Promise<void> {
     try {
-      await this.#runInLockForClient(ctx, msg, this.#closeConnection);
+      await this.#runInLockForClient(
+        ctx,
+        [msg[0], {deleted: {clientIDs: [ctx.clientID]}}],
+        this.#handleConfigUpdate,
+      );
     } catch (e) {
       this.#lc.error?.('closeConnection failed', e);
     }
   }
 
-  async #updatePatchesForDesiredQueries(
+  async #updateCVRConfig(
     lc: LogContext,
     cvr: CVRSnapshot,
     fn: (updater: CVRConfigDrivenUpdater) => PatchToVersion[],
@@ -520,78 +507,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       pokers.forEach(poker => poker.end(newCVR.version));
     }
 
+    if (this.#pipelinesSynced) {
+      await this.#syncQueryPipelineSet(lc, this.#cvr);
+    }
+
     return this.#cvr;
   }
-
-  // eslint-disable-next-line require-await
-  readonly #deleteClients = async (
-    lc: LogContext,
-    clientID: string,
-    {clientIDs, clientGroupIDs}: DeleteClientsBody,
-    cvr: CVRSnapshot,
-  ): Promise<void> => {
-    const deletedClientIDs: string[] = [];
-    const deletedClientGroupIDs: string[] = [];
-
-    if (clientIDs?.length || clientGroupIDs?.length) {
-      // cvr = ... For #syncQueryPipelineSet().
-      cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater => {
-        const patches: PatchToVersion[] = [];
-        if (clientIDs) {
-          for (const cid of clientIDs) {
-            assert(cid !== clientID, 'cannot delete self');
-            const patchesDueToClient = updater.deleteClient(cid);
-            patches.push(...patchesDueToClient);
-            deletedClientIDs.push(cid);
-          }
-        }
-
-        if (clientGroupIDs) {
-          for (const clientGroupID of clientGroupIDs) {
-            assert(clientGroupID !== this.id, 'cannot delete self');
-            updater.deleteClientGroup(clientGroupID);
-          }
-        }
-
-        return patches;
-      });
-    }
-
-    if (this.#pipelinesSynced) {
-      await this.#syncQueryPipelineSet(lc, cvr);
-    }
-
-    // Send 'deleteClients' to the clients.
-    if (deletedClientIDs.length || deletedClientGroupIDs.length) {
-      const clients = this.#getClients();
-      for (const client of clients) {
-        client.sendDeleteClients(lc, deletedClientIDs, deletedClientGroupIDs);
-      }
-    }
-  };
-
-  readonly #closeConnection = async (
-    lc: LogContext,
-    clientID: string,
-    _body: CloseConnectionBody,
-    cvr: CVRSnapshot,
-  ): Promise<void> => {
-    lc.debug?.('closing connection');
-
-    cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater =>
-      updater.deleteClient(clientID),
-    );
-
-    if (this.#pipelinesSynced) {
-      await this.#syncQueryPipelineSet(lc, cvr);
-    }
-
-    for (const client of this.#getClients()) {
-      if (client.clientID !== clientID) {
-        client.sendDeleteClients(lc, [clientID], []);
-      }
-    }
-  };
 
   /**
    * Runs the given `fn` to process the `msg` from within the `#lock`,
@@ -603,6 +524,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     fn: (
       lc: LogContext,
       clientID: string,
+      cmd: M[0],
       body: B,
       cvr: CVRSnapshot,
     ) => Promise<void>,
@@ -636,7 +558,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             }
 
             lc.debug?.(cmd, body);
-            return fn(lc, clientID, body, cvr);
+            return fn(lc, clientID, cmd, body, cvr);
           });
         } catch (e) {
           const lc = this.#lc
@@ -666,20 +588,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   // Must be called from within #lock.
-  readonly #patchQueries = (
+  readonly #handleConfigUpdate = (
     lc: LogContext,
     clientID: string,
-    {desiredQueriesPatch}: ChangeDesiredQueriesBody,
+    cmd: Upstream[0],
+    {deleted, desiredQueriesPatch}: Partial<InitConnectionBody>,
     cvr: CVRSnapshot,
   ) =>
     startAsyncSpan(tracer, 'vs.#patchQueries', async () => {
-      // Apply requested patches.
-      if (desiredQueriesPatch.length) {
-        lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
-        // cvr = ... For #syncQueryPipelineSet().
-        cvr = await this.#updatePatchesForDesiredQueries(lc, cvr, updater => {
+      const deletedClientIDs: string[] = [];
+      const deletedClientGroupIDs: string[] = [];
+
+      cvr = await this.#updateCVRConfig(lc, cvr, updater => {
+        const patches: PatchToVersion[] = [];
+
+        // Apply requested patches.
+        if (desiredQueriesPatch?.length) {
+          lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
           const now = Date.now();
-          const patches: PatchToVersion[] = [];
           for (const patch of desiredQueriesPatch) {
             switch (patch.op) {
               case 'put':
@@ -699,12 +625,39 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                 break;
             }
           }
-          return patches;
-        });
-      }
+        }
 
-      if (this.#pipelinesSynced) {
-        await this.#syncQueryPipelineSet(lc, cvr);
+        if (deleted?.clientIDs?.length || deleted?.clientGroupIDs?.length) {
+          if (deleted?.clientIDs) {
+            for (const cid of deleted.clientIDs) {
+              if (cmd === 'closeConnection') {
+                assert(cid === clientID, 'cannot close other clients');
+              } else {
+                assert(cid !== clientID, 'cannot delete self');
+              }
+              const patchesDueToClient = updater.deleteClient(cid);
+              patches.push(...patchesDueToClient);
+              deletedClientIDs.push(cid);
+            }
+          }
+
+          if (deleted?.clientGroupIDs) {
+            for (const clientGroupID of deleted.clientGroupIDs) {
+              assert(clientGroupID !== this.id, 'cannot delete self');
+              updater.deleteClientGroup(clientGroupID);
+            }
+          }
+        }
+
+        return patches;
+      });
+
+      // Send 'deleteClients' to the clients.
+      if (deletedClientIDs.length || deletedClientGroupIDs.length) {
+        const clients = this.#getClients();
+        for (const client of clients) {
+          client.sendDeleteClients(lc, deletedClientIDs, deletedClientGroupIDs);
+        }
       }
 
       this.#scheduleExpireEviction(lc, cvr);

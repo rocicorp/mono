@@ -387,8 +387,13 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       return [];
     }
 
-    // When a client is deleted we remove the desired queries and the client itself.
-    const patches = this.deleteDesiredQueries(clientID, client.desiredQueryIDs);
+    // When a client is deleted we mark all of its desired queries as inactive.
+    // They will then be removed when the queries expire.
+    const patches = this.markDesiredQueriesAsInactive(
+      clientID,
+      client.desiredQueryIDs,
+      Date.now(),
+    );
     delete this._cvr.clients[clientID];
     this._cvrStore.deleteClient(clientID);
 

@@ -8,10 +8,10 @@ import * as v from '../../../packages/shared/src/valita.ts';
 const options = {
   pids: v.array(v.number()),
   display: {
-    intervalSeconds: v.number().default(1),
+    intervalSeconds: v.number().default(10),
   },
   output: {
-    every: v.number().default(60),
+    every: v.number().default(1),
     file: v.string().optional(),
   },
 };
