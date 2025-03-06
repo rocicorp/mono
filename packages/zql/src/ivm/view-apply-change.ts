@@ -48,13 +48,22 @@ type EditViewChange = {
   oldNode: RowOnlyNode;
 };
 
+/**
+ * This is a subset of WeakMap but restricted to what we need.
+ */
+export interface RefCountMap {
+  get(entry: Entry): number | undefined;
+  set(entry: Entry, refCount: number): void;
+  delete(entry: Entry): boolean;
+}
+
 export function applyChange(
   parentEntry: Entry,
   change: ViewChange,
   schema: SourceSchema,
   relationship: string,
   format: Format,
-  refCountMap: WeakMap<Entry, number>,
+  refCountMap: RefCountMap,
 ) {
   if (schema.isHidden) {
     switch (change.type) {
@@ -111,6 +120,10 @@ export function applyChange(
       if (singular) {
         const oldEntry = parentEntry[relationship] as Entry | undefined;
         if (oldEntry !== undefined) {
+          assert(
+            schema.compareRows(oldEntry, newEntry) === 0,
+            'single output already exists',
+          );
           // adding same again.
           const rc = must(refCountMap.get(oldEntry));
           refCountMap.delete(oldEntry);

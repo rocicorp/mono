@@ -1,6 +1,7 @@
 import {
   createStore,
   produce,
+  unwrap,
   type SetStoreFunction,
   type Store,
 } from 'solid-js/store';
@@ -20,6 +21,7 @@ import {
   type ViewFactory,
 } from '../../zero-advanced/src/mod.js';
 import type {Schema} from '../../zero-schema/src/mod.js';
+import type {RefCountMap} from '../../zql/src/ivm/view-apply-change.ts';
 
 export type QueryResultDetails = {
   readonly type: ResultType;
@@ -29,6 +31,24 @@ type State = [Entry, QueryResultDetails];
 
 const complete = {type: 'complete'} as const;
 const unknown = {type: 'unknown'} as const;
+
+/**
+ * We need this class since Solid wraps the underlying object in a proxy
+ * and we need to store the ref count on the underlying object.
+ */
+class SolidRefCountMap implements RefCountMap {
+  readonly #map = new WeakMap<Entry, number>();
+
+  get(entry: Entry): number | undefined {
+    return this.#map.get(unwrap(entry));
+  }
+  set(entry: Entry, refCount: number): void {
+    this.#map.set(unwrap(entry), refCount);
+  }
+  delete(entry: Entry): boolean {
+    return this.#map.delete(unwrap(entry));
+  }
+}
 
 export class SolidView<V> implements Output {
   readonly #input: Input;
@@ -48,7 +68,7 @@ export class SolidView<V> implements Output {
   // optimization reduced #applyChanges time from 743ms to 133ms.
   #builderRoot: Entry | undefined;
   #pendingChanges: ViewChange[] = [];
-  readonly #refCountMap = new WeakMap<Entry, number>();
+  readonly #refCountMap = new SolidRefCountMap();
 
   constructor(
     input: Input,
