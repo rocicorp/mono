@@ -6,7 +6,7 @@ import type {Pusher} from './pusher.ts';
 import type {MutatorDefs, RequestOptions} from './types.ts';
 import type {Hash} from './hash.ts';
 import type {InternalDiff} from './btree/node.ts';
-import type {Store} from './dag/store.ts';
+import type {Read, Store} from './dag/store.ts';
 
 /**
  * The options passed to {@link Replicache}.
@@ -271,7 +271,16 @@ export type ZeroOption = {
    * The data returned by `getTxData` will be available on the Replicache transaction
    * object for use in Zero's mutators.
    */
-  getTxData(expectedHead: Hash, desiredHead: Hash): Promise<ZeroTxData>;
+  getTxData(
+    expectedHead: Hash,
+    desiredHead: Hash,
+    readOptions?:
+      | {
+          openLazyRead?: Read | undefined;
+          openLazySourceRead?: Read | undefined;
+        }
+      | undefined,
+  ): Promise<ZeroTxData>;
 
   /**
    * When Replicache's main head moves forward, Zero must advance its IVM state.
