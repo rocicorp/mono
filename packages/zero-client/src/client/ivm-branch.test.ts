@@ -399,7 +399,7 @@ describe('forkToHead', () => {
       timestamp++,
     );
     await initFromStore(branch, syncHash, dagStore);
-    await branch.forkToHead(dagStore, syncHash);
+    await branch.forkToHead('rebase', dagStore, syncHash);
     expect([
       ...must(branch.getSource('issue'))
         .connect([['id', 'asc']])
@@ -444,7 +444,7 @@ describe('forkToHead', () => {
     } as unknown as FrozenJSONValue);
     const head = await w.commit(SYNC_HEAD_NAME);
 
-    const fork = await branch.forkToHead(dagStore, head);
+    const fork = await branch.forkToHead('rebase', dagStore, head);
     expect([
       ...must(fork.getSource('issue'))
         .connect([['id', 'asc']])
@@ -465,7 +465,7 @@ describe('forkToHead', () => {
     `);
 
     // can also re-wind the fork to the original head
-    const fork2 = await fork.forkToHead(dagStore, syncHash);
+    const fork2 = await fork.forkToHead('rebase', dagStore, syncHash);
     expect([
       ...must(fork2.getSource('issue'))
         .connect([['id', 'asc']])
