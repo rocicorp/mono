@@ -2,7 +2,7 @@ import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
-import type {Change, ChildChange} from './change.ts';
+import type {Change, ChildChange, EditChange} from './change.ts';
 import {valuesEqual, type Node} from './data.ts';
 import {
   throwOutput,
@@ -29,6 +29,23 @@ type Args = {
   hidden: boolean;
   system: System;
 };
+
+type ChildChangeOverlay =
+  // A 'add', 'remove', 'child' change, or a 'edit' change
+  // that is not split into a 'remove' from some parents and add
+  // to new 'parents' due to join key value changes.
+  | {
+      type: 'simple';
+      change: Change;
+      position: Row | undefined;
+    }
+  | {
+      type: 'split-edit';
+      phase: 'remove' | 'add';
+      change: EditChange;
+      position: Row | undefined;
+    };
+
 /**
  * The Join operator joins the output from two upstream inputs. Zero's join
  * is a little different from SQL's join in that we output hierarchical data,
@@ -49,6 +66,9 @@ export class Join implements Input {
   readonly #schema: SourceSchema;
 
   #output: Output = throwOutput;
+
+  #inProgressChildChange: ChildChangeOverlay | undefined;
+  #inProgressParentSplitEdit: EditChange | undefined;
 
   constructor({
     parent,
@@ -109,6 +129,15 @@ export class Join implements Input {
 
   *fetch(req: FetchRequest): Stream<Node> {
     for (const parentNode of this.#parent.fetch(req)) {
+      if (
+        this.#inProgressParentSplitEdit &&
+        this.getSchema().compareRows(
+          parentNode.row,
+          this.#inProgressParentSplitEdit.node.row,
+        ) === 0
+      ) {
+        continue;
+      }
       yield this.#processParentNode(
         parentNode.row,
         parentNode.relationships,
@@ -187,10 +216,15 @@ export class Join implements Input {
             ),
           });
         } else {
-          this.#pushParent({
-            type: 'remove',
-            node: change.oldNode,
-          });
+          this.#inProgressParentSplitEdit = change;
+          try {
+            this.#pushParent({
+              type: 'remove',
+              node: change.oldNode,
+            });
+          } finally {
+            this.#inProgressParentSplitEdit = undefined;
+          }
           this.#pushParent({
             type: 'add',
             node: change.node,
@@ -206,6 +240,13 @@ export class Join implements Input {
 
   #pushChild(change: Change): void {
     const pushChildChange = (childRow: Row, change: Change) => {
+      if (!this.#inProgressChildChange) {
+        this.#inProgressChildChange = {
+          type: 'simple',
+          change,
+          position: undefined,
+        };
+      }
       const parentNodes = this.#parent.fetch({
         constraint: Object.fromEntries(
           this.#parentKey.map((key, i) => [key, childRow[this.#childKey[i]]]),
@@ -213,6 +254,7 @@ export class Join implements Input {
       });
 
       for (const parentNode of parentNodes) {
+        this.#inProgressChildChange.position = parentNode.row;
         const childChange: ChildChange = {
           type: 'child',
           node: this.#processParentNode(
@@ -229,40 +271,156 @@ export class Join implements Input {
       }
     };
 
-    switch (change.type) {
-      case 'add':
-      case 'remove':
-        pushChildChange(change.node.row, change);
-        break;
-      case 'child':
-        pushChildChange(change.node.row, change);
-        break;
-      case 'edit': {
-        const childRow = change.node.row;
-        const oldChildRow = change.oldNode.row;
-        if (rowEqualsForCompoundKey(oldChildRow, childRow, this.#childKey)) {
-          // The child row was edited in a way that does not change the relationship.
-          // We can therefore just push the change down (wrapped in a child change).
-          pushChildChange(childRow, change);
-        } else {
-          // The child row was edited in a way that changes the relationship. We
-          // therefore treat this as a remove from the old row followed by an
-          // add to the new row.
-          pushChildChange(oldChildRow, {
-            type: 'remove',
-            node: change.oldNode,
-          });
-          pushChildChange(childRow, {
-            type: 'add',
-            node: change.node,
-          });
+    try {
+      switch (change.type) {
+        case 'add':
+        case 'remove':
+          pushChildChange(change.node.row, change);
+          break;
+        case 'child':
+          pushChildChange(change.node.row, change);
+          break;
+        case 'edit': {
+          const childRow = change.node.row;
+          const oldChildRow = change.oldNode.row;
+          if (rowEqualsForCompoundKey(oldChildRow, childRow, this.#childKey)) {
+            // The child row was edited in a way that does not change the relationship.
+            // We can therefore just push the change down (wrapped in a child change).
+            pushChildChange(childRow, change);
+          } else {
+            // The child row was edited in a way that changes the relationship. We
+            // therefore treat this as a remove of the old row followed by an
+            // add of the new row.
+            this.#inProgressChildChange = {
+              type: 'split-edit',
+              phase: 'remove',
+              change,
+              position: undefined,
+            };
+            pushChildChange(oldChildRow, {
+              type: 'remove',
+              node: change.oldNode,
+            });
+            this.#inProgressChildChange = {
+              type: 'split-edit',
+              phase: 'add',
+              change,
+              position: undefined,
+            };
+            pushChildChange(childRow, {
+              type: 'add',
+              node: change.node,
+            });
+          }
+          break;
         }
-        break;
-      }
 
-      default:
-        unreachable(change);
+        default:
+          unreachable(change);
+      }
+    } finally {
+      this.#inProgressChildChange = undefined;
     }
+  }
+
+  *#generateChildStreamWithOverlay(
+    stream: Stream<Node>,
+    overlay: Change,
+  ): Stream<Node> {
+    let applied = false;
+    let editOldApplied = false;
+    let editNewApplied = false;
+    for (const child of stream) {
+      let yieldChild = true;
+      if (!applied) {
+        switch (overlay.type) {
+          case 'add': {
+            if (
+              this.#child
+                .getSchema()
+                .compareRows(overlay.node.row, child.row) === 0
+            ) {
+              applied = true;
+              yieldChild = false;
+            }
+            break;
+          }
+          case 'remove': {
+            if (
+              this.#child.getSchema().compareRows(overlay.node.row, child.row) <
+              0
+            ) {
+              applied = true;
+              yield overlay.node;
+            }
+            break;
+          }
+          case 'edit': {
+            if (
+              this.#child
+                .getSchema()
+                .compareRows(overlay.oldNode.row, child.row) < 0
+            ) {
+              editOldApplied = true;
+              if (editNewApplied) {
+                applied = true;
+              }
+              yield overlay.oldNode;
+            }
+            if (
+              this.#child
+                .getSchema()
+                .compareRows(overlay.node.row, child.row) === 0
+            ) {
+              editNewApplied = true;
+              if (editOldApplied) {
+                applied = true;
+              }
+              yieldChild = false;
+            }
+            break;
+          }
+          case 'child': {
+            if (
+              this.#child
+                .getSchema()
+                .compareRows(overlay.node.row, child.row) === 0
+            ) {
+              applied = true;
+              yield {
+                row: child.row,
+                relationships: {
+                  ...child.relationships,
+                  [overlay.child.relationshipName]: () =>
+                    this.#generateChildStreamWithOverlay(
+                      child.relationships[overlay.child.relationshipName](),
+                      overlay.child.change,
+                    ),
+                },
+              };
+              yieldChild = false;
+            }
+            break;
+          }
+        }
+      }
+      if (yieldChild) {
+        yield child;
+      }
+    }
+    if (!applied) {
+      if (overlay.type === 'remove') {
+        applied = true;
+        yield overlay.node;
+      } else if (overlay.type === 'edit') {
+        assert(editNewApplied);
+        editOldApplied = true;
+        applied = true;
+        yield overlay.node;
+      }
+    }
+
+    assert(applied);
   }
 
   #processParentNode(
@@ -308,7 +466,8 @@ export class Join implements Input {
           );
         }
       }
-      return this.#child[method]({
+
+      const stream = this.#child[method]({
         constraint: Object.fromEntries(
           this.#childKey.map((key, i) => [
             key,
@@ -316,6 +475,77 @@ export class Join implements Input {
           ]),
         ),
       });
+
+      if (this.#inProgressChildChange) {
+        if (this.#inProgressChildChange.type === 'simple') {
+          if (
+            this.#isJoinMatch(
+              parentNodeRow,
+              this.#inProgressChildChange.change.node.row,
+            ) &&
+            this.#inProgressChildChange.position &&
+            this.#schema.compareRows(
+              parentNodeRow,
+              this.#inProgressChildChange.position,
+            ) > 0
+          ) {
+            return this.#generateChildStreamWithOverlay(
+              stream,
+              this.#inProgressChildChange.change,
+            );
+          }
+        } else {
+          this.#inProgressChildChange.type satisfies 'split-edit';
+          if (this.#inProgressChildChange.phase === 'remove') {
+            if (
+              this.#isJoinMatch(
+                parentNodeRow,
+                this.#inProgressChildChange.change.node.row,
+              )
+            ) {
+              return this.#generateChildStreamWithOverlay(stream, {
+                type: 'add',
+                node: this.#inProgressChildChange.change.node,
+              });
+            }
+            if (
+              this.#isJoinMatch(
+                parentNodeRow,
+                this.#inProgressChildChange.change.oldNode.row,
+              ) &&
+              this.#inProgressChildChange.position &&
+              this.#schema.compareRows(
+                parentNodeRow,
+                this.#inProgressChildChange.position,
+              ) > 0
+            ) {
+              return this.#generateChildStreamWithOverlay(stream, {
+                type: 'remove',
+                node: this.#inProgressChildChange.change.oldNode,
+              });
+            }
+          } else {
+            this.#inProgressChildChange.phase satisfies 'add';
+            if (
+              this.#isJoinMatch(
+                parentNodeRow,
+                this.#inProgressChildChange.change.node.row,
+              ) &&
+              this.#inProgressChildChange.position &&
+              this.#schema.compareRows(
+                parentNodeRow,
+                this.#inProgressChildChange.position,
+              ) > 0
+            ) {
+              return this.#generateChildStreamWithOverlay(stream, {
+                type: 'add',
+                node: this.#inProgressChildChange.change.node,
+              });
+            }
+          }
+        }
+      }
+      return stream;
     };
 
     return {
@@ -325,6 +555,15 @@ export class Join implements Input {
         [this.#relationshipName]: childStream,
       },
     };
+  }
+
+  #isJoinMatch(parent: Row, child: Row) {
+    for (let i = 0; i < this.#parentKey.length; i++) {
+      if (!valuesEqual(parent[this.#parentKey[i]], child[this.#childKey[i]])) {
+        return false;
+      }
+    }
+    return true;
   }
 }
 
