@@ -495,7 +495,11 @@ export class Zero<
       enableMutationRecovery: false,
       onClientsDeleted: (clientIDs, clientGroupIDs) =>
         this.#deleteClientsManager.onClientsDeleted(clientIDs, clientGroupIDs),
-      zero: new ZeroRep(this.#zeroContext, this.#ivmMain),
+      zero: new ZeroRep(
+        this.#zeroContext,
+        this.#ivmMain,
+        options.mutators !== undefined,
+      ),
     };
 
     const rep = new ReplicacheImpl(replicacheOptions, replicacheImplOptions);

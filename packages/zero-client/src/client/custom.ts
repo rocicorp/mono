@@ -93,6 +93,11 @@ export class TransactionImpl implements Transaction<Schema> {
     this.mutate = makeSchemaCRUD(
       schema,
       repTx,
+      // CRUD operators should not mutate the IVM store directly
+      // for `initial`. The IVM store will be updated via calls to `advance`
+      // after the transaction has been committed to the Replicache b-tree.
+      // Mutating the IVM store in the mutator would cause us to synchronously
+      // notify listeners of IVM while we're inside of the Replicache DB transaction.
       repTx.reason === 'initial'
         ? undefined
         : (must(
