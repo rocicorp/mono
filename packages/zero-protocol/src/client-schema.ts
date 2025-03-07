@@ -1,7 +1,5 @@
-import {h64} from '../../shared/src/hash.ts';
-import {mapAllEntries, mapEntries} from '../../shared/src/objects.ts';
+import {mapAllEntries} from '../../shared/src/objects.ts';
 import * as v from '../../shared/src/valita.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 
 export type ValueType = 'string' | 'number' | 'boolean' | 'null' | 'json';
 
@@ -49,24 +47,4 @@ export function normalize(schema: ClientSchema): ClientSchema {
         ]),
     ),
   };
-}
-
-export function clientSchemaFrom(schema: Schema): {
-  clientSchema: ClientSchema;
-  hash: string;
-} {
-  const client = {
-    tables: mapEntries(schema.tables, (name, {serverName, columns}) => [
-      serverName ?? name,
-      {
-        columns: mapEntries(columns, (name, {serverName, type}) => [
-          serverName ?? name,
-          {type},
-        ]),
-      },
-    ]),
-  };
-  const clientSchema = normalize(client);
-  const hash = h64(JSON.stringify(clientSchema)).toString(36);
-  return {clientSchema, hash};
 }
