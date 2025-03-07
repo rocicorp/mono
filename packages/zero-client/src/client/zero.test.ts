@@ -3204,7 +3204,6 @@ test('custom mutations get pushed', async () => {
 
   expect(
     mockSocket.messages.map(x => {
-      console.error(x);
       const ret = JSON.parse(x);
       if ('requestID' in ret[1]) {
         delete ret[1].requestID;
