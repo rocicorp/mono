@@ -1326,17 +1326,12 @@ suite('push one:many', () => {
             ".comments:source(comment)",
             "push",
             {
-              "oldRow": {
+              "row": {
                 "id": "c1",
                 "issueID": "i1",
                 "text": "comment 1",
               },
-              "row": {
-                "id": "c1",
-                "issueID": "i2",
-                "text": "comment 1.2",
-              },
-              "type": "edit",
+              "type": "remove",
             },
           ],
           [
@@ -1365,6 +1360,18 @@ suite('push one:many', () => {
                 "text": "issue 1",
               },
               "type": "child",
+            },
+          ],
+          [
+            ".comments:source(comment)",
+            "push",
+            {
+              "row": {
+                "id": "c1",
+                "issueID": "i2",
+                "text": "comment 1.2",
+              },
+              "type": "add",
             },
           ],
           [
@@ -1513,15 +1520,11 @@ suite('push one:many', () => {
             ":source(issue)",
             "push",
             {
-              "oldRow": {
+              "row": {
                 "id": "i1",
                 "text": "issue 1",
               },
-              "row": {
-                "id": "i3",
-                "text": "issue 1.3",
-              },
-              "type": "edit",
+              "type": "remove",
             },
           ],
           [
@@ -1542,6 +1545,17 @@ suite('push one:many', () => {
               "constraint": {
                 "issueID": "i1",
               },
+            },
+          ],
+          [
+            ":source(issue)",
+            "push",
+            {
+              "row": {
+                "id": "i3",
+                "text": "issue 1.3",
+              },
+              "type": "add",
             },
           ],
           [
@@ -2149,15 +2163,11 @@ suite('push many:one', () => {
             ".owner:source(user)",
             "push",
             {
-              "oldRow": {
+              "row": {
                 "id": "u2",
                 "text": "user 2",
               },
-              "row": {
-                "id": "u1",
-                "text": "user 1",
-              },
-              "type": "edit",
+              "type": "remove",
             },
           ],
           [
@@ -2167,6 +2177,17 @@ suite('push many:one', () => {
               "constraint": {
                 "ownerID": "u2",
               },
+            },
+          ],
+          [
+            ".owner:source(user)",
+            "push",
+            {
+              "row": {
+                "id": "u1",
+                "text": "user 1",
+              },
+              "type": "add",
             },
           ],
           [
@@ -2394,34 +2415,24 @@ suite('push many:one', () => {
             ".issues:source(issue)",
             "push",
             {
-              "oldRow": {
+              "row": {
                 "id": "i2",
                 "ownerID": "u2",
                 "text": "item 2",
               },
-              "row": {
-                "id": "i2",
-                "ownerID": "u1",
-                "text": "item 2",
-              },
-              "type": "edit",
+              "type": "remove",
             },
           ],
           [
             ".issues:join(comments)",
             "push",
             {
-              "oldRow": {
+              "row": {
                 "id": "i2",
                 "ownerID": "u2",
                 "text": "item 2",
               },
-              "row": {
-                "id": "i2",
-                "ownerID": "u1",
-                "text": "item 2",
-              },
-              "type": "edit",
+              "type": "remove",
             },
           ],
           [
@@ -2459,6 +2470,30 @@ suite('push many:one', () => {
               "constraint": {
                 "issueID": "i2",
               },
+            },
+          ],
+          [
+            ".issues:source(issue)",
+            "push",
+            {
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+                "text": "item 2",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            ".issues:join(comments)",
+            "push",
+            {
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+                "text": "item 2",
+              },
+              "type": "add",
             },
           ],
           [
@@ -4218,38 +4253,26 @@ describe('edit assignee', () => {
           ":source(issue)",
           "push",
           {
-            "oldRow": {
+            "row": {
               "assigneeID": undefined,
               "creatorID": "u1",
               "issueID": "i1",
               "text": "first issue",
             },
-            "row": {
-              "assigneeID": "u1",
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "edit",
+            "type": "remove",
           },
         ],
         [
           ":join(creator)",
           "push",
           {
-            "oldRow": {
+            "row": {
               "assigneeID": undefined,
               "creatorID": "u1",
               "issueID": "i1",
               "text": "first issue",
             },
-            "row": {
-              "assigneeID": "u1",
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "edit",
+            "type": "remove",
           },
         ],
         [
@@ -4281,6 +4304,32 @@ describe('edit assignee', () => {
             "constraint": {
               "userID": undefined,
             },
+          },
+        ],
+        [
+          ":source(issue)",
+          "push",
+          {
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          ":join(creator)",
+          "push",
+          {
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "add",
           },
         ],
         [
@@ -4534,38 +4583,26 @@ describe('edit assignee', () => {
           ":source(issue)",
           "push",
           {
-            "oldRow": {
+            "row": {
               "assigneeID": undefined,
               "creatorID": "u1",
               "issueID": "i1",
               "text": "first issue",
             },
-            "row": {
-              "assigneeID": "u1",
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "edit",
+            "type": "remove",
           },
         ],
         [
           ":join(creator)",
           "push",
           {
-            "oldRow": {
+            "row": {
               "assigneeID": undefined,
               "creatorID": "u1",
               "issueID": "i1",
               "text": "first issue",
             },
-            "row": {
-              "assigneeID": "u1",
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "edit",
+            "type": "remove",
           },
         ],
         [
@@ -4597,6 +4634,32 @@ describe('edit assignee', () => {
             "constraint": {
               "userID": undefined,
             },
+          },
+        ],
+        [
+          ":source(issue)",
+          "push",
+          {
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          ":join(creator)",
+          "push",
+          {
+            "row": {
+              "assigneeID": "u1",
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "add",
           },
         ],
         [
@@ -4809,38 +4872,26 @@ describe('edit assignee', () => {
           ":source(issue)",
           "push",
           {
-            "oldRow": {
+            "row": {
               "assigneeID": "u1",
               "creatorID": "u1",
               "issueID": "i1",
               "text": "first issue",
             },
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "edit",
+            "type": "remove",
           },
         ],
         [
           ":join(creator)",
           "push",
           {
-            "oldRow": {
+            "row": {
               "assigneeID": "u1",
               "creatorID": "u1",
               "issueID": "i1",
               "text": "first issue",
             },
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "edit",
+            "type": "remove",
           },
         ],
         [
@@ -4872,6 +4923,32 @@ describe('edit assignee', () => {
             "constraint": {
               "userID": "u1",
             },
+          },
+        ],
+        [
+          ":source(issue)",
+          "push",
+          {
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          ":join(creator)",
+          "push",
+          {
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "add",
           },
         ],
         [
@@ -5115,38 +5192,26 @@ describe('edit assignee', () => {
           ":source(issue)",
           "push",
           {
-            "oldRow": {
+            "row": {
               "assigneeID": "u1",
               "creatorID": "u1",
               "issueID": "i1",
               "text": "first issue",
             },
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "edit",
+            "type": "remove",
           },
         ],
         [
           ":join(creator)",
           "push",
           {
-            "oldRow": {
+            "row": {
               "assigneeID": "u1",
               "creatorID": "u1",
               "issueID": "i1",
               "text": "first issue",
             },
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "edit",
+            "type": "remove",
           },
         ],
         [
@@ -5178,6 +5243,32 @@ describe('edit assignee', () => {
             "constraint": {
               "userID": "u1",
             },
+          },
+        ],
+        [
+          ":source(issue)",
+          "push",
+          {
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          ":join(creator)",
+          "push",
+          {
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "add",
           },
         ],
         [
