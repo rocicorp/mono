@@ -301,6 +301,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   readonly perdag: Store;
   readonly #idbDatabases: IDBDatabasesStore;
   readonly #lc: LogContext;
+  readonly #zero: ZeroOption | undefined;
 
   readonly #closeAbortController = new AbortController();
 
@@ -422,6 +423,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       enableClientGroupForking = true,
       onClientsDeleted = () => {},
     } = implOptions;
+    this.#zero = implOptions.zero;
     this.auth = auth ?? '';
     this.pullURL = pullURL;
     this.pushURL = pushURL;
@@ -560,6 +562,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     );
 
     // Now we have a profileID, a clientID, a clientGroupID and DB!
+    await this.#zero?.init(headHash, this.memdag);
     resolveReady();
 
     if (this.#enablePullAndPushInOpen) {
@@ -752,23 +755,26 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       const lc = this.#lc
         .withContext('maybeEndPull')
         .withContext('requestID', requestID);
-      const {replayMutations, diffs} = await maybeEndPull<LocalMeta>(
-        this.memdag,
-        lc,
-        syncHead,
-        clientID,
-        this.#subscriptions,
-        FormatVersion.Latest,
-      );
+      const {replayMutations, diffs, oldMainHead, mainHead} =
+        await maybeEndPull<LocalMeta>(
+          this.memdag,
+          lc,
+          syncHead,
+          clientID,
+          this.#subscriptions,
+          FormatVersion.Latest,
+        );
 
       if (!replayMutations || replayMutations.length === 0) {
         // All done.
+        this.#zero?.advance(oldMainHead, mainHead, diffs.get('') ?? []);
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return;
       }
 
       // Replay.
+      const zeroData = await this.#zero?.getTxData?.('rebase', syncHead);
       for (const mutation of replayMutations) {
         // TODO(greg): I'm not sure why this was in Replicache#_mutate...
         // Ensure that we run initial pending subscribe functions before starting a
@@ -787,7 +793,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
             lc,
             isLocalMetaDD31(meta) ? meta.clientID : clientID,
             FormatVersion.Latest,
-            undefined,
+            zeroData,
           ),
         );
       }
@@ -1175,6 +1181,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           this.#mutatorRegistry,
           () => this.#closed,
           FormatVersion.Latest,
+          this.#zero?.getTxData,
         );
       } catch (e) {
         if (e instanceof ClientStateNotFoundError) {
@@ -1198,9 +1205,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     if (this.#closed) {
       return;
     }
-    let diffs;
+    let refreshResult: Awaited<ReturnType<typeof refresh>>;
     try {
-      diffs = await refresh(
+      refreshResult = await refresh(
         this.#lc,
         this.memdag,
         this.perdag,
@@ -1209,6 +1216,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         this.#subscriptions,
         () => this.closed,
         FormatVersion.Latest,
+        this.#zero,
       );
     } catch (e) {
       if (e instanceof ClientStateNotFoundError) {
@@ -1219,8 +1227,13 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         throw e;
       }
     }
-    if (diffs !== undefined) {
-      await this.#subscriptions.fire(diffs);
+    if (refreshResult !== undefined) {
+      this.#zero?.advance(
+        refreshResult.oldHead,
+        refreshResult.newHead,
+        refreshResult.diffs.get('') ?? [],
+      );
+      await this.#subscriptions.fire(refreshResult.diffs);
     }
   }
 
@@ -1489,20 +1502,23 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           clientID,
           await dbWrite.getMutationID(),
           'initial',
-          undefined,
+          await this.#zero?.getTxData('initial', headHash, {
+            openLazyRead: dagWrite,
+          }),
           dbWrite,
           this.#lc,
         );
         const result: R = await mutatorImpl(tx, args);
         throwIfClosed(dbWrite);
         const lastMutationID = await dbWrite.getMutationID();
-        const diffs = await dbWrite.commitWithDiffs(
+        const [newHead, diffs] = await dbWrite.commitWithDiffs(
           DEFAULT_HEAD_NAME,
           this.#subscriptions,
         );
 
         // Update this after the commit in case the commit fails.
         this.lastMutationID = lastMutationID;
+        this.#zero?.advance(headHash, newHead, diffs.get('') ?? []);
 
         // Send is not supposed to reject
         this.#pushConnectionLoop.send(false).catch(() => void 0);

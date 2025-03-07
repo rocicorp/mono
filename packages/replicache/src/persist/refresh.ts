@@ -39,6 +39,7 @@ import {
   type ChunkWithSize,
   GatherNotCachedVisitor,
 } from './gather-not-cached-visitor.ts';
+import type {ZeroOption} from '../replicache-options.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
@@ -54,6 +55,8 @@ type RefreshResult =
       type: 'complete';
       diffs: DiffsMap;
       newPerdagClientHeadHash: Hash;
+      oldHead: Hash;
+      newHead: Hash;
     };
 
 /**
@@ -69,7 +72,8 @@ export async function refresh(
   diffConfig: DiffComputationConfig,
   closed: () => boolean,
   formatVersion: FormatVersion,
-): Promise<DiffsMap | undefined> {
+  zero: ZeroOption | undefined,
+): Promise<{oldHead: Hash; newHead: Hash; diffs: DiffsMap} | undefined> {
   if (closed()) {
     return;
   }
@@ -172,7 +176,7 @@ export async function refresh(
       if (closed() || !perdagWriteResult) {
         return {
           type: 'aborted',
-        };
+        } as const;
       }
       // pull/poke and refresh are racing to see who gets to update
       // the memdag (the one with the newer base snapshot cookie wins)
@@ -230,19 +234,28 @@ export async function refresh(
         await Promise.all(ps);
 
         let newMemdagHeadHash = perdagClientGroupHeadHash;
-        for (let i = newMemdagMutations.length - 1; i >= 0; i--) {
-          newMemdagHeadHash = (
-            await rebaseMutationAndPutCommit(
-              newMemdagMutations[i],
-              memdagWrite,
-              newMemdagHeadHash,
-              mutators,
-              lc,
-              newMemdagMutations[i].meta.clientID,
-              formatVersion,
-              undefined,
-            )
-          ).chunk.hash;
+        if (newMemdagMutations.length > 0) {
+          const zeroData = await zero?.getTxData?.(
+            'rebase',
+            newMemdagHeadHash,
+            {
+              openLazyRead: memdagWrite,
+            },
+          );
+          for (let i = newMemdagMutations.length - 1; i >= 0; i--) {
+            newMemdagHeadHash = (
+              await rebaseMutationAndPutCommit(
+                newMemdagMutations[i],
+                memdagWrite,
+                newMemdagHeadHash,
+                mutators,
+                lc,
+                newMemdagMutations[i].meta.clientID,
+                formatVersion,
+                zeroData,
+              )
+            ).chunk.hash;
+          }
         }
 
         const newMemdagHeadCommit = await commitFromHash(
@@ -261,8 +274,10 @@ export async function refresh(
         return {
           type: 'complete',
           diffs,
+          oldHead: memdagHeadCommit.chunk.hash,
+          newHead: newMemdagHeadHash,
           newPerdagClientHeadHash: perdagClientGroupHeadHash,
-        };
+        } as const;
       });
     });
 
@@ -290,7 +305,11 @@ export async function refresh(
     return undefined;
   }
   await setRefreshHashes([result.newPerdagClientHeadHash]);
-  return result.diffs;
+  return {
+    oldHead: result.oldHead,
+    newHead: result.newHead,
+    diffs: result.diffs,
+  };
 }
 
 function shouldAbortRefresh(

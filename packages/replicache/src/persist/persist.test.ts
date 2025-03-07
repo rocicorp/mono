@@ -932,6 +932,7 @@ async function setupPersistTest() {
       mutators,
       () => false,
       FormatVersion.Latest,
+      undefined,
       onGatherMemOnlyChunksForTest,
     );
     const persistedChunkHashes: Hash[] = [];
