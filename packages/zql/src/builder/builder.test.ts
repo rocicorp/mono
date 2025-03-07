@@ -1,8 +1,6 @@
 import {expect, test} from 'vitest';
 import type {AST, Disjunction} from '../../../zero-protocol/src/ast.ts';
 import {Catch} from '../ivm/catch.ts';
-import {MemoryStorage} from '../ivm/memory-storage.ts';
-import type {Source} from '../ivm/source.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
 import {
   bindStaticParameters,
@@ -11,6 +9,7 @@ import {
 } from './builder.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {LogConfig} from '../../../otel/src/log-options.ts';
+import {TestBuilderDelegate} from './test-builder-delegate.ts';
 
 const lc = createSilentLogContext();
 const logConfig: LogConfig = {
@@ -20,7 +19,7 @@ const logConfig: LogConfig = {
   slowRowThreshold: 0,
 };
 
-export function testSources() {
+export function testBuilderDelegate() {
   const users = createSource(
     lc,
     logConfig,
@@ -70,15 +69,11 @@ export function testSources() {
 
   const sources = {users, userStates, states};
 
-  function getSource(name: string) {
-    return (sources as Record<string, Source>)[name];
-  }
-
-  return {sources, getSource};
+  return {sources, delegate: new TestBuilderDelegate(sources)};
 }
 
 test('source-only', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -88,10 +83,7 @@ test('source-only', () => {
           ['id', 'asc'],
         ],
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -174,7 +166,7 @@ test('source-only', () => {
 });
 
 test('filter', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -193,10 +185,7 @@ test('filter', () => {
           },
         },
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -275,7 +264,7 @@ test('filter', () => {
 });
 
 test('self-join', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -293,10 +282,7 @@ test('self-join', () => {
           },
         ],
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -576,7 +562,7 @@ test('self-join', () => {
 });
 
 test('self-join edit', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -595,10 +581,7 @@ test('self-join edit', () => {
         ],
         limit: 3,
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -721,7 +704,7 @@ test('self-join edit', () => {
 });
 
 test('multi-join', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -768,10 +751,7 @@ test('multi-join', () => {
           },
         ],
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -899,7 +879,7 @@ test('multi-join', () => {
 });
 
 test('join with limit', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -936,10 +916,7 @@ test('join with limit', () => {
           },
         ],
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -1051,7 +1028,7 @@ test('join with limit', () => {
 });
 
 test('skip', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -1059,10 +1036,7 @@ test('skip', () => {
         orderBy: [['id', 'asc']],
         start: {row: {id: 3}, exclusive: true},
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -1121,7 +1095,7 @@ test('skip', () => {
 });
 
 test('exists junction', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -1161,10 +1135,7 @@ test('exists junction', () => {
           op: 'EXISTS',
         },
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -1329,7 +1300,7 @@ test('exists junction', () => {
 });
 
 test('duplicative exists junction', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -1374,10 +1345,7 @@ test('duplicative exists junction', () => {
           ],
         },
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -1538,7 +1506,7 @@ test('duplicative exists junction', () => {
 });
 
 test('exists junction with limit, remove row after limit, and last row', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -1576,10 +1544,7 @@ test('exists junction with limit, remove row after limit, and last row', () => {
           op: 'EXISTS',
         },
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -1676,7 +1641,7 @@ test('exists junction with limit, remove row after limit, and last row', () => {
 });
 
 test('exists self join', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -1697,10 +1662,7 @@ test('exists self join', () => {
         },
         limit: 2,
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -1857,7 +1819,7 @@ test('exists self join', () => {
 });
 
 test('not exists self join', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -1877,10 +1839,7 @@ test('not exists self join', () => {
           op: 'NOT EXISTS',
         },
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -2034,7 +1993,7 @@ test('bind static parameters', () => {
 });
 
 test('empty or - nothing goes through', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -2045,10 +2004,7 @@ test('empty or - nothing goes through', () => {
           conditions: [],
         },
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -2059,7 +2015,7 @@ test('empty or - nothing goes through', () => {
 });
 
 test('empty and - everything goes through', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -2070,10 +2026,7 @@ test('empty and - everything goes through', () => {
           conditions: [],
         },
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -2097,7 +2050,7 @@ test('empty and - everything goes through', () => {
 });
 
 test('always false literal comparison - nothing goes through', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -2116,10 +2069,7 @@ test('always false literal comparison - nothing goes through', () => {
           },
         },
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
@@ -2130,7 +2080,7 @@ test('always false literal comparison - nothing goes through', () => {
 });
 
 test('always true literal comparison - everything goes through', () => {
-  const {sources, getSource} = testSources();
+  const {sources, delegate} = testBuilderDelegate();
   const sink = new Catch(
     buildPipeline(
       {
@@ -2149,10 +2099,7 @@ test('always true literal comparison - everything goes through', () => {
           },
         },
       },
-      {
-        getSource,
-        createStorage: () => new MemoryStorage(),
-      },
+      delegate,
     ),
   );
 
