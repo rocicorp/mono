@@ -3,7 +3,7 @@ import {beforeAll} from 'vitest';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {compile} from './compiler.ts';
-import {schema} from '../../zql/src/query/test/test-schemas.ts';
+import {createTableSQL, schema} from '../../zql/src/query/test/test-schemas.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {formatSqlite, sql} from './sql.ts';
@@ -28,48 +28,6 @@ const logConfig: LogConfig = {
   ivmSampling: 0,
   slowRowThreshold: 0,
 };
-
-const createTableSQL = /*sql*/ `
-CREATE TABLE IF NOT EXISTS "issue" (
-  "id" TEXT PRIMARY KEY,
-  "title" TEXT NOT NULL,
-  "description" TEXT NOT NULL,
-  "closed" BOOLEAN NOT NULL,
-  "ownerId" TEXT
-);
-
-CREATE TABLE IF NOT EXISTS "user" (
-  "id" TEXT PRIMARY KEY,
-  "name" TEXT NOT NULL,
-  "metadata" JSONB
-);
-
-CREATE TABLE IF NOT EXISTS "comment" (
-  "id" TEXT PRIMARY KEY,
-  "authorId" TEXT NOT NULL,
-  "issueId" TEXT NOT NULL,
-  "text" TEXT NOT NULL,
-  "createdAt" BIGINT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS "issueLabel" (
-  "issueId" TEXT NOT NULL,
-  "labelId" TEXT NOT NULL,
-  PRIMARY KEY ("issueId", "labelId")
-);
-
-CREATE TABLE IF NOT EXISTS "label" (
-  "id" TEXT PRIMARY KEY,
-  "name" TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS "revision" (
-  "id" TEXT PRIMARY KEY,
-  "authorId" TEXT NOT NULL,
-  "commentId" TEXT NOT NULL,
-  "text" TEXT NOT NULL
-);
-`;
 
 let pg: PostgresDB;
 let sqlite: Database;
