@@ -36,7 +36,7 @@ const keyCmp = ([a]: [a: string, _: unknown], [b]: [b: string, _: unknown]) =>
  * Returns a normalized schema (with the tables and columns sorted)
  * suitable for hashing.
  */
-export function normalize(schema: ClientSchema): ClientSchema {
+export function normalizeClientSchema(schema: ClientSchema): ClientSchema {
   return {
     tables: mapAllEntries(schema.tables, tables =>
       tables

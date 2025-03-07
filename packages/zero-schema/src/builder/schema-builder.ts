@@ -2,7 +2,7 @@
 import {h64} from '../../../shared/src/hash.ts';
 import {mapEntries} from '../../../shared/src/objects.ts';
 import {
-  normalize,
+  normalizeClientSchema,
   type ClientSchema,
 } from '../../../zero-protocol/src/client-schema.ts';
 import type {
@@ -138,7 +138,7 @@ export function clientSchemaFrom(schema: Schema): {
       },
     ]),
   };
-  const clientSchema = normalize(client);
+  const clientSchema = normalizeClientSchema(client);
   const hash = h64(JSON.stringify(clientSchema)).toString(36);
   return {clientSchema, hash};
 }

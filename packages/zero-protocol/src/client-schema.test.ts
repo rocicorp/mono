@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {normalize, type ClientSchema} from './client-schema.ts';
+import {normalizeClientSchema, type ClientSchema} from './client-schema.ts';
 
 // Use JSON.stringify in expectations to preserve / verify key order.
 const stringify = (o: unknown) => JSON.stringify(o, null, 2);
@@ -30,7 +30,7 @@ test('normalize', () => {
     },
   };
 
-  expect(stringify(normalize(s1))).toMatchInlineSnapshot(`
+  expect(stringify(normalizeClientSchema(s1))).toMatchInlineSnapshot(`
     "{
       "tables": {
         "b": {
