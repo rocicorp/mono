@@ -1,6 +1,6 @@
 import {expect} from 'vitest';
 import {must} from '../../../../shared/src/must.ts';
-import type {AST, CompoundKey} from '../../../../zero-protocol/src/ast.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../../zero-schema/src/table-schema.ts';
@@ -46,20 +46,9 @@ export type Sources = Record<
 
 export type SourceContents = Readonly<Record<string, readonly Row[]>>;
 
-export type Joins = Record<
-  string,
-  {
-    parentKey: CompoundKey;
-    parentSource: string;
-    childKey: CompoundKey;
-    childSource: string;
-    relationshipName: string;
-  }
->;
-
 export type Pushes = [sourceName: string, change: SourceChange][];
 
-export type NewPushTest = {
+export type PushTest = {
   sources: Sources;
   sourceContents: SourceContents;
   ast: AST;
@@ -67,7 +56,7 @@ export type NewPushTest = {
   pushes: Pushes;
 };
 
-export function runPushTest(t: NewPushTest) {
+export function runPushTest(t: PushTest) {
   function innerTest<T>(makeFinalOutput: (j: Input) => T) {
     const sources: Record<string, Source> = Object.fromEntries(
       Object.entries(t.sources).map(([name, {columns, primaryKeys}]) => [

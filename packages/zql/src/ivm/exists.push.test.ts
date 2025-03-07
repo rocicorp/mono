@@ -172,7 +172,7 @@ suite('EXISTS 1 to many', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(issue)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -257,82 +257,43 @@ suite('EXISTS 1 to many', () => {
           ],
         ]
       `);
-    expect(log.filter(msg => msg[0].indexOf('take') > -1))
-      .toMatchInlineSnapshot(`
+    expect(log.filter(msg => msg[0] === ':take')).toMatchInlineSnapshot(`
+      [
         [
-          [
-            ".issue:take",
-            "push",
-            {
-              "row": {
-                "id": "i1",
-                "title": "issue 1",
-              },
-              "type": "remove",
+          ":take",
+          "push",
+          {
+            "row": {
+              "id": "c1",
+              "issueID": "i1",
             },
-          ],
-          [
-            ".issue:take",
-            "fetch",
-            {
-              "constraint": {
-                "id": "i1",
-              },
+            "type": "remove",
+          },
+        ],
+        [
+          ":take",
+          "push",
+          {
+            "row": {
+              "id": "c4",
+              "issueID": "i2",
             },
-          ],
-          [
-            ".issue:take",
-            "fetch",
-            {
-              "constraint": {
-                "id": "i2",
-              },
+            "type": "add",
+          },
+        ],
+        [
+          ":take",
+          "push",
+          {
+            "row": {
+              "id": "c2",
+              "issueID": "i1",
             },
-          ],
-          [
-            ":take",
-            "push",
-            {
-              "row": {
-                "id": "c1",
-                "issueID": "i1",
-              },
-              "type": "remove",
-            },
-          ],
-          [
-            ":take",
-            "push",
-            {
-              "row": {
-                "id": "c4",
-                "issueID": "i2",
-              },
-              "type": "add",
-            },
-          ],
-          [
-            ".issue:take",
-            "fetch",
-            {
-              "constraint": {
-                "id": "i2",
-              },
-            },
-          ],
-          [
-            ":take",
-            "push",
-            {
-              "row": {
-                "id": "c2",
-                "issueID": "i1",
-              },
-              "type": "remove",
-            },
-          ],
-        ]
-      `);
+            "type": "remove",
+          },
+        ],
+      ]
+    `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -399,11 +360,30 @@ suite('EXISTS 1 to many', () => {
       ]
     `);
 
-    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(
-      `undefined`,
-    );
+    expect(actualStorage[':exists(issue)']).toMatchInlineSnapshot(`
+      {
+        "row/["i1"]/["c1"]": 0,
+        "row/["i1"]/["c2"]": 0,
+        "row/["i1"]/["c3"]": 0,
+        "row/["i2"]/["c4"]": 1,
+      }
+    `);
 
-    expect(actualStorage['take']).toMatchInlineSnapshot(`undefined`);
+    expect(actualStorage[':take']).toMatchInlineSnapshot(`
+      {
+        "["take"]": {
+          "bound": {
+            "id": "c4",
+            "issueID": "i2",
+          },
+          "size": 1,
+        },
+        "maxBound": {
+          "id": "c4",
+          "issueID": "i2",
+        },
+      }
+    `);
   });
 });
 
@@ -475,7 +455,7 @@ suite('EXISTS', () => {
     `);
 
     expect(
-      log.filter(msg => msg[0].indexOf('exists') > -1),
+      log.filter(msg => msg[0] === ':exists(comments)'),
     ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
@@ -558,7 +538,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -662,7 +642,7 @@ suite('EXISTS', () => {
     `);
 
     expect(
-      log.filter(msg => msg[0].indexOf('exists') > -1),
+      log.filter(msg => msg[0] === ':exists(comments)'),
     ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
@@ -714,7 +694,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -818,7 +798,7 @@ suite('EXISTS', () => {
     `);
 
     expect(
-      log.filter(msg => msg[0].indexOf('exists') > -1),
+      log.filter(msg => msg[0] === ':exists(comments)'),
     ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
@@ -883,7 +863,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -990,7 +970,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -1097,7 +1077,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -1196,7 +1176,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -1293,7 +1273,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -1404,7 +1384,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -1522,7 +1502,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -1668,7 +1648,7 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -1753,7 +1733,7 @@ suite('NOT EXISTS', () => {
     `);
 
     expect(
-      log.filter(msg => msg[0].indexOf('exists') > -1),
+      log.filter(msg => msg[0] === ':exists(comments)'),
     ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
@@ -1796,7 +1776,7 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -1873,7 +1853,7 @@ suite('NOT EXISTS', () => {
     `);
 
     expect(
-      log.filter(msg => msg[0].indexOf('exists') > -1),
+      log.filter(msg => msg[0] === ':exists(comments)'),
     ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
@@ -1921,7 +1901,7 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -2002,7 +1982,7 @@ suite('NOT EXISTS', () => {
     `);
 
     expect(
-      log.filter(msg => msg[0].indexOf('exists') > -1),
+      log.filter(msg => msg[0] === ':exists(comments)'),
     ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
@@ -2044,7 +2024,7 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -2121,7 +2101,7 @@ suite('NOT EXISTS', () => {
     `);
 
     expect(
-      log.filter(msg => msg[0].indexOf('exists') > -1),
+      log.filter(msg => msg[0] === ':exists(comments)'),
     ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
@@ -2173,7 +2153,7 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
@@ -2250,7 +2230,7 @@ suite('NOT EXISTS', () => {
     `);
 
     expect(
-      log.filter(msg => msg[0].indexOf('exists') > -1),
+      log.filter(msg => msg[0] === ':exists(comments)'),
     ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
@@ -2299,7 +2279,7 @@ suite('NOT EXISTS', () => {
     `);
 
     expect(
-      log.filter(msg => msg[0].indexOf('exists') > -1),
+      log.filter(msg => msg[0] === ':exists(comments)'),
     ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
@@ -2347,7 +2327,7 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0].indexOf('exists') > -1))
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
       .toMatchInlineSnapshot(`
         [
           [
