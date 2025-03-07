@@ -170,16 +170,35 @@ function buildPipelineInternal(
   if (!source) {
     throw new Error(`Source not found: ${ast.table}`);
   }
-  const conn = source.connect(must(ast.orderBy), ast.where);
+  ast = uniquifyCorrelatedSubqueryConditionAliases(ast);
+
+  const csqsFromCondition = gatherCorrelatedSubqueryQueriesFromCondition(
+    ast.where,
+  );
+  const splitEditKeys: Set<string> = partitionKey
+    ? new Set(partitionKey)
+    : new Set();
+  for (const csq of csqsFromCondition) {
+    for (const key of csq.correlation.parentField) {
+      splitEditKeys.add(key);
+    }
+  }
+  if (ast.related) {
+    for (const csq of ast.related) {
+      for (const key of csq.correlation.parentField) {
+        splitEditKeys.add(key);
+      }
+    }
+  }
+  const conn = source.connect(must(ast.orderBy), ast.where, splitEditKeys);
   let end: Input = delegate.decorateInput(conn, `${name}:source(${ast.table})`);
   const {fullyAppliedFilters} = conn;
-  ast = uniquifyCorrelatedSubqueryConditionAliases(ast);
 
   if (ast.start) {
     end = delegate.decorateInput(new Skip(end, ast.start), `${name}:skip)`);
   }
 
-  for (const csq of gatherCorrelatedSubqueryQueriesFromCondition(ast.where)) {
+  for (const csq of csqsFromCondition) {
     end = applyCorrelatedSubQuery(csq, delegate, end, name);
   }
 

@@ -161,42 +161,28 @@ export class Join implements Input {
         });
         break;
       case 'edit': {
-        // When an edit comes in we need to:
-        // - If the value of the join key did not change we can forward
-        //   as an edit but with relationships added
-        // - Otherwise we convert to a remove and add
-
-        if (
+        // Assert the edit could not change the relationship.
+        assert(
           rowEqualsForCompoundKey(
             change.oldNode.row,
             change.node.row,
             this.#parentKey,
-          )
-        ) {
-          this.#output.push({
-            type: 'edit',
-            oldNode: this.#processParentNode(
-              change.oldNode.row,
-              change.oldNode.relationships,
-              'cleanup',
-            ),
-            node: this.#processParentNode(
-              change.node.row,
-              change.node.relationships,
-              'fetch',
-            ),
-          });
-        } else {
-          this.#pushParent({
-            type: 'remove',
-            node: change.oldNode,
-          });
-          this.#pushParent({
-            type: 'add',
-            node: change.node,
-          });
-        }
-
+          ),
+          'Parent edit must not change relationship.',
+        );
+        this.#output.push({
+          type: 'edit',
+          oldNode: this.#processParentNode(
+            change.oldNode.row,
+            change.oldNode.relationships,
+            'cleanup',
+          ),
+          node: this.#processParentNode(
+            change.node.row,
+            change.node.relationships,
+            'fetch',
+          ),
+        });
         break;
       }
       default:
@@ -240,23 +226,12 @@ export class Join implements Input {
       case 'edit': {
         const childRow = change.node.row;
         const oldChildRow = change.oldNode.row;
-        if (rowEqualsForCompoundKey(oldChildRow, childRow, this.#childKey)) {
-          // The child row was edited in a way that does not change the relationship.
-          // We can therefore just push the change down (wrapped in a child change).
-          pushChildChange(childRow, change);
-        } else {
-          // The child row was edited in a way that changes the relationship. We
-          // therefore treat this as a remove from the old row followed by an
-          // add to the new row.
-          pushChildChange(oldChildRow, {
-            type: 'remove',
-            node: change.oldNode,
-          });
-          pushChildChange(childRow, {
-            type: 'add',
-            node: change.node,
-          });
-        }
+        // Assert the edit could not change the relationship.
+        assert(
+          rowEqualsForCompoundKey(oldChildRow, childRow, this.#childKey),
+          'Child edit must not change relationship.',
+        );
+        pushChildChange(childRow, change);
         break;
       }
 

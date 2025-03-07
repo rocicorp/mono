@@ -684,6 +684,50 @@ test('self-join edit', () => {
               {
                 "relationships": {},
                 "row": {
+                  "id": 1,
+                  "name": "aaron",
+                  "recruiterID": null,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 4,
+            "name": "matt",
+            "recruiterID": 1,
+          },
+        },
+        "type": "add",
+      },
+      {
+        "node": {
+          "relationships": {
+            "recruiter": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": 1,
+                  "name": "aaron",
+                  "recruiterID": null,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 4,
+            "name": "matt",
+            "recruiterID": 1,
+          },
+        },
+        "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {
+            "recruiter": [
+              {
+                "relationships": {},
+                "row": {
                   "id": 2,
                   "name": "erik",
                   "recruiterID": 1,
