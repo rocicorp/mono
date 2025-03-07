@@ -48,6 +48,7 @@ import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
 import {transformQuery} from './read-authorizer.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
 
 const logConfig: LogConfig = {
   format: 'text',
@@ -523,6 +524,9 @@ beforeEach(() => {
 
     createStorage() {
       return new MemoryStorage();
+    },
+    decorateInput(input: Input): Input {
+      return input;
     },
     addServerQuery() {
       return () => {};

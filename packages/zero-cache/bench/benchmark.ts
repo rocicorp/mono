@@ -3,6 +3,7 @@
 import {assert} from '../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
+import type {Input} from '../../zql/src/ivm/operator.ts';
 import type {Source} from '../../zql/src/ivm/source.ts';
 import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
 import {Database} from '../../zqlite/src/db.ts';
@@ -62,6 +63,9 @@ export function bench(opts: Options) {
     createStorage() {
       // TODO: table storage!!
       return new MemoryStorage();
+    },
+    decorateInput(input: Input): Input {
+      return input;
     },
     addServerQuery() {
       return () => {};
