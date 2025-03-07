@@ -3,7 +3,7 @@ import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
-import type {Storage} from '../../../zql/src/ivm/operator.ts';
+import type {Input, Storage} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {
   CommitListener,
@@ -60,6 +60,10 @@ export class ZeroContext implements QueryDelegate {
 
   createStorage(): Storage {
     return new MemoryStorage();
+  }
+
+  decorateInput(input: Input): Input {
+    return input;
   }
 
   onTransactionCommit(cb: CommitListener): () => void {

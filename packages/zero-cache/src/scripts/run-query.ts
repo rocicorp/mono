@@ -25,6 +25,7 @@ import {
   zeroOptions,
   type LogConfig,
 } from '../config/zero-config.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
 
 const options = {
   replicaFile: zeroOptions.replica.file,
@@ -84,6 +85,9 @@ const host: QueryDelegate = {
   createStorage() {
     // TODO: table storage!!
     return new MemoryStorage();
+  },
+  decorateInput(input: Input): Input {
+    return input;
   },
   addServerQuery() {
     return () => {};

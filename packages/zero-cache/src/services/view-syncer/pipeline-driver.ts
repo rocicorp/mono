@@ -233,6 +233,7 @@ export class PipelineDriver {
     const input = buildPipeline(query, {
       getSource: name => this.#getSource(name),
       createStorage: () => this.#createStorage(),
+      decorateInput: input => input,
     });
     const schema = input.getSchema();
     input.setOutput({
