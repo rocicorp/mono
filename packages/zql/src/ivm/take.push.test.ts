@@ -1,13 +1,10 @@
 import {describe, expect, suite, test} from 'vitest';
 import type {JSONObject} from '../../../shared/src/json.ts';
-import type {AST, Ordering} from '../../../zero-protocol/src/ast.ts';
-import type {Row, Value} from '../../../zero-protocol/src/data.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import {type CaughtChange} from './catch.ts';
 import {type SnitchMessage} from './snitch.ts';
 import type {SourceChange} from './source.ts';
-import {type PartitionKey} from './take.ts';
 import {runPushTest, type Sources} from './test/push-tests.ts';
 
 suite('take with no partition', () => {
@@ -15,9 +12,9 @@ suite('take with no partition', () => {
     test('limit 0', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
         ],
         limit: 0,
         pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
@@ -44,9 +41,9 @@ suite('take with no partition', () => {
     test('less than limit add row at start', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
         ],
         limit: 5,
         pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
@@ -83,12 +80,14 @@ suite('take with no partition', () => {
             "bound": {
               "created": 300,
               "id": "i3",
+              "text": null,
             },
             "size": 4,
           },
           "maxBound": {
             "created": 300,
             "id": "i3",
+            "text": null,
           },
         }
       `);
@@ -111,9 +110,9 @@ suite('take with no partition', () => {
     test('less than limit add row at end', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
         ],
         limit: 5,
         pushes: [{type: 'add', row: {id: 'i4', created: 350}}],
@@ -178,10 +177,10 @@ suite('take with no partition', () => {
     test('at limit add row after bound', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
-          {id: 'i4', created: 400},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
+          {id: 'i4', created: 400, text: null},
         ],
         limit: 3,
         pushes: [{type: 'add', row: {id: 'i5', created: 350}}],
@@ -207,12 +206,14 @@ suite('take with no partition', () => {
             "bound": {
               "created": 300,
               "id": "i3",
+              "text": null,
             },
             "size": 3,
           },
           "maxBound": {
             "created": 300,
             "id": "i3",
+            "text": null,
           },
         }
       `);
@@ -222,10 +223,10 @@ suite('take with no partition', () => {
     test('at limit add row at start', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
-          {id: 'i4', created: 400},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
+          {id: 'i4', created: 400, text: null},
         ],
         limit: 3,
         pushes: [{type: 'add', row: {id: 'i5', created: 50}}],
@@ -254,6 +255,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -265,6 +267,7 @@ suite('take with no partition', () => {
               "row": {
                 "created": 300,
                 "id": "i3",
+                "text": null,
               },
               "type": "remove",
             },
@@ -288,12 +291,14 @@ suite('take with no partition', () => {
             "bound": {
               "created": 200,
               "id": "i2",
+              "text": null,
             },
             "size": 3,
           },
           "maxBound": {
             "created": 300,
             "id": "i3",
+            "text": null,
           },
         }
       `);
@@ -305,6 +310,7 @@ suite('take with no partition', () => {
               "row": {
                 "created": 300,
                 "id": "i3",
+                "text": null,
               },
             },
             "type": "remove",
@@ -326,10 +332,10 @@ suite('take with no partition', () => {
     test('at limit add row at end', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
-          {id: 'i4', created: 400},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
+          {id: 'i4', created: 400, text: null},
         ],
         limit: 3,
         pushes: [{type: 'add', row: {id: 'i5', created: 250}}],
@@ -358,6 +364,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -369,6 +376,7 @@ suite('take with no partition', () => {
               "row": {
                 "created": 300,
                 "id": "i3",
+                "text": null,
               },
               "type": "remove",
             },
@@ -398,6 +406,7 @@ suite('take with no partition', () => {
           "maxBound": {
             "created": 300,
             "id": "i3",
+            "text": null,
           },
         }
       `);
@@ -409,6 +418,7 @@ suite('take with no partition', () => {
               "row": {
                 "created": 300,
                 "id": "i3",
+                "text": null,
               },
             },
             "type": "remove",
@@ -432,9 +442,9 @@ suite('take with no partition', () => {
     test('limit 0', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
         ],
         limit: 0,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
@@ -461,9 +471,9 @@ suite('take with no partition', () => {
     test('less than limit remove row at start', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
         ],
         limit: 5,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
@@ -492,6 +502,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -506,6 +517,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -529,12 +541,14 @@ suite('take with no partition', () => {
             "bound": {
               "created": 300,
               "id": "i3",
+              "text": null,
             },
             "size": 2,
           },
           "maxBound": {
             "created": 300,
             "id": "i3",
+            "text": null,
           },
         }
       `);
@@ -557,9 +571,9 @@ suite('take with no partition', () => {
     test('less than limit remove row at end', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
         ],
         limit: 5,
         pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
@@ -588,6 +602,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -602,6 +617,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -625,12 +641,14 @@ suite('take with no partition', () => {
             "bound": {
               "created": 200,
               "id": "i2",
+              "text": null,
             },
             "size": 2,
           },
           "maxBound": {
             "created": 300,
             "id": "i3",
+            "text": null,
           },
         }
       `);
@@ -653,10 +671,10 @@ suite('take with no partition', () => {
     test('at limit remove row after bound', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
-          {id: 'i4', created: 400},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
+          {id: 'i4', created: 400, text: null},
         ],
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i4', created: 400}}],
@@ -682,12 +700,14 @@ suite('take with no partition', () => {
             "bound": {
               "created": 300,
               "id": "i3",
+              "text": null,
             },
             "size": 3,
           },
           "maxBound": {
             "created": 300,
             "id": "i3",
+            "text": null,
           },
         }
       `);
@@ -697,10 +717,10 @@ suite('take with no partition', () => {
     test('at limit remove row at start with row after', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
-          {id: 'i4', created: 400},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
+          {id: 'i4', created: 400, text: null},
         ],
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
@@ -729,6 +749,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -743,6 +764,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -765,6 +787,7 @@ suite('take with no partition', () => {
               "row": {
                 "created": 400,
                 "id": "i4",
+                "text": null,
               },
               "type": "add",
             },
@@ -777,12 +800,14 @@ suite('take with no partition', () => {
             "bound": {
               "created": 400,
               "id": "i4",
+              "text": null,
             },
             "size": 3,
           },
           "maxBound": {
             "created": 400,
             "id": "i4",
+            "text": null,
           },
         }
       `);
@@ -804,6 +829,7 @@ suite('take with no partition', () => {
               "row": {
                 "created": 400,
                 "id": "i4",
+                "text": null,
               },
             },
             "type": "add",
@@ -815,10 +841,10 @@ suite('take with no partition', () => {
     test('at limit remove row at start with row after, limit 2', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
-          {id: 'i4', created: 400},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
+          {id: 'i4', created: 400, text: null},
         ],
         limit: 2,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
@@ -847,6 +873,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 200,
                   "id": "i2",
+                  "text": null,
                 },
               },
             },
@@ -861,6 +888,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 200,
                   "id": "i2",
+                  "text": null,
                 },
               },
             },
@@ -883,6 +911,7 @@ suite('take with no partition', () => {
               "row": {
                 "created": 300,
                 "id": "i3",
+                "text": null,
               },
               "type": "add",
             },
@@ -895,12 +924,14 @@ suite('take with no partition', () => {
             "bound": {
               "created": 300,
               "id": "i3",
+              "text": null,
             },
             "size": 2,
           },
           "maxBound": {
             "created": 300,
             "id": "i3",
+            "text": null,
           },
         }
       `);
@@ -922,6 +953,7 @@ suite('take with no partition', () => {
               "row": {
                 "created": 300,
                 "id": "i3",
+                "text": null,
               },
             },
             "type": "add",
@@ -933,10 +965,10 @@ suite('take with no partition', () => {
     test('at limit remove row at start with row after, limit 1', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
-          {id: 'i4', created: 400},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
+          {id: 'i4', created: 400, text: null},
         ],
         limit: 1,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
@@ -965,6 +997,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 100,
                   "id": "i1",
+                  "text": null,
                 },
               },
             },
@@ -979,6 +1012,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 100,
                   "id": "i1",
+                  "text": null,
                 },
               },
             },
@@ -1001,6 +1035,7 @@ suite('take with no partition', () => {
               "row": {
                 "created": 200,
                 "id": "i2",
+                "text": null,
               },
               "type": "add",
             },
@@ -1013,12 +1048,14 @@ suite('take with no partition', () => {
             "bound": {
               "created": 200,
               "id": "i2",
+              "text": null,
             },
             "size": 1,
           },
           "maxBound": {
             "created": 200,
             "id": "i2",
+            "text": null,
           },
         }
       `);
@@ -1040,6 +1077,7 @@ suite('take with no partition', () => {
               "row": {
                 "created": 200,
                 "id": "i2",
+                "text": null,
               },
             },
             "type": "add",
@@ -1051,9 +1089,9 @@ suite('take with no partition', () => {
     test('at limit remove row at start no row after', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
         ],
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
@@ -1082,6 +1120,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -1096,6 +1135,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -1119,12 +1159,14 @@ suite('take with no partition', () => {
             "bound": {
               "created": 300,
               "id": "i3",
+              "text": null,
             },
             "size": 2,
           },
           "maxBound": {
             "created": 300,
             "id": "i3",
+            "text": null,
           },
         }
       `);
@@ -1147,10 +1189,10 @@ suite('take with no partition', () => {
     test('at limit remove row at end with row after', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
-          {id: 'i4', created: 400},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
+          {id: 'i4', created: 400, text: null},
         ],
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
@@ -1179,6 +1221,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -1193,6 +1236,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -1215,6 +1259,7 @@ suite('take with no partition', () => {
               "row": {
                 "created": 400,
                 "id": "i4",
+                "text": null,
               },
               "type": "add",
             },
@@ -1227,12 +1272,14 @@ suite('take with no partition', () => {
             "bound": {
               "created": 400,
               "id": "i4",
+              "text": null,
             },
             "size": 3,
           },
           "maxBound": {
             "created": 400,
             "id": "i4",
+            "text": null,
           },
         }
       `);
@@ -1254,6 +1301,7 @@ suite('take with no partition', () => {
               "row": {
                 "created": 400,
                 "id": "i4",
+                "text": null,
               },
             },
             "type": "add",
@@ -1265,9 +1313,9 @@ suite('take with no partition', () => {
     test('at limit remove row at end, no row after', () => {
       const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
-          {id: 'i1', created: 100},
-          {id: 'i2', created: 200},
-          {id: 'i3', created: 300},
+          {id: 'i1', created: 100, text: null},
+          {id: 'i2', created: 200, text: null},
+          {id: 'i3', created: 300, text: null},
         ],
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
@@ -1296,6 +1344,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -1310,6 +1359,7 @@ suite('take with no partition', () => {
                 "row": {
                   "created": 300,
                   "id": "i3",
+                  "text": null,
                 },
               },
             },
@@ -1333,12 +1383,14 @@ suite('take with no partition', () => {
             "bound": {
               "created": 200,
               "id": "i2",
+              "text": null,
             },
             "size": 2,
           },
           "maxBound": {
             "created": 300,
             "id": "i3",
+            "text": null,
           },
         }
       `);
@@ -2318,31 +2370,13 @@ suite('take with no partition', () => {
 });
 
 suite('take with partition', () => {
-  const base = {
-    columns: {
-      id: {type: 'string'},
-      issueID: {type: 'string'},
-      created: {type: 'number'},
-    },
-    primaryKey: ['id'],
-    sort: [
-      ['created', 'asc'],
-      ['id', 'asc'],
-    ],
-  } as const;
-
   suite('add', () => {
     test('limit 0', () => {
       const {messages, storage, pushes} = takeTestWithPartition({
-        ...base,
-        partition: {
-          key: ['issueID'],
-          values: [['i1'], ['i2']],
-        },
         sourceRows: [
-          {id: 'c1', issueID: 'i1', created: 100},
-          {id: 'c2', issueID: 'i1', created: 200},
-          {id: 'c3', issueID: 'i1', created: 300},
+          {id: 'c1', issueID: 'i1', created: 100, text: null},
+          {id: 'c2', issueID: 'i1', created: 200, text: null},
+          {id: 'c3', issueID: 'i1', created: 300, text: null},
         ],
         limit: 0,
         pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
@@ -2369,17 +2403,12 @@ suite('take with partition', () => {
 
     test('less than limit add row at start', () => {
       const {messages, storage, pushes} = takeTestWithPartition({
-        ...base,
-        partition: {
-          key: ['issueID'],
-          values: [['i1'], ['i2']],
-        },
         sourceRows: [
-          {id: 'c1', issueID: 'i1', created: 100},
-          {id: 'c2', issueID: 'i1', created: 200},
-          {id: 'c3', issueID: 'i1', created: 300},
-          {id: 'c4', issueID: 'i2', created: 400},
-          {id: 'c5', issueID: 'i2', created: 500},
+          {id: 'c1', issueID: 'i1', created: 100, text: null},
+          {id: 'c2', issueID: 'i1', created: 200, text: null},
+          {id: 'c3', issueID: 'i1', created: 300, text: null},
+          {id: 'c4', issueID: 'i2', created: 400, text: null},
+          {id: 'c5', issueID: 'i2', created: 500, text: null},
         ],
         limit: 5,
         pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
@@ -2446,6 +2475,7 @@ suite('take with partition', () => {
               "created": 300,
               "id": "c3",
               "issueID": "i1",
+              "text": null,
             },
             "size": 3,
           },
@@ -2454,6 +2484,7 @@ suite('take with partition', () => {
               "created": 500,
               "id": "c5",
               "issueID": "i2",
+              "text": null,
             },
             "size": 3,
           },
@@ -2461,6 +2492,7 @@ suite('take with partition', () => {
             "created": 500,
             "id": "c5",
             "issueID": "i2",
+            "text": null,
           },
         }
       `);
@@ -2492,21 +2524,16 @@ suite('take with partition', () => {
 
     test('at limit add row at end', () => {
       const {messages, storage, pushes} = takeTestWithPartition({
-        ...base,
-        partition: {
-          key: ['issueID'],
-          values: [['i1'], ['i2']],
-        },
         sourceRows: [
-          {id: 'c1', issueID: 'i1', created: 100},
-          {id: 'c2', issueID: 'i1', created: 200},
+          {id: 'c1', issueID: 'i1', created: 100, text: null},
+          {id: 'c2', issueID: 'i1', created: 200, text: null},
           // 580 to test that it constrains looking for previous
           // to constraint issueID: 'i2'
-          {id: 'c3', issueID: 'i1', created: 580},
-          {id: 'c4', issueID: 'i2', created: 400},
-          {id: 'c5', issueID: 'i2', created: 500},
-          {id: 'c6', issueID: 'i2', created: 600},
-          {id: 'c7', issueID: 'i2', created: 700},
+          {id: 'c3', issueID: 'i1', created: 580, text: null},
+          {id: 'c4', issueID: 'i2', created: 400, text: null},
+          {id: 'c5', issueID: 'i2', created: 500, text: null},
+          {id: 'c6', issueID: 'i2', created: 600, text: null},
+          {id: 'c7', issueID: 'i2', created: 700, text: null},
         ],
         limit: 3,
         pushes: [{type: 'add', row: {id: 'c8', issueID: 'i2', created: 550}}],
@@ -2539,6 +2566,7 @@ suite('take with partition', () => {
                   "created": 600,
                   "id": "c6",
                   "issueID": "i2",
+                  "text": null,
                 },
               },
             },
@@ -2551,6 +2579,7 @@ suite('take with partition', () => {
                 "created": 600,
                 "id": "c6",
                 "issueID": "i2",
+                "text": null,
               },
               "type": "remove",
             },
@@ -2573,6 +2602,7 @@ suite('take with partition', () => {
                   "created": 600,
                   "id": "c6",
                   "issueID": "i2",
+                  "text": null,
                 },
                 "type": "remove",
               },
@@ -2630,6 +2660,7 @@ suite('take with partition', () => {
               "created": 580,
               "id": "c3",
               "issueID": "i1",
+              "text": null,
             },
             "size": 3,
           },
@@ -2645,6 +2676,7 @@ suite('take with partition', () => {
             "created": 600,
             "id": "c6",
             "issueID": "i2",
+            "text": null,
           },
         }
       `);
@@ -2659,6 +2691,7 @@ suite('take with partition', () => {
                     "created": 600,
                     "id": "c6",
                     "issueID": "i2",
+                    "text": null,
                   },
                 },
                 "type": "remove",
@@ -2696,17 +2729,12 @@ suite('take with partition', () => {
 
     test('add with non-fetched partition value', () => {
       const {messages, storage, pushes} = takeTestWithPartition({
-        ...base,
-        partition: {
-          key: ['issueID'],
-          values: [['i1'], ['i2']],
-        },
         sourceRows: [
-          {id: 'c1', issueID: 'i1', created: 100},
-          {id: 'c2', issueID: 'i1', created: 200},
-          {id: 'c3', issueID: 'i1', created: 300},
-          {id: 'c4', issueID: 'i2', created: 400},
-          {id: 'c5', issueID: 'i2', created: 500},
+          {id: 'c1', issueID: 'i1', created: 100, text: null},
+          {id: 'c2', issueID: 'i1', created: 200, text: null},
+          {id: 'c3', issueID: 'i1', created: 300, text: null},
+          {id: 'c4', issueID: 'i2', created: 400, text: null},
+          {id: 'c5', issueID: 'i2', created: 500, text: null},
         ],
         limit: 3,
         pushes: [{type: 'add', row: {id: 'c6', issueID: '3', created: 550}}],
@@ -2734,6 +2762,7 @@ suite('take with partition', () => {
               "created": 300,
               "id": "c3",
               "issueID": "i1",
+              "text": null,
             },
             "size": 3,
           },
@@ -2742,6 +2771,7 @@ suite('take with partition', () => {
               "created": 500,
               "id": "c5",
               "issueID": "i2",
+              "text": null,
             },
             "size": 2,
           },
@@ -2749,6 +2779,7 @@ suite('take with partition', () => {
             "created": 500,
             "id": "c5",
             "issueID": "i2",
+            "text": null,
           },
         }
       `);
@@ -2759,15 +2790,10 @@ suite('take with partition', () => {
   suite('remove', () => {
     test('limit 0', () => {
       const {messages, storage, pushes} = takeTestWithPartition({
-        ...base,
-        partition: {
-          key: ['issueID'],
-          values: [['i1'], ['i2']],
-        },
         sourceRows: [
-          {id: 'c1', issueID: 'i1', created: 100},
-          {id: 'c2', issueID: 'i1', created: 200},
-          {id: 'c3', issueID: 'i1', created: 300},
+          {id: 'c1', issueID: 'i1', created: 100, text: null},
+          {id: 'c2', issueID: 'i1', created: 200, text: null},
+          {id: 'c3', issueID: 'i1', created: 300, text: null},
         ],
         limit: 0,
         pushes: [
@@ -2796,17 +2822,12 @@ suite('take with partition', () => {
 
     test('less than limit remove row at start', () => {
       const {messages, storage, pushes} = takeTestWithPartition({
-        ...base,
-        partition: {
-          key: ['issueID'],
-          values: [['i1'], ['i2']],
-        },
         sourceRows: [
-          {id: 'c1', issueID: 'i1', created: 100},
-          {id: 'c2', issueID: 'i1', created: 200},
-          {id: 'c3', issueID: 'i1', created: 300},
-          {id: 'c4', issueID: 'i2', created: 400},
-          {id: 'c5', issueID: 'i2', created: 500},
+          {id: 'c1', issueID: 'i1', created: 100, text: null},
+          {id: 'c2', issueID: 'i1', created: 200, text: null},
+          {id: 'c3', issueID: 'i1', created: 300, text: null},
+          {id: 'c4', issueID: 'i2', created: 400, text: null},
+          {id: 'c5', issueID: 'i2', created: 500, text: null},
         ],
         limit: 5,
         pushes: [
@@ -2841,6 +2862,7 @@ suite('take with partition', () => {
                   "created": 300,
                   "id": "c3",
                   "issueID": "i1",
+                  "text": null,
                 },
               },
             },
@@ -2858,6 +2880,7 @@ suite('take with partition', () => {
                   "created": 300,
                   "id": "c3",
                   "issueID": "i1",
+                  "text": null,
                 },
               },
             },
@@ -2910,6 +2933,7 @@ suite('take with partition', () => {
               "created": 300,
               "id": "c3",
               "issueID": "i1",
+              "text": null,
             },
             "size": 2,
           },
@@ -2918,6 +2942,7 @@ suite('take with partition', () => {
               "created": 500,
               "id": "c5",
               "issueID": "i2",
+              "text": null,
             },
             "size": 2,
           },
@@ -2925,6 +2950,7 @@ suite('take with partition', () => {
             "created": 500,
             "id": "c5",
             "issueID": "i2",
+            "text": null,
           },
         }
       `);
@@ -2956,18 +2982,13 @@ suite('take with partition', () => {
 
     test('remove row unfetched partition', () => {
       const {messages, storage, pushes} = takeTestWithPartition({
-        ...base,
-        partition: {
-          key: ['issueID'],
-          values: [['i1'], ['i2']],
-        },
         sourceRows: [
-          {id: 'c1', issueID: 'i1', created: 100},
-          {id: 'c2', issueID: 'i1', created: 200},
-          {id: 'c3', issueID: 'i1', created: 300},
-          {id: 'c4', issueID: 'i2', created: 400},
-          {id: 'c5', issueID: 'i2', created: 500},
-          {id: 'c6', issueID: 'i3', created: 600},
+          {id: 'c1', issueID: 'i1', created: 100, text: null},
+          {id: 'c2', issueID: 'i1', created: 200, text: null},
+          {id: 'c3', issueID: 'i1', created: 300, text: null},
+          {id: 'c4', issueID: 'i2', created: 400, text: null},
+          {id: 'c5', issueID: 'i2', created: 500, text: null},
+          {id: 'c6', issueID: 'i3', created: 600, text: null},
         ],
         limit: 5,
         pushes: [
@@ -2997,6 +3018,7 @@ suite('take with partition', () => {
               "created": 300,
               "id": "c3",
               "issueID": "i1",
+              "text": null,
             },
             "size": 3,
           },
@@ -3005,6 +3027,7 @@ suite('take with partition', () => {
               "created": 500,
               "id": "c5",
               "issueID": "i2",
+              "text": null,
             },
             "size": 2,
           },
@@ -3012,6 +3035,7 @@ suite('take with partition', () => {
             "created": 500,
             "id": "c5",
             "issueID": "i2",
+            "text": null,
           },
         }
       `);
@@ -3021,17 +3045,6 @@ suite('take with partition', () => {
 
   suite('edit', () => {
     const base = {
-      columns: {
-        id: {type: 'string'},
-        created: {type: 'number'},
-        issueID: {type: 'string'},
-        text: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      sort: [
-        ['created', 'asc'],
-        ['id', 'asc'],
-      ],
       sourceRows: [
         {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
         {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
@@ -3039,19 +3052,11 @@ suite('take with partition', () => {
         {id: 'c4', issueID: 'i2', created: 400, text: 'd'},
         {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
       ],
-      partition: {
-        key: ['issueID'],
-        values: [['i1'], ['i2']],
-      },
     } as const;
 
     test('limit 0', () => {
       const {messages, storage, pushes} = takeTestWithPartition({
         ...base,
-        partition: {
-          key: ['issueID'],
-          values: [['i1'], ['i2']],
-        },
         limit: 0,
         pushes: [
           {
@@ -5228,7 +5233,58 @@ suite('take with partition', () => {
   });
 });
 
-function takeTestWithPartition(t: TakeTestWithPartition): TakeTestReults {
+type TakeTestResults = {
+  messages: SnitchMessage[];
+  storage: JSONObject;
+  pushes: CaughtChange[];
+};
+
+type TakeTest = {
+  sourceRows: readonly Row[];
+  limit: number;
+  pushes: SourceChange[];
+};
+
+function takeNoPartitionTest(t: TakeTest): TakeTestResults {
+  const testTableName = 'testTable';
+  const ast: AST = {
+    table: 'testTable',
+    orderBy: [
+      ['created', 'asc'],
+      ['id', 'asc'],
+    ],
+    limit: t.limit,
+  } as const;
+  const result = runPushTest({
+    sources: {
+      [testTableName]: {
+        primaryKeys: ['id'],
+        columns: {
+          id: {type: 'string'},
+          created: {type: 'number'},
+          text: {type: 'string', optional: true},
+        },
+      },
+    },
+    sourceContents: {
+      [testTableName]: t.sourceRows,
+    },
+    ast,
+    format: {
+      singular: false,
+      relationships: {},
+    },
+    pushes: t.pushes.map(change => [testTableName, change]),
+  });
+
+  return {
+    messages: result.log,
+    storage: result.actualStorage[':take'],
+    pushes: result.pushes,
+  };
+}
+
+function takeTestWithPartition(t: TakeTest): TakeTestResults {
   const sources: Sources = {
     issue: {
       columns: {
@@ -5241,6 +5297,7 @@ function takeTestWithPartition(t: TakeTestWithPartition): TakeTestReults {
         id: {type: 'string'},
         issueID: {type: 'string'},
         created: {type: 'number'},
+        text: {type: 'string', optional: true},
       },
       primaryKeys: ['id'],
     },
@@ -5290,69 +5347,3 @@ function takeTestWithPartition(t: TakeTestWithPartition): TakeTestReults {
     pushes: result.pushes,
   };
 }
-
-function takeNoPartitionTest(t: TakeTestNoPartition): TakeTestReults {
-  const testTableName = 'testTable';
-  const ast: AST = {
-    table: 'testTable',
-    orderBy: [
-      ['created', 'asc'],
-      ['id', 'asc'],
-    ],
-    limit: t.limit,
-  } as const;
-  const result = runPushTest({
-    sources: {
-      [testTableName]: {
-        primaryKeys: ['id'],
-        columns: {
-          id: {type: 'string'},
-          created: {type: 'number'},
-          text: {type: 'string', optional: true},
-        },
-      },
-    },
-    sourceContents: {
-      [testTableName]: t.sourceRows,
-    },
-    ast,
-    format: {
-      singular: false,
-      relationships: {},
-    },
-    pushes: t.pushes.map(change => [testTableName, change]),
-  });
-
-  return {
-    messages: result.log,
-    storage: result.actualStorage[':take'],
-    pushes: result.pushes,
-  };
-}
-
-type TakeTestNoPartition = {
-  sourceRows: readonly Row[];
-  limit: number;
-  pushes: SourceChange[];
-};
-
-type TakeTestWithPartition = {
-  columns: Record<string, SchemaValue>;
-  primaryKey: PrimaryKey;
-  sourceRows: readonly Row[];
-  sort?: Ordering | undefined;
-  limit: number;
-  partition:
-    | {
-        key: PartitionKey;
-        values: readonly (readonly Value[])[];
-      }
-    | undefined;
-  pushes: SourceChange[];
-};
-
-type TakeTestReults = {
-  messages: SnitchMessage[];
-  storage: JSONObject;
-  pushes: CaughtChange[];
-};
