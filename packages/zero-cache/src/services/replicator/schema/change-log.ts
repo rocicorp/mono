@@ -97,8 +97,8 @@ export function logSetOp(
   version: LexiVersion,
   table: string,
   row: LiteRowKey,
-) {
-  logRowOp(db, version, table, row, SET_OP);
+): string {
+  return logRowOp(db, version, table, row, SET_OP);
 }
 
 export function logDeleteOp(
@@ -106,8 +106,8 @@ export function logDeleteOp(
   version: LexiVersion,
   table: string,
   row: LiteRowKey,
-) {
-  logRowOp(db, version, table, row, DEL_OP);
+): string {
+  return logRowOp(db, version, table, row, DEL_OP);
 }
 
 function logRowOp(
@@ -116,7 +116,7 @@ function logRowOp(
   table: string,
   row: LiteRowKey,
   op: string,
-) {
+): string {
   const rowKey = stringify(normalizedKeyOrder(row));
   db.run(
     `
@@ -127,6 +127,7 @@ function logRowOp(
     `,
     {version, table, rowKey, op},
   );
+  return rowKey;
 }
 export function logTruncateOp(
   db: StatementRunner,

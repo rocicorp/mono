@@ -56,9 +56,12 @@ export const insertSchema = v.object({
 export const updateSchema = v.object({
   tag: v.literal('update'),
   relation: relationSchema,
-  // key is present if the update changed the key of the row, or if the
+  // `key` is present if the update changed the key of the row, or if the
   // table's replicaIdentity === 'full'
   key: rowSchema.nullable(),
+  // `new` is the full row (and not just the updated columns). This is
+  // necessary for "catchup" replication scenarios such as adding tables
+  // to a publication, or resharding.
   new: rowSchema,
 });
 
