@@ -24,6 +24,7 @@ import {stringify} from '../../types/bigint-json.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {liteRow, type LiteRow, type LiteRowKey} from '../../types/lite.ts';
 import {liteTableName} from '../../types/names.ts';
+import {normalizedKeyOrder} from '../../types/row-key.ts';
 import {id} from '../../types/sql.ts';
 import type {
   Change,
@@ -361,18 +362,11 @@ class TransactionProcessor {
   processInsert(insert: MessageInsert) {
     const table = liteTableName(insert.relation);
     const newRow = liteRow(insert.new, this.#tableSpec(table));
-    const row = {
+
+    this.#upsert(table, {
       ...newRow.row,
       [ZERO_VERSION_COLUMN_NAME]: this.#version,
-    };
-    const columns = Object.keys(row).map(c => id(c));
-    this.#db.run(
-      `
-      INSERT INTO ${id(table)} (${columns.join(',')})
-        VALUES (${new Array(columns.length).fill('?').join(',')})
-      `,
-      Object.values(row),
-    );
+    });
 
     if (insert.relation.keyColumns.length === 0) {
       // INSERTs can be replicated for rows without a PRIMARY KEY or a
@@ -388,50 +382,66 @@ class TransactionProcessor {
     this.#logSetOp(table, key);
   }
 
+  #upsert(table: string, row: LiteRow) {
+    const columns = Object.keys(row).map(c => id(c));
+    this.#db.run(
+      `
+      INSERT OR REPLACE INTO ${id(table)} (${columns.join(',')})
+        VALUES (${new Array(columns.length).fill('?').join(',')})
+      `,
+      Object.values(row),
+    );
+  }
+
+  // Note: Updates are applied as "upserts", so that the `new` row
+  // is guaranteed to exist even if its previous incarnation did not.
+  // This is necessary to facilitate "resumptive" replication, whereby
+  // rows of tables that were not initially-synced are introduced into
+  // into the replica via updates. Resumptive replication can happen
+  // when (1) an existing table is added to the apps publication or
+  // (2) a new sharding key is added to a shard during resharding.
   processUpdate(update: MessageUpdate) {
     const table = liteTableName(update.relation);
     const newRow = liteRow(update.new, this.#tableSpec(table));
-    const row = {
-      ...newRow.row,
-      [ZERO_VERSION_COLUMN_NAME]: this.#version,
-    };
     // update.key is set with the old values if the key has changed.
     const oldKey = update.key
       ? this.#getKey(liteRow(update.key, this.#tableSpec(table)), update)
       : null;
     const newKey = this.#getKey(newRow, update);
-    const currKey = oldKey ?? newKey;
-    const setExprs = Object.keys(row).map(col => `${id(col)}=?`);
-    const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
 
-    this.#db.run(
-      `
-      UPDATE ${id(table)}
-        SET ${setExprs.join(',')}
-        WHERE ${conds.join(' AND ')}
-      `,
-      [...Object.values(row), ...Object.values(currKey)],
-    );
+    const oldKeyString = oldKey ? this.#logDeleteOp(table, oldKey) : null;
+    const newKeyString = this.#logSetOp(table, newKey);
 
-    if (oldKey) {
-      this.#logDeleteOp(table, oldKey);
+    if (oldKey && oldKeyString !== newKeyString) {
+      // Because the change is applied with an INSERT instead of an UPDATE,
+      // the previous row, if its key was different, is explicitly deleted.
+      // In general, it is expected changing the key of a row is an
+      // uncommon operation.
+      this.#delete(table, oldKey);
     }
-    this.#logSetOp(table, newKey);
+    this.#upsert(table, {
+      ...newRow.row,
+      [ZERO_VERSION_COLUMN_NAME]: this.#version,
+    });
   }
 
   processDelete(del: MessageDelete) {
     const table = liteTableName(del.relation);
     const rowKey = this.#getKey(liteRow(del.key, this.#tableSpec(table)), del);
 
+    this.#delete(table, rowKey);
+
+    if (this.#txMode !== 'INITIAL-SYNC') {
+      this.#logDeleteOp(table, rowKey);
+    }
+  }
+
+  #delete(table: string, rowKey: LiteRowKey) {
     const conds = Object.keys(rowKey).map(col => `${id(col)}=?`);
     this.#db.run(
       `DELETE FROM ${id(table)} WHERE ${conds.join(' AND ')}`,
       Object.values(rowKey),
     );
-
-    if (this.#txMode !== 'INITIAL-SYNC') {
-      this.#logDeleteOp(table, rowKey);
-    }
   }
 
   processTruncate(truncate: MessageTruncate) {
@@ -560,16 +570,18 @@ class TransactionProcessor {
     this.#logResetOp(table);
   }
 
-  #logSetOp(table: string, key: LiteRowKey) {
+  #logSetOp(table: string, key: LiteRowKey): string {
     if (this.#txMode !== 'INITIAL-SYNC') {
-      logSetOp(this.#db, this.#version, table, key);
+      return logSetOp(this.#db, this.#version, table, key);
     }
+    return stringify(normalizedKeyOrder(key));
   }
 
-  #logDeleteOp(table: string, key: LiteRowKey) {
+  #logDeleteOp(table: string, key: LiteRowKey): string {
     if (this.#txMode !== 'INITIAL-SYNC') {
-      logDeleteOp(this.#db, this.#version, table, key);
+      return logDeleteOp(this.#db, this.#version, table, key);
     }
+    return stringify(normalizedKeyOrder(key));
   }
 
   #logTruncateOp(table: string) {
