@@ -1,4 +1,4 @@
-import {beforeEach, describe, test} from 'vitest';
+import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../../db/statements.ts';
@@ -21,10 +21,18 @@ describe('replicator/schema/change-log', () => {
   });
 
   test('replicator/schema/change-log', () => {
-    logSetOp(db, '01', 'foo', {a: 1, b: 2});
-    logSetOp(db, '01', 'foo', {b: 3, a: 2}); // Note: rowKey JSON should have sorted keys
-    logSetOp(db, '01', 'bar', {b: 2, a: 1}); // Note: rowKey JSON should have sorted keys
-    logSetOp(db, '01', 'bar', {a: 2, b: 3});
+    expect(logSetOp(db, '01', 'foo', {a: 1, b: 2})).toMatchInlineSnapshot(
+      `"{"a":1,"b":2}"`,
+    );
+    expect(logSetOp(db, '01', 'foo', {b: 3, a: 2})).toMatchInlineSnapshot(
+      `"{"a":2,"b":3}"`,
+    );
+    expect(logSetOp(db, '01', 'bar', {b: 2, a: 1})).toMatchInlineSnapshot(
+      `"{"a":1,"b":2}"`,
+    );
+    expect(logSetOp(db, '01', 'bar', {a: 2, b: 3})).toMatchInlineSnapshot(
+      `"{"a":2,"b":3}"`,
+    );
 
     expectTables(db.db, {
       ['_zero.changeLog']: [
@@ -35,7 +43,9 @@ describe('replicator/schema/change-log', () => {
       ],
     });
 
-    logDeleteOp(db, '02', 'bar', {a: 2, b: 3});
+    expect(logDeleteOp(db, '02', 'bar', {b: 3, a: 2})).toMatchInlineSnapshot(
+      `"{"a":2,"b":3}"`,
+    );
 
     expectTables(db.db, {
       ['_zero.changeLog']: [
@@ -46,10 +56,16 @@ describe('replicator/schema/change-log', () => {
       ],
     });
 
-    logDeleteOp(db, '03', 'foo', {a: 2, b: 3});
-    logSetOp(db, '03', 'foo', {b: 4, a: 5});
+    expect(logDeleteOp(db, '03', 'foo', {a: 2, b: 3})).toMatchInlineSnapshot(
+      `"{"a":2,"b":3}"`,
+    );
+    expect(logSetOp(db, '03', 'foo', {b: 4, a: 5})).toMatchInlineSnapshot(
+      `"{"a":5,"b":4}"`,
+    );
     logTruncateOp(db, '03', 'foo'); // Clears all "foo" log entries, including the previous two.
-    logSetOp(db, '03', 'foo', {b: 9, a: 8});
+    expect(logSetOp(db, '03', 'foo', {b: 9, a: 8})).toMatchInlineSnapshot(
+      `"{"a":8,"b":9}"`,
+    );
 
     expectTables(db.db, {
       ['_zero.changeLog']: [
@@ -60,10 +76,16 @@ describe('replicator/schema/change-log', () => {
       ],
     });
 
-    logDeleteOp(db, '04', 'bar', {a: 1, b: 2});
-    logSetOp(db, '04', 'bar', {b: 3, a: 2});
+    expect(logDeleteOp(db, '04', 'bar', {a: 1, b: 2})).toMatchInlineSnapshot(
+      `"{"a":1,"b":2}"`,
+    );
+    expect(logSetOp(db, '04', 'bar', {b: 3, a: 2})).toMatchInlineSnapshot(
+      `"{"a":2,"b":3}"`,
+    );
     logResetOp(db, '04', 'bar'); // Clears all "bar" log entries, including the previous two.
-    logSetOp(db, '04', 'bar', {b: 9, a: 7});
+    expect(logSetOp(db, '04', 'bar', {b: 9, a: 7})).toMatchInlineSnapshot(
+      `"{"a":7,"b":9}"`,
+    );
 
     expectTables(db.db, {
       ['_zero.changeLog']: [

@@ -1139,6 +1139,112 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
       [],
     ],
+    [
+      'resumptive replication',
+      `
+      CREATE TABLE existing (a TEXT PRIMARY KEY, b TEXT);
+      INSERT INTO existing (a, b) VALUES ('c', 'd');
+      INSERT INTO existing (a, b) VALUES ('e', 'f');
+
+      CREATE TABLE existing_full (a TEXT PRIMARY KEY, b TEXT);
+      ALTER TABLE existing_full REPLICA IDENTITY FULL;
+      INSERT INTO existing_full (a, b) VALUES ('c', 'd');
+      INSERT INTO existing_full (a, b) VALUES ('e', 'f');
+
+      ALTER PUBLICATION zero_some_public ADD TABLE existing;
+      ALTER PUBLICATION zero_some_public ADD TABLE existing_full;
+      UPDATE existing SET a = a;
+      UPDATE existing_full SET a = a;
+      `,
+      [
+        {tag: 'create-table'},
+        {tag: 'create-index'},
+        {tag: 'create-table'},
+        {tag: 'create-index'},
+        {tag: 'update'},
+        {tag: 'update'},
+        {tag: 'update'},
+        {tag: 'update'},
+      ],
+      {
+        existing: [
+          {a: 'c', b: 'd'},
+          {a: 'e', b: 'f'},
+        ],
+        ['existing_full']: [
+          {a: 'c', b: 'd'},
+          {a: 'e', b: 'f'},
+        ],
+      },
+      [
+        {
+          name: 'existing',
+          columns: {
+            a: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            b: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+          },
+        },
+        {
+          name: 'existing_full',
+          columns: {
+            a: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            b: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+          },
+        },
+      ],
+      [
+        {
+          columns: {a: 'ASC'},
+          name: 'existing_pkey',
+          tableName: 'existing',
+          unique: true,
+        },
+        {
+          columns: {a: 'ASC'},
+          name: 'existing_full_pkey',
+          tableName: 'existing_full',
+          unique: true,
+        },
+      ],
+    ],
   ] satisfies [
     name: string,
     statements: string,

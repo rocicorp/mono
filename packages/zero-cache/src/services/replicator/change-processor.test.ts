@@ -539,6 +539,131 @@ describe('replicator/incremental-sync', () => {
       },
     },
     {
+      name: 'upsert (resumptive replication)',
+      setup: `
+      CREATE TABLE foo(
+        id INT PRIMARY KEY,
+        desc TEXT,
+        _0_version TEXT
+      );
+      INSERT INTO foo (id, desc) VALUES (1, 'one');
+
+      CREATE TABLE full(
+        id INT PRIMARY KEY,
+        bool BOOL,
+        desc TEXT,
+        _0_version TEXT
+      );
+      INSERT INTO full (id, bool, desc) VALUES (2, 0, 'two');
+      `,
+      downstream: [
+        ['begin', full.begin(), {commitWatermark: '06'}],
+        ['data', fooBarBaz.insert('foo', {id: 1, desc: 'replaced one'})],
+        ['data', fooBarBaz.update('foo', {id: 789, desc: null})],
+        ['data', fooBarBaz.update('foo', {id: 234, desc: 'woo'}, {id: 999})],
+        ['data', fooBarBaz.delete('foo', {id: 1000})],
+        [
+          'data',
+          full.insert('full', {id: 2, bool: true, desc: 'replaced two'}),
+        ],
+        [
+          'data',
+          full.update(
+            'full',
+            {id: 321, bool: false, desc: 'voo'},
+            {id: 333, bool: true, desc: 'did not exist'},
+          ),
+        ],
+        [
+          'data',
+          full.update(
+            'full',
+            {id: 456, bool: false, desc: null},
+            {id: 456, bool: false, desc: 'did not exist'},
+          ),
+        ],
+        [
+          'data',
+          full.delete('full', {id: 2000, bool: false, desc: 'does not exist'}),
+        ],
+        ['commit', full.commit(), {watermark: '06'}],
+      ],
+      data: {
+        foo: [
+          {id: 1n, desc: 'replaced one', ['_0_version']: '06'},
+          {id: 789n, desc: null, ['_0_version']: '06'},
+          {id: 234n, desc: 'woo', ['_0_version']: '06'},
+        ],
+        full: [
+          {id: 2n, bool: 1n, desc: 'replaced two', ['_0_version']: '06'},
+          {id: 321n, bool: 0n, desc: 'voo', ['_0_version']: '06'},
+          {id: 456n, bool: 0n, desc: null, ['_0_version']: '06'},
+        ],
+        ['_zero.changeLog']: [
+          {
+            op: 's',
+            rowKey: '{"id":1}',
+            stateVersion: '06',
+            table: 'foo',
+          },
+          {
+            op: 's',
+            rowKey: '{"id":789}',
+            stateVersion: '06',
+            table: 'foo',
+          },
+          {
+            op: 'd',
+            rowKey: '{"id":999}',
+            stateVersion: '06',
+            table: 'foo',
+          },
+          {
+            op: 's',
+            rowKey: '{"id":234}',
+            stateVersion: '06',
+            table: 'foo',
+          },
+          {
+            op: 'd',
+            rowKey: '{"id":1000}',
+            stateVersion: '06',
+            table: 'foo',
+          },
+          {
+            op: 's',
+            rowKey: '{"id":2}',
+            stateVersion: '06',
+            table: 'full',
+          },
+          {
+            op: 'd',
+            rowKey: '{"id":333}',
+            stateVersion: '06',
+            table: 'full',
+          },
+          {
+            op: 's',
+            rowKey: '{"id":321}',
+            stateVersion: '06',
+            table: 'full',
+          },
+          {
+            op: 's',
+            rowKey: '{"id":456}',
+            stateVersion: '06',
+            table: 'full',
+          },
+          {
+            op: 'd',
+            rowKey: '{"id":2000}',
+            stateVersion: '06',
+            table: 'full',
+          },
+        ],
+      },
+    },
+    {
       name: 'reserved words in DML',
       setup: `
       CREATE TABLE "transaction" (
@@ -1039,6 +1164,7 @@ describe('replicator/incremental-sync', () => {
       name: 'rename column',
       setup: `
         CREATE TABLE foo(id INT8, renameMe TEXT, _0_version TEXT);
+        CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
         INSERT INTO foo(id, renameMe, _0_version) VALUES (1, 'hel', '00');
         INSERT INTO foo(id, renameMe, _0_version) VALUES (2, 'low', '00');
         INSERT INTO foo(id, renameMe, _0_version) VALUES (3, 'orl', '00');
@@ -1107,12 +1233,20 @@ describe('replicator/incremental-sync', () => {
           },
         },
       ],
-      indexSpecs: [],
+      indexSpecs: [
+        {
+          name: 'foo_pkey',
+          tableName: 'foo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+      ],
     },
     {
       name: 'change column nullability',
       setup: `
         CREATE TABLE foo(id INT8, nolz TEXT, _0_version TEXT);
+        CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
         INSERT INTO foo(id, nolz, _0_version) VALUES (1, 'hel', '00');
         INSERT INTO foo(id, nolz, _0_version) VALUES (2, 'low', '00');
         INSERT INTO foo(id, nolz, _0_version) VALUES (3, 'orl', '00');
@@ -1181,12 +1315,20 @@ describe('replicator/incremental-sync', () => {
           },
         },
       ],
-      indexSpecs: [],
+      indexSpecs: [
+        {
+          name: 'foo_pkey',
+          tableName: 'foo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+      ],
     },
     {
       name: 'rename indexed column',
       setup: `
         CREATE TABLE foo(id INT8, renameMe TEXT, _0_version TEXT);
+        CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
         CREATE UNIQUE INDEX foo_rename_me ON foo (renameMe);
         INSERT INTO foo(id, renameMe, _0_version) VALUES (1, 'hel', '00');
         INSERT INTO foo(id, renameMe, _0_version) VALUES (2, 'low', '00');
@@ -1258,6 +1400,12 @@ describe('replicator/incremental-sync', () => {
       ],
       indexSpecs: [
         {
+          name: 'foo_pkey',
+          tableName: 'foo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+        {
           name: 'foo_rename_me',
           tableName: 'foo',
           columns: {newName: 'ASC'},
@@ -1269,6 +1417,7 @@ describe('replicator/incremental-sync', () => {
       name: 'retype column',
       setup: `
         CREATE TABLE foo(id INT8, num TEXT, _0_version TEXT);
+        CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
         INSERT INTO foo(id, num, _0_version) VALUES (1, '3', '00');
         INSERT INTO foo(id, num, _0_version) VALUES (2, '2', '00');
         INSERT INTO foo(id, num, _0_version) VALUES (3, '3', '00');
@@ -1337,12 +1486,20 @@ describe('replicator/incremental-sync', () => {
           },
         },
       ],
-      indexSpecs: [],
+      indexSpecs: [
+        {
+          tableName: 'foo',
+          name: 'foo_pkey',
+          unique: true,
+          columns: {id: 'ASC'},
+        },
+      ],
     },
     {
       name: 'retype column with indexes',
       setup: `
         CREATE TABLE foo(id INT8, num TEXT, _0_version TEXT);
+        CREATE UNIQUE INDEX foo_pkey ON foo (id);
         CREATE UNIQUE INDEX foo_num ON foo (num);
         CREATE UNIQUE INDEX foo_id_num ON foo (id, num);
         INSERT INTO foo(id, num, _0_version) VALUES (1, '3', '00');
@@ -1426,12 +1583,19 @@ describe('replicator/incremental-sync', () => {
           columns: {num: 'ASC'},
           unique: true,
         },
+        {
+          name: 'foo_pkey',
+          tableName: 'foo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
       ],
     },
     {
       name: 'rename and retype column',
       setup: `
         CREATE TABLE foo(id INT8, numburr TEXT, _0_version TEXT);
+        CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
         INSERT INTO foo(id, numburr, _0_version) VALUES (1, '3', '00');
         INSERT INTO foo(id, numburr, _0_version) VALUES (2, '2', '00');
         INSERT INTO foo(id, numburr, _0_version) VALUES (3, '3', '00');
@@ -1500,7 +1664,14 @@ describe('replicator/incremental-sync', () => {
           },
         },
       ],
-      indexSpecs: [],
+      indexSpecs: [
+        {
+          tableName: 'foo',
+          name: 'foo_pkey',
+          unique: true,
+          columns: {id: 'ASC'},
+        },
+      ],
     },
     {
       name: 'drop table',
@@ -1713,7 +1884,6 @@ describe('replicator/incremental-sync', () => {
       if (c.indexSpecs) {
         expect(listIndexes(replica)).toEqual(c.indexSpecs);
       }
-      expectTables(replica, c.data, 'bigint');
     });
   }
 });

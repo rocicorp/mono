@@ -527,7 +527,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     replicator.processTransaction(
       '134',
-      messages.update('comments', {id: '22', issueID: '3'}),
+      messages.update('comments', {id: '22', issueID: '3', upvotes: 20000}),
     );
 
     expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
@@ -560,7 +560,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     replicator.processTransaction(
       '135',
-      messages.update('comments', {id: '22', upvotes: 10}),
+      messages.update('comments', {id: '22', issueID: '3', upvotes: 10}),
     );
 
     expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`

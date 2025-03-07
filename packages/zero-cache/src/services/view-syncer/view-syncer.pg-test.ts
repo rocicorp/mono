@@ -2438,6 +2438,7 @@ describe('view-syncer/service', () => {
       appMessages.update('schemaVersions', {
         lock: true,
         minSupportedVersion: 3,
+        maxSupportedVersion: 3,
       }),
     );
 

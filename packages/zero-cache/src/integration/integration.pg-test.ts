@@ -768,6 +768,11 @@ describe('integration', {timeout: 30000}, () => {
               new: {
                 id: 'bar',
                 ['far_id']: 'not_baz',
+                b: true,
+                j1: {foo: 'bar\u0000'},
+                j2: true,
+                j3: 123,
+                j4: 'string',
               },
               key: null,
             },
