@@ -18,6 +18,7 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {first} from './stream.ts';
+import {log} from '../../../shared/src/glob-log.ts';
 
 type SizeStorageKeyPrefix = `row/${string}/`;
 /**
@@ -120,6 +121,7 @@ export class Exists implements Operator {
 
   push(change: Change) {
     this.#inPush = true;
+    log('EXISTS GOT PUSH', change);
     try {
       switch (change.type) {
         // add, remove and edit cannot change the size of the

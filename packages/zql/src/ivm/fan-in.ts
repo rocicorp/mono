@@ -13,6 +13,7 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
+import {log} from '../../../shared/src/glob-log.ts';
 
 /**
  * The FanIn operator merges multiple streams into one.
@@ -76,6 +77,7 @@ export class FanIn implements Operator {
   }
 
   push(change: Change) {
+    log('FAN IN GOT PUSH', change);
     this.#fanOut.onFanInReceivedPush();
     this.#output.push(change);
   }
