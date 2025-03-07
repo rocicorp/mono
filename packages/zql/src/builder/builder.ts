@@ -187,7 +187,7 @@ function buildPipelineInternal(
     end = applyWhere(end, ast.where, delegate, name);
   }
 
-  if (ast.limit) {
+  if (ast.limit !== undefined) {
     const takeName = `${name}:take`;
     end = delegate.decorateInput(
       new Take(end, delegate.createStorage(takeName), ast.limit, partitionKey),

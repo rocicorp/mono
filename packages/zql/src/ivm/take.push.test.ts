@@ -1,45 +1,19 @@
 import {describe, expect, suite, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.ts';
-import type {JSONValue} from '../../../shared/src/json.ts';
-import type {Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {JSONObject} from '../../../shared/src/json.ts';
+import type {AST, Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
-import {Catch, type CaughtChange} from './catch.ts';
-import {MemoryStorage} from './memory-storage.ts';
-import {Snitch, type SnitchMessage} from './snitch.ts';
+import {type CaughtChange} from './catch.ts';
+import {type SnitchMessage} from './snitch.ts';
 import type {SourceChange} from './source.ts';
-import {Take, type PartitionKey} from './take.ts';
-import {createSource} from './test/source-factory.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
-
-const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
+import {type PartitionKey} from './take.ts';
+import {runPushTest, type Sources} from './test/push-tests.ts';
 
 suite('take with no partition', () => {
-  const base = {
-    columns: {
-      id: {type: 'string'},
-      created: {type: 'number'},
-    },
-    primaryKey: ['id'],
-    sort: [
-      ['created', 'asc'],
-      ['id', 'asc'],
-    ],
-    partition: undefined,
-  } as const;
-
   suite('add', () => {
     test('limit 0', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -51,7 +25,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -68,8 +42,7 @@ suite('take with no partition', () => {
     });
 
     test('less than limit add row at start', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -81,7 +54,18 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
+            "push",
+            {
+              "row": {
+                "created": 50,
+                "id": "i4",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            ":take",
             "push",
             {
               "row": {
@@ -125,8 +109,7 @@ suite('take with no partition', () => {
     });
 
     test('less than limit add row at end', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -138,7 +121,18 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
+            "push",
+            {
+              "row": {
+                "created": 350,
+                "id": "i4",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            ":take",
             "push",
             {
               "row": {
@@ -182,8 +176,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit add row after bound', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -196,7 +189,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -227,8 +220,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit add row at start', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -241,7 +233,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -252,7 +244,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -264,6 +256,28 @@ suite('take with no partition', () => {
                   "id": "i3",
                 },
               },
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 50,
+                "id": "i5",
+              },
+              "type": "add",
             },
           ],
         ]
@@ -310,8 +324,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit add row at end', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -324,7 +337,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -335,7 +348,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -347,6 +360,28 @@ suite('take with no partition', () => {
                   "id": "i3",
                 },
               },
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 250,
+                "id": "i5",
+              },
+              "type": "add",
             },
           ],
         ]
@@ -395,8 +430,7 @@ suite('take with no partition', () => {
 
   suite('remove', () => {
     test('limit 0', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -408,7 +442,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -425,8 +459,7 @@ suite('take with no partition', () => {
     });
 
     test('less than limit remove row at start', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -438,7 +471,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -449,7 +482,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -464,7 +497,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -475,6 +508,17 @@ suite('take with no partition', () => {
                   "id": "i3",
                 },
               },
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
             },
           ],
         ]
@@ -511,8 +555,7 @@ suite('take with no partition', () => {
     });
 
     test('less than limit remove row at end', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -524,7 +567,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -535,7 +578,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -550,7 +593,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -561,6 +604,17 @@ suite('take with no partition', () => {
                   "id": "i3",
                 },
               },
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+              "type": "remove",
             },
           ],
         ]
@@ -597,8 +651,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit remove row after bound', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -611,7 +664,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -642,8 +695,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit remove row at start with row after', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -656,7 +708,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -667,7 +719,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -682,7 +734,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -693,6 +745,28 @@ suite('take with no partition', () => {
                   "id": "i3",
                 },
               },
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 400,
+                "id": "i4",
+              },
+              "type": "add",
             },
           ],
         ]
@@ -739,8 +813,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit remove row at start with row after, limit 2', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -753,7 +826,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -764,7 +837,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -779,7 +852,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -790,6 +863,28 @@ suite('take with no partition', () => {
                   "id": "i2",
                 },
               },
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+              "type": "add",
             },
           ],
         ]
@@ -836,8 +931,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit remove row at start with row after, limit 1', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -850,7 +944,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -861,7 +955,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -876,7 +970,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -887,6 +981,28 @@ suite('take with no partition', () => {
                   "id": "i1",
                 },
               },
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 200,
+                "id": "i2",
+              },
+              "type": "add",
             },
           ],
         ]
@@ -933,8 +1049,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit remove row at start no row after', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -946,7 +1061,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -957,7 +1072,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -972,7 +1087,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -983,6 +1098,17 @@ suite('take with no partition', () => {
                   "id": "i3",
                 },
               },
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "i1",
+              },
+              "type": "remove",
             },
           ],
         ]
@@ -1019,8 +1145,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit remove row at end with row after', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -1033,7 +1158,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -1044,7 +1169,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -1059,7 +1184,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -1070,6 +1195,28 @@ suite('take with no partition', () => {
                   "id": "i3",
                 },
               },
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 400,
+                "id": "i4",
+              },
+              "type": "add",
             },
           ],
         ]
@@ -1116,8 +1263,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit remove row at end, no row after', () => {
-      const {messages, storage, pushes} = takeTest({
-        ...base,
+      const {messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100},
           {id: 'i2', created: 200},
@@ -1129,7 +1275,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "row": {
@@ -1140,7 +1286,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -1155,7 +1301,7 @@ suite('take with no partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ":source(testTable)",
             "fetch",
             {
               "constraint": undefined,
@@ -1166,6 +1312,17 @@ suite('take with no partition', () => {
                   "id": "i3",
                 },
               },
+            },
+          ],
+          [
+            ":take",
+            "push",
+            {
+              "row": {
+                "created": 300,
+                "id": "i3",
+              },
+              "type": "remove",
             },
           ],
         ]
@@ -1204,27 +1361,16 @@ suite('take with no partition', () => {
 
   suite('edit', () => {
     const base = {
-      columns: {
-        id: {type: 'string'},
-        created: {type: 'number'},
-        text: {type: 'string'},
-      },
-      primaryKey: ['id'],
-      sort: [
-        ['created', 'asc'],
-        ['id', 'asc'],
-      ],
       sourceRows: [
         {id: 'i1', created: 100, text: 'a'},
         {id: 'i2', created: 200, text: 'b'},
         {id: 'i3', created: 300, text: 'c'},
         {id: 'i4', created: 400, text: 'd'},
       ],
-      partition: undefined,
     } as const;
 
     test('limit 0', () => {
-      const {messages, storage, pushes} = takeTest({
+      const {messages, storage, pushes} = takeNoPartitionTest({
         ...base,
         limit: 0,
         pushes: [
@@ -1238,7 +1384,7 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
             "push",
             {
               "oldRow": {
@@ -1262,7 +1408,7 @@ suite('take with no partition', () => {
 
     describe('less than limit ', () => {
       test('edit row at start', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 5,
           pushes: [
@@ -1276,7 +1422,24 @@ suite('take with no partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ":source(testTable)",
+              "push",
+              {
+                "oldRow": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": "a",
+                },
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": "a2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":take",
               "push",
               {
                 "oldRow": {
@@ -1331,7 +1494,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row at end', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 5,
           pushes: [
@@ -1345,7 +1508,24 @@ suite('take with no partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ":source(testTable)",
+              "push",
+              {
+                "oldRow": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d",
+                },
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":take",
               "push",
               {
                 "oldRow": {
@@ -1402,7 +1582,7 @@ suite('take with no partition', () => {
 
     describe('at limit', () => {
       test('edit row after boundary', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -1416,7 +1596,7 @@ suite('take with no partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ":source(testTable)",
               "push",
               {
                 "oldRow": {
@@ -1455,7 +1635,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row before boundary', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -1469,7 +1649,24 @@ suite('take with no partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ":source(testTable)",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":take",
               "push",
               {
                 "oldRow": {
@@ -1524,7 +1721,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row at boundary', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -1538,7 +1735,24 @@ suite('take with no partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ":source(testTable)",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":take",
               "push",
               {
                 "oldRow": {
@@ -1593,7 +1807,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row before boundary, changing its order', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -1607,7 +1821,24 @@ suite('take with no partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ":source(testTable)",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 50,
+                  "id": "i2",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":take",
               "push",
               {
                 "oldRow": {
@@ -1662,7 +1893,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row after boundary to make it the new boundary', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -1676,7 +1907,7 @@ suite('take with no partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ":source(testTable)",
               "push",
               {
                 "oldRow": {
@@ -1693,7 +1924,7 @@ suite('take with no partition', () => {
               },
             ],
             [
-              "takeSnitch",
+              ":source(testTable)",
               "fetch",
               {
                 "constraint": undefined,
@@ -1706,6 +1937,30 @@ suite('take with no partition', () => {
                     "text": "c",
                   },
                 },
+              },
+            ],
+            [
+              ":take",
+              "push",
+              {
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c",
+                },
+                "type": "remove",
+              },
+            ],
+            [
+              ":take",
+              "push",
+              {
+                "row": {
+                  "created": 250,
+                  "id": "i4",
+                  "text": "d",
+                },
+                "type": "add",
               },
             ],
           ]
@@ -1756,7 +2011,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row before boundary to make it new boundary', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -1770,7 +2025,7 @@ suite('take with no partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ":source(testTable)",
               "push",
               {
                 "oldRow": {
@@ -1787,7 +2042,7 @@ suite('take with no partition', () => {
               },
             ],
             [
-              "takeSnitch",
+              ":source(testTable)",
               "fetch",
               {
                 "constraint": undefined,
@@ -1799,6 +2054,23 @@ suite('take with no partition', () => {
                     "text": "c",
                   },
                 },
+              },
+            ],
+            [
+              ":take",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 350,
+                  "id": "i2",
+                  "text": "b2",
+                },
+                "type": "edit",
               },
             ],
           ]
@@ -1840,7 +2112,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row before boundary to fetch new boundary', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -1854,7 +2126,7 @@ suite('take with no partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ":source(testTable)",
               "push",
               {
                 "oldRow": {
@@ -1871,7 +2143,7 @@ suite('take with no partition', () => {
               },
             ],
             [
-              "takeSnitch",
+              ":source(testTable)",
               "fetch",
               {
                 "constraint": undefined,
@@ -1883,6 +2155,30 @@ suite('take with no partition', () => {
                     "text": "c",
                   },
                 },
+              },
+            ],
+            [
+              ":take",
+              "push",
+              {
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": "b",
+                },
+                "type": "remove",
+              },
+            ],
+            [
+              ":take",
+              "push",
+              {
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d",
+                },
+                "type": "add",
               },
             ],
           ]
@@ -1934,7 +2230,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit 1', () => {
-      const {messages, storage, pushes} = takeTest({
+      const {messages, storage, pushes} = takeNoPartitionTest({
         ...base,
         limit: 1,
         pushes: [
@@ -1948,7 +2244,24 @@ suite('take with no partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ":source(testTable)",
+            "push",
+            {
+              "oldRow": {
+                "created": 100,
+                "id": "i1",
+                "text": "a",
+              },
+              "row": {
+                "created": 50,
+                "id": "i1",
+                "text": "a2",
+              },
+              "type": "edit",
+            },
+          ],
+          [
+            ":take",
             "push",
             {
               "oldRow": {
@@ -2020,7 +2333,7 @@ suite('take with partition', () => {
 
   suite('add', () => {
     test('limit 0', () => {
-      const {messages, storage, pushes} = takeTest({
+      const {messages, storage, pushes} = takeTestWithPartition({
         ...base,
         partition: {
           key: ['issueID'],
@@ -2037,7 +2350,7 @@ suite('take with partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ".comments:source(comment)",
             "push",
             {
               "row": {
@@ -2055,7 +2368,7 @@ suite('take with partition', () => {
     });
 
     test('less than limit add row at start', () => {
-      const {messages, storage, pushes} = takeTest({
+      const {messages, storage, pushes} = takeTestWithPartition({
         ...base,
         partition: {
           key: ['issueID'],
@@ -2074,7 +2387,7 @@ suite('take with partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ".comments:source(comment)",
             "push",
             {
               "row": {
@@ -2083,6 +2396,45 @@ suite('take with partition', () => {
                 "issueID": "i2",
               },
               "type": "add",
+            },
+          ],
+          [
+            ".comments:take",
+            "push",
+            {
+              "row": {
+                "created": 150,
+                "id": "c6",
+                "issueID": "i2",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            ":source(issue)",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i2",
+              },
+            },
+          ],
+          [
+            ":join(comments)",
+            "push",
+            {
+              "child": {
+                "row": {
+                  "created": 150,
+                  "id": "c6",
+                  "issueID": "i2",
+                },
+                "type": "add",
+              },
+              "row": {
+                "id": "i2",
+              },
+              "type": "child",
             },
           ],
         ]
@@ -2115,22 +2467,31 @@ suite('take with partition', () => {
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 150,
-                "id": "c6",
-                "issueID": "i2",
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "created": 150,
+                    "id": "c6",
+                    "issueID": "i2",
+                  },
+                },
+                "type": "add",
               },
+              "relationshipName": "comments",
             },
-            "type": "add",
+            "row": {
+              "id": "i2",
+            },
+            "type": "child",
           },
         ]
       `);
     });
 
     test('at limit add row at end', () => {
-      const {messages, storage, pushes} = takeTest({
+      const {messages, storage, pushes} = takeTestWithPartition({
         ...base,
         partition: {
           key: ['issueID'],
@@ -2153,7 +2514,7 @@ suite('take with partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ".comments:source(comment)",
             "push",
             {
               "row": {
@@ -2165,7 +2526,7 @@ suite('take with partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ".comments:source(comment)",
             "fetch",
             {
               "constraint": {
@@ -2180,6 +2541,84 @@ suite('take with partition', () => {
                   "issueID": "i2",
                 },
               },
+            },
+          ],
+          [
+            ".comments:take",
+            "push",
+            {
+              "row": {
+                "created": 600,
+                "id": "c6",
+                "issueID": "i2",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":source(issue)",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i2",
+              },
+            },
+          ],
+          [
+            ":join(comments)",
+            "push",
+            {
+              "child": {
+                "row": {
+                  "created": 600,
+                  "id": "c6",
+                  "issueID": "i2",
+                },
+                "type": "remove",
+              },
+              "row": {
+                "id": "i2",
+              },
+              "type": "child",
+            },
+          ],
+          [
+            ".comments:take",
+            "push",
+            {
+              "row": {
+                "created": 550,
+                "id": "c8",
+                "issueID": "i2",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            ":source(issue)",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i2",
+              },
+            },
+          ],
+          [
+            ":join(comments)",
+            "push",
+            {
+              "child": {
+                "row": {
+                  "created": 550,
+                  "id": "c8",
+                  "issueID": "i2",
+                },
+                "type": "add",
+              },
+              "row": {
+                "id": "i2",
+              },
+              "type": "child",
             },
           ],
         ]
@@ -2212,33 +2651,51 @@ suite('take with partition', () => {
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 600,
-                "id": "c6",
-                "issueID": "i2",
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "created": 600,
+                    "id": "c6",
+                    "issueID": "i2",
+                  },
+                },
+                "type": "remove",
               },
+              "relationshipName": "comments",
             },
-            "type": "remove",
+            "row": {
+              "id": "i2",
+            },
+            "type": "child",
           },
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 550,
-                "id": "c8",
-                "issueID": "i2",
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "created": 550,
+                    "id": "c8",
+                    "issueID": "i2",
+                  },
+                },
+                "type": "add",
               },
+              "relationshipName": "comments",
             },
-            "type": "add",
+            "row": {
+              "id": "i2",
+            },
+            "type": "child",
           },
         ]
       `);
     });
 
     test('add with non-fetched partition value', () => {
-      const {messages, storage, pushes} = takeTest({
+      const {messages, storage, pushes} = takeTestWithPartition({
         ...base,
         partition: {
           key: ['issueID'],
@@ -2257,7 +2714,7 @@ suite('take with partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ".comments:source(comment)",
             "push",
             {
               "row": {
@@ -2301,7 +2758,7 @@ suite('take with partition', () => {
 
   suite('remove', () => {
     test('limit 0', () => {
-      const {messages, storage, pushes} = takeTest({
+      const {messages, storage, pushes} = takeTestWithPartition({
         ...base,
         partition: {
           key: ['issueID'],
@@ -2320,7 +2777,7 @@ suite('take with partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ".comments:source(comment)",
             "push",
             {
               "row": {
@@ -2338,7 +2795,7 @@ suite('take with partition', () => {
     });
 
     test('less than limit remove row at start', () => {
-      const {messages, storage, pushes} = takeTest({
+      const {messages, storage, pushes} = takeTestWithPartition({
         ...base,
         partition: {
           key: ['issueID'],
@@ -2359,7 +2816,7 @@ suite('take with partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ".comments:source(comment)",
             "push",
             {
               "row": {
@@ -2371,7 +2828,7 @@ suite('take with partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ".comments:source(comment)",
             "fetch",
             {
               "constraint": {
@@ -2389,7 +2846,7 @@ suite('take with partition', () => {
             },
           ],
           [
-            "takeSnitch",
+            ".comments:source(comment)",
             "fetch",
             {
               "constraint": {
@@ -2403,6 +2860,45 @@ suite('take with partition', () => {
                   "issueID": "i1",
                 },
               },
+            },
+          ],
+          [
+            ".comments:take",
+            "push",
+            {
+              "row": {
+                "created": 100,
+                "id": "c1",
+                "issueID": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":source(issue)",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i1",
+              },
+            },
+          ],
+          [
+            ":join(comments)",
+            "push",
+            {
+              "child": {
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                },
+                "type": "remove",
+              },
+              "row": {
+                "id": "i1",
+              },
+              "type": "child",
             },
           ],
         ]
@@ -2435,22 +2931,31 @@ suite('take with partition', () => {
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 100,
-                "id": "c1",
-                "issueID": "i1",
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "created": 100,
+                    "id": "c1",
+                    "issueID": "i1",
+                  },
+                },
+                "type": "remove",
               },
+              "relationshipName": "comments",
             },
-            "type": "remove",
+            "row": {
+              "id": "i1",
+            },
+            "type": "child",
           },
         ]
       `);
     });
 
     test('remove row unfetched partition', () => {
-      const {messages, storage, pushes} = takeTest({
+      const {messages, storage, pushes} = takeTestWithPartition({
         ...base,
         partition: {
           key: ['issueID'],
@@ -2472,7 +2977,7 @@ suite('take with partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ".comments:source(comment)",
             "push",
             {
               "row": {
@@ -2541,7 +3046,7 @@ suite('take with partition', () => {
     } as const;
 
     test('limit 0', () => {
-      const {messages, storage, pushes} = takeTest({
+      const {messages, storage, pushes} = takeTestWithPartition({
         ...base,
         partition: {
           key: ['issueID'],
@@ -2559,7 +3064,7 @@ suite('take with partition', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "takeSnitch",
+            ".comments:source(comment)",
             "push",
             {
               "oldRow": {
@@ -2585,7 +3090,7 @@ suite('take with partition', () => {
 
     describe('less than limit ', () => {
       test('edit row at start', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 5,
           pushes: [
@@ -2599,7 +3104,7 @@ suite('take with partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "push",
               {
                 "oldRow": {
@@ -2617,88 +3122,57 @@ suite('take with partition', () => {
                 "type": "edit",
               },
             ],
-          ]
-        `);
-        expect(storage).toMatchInlineSnapshot(`
-          {
-            "["take","i1"]": {
-              "bound": {
-                "created": 300,
-                "id": "c3",
-                "issueID": "i1",
-                "text": "c",
-              },
-              "size": 3,
-            },
-            "["take","i2"]": {
-              "bound": {
-                "created": 500,
-                "id": "c5",
-                "issueID": "i2",
-                "text": "e",
-              },
-              "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
-            },
-          }
-        `);
-        expect(pushes).toMatchInlineSnapshot(`
-          [
-            {
-              "oldRow": {
-                "created": 100,
-                "id": "c1",
-                "issueID": "i1",
-                "text": "a",
-              },
-              "row": {
-                "created": 100,
-                "id": "c1",
-                "issueID": "i1",
-                "text": "a2",
-              },
-              "type": "edit",
-            },
-          ]
-        `);
-      });
-
-      test('edit row at end', () => {
-        const {messages, storage, pushes} = takeTest({
-          ...base,
-          limit: 5,
-          pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
-              row: {id: 'c5', issueID: 'i2', created: 500, text: 'e2'},
-            },
-          ],
-        });
-        expect(messages).toMatchInlineSnapshot(`
-          [
             [
-              "takeSnitch",
+              ".comments:take",
               "push",
               {
                 "oldRow": {
-                  "created": 500,
-                  "id": "c5",
-                  "issueID": "i2",
-                  "text": "e",
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
                 },
                 "row": {
-                  "created": 500,
-                  "id": "c5",
-                  "issueID": "i2",
-                  "text": "e2",
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a2",
                 },
                 "type": "edit",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "oldRow": {
+                    "created": 100,
+                    "id": "c1",
+                    "issueID": "i1",
+                    "text": "a",
+                  },
+                  "row": {
+                    "created": 100,
+                    "id": "c1",
+                    "issueID": "i1",
+                    "text": "a2",
+                  },
+                  "type": "edit",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
             ],
           ]
@@ -2734,19 +3208,174 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
+              "child": {
+                "change": {
+                  "oldRow": {
+                    "created": 100,
+                    "id": "c1",
+                    "issueID": "i1",
+                    "text": "a",
+                  },
+                  "row": {
+                    "created": 100,
+                    "id": "c1",
+                    "issueID": "i1",
+                    "text": "a2",
+                  },
+                  "type": "edit",
+                },
+                "relationshipName": "comments",
+              },
+              "row": {
+                "id": "i1",
+              },
+              "type": "child",
+            },
+          ]
+        `);
+      });
+
+      test('edit row at end', () => {
+        const {messages, storage, pushes} = takeTestWithPartition({
+          ...base,
+          limit: 5,
+          pushes: [
+            {
+              type: 'edit',
+              oldRow: {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
+              row: {id: 'c5', issueID: 'i2', created: 500, text: 'e2'},
+            },
+          ],
+        });
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              ".comments:source(comment)",
+              "push",
+              {
+                "oldRow": {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+                "row": {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "oldRow": {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+                "row": {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i2",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "oldRow": {
+                    "created": 500,
+                    "id": "c5",
+                    "issueID": "i2",
+                    "text": "e",
+                  },
+                  "row": {
+                    "created": 500,
+                    "id": "c5",
+                    "issueID": "i2",
+                    "text": "e2",
+                  },
+                  "type": "edit",
+                },
+                "row": {
+                  "id": "i2",
+                },
+                "type": "child",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": "c",
+              },
+              "size": 3,
+            },
+            "["take","i2"]": {
+              "bound": {
                 "created": 500,
                 "id": "c5",
                 "issueID": "i2",
                 "text": "e",
               },
-              "row": {
-                "created": 500,
-                "id": "c5",
-                "issueID": "i2",
-                "text": "e2",
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "child": {
+                "change": {
+                  "oldRow": {
+                    "created": 500,
+                    "id": "c5",
+                    "issueID": "i2",
+                    "text": "e",
+                  },
+                  "row": {
+                    "created": 500,
+                    "id": "c5",
+                    "issueID": "i2",
+                    "text": "e2",
+                  },
+                  "type": "edit",
+                },
+                "relationshipName": "comments",
               },
-              "type": "edit",
+              "row": {
+                "id": "i2",
+              },
+              "type": "child",
             },
           ]
         `);
@@ -2755,7 +3384,7 @@ suite('take with partition', () => {
 
     describe('at limit', () => {
       test('edit row after boundary', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 2,
           pushes: [
@@ -2769,7 +3398,7 @@ suite('take with partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "push",
               {
                 "oldRow": {
@@ -2821,7 +3450,7 @@ suite('take with partition', () => {
       });
 
       test('edit row before boundary', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 3,
           pushes: [
@@ -2835,7 +3464,7 @@ suite('take with partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "push",
               {
                 "oldRow": {
@@ -2853,88 +3482,57 @@ suite('take with partition', () => {
                 "type": "edit",
               },
             ],
-          ]
-        `);
-        expect(storage).toMatchInlineSnapshot(`
-          {
-            "["take","i1"]": {
-              "bound": {
-                "created": 300,
-                "id": "c3",
-                "issueID": "i1",
-                "text": "c",
-              },
-              "size": 3,
-            },
-            "["take","i2"]": {
-              "bound": {
-                "created": 500,
-                "id": "c5",
-                "issueID": "i2",
-                "text": "e",
-              },
-              "size": 2,
-            },
-            "maxBound": {
-              "created": 500,
-              "id": "c5",
-              "issueID": "i2",
-              "text": "e",
-            },
-          }
-        `);
-        expect(pushes).toMatchInlineSnapshot(`
-          [
-            {
-              "oldRow": {
-                "created": 200,
-                "id": "c2",
-                "issueID": "i1",
-                "text": "b",
-              },
-              "row": {
-                "created": 200,
-                "id": "c2",
-                "issueID": "i1",
-                "text": "b2",
-              },
-              "type": "edit",
-            },
-          ]
-        `);
-      });
-
-      test('edit row at boundary', () => {
-        const {messages, storage, pushes} = takeTest({
-          ...base,
-          limit: 3,
-          pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-              row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
-            },
-          ],
-        });
-        expect(messages).toMatchInlineSnapshot(`
-          [
             [
-              "takeSnitch",
+              ".comments:take",
               "push",
               {
                 "oldRow": {
-                  "created": 300,
-                  "id": "c3",
+                  "created": 200,
+                  "id": "c2",
                   "issueID": "i1",
-                  "text": "c",
+                  "text": "b",
                 },
                 "row": {
-                  "created": 300,
-                  "id": "c3",
+                  "created": 200,
+                  "id": "c2",
                   "issueID": "i1",
-                  "text": "c2",
+                  "text": "b2",
                 },
                 "type": "edit",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "oldRow": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b2",
+                  },
+                  "type": "edit",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
             ],
           ]
@@ -2970,26 +3568,181 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
+              "child": {
+                "change": {
+                  "oldRow": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b2",
+                  },
+                  "type": "edit",
+                },
+                "relationshipName": "comments",
+              },
+              "row": {
+                "id": "i1",
+              },
+              "type": "child",
+            },
+          ]
+        `);
+      });
+
+      test('edit row at boundary', () => {
+        const {messages, storage, pushes} = takeTestWithPartition({
+          ...base,
+          limit: 3,
+          pushes: [
+            {
+              type: 'edit',
+              oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+              row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
+            },
+          ],
+        });
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              ".comments:source(comment)",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "oldRow": {
+                    "created": 300,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c",
+                  },
+                  "row": {
+                    "created": 300,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c2",
+                  },
+                  "type": "edit",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take","i1"]": {
+              "bound": {
                 "created": 300,
                 "id": "c3",
                 "issueID": "i1",
                 "text": "c",
               },
-              "row": {
-                "created": 300,
-                "id": "c3",
-                "issueID": "i1",
-                "text": "c2",
+              "size": 3,
+            },
+            "["take","i2"]": {
+              "bound": {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": "e",
               },
-              "type": "edit",
+              "size": 2,
+            },
+            "maxBound": {
+              "created": 500,
+              "id": "c5",
+              "issueID": "i2",
+              "text": "e",
+            },
+          }
+        `);
+        expect(pushes).toMatchInlineSnapshot(`
+          [
+            {
+              "child": {
+                "change": {
+                  "oldRow": {
+                    "created": 300,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c",
+                  },
+                  "row": {
+                    "created": 300,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c2",
+                  },
+                  "type": "edit",
+                },
+                "relationshipName": "comments",
+              },
+              "row": {
+                "id": "i1",
+              },
+              "type": "child",
             },
           ]
         `);
       });
 
       test('edit row at boundary, making it not the boundary', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 3,
           pushes: [
@@ -3003,7 +3756,7 @@ suite('take with partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "push",
               {
                 "oldRow": {
@@ -3022,7 +3775,7 @@ suite('take with partition', () => {
               },
             ],
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "fetch",
               {
                 "constraint": {
@@ -3038,6 +3791,59 @@ suite('take with partition', () => {
                     "text": "c",
                   },
                 },
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 150,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "oldRow": {
+                    "created": 300,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c",
+                  },
+                  "row": {
+                    "created": 150,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c2",
+                  },
+                  "type": "edit",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
             ],
           ]
@@ -3073,26 +3879,35 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 300,
-                "id": "c3",
-                "issueID": "i1",
-                "text": "c",
+              "child": {
+                "change": {
+                  "oldRow": {
+                    "created": 300,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c",
+                  },
+                  "row": {
+                    "created": 150,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c2",
+                  },
+                  "type": "edit",
+                },
+                "relationshipName": "comments",
               },
               "row": {
-                "created": 150,
-                "id": "c3",
-                "issueID": "i1",
-                "text": "c2",
+                "id": "i1",
               },
-              "type": "edit",
+              "type": "child",
             },
           ]
         `);
       });
 
       test('edit row at boundary, making it fall outside the window', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 2,
           pushes: [
@@ -3106,7 +3921,7 @@ suite('take with partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "push",
               {
                 "oldRow": {
@@ -3125,7 +3940,7 @@ suite('take with partition', () => {
               },
             ],
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "fetch",
               {
                 "constraint": {
@@ -3140,6 +3955,88 @@ suite('take with partition', () => {
                     "text": "b",
                   },
                 },
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "row": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                "type": "remove",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                  "type": "remove",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "type": "add",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "row": {
+                    "created": 300,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c",
+                  },
+                  "type": "add",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
             ],
           ]
@@ -3175,35 +4072,53 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 200,
-                  "id": "c2",
-                  "issueID": "i1",
-                  "text": "b",
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "created": 200,
+                      "id": "c2",
+                      "issueID": "i1",
+                      "text": "b",
+                    },
+                  },
+                  "type": "remove",
                 },
+                "relationshipName": "comments",
               },
-              "type": "remove",
+              "row": {
+                "id": "i1",
+              },
+              "type": "child",
             },
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 300,
-                  "id": "c3",
-                  "issueID": "i1",
-                  "text": "c",
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "created": 300,
+                      "id": "c3",
+                      "issueID": "i1",
+                      "text": "c",
+                    },
+                  },
+                  "type": "add",
                 },
+                "relationshipName": "comments",
               },
-              "type": "add",
+              "row": {
+                "id": "i1",
+              },
+              "type": "child",
             },
           ]
         `);
       });
 
       test('edit row before boundary, changing its order', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 3,
           pushes: [
@@ -3217,7 +4132,7 @@ suite('take with partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "push",
               {
                 "oldRow": {
@@ -3233,6 +4148,59 @@ suite('take with partition', () => {
                   "text": "b2",
                 },
                 "type": "edit",
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "oldRow": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                "row": {
+                  "created": 50,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "oldRow": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                  "row": {
+                    "created": 50,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b2",
+                  },
+                  "type": "edit",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
             ],
           ]
@@ -3268,26 +4236,35 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 200,
-                "id": "c2",
-                "issueID": "i1",
-                "text": "b",
+              "child": {
+                "change": {
+                  "oldRow": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                  "row": {
+                    "created": 50,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b2",
+                  },
+                  "type": "edit",
+                },
+                "relationshipName": "comments",
               },
               "row": {
-                "created": 50,
-                "id": "c2",
-                "issueID": "i1",
-                "text": "b2",
+                "id": "i1",
               },
-              "type": "edit",
+              "type": "child",
             },
           ]
         `);
       });
 
       test('edit row after boundary to make it the new boundary', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 2,
           pushes: [
@@ -3301,7 +4278,7 @@ suite('take with partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "push",
               {
                 "oldRow": {
@@ -3320,7 +4297,7 @@ suite('take with partition', () => {
               },
             ],
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "fetch",
               {
                 "constraint": {
@@ -3336,6 +4313,88 @@ suite('take with partition', () => {
                     "text": "b",
                   },
                 },
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "row": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                "type": "remove",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                  "type": "remove",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "row": {
+                  "created": 150,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+                "type": "add",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "row": {
+                    "created": 150,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c2",
+                  },
+                  "type": "add",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
             ],
           ]
@@ -3371,35 +4430,53 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 200,
-                  "id": "c2",
-                  "issueID": "i1",
-                  "text": "b",
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "created": 200,
+                      "id": "c2",
+                      "issueID": "i1",
+                      "text": "b",
+                    },
+                  },
+                  "type": "remove",
                 },
+                "relationshipName": "comments",
               },
-              "type": "remove",
+              "row": {
+                "id": "i1",
+              },
+              "type": "child",
             },
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 150,
-                  "id": "c3",
-                  "issueID": "i1",
-                  "text": "c2",
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "created": 150,
+                      "id": "c3",
+                      "issueID": "i1",
+                      "text": "c2",
+                    },
+                  },
+                  "type": "add",
                 },
+                "relationshipName": "comments",
               },
-              "type": "add",
+              "row": {
+                "id": "i1",
+              },
+              "type": "child",
             },
           ]
         `);
       });
 
       test('edit row before boundary to make it new boundary', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 2,
           pushes: [
@@ -3413,7 +4490,7 @@ suite('take with partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "push",
               {
                 "oldRow": {
@@ -3432,7 +4509,7 @@ suite('take with partition', () => {
               },
             ],
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "fetch",
               {
                 "constraint": {
@@ -3447,6 +4524,59 @@ suite('take with partition', () => {
                     "text": "b",
                   },
                 },
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "oldRow": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                "row": {
+                  "created": 250,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a2",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "oldRow": {
+                    "created": 100,
+                    "id": "c1",
+                    "issueID": "i1",
+                    "text": "a",
+                  },
+                  "row": {
+                    "created": 250,
+                    "id": "c1",
+                    "issueID": "i1",
+                    "text": "a2",
+                  },
+                  "type": "edit",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
             ],
           ]
@@ -3482,26 +4612,35 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "oldRow": {
-                "created": 100,
-                "id": "c1",
-                "issueID": "i1",
-                "text": "a",
+              "child": {
+                "change": {
+                  "oldRow": {
+                    "created": 100,
+                    "id": "c1",
+                    "issueID": "i1",
+                    "text": "a",
+                  },
+                  "row": {
+                    "created": 250,
+                    "id": "c1",
+                    "issueID": "i1",
+                    "text": "a2",
+                  },
+                  "type": "edit",
+                },
+                "relationshipName": "comments",
               },
               "row": {
-                "created": 250,
-                "id": "c1",
-                "issueID": "i1",
-                "text": "a2",
+                "id": "i1",
               },
-              "type": "edit",
+              "type": "child",
             },
           ]
         `);
       });
 
       test('edit row before boundary to fetch new boundary', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 2,
           pushes: [
@@ -3515,7 +4654,7 @@ suite('take with partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "push",
               {
                 "oldRow": {
@@ -3534,7 +4673,7 @@ suite('take with partition', () => {
               },
             ],
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "fetch",
               {
                 "constraint": {
@@ -3549,6 +4688,88 @@ suite('take with partition', () => {
                     "text": "b",
                   },
                 },
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                "type": "remove",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "row": {
+                    "created": 100,
+                    "id": "c1",
+                    "issueID": "i1",
+                    "text": "a",
+                  },
+                  "type": "remove",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "type": "add",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "row": {
+                    "created": 300,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c",
+                  },
+                  "type": "add",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
             ],
           ]
@@ -3584,28 +4805,46 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 100,
-                  "id": "c1",
-                  "issueID": "i1",
-                  "text": "a",
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "created": 100,
+                      "id": "c1",
+                      "issueID": "i1",
+                      "text": "a",
+                    },
+                  },
+                  "type": "remove",
                 },
+                "relationshipName": "comments",
               },
-              "type": "remove",
+              "row": {
+                "id": "i1",
+              },
+              "type": "child",
             },
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 300,
-                  "id": "c3",
-                  "issueID": "i1",
-                  "text": "c",
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "created": 300,
+                      "id": "c3",
+                      "issueID": "i1",
+                      "text": "c",
+                    },
+                  },
+                  "type": "add",
                 },
+                "relationshipName": "comments",
               },
-              "type": "add",
+              "row": {
+                "id": "i1",
+              },
+              "type": "child",
             },
           ]
         `);
@@ -3614,7 +4853,7 @@ suite('take with partition', () => {
 
     describe('changing partition value', () => {
       test('move to from first partition to second', () => {
-        const {messages, storage, pushes} = takeTest({
+        const {messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 2,
           pushes: [
@@ -3628,7 +4867,7 @@ suite('take with partition', () => {
         expect(messages).toMatchInlineSnapshot(`
           [
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "push",
               {
                 "oldRow": {
@@ -3647,7 +4886,7 @@ suite('take with partition', () => {
               },
             ],
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "fetch",
               {
                 "constraint": {
@@ -3666,7 +4905,7 @@ suite('take with partition', () => {
               },
             ],
             [
-              "takeSnitch",
+              ".comments:source(comment)",
               "fetch",
               {
                 "constraint": {
@@ -3684,7 +4923,89 @@ suite('take with partition', () => {
               },
             ],
             [
-              "takeSnitch",
+              ".comments:take",
+              "push",
+              {
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                "type": "remove",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "row": {
+                    "created": 100,
+                    "id": "c1",
+                    "issueID": "i1",
+                    "text": "a",
+                  },
+                  "type": "remove",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "row": {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+                "type": "add",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "row": {
+                    "created": 300,
+                    "id": "c3",
+                    "issueID": "i1",
+                    "text": "c",
+                  },
+                  "type": "add",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
+              },
+            ],
+            [
+              ".comments:source(comment)",
               "fetch",
               {
                 "constraint": {
@@ -3700,6 +5021,88 @@ suite('take with partition', () => {
                     "text": "e",
                   },
                 },
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "row": {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+                "type": "remove",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i2",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "row": {
+                    "created": 500,
+                    "id": "c5",
+                    "issueID": "i2",
+                    "text": "e",
+                  },
+                  "type": "remove",
+                },
+                "row": {
+                  "id": "i2",
+                },
+                "type": "child",
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i2",
+                  "text": "a2",
+                },
+                "type": "add",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i2",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "row": {
+                    "created": 100,
+                    "id": "c1",
+                    "issueID": "i2",
+                    "text": "a2",
+                  },
+                  "type": "add",
+                },
+                "row": {
+                  "id": "i2",
+                },
+                "type": "child",
               },
             ],
           ]
@@ -3735,52 +5138,88 @@ suite('take with partition', () => {
         expect(pushes).toMatchInlineSnapshot(`
           [
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 100,
-                  "id": "c1",
-                  "issueID": "i1",
-                  "text": "a",
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "created": 100,
+                      "id": "c1",
+                      "issueID": "i1",
+                      "text": "a",
+                    },
+                  },
+                  "type": "remove",
                 },
+                "relationshipName": "comments",
               },
-              "type": "remove",
+              "row": {
+                "id": "i1",
+              },
+              "type": "child",
             },
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 300,
-                  "id": "c3",
-                  "issueID": "i1",
-                  "text": "c",
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "created": 300,
+                      "id": "c3",
+                      "issueID": "i1",
+                      "text": "c",
+                    },
+                  },
+                  "type": "add",
                 },
+                "relationshipName": "comments",
               },
-              "type": "add",
+              "row": {
+                "id": "i1",
+              },
+              "type": "child",
             },
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 500,
-                  "id": "c5",
-                  "issueID": "i2",
-                  "text": "e",
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "created": 500,
+                      "id": "c5",
+                      "issueID": "i2",
+                      "text": "e",
+                    },
+                  },
+                  "type": "remove",
                 },
+                "relationshipName": "comments",
               },
-              "type": "remove",
+              "row": {
+                "id": "i2",
+              },
+              "type": "child",
             },
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 100,
-                  "id": "c1",
-                  "issueID": "i2",
-                  "text": "a2",
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "created": 100,
+                      "id": "c1",
+                      "issueID": "i2",
+                      "text": "a2",
+                    },
+                  },
+                  "type": "add",
                 },
+                "relationshipName": "comments",
               },
-              "type": "add",
+              "row": {
+                "id": "i2",
+              },
+              "type": "child",
             },
           ]
         `);
@@ -3789,48 +5228,115 @@ suite('take with partition', () => {
   });
 });
 
-function takeTest(t: TakeTest): TakeTestReults {
-  const log: SnitchMessage[] = [];
-  const source = createSource(lc, logConfig, 'table', t.columns, t.primaryKey);
-  for (const row of t.sourceRows) {
-    source.push({type: 'add', row});
-  }
-  const snitch = new Snitch(
-    source.connect(t.sort || [['id', 'asc']]),
-    'takeSnitch',
-    log,
-  );
-  const memoryStorage = new MemoryStorage();
-  const partitionKey = t.partition?.key;
+function takeTestWithPartition(t: TakeTestWithPartition): TakeTestReults {
+  const sources: Sources = {
+    issue: {
+      columns: {
+        id: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+    comment: {
+      columns: {
+        id: {type: 'string'},
+        issueID: {type: 'string'},
+        created: {type: 'number'},
+      },
+      primaryKeys: ['id'],
+    },
+  } as const;
 
-  const take = new Take(snitch, memoryStorage, t.limit, partitionKey);
-  const c = new Catch(take);
-  if (t.partition === undefined) {
-    c.fetch();
-  } else {
-    assert(partitionKey);
-    for (const partitionValue of t.partition.values) {
-      c.fetch({
-        constraint: Object.fromEntries(
-          partitionKey.map((k, i) => [k, partitionValue[i]]),
-        ),
-      });
-    }
-  }
-  expect(c.pushes).toEqual([]);
-  log.length = 0;
-  for (const change of t.pushes) {
-    source.push(change);
-  }
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+    related: [
+      {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['issueID']},
+        subquery: {
+          table: 'comment',
+          alias: 'comments',
+          orderBy: [
+            ['created', 'asc'],
+            ['id', 'asc'],
+          ],
+          limit: t.limit,
+        },
+      },
+    ],
+  } as const;
 
+  const result = runPushTest({
+    sources,
+    sourceContents: {
+      issue: [{id: 'i1'}, {id: 'i2'}],
+      comment: t.sourceRows,
+    },
+    ast,
+    format: {
+      singular: false,
+      relationships: {
+        comments: {
+          singular: false,
+          relationships: {},
+        },
+      },
+    },
+    pushes: t.pushes.map(change => ['comment', change]),
+  });
   return {
-    messages: log,
-    storage: memoryStorage.cloneData(),
-    pushes: c.pushes,
+    messages: result.log,
+    storage: result.actualStorage['.comments:take'],
+    pushes: result.pushes,
   };
 }
 
-type TakeTest = {
+function takeNoPartitionTest(t: TakeTestNoPartition): TakeTestReults {
+  const testTableName = 'testTable';
+  const ast: AST = {
+    table: 'testTable',
+    orderBy: [
+      ['created', 'asc'],
+      ['id', 'asc'],
+    ],
+    limit: t.limit,
+  } as const;
+  const result = runPushTest({
+    sources: {
+      [testTableName]: {
+        primaryKeys: ['id'],
+        columns: {
+          id: {type: 'string'},
+          created: {type: 'number'},
+          text: {type: 'string', optional: true},
+        },
+      },
+    },
+    sourceContents: {
+      [testTableName]: t.sourceRows,
+    },
+    ast,
+    format: {
+      singular: false,
+      relationships: {},
+    },
+    pushes: t.pushes.map(change => [testTableName, change]),
+  });
+
+  return {
+    messages: result.log,
+    storage: result.actualStorage[':take'],
+    pushes: result.pushes,
+  };
+}
+
+type TakeTestNoPartition = {
+  sourceRows: readonly Row[];
+  limit: number;
+  pushes: SourceChange[];
+};
+
+type TakeTestWithPartition = {
   columns: Record<string, SchemaValue>;
   primaryKey: PrimaryKey;
   sourceRows: readonly Row[];
@@ -3847,6 +5353,6 @@ type TakeTest = {
 
 type TakeTestReults = {
   messages: SnitchMessage[];
-  storage: Record<string, JSONValue>;
+  storage: JSONObject;
   pushes: CaughtChange[];
 };
