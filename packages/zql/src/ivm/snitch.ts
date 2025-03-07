@@ -1,8 +1,10 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
 import {
+  InputBase,
   type FetchRequest,
   type Input,
   type Operator,
@@ -15,7 +17,7 @@ import type {Stream} from './stream.ts';
  * Snitch is an Operator that records all messages it receives. Useful for
  * debugging.
  */
-export class Snitch implements Operator {
+export class Snitch extends InputBase implements Operator {
   readonly #input: Input;
   readonly #name: string;
   readonly #logTypes: LogType[];
@@ -29,6 +31,7 @@ export class Snitch implements Operator {
     log: SnitchMessage[] = [],
     logTypes: LogType[] = ['fetch', 'push', 'cleanup'],
   ) {
+    super([input]);
     this.#input = input;
     this.#name = name;
     this.log = log;
@@ -42,6 +45,10 @@ export class Snitch implements Operator {
 
   setOutput(output: Output) {
     this.#output = output;
+  }
+
+  getOutputs(): readonly Output[] {
+    return [must(this.#output)];
   }
 
   getSchema(): SourceSchema {

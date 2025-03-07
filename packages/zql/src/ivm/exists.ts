@@ -9,6 +9,7 @@ import {
   type NormalizedValue,
 } from './data.ts';
 import {
+  InputBase,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -46,7 +47,7 @@ interface ExistsStorage {
  * The Exists operator filters data based on whether or not a relationship is
  * non-empty.
  */
-export class Exists implements Operator {
+export class Exists extends InputBase implements Operator {
   readonly #input: Input;
   readonly #relationshipName: string;
   readonly #storage: ExistsStorage;
@@ -73,6 +74,7 @@ export class Exists implements Operator {
     parentJoinKey: CompoundKey,
     type: 'EXISTS' | 'NOT EXISTS',
   ) {
+    super([input]);
     this.#input = input;
     this.#relationshipName = relationshipName;
     this.#input.setOutput(this);
@@ -90,6 +92,10 @@ export class Exists implements Operator {
 
   setOutput(output: Output) {
     this.#output = output;
+  }
+
+  getOutputs(): Output[] {
+    return [this.#output];
   }
 
   destroy(): void {

@@ -33,8 +33,10 @@ import {
 import type {AdvancedQuery} from './query-internal.ts';
 import {
   DEFAULT_TTL,
+  type EdgeVisual,
   type GetFilterType,
   type HumanReadable,
+  type NodeVisual,
   type Operator,
   type PreloadOptions,
   type PullRow,
@@ -541,6 +543,10 @@ export abstract class AbstractQuery<
     return this.#completedAST;
   }
 
+  abstract visualize(): {
+    nodes: NodeVisual[];
+    edges: EdgeVisual[];
+  };
   abstract materialize(): TypedView<HumanReadable<TReturn>>;
   abstract materialize<T>(factory: ViewFactory<TSchema, TTable, TReturn, T>): T;
   abstract run(): Promise<HumanReadable<TReturn>>;
@@ -628,6 +634,45 @@ export class QueryImpl<
     );
 
     return view as T;
+  }
+
+  visualize(): {
+    nodes: NodeVisual[];
+    edges: EdgeVisual[];
+  } {
+    const ast = this._completeAst();
+    const end = buildPipeline(ast, this.#delegate);
+
+    const nodes = new Map<number, NodeVisual>();
+    const edges = new Map<string, EdgeVisual>();
+
+    function visit(node: Input) {
+      if (nodes.has(node.id)) {
+        return;
+      }
+
+      nodes.set(node.id, {
+        id: node.id,
+        name: node.name,
+        type:
+          node.constructor.name === 'Object' ? 'Source' : node.constructor.name,
+      });
+
+      for (const input of node.getInputs()) {
+        edges.set(`${input.id}-${node.id}`, {
+          source: input.id,
+          dest: node.id,
+        });
+        visit(input);
+      }
+    }
+
+    visit(end);
+
+    return {
+      nodes: [...nodes.values()],
+      edges: [...edges.values()],
+    };
   }
 
   run(): Promise<HumanReadable<TReturn>> {

@@ -196,7 +196,23 @@ export interface Query<
     cleanup: () => void;
     complete: Promise<void>;
   };
+
+  visualize(): {
+    nodes: NodeVisual[];
+    edges: EdgeVisual[];
+  };
 }
+
+export type NodeVisual = {
+  id: number;
+  name: string;
+  type: string;
+};
+
+export type EdgeVisual = {
+  source: number;
+  dest: number;
+};
 
 export type PreloadOptions = {
   /**

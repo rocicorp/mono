@@ -6,7 +6,13 @@ import type {SchemaQuery, DBTransaction} from '../../zql/src/mutate/custom.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
-import type {HumanReadable, PullRow, Query} from '../../zql/src/query/query.ts';
+import type {
+  EdgeVisual,
+  HumanReadable,
+  NodeVisual,
+  PullRow,
+  Query,
+} from '../../zql/src/query/query.ts';
 import type {TypedView} from '../../zql/src/query/typed-view.ts';
 
 export function makeSchemaQuery<S extends Schema>(
@@ -77,6 +83,10 @@ export class Z2SQuery<
     format: Format | undefined,
   ): Z2SQuery<TSchema, TTable, TReturn> {
     return new Z2SQuery(schema, tableName, this.#dbTransaction, ast, format);
+  }
+
+  visualize(): {nodes: NodeVisual[]; edges: EdgeVisual[]} {
+    throw new Error('Z2SQuery cannot be visualized');
   }
 
   async run(): Promise<HumanReadable<TReturn>> {

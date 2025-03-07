@@ -3,6 +3,7 @@ import type {AddChange, Change, ChildChange, RemoveChange} from './change.ts';
 import type {Comparator, Node} from './data.ts';
 import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.ts';
 import {
+  InputBase,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -22,7 +23,7 @@ export type Bound = {
  * Skip sets the start position for the pipeline. No rows before the bound will
  * be output.
  */
-export class Skip implements Operator {
+export class Skip extends InputBase implements Operator {
   readonly #input: Input;
   readonly #bound: Bound;
   readonly #comparator: Comparator;
@@ -30,6 +31,7 @@ export class Skip implements Operator {
   #output: Output = throwOutput;
 
   constructor(input: Input, bound: Bound) {
+    super([input]);
     this.#input = input;
     this.#bound = bound;
     this.#comparator = input.getSchema().compareRows;
@@ -68,6 +70,10 @@ export class Skip implements Operator {
 
   setOutput(output: Output): void {
     this.#output = output;
+  }
+
+  getOutputs(): readonly Output[] {
+    return [this.#output];
   }
 
   destroy(): void {

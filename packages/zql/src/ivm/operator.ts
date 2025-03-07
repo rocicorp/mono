@@ -10,6 +10,11 @@ import type {Stream} from './stream.ts';
  * Input to an operator.
  */
 export interface Input {
+  readonly id: number;
+  readonly name: string;
+  getOutputs(): readonly Output[];
+  getInputs(): readonly Input[];
+
   /** The schema of the data this input returns. */
   getSchema(): SourceSchema;
 
@@ -90,6 +95,36 @@ export const throwOutput: Output = {
  * to the previous.
  */
 export interface Operator extends Input, Output {}
+
+let nextId = 0;
+export function getNextId() {
+  return ++nextId;
+}
+
+export abstract class InputBase implements Input {
+  readonly id: number;
+  readonly #inputs: readonly Input[];
+
+  constructor(inputs: readonly Input[]) {
+    this.id = getNextId();
+    this.#inputs = inputs;
+  }
+
+  getInputs(): readonly Input[] {
+    return this.#inputs;
+  }
+
+  get name() {
+    return this.constructor.name;
+  }
+
+  abstract getOutputs(): readonly Output[];
+  abstract getSchema(): SourceSchema;
+  abstract fetch(req: FetchRequest): Stream<Node>;
+  abstract cleanup(req: FetchRequest): Stream<Node>;
+  abstract setOutput(output: Output): void;
+  abstract destroy(): void;
+}
 
 /**
  * Operators get access to storage that they can store their internal

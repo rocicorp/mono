@@ -3,7 +3,13 @@ import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../ivm/view.ts';
 import {ExpressionBuilder} from './expression.ts';
 import {AbstractQuery} from './query-impl.ts';
-import type {HumanReadable, PullRow, Query} from './query.ts';
+import type {
+  EdgeVisual,
+  HumanReadable,
+  NodeVisual,
+  PullRow,
+  Query,
+} from './query.ts';
 import type {TypedView} from './typed-view.ts';
 
 export function staticQuery<
@@ -43,6 +49,13 @@ export class StaticQuery<
 
   get ast() {
     return this._completeAst();
+  }
+
+  visualize(): {
+    nodes: NodeVisual[];
+    edges: EdgeVisual[];
+  } {
+    throw new Error('Not implemented');
   }
 
   materialize(): TypedView<HumanReadable<TReturn>> {

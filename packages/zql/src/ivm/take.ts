@@ -8,6 +8,7 @@ import {type Change, type EditChange, type RemoveChange} from './change.ts';
 import type {Constraint} from './constraint.ts';
 import {compareValues, type Comparator, type Node} from './data.ts';
 import {
+  InputBase,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -43,7 +44,7 @@ export type PartitionKey = PrimaryKey;
  *
  * Take can count rows globally or by unique value of some field.
  */
-export class Take implements Operator {
+export class Take extends InputBase implements Operator {
   readonly #input: Input;
   readonly #storage: TakeStorage;
   readonly #limit: number;
@@ -58,6 +59,7 @@ export class Take implements Operator {
     limit: number,
     partitionKey?: PartitionKey | undefined,
   ) {
+    super([input]);
     assert(limit >= 0);
     assertOrderingIncludesPK(
       input.getSchema().sort,
@@ -72,8 +74,16 @@ export class Take implements Operator {
       partitionKey && makePartitionKeyComparator(partitionKey);
   }
 
+  get name() {
+    return `Take(${this.#limit})`;
+  }
+
   setOutput(output: Output): void {
     this.#output = output;
+  }
+
+  getOutputs(): readonly Output[] {
+    return [this.#output];
   }
 
   getSchema(): SourceSchema {

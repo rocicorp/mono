@@ -133,6 +133,10 @@ test('discord report https://discord.com/channels/830183651022471199/13475501749
     },
   });
 
+  const data = q.visualize();
+  console.log('data', data);
+  expect(JSON.stringify(data)).toMatchInlineSnapshot(`"{"nodes":[{"id":24,"name":"Join(comments)","type":"Join"},{"id":22,"name":"FanIn","type":"FanIn"},{"id":20,"name":"Exists","type":"Exists"},{"id":19,"name":"closed = literal","type":"Filter"},{"id":18,"name":"id = literal","type":"Filter"},{"id":17,"name":"FanOut","type":"FanOut"},{"id":16,"name":"Join(zsubq_comments_0)","type":"Join"},{"id":13,"name":"issue","type":"Source"},{"id":15,"name":"Take(3)","type":"Take"},{"id":14,"name":"comment","type":"Source"},{"id":21,"name":"id = literal and ownerId = literal","type":"Filter"},{"id":23,"name":"comment","type":"Source"}],"edges":[{"source":22,"dest":24},{"source":20,"dest":22},{"source":19,"dest":20},{"source":18,"dest":19},{"source":17,"dest":18},{"source":16,"dest":17},{"source":13,"dest":16},{"source":15,"dest":16},{"source":14,"dest":15},{"source":21,"dest":22},{"source":17,"dest":21},{"source":23,"dest":24}]}"`);
+
   // the data post-edit should be the same as the view when hydrated from scratch
   // but it is not! `view.data` is empty!
   expect(view.data).toEqual(q.materialize().data);

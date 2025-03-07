@@ -5,6 +5,7 @@ import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {Change, ChildChange} from './change.ts';
 import {valuesEqual, type Node} from './data.ts';
 import {
+  InputBase,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -39,7 +40,7 @@ type Args = {
  * the name #relationshipName. The value of the relationship is a stream of
  * child nodes which are the corresponding values from the child source.
  */
-export class Join implements Input {
+export class Join extends InputBase {
   readonly #parent: Input;
   readonly #child: Input;
   readonly #storage: Storage;
@@ -60,6 +61,7 @@ export class Join implements Input {
     hidden,
     system,
   }: Args) {
+    super([parent, child]);
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
       parentKey.length === childKey.length,
@@ -92,6 +94,14 @@ export class Join implements Input {
     child.setOutput({
       push: (change: Change) => this.#pushChild(change),
     });
+  }
+
+  get name() {
+    return `Join(${this.#relationshipName})`;
+  }
+
+  getOutputs(): readonly Output[] {
+    return [this.#output];
   }
 
   destroy(): void {
