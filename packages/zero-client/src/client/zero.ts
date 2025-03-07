@@ -492,8 +492,9 @@ export class Zero<
       kvStore,
     };
 
+    const lc = new LogContext(logOptions.logLevel, {}, logOptions.logSink);
     this.#zeroContext = new ZeroContext(
-      new LogContext(logOptions.logLevel, {}, logOptions.logSink),
+      lc,
       this.#ivmMain,
       (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
       batchViewUpdates,
@@ -505,7 +506,11 @@ export class Zero<
       enableMutationRecovery: false,
       onClientsDeleted: (clientIDs, clientGroupIDs) =>
         this.#deleteClientsManager.onClientsDeleted(clientIDs, clientGroupIDs),
-      zero: new ZeroRep(this.#zeroContext, this.#ivmMain),
+      zero: new ZeroRep(
+        this.#zeroContext,
+        this.#ivmMain,
+        options.mutators !== undefined,
+      ),
     };
 
     const rep = new ReplicacheImpl(replicacheOptions, replicacheImplOptions);
@@ -516,11 +521,7 @@ export class Zero<
     }
     this.#server = server;
     this.userID = userID;
-    this.#lc = new LogContext(
-      logOptions.logLevel,
-      {clientID: rep.clientID},
-      logOptions.logSink,
-    );
+    this.#lc = lc.withContext('clientID', rep.clientID);
 
     const onUpdateNeededCallback =
       onUpdateNeeded ??

@@ -281,7 +281,7 @@ export interface ZeroOption {
     reason: TransactionReason,
     desiredHead: Hash,
     readOptions?: ZeroReadOptions | undefined,
-  ): Promise<ZeroTxData>;
+  ): Promise<ZeroTxData> | undefined;
 
   /**
    * When Replicache's main head moves forward, Zero must advance its IVM state.

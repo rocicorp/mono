@@ -20,11 +20,17 @@ import type {TransactionReason} from '../../../replicache/src/transactions.ts';
 export class ZeroRep implements ZeroOption {
   readonly #context: ZeroContext;
   readonly #ivmMain: IVMSourceBranch;
+  readonly #customMutatorsEnabled: boolean;
   #store: LazyStore | undefined;
 
-  constructor(context: ZeroContext, ivmMain: IVMSourceBranch) {
+  constructor(
+    context: ZeroContext,
+    ivmMain: IVMSourceBranch,
+    customMutatorsEnabled: boolean,
+  ) {
     this.#context = context;
     this.#ivmMain = ivmMain;
+    this.#customMutatorsEnabled = customMutatorsEnabled;
   }
 
   async init(hash: Hash, store: LazyStore) {
@@ -51,13 +57,21 @@ export class ZeroRep implements ZeroOption {
     reason: TransactionReason,
     desiredHead: Hash,
     readOptions?: ZeroReadOptions | undefined,
-  ): Promise<IVMSourceBranch> =>
-    this.#ivmMain.forkToHead(
+  ): Promise<IVMSourceBranch> | undefined => {
+    // getTxData requires some extensive testing for complete confidence
+    // that it will not break. Do not enable `getTxData` unless the user
+    // has opted into custom mutators.
+    if (!this.#customMutatorsEnabled) {
+      return;
+    }
+
+    return this.#ivmMain.forkToHead(
       reason,
       must(this.#store),
       desiredHead,
       readOptions,
     );
+  };
 
   advance = (expectedHash: Hash, newHash: Hash, diffs: InternalDiff): void => {
     this.#context.processChanges(expectedHash, newHash, diffs);
