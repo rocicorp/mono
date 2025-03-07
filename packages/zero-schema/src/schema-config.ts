@@ -1,12 +1,13 @@
 import * as v from '../../shared/src/valita.ts';
 import {compoundKeySchema} from '../../zero-protocol/src/ast.ts';
+import {valueTypeSchema} from '../../zero-protocol/src/client-schema.ts';
 import {primaryKeySchema} from '../../zero-protocol/src/primary-key.ts';
 import type {Schema} from './builder/schema-builder.ts';
 import {
   permissionsConfigSchema,
   type PermissionsConfig,
 } from './compiled-permissions.ts';
-import type {Relationship, TableSchema, ValueType} from './table-schema.ts';
+import type {Relationship, TableSchema} from './table-schema.ts';
 
 export type SchemaConfig = {
   schema: Schema;
@@ -23,14 +24,6 @@ const relationshipPart = v.readonlyObject({
 export const relationshipSchema: v.Type<Relationship> = v.union(
   v.readonly(v.tuple([relationshipPart])),
   v.readonly(v.tuple([relationshipPart, relationshipPart])),
-);
-
-export const valueTypeSchema: v.Type<ValueType> = v.union(
-  v.literal('string'),
-  v.literal('number'),
-  v.literal('boolean'),
-  v.literal('null'),
-  v.literal('json'),
 );
 
 export const schemaValueSchema = v.readonlyObject({

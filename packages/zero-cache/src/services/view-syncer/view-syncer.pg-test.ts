@@ -12,10 +12,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
-import {
-  type ClientSchema,
-  clientSchemaFrom,
-} from '../../../../zero-protocol/src/client-schema.ts';
+import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import type {ErrorBody} from '../../../../zero-protocol/src/error.ts';
@@ -27,7 +24,10 @@ import type {
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {QueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  clientSchemaFrom,
+  createSchema,
+} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {
   json,
   number,

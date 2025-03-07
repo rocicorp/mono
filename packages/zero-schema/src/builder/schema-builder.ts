@@ -1,4 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import {h64} from '../../../shared/src/hash.ts';
+import {mapEntries} from '../../../shared/src/objects.ts';
+import {
+  normalize,
+  type ClientSchema,
+} from '../../../zero-protocol/src/client-schema.ts';
 import type {
   Relationship,
   RelationshipsSchema,
@@ -115,4 +121,24 @@ function checkRelationship(
       source = tables[connection.destSchema];
     });
   });
+}
+
+export function clientSchemaFrom(schema: Schema): {
+  clientSchema: ClientSchema;
+  hash: string;
+} {
+  const client = {
+    tables: mapEntries(schema.tables, (name, {serverName, columns}) => [
+      serverName ?? name,
+      {
+        columns: mapEntries(columns, (name, {serverName, type}) => [
+          serverName ?? name,
+          {type},
+        ]),
+      },
+    ]),
+  };
+  const clientSchema = normalize(client);
+  const hash = h64(JSON.stringify(clientSchema)).toString(36);
+  return {clientSchema, hash};
 }

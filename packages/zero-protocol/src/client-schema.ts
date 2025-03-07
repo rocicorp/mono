@@ -2,7 +2,16 @@ import {h64} from '../../shared/src/hash.ts';
 import {mapAllEntries, mapEntries} from '../../shared/src/objects.ts';
 import * as v from '../../shared/src/valita.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import {valueTypeSchema} from '../../zero-schema/src/schema-config.ts';
+
+export type ValueType = 'string' | 'number' | 'boolean' | 'null' | 'json';
+
+export const valueTypeSchema: v.Type<ValueType> = v.union(
+  v.literal('string'),
+  v.literal('number'),
+  v.literal('boolean'),
+  v.literal('null'),
+  v.literal('json'),
+);
 
 export const columnSchemaSchema = v.object({
   type: valueTypeSchema,
@@ -29,7 +38,6 @@ const keyCmp = ([a]: [a: string, _: unknown], [b]: [b: string, _: unknown]) =>
  * Returns a normalized schema (with the tables and columns sorted)
  * suitable for hashing.
  */
-// exported for testing.
 export function normalize(schema: ClientSchema): ClientSchema {
   return {
     tables: mapAllEntries(schema.tables, tables =>

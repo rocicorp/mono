@@ -33,10 +33,7 @@ import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
-import {
-  type ClientSchema,
-  clientSchemaFrom,
-} from '../../../zero-protocol/src/client-schema.ts';
+import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {CloseConnectionMessage} from '../../../zero-protocol/src/close-connection.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
@@ -69,7 +66,10 @@ import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  type Schema,
+  clientSchemaFrom,
+} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   type NameMapper,
   clientToServer,

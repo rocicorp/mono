@@ -1,8 +1,8 @@
 import {expect, expectTypeOf, test} from 'vitest';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {relationships} from './relationship-builder.ts';
-import {createSchema} from './schema-builder.ts';
-import {number, string, table} from './table-builder.ts';
+import {clientSchemaFrom, createSchema} from './schema-builder.ts';
+import {boolean, number, string, table} from './table-builder.ts';
 
 const mockQuery = {
   select() {
@@ -570,4 +570,90 @@ test('schema with conflicting table names', () => {
   ).toThrowErrorMatchingInlineSnapshot(
     `[Error: Multiple tables reference the name "bar"]`,
   );
+});
+
+// Use JSON.stringify in expectations to preserve / verify key order.
+const stringify = (o: unknown) => JSON.stringify(o, null, 2);
+
+test('clientSchemaFrom', () => {
+  const schema = createSchema(1, {
+    tables: [
+      table('issue')
+        .from('issues')
+        .columns({
+          id: string(),
+          title: string(),
+          description: string(),
+          closed: boolean(),
+          ownerId: string().from('owner_id').optional(),
+        })
+        .primaryKey('id'),
+      table('comment')
+        .from('comments')
+        .columns({
+          id: string().from('comment_id'),
+          issueId: string().from('the_issue_id'), // verify sorting by serverName
+          description: string(),
+        })
+        .primaryKey('id'),
+      table('noMappings')
+        .columns({
+          id: string(),
+          description: string(),
+        })
+        .primaryKey('id'),
+    ],
+  });
+
+  expect(stringify(clientSchemaFrom(schema))).toMatchInlineSnapshot(`
+    "{
+      "clientSchema": {
+        "tables": {
+          "comments": {
+            "columns": {
+              "comment_id": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "the_issue_id": {
+                "type": "string"
+              }
+            }
+          },
+          "issues": {
+            "columns": {
+              "closed": {
+                "type": "boolean"
+              },
+              "description": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "owner_id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "noMappings": {
+            "columns": {
+              "description": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "hash": "qw9u2r398f0z"
+    }"
+  `);
 });
