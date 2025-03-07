@@ -103,17 +103,11 @@ export class IVMSourceBranch {
    */
   async forkToHead(
     store: LazyStore,
-    expectedHead: Hash,
     desiredHead: Hash,
     readOptions?: ZeroReadOptions | undefined,
   ): Promise<IVMSourceBranch> {
     const fork = this.fork();
 
-    assert(
-      expectedHead === fork.hash,
-      () =>
-        `Expected head must match the main head. Got: ${expectedHead}, expected: ${fork.hash}`,
-    );
     if (fork.hash === desiredHead) {
       return fork;
     }

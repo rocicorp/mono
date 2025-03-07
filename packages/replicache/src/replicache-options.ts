@@ -277,7 +277,6 @@ export interface ZeroOption {
    * object for use in Zero's mutators.
    */
   getTxData(
-    expectedHead: Hash,
     desiredHead: Hash,
     readOptions?: ZeroReadOptions | undefined,
   ): Promise<ZeroTxData>;

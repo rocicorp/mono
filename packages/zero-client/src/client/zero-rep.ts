@@ -49,14 +49,12 @@ export class ZeroRep implements ZeroOption {
   }
 
   getTxData = async (
-    expectedHead: Hash,
     desiredHead: Hash,
     readOptions?: ZeroReadOptions | undefined,
   ): Promise<IVMSourceBranch> => {
     await this.#ivmMain.ready;
     return this.#ivmMain.forkToHead(
       must(this.#store),
-      expectedHead,
       desiredHead,
       readOptions,
     );
