@@ -1,7 +1,6 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {useCallback, useRef, useState} from 'react';
-import {days} from '../../../../packages/shared/src/time.ts';
 import {useClickOutside} from '../hooks/use-click-outside.ts';
 import {useZero} from '../hooks/use-zero.ts';
 import {Button} from './button.tsx';
@@ -27,7 +26,7 @@ export function LabelPicker({
   const [isOpen, setIsOpen] = useState(false);
   const z = useZero();
   const [labels] = useQuery(z.query.label.orderBy('name', 'asc'), {
-    ttl: days(1),
+    ttl: '1d',
   });
   const ref = useRef<HTMLDivElement>(null);
 

@@ -31,7 +31,7 @@ import {
   type RowsVersionRow,
   setupCVRTables,
 } from './schema/cvr.ts';
-import type {CVRVersion, RowID} from './schema/types.ts';
+import type {ClientQueryRecord, CVRVersion, RowID} from './schema/types.ts';
 
 const APP_ID = 'dapp';
 const SHARD_NUM = 3;
@@ -317,7 +317,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -421,7 +421,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -650,12 +650,12 @@ describe('view-syncer/cvr', () => {
             dooClient: {
               version: {stateVersion: '1a8'},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -860,6 +860,8 @@ describe('view-syncer/cvr', () => {
           clientState: {
             barClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
+              inactivatedAt: undefined,
+              ttl: -1,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -871,12 +873,12 @@ describe('view-syncer/cvr', () => {
             barClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
             fooClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
         },
@@ -887,7 +889,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
         },
@@ -1558,7 +1560,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           transformationHash: 'serverOneHash',
@@ -2000,7 +2002,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           transformationHash: 'serverTwoHash',
@@ -2594,7 +2596,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           transformationHash: 'updatedServerOneHash',
@@ -2608,7 +2610,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           transformationHash: 'updatedServerTwoHash',
@@ -3286,7 +3288,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "fooClient": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -3310,7 +3312,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "fooClient": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -4184,7 +4186,7 @@ describe('view-syncer/cvr', () => {
               "clientState": {
                 "fooClient": {
                   "inactivatedAt": undefined,
-                  "ttl": undefined,
+                  "ttl": -1,
                   "version": {
                     "minorVersion": 1,
                     "stateVersion": "1a9",
@@ -4225,7 +4227,7 @@ describe('view-syncer/cvr', () => {
             clientState: {
               fooClient: {
                 inactivatedAt: now,
-                ttl: undefined,
+                ttl: -1,
                 version: {
                   minorVersion: 1,
                   stateVersion: '1aa',
@@ -4468,7 +4470,7 @@ describe('view-syncer/cvr', () => {
               "clientState": {
                 "fooClient": {
                   "inactivatedAt": undefined,
-                  "ttl": undefined,
+                  "ttl": -1,
                   "version": {
                     "minorVersion": 1,
                     "stateVersion": "1a9",
@@ -4529,7 +4531,7 @@ describe('view-syncer/cvr', () => {
             clientState: {
               fooClient: {
                 inactivatedAt: now,
-                ttl: undefined,
+                ttl: -1,
                 version: {
                   minorVersion: 1,
                   stateVersion: '1aa',
@@ -4551,6 +4553,123 @@ describe('view-syncer/cvr', () => {
           stateVersion: '1aa',
         },
       });
+    });
+
+    test('using negative numbers for ttl', async () => {
+      // Negative number are treated as no ttl/forever.
+      const now = Date.UTC(2025, 2, 18);
+
+      const initialState: DBState = {
+        instances: [
+          {
+            clientGroupID: 'abc123',
+            version: '1aa',
+            replicaVersion: '120',
+            lastActive: now,
+          },
+        ],
+        clients: [
+          {
+            clientGroupID: 'abc123',
+            clientID: 'fooClient',
+            patchVersion: '1a9:01',
+            deleted: null,
+          },
+        ],
+        queries: [
+          {
+            clientGroupID: 'abc123',
+            queryHash: 'oneHash',
+            clientAST: {table: 'issues'},
+            transformationHash: null,
+            transformationVersion: null,
+            patchVersion: null,
+            internal: null,
+            deleted: null,
+          },
+        ],
+        desires: [
+          {
+            clientGroupID: 'abc123',
+            clientID: 'fooClient',
+            queryHash: 'oneHash',
+            patchVersion: '1a9:01',
+            deleted: null,
+            inactivatedAt: null,
+            ttl: 10 / 1000,
+          },
+        ],
+        rows: [],
+      };
+
+      await setInitialState(db, initialState);
+
+      const cvrStore = new CVRStore(
+        lc,
+        db,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const cvr = await cvrStore.load(lc, LAST_CONNECT);
+      expect(cvr.clients.fooClient).toMatchInlineSnapshot(`
+        {
+          "desiredQueryIDs": [
+            "oneHash",
+          ],
+          "id": "fooClient",
+        }
+      `);
+      expect((cvr.queries.oneHash as ClientQueryRecord).clientState.fooClient)
+        .toMatchInlineSnapshot(`
+          {
+            "inactivatedAt": undefined,
+            "ttl": 10,
+            "version": {
+              "minorVersion": 1,
+              "stateVersion": "1a9",
+            },
+          }
+        `);
+
+      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
+      expect(
+        updater.putDesiredQueries('fooClient', [
+          {hash: 'oneHash', ast: {table: 'issues'}, ttl: -1},
+        ]),
+      ).toMatchInlineSnapshot(`
+        [
+          {
+            "patch": {
+              "ast": {
+                "table": "issues",
+              },
+              "clientID": "fooClient",
+              "id": "oneHash",
+              "op": "put",
+              "type": "query",
+            },
+            "toVersion": {
+              "minorVersion": 1,
+              "stateVersion": "1aa",
+            },
+          },
+        ]
+      `);
+      const {cvr: updated} = await updater.flush(lc, true, LAST_CONNECT, now);
+      expect(
+        (updated.queries.oneHash as ClientQueryRecord).clientState.fooClient,
+      ).toMatchInlineSnapshot(`
+        {
+          "inactivatedAt": undefined,
+          "ttl": -1,
+          "version": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        }
+      `);
     });
   });
 
@@ -4710,7 +4829,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -4718,7 +4837,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-b": {
                 "inactivatedAt": 1709683200000,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1aa",
@@ -4726,7 +4845,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -5025,7 +5144,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -5033,7 +5152,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -5237,7 +5356,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -5245,7 +5364,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",

@@ -4,7 +4,7 @@ import type {ClientQueryRecord} from './schema/types.ts';
 
 type QueryDef = {
   hash: string;
-  ttl: number | undefined;
+  ttl: number;
   inactivatedAt: number | undefined;
 };
 
@@ -86,22 +86,22 @@ test.each([
   {
     clients: {
       clientX: [
-        {hash: 'h1', ttl: undefined, inactivatedAt: 1000},
+        {hash: 'h1', ttl: -1, inactivatedAt: 1000},
         {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
-        {hash: 'h3', ttl: undefined, inactivatedAt: 3000},
+        {hash: 'h3', ttl: -1, inactivatedAt: 3000},
       ],
     },
     expected: [
       {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
-      {hash: 'h1', ttl: undefined, inactivatedAt: 1000},
-      {hash: 'h3', ttl: undefined, inactivatedAt: 3000},
+      {hash: 'h1', ttl: -1, inactivatedAt: 1000},
+      {hash: 'h3', ttl: -1, inactivatedAt: 3000},
     ],
   },
   {
     clients: {
       clientX: [
         {hash: 'h1', ttl: 500, inactivatedAt: undefined},
-        {hash: 'h2', ttl: undefined, inactivatedAt: undefined},
+        {hash: 'h2', ttl: -1, inactivatedAt: undefined},
         {hash: 'h3', ttl: 1000, inactivatedAt: 500},
       ],
     },
@@ -111,13 +111,13 @@ test.each([
     clients: {
       clientX: [
         {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-        {hash: 'h2', ttl: undefined, inactivatedAt: 2000},
-        {hash: 'h3', ttl: undefined, inactivatedAt: undefined},
+        {hash: 'h2', ttl: -1, inactivatedAt: 2000},
+        {hash: 'h3', ttl: -1, inactivatedAt: undefined},
       ],
     },
     expected: [
       {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-      {hash: 'h2', ttl: undefined, inactivatedAt: 2000},
+      {hash: 'h2', ttl: -1, inactivatedAt: 2000},
     ],
   },
 
@@ -187,28 +187,28 @@ test.each([
       ],
       clientY: [
         {hash: 'h1', ttl: 3000, inactivatedAt: 2000},
-        {hash: 'h2', ttl: undefined, inactivatedAt: 4000},
+        {hash: 'h2', ttl: -1, inactivatedAt: 4000},
       ],
     },
     expected: [
       {hash: 'h1', ttl: 3000, inactivatedAt: 2000},
-      {hash: 'h2', ttl: undefined, inactivatedAt: 4000},
+      {hash: 'h2', ttl: -1, inactivatedAt: 4000},
     ],
   },
   {
     clients: {
       clientX: [
         {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-        {hash: 'h2', ttl: undefined, inactivatedAt: 2000},
+        {hash: 'h2', ttl: -1, inactivatedAt: 2000},
       ],
       clientY: [
-        {hash: 'h1', ttl: undefined, inactivatedAt: 3000},
+        {hash: 'h1', ttl: -1, inactivatedAt: 3000},
         {hash: 'h2', ttl: 2000, inactivatedAt: 1500},
       ],
     },
     expected: [
-      {hash: 'h2', ttl: undefined, inactivatedAt: 2000},
-      {hash: 'h1', ttl: undefined, inactivatedAt: 3000},
+      {hash: 'h2', ttl: -1, inactivatedAt: 2000},
+      {hash: 'h1', ttl: -1, inactivatedAt: 3000},
     ],
   },
   {
@@ -218,13 +218,13 @@ test.each([
         {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
       ],
       clientY: [
-        {hash: 'h1', ttl: undefined, inactivatedAt: 2000},
-        {hash: 'h2', ttl: undefined, inactivatedAt: undefined},
+        {hash: 'h1', ttl: -1, inactivatedAt: 2000},
+        {hash: 'h2', ttl: -1, inactivatedAt: undefined},
       ],
     },
     expected: [
       {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
-      {hash: 'h1', ttl: undefined, inactivatedAt: 2000},
+      {hash: 'h1', ttl: -1, inactivatedAt: 2000},
     ],
   },
 ])('getInactiveQueries %o', ({clients, expected}) => {

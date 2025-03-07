@@ -1458,7 +1458,7 @@ function expired(
   for (const clientID in clientState) {
     if (hasOwn(clientState, clientID)) {
       const {ttl, inactivatedAt} = clientState[clientID];
-      if (ttl === undefined || inactivatedAt === undefined) {
+      if (ttl < 0 || inactivatedAt === undefined) {
         return false;
       }
       if (inactivatedAt + ttl > now) {
