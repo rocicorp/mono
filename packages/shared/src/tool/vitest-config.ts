@@ -41,11 +41,11 @@ export default {
       provider: 'playwright',
       headless: true,
       screenshotFailures: false,
-      // instances: [
-      //   {browser: 'chromium'},
-      //   {browser: 'firefox'},
-      //   {browser: 'webkit'},
-      // ],
+      instances: [
+        {browser: 'chromium'},
+        {browser: 'firefox'},
+        {browser: 'webkit'},
+      ],
     },
     typecheck: {
       enabled: false,
