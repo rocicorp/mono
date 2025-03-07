@@ -4,7 +4,7 @@ import type {
   HumanReadable,
   Query,
 } from '../../zero/src/advanced.ts';
-import type {Schema} from '../../zero/src/zero.ts';
+import {DEFAULT_TTL, type Schema, type TTL} from '../../zero/src/zero.ts';
 import {solidViewFactory, type QueryResultDetails} from './solid-view.ts';
 
 export type QueryResult<TReturn> = readonly [
@@ -13,7 +13,7 @@ export type QueryResult<TReturn> = readonly [
 ];
 
 export type UseQueryOptions = {
-  ttl?: number | undefined;
+  ttl?: TTL | undefined;
 };
 
 export function useQuery<
@@ -26,7 +26,7 @@ export function useQuery<
 ): QueryResult<TReturn> {
   // Wrap in in createMemo to ensure a new view is created if the querySignal changes.
   const view = createMemo(() => {
-    const ttl = normalize(options)?.ttl;
+    const ttl = normalize(options)?.ttl ?? DEFAULT_TTL;
     const query = querySignal() as AdvancedQuery<TSchema, TTable, TReturn>;
 
     const view = (query as AdvancedQuery<TSchema, TTable, TReturn>).materialize(

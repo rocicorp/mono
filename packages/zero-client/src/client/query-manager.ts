@@ -16,6 +16,7 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {GotCallback} from '../../../zql/src/query/query-impl.ts';
+import {parseTTL, type TTL} from '../../../zql/src/query/ttl.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {ReadTransaction} from './replicache-types.ts';
 
@@ -36,7 +37,7 @@ export class QueryManager {
       normalized: AST;
       count: number;
       gotCallbacks: GotCallback[];
-      ttl: number | undefined;
+      ttl: TTL;
     }
   > = new Map();
   readonly #recentQueriesMaxSize: number;
@@ -116,7 +117,7 @@ export class QueryManager {
     }
     for (const [hash, {normalized, ttl}] of this.#queries) {
       if (!existingQueryHashes.has(hash)) {
-        patch.set(hash, {op: 'put', hash, ast: normalized, ttl});
+        patch.set(hash, {op: 'put', hash, ast: normalized, ttl: parseTTL(ttl)});
       }
     }
 
@@ -140,11 +141,7 @@ export class QueryManager {
     return patch;
   }
 
-  add(
-    ast: AST,
-    ttl?: number | undefined,
-    gotCallback?: GotCallback | undefined,
-  ): () => void {
+  add(ast: AST, ttl: TTL, gotCallback?: GotCallback | undefined): () => void {
     const normalized = normalizeAST(ast);
     const astHash = hashOfAST(normalized);
     let entry = this.#queries.get(astHash);
@@ -162,7 +159,7 @@ export class QueryManager {
         'changeDesiredQueries',
         {
           desiredQueriesPatch: [
-            {op: 'put', hash: astHash, ast: serverAST, ttl},
+            {op: 'put', hash: astHash, ast: serverAST, ttl: parseTTL(ttl)},
           ],
         },
       ]);
@@ -177,7 +174,12 @@ export class QueryManager {
           'changeDesiredQueries',
           {
             desiredQueriesPatch: [
-              {op: 'put', hash: astHash, ast: entry.normalized, ttl},
+              {
+                op: 'put',
+                hash: astHash,
+                ast: entry.normalized,
+                ttl: parseTTL(ttl),
+              },
             ],
           },
         ]);

@@ -4,7 +4,12 @@ import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {AdvancedQuery} from '../../zql/src/query/query-internal.ts';
-import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
+import {
+  DEFAULT_TTL,
+  type HumanReadable,
+  type Query,
+} from '../../zql/src/query/query.ts';
+import type {TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './use-zero.tsx';
 
@@ -24,10 +29,8 @@ export type UseQueryOptions = {
    * after the query is removed. During this time, Zero continues to sync the query.
    * Default is 10 seconds.
    */
-  ttl?: number | undefined;
+  ttl?: TTL | undefined;
 };
-
-const DEFAULT_TTL = 10_000;
 
 export function useQuery<
   TSchema extends Schema,
@@ -38,7 +41,7 @@ export function useQuery<
   options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
-  let ttl: number | undefined;
+  let ttl: TTL = DEFAULT_TTL;
   if (typeof options === 'boolean') {
     enabled = options;
   } else if (options) {
@@ -181,7 +184,7 @@ export class ViewStore {
     clientID: string,
     query: AdvancedQuery<TSchema, TTable, TReturn>,
     enabled: boolean,
-    ttl: number | undefined,
+    ttl: TTL,
   ): {
     getSnapshot: () => QueryResult<TReturn>;
     subscribeReactInternals: (internals: () => void) => () => void;
@@ -257,11 +260,11 @@ class ViewWrapper<
   readonly #query: AdvancedQuery<TSchema, TTable, TReturn>;
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
-  readonly #ttl: number | undefined;
+  readonly #ttl: TTL;
 
   constructor(
     query: AdvancedQuery<TSchema, TTable, TReturn>,
-    ttl: number | undefined,
+    ttl: TTL,
     onMaterialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
     onDematerialized: () => void,
   ) {

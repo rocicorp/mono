@@ -717,7 +717,7 @@ describe('view-syncer/service', () => {
           clientState: {
             foo: {
               inactivatedAt,
-              ttl: undefined,
+              ttl: -1,
               version: {minorVersion: 2, stateVersion: '00'},
             },
           },
@@ -728,7 +728,7 @@ describe('view-syncer/service', () => {
           clientState: {
             foo: {
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
               version: {stateVersion: '00', minorVersion: 2},
             },
           },
@@ -5196,10 +5196,10 @@ describe('view-syncer/service', () => {
       await expectNoPokes(client);
     });
 
-    test('3 queries, inactive 2 at the same time', async () => {
+    test('3 queries, inactivate 2 at the same time', async () => {
       vs.maxRowCount = 5;
 
-      // This test is similar to the previous one but we inactive two at the same time. Both should be evicted.
+      // This test is similar to the previous one but we inactivate two at the same time. Both should be evicted.
       const client = connect(SYNC_CONTEXT, [
         {op: 'put', hash: 'user-query-hash', ast: USERS_QUERY}, // 3 rows
         {op: 'put', hash: 'comment-query-hash', ast: COMMENTS_QUERY}, // 2 rows

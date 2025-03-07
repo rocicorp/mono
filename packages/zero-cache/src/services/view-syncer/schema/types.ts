@@ -172,10 +172,11 @@ const clientStateSchema = v.object({
   inactivatedAt: v.number().optional(),
 
   /**
-   * TTL, time to live in milliseconds. If the query is not updated within this time.
-   * The time to live is the time after it has become inactive.
+   * TTL, time to live in milliseconds. If the query is not updated within this
+   * time. The time to live is the time after it has become inactive. Negative
+   * values are treated as `'forever'`.
    */
-  ttl: v.number().optional(),
+  ttl: v.number(),
 
   /**
    * The version at which the client state changed (i.e. individual `patchVersion`s).

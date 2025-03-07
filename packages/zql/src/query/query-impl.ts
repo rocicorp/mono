@@ -40,6 +40,7 @@ import {
   type PullRow,
   type Query,
 } from './query.ts';
+import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 type AnyQuery = Query<Schema, string, any>;
@@ -75,7 +76,7 @@ export type GotCallback = (got: boolean) => void;
 export interface QueryDelegate extends BuilderDelegate {
   addServerQuery(
     ast: AST,
-    ttl: number,
+    ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ): () => void;
   onTransactionCommit(cb: CommitListener): () => void;

@@ -1,4 +1,4 @@
-import {escapeLike} from '@rocicorp/zero';
+import {escapeLike, type TTL} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
@@ -14,7 +14,6 @@ import React, {
 import {useDebouncedCallback} from 'use-debounce';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
-import {hours, minutes} from '../../../../../packages/shared/src/time.ts';
 import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
 import {IssueLink} from '../../components/issue-link.tsx';
@@ -57,7 +56,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const sortDirection =
     qs.get('sortDir')?.toLowerCase() === 'asc' ? 'asc' : 'desc';
 
-  let ttl = hours(1);
+  let ttl: TTL = '1h';
 
   let q = z.query.issue
     .orderBy(sortField, sortDirection)
@@ -81,7 +80,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }
 
   if (textFilter) {
-    ttl = minutes(10);
+    ttl = '10m';
     q = q.where(({or, cmp, exists}) =>
       or(
         cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
