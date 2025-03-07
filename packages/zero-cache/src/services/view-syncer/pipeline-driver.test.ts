@@ -291,12 +291,12 @@ describe('view-syncer/pipeline-driver', () => {
   );
 
   test('replica version', () => {
-    pipelines.init();
+    pipelines.init(null);
     expect(pipelines.replicaVersion).toBe('123');
   });
 
   test('add query', () => {
-    pipelines.init();
+    pipelines.init(null);
 
     expect([...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)])
       .toMatchInlineSnapshot(`
@@ -406,7 +406,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('insert', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction(
@@ -468,7 +468,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('delete', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction(
@@ -511,7 +511,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('truncate', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction('134', messages.truncate('comments'));
@@ -522,7 +522,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('update', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction(
@@ -584,7 +584,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('reset', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
     expect(pipelines.addedQueries()).toEqual(new Set(['hash1']));
 
@@ -594,7 +594,7 @@ describe('view-syncer/pipeline-driver', () => {
     );
 
     pipelines.advanceWithoutDiff();
-    pipelines.reset();
+    pipelines.reset(null);
 
     expect(pipelines.addedQueries()).toEqual(new Set());
 
@@ -705,7 +705,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('whereExists query', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_QUERY_WITH_EXISTS)];
 
     replicator.processTransaction(
@@ -753,7 +753,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('whereExists added by permissions return no rows', () => {
-    pipelines.init();
+    pipelines.init(null);
     expect([
       ...pipelines.addQuery('hash1', ISSUES_QUERY_WITH_EXISTS_FROM_PERMISSIONS),
     ]).toMatchInlineSnapshot(`
@@ -916,7 +916,7 @@ describe('view-syncer/pipeline-driver', () => {
       ],
     };
 
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', query)];
 
     replicator.processTransaction(
@@ -1069,7 +1069,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('getRow', () => {
-    pipelines.init();
+    pipelines.init(null);
 
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
@@ -1122,7 +1122,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('schemaVersions change and insert', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction(
@@ -1165,7 +1165,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('multiple advancements', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction(
@@ -1242,7 +1242,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('remove query', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     expect([...pipelines.addedQueries()]).toEqual(['hash1']);
@@ -1262,7 +1262,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('push fails on out of bounds numbers', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction(

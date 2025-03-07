@@ -16,6 +16,7 @@ import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {changeDesiredQueriesMessageSchema} from '../../../zero-protocol/src/change-desired-queries.ts';
+import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import {
   decodeSecProtocols,
   encodeSecProtocols,
@@ -356,7 +357,16 @@ describe('createSocket', () => {
     expectedURL: string,
     additionalConnectParams?: Record<string, string>,
   ) => {
-    const schemaVersion = 3;
+    const clientSchema: ClientSchema = {
+      tables: {
+        foo: {
+          columns: {
+            bar: {type: 'string'},
+          },
+        },
+      },
+    };
+
     test(expectedURL, async () => {
       sinon.stub(performance, 'now').returns(now);
       const [mockSocket, queriesPatch, deletedClients] = await createSocket(
@@ -367,7 +377,7 @@ describe('createSocket', () => {
         baseCookie,
         clientID,
         'testClientGroupID',
-        schemaVersion,
+        clientSchema,
         userID,
         auth,
         lmid,
@@ -385,6 +395,7 @@ describe('createSocket', () => {
             {
               desiredQueriesPatch: [],
               deleted: {clientIDs: ['old-deleted-client']},
+              ...(baseCookie === null ? {clientSchema} : {}),
             },
           ],
           auth,
@@ -401,7 +412,7 @@ describe('createSocket', () => {
         baseCookie,
         clientID,
         'testClientGroupID',
-        schemaVersion,
+        clientSchema,
         userID,
         auth,
         lmid,
@@ -428,7 +439,7 @@ describe('createSocket', () => {
     0,
     false,
     0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
+    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
   );
   t(
     'ws://example.com/prefix',
@@ -439,7 +450,7 @@ describe('createSocket', () => {
     0,
     false,
     0,
-    `ws://example.com/prefix/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
+    `ws://example.com/prefix/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
   );
   t(
     'ws://example.com/prefix/',
@@ -450,7 +461,7 @@ describe('createSocket', () => {
     0,
     false,
     0,
-    `ws://example.com/prefix/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
+    `ws://example.com/prefix/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
   );
 
   t(
@@ -462,7 +473,7 @@ describe('createSocket', () => {
     0,
     false,
     0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx`,
+    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx`,
   );
 
   t(
@@ -474,7 +485,7 @@ describe('createSocket', () => {
     0,
     false,
     0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx`,
+    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=1234&ts=0&lmid=0&wsid=wsidx`,
   );
 
   t(
@@ -486,7 +497,7 @@ describe('createSocket', () => {
     123,
     false,
     0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx`,
+    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx`,
   );
 
   t(
@@ -498,7 +509,7 @@ describe('createSocket', () => {
     123,
     false,
     0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx`,
+    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=123&wsid=wsidx`,
   );
 
   t(
@@ -510,7 +521,7 @@ describe('createSocket', () => {
     0,
     false,
     0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
+    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
   );
 
   t(
@@ -522,7 +533,7 @@ describe('createSocket', () => {
     0,
     false,
     0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
+    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx`,
   );
 
   t(
@@ -534,7 +545,7 @@ describe('createSocket', () => {
     0,
     true,
     0,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true`,
+    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=0&lmid=0&wsid=wsidx&debugPerf=true`,
   );
 
   t(
@@ -546,7 +557,7 @@ describe('createSocket', () => {
     0,
     false,
     456,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx`,
+    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx`,
   );
 
   t(
@@ -558,7 +569,7 @@ describe('createSocket', () => {
     0,
     false,
     456,
-    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&schemaVersion=3&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx&reason=rehome&backoff=100&lastTask=foo%2Fbar%26baz`,
+    `ws://example.com/sync/v${PROTOCOL_VERSION}/connect?clientID=clientID&clientGroupID=testClientGroupID&userID=userID&baseCookie=&ts=456&lmid=0&wsid=wsidx&reason=rehome&backoff=100&lastTask=foo%2Fbar%26baz`,
     {
       reason: 'rehome',
       backoff: '100',
@@ -583,17 +594,42 @@ describe('initConnection', () => {
   test('sent when connected message received but before ConnectionState.Connected desired queries > maxHeaderLength', async () => {
     const r = zeroForTest({
       maxHeaderLength: 0,
+      schema: createSchema(1, {
+        tables: [
+          table('abc')
+            .columns({
+              id: string(),
+              value: string(),
+            })
+            .primaryKey('id'),
+        ],
+      }),
     });
     const mockSocket = await r.socket;
     mockSocket.onUpstream = msg => {
-      expect(
-        valita.parse(JSON.parse(msg), initConnectionMessageSchema),
-      ).toEqual([
-        'initConnection',
-        {
-          desiredQueriesPatch: [],
-        },
-      ]);
+      expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
+        .toMatchInlineSnapshot(`
+          [
+            "initConnection",
+            {
+              "clientSchema": {
+                "tables": {
+                  "abc": {
+                    "columns": {
+                      "id": {
+                        "type": "string",
+                      },
+                      "value": {
+                        "type": "string",
+                      },
+                    },
+                  },
+                },
+              },
+              "desiredQueriesPatch": [],
+            },
+          ]
+        `);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     };
 
@@ -606,6 +642,16 @@ describe('initConnection', () => {
     const r = await zeroForTestWithDeletedClients({
       maxHeaderLength: 0,
       deletedClients: ['a'],
+      schema: createSchema(1, {
+        tables: [
+          table('def')
+            .columns({
+              id: string(),
+              value: string(),
+            })
+            .primaryKey('id'),
+        ],
+      }),
     });
 
     const mockSocket = await r.socket;
@@ -615,6 +661,20 @@ describe('initConnection', () => {
           [
             "initConnection",
             {
+              "clientSchema": {
+                "tables": {
+                  "def": {
+                    "columns": {
+                      "id": {
+                        "type": "string",
+                      },
+                      "value": {
+                        "type": "string",
+                      },
+                    },
+                  },
+                },
+              },
               "deleted": {
                 "clientIDs": [
                   "a",
@@ -636,6 +696,16 @@ describe('initConnection', () => {
     const r = await zeroForTestWithDeletedClients({
       maxHeaderLength: 0,
       deletedClientGroups: ['a'],
+      schema: createSchema(1, {
+        tables: [
+          table('ijk')
+            .columns({
+              id: string(),
+              value: string(),
+            })
+            .primaryKey('id'),
+        ],
+      }),
     });
 
     const mockSocket = await r.socket;
@@ -645,6 +715,20 @@ describe('initConnection', () => {
           [
             "initConnection",
             {
+              "clientSchema": {
+                "tables": {
+                  "ijk": {
+                    "columns": {
+                      "id": {
+                        "type": "string",
+                      },
+                      "value": {
+                        "type": "string",
+                      },
+                    },
+                  },
+                },
+              },
               "deleted": {
                 "clientGroupIDs": [
                   "a",
@@ -687,28 +771,42 @@ describe('initConnection', () => {
         initConnectionMessageSchema,
       ),
     ).toMatchInlineSnapshot(`
-      [
-        "initConnection",
-        {
-          "desiredQueriesPatch": [
-            {
-              "ast": {
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
-                "table": "e",
+        [
+          "initConnection",
+          {
+            "clientSchema": {
+              "tables": {
+                "e": {
+                  "columns": {
+                    "id": {
+                      "type": "string",
+                    },
+                    "value": {
+                      "type": "string",
+                    },
+                  },
+                },
               },
-              "hash": "29j3x0l4bxthp",
-              "op": "put",
-              "ttl": 10000,
             },
-          ],
-        },
-      ]
-    `);
+            "desiredQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "e",
+                },
+                "hash": "29j3x0l4bxthp",
+                "op": "put",
+                "ttl": 10000,
+              },
+            ],
+          },
+        ]
+      `);
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
@@ -770,33 +868,47 @@ describe('initConnection', () => {
         initConnectionMessageSchema,
       ),
     ).toMatchInlineSnapshot(`
-      [
-        "initConnection",
-        {
-          "deleted": {
-            "clientIDs": [
-              "a",
-            ],
-          },
-          "desiredQueriesPatch": [
-            {
-              "ast": {
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
-                "table": "e",
-              },
-              "hash": "29j3x0l4bxthp",
-              "op": "put",
-              "ttl": 10000,
-            },
-          ],
-        },
-      ]
-    `);
+                [
+                  "initConnection",
+                  {
+                    "clientSchema": {
+                      "tables": {
+                        "e": {
+                          "columns": {
+                            "id": {
+                              "type": "string",
+                            },
+                            "value": {
+                              "type": "string",
+                            },
+                          },
+                        },
+                      },
+                    },
+                    "deleted": {
+                      "clientIDs": [
+                        "a",
+                      ],
+                    },
+                    "desiredQueriesPatch": [
+                      {
+                        "ast": {
+                          "orderBy": [
+                            [
+                              "id",
+                              "asc",
+                            ],
+                          ],
+                          "table": "e",
+                        },
+                        "hash": "29j3x0l4bxthp",
+                        "op": "put",
+                        "ttl": 10000,
+                      },
+                    ],
+                  },
+                ]
+              `);
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
@@ -822,28 +934,42 @@ describe('initConnection', () => {
     mockSocket.onUpstream = msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-          [
-            "initConnection",
-            {
-              "desiredQueriesPatch": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "e",
-                  },
-                  "hash": "29j3x0l4bxthp",
-                  "op": "put",
-                  "ttl": 10000,
-                },
-              ],
-            },
-          ]
-        `);
+                          [
+                            "initConnection",
+                            {
+                              "clientSchema": {
+                                "tables": {
+                                  "e": {
+                                    "columns": {
+                                      "id": {
+                                        "type": "string",
+                                      },
+                                      "value": {
+                                        "type": "string",
+                                      },
+                                    },
+                                  },
+                                },
+                              },
+                              "desiredQueriesPatch": [
+                                {
+                                  "ast": {
+                                    "orderBy": [
+                                      [
+                                        "id",
+                                        "asc",
+                                      ],
+                                    ],
+                                    "table": "e",
+                                  },
+                                  "hash": "29j3x0l4bxthp",
+                                  "op": "put",
+                                  "ttl": 10000,
+                                },
+                              ],
+                            },
+                          ]
+                        `);
 
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     };
@@ -875,33 +1001,47 @@ describe('initConnection', () => {
     mockSocket.onUpstream = msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-          [
-            "initConnection",
-            {
-              "deleted": {
-                "clientIDs": [
-                  "a",
-                ],
-              },
-              "desiredQueriesPatch": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "e",
-                  },
-                  "hash": "29j3x0l4bxthp",
-                  "op": "put",
-                  "ttl": 10000,
-                },
-              ],
-            },
-          ]
-        `);
+                            [
+                              "initConnection",
+                              {
+                                "clientSchema": {
+                                  "tables": {
+                                    "e": {
+                                      "columns": {
+                                        "id": {
+                                          "type": "string",
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                        },
+                                      },
+                                    },
+                                  },
+                                },
+                                "deleted": {
+                                  "clientIDs": [
+                                    "a",
+                                  ],
+                                },
+                                "desiredQueriesPatch": [
+                                  {
+                                    "ast": {
+                                      "orderBy": [
+                                        [
+                                          "id",
+                                          "asc",
+                                        ],
+                                      ],
+                                      "table": "e",
+                                    },
+                                    "hash": "29j3x0l4bxthp",
+                                    "op": "put",
+                                    "ttl": 10000,
+                                  },
+                                ],
+                              },
+                            ]
+                          `);
 
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     };
@@ -959,6 +1099,16 @@ describe('initConnection', () => {
       'initConnection',
       {
         desiredQueriesPatch: [],
+        clientSchema: {
+          tables: {
+            e: {
+              columns: {
+                id: {type: 'string'},
+                value: {type: 'string'},
+              },
+            },
+          },
+        },
       },
     ]);
 
@@ -3054,6 +3204,7 @@ test('custom mutations get pushed', async () => {
 
   expect(
     mockSocket.messages.map(x => {
+      console.error(x);
       const ret = JSON.parse(x);
       if ('requestID' in ret[1]) {
         delete ret[1].requestID;

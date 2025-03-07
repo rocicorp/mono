@@ -135,17 +135,18 @@ describe('view-syncer/cvr-store', () => {
     // Verify that the store signaled an ownership change to 'my-task' at CONNECT_TIME.
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "my-cvr",
-          "grantedAt": 1732233600000,
-          "lastActive": 1725408000000,
-          "owner": "my-task",
-          "replicaVersion": "01",
-          "version": "04",
-        },
-      ]
-    `);
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600000,
+            "lastActive": 1725408000000,
+            "owner": "my-task",
+            "replicaVersion": "01",
+            "version": "04",
+          },
+        ]
+      `);
   });
 
   test('wrong owner', async () => {
@@ -159,17 +160,18 @@ describe('view-syncer/cvr-store', () => {
     // Verify that no ownership change was signaled.
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "my-cvr",
-          "grantedAt": 1732233600001,
-          "lastActive": 1725408000000,
-          "owner": "other-task",
-          "replicaVersion": "01",
-          "version": "03",
-        },
-      ]
-    `);
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600001,
+            "lastActive": 1725408000000,
+            "owner": "other-task",
+            "replicaVersion": "01",
+            "version": "03",
+          },
+        ]
+      `);
   });
 
   async function catchupRows(
@@ -397,17 +399,18 @@ describe('view-syncer/cvr-store', () => {
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "my-cvr",
-          "grantedAt": 1732233600000,
-          "lastActive": 1732320000000,
-          "owner": "my-task",
-          "replicaVersion": "01",
-          "version": "04",
-        },
-      ]
-    `);
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600000,
+            "lastActive": 1732320000000,
+            "owner": "my-task",
+            "replicaVersion": "01",
+            "version": "04",
+          },
+        ]
+      `);
 
     // rowsVersion === '03' (flush deferred).
     expect(await db`SELECT * FROM "roze_1/cvr"."rowsVersion"`)
@@ -451,17 +454,18 @@ describe('view-syncer/cvr-store', () => {
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "my-cvr",
-          "grantedAt": 1732233600000,
-          "lastActive": 1732320000000,
-          "owner": "my-task",
-          "replicaVersion": "01",
-          "version": "05",
-        },
-      ]
-    `);
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600000,
+            "lastActive": 1732320000000,
+            "owner": "my-task",
+            "replicaVersion": "01",
+            "version": "05",
+          },
+        ]
+      `);
 
     // rowsVersion === '03' (flush deferred).
     expect(await db`SELECT * FROM "roze_1/cvr"."rowsVersion"`)
@@ -539,17 +543,18 @@ describe('view-syncer/cvr-store', () => {
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "my-cvr",
-          "grantedAt": 1732233600000,
-          "lastActive": 1732320000000,
-          "owner": "my-task",
-          "replicaVersion": "01",
-          "version": "18m",
-        },
-      ]
-    `);
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600000,
+            "lastActive": 1732320000000,
+            "owner": "my-task",
+            "replicaVersion": "01",
+            "version": "18m",
+          },
+        ]
+      `);
 
     // Should block until all pending rows are flushed.
     await store.flushed(lc);
@@ -627,17 +632,18 @@ describe('view-syncer/cvr-store', () => {
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "my-cvr",
-          "grantedAt": 1732233600000,
-          "lastActive": 1732320000000,
-          "owner": "my-task",
-          "replicaVersion": "01",
-          "version": "18w",
-        },
-      ]
-    `);
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600000,
+            "lastActive": 1732320000000,
+            "owner": "my-task",
+            "replicaVersion": "01",
+            "version": "18w",
+          },
+        ]
+      `);
 
     // Should block until all pending rows are flushed.
     await store.flushed(lc);
@@ -689,17 +695,18 @@ describe('view-syncer/cvr-store', () => {
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
-    Result [
-      {
-        "clientGroupID": "my-cvr",
-        "grantedAt": 1732233600000,
-        "lastActive": 1732320000000,
-        "owner": "my-task",
-        "replicaVersion": "01",
-        "version": "04",
-      },
-    ]
-  `);
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600000,
+            "lastActive": 1732320000000,
+            "owner": "my-task",
+            "replicaVersion": "01",
+            "version": "04",
+          },
+        ]
+      `);
 
     // rowsVersion === '03' (flush deferred).
     expect(await db`SELECT * FROM "roze_1/cvr"."rowsVersion"`)

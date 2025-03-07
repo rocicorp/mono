@@ -1,4 +1,5 @@
 import * as v from '../../shared/src/valita.ts';
+import {clientSchemaSchema} from './client-schema.ts';
 import {deleteClientsBodySchema} from './delete-clients.ts';
 import {queriesPatchSchema} from './queries-patch.ts';
 
@@ -22,6 +23,7 @@ export const connectedMessageSchema = v.tuple([
 
 const initConnectionBodySchema = v.object({
   desiredQueriesPatch: queriesPatchSchema,
+  clientSchema: clientSchemaSchema.optional(),
   deleted: deleteClientsBodySchema.optional(),
 });
 

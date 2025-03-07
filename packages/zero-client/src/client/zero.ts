@@ -26,12 +26,17 @@ import {
 } from '../../../shared/src/browser-env.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import {
+  type ClientSchema,
+  clientSchemaFrom,
+} from '../../../zero-protocol/src/client-schema.ts';
 import type {CloseConnectionMessage} from '../../../zero-protocol/src/close-connection.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
@@ -121,6 +126,7 @@ import {
   reportReloadReason,
   resetBackoff,
 } from './reload-error-handler.ts';
+import type {WriteTransaction} from './replicache-types.ts';
 import {
   ServerError,
   isAuthError,
@@ -130,8 +136,6 @@ import {
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
-import type {WriteTransaction} from './replicache-types.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -279,6 +283,7 @@ export class Zero<
   readonly #lc: LogContext;
   readonly #logOptions: LogOptions;
   readonly #enableAnalytics: boolean;
+  readonly #clientSchema: ClientSchema;
 
   readonly #pokeHandler: PokeHandler;
   readonly #queryManager: QueryManager;
@@ -465,10 +470,13 @@ export class Zero<
 
     this.storageKey = storageKey ?? '';
 
+    const {clientSchema, hash} = clientSchemaFrom(schema);
+    this.#clientSchema = clientSchema;
+
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
-      // The schema stored in IDB is dependent upon both the application schema
+      // The schema stored in IDB is dependent upon both the ClientSchema
       // and the AST schema (i.e. PROTOCOL_VERSION).
-      schemaVersion: `${schema.version}.${PROTOCOL_VERSION}`,
+      schemaVersion: `${PROTOCOL_VERSION}.${hash}`,
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
@@ -1006,11 +1014,15 @@ export class Zero<
     } else if (this.#initConnectionQueries === undefined) {
       // if #initConnectionQueries was undefined that means we never
       // sent `initConnection` to the server inside the sec-protocol header.
+      const clientSchema = this.#clientSchema;
       send(socket, [
         'initConnection',
         {
           desiredQueriesPatch: [...queriesPatch.values()],
           deleted: skipEmptyDeletedClients(this.#deletedClients),
+          // The clientSchema only needs to be sent for the very first request.
+          // Henceforth it is stored with the CVR and verified automatically.
+          ...(this.#connectCookie === null ? {clientSchema} : {}),
         },
       ]);
       this.#deletedClients = undefined;
@@ -1097,7 +1109,7 @@ export class Zero<
       this.#connectCookie,
       this.clientID,
       await this.clientGroupID,
-      this.#options.schema.version,
+      this.#clientSchema,
       this.userID,
       this.#rep.auth,
       this.#lastMutationIDReceived,
@@ -1769,7 +1781,7 @@ export async function createSocket(
   baseCookie: NullableVersion,
   clientID: string,
   clientGroupID: string,
-  schemaVersion: number,
+  clientSchema: ClientSchema,
   userID: string,
   auth: string | undefined,
   lmid: number,
@@ -1791,7 +1803,6 @@ export async function createSocket(
   const {searchParams} = url;
   searchParams.set('clientID', clientID);
   searchParams.set('clientGroupID', clientGroupID);
-  searchParams.set('schemaVersion', schemaVersion.toString());
   searchParams.set('userID', userID);
   searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));
   searchParams.set('ts', String(performance.now()));
@@ -1830,6 +1841,9 @@ export async function createSocket(
       {
         desiredQueriesPatch: [...queriesPatch.values()],
         deleted: skipEmptyDeletedClients(deletedClients),
+        // The clientSchema only needs to be sent for the very first request.
+        // Henceforth it is stored with the CVR and verified automatically.
+        ...(baseCookie === null ? {clientSchema} : {}),
       },
     ],
     auth,
