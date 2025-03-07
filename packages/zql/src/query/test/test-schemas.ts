@@ -170,3 +170,45 @@ export type IssueLabel = Row<typeof issueLabelSchema>;
 export type Label = Row<typeof labelSchema>;
 export type Revision = Row<typeof revisionSchema>;
 export type User = Row<typeof userSchema>;
+
+export const createTableSQL = /*sql*/ `
+CREATE TABLE IF NOT EXISTS "issue" (
+  "id" TEXT PRIMARY KEY,
+  "title" TEXT NOT NULL,
+  "description" TEXT NOT NULL,
+  "closed" BOOLEAN NOT NULL,
+  "ownerId" TEXT
+);
+
+CREATE TABLE IF NOT EXISTS "user" (
+  "id" TEXT PRIMARY KEY,
+  "name" TEXT NOT NULL,
+  "metadata" JSONB
+);
+
+CREATE TABLE IF NOT EXISTS "comment" (
+  "id" TEXT PRIMARY KEY,
+  "authorId" TEXT NOT NULL,
+  "issueId" TEXT NOT NULL,
+  "text" TEXT NOT NULL,
+  "createdAt" BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "issueLabel" (
+  "issueId" TEXT NOT NULL,
+  "labelId" TEXT NOT NULL,
+  PRIMARY KEY ("issueId", "labelId")
+);
+
+CREATE TABLE IF NOT EXISTS "label" (
+  "id" TEXT PRIMARY KEY,
+  "name" TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "revision" (
+  "id" TEXT PRIMARY KEY,
+  "authorId" TEXT NOT NULL,
+  "commentId" TEXT NOT NULL,
+  "text" TEXT NOT NULL
+);
+`;
