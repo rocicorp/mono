@@ -18,7 +18,6 @@ import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import {putOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
-import {DEFAULT_TTL} from '../../../zql/src/query/query.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import type {TTL} from '../../../zql/src/query/ttl.ts';
 import {toGotQueriesKey} from './keys.ts';
@@ -56,6 +55,7 @@ test('add', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
+          ttl: -1,
         },
       ],
     },
@@ -226,7 +226,7 @@ test('add renamed fields', () => {
             },
             "hash": "2courpv3kf7et",
             "op": "put",
-            "ttl": undefined,
+            "ttl": -1,
           },
         ],
       },
@@ -263,6 +263,7 @@ test('remove, recent queries max size 0', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
+          ttl: -1,
         },
       ],
     },
@@ -335,6 +336,7 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
+          ttl: -1,
         },
       ],
     },
@@ -357,6 +359,7 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
+          ttl: -1,
         },
       ],
     },
@@ -376,6 +379,7 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
+          ttl: -1,
         },
       ],
     },
@@ -395,6 +399,7 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
+          ttl: -1,
         },
       ],
     },
@@ -481,6 +486,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
+          ttl: -1,
         },
       ],
     },
@@ -500,6 +506,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
+          ttl: -1,
         },
       ],
     },
@@ -519,6 +526,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
+          ttl: -1,
         },
       ],
     },
@@ -538,6 +546,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
+          ttl: -1,
         },
       ],
     },
@@ -680,7 +689,7 @@ describe('getQueriesPatch', () => {
               table: 'issues',
               orderBy: [['id', 'desc']],
             } satisfies AST,
-            ttl: undefined,
+            ttl: -1,
           },
         ].map(x => [x.hash, x] as const),
       ),
@@ -704,7 +713,7 @@ describe('getQueriesPatch', () => {
       );
     });
 
-    async function add(ttl: TTL = DEFAULT_TTL): Promise<number | undefined> {
+    async function add(ttl: TTL): Promise<number | undefined> {
       // hash 1hydj1t7t5yv4
       const ast: AST = {
         table: 'issue',
@@ -796,12 +805,12 @@ describe('getQueriesPatch', () => {
       expect(send).toBeCalledTimes(0);
 
       send.mockClear();
-      expect(await add(undefined)).toBe(2000);
-      expect(send).toBeCalledTimes(0);
+      expect(await add('forever')).toBe(-1);
+      expect(send).toBeCalledTimes(1);
     });
 
     test('with first NOT having a ttl', async () => {
-      expect(await add(undefined)).toBe(undefined);
+      expect(await add('none')).toBe(0);
       expect(send).toBeCalledTimes(1);
       expect(send.mock.calls[0]).toMatchInlineSnapshot(`
         [
@@ -827,7 +836,7 @@ describe('getQueriesPatch', () => {
                   },
                   "hash": "1hydj1t7t5yv4",
                   "op": "put",
-                  "ttl": undefined,
+                  "ttl": 0,
                 },
               ],
             },
@@ -836,7 +845,7 @@ describe('getQueriesPatch', () => {
       `);
 
       send.mockClear();
-      expect(await add(undefined)).toBe(undefined);
+      expect(await add('none')).toBe(0);
       expect(send).toBeCalledTimes(0);
 
       send.mockClear();
@@ -875,8 +884,8 @@ describe('getQueriesPatch', () => {
       `);
 
       send.mockClear();
-      expect(await add(undefined)).toBe(1000);
-      expect(send).toBeCalledTimes(0);
+      expect(await add('forever')).toBe(-1);
+      expect(send).toBeCalledTimes(1);
     });
   });
 
@@ -952,7 +961,7 @@ describe('getQueriesPatch', () => {
           },
           "hash": "3c5d3uiyypuxu",
           "op": "put",
-          "ttl": undefined,
+          "ttl": -1,
         },
         "2q7cds8pild5w" => {
           "ast": {
@@ -972,7 +981,7 @@ describe('getQueriesPatch', () => {
           },
           "hash": "2q7cds8pild5w",
           "op": "put",
-          "ttl": undefined,
+          "ttl": -1,
         },
       }
     `);
@@ -1086,7 +1095,7 @@ test('gotCallback, query got after add', () => {
             limit: undefined,
             schema: undefined,
           } satisfies AST,
-          ttl,
+          ttl: -1,
         },
       ],
     },
@@ -1279,6 +1288,7 @@ describe('queriesPatch with lastPatch', () => {
         },
         hash: '12hwg3ihkijhm',
         op: 'put',
+        ttl: -1,
       },
     ]);
   });

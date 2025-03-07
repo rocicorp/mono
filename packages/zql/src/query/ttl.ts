@@ -37,3 +37,15 @@ export function parseTTL(ttl: TTL): number {
   const multi = multiplier[ttl[ttl.length - 1] as TimeUnit];
   return Number(ttl.slice(0, -1)) * multi;
 }
+
+export function compareTTL(a: TTL, b: TTL): number {
+  const ap = parseTTL(a);
+  const bp = parseTTL(b);
+  if (ap === -1 && bp !== -1) {
+    return 1;
+  }
+  if (ap !== -1 && bp === -1) {
+    return -1;
+  }
+  return ap - bp;
+}

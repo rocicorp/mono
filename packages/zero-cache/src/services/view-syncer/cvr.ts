@@ -9,6 +9,7 @@ import {
 } from '../../../../shared/src/set-utils.ts';
 import {stringCompare} from '../../../../shared/src/string-compare.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import {compareTTL} from '../../../../zql/src/query/ttl.ts';
 import {stringify, type JSONObject} from '../../types/bigint-json.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
@@ -213,7 +214,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
     // Find the new/changed desired queries.
     const needed: Set<string> = new Set();
-    for (const {hash, ttl} of queries) {
+    for (const {hash, ttl = -1} of queries) {
       const query = this._cvr.queries[hash];
       if (!query) {
         needed.add(hash);
@@ -230,7 +231,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         continue;
       }
 
-      if (isLargerTTL(ttl, oldClientState.ttl)) {
+      if (compareTTL(ttl, oldClientState.ttl) > 0) {
         needed.add(hash);
       }
     }
@@ -242,7 +243,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     client.desiredQueryIDs = [...union(current, needed)].sort(stringCompare);
 
     for (const id of needed) {
-      const {ast, ttl} = must(queries.find(({hash}) => hash === id));
+      const {ast, ttl = -1} = must(queries.find(({hash}) => hash === id));
       const query =
         this._cvr.queries[id] ??
         ({
@@ -878,14 +879,6 @@ export function nextEvictionTime(cvr: CVR): number | undefined {
   return next;
 }
 
-function isLargerTTL(a: number | undefined, b: number | undefined): boolean {
-  return b === undefined || b < 0
-    ? false
-    : a === undefined || a < 0
-    ? true
-    : a > b;
-}
-
-function normalizeTTL(ttl: number | undefined): number {
-  return ttl === undefined || ttl < 0 ? -1 : ttl;
+function normalizeTTL(ttl: number): number {
+  return ttl < 0 ? -1 : ttl;
 }

@@ -16,7 +16,7 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {GotCallback} from '../../../zql/src/query/query-impl.ts';
-import {parseTTL, type TTL} from '../../../zql/src/query/ttl.ts';
+import {compareTTL, parseTTL, type TTL} from '../../../zql/src/query/ttl.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {ReadTransaction} from './replicache-types.ts';
 
@@ -168,7 +168,7 @@ export class QueryManager {
 
       // If the query already exists and the new ttl is larger than the old one
       // we send a changeDesiredQueries message to the server to update the ttl.
-      if (ttl !== undefined && (entry.ttl === undefined || ttl > entry.ttl)) {
+      if (compareTTL(ttl, entry.ttl) > 0) {
         entry.ttl = ttl;
         this.#send([
           'changeDesiredQueries',
