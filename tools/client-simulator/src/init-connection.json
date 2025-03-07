@@ -1,0 +1,279 @@
+[
+  "initConnection",
+  {
+    "desiredQueriesPatch": [
+      {
+        "op": "put",
+        "hash": "4fl61v12s0hp",
+        "ast": {
+          "table": "issue",
+          "orderBy": [["id", "asc"]],
+          "related": [
+            {
+              "hidden": true,
+              "system": "client",
+              "subquery": {
+                "alias": "labels",
+                "table": "issueLabel",
+                "orderBy": [
+                  ["issueID", "asc"],
+                  ["labelID", "asc"]
+                ],
+                "related": [
+                  {
+                    "system": "client",
+                    "subquery": {
+                      "alias": "labels",
+                      "table": "label",
+                      "orderBy": [["id", "asc"]]
+                    },
+                    "correlation": {
+                      "childField": ["id"],
+                      "parentField": ["labelID"]
+                    }
+                  }
+                ]
+              },
+              "correlation": {"childField": ["issueID"], "parentField": ["id"]}
+            },
+            {
+              "system": "client",
+              "subquery": {
+                "alias": "viewState",
+                "table": "viewState",
+                "where": {
+                  "op": "=",
+                  "left": {"name": "userID", "type": "column"},
+                  "type": "simple",
+                  "right": {"type": "literal", "value": "anon"}
+                },
+                "orderBy": [
+                  ["userID", "asc"],
+                  ["issueID", "asc"]
+                ]
+              },
+              "correlation": {"childField": ["issueID"], "parentField": ["id"]}
+            }
+          ]
+        }
+      },
+      {
+        "op": "put",
+        "hash": "2x0oebxxvkihy",
+        "ast": {
+          "table": "issue",
+          "orderBy": [
+            ["modified", "desc"],
+            ["id", "desc"]
+          ],
+          "related": [
+            {
+              "hidden": true,
+              "system": "client",
+              "subquery": {
+                "alias": "labels",
+                "table": "issueLabel",
+                "orderBy": [
+                  ["issueID", "asc"],
+                  ["labelID", "asc"]
+                ],
+                "related": [
+                  {
+                    "system": "client",
+                    "subquery": {
+                      "alias": "labels",
+                      "table": "label",
+                      "orderBy": [["id", "asc"]]
+                    },
+                    "correlation": {
+                      "childField": ["id"],
+                      "parentField": ["labelID"]
+                    }
+                  }
+                ]
+              },
+              "correlation": {"childField": ["issueID"], "parentField": ["id"]}
+            },
+            {
+              "system": "client",
+              "subquery": {
+                "alias": "viewState",
+                "limit": 1,
+                "table": "viewState",
+                "where": {
+                  "op": "=",
+                  "left": {"name": "userID", "type": "column"},
+                  "type": "simple",
+                  "right": {"type": "literal", "value": "anon"}
+                },
+                "orderBy": [
+                  ["userID", "asc"],
+                  ["issueID", "asc"]
+                ]
+              },
+              "correlation": {"childField": ["issueID"], "parentField": ["id"]}
+            }
+          ]
+        }
+      },
+      {
+        "op": "put",
+        "hash": "26i0cmidgg18z",
+        "ast": {
+          "table": "issue",
+          "orderBy": [["id", "asc"]],
+          "related": [
+            {
+              "system": "client",
+              "subquery": {
+                "alias": "assignee",
+                "table": "user",
+                "orderBy": [["id", "asc"]]
+              },
+              "correlation": {
+                "childField": ["id"],
+                "parentField": ["assigneeID"]
+              }
+            },
+            {
+              "system": "client",
+              "subquery": {
+                "alias": "comments",
+                "limit": 101,
+                "table": "comment",
+                "orderBy": [
+                  ["created", "desc"],
+                  ["id", "asc"]
+                ],
+                "related": [
+                  {
+                    "system": "client",
+                    "subquery": {
+                      "alias": "creator",
+                      "table": "user",
+                      "orderBy": [["id", "asc"]]
+                    },
+                    "correlation": {
+                      "childField": ["id"],
+                      "parentField": ["creatorID"]
+                    }
+                  },
+                  {
+                    "system": "client",
+                    "subquery": {
+                      "alias": "emoji",
+                      "table": "emoji",
+                      "orderBy": [["id", "asc"]],
+                      "related": [
+                        {
+                          "system": "client",
+                          "subquery": {
+                            "alias": "creator",
+                            "table": "user",
+                            "orderBy": [["id", "asc"]]
+                          },
+                          "correlation": {
+                            "childField": ["id"],
+                            "parentField": ["creatorID"]
+                          }
+                        }
+                      ]
+                    },
+                    "correlation": {
+                      "childField": ["subjectID"],
+                      "parentField": ["id"]
+                    }
+                  }
+                ]
+              },
+              "correlation": {"childField": ["issueID"], "parentField": ["id"]}
+            },
+            {
+              "system": "client",
+              "subquery": {
+                "alias": "creator",
+                "table": "user",
+                "orderBy": [["id", "asc"]]
+              },
+              "correlation": {
+                "childField": ["id"],
+                "parentField": ["creatorID"]
+              }
+            },
+            {
+              "system": "client",
+              "subquery": {
+                "alias": "emoji",
+                "table": "emoji",
+                "orderBy": [["id", "asc"]],
+                "related": [
+                  {
+                    "system": "client",
+                    "subquery": {
+                      "alias": "creator",
+                      "table": "user",
+                      "orderBy": [["id", "asc"]]
+                    },
+                    "correlation": {
+                      "childField": ["id"],
+                      "parentField": ["creatorID"]
+                    }
+                  }
+                ]
+              },
+              "correlation": {
+                "childField": ["subjectID"],
+                "parentField": ["id"]
+              }
+            },
+            {
+              "hidden": true,
+              "system": "client",
+              "subquery": {
+                "alias": "labels",
+                "table": "issueLabel",
+                "orderBy": [
+                  ["issueID", "asc"],
+                  ["labelID", "asc"]
+                ],
+                "related": [
+                  {
+                    "system": "client",
+                    "subquery": {
+                      "alias": "labels",
+                      "table": "label",
+                      "orderBy": [["id", "asc"]]
+                    },
+                    "correlation": {
+                      "childField": ["id"],
+                      "parentField": ["labelID"]
+                    }
+                  }
+                ]
+              },
+              "correlation": {"childField": ["issueID"], "parentField": ["id"]}
+            },
+            {
+              "system": "client",
+              "subquery": {
+                "alias": "viewState",
+                "table": "viewState",
+                "where": {
+                  "op": "=",
+                  "left": {"name": "userID", "type": "column"},
+                  "type": "simple",
+                  "right": {"type": "literal", "value": "anon"}
+                },
+                "orderBy": [
+                  ["userID", "asc"],
+                  ["issueID", "asc"]
+                ]
+              },
+              "correlation": {"childField": ["issueID"], "parentField": ["id"]}
+            }
+          ]
+        }
+      }
+    ]
+  }
+]
