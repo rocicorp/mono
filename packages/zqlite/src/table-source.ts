@@ -23,24 +23,15 @@ import {
   transformFilters,
   type NoSubqueryCondition,
 } from '../../zql/src/builder/filter.ts';
-import type {Change} from '../../zql/src/ivm/change.ts';
-import {
-  makeComparator,
-  type Comparator,
-  type Node,
-} from '../../zql/src/ivm/data.ts';
-import {filterPush} from '../../zql/src/ivm/filter-push.ts';
+import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
   generateWithOverlay,
   generateWithStart,
+  genPush,
+  type Connection,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.ts';
-import type {
-  FetchRequest,
-  Input,
-  Output,
-  Start,
-} from '../../zql/src/ivm/operator.ts';
+import type {FetchRequest, Start} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import type {
   Source,
@@ -52,19 +43,6 @@ import {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
 import {runtimeDebugFlags, runtimeDebugStats} from './runtime-debug.ts';
-
-type Connection = {
-  input: Input;
-  output: Output | undefined;
-  sort: Ordering;
-  filters:
-    | {
-        condition: NoSubqueryCondition;
-        predicate: (row: Row) => boolean;
-      }
-    | undefined;
-  compareRows: Comparator;
-};
 
 type Statements = {
   readonly cache: StatementCache;
@@ -103,6 +81,7 @@ export class TableSource implements Source {
   readonly #lc: LogContext;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
+  #splitEditOverlay?: Overlay | undefined;
 
   constructor(
     logContext: LogContext,
@@ -218,7 +197,11 @@ export class TableSource implements Source {
     };
   }
 
-  connect(sort: Ordering, filters?: Condition | undefined) {
+  connect(
+    sort: Ordering,
+    filters?: Condition | undefined,
+    splitEditKeys?: Set<string> | undefined,
+  ) {
     const transformedFilters = transformFilters(filters);
     const input: SourceInput = {
       getSchema: () => schema,
@@ -239,6 +222,7 @@ export class TableSource implements Source {
       input,
       output: undefined,
       sort,
+      splitEditKeys,
       filters: transformedFilters.filters
         ? {
             condition: transformedFilters.filters,
@@ -284,13 +268,6 @@ export class TableSource implements Source {
 
       const comparator = makeComparator(sort, req.reverse);
 
-      let overlay: Overlay | undefined;
-      if (this.#overlay) {
-        if (callingConnectionIndex <= this.#overlay.outputIndex) {
-          overlay = this.#overlay;
-        }
-      }
-
       yield* generateWithStart(
         generateWithOverlay(
           req.start?.row,
@@ -300,7 +277,9 @@ export class TableSource implements Source {
             sqlAndBindings.text,
           ),
           req.constraint,
-          overlay,
+          this.#overlay,
+          this.#splitEditOverlay,
+          callingConnectionIndex,
           comparator,
           connection.filters?.predicate,
         ),
@@ -353,59 +332,20 @@ export class TableSource implements Source {
       this.#stmts.checkExists.get<{exists: number}>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
       )?.exists === 1;
+    const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
+    const setSplitEditOverlay = (o: Overlay | undefined) =>
+      (this.#splitEditOverlay = o);
 
-    switch (change.type) {
-      case 'add':
-        assert(
-          !exists(change.row),
-          () => `Row already exists ${stringify(change)}`,
-        );
-        break;
-      case 'remove':
-        assert(exists(change.row), () => `Row not found ${stringify(change)}`);
-        break;
-      case 'edit':
-        assert(
-          exists(change.oldRow),
-          () => `Row not found ${stringify(change)}`,
-        );
-        break;
-      default:
-        unreachable(change);
+    for (const x of genPush(
+      change,
+      exists,
+      this.#connections.entries(),
+      setOverlay,
+      setSplitEditOverlay,
+    )) {
+      yield x;
     }
 
-    const outputChange: Change =
-      change.type === 'edit'
-        ? {
-            type: change.type,
-            oldNode: {
-              row: change.oldRow,
-              relationships: {},
-            },
-            node: {
-              row: change.row,
-              relationships: {},
-            },
-          }
-        : {
-            type: change.type,
-            node: {
-              row: change.row,
-              relationships: {},
-            },
-          };
-
-    for (const [
-      outputIndex,
-      {output, filters},
-    ] of this.#connections.entries()) {
-      if (output) {
-        this.#overlay = {outputIndex, change};
-        filterPush(outputChange, output, filters?.predicate);
-        yield;
-      }
-    }
-    this.#overlay = undefined;
     switch (change.type) {
       case 'add':
         this.#stmts.insert.run(
@@ -897,10 +837,4 @@ function nonPrimaryKeys(
   primaryKey: PrimaryKey,
 ) {
   return Object.keys(columns).filter(c => !primaryKey.includes(c));
-}
-
-function stringify(change: SourceChange) {
-  return JSON.stringify(change, (_, v) =>
-    typeof v === 'bigint' ? v.toString() : v,
-  );
 }
