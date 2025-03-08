@@ -283,7 +283,6 @@ test('stable generation', () => {
           ],
         },
       },
-      "version": 1,
     }
   `);
 });
