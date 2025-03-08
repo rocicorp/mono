@@ -30,7 +30,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [
     table('issue')
       .from('issues')

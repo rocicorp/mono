@@ -42,7 +42,7 @@ test('Zero Junction', async () => {
     ),
   }));
 
-  const schema = createSchema(1, {
+  const schema = createSchema({
     tables: [eventSchema, athleteSchema, disciplineSchema, matchupSchema],
     relationships: [eventRelation],
   });

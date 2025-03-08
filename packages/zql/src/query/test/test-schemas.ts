@@ -146,7 +146,7 @@ const labelRelationships = relationships(label, ({many}) => ({
   ),
 }));
 
-export const schema = createSchema(1, {
+export const schema = createSchema({
   tables: [issue, user, comment, revision, label, issueLabel],
   relationships: [
     issueRelationships,

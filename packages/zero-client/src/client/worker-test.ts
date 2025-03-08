@@ -40,7 +40,7 @@ async function testBasics(userID: string) {
 
   const r = zeroForTest({
     userID,
-    schema: createSchema(1, {
+    schema: createSchema({
       tables: [
         table('e')
           .columns({

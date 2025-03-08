@@ -2020,7 +2020,7 @@ test('queryComplete promise', async () => {
   expect(view.resultDetails).toEqual({type: 'complete'});
 });
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [
     table('test')
       .columns({

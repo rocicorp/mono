@@ -97,7 +97,7 @@ test('onOnlineChange callback', async () => {
 
   const z = zeroForTest({
     logLevel: 'debug',
-    schema: createSchema(1, {
+    schema: createSchema({
       tables: [
         table('foo')
           .columns({
@@ -594,7 +594,7 @@ describe('initConnection', () => {
   test('sent when connected message received but before ConnectionState.Connected desired queries > maxHeaderLength', async () => {
     const r = zeroForTest({
       maxHeaderLength: 0,
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('abc')
             .columns({
@@ -642,7 +642,7 @@ describe('initConnection', () => {
     const r = await zeroForTestWithDeletedClients({
       maxHeaderLength: 0,
       deletedClients: ['a'],
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('def')
             .columns({
@@ -696,7 +696,7 @@ describe('initConnection', () => {
     const r = await zeroForTestWithDeletedClients({
       maxHeaderLength: 0,
       deletedClientGroups: ['a'],
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('ijk')
             .columns({
@@ -748,7 +748,7 @@ describe('initConnection', () => {
 
   test('sends desired queries patch in sec-protocol header', async () => {
     const r = zeroForTest({
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('e')
             .columns({
@@ -844,7 +844,7 @@ describe('initConnection', () => {
 
   test('sends desired queries patch in sec-protocol header with deletedClients', async () => {
     const r = await zeroForTestWithDeletedClients({
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('e')
             .columns({
@@ -918,7 +918,7 @@ describe('initConnection', () => {
   test('sends desired queries patch in `initConnectionMessage` when the patch is over maxHeaderLength', async () => {
     const r = zeroForTest({
       maxHeaderLength: 0,
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('e')
             .columns({
@@ -984,7 +984,7 @@ describe('initConnection', () => {
   test('sends desired queries patch in `initConnectionMessage` when the patch is over maxHeaderLength with deleted clients', async () => {
     const r = await zeroForTestWithDeletedClients({
       maxHeaderLength: 0,
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('e')
             .columns({
@@ -1055,7 +1055,7 @@ describe('initConnection', () => {
 
   test('sends changeDesiredQueries if new queries are added after initConnection but before connected', async () => {
     const r = zeroForTest({
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('e')
             .columns({
@@ -1123,7 +1123,7 @@ describe('initConnection', () => {
 
   test('changeDesiredQueries does not include queries sent with initConnection', async () => {
     const r = zeroForTest({
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('e')
             .columns({
@@ -1150,7 +1150,7 @@ describe('initConnection', () => {
 
   test('changeDesiredQueries does include removal of a query sent with initConnection if it was removed before `connected`', async () => {
     const r = zeroForTest({
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('e')
             .columns({
@@ -1424,7 +1424,7 @@ test('pusher maps CRUD mutation names', async () => {
     }[],
   ) => {
     const r = zeroForTest({
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('issue')
             .from('issues')
@@ -1714,7 +1714,7 @@ test('smokeTest', async () => {
     const serverOptions = c.enableServer ? {} : {server: null};
     const r = zeroForTest({
       ...serverOptions,
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('issues')
             .columns({
@@ -2639,7 +2639,7 @@ test('kvStore option', async () => {
       server: null,
       userID,
       kvStore,
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('e')
             .columns({
@@ -2737,7 +2737,7 @@ test('Zero close should stop timeout, close delayed', async () => {
 
 test('ensure we get the same query object back', () => {
   const z = zeroForTest({
-    schema: createSchema(1, {
+    schema: createSchema({
       tables: [
         table('issue')
           .columns({
@@ -2768,7 +2768,7 @@ test('ensure we get the same query object back', () => {
 
 test('the type of collection should be inferred from options with parse', () => {
   const r = zeroForTest({
-    schema: createSchema(1, {
+    schema: createSchema({
       tables: [
         table('issue')
           .columns({
@@ -2799,7 +2799,7 @@ test('the type of collection should be inferred from options with parse', () => 
 describe('CRUD', () => {
   const makeZero = () =>
     zeroForTest({
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('issue')
             .from('issues')
@@ -2967,7 +2967,7 @@ describe('CRUD', () => {
 
   test('do not expose _zero_crud', () => {
     const z = zeroForTest({
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('issue')
             .columns({
@@ -3000,7 +3000,7 @@ describe('CRUD with compound primary key', () => {
   };
   const makeZero = () =>
     zeroForTest({
-      schema: createSchema(1, {
+      schema: createSchema({
         tables: [
           table('issue')
             .columns({
@@ -3125,7 +3125,7 @@ describe('CRUD with compound primary key', () => {
 
 test('mutate is a function for batching', async () => {
   const z = zeroForTest({
-    schema: createSchema(1, {
+    schema: createSchema({
       tables: [
         table('issue')
           .columns({
@@ -3176,7 +3176,7 @@ test('mutate is a function for batching', async () => {
 });
 
 test('custom mutations get pushed', async () => {
-  const schema = createSchema(1, {
+  const schema = createSchema({
     tables: [
       table('issues').columns({id: string(), value: number()}).primaryKey('id'),
     ],
@@ -3270,7 +3270,7 @@ test('custom mutations get pushed', async () => {
 
 test('calling mutate on the non batch version should throw inside a batch', async () => {
   const z = zeroForTest({
-    schema: createSchema(1, {
+    schema: createSchema({
       tables: [
         table('issue')
           .columns({

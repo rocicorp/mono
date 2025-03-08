@@ -9,7 +9,7 @@ import {zeroForTest} from './test-utils.ts';
 
 test('we can create rows with json columns and query those rows', async () => {
   const z = zeroForTest({
-    schema: createSchema(1, {
+    schema: createSchema({
       tables: [
         table('track')
           .columns({

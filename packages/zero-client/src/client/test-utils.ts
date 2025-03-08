@@ -234,7 +234,7 @@ export function zeroForTest<
     newOptions.kvStore = 'mem';
   }
 
-  const schema = options.schema ?? ({version: 1, tables: {}} as S);
+  const schema = options.schema ?? ({tables: {}} as S);
 
   const r = new TestZero({
     server: 'https://example.com/',
