@@ -2251,7 +2251,7 @@ test('SchemaVersionNotSupported default handler', async () => {
   expect(fake.calledOnce).true;
 
   expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
-    "The server no longer supports this client's schema version. server test message",
+    "Client and server schemas incompatible. server test message",
   );
 });
 
