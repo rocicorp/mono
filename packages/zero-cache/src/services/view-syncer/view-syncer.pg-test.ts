@@ -2852,7 +2852,7 @@ describe('view-syncer/service', () => {
     await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
       kind: ErrorKind.SchemaVersionNotSupported,
       message:
-        'The "issues"."owner" column does not exist or is one of the replicated columns: "big","id","json","parent","title".',
+        'The "issues"."owner" column does not exist or is not one of the replicated columns: "big","id","json","parent","title".',
     });
   });
 
