@@ -833,12 +833,21 @@ export class Zero<
         return this.#handleErrorMessage(lc, downMessage);
 
       case 'pong':
+        // Receiving a pong means that the connection is healthy, as the
+        // initial schema / versioning negotiations would produce an error
+        // before a ping-pong timeout.
+        resetBackoff();
         return this.#onPong();
 
       case 'pokeStart':
         return this.#handlePokeStart(lc, downMessage);
 
       case 'pokePart':
+        if (downMessage[1].rowsPatch) {
+          // Receiving row data indicates that the client is in a good state
+          // and can reset the reload backoff state.
+          resetBackoff();
+        }
         return this.#handlePokePart(lc, downMessage);
 
       case 'pokeEnd':
@@ -1228,7 +1237,6 @@ export class Zero<
   }
 
   #handlePokeStart(_lc: LogContext, pokeMessage: PokeStartMessage): void {
-    resetBackoff();
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeStart(pokeMessage[1]);
   }
@@ -1671,7 +1679,7 @@ export class Zero<
   }
 
   /**
-   * Starts a a ping and waits for a pong.
+   * Starts a ping and waits for a pong.
    *
    * If it takes too long to get a pong we disconnect and this returns
    * {@code PingResult.TimedOut}.
