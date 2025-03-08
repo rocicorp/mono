@@ -4875,19 +4875,13 @@ suite('take with partition', () => {
               ".comments:source(comment)",
               "push",
               {
-                "oldRow": {
+                "row": {
                   "created": 100,
                   "id": "c1",
                   "issueID": "i1",
                   "text": "a",
                 },
-                "row": {
-                  "created": 100,
-                  "id": "c1",
-                  "issueID": "i2",
-                  "text": "a2",
-                },
-                "type": "edit",
+                "type": "remove",
               },
             ],
             [
@@ -5007,6 +5001,19 @@ suite('take with partition', () => {
                   "id": "i1",
                 },
                 "type": "child",
+              },
+            ],
+            [
+              ".comments:source(comment)",
+              "push",
+              {
+                "row": {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i2",
+                  "text": "a2",
+                },
+                "type": "add",
               },
             ],
             [
