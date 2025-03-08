@@ -67,7 +67,7 @@ export function checkClientSchema(
 
         errors.push(
           `The "${table}"."${missing}" column does not exist ` +
-            `or is one of the replicated columns: ${columns}.`,
+            `or is not one of the replicated columns: ${columns}.`,
         );
       }
     }

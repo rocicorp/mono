@@ -145,7 +145,7 @@ describe('client schemas', () => {
         fullTables,
       ),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"yyy\\" table does not exist or is not one of the replicated tables: \\"bar\\",\\"foo\\".\\nThe \\"bar\\".\\"zzz\\" column does not exist or is one of the replicated columns: \\"d\\",\\"e\\",\\"f\\",\\"id\\"."}]`,
+      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"yyy\\" table does not exist or is not one of the replicated tables: \\"bar\\",\\"foo\\".\\nThe \\"bar\\".\\"zzz\\" column does not exist or is not one of the replicated columns: \\"d\\",\\"e\\",\\"f\\",\\"id\\"."}]`,
     );
   });
 
