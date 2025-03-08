@@ -1234,7 +1234,6 @@ test('pusher sends one mutation per push message', async () => {
         expect(msg[1].clientGroupID).to.equal(
           clientGroupID ?? (await r.clientGroupID),
         );
-        expect(msg[1].schemaVersion).to.equal(1);
         expect(msg[1].mutations).to.have.lengthOf(1);
         expect(msg[1].requestID).to.equal(requestID);
       }
@@ -3227,7 +3226,6 @@ test('custom mutations get pushed', async () => {
           },
         ],
         pushVersion: 1,
-        schemaVersion: 1,
       },
     ],
     [
@@ -3246,7 +3244,6 @@ test('custom mutations get pushed', async () => {
           },
         ],
         pushVersion: 1,
-        schemaVersion: 1,
       },
     ],
     [
@@ -3265,7 +3262,6 @@ test('custom mutations get pushed', async () => {
           },
         ],
         pushVersion: 1,
-        schemaVersion: 1,
       },
     ],
     ['ping', {}],

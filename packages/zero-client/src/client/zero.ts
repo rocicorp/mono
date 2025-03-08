@@ -1338,8 +1338,6 @@ export class Zero<
           clientGroupID: req.clientGroupID,
           mutations: [zeroM],
           pushVersion: req.pushVersion,
-          // Zero schema versions are always numbers.
-          schemaVersion: parseInt(req.schemaVersion),
           requestID,
         },
       ];

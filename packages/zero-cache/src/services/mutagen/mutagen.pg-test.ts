@@ -127,6 +127,57 @@ describe('processMutation', {timeout: 15000}, () => {
     });
   });
 
+  test('schemaVersions table not looked up if no schema version specified', async () => {
+    await expectTables(db, {
+      idonly: [],
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [],
+    });
+    await db`DROP TABLE ${db(APP_ID)}."schemaVersions";`;
+
+    const error = await processMutation(
+      lc,
+      undefined,
+      db,
+      SHARD,
+      'abc',
+      {
+        type: MutationType.CRUD,
+        id: 1,
+        clientID: '123',
+        name: '_zero_crud',
+        args: [
+          {
+            ops: [
+              {
+                op: 'insert',
+                tableName: 'idonly',
+                primaryKey: ['id'],
+                value: {id: '1'},
+              },
+            ],
+          },
+        ],
+        timestamp: Date.now(),
+      },
+      mockWriteAuthorizer,
+      undefined, // schemaVersion,
+    );
+
+    expect(error).undefined;
+
+    await expectTables(db, {
+      idonly: [{id: '1'}],
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
+        {
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 1n,
+          userID: null,
+        },
+      ],
+    });
+  });
+
   test('next sequential mutation for previously seen client', async () => {
     await db`
       INSERT INTO ${db(

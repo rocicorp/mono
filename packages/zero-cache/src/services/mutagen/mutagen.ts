@@ -44,7 +44,7 @@ export interface Mutagen {
   processMutation(
     mutation: Mutation,
     authData: JWTPayload | undefined,
-    schemaVersion: number,
+    schemaVersion: number | undefined,
   ): Promise<MutationError | undefined>;
 }
 
@@ -91,7 +91,7 @@ export class MutagenService implements Mutagen, Service {
   processMutation(
     mutation: Mutation,
     authData: JWTPayload | undefined,
-    schemaVersion: number,
+    schemaVersion: number | undefined,
   ): Promise<MutationError | undefined> {
     if (this.#limiter?.canDo() === false) {
       return Promise.resolve([
@@ -131,7 +131,7 @@ export async function processMutation(
   clientGroupID: string,
   mutation: Mutation,
   writeAuthorizer: WriteAuthorizer,
-  schemaVersion: number,
+  schemaVersion: number | undefined,
   onTxStart?: () => void | Promise<void>, // for testing
 ): Promise<MutationError | undefined> {
   assert(
@@ -248,7 +248,7 @@ async function processMutationWithTx(
   authData: JWTPayload | undefined,
   shard: ShardID,
   clientGroupID: string,
-  schemaVersion: number,
+  schemaVersion: number | undefined,
   mutation: CRUDMutation,
   errorMode: boolean,
   authorizer: WriteAuthorizer,
@@ -368,7 +368,7 @@ async function checkSchemaVersionAndIncrementLastMutationID(
   tx: PostgresTransaction,
   shard: ShardID,
   clientGroupID: string,
-  schemaVersion: number,
+  schemaVersion: number | undefined,
   clientID: string,
   receivedMutationID: number,
 ) {
@@ -381,12 +381,14 @@ async function checkSchemaVersionAndIncrementLastMutationID(
       DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
       RETURNING "lastMutationID"
   `,
-    tx<
-      {
-        minSupportedVersion: number;
-        maxSupportedVersion: number;
-      }[]
-    >`SELECT "minSupportedVersion", "maxSupportedVersion" 
+    schemaVersion === undefined
+      ? undefined
+      : tx<
+          {
+            minSupportedVersion: number;
+            maxSupportedVersion: number;
+          }[]
+        >`SELECT "minSupportedVersion", "maxSupportedVersion" 
         FROM ${tx(appSchema(shard))}."schemaVersions"`,
   ]);
 
@@ -404,11 +406,13 @@ async function checkSchemaVersionAndIncrementLastMutationID(
     });
   }
 
-  assert(supportedVersionRange.length === 1);
-  throwErrorForClientIfSchemaVersionNotSupported(
-    schemaVersion,
-    supportedVersionRange[0],
-  );
+  if (schemaVersion !== undefined && supportedVersionRange !== undefined) {
+    assert(supportedVersionRange.length === 1);
+    throwErrorForClientIfSchemaVersionNotSupported(
+      schemaVersion,
+      supportedVersionRange[0],
+    );
+  }
 }
 
 class MutationAlreadyProcessedError extends Error {
