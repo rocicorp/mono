@@ -18,7 +18,7 @@ const userSchema = table('user')
   })
   .primaryKey('id');
 
-const schema = createSchema(1, {tables: [userSchema]});
+const schema = createSchema({tables: [userSchema]});
 
 type AuthData = {
   sub: string;

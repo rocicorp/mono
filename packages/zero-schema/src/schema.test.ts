@@ -4,7 +4,7 @@ import {createSchema} from './builder/schema-builder.ts';
 import {number, string, table} from './builder/table-builder.ts';
 
 test('Key name does not matter', () => {
-  const schema = createSchema(1, {
+  const schema = createSchema({
     tables: [table('bar').columns({id: string()}).primaryKey('id')],
   });
 
@@ -19,7 +19,7 @@ test('Key name does not matter', () => {
 
 test('Missing primary key is an error', () => {
   expect(() =>
-    createSchema(1, {tables: [table('foo').columns({id: string()})]}),
+    createSchema({tables: [table('foo').columns({id: string()})]}),
   ).toThrowErrorMatchingInlineSnapshot(
     `[Error: Table "foo" is missing a primary key]`,
   );
@@ -48,7 +48,7 @@ test('Missing table in direct relationship should throw', () => {
   }));
 
   expect(() =>
-    createSchema(1, {tables: [foo], relationships: [fooRelationships]}),
+    createSchema({tables: [foo], relationships: [fooRelationships]}),
   ).toThrowErrorMatchingInlineSnapshot(
     `[Error: For relationship "foo"."barRelation", destination table "bar" is missing in the schema]`,
   );
@@ -100,7 +100,7 @@ test('Missing table in junction relationship should throw', () => {
   }));
 
   expect(() =>
-    createSchema(1, {
+    createSchema({
       tables: [tableB, tableC],
       relationships: [tableBRelationships, tableCRelationships],
     }),
@@ -156,7 +156,7 @@ test('Missing column in direct relationship source should throw', () => {
   }));
 
   expect(() =>
-    createSchema(1, {tables: [bar, foo], relationships: [fooRelationships]}),
+    createSchema({tables: [bar, foo], relationships: [fooRelationships]}),
   ).toThrowErrorMatchingInlineSnapshot(
     `[Error: For relationship "foo"."barRelation", the source field "missing" is missing in the table schema "foo"]`,
   );
@@ -237,7 +237,7 @@ test('Missing column in junction relationship source should throw', () => {
   }));
 
   expect(() =>
-    createSchema(1, {
+    createSchema({
       tables: [tableA, tableB, junctionTable],
       relationships: [tableARelationships],
     }),

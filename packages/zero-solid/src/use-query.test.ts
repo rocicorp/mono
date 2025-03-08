@@ -9,7 +9,7 @@ import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {useQuery} from './use-query.ts';
 
 function setupTestEnvironment() {
-  const schema = createSchema(1, {
+  const schema = createSchema({
     tables: [
       table('table')
         .columns({

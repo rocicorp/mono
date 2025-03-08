@@ -78,7 +78,6 @@ export function getSchema(lc: LogContext, replica: Database): Schema {
     }),
   );
   return {
-    version: 1, // only used on the client-side
     tables,
     relationships: {}, // relationships are already denormalized in ASTs
   };

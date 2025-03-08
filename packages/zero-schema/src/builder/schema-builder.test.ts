@@ -114,7 +114,7 @@ test('building a schema', async () => {
     ),
   }));
 
-  const schema = createSchema(1, {
+  const schema = createSchema({
     tables: [user, issue, issueLabel, label],
     relationships: [userRelationships, issueRelationships, labelRelationships],
   });
@@ -269,7 +269,7 @@ test('too many relationships', () => {
   const y = makeTable('y');
   const z = makeTable('z');
 
-  const schema = createSchema(1, {
+  const schema = createSchema({
     tables: [
       a,
       b,
@@ -566,7 +566,7 @@ test('schema with conflicting table names', () => {
   const bar = table('bar').columns({a: string()}).primaryKey('a');
 
   expect(() =>
-    createSchema(1, {tables: [foo, bar]}),
+    createSchema({tables: [foo, bar]}),
   ).toThrowErrorMatchingInlineSnapshot(
     `[Error: Multiple tables reference the name "bar"]`,
   );
@@ -576,7 +576,7 @@ test('schema with conflicting table names', () => {
 const stringify = (o: unknown) => JSON.stringify(o, null, 2);
 
 test('clientSchemaFrom', () => {
-  const schema = createSchema(1, {
+  const schema = createSchema({
     tables: [
       table('issue')
         .from('issues')

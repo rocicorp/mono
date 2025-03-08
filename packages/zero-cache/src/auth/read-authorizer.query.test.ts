@@ -34,6 +34,7 @@ import {
 } from '../../../zql/src/builder/builder.ts';
 import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {
@@ -48,7 +49,6 @@ import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
 import {transformQuery} from './read-authorizer.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
-import type {Input} from '../../../zql/src/ivm/operator.ts';
 
 const logConfig: LogConfig = {
   format: 'text',
@@ -283,7 +283,7 @@ type AuthData = {
   };
 };
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [
     user,
     issue,

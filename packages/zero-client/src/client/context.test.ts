@@ -8,14 +8,14 @@ import {Join} from '../../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import {type AddQuery, ZeroContext} from './context.ts';
-import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
+import {ENTITIES_KEY_PREFIX} from './keys.ts';
 
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();
 
 test('getSource', () => {
-  const schema = createSchema(1, {
+  const schema = createSchema({
     tables: [
       table('users')
         .columns({
@@ -90,7 +90,7 @@ test('getSource', () => {
     }
   `);
 });
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [
     table('t1')
       .columns({
@@ -200,7 +200,7 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
 });
 
 test('transactions', () => {
-  const schema = createSchema(1, {
+  const schema = createSchema({
     tables: [
       table('server')
         .columns({

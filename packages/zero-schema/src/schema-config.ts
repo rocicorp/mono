@@ -40,7 +40,6 @@ export const tableSchemaSchema: v.Type<TableSchema> = v.readonlyObject({
 });
 
 export const schemaSchema = v.readonlyObject({
-  version: v.number(),
   tables: v.record(tableSchemaSchema),
   relationships: v.record(v.record(relationshipSchema)),
 });

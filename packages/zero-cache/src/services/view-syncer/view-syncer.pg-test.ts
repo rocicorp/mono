@@ -282,7 +282,7 @@ const users = table('users')
   })
   .primaryKey('id');
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [issues, comments, issueLabels, labels, users],
   relationships: [
     relationships(comments, connect => ({

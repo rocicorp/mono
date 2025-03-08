@@ -1,11 +1,11 @@
 import type {Faker} from '@faker-js/faker';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
+  Relationship,
   RelationshipsSchema,
   SchemaValue,
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
-import type {Relationship} from '../../../zero-schema/src/table-schema.ts';
 import {generateUniqueValues, selectRandom, shuffle, type Rng} from './util.ts';
 
 const dbTypes = {
@@ -23,7 +23,6 @@ export function generateSchema(rng: Rng, faker: Faker): Schema {
   const relationships = generateRelationships(rng, tables);
 
   return {
-    version: 1,
     tables: Object.fromEntries(tables.map(table => [table.name, table])),
     relationships,
   };
