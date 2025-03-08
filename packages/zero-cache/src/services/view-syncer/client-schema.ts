@@ -3,8 +3,11 @@ import {difference, intersection} from '../../../../shared/src/set-utils.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
+import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
+import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.ts';
 
 export function checkClientSchema(
+  shardID: ShardID,
   clientSchema: ClientSchema,
   tableSpecs: Map<string, LiteAndZqlSpec>,
   fullTables: Map<string, LiteTableSpec>,
@@ -23,11 +26,20 @@ export function checkClientSchema(
   for (const missing of [...missingTables].sort()) {
     if (fullTables.has(missing)) {
       errors.push(
-        `The "${missing}" table is missing a primary key or non-null unique index and thus cannot be synced to the client`,
+        `The "${missing}" table is missing a primary key or non-null ` +
+          `unique index and thus cannot be synced to the client`,
       );
     } else {
+      const app = appSchema(shardID) + '.';
+      const shard = upstreamSchema(shardID) + '.';
+      const syncedTables = [...tableSpecs.keys()]
+        .filter(t => !t.startsWith(app) && !t.startsWith(shard))
+        .sort()
+        .map(t => `"${t}"`)
+        .join(',');
       errors.push(
-        `The "${missing}" table does not exist or is not being replicated from the upstream database.`,
+        `The "${missing}" table does not exist or is not ` +
+          `one of the replicated tables: ${syncedTables}.`,
       );
     }
   }
@@ -43,11 +55,19 @@ export function checkClientSchema(
     for (const missing of [...missingColumns].sort()) {
       if (fullSpec.columns[missing]) {
         errors.push(
-          `The "${table}"."${missing}" column cannot be synced because it is of an unsupported data type "${fullSpec.columns[missing].dataType}"`,
+          `The "${table}"."${missing}" column cannot be synced because it ` +
+            `is of an unsupported data type "${fullSpec.columns[missing].dataType}"`,
         );
       } else {
+        const columns = [...syncedColumns]
+          .filter(c => c !== ZERO_VERSION_COLUMN_NAME)
+          .sort()
+          .map(c => `"${c}"`)
+          .join(',');
+
         errors.push(
-          `The "${table}"."${missing}" column does not exist or is not being replicated from the upstream database`,
+          `The "${table}"."${missing}" column does not exist ` +
+            `or is one of the replicated columns: ${columns}.`,
         );
       }
     }
@@ -57,7 +77,8 @@ export function checkClientSchema(
       const serverType = serverSpec.zqlSpec[column].type;
       if (clientSpec.columns[column].type !== serverSpec.zqlSpec[column].type) {
         errors.push(
-          `The "${table}"."${column}" column's upstream type "${serverType}" does not match the client type "${clientType}"`,
+          `The "${table}"."${column}" column's upstream type "${serverType}" ` +
+            `does not match the client type "${clientType}"`,
         );
       }
     }

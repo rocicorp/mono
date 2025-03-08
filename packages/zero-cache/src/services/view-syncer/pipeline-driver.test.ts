@@ -43,7 +43,7 @@ describe('view-syncer/pipeline-driver', () => {
       lc,
       logConfig,
       new Snapshotter(lc, dbFile.path, {appID: 'zeroz'}),
-      {appID: 'zeroz'},
+      {appID: 'zeroz', shardNum: 1},
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
       'pipeline-driver.test.ts',
     );

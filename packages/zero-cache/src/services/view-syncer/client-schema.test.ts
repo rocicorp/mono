@@ -4,11 +4,14 @@ import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts'
 import {Database} from '../../../../zqlite/src/db.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
+import type {ShardID} from '../../types/shards.ts';
 import {checkClientSchema} from './client-schema.ts';
 
 describe('client schemas', () => {
   const tableSpecs = new Map<string, LiteAndZqlSpec>();
   const fullTables = new Map<string, LiteTableSpec>();
+
+  const SHARD_ID: ShardID = {appID: 'zero', shardNum: 0};
 
   beforeAll(() => {
     const lc = createSilentLogContext();
@@ -19,7 +22,8 @@ describe('client schemas', () => {
         a int,
         b bool,
         c json,
-        notSyncedToClient custom_pg_type
+        notSyncedToClient custom_pg_type,
+        _0_version TEXT
       );
       CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
 
@@ -27,7 +31,8 @@ describe('client schemas', () => {
         id "text|NOT_NULL",
         d int,
         e bool,
-        f json
+        f json,
+        _0_version TEXT
       );
       CREATE UNIQUE INDEX bar_pkey ON bar (id ASC);
 
@@ -35,10 +40,16 @@ describe('client schemas', () => {
         id "text|NOT_NULL",
         d int,
         e bool,
-        f json
+        f json,
+        _0_version TEXT
       );
       CREATE INDEX not_unique ON nopk (id ASC);
       CREATE UNIQUE INDEX nullable ON nopk (d ASC);
+
+      -- Not the full internal tables. Just declared here to confirm that
+      -- they do not show up in the error messages.
+      CREATE TABLE "zero.permissions" (lock bool PRIMARY KEY);
+      CREATE TABLE "zero_0.clients" (clientGroupID TEXT PRIMARY KEY);
       `);
     computeZqlSpecs(lc, db, tableSpecs, fullTables);
   });
@@ -97,12 +108,13 @@ describe('client schemas', () => {
       },
     ],
   ] as [ClientSchema][])('subset okay: %o', clientSchema => {
-    checkClientSchema(clientSchema, tableSpecs, fullTables);
+    checkClientSchema(SHARD_ID, clientSchema, tableSpecs, fullTables);
   });
 
   test('missing tables, missing columns', () => {
     expect(() =>
       checkClientSchema(
+        SHARD_ID,
         {
           tables: {
             bar: {
@@ -133,13 +145,14 @@ describe('client schemas', () => {
         fullTables,
       ),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"yyy\\" table does not exist or is not being replicated from the upstream database.\\nThe \\"bar\\".\\"zzz\\" column does not exist or is not being replicated from the upstream database"}]`,
+      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"yyy\\" table does not exist or is not one of the replicated tables: \\"bar\\",\\"foo\\".\\nThe \\"bar\\".\\"zzz\\" column does not exist or is one of the replicated columns: \\"d\\",\\"e\\",\\"f\\",\\"id\\"."}]`,
     );
   });
 
   test('column not synced to client', () => {
     expect(() =>
       checkClientSchema(
+        SHARD_ID,
         {
           tables: {
             foo: {
@@ -164,6 +177,7 @@ describe('client schemas', () => {
   test('column data type mismatch', () => {
     expect(() =>
       checkClientSchema(
+        SHARD_ID,
         {
           tables: {
             foo: {
@@ -187,6 +201,7 @@ describe('client schemas', () => {
   test('table missing primary key', () => {
     expect(() =>
       checkClientSchema(
+        SHARD_ID,
         {
           tables: {
             nopk: {
@@ -215,6 +230,7 @@ describe('client schemas', () => {
   test('nothing synced', () => {
     expect(() =>
       checkClientSchema(
+        SHARD_ID,
         {
           tables: {
             foo: {

@@ -24,7 +24,7 @@ import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import type {RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
-import type {AppID} from '../../types/shards.ts';
+import type {ShardID} from '../../types/shards.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
 import type {ClientGroupStorage} from './database-storage.ts';
@@ -71,7 +71,7 @@ export class PipelineDriver {
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
   readonly #storage: ClientGroupStorage;
-  readonly #appID: string;
+  readonly #shardID: ShardID;
   readonly #clientGroupID: string;
   readonly #logConfig: LogConfig;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
@@ -83,14 +83,14 @@ export class PipelineDriver {
     lc: LogContext,
     logConfig: LogConfig,
     snapshotter: Snapshotter,
-    {appID}: AppID,
+    shardID: ShardID,
     storage: ClientGroupStorage,
     clientGroupID: string,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
     this.#storage = storage;
-    this.#appID = appID;
+    this.#shardID = shardID;
     this.#clientGroupID = clientGroupID;
     this.#logConfig = logConfig;
   }
@@ -108,7 +108,12 @@ export class PipelineDriver {
     const fullTables = new Map<string, LiteTableSpec>();
     computeZqlSpecs(this.#lc, db.db, this.#tableSpecs, fullTables);
     if (clientSchema) {
-      checkClientSchema(clientSchema, this.#tableSpecs, fullTables);
+      checkClientSchema(
+        this.#shardID,
+        clientSchema,
+        this.#tableSpecs,
+        fullTables,
+      );
     }
 
     const {replicaVersion} = getSubscriptionState(db);
@@ -155,7 +160,7 @@ export class PipelineDriver {
     const res = reloadPermissionsIfChanged(
       this.#lc,
       this.#snapshotter.current().db,
-      this.#appID,
+      this.#shardID.appID,
       this.#permissions,
     );
     if (res.changed) {
@@ -192,7 +197,12 @@ export class PipelineDriver {
     const fullTables = new Map<string, LiteTableSpec>();
     computeZqlSpecs(this.#lc, db.db, this.#tableSpecs, fullTables);
     if (clientSchema) {
-      checkClientSchema(clientSchema, this.#tableSpecs, fullTables);
+      checkClientSchema(
+        this.#shardID,
+        clientSchema,
+        this.#tableSpecs,
+        fullTables,
+      );
     }
     const {replicaVersion} = getSubscriptionState(db);
     this.#replicaVersion = replicaVersion;
