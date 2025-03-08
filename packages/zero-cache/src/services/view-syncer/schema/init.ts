@@ -97,6 +97,12 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migrateV8ToV9: Migration = {
+    migrateSchema: async (_, tx) => {
+      await tx`ALTER TABLE ${tx(schema)}.instances ADD "clientSchema" JSONB`;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -107,6 +113,7 @@ export async function initViewSyncerSchema(
     6: migrateV5ToV6,
     7: migrateV6ToV7,
     8: migrateV7ToV8,
+    9: migrateV8ToV9,
   };
 
   await runSchemaMigrations(

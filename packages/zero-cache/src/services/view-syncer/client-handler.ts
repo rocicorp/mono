@@ -88,7 +88,7 @@ export class ClientHandler {
   readonly #downstream: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
   readonly #protocolVersion: number;
-  readonly #schemaVersion: number;
+  readonly #schemaVersion: number | null;
 
   constructor(
     lc: LogContext,
@@ -98,7 +98,7 @@ export class ClientHandler {
     shard: ShardID,
     baseCookie: string | null,
     protocolVersion: number,
-    schemaVersion: number,
+    schemaVersion: number | null,
     downstream: Subscription<Downstream>,
   ) {
     this.#clientGroupID = clientGroupID;
@@ -141,7 +141,7 @@ export class ClientHandler {
     const pokeID = versionToCookie(tentativeVersion);
     const lc = this.#lc.withContext('pokeID', pokeID);
 
-    if (schemaVersions) {
+    if (schemaVersions && this.#schemaVersion) {
       const schemaVersionError = getErrorForClientIfSchemaVersionNotSupported(
         this.#schemaVersion,
         schemaVersions,
@@ -361,7 +361,9 @@ export function ensureSafeJSON(row: JSONObject): SafeJSONObject {
     })
     .map(([k, v]) => [k, Number(v)]);
 
-  return modified.length ? {...row, ...Object.fromEntries(modified)} : row;
+  return modified.length
+    ? {...row, ...Object.fromEntries(modified)}
+    : (row as SafeJSONObject);
 }
 
 export function revisedCookieProtocolSupportedByAll(clients: ClientHandler[]) {

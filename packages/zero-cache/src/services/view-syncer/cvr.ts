@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {deepEqual} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {
   difference,
@@ -9,7 +10,9 @@ import {
 } from '../../../../shared/src/set-utils.ts';
 import {stringCompare} from '../../../../shared/src/string-compare.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {stringify, type JSONObject} from '../../types/bigint-json.ts';
+import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
@@ -43,6 +46,7 @@ export type CVR = {
   replicaVersion: string | null;
   clients: Record<string, ClientRecord>;
   queries: Record<string, QueryRecord>;
+  clientSchema: ClientSchema | null;
 };
 
 /** Exported immutable CVR type. */
@@ -54,6 +58,7 @@ export type CVRSnapshot = {
   readonly replicaVersion: string | null;
   readonly clients: Readonly<Record<string, ClientRecord>>;
   readonly queries: Readonly<Record<string, QueryRecord>>;
+  readonly clientSchema: ClientSchema | null;
 };
 
 const CLIENT_LMID_QUERY_ID = 'lmids';
@@ -201,6 +206,29 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       this._cvrStore.putQuery(lmidsQuery);
     }
     return client;
+  }
+
+  setClientSchema(lc: LogContext, clientSchema: ClientSchema) {
+    if (this._cvr.clientSchema === null) {
+      this._cvr.clientSchema = clientSchema;
+      this._cvrStore.putInstance(this._cvr);
+    } else if (!deepEqual(this._cvr.clientSchema, clientSchema)) {
+      // This should not be possible with a correct Zero client, as clients
+      // of a CVR should all have the same schema (given that the schema hash
+      // is part of the idb key). In fact, clients joining an existing group
+      // (i.e. non-empty baseCookie) do not send the clientSchema message.
+      lc.warn?.(
+        `New schema ${JSON.stringify(
+          clientSchema,
+        )} does not match existing schema ${JSON.stringify(
+          this._cvr.clientSchema,
+        )}`,
+      );
+      throw new ErrorForClient({
+        kind: 'InvalidConnectionRequest',
+        message: `Provided schema does not match previous schema`,
+      });
+    }
   }
 
   putDesiredQueries(

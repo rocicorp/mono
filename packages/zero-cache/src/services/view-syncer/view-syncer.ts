@@ -79,7 +79,7 @@ export type SyncContext = {
   readonly wsID: string;
   readonly baseCookie: string | null;
   readonly protocolVersion: number;
-  readonly schemaVersion: number;
+  readonly schemaVersion: number | null;
   readonly tokenData: TokenData | undefined;
 };
 
@@ -229,11 +229,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           break;
         }
         assert(state === 'version-ready'); // This is the only state change used.
-        if (!this.#pipelines.initialized()) {
-          // On the first version-ready signal, connect to the replica.
-          this.#pipelines.init();
-        }
+
         await this.#runInLockWithCVR(async (lc, cvr) => {
+          if (!this.#pipelines.initialized()) {
+            // On the first version-ready signal, connect to the replica.
+            this.#pipelines.init(cvr.clientSchema);
+          }
           if (
             cvr.replicaVersion !== null &&
             cvr.version.stateVersion !== '00' &&
@@ -252,7 +253,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               return;
             }
             lc.info?.(`resetting pipelines: ${result.message}`);
-            this.#pipelines.reset();
+            this.#pipelines.reset(cvr.clientSchema);
           }
 
           // Advance the snapshot to the current version.
@@ -592,7 +593,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     clientID: string,
     cmd: Upstream[0],
-    {deleted, desiredQueriesPatch}: Partial<InitConnectionBody>,
+    {clientSchema, deleted, desiredQueriesPatch}: Partial<InitConnectionBody>,
     cvr: CVRSnapshot,
   ) =>
     startAsyncSpan(tracer, 'vs.#patchQueries', async () => {
@@ -601,6 +602,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       cvr = await this.#updateCVRConfig(lc, cvr, updater => {
         const patches: PatchToVersion[] = [];
+
+        if (clientSchema) {
+          updater.setClientSchema(lc, clientSchema);
+        }
 
         // Apply requested patches.
         if (desiredQueriesPatch?.length) {

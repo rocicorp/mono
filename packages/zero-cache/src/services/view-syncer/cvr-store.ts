@@ -12,7 +12,9 @@ import {
 } from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
+import * as v from '../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../zero-protocol/src/ast.ts';
+import {clientSchemaSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
@@ -181,6 +183,7 @@ export class CVRStore {
       replicaVersion: null,
       clients: {},
       queries: {},
+      clientSchema: null,
     };
 
     const [instance, clientsRows, queryRows, desiresRows] =
@@ -191,7 +194,8 @@ export class CVRStore {
                  "lastActive", 
                  "replicaVersion", 
                  "owner", 
-                 "grantedAt", 
+                 "grantedAt",
+                 "clientSchema", 
                  rows."version" as "rowsVersion"
             FROM ${this.#cvr('instances')} AS cvr
             LEFT JOIN ${this.#cvr('rowsVersion')} AS rows 
@@ -221,6 +225,7 @@ export class CVRStore {
         version: cvr.version,
         lastActive: 0,
         replicaVersion: null,
+        clientSchema: null,
       });
     } else {
       assert(instance.length === 1);
@@ -231,6 +236,7 @@ export class CVRStore {
         owner,
         grantedAt,
         rowsVersion,
+        clientSchema,
       } = instance[0];
 
       if (owner !== this.#taskID) {
@@ -261,6 +267,15 @@ export class CVRStore {
       cvr.version = versionFromString(version);
       cvr.lastActive = lastActive;
       cvr.replicaVersion = replicaVersion;
+
+      try {
+        cvr.clientSchema =
+          clientSchema === null
+            ? null
+            : v.parse(clientSchema, clientSchemaSchema);
+      } catch (e) {
+        throw new InvalidClientSchemaError(e);
+      }
     }
 
     for (const row of clientsRows) {
@@ -342,7 +357,11 @@ export class CVRStore {
     version,
     replicaVersion,
     lastActive,
-  }: Pick<CVRSnapshot, 'version' | 'replicaVersion' | 'lastActive'>): void {
+    clientSchema,
+  }: Pick<
+    CVRSnapshot,
+    'version' | 'replicaVersion' | 'lastActive' | 'clientSchema'
+  >): void {
     this.#writes.add({
       stats: {instances: 1},
       write: (tx, lastConnectTime) => {
@@ -353,6 +372,7 @@ export class CVRStore {
           replicaVersion,
           owner: this.#taskID,
           grantedAt: lastConnectTime,
+          clientSchema,
         };
         return tx`
         INSERT INTO ${this.#cvr('instances')} ${tx(change)} 
@@ -816,6 +836,21 @@ export class OwnershipError extends ErrorForClient {
         maxBackoffMs: 0,
       },
       'info',
+    );
+  }
+}
+
+export class InvalidClientSchemaError extends ErrorForClient {
+  readonly name = 'InvalidClientSchemaError';
+
+  constructor(cause: unknown) {
+    super(
+      {
+        kind: ErrorKind.SchemaVersionNotSupported,
+        message: `Could not parse clientSchema stored in CVR: ${String(cause)}`,
+      },
+      'warn',
+      {cause},
     );
   }
 }
