@@ -35,11 +35,12 @@ import {
   generateWithStart,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.ts';
-import type {
-  FetchRequest,
-  Input,
-  Output,
-  Start,
+import {
+  getNextId,
+  type FetchRequest,
+  type Input,
+  type Output,
+  type Start,
 } from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import type {
@@ -221,6 +222,9 @@ export class TableSource implements Source {
   connect(sort: Ordering, filters?: Condition | undefined) {
     const transformedFilters = transformFilters(filters);
     const input: SourceInput = {
+      id: getNextId(),
+      name: this.#table,
+      getInputs: () => [],
       getSchema: () => schema,
       fetch: req => this.#fetch(req, connection),
       cleanup: req => this.#cleanup(req, connection),

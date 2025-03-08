@@ -8,7 +8,7 @@ import {ArrayView} from './array-view.ts';
 import type {Change} from './change.ts';
 import {Join} from './join.ts';
 import {MemoryStorage} from './memory-storage.ts';
-import type {Input} from './operator.ts';
+import {getNextId, type Input} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {Take} from './take.ts';
 import {createSource} from './test/source-factory.ts';
@@ -568,6 +568,11 @@ test('collapse', () => {
   };
 
   const input: Input = {
+    id: getNextId(),
+    getInputs() {
+      return [];
+    },
+    name: 'test',
     cleanup() {
       return [];
     },
@@ -1028,6 +1033,14 @@ test('collapse-single', () => {
   };
 
   const input = {
+    id: getNextId(),
+    getInputs() {
+      return [];
+    },
+    getOutputs() {
+      return [];
+    },
+    name: 'test',
     cleanup() {
       return [];
     },
@@ -1392,6 +1405,11 @@ test('edit to preserve relationships', () => {
   };
 
   const input: Input = {
+    id: getNextId(),
+    getInputs() {
+      return [];
+    },
+    name: 'test',
     getSchema() {
       return schema;
     },

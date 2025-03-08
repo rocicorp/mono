@@ -3,6 +3,7 @@ import type {Change} from './change.ts';
 import {drainStreams} from './data.ts';
 import {filterPush} from './filter-push.ts';
 import {
+  InputBase,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -16,20 +17,35 @@ import type {SourceSchema} from './schema.ts';
  *
  * The predicate must be pure.
  */
-export class Filter implements Operator {
+export class Filter extends InputBase implements Operator {
   readonly #input: Input;
   readonly #predicate: (row: Row) => boolean;
+  readonly #name: string | undefined;
 
   #output: Output = throwOutput;
 
-  constructor(input: Input, predicate: (row: Row) => boolean) {
+  constructor(
+    input: Input,
+    predicate: (row: Row) => boolean,
+    name?: string | undefined,
+  ) {
+    super([input]);
     this.#input = input;
+    this.#name = name;
     this.#predicate = predicate;
     input.setOutput(this);
   }
 
+  get name() {
+    return this.#name || 'Filter';
+  }
+
   setOutput(output: Output) {
     this.#output = output;
+  }
+
+  getOutputs(): Output[] {
+    return [this.#output];
   }
 
   destroy(): void {

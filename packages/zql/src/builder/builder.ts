@@ -244,13 +244,11 @@ export function applyOr(
     groupSubqueryConditions(condition);
   // if there are no subquery conditions, no fan-in / fan-out is needed
   if (subqueryConditions.length === 0) {
-    return new Filter(
-      input,
-      createPredicate({
-        type: 'or',
-        conditions: otherConditions,
-      }),
-    );
+    const cond = {
+      type: 'or',
+      conditions: otherConditions,
+    } as const;
+    return new Filter(input, createPredicate(cond), predicateString(cond));
   }
 
   const fanOut = new FanOut(input);
@@ -258,17 +256,22 @@ export function applyOr(
     applyWhere(fanOut, subCondition, delegate, name),
   );
   if (otherConditions.length > 0) {
+    const cond = {
+      type: 'or',
+      conditions: otherConditions,
+    } as const;
     branches.push(
-      new Filter(
-        fanOut,
-        createPredicate({
-          type: 'or',
-          conditions: otherConditions,
-        }),
-      ),
+      new Filter(fanOut, createPredicate(cond), predicateString(cond)),
     );
   }
   return new FanIn(fanOut, branches);
+}
+
+function predicateString(cond: NoSubqueryCondition): string {
+  if (cond.type === 'simple') {
+    return `${valueString(cond.left)} ${cond.op} ${valueString(cond.right)}`;
+  }
+  return cond.conditions.map(predicateString).join(` ${cond.type} `);
 }
 
 export function groupSubqueryConditions(condition: Disjunction) {
@@ -300,7 +303,24 @@ export function isNotAndDoesNotContainSubquery(
 }
 
 function applySimpleCondition(input: Input, condition: SimpleCondition): Input {
-  return new Filter(input, createPredicate(condition));
+  return new Filter(
+    input,
+    createPredicate(condition),
+    `${valueString(condition.left)} ${condition.op} ${valueString(
+      condition.right,
+    )}`,
+  );
+}
+
+function valueString(value: ValuePosition) {
+  switch (value.type) {
+    case 'column':
+      return value.name;
+    case 'literal':
+      return value.type.toString();
+    case 'static':
+      return `static:${value.anchor}.${value.field}`;
+  }
 }
 
 function applyCorrelatedSubQuery(

@@ -5,6 +5,7 @@ import type {Change} from './change.ts';
 import type {Node} from './data.ts';
 import type {FanOut} from './fan-out.ts';
 import {
+  InputBase,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -28,13 +29,14 @@ import type {Stream} from './stream.ts';
  * fan-in
  *   |
  */
-export class FanIn implements Operator {
+export class FanIn extends InputBase implements Operator {
   readonly #inputs: readonly Input[];
   readonly #fanOut: FanOut;
   readonly #schema: SourceSchema;
   #output: Output = throwOutput;
 
   constructor(fanOut: FanOut, inputs: Input[]) {
+    super(inputs);
     this.#inputs = inputs;
     this.#schema = fanOut.getSchema();
     this.#fanOut = fanOut;
@@ -46,6 +48,10 @@ export class FanIn implements Operator {
 
   setOutput(output: Output): void {
     this.#output = output;
+  }
+
+  getOutputs(): Output[] {
+    return [this.#output];
   }
 
   destroy(): void {

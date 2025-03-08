@@ -589,6 +589,11 @@ test('collapse', () => {
   };
 
   const input: Input = {
+    getInputs() {
+      return [];
+    },
+    id: 0,
+    name: 'test',
     cleanup() {
       return [];
     },
@@ -1070,6 +1075,11 @@ test('collapse-single', () => {
   };
 
   const input = {
+    getInputs() {
+      return [];
+    },
+    id: 0,
+    name: 'test',
     cleanup() {
       return [];
     },
@@ -1541,6 +1551,11 @@ test('edit to preserve relationships', () => {
   };
 
   const input: Input = {
+    getInputs() {
+      return [];
+    },
+    id: 0,
+    name: 'test',
     getSchema() {
       return schema;
     },
@@ -1735,6 +1750,11 @@ test('edit leaf', () => {
   };
 
   const input: Input = {
+    getInputs() {
+      return [];
+    },
+    id: 0,
+    name: 'test',
     cleanup() {
       return [];
     },

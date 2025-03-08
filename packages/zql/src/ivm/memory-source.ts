@@ -28,6 +28,7 @@ import {
 } from './data.ts';
 import {filterPush} from './filter-push.ts';
 import {
+  getNextId,
   type FetchRequest,
   type Input,
   type Output,
@@ -138,6 +139,9 @@ export class MemorySource implements Source {
     const transformedFilters = transformFilters(filters);
 
     const input: SourceInput = {
+      id: getNextId(),
+      name: this.#tableName,
+      getInputs: () => [],
       getSchema: () => schema,
       fetch: req => this.#fetch(req, connection),
       cleanup: req => this.#cleanup(req, connection),
