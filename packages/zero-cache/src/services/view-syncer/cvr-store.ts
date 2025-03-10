@@ -201,11 +201,11 @@ export class CVRStore {
             LEFT JOIN ${this.#cvr('rowsVersion')} AS rows 
             ON cvr."clientGroupID" = rows."clientGroupID"
             WHERE cvr."clientGroupID" = ${id}`,
-        tx<Pick<ClientsRow, 'clientID'>[]>`
-        SELECT "clientID" FROM ${this.#cvr('clients')}
+        tx<Pick<ClientsRow, 'clientID'>[]>`SELECT "clientID" FROM ${this.#cvr(
+          'clients',
+        )}
            WHERE "clientGroupID" = ${id}`,
-        tx<QueriesRow[]>`
-        SELECT * FROM ${this.#cvr('queries')} 
+        tx<QueriesRow[]>`SELECT * FROM ${this.#cvr('queries')} 
           WHERE "clientGroupID" = ${id} AND deleted IS DISTINCT FROM true`,
         tx<DesiresRow[]>`SELECT 
           "clientGroupID",
@@ -292,13 +292,13 @@ export class CVRStore {
 
     for (const row of desiresRows) {
       const client = cvr.clients[row.clientID];
-      if (!client) {
-        // should be impossible unless CVR is corrupted
-        lc.error?.(`Client ${row.clientID} not found`, cvr);
-        throw new Error(`Client ${row.clientID} not found`);
-      }
-      if (!row.deleted && row.inactivatedAt === null) {
-        client.desiredQueryIDs.push(row.queryHash);
+      if (client) {
+        if (!row.deleted && row.inactivatedAt === null) {
+          client.desiredQueryIDs.push(row.queryHash);
+        }
+      } else {
+        // This can happen if the client was deleted but the queries are still alive.
+        lc.debug?.(`Client ${row.clientID} not found`, cvr);
       }
 
       const query = cvr.queries[row.queryHash];
