@@ -23,7 +23,7 @@ type QueryHash = string;
 type Entry = {
   normalized: AST;
   count: number;
-  gotCallbacks: Set<GotCallback>;
+  gotCallbacks: GotCallback[];
   ttl: number | undefined;
 };
 
@@ -152,7 +152,7 @@ export class QueryManager {
       entry = {
         normalized: serverAST,
         count: 1,
-        gotCallbacks: new Set(gotCallback && [gotCallback]),
+        gotCallbacks: gotCallback ? [gotCallback] : [],
         ttl,
       };
       this.#queries.set(astHash, entry);
@@ -182,7 +182,7 @@ export class QueryManager {
       }
 
       if (gotCallback) {
-        entry.gotCallbacks.add(gotCallback);
+        entry.gotCallbacks.push(gotCallback);
       }
     }
 
@@ -202,7 +202,8 @@ export class QueryManager {
 
   #remove(entry: Entry, astHash: string, gotCallback: GotCallback | undefined) {
     if (gotCallback) {
-      entry.gotCallbacks.delete(gotCallback);
+      const index = entry.gotCallbacks.indexOf(gotCallback);
+      entry.gotCallbacks.splice(index, 1);
     }
     --entry.count;
     if (entry.count === 0) {
