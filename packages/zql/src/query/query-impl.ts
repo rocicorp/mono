@@ -132,9 +132,7 @@ export abstract class AbstractQuery<
 
   hash(): string {
     if (!this.#hash) {
-      const ast = this._completeAst();
-      const hash = hashOfAST(ast);
-      this.#hash = hash;
+      this.#hash = hashOfAST(this._completeAst());
     }
     return this.#hash;
   }
