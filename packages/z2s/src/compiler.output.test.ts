@@ -642,7 +642,7 @@ test('related w/o junction edge', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT (
-        SELECT array_agg(row_to_json("inner_owner")) FROM (SELECT * FROM "user"  WHERE ("issue"."owner_id" = "user"."id")  ) "inner_owner"
+        SELECT COALESCE(array_agg(row_to_json("inner_owner")) , ARRAY[]::json[]) FROM (SELECT * FROM "user"  WHERE ("issue"."owner_id" = "user"."id")  ) "inner_owner"
       ) as "owner",* FROM "issue"",
       "values": [],
     }

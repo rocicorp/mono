@@ -106,9 +106,11 @@ function relationshipSubquery(
     ) as ${sql.ident(relationship.subquery.alias)}`;
   }
   return sql`(
-    SELECT ${format?.singular ? sql`` : sql`array_agg`}(row_to_json(${sql.ident(
-      `inner_${relationship.subquery.alias}`,
-    )})) FROM (${select(
+    SELECT ${
+      format?.singular ? sql`` : sql`COALESCE(array_agg`
+    }(row_to_json(${sql.ident(`inner_${relationship.subquery.alias}`)})) ${
+      format?.singular ? sql`` : sql`, ARRAY[]::json[])`
+    } FROM (${select(
       relationship.subquery,
       format,
       correlate(
