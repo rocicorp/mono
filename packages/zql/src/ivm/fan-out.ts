@@ -1,4 +1,6 @@
+import {must} from '../../../shared/src/must.ts';
 import type {Change} from './change.ts';
+import type {FanIn} from './fan-in.ts';
 import type {FetchRequest, Input, Operator, Output} from './operator.ts';
 
 /**
@@ -9,16 +11,16 @@ import type {FetchRequest, Input, Operator, Output} from './operator.ts';
 export class FanOut implements Operator {
   readonly #input: Input;
   readonly #outputs: Output[] = [];
-  // FanOut is paired with a FanIn.
-  // Once FanIn has received a push from FanOut along
-  // any branch, FanOut no longer needs to push that value
-  // across the rest of its outputs..
-  #fanInReceivedPush: boolean = false;
+  #fanIn: FanIn | undefined;
   #destroyCount: number = 0;
 
   constructor(input: Input) {
     this.#input = input;
     input.setOutput(this);
+  }
+
+  setFanIn(fanIn: FanIn) {
+    this.#fanIn = fanIn;
   }
 
   setOutput(output: Output): void {
@@ -48,17 +50,13 @@ export class FanOut implements Operator {
     return this.#input.cleanup(req);
   }
 
-  onFanInReceivedPush() {
-    this.#fanInReceivedPush = true;
-  }
-
   push(change: Change) {
-    this.#fanInReceivedPush = false;
     for (const out of this.#outputs) {
       out.push(change);
-      if (this.#fanInReceivedPush) {
-        return;
-      }
     }
+    must(
+      this.#fanIn,
+      'fan-out must have a corresponding fan-in set!',
+    ).fanOutDonePushingToAllBranches(change.type);
   }
 }

@@ -287,7 +287,9 @@ export function applyOr(
       ),
     );
   }
-  return new FanIn(fanOut, branches);
+  const ret = new FanIn(fanOut, branches);
+  fanOut.setFanIn(ret);
+  return ret;
 }
 
 export function groupSubqueryConditions(condition: Disjunction) {
