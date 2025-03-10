@@ -53,7 +53,11 @@ export interface Source {
    * order.
    * @param filters Filters to apply to the source.
    */
-  connect(sort: Ordering, filters?: Condition | undefined): SourceInput;
+  connect(
+    sort: Ordering,
+    filters?: Condition | undefined,
+    splitEditKeys?: Set<string> | undefined,
+  ): SourceInput;
 
   /**
    * Pushes a change into the source and into all connected outputs.

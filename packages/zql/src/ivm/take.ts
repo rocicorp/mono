@@ -382,30 +382,11 @@ export class Take implements Operator {
   }
 
   #pushEditChange(change: EditChange): void {
-    if (
-      this.#partitionKeyComparator &&
-      this.#partitionKeyComparator(change.oldNode.row, change.node.row) !== 0
-    ) {
-      // different partition key so fall back to remove/add.
-
-      // TODO: So in some cases these don't need to be transformed into a remove
-      // + add.
-      //
-      // If the oldRow was <= the bound of the old partition value, and the
-      // newRow is <= the bound of the new partition value, this can be sent as
-      // an edit, as the row is present in the output of this operator before
-      // and after applying this push.
-
-      this.push({
-        type: 'remove',
-        node: change.oldNode,
-      });
-      this.push({
-        type: 'add',
-        node: change.node,
-      });
-      return;
-    }
+    assert(
+      !this.#partitionKeyComparator ||
+        this.#partitionKeyComparator(change.oldNode.row, change.node.row) === 0,
+      'Unexpected change of partition key',
+    );
 
     const {takeState, takeStateKey, maxBound, constraint} =
       this.#getStateAndConstraint(change.oldNode.row);
