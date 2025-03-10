@@ -780,7 +780,7 @@ describe('view-syncer/cvr-store', () => {
             "clientState": {
               "client1": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "stateVersion": "01",
                 },
