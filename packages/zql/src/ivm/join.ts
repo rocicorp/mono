@@ -3,7 +3,7 @@ import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {Change, ChildChange} from './change.ts';
-import {valuesEqual, type Node} from './data.ts';
+import {compareValues, valuesEqual, type Node} from './data.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -168,7 +168,11 @@ export class Join implements Input {
             change.node.row,
             this.#parentKey,
           ),
-          'Parent edit must not change relationship.',
+          `Parent edit must not change relationship. ${JSON.stringify(
+            change.oldNode.row,
+          )},  ${JSON.stringify(change.node.row)}, ${JSON.stringify(
+            this.#parentKey,
+          )}`,
         );
         this.#output.push({
           type: 'edit',
@@ -334,7 +338,7 @@ export function makeStorageKey(
 
 function rowEqualsForCompoundKey(a: Row, b: Row, key: CompoundKey): boolean {
   for (let i = 0; i < key.length; i++) {
-    if (!valuesEqual(a[key[i]], b[key[i]])) {
+    if (compareValues(a[key[i]], b[key[i]]) !== 0) {
       return false;
     }
   }
