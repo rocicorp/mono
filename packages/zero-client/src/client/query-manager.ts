@@ -1,7 +1,6 @@
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {assert} from '../../../shared/src/asserts.ts';
-import {must} from '../../../shared/src/must.ts';
 import {hashOfAST} from '../../../zero-protocol/src/ast-hash.ts';
 import {
   mapAST,
@@ -21,6 +20,13 @@ import type {ReadTransaction} from './replicache-types.ts';
 
 type QueryHash = string;
 
+type Entry = {
+  normalized: AST;
+  count: number;
+  gotCallbacks: Set<GotCallback>;
+  ttl: number | undefined;
+};
+
 /**
  * Tracks what queries the client is currently subscribed to on the server.
  * Sends `changeDesiredQueries` message to server when this changes.
@@ -30,15 +36,7 @@ export class QueryManager {
   readonly #clientID: ClientID;
   readonly #clientToServer: NameMapper;
   readonly #send: (change: ChangeDesiredQueriesMessage) => void;
-  readonly #queries: Map<
-    QueryHash,
-    {
-      normalized: AST;
-      count: number;
-      gotCallbacks: GotCallback[];
-      ttl: number | undefined;
-    }
-  > = new Map();
+  readonly #queries: Map<QueryHash, Entry> = new Map();
   readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
   readonly #gotQueries: Set<string> = new Set();
@@ -154,7 +152,7 @@ export class QueryManager {
       entry = {
         normalized: serverAST,
         count: 1,
-        gotCallbacks: gotCallback === undefined ? [] : [gotCallback],
+        gotCallbacks: new Set(gotCallback && [gotCallback]),
         ttl,
       };
       this.#queries.set(astHash, entry);
@@ -184,7 +182,7 @@ export class QueryManager {
       }
 
       if (gotCallback) {
-        entry.gotCallbacks.push(gotCallback);
+        entry.gotCallbacks.add(gotCallback);
       }
     }
 
@@ -198,15 +196,13 @@ export class QueryManager {
         return;
       }
       removed = true;
-      this.#remove(astHash, gotCallback);
+      this.#remove(entry, astHash, gotCallback);
     };
   }
 
-  #remove(astHash: string, gotCallback: GotCallback | undefined) {
-    const entry = must(this.#queries.get(astHash));
+  #remove(entry: Entry, astHash: string, gotCallback: GotCallback | undefined) {
     if (gotCallback) {
-      const index = entry.gotCallbacks.indexOf(gotCallback);
-      entry.gotCallbacks.splice(index, 1);
+      entry.gotCallbacks.delete(gotCallback);
     }
     --entry.count;
     if (entry.count === 0) {
