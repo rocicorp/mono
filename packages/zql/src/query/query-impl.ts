@@ -589,6 +589,7 @@ export class QueryImpl<
     factoryOrTTL?: ViewFactory<TSchema, TTable, TReturn, T> | number,
     ttl: number = DEFAULT_TTL,
   ): T {
+    const t0 = Date.now();
     let factory: ViewFactory<TSchema, TTable, TReturn, T> | undefined;
     if (typeof factoryOrTTL === 'function') {
       factory = factoryOrTTL;
@@ -600,6 +601,17 @@ export class QueryImpl<
     let queryGot = false;
     const removeServerQuery = this.#delegate.addServerQuery(ast, ttl, got => {
       if (got) {
+        const t1 = Date.now();
+        // TODO: Make this configurable.
+        if (t1 - t0 > 1_000) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            'Slow query materialization (including server/network)',
+            this.hash(),
+            ast,
+            t1 - t0,
+          );
+        }
         queryGot = true;
         queryCompleteResolver.resolve(true);
       }
