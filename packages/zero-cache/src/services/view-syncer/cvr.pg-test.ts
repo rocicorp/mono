@@ -4733,6 +4733,7 @@ describe('view-syncer/cvr', () => {
             version: '1aa',
             replicaVersion: '120',
             lastActive: now,
+            clientSchema: null,
           },
         ],
         clients: [
