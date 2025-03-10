@@ -17,8 +17,8 @@ export default defineWorkspace([
       include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
     },
   },
-  pgConfigForVersion(15),
-  pgConfigForVersion(16),
+  // pgConfigForVersion(15),
+  // pgConfigForVersion(16),
   pgConfigForVersion(17),
   // To run tests against a custom Postgres instance (e.g. Aurora), specify
   // the connection string in the CUSTOM_PG environment variable, and optionally

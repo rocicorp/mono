@@ -32,12 +32,22 @@ import {compile} from '../../compiler.ts';
 import type {JSONValue} from '../../../../shared/src/json.ts';
 import {MemorySource} from '../../../../zql/src/ivm/memory-source.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../../zql/src/query/test/query-delegate.ts';
+import type {AdvancedQuery} from '../../../../zql/src/query/query-internal.ts';
+import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {Input} from '../../../../zql/src/ivm/operator.ts';
+import type {Format} from '../../../../zql/src/ivm/view.ts';
+import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
+import type {Change} from '../../../../zql/src/ivm/change.ts';
+import {must} from '../../../../shared/src/must.ts';
+import type {Node} from '../../../../zql/src/ivm/data.ts';
+import {wrapIterable} from '../../../../shared/src/iterables.ts';
 
 let pg: PostgresDB;
 let sqlite: Database;
 let zqliteQueryDelegate: QueryDelegate;
 let memoryQueryDelegate: QueryDelegate;
 type AnyQuery = Query<any, any, any>;
+type AnyAdvancedQuery = AdvancedQuery<any, any, any>;
 
 type Schema = typeof schema;
 type Queries = {
@@ -185,7 +195,167 @@ async function checkZqlAndSql(
   // `-` is PG
   // `+` is ZQLite
   expect(zqliteResult).toEqual(pgResult);
-  expect(zqliteResult).toEqual(zqlMemResult);
+  expect(zqlMemResult).toEqual(pgResult);
+
+  // now check pushes
+  await checkPush(pg, zqliteQuery, memoryQuery);
+}
+
+async function checkPush(
+  pg: PostgresDB,
+  zqliteQuery: Query<Schema, keyof Schema['tables']>,
+  memoryQuery: Query<Schema, keyof Schema['tables']>,
+) {
+  const queryRows = gatherRows(memoryQuery as unknown as AnyAdvancedQuery);
+
+  function copyRows() {
+    return new Map(
+      wrapIterable(queryRows.entries()).map(([table, rows]) => [
+        table,
+        [...rows],
+      ]),
+    );
+  }
+
+  const totalNumRows = [...queryRows.values()].reduce(
+    (acc, rows) => acc + rows.length,
+    0,
+  );
+
+  const pgReRunInterval = totalNumRows / 100;
+  await checkRemoveFromComplete(
+    pgReRunInterval,
+    copyRows(),
+    pg,
+    zqliteQuery,
+    memoryQuery,
+  );
+  checkAddFromZero();
+  checkEditToRandom();
+  checkEditToComplete();
+}
+
+// Removes all rows that are in the result set
+// one at a time till there are no rows left.
+// Randomly selects which table to remove a row from on each iteration.
+async function checkRemoveFromComplete(
+  // re-running PG ~8,000 times for some result sets is prohibitively slow
+  pgReRunInterval: number,
+  queryRows: Map<string, Row[]>,
+  pg: PostgresDB,
+  zqliteQuery: Query<Schema, keyof Schema['tables']>,
+  memoryQuery: Query<Schema, keyof Schema['tables']>,
+) {
+  const tables = [...queryRows.keys()];
+
+  const zqliteMaterialized = zqliteQuery.materialize();
+  const zqlMaterialized = memoryQuery.materialize();
+  const sqlQuery = formatPg(compile(ast(zqliteQuery), format(zqliteQuery)));
+
+  let numOps = 0;
+  while (tables.length > 0) {
+    ++numOps;
+    const tableIndex = Math.floor(Math.random() * tables.length);
+    const table = tables[tableIndex];
+    const rows = must(queryRows.get(table));
+    const rowIndex = Math.floor(Math.random() * rows.length);
+    const row = must(rows[rowIndex]);
+    rows.splice(rowIndex, 1);
+
+    if (rows.length === 0) {
+      tables.splice(tableIndex, 1);
+    }
+
+    const {primaryKey} = schema.tables[table as keyof Schema['tables']];
+    await pg`DELETE FROM ${pg(table)} WHERE ${primaryKey
+      .map(col => pg`${pg(col)} = ${row[col] ?? null}`)
+      .reduce((l, r) => pg`${l} AND ${r}`)}`;
+    must(zqliteQueryDelegate.getSource(table)).push({
+      type: 'remove',
+      row,
+    });
+    must(memoryQueryDelegate.getSource(table)).push({
+      type: 'remove',
+      row,
+    });
+
+    if (numOps % pgReRunInterval === 0) {
+      const pgResult = await pg.unsafe(
+        sqlQuery.text,
+        sqlQuery.values as JSONValue[],
+      );
+      expect(zqliteMaterialized.data).toEqual(pgResult);
+      expect(zqlMaterialized.data).toEqual(pgResult);
+    } else {
+      expect(zqliteMaterialized.data).toEqual(zqlMaterialized.data);
+    }
+  }
+}
+
+// Add back rows that are in the result set
+// one at a time. Randomly selects which table.
+function checkAddFromZero() {}
+
+// Edits rows that are in the result set to random values
+// re-runs pg query after each operation.
+// Randomly choses a table on each iteration.
+function checkEditToRandom() {}
+
+// Edits rows that are not in the result set to values
+// that should cause inclusion in the result set.
+// re-runs pg query after each operation.
+//
+// Randomly choses a table on each iteration.
+function checkEditToComplete() {}
+
+function gatherRows(q: AnyAdvancedQuery): Map<string, Row[]> {
+  const rows = new Map<string, Row[]>();
+
+  const view = q.materialize(
+    (
+      _query: AnyQuery,
+      input: Input,
+      _format: Format,
+      onDestroy: () => void,
+      _onTransactionCommit: (cb: () => void) => void,
+      _queryComplete: true | Promise<true>,
+    ) => {
+      const schema = input.getSchema();
+      for (const node of input.fetch({})) {
+        processNode(schema, node);
+      }
+
+      return {
+        push: (_change: Change) => {
+          throw new Error('should not receive a push');
+        },
+        destroy() {
+          onDestroy();
+        },
+      } as const;
+    },
+  );
+
+  function processNode(schema: SourceSchema, node: Node) {
+    const {tableName: table} = schema;
+    let rowsForTable = rows.get(table);
+    if (rowsForTable === undefined) {
+      rowsForTable = [];
+      rows.set(table, rowsForTable);
+    }
+    rowsForTable.push(node.row);
+    for (const [relationship, getChildren] of Object.entries(
+      node.relationships,
+    )) {
+      const childSchema = must(schema.relationships[relationship]);
+      for (const child of getChildren()) {
+        processNode(childSchema, child);
+      }
+    }
+  }
+
+  view.destroy();
+  return rows;
 }
 
 function runZqlAsSql(
