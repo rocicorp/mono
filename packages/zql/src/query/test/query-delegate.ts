@@ -51,6 +51,8 @@ export class QueryDelegateImpl implements QueryDelegate {
     };
   }
 
+  onQueryMaterialized() {}
+
   commit() {
     for (const listener of this.#commitListeners) {
       listener();

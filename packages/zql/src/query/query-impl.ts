@@ -81,6 +81,7 @@ export interface QueryDelegate extends BuilderDelegate {
   ): () => void;
   onTransactionCommit(cb: CommitListener): () => void;
   batchViewUpdates<T>(applyViewUpdates: () => T): T;
+  onQueryMaterialized(hash: string, ast: AST, duration: number): void;
 }
 
 export function staticParam(
@@ -601,16 +602,7 @@ export class QueryImpl<
     const removeServerQuery = this.#delegate.addServerQuery(ast, ttl, got => {
       if (got) {
         const t1 = Date.now();
-        // TODO: Make this configurable.
-        if (t1 - t0 > 1_000) {
-          // eslint-disable-next-line no-console
-          console.warn(
-            'Slow query materialization (including server/network)',
-            this.hash(),
-            ast,
-            t1 - t0,
-          );
-        }
+        this.#delegate.onQueryMaterialized(this.hash(), ast, t1 - t0);
         queryGot = true;
         queryCompleteResolver.resolve(true);
       }

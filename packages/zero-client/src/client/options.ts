@@ -148,6 +148,15 @@ export interface ZeroOptions<
    * Default value: 8kb.
    */
   maxHeaderLength?: number | undefined;
+
+  /**
+   * The maximum amount of milliseconds to wait for a materialization to
+   * complete (including network/server time) before printing a warning to the
+   * console.
+   *
+   * Default value: 5_000.
+   */
+  slowMaterializeThreshold?: number | undefined;
 }
 
 export interface ZeroAdvancedOptions<
