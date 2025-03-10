@@ -1382,12 +1382,12 @@ test('gotCallback, add same got callback twice', () => {
   };
 
   const gotCallback = vi.fn<(got: boolean) => void>();
-  const rem1 = queryManager.add(ast, undefined, gotCallback);
+  const rem1 = queryManager.add(ast, -1, gotCallback);
   expect(gotCallback).toBeCalledTimes(1);
   expect(gotCallback).toBeCalledWith(false);
   gotCallback.mockClear();
 
-  const rem2 = queryManager.add(ast, undefined, gotCallback);
+  const rem2 = queryManager.add(ast, -1, gotCallback);
   expect(gotCallback).toBeCalledTimes(1);
   expect(gotCallback).toBeCalledWith(false);
   gotCallback.mockClear();
@@ -1405,7 +1405,7 @@ test('gotCallback, add same got callback twice', () => {
             orderBy: [['id', 'asc']],
             ...normalizingFields,
           } satisfies AST,
-          ttl: undefined,
+          ttl: -1,
         },
       ],
     },
