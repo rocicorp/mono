@@ -26,7 +26,9 @@ async function getChinook(fileName: string, url: string): Promise<string> {
   const content = (await response.text())
     .replaceAll('DROP DATABASE IF EXISTS chinook;', '')
     .replaceAll('CREATE DATABASE chinook;', '')
-    .replaceAll('\\c chinook;', '');
+    .replaceAll('\\c chinook;', '')
+    // disabled foreign key constraints as push tests do not respect an insertion order that would preserved them.
+    .replace(/ALTER TABLE.*?FOREIGN KEY.*?;/gs, '');
   await writeFile(fileName, content);
   return content;
 }
