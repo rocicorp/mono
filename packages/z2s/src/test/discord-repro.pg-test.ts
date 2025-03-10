@@ -56,10 +56,8 @@ beforeAll(async () => {
   issueQuery = newQuery(queryDelegate, schema, 'issue');
 });
 
-test.fails(
-  'discord report https://discord.com/channels/830183651022471199/1347550174968287233/1347552521865920616',
-  () => {
-    /**
+test('discord report https://discord.com/channels/830183651022471199/1347550174968287233/1347552521865920616', () => {
+  /**
    The discord query:
    eb.or(
         eb.cmp('ownerId', '=', authData.sub!),
@@ -75,22 +73,22 @@ test.fails(
 
     The "no rows returned" error could be due to the combination of currently active queries in their app.
    */
-    const q = issueQuery
-      .where('id', 'issue1')
-      .where(eb =>
-        eb.or(
-          eb.cmp('ownerId', '=', 'user1'),
-          eb.and(
-            eb.cmp('closed', '=', false),
-            eb.exists('comments', q => q.where('authorId', '=', 'user1')),
-          ),
+  const q = issueQuery
+    .where('id', 'issue1')
+    .where(eb =>
+      eb.or(
+        eb.cmp('ownerId', '=', 'user1'),
+        eb.and(
+          eb.cmp('closed', '=', false),
+          eb.exists('comments', q => q.where('authorId', '=', 'user1')),
         ),
-      )
-      .related('comments');
+      ),
+    )
+    .related('comments');
 
-    const view = q.materialize();
+  const view = q.materialize();
 
-    expect(view.data).toMatchInlineSnapshot(`
+  expect(view.data).toMatchInlineSnapshot(`
     [
       {
         "closed": false,
@@ -111,26 +109,25 @@ test.fails(
     ]
   `);
 
-    queryDelegate.getSource('issue')?.push({
-      type: 'edit',
-      oldRow: {
-        id: 'issue1',
-        title: 'Test Issue 1',
-        description: 'Description for issue 1',
-        closed: false,
-        ownerId: 'user1',
-      },
-      row: {
-        id: 'issue1',
-        title: 'Test Issue 1',
-        description: 'Description for issue 1',
-        closed: true,
-        ownerId: 'user1',
-      },
-    });
+  queryDelegate.getSource('issue')?.push({
+    type: 'edit',
+    oldRow: {
+      id: 'issue1',
+      title: 'Test Issue 1',
+      description: 'Description for issue 1',
+      closed: false,
+      ownerId: 'user1',
+    },
+    row: {
+      id: 'issue1',
+      title: 'Test Issue 1',
+      description: 'Description for issue 1',
+      closed: true,
+      ownerId: 'user1',
+    },
+  });
 
-    // the data post-edit should be the same as the view when hydrated from scratch
-    // but it is not! `view.data` is empty!
-    expect(view.data).toEqual(q.materialize().data);
-  },
-);
+  // the data post-edit should be the same as the view when hydrated from scratch
+  // but it is not! `view.data` is empty!
+  expect(view.data).toEqual(q.materialize().data);
+});
