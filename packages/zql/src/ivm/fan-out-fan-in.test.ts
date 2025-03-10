@@ -23,6 +23,10 @@ test('fan-out pushes along all paths', () => {
   const catch2 = new Catch(fanOut);
   const catch3 = new Catch(fanOut);
 
+  // dummy fan-in for invariant in fan-out
+  const fanIn = new FanIn(fanOut, []);
+  fanOut.setFanIn(fanIn);
+
   s.push({type: 'add', row: {a: 1, b: 'foo'}});
   s.push({type: 'edit', oldRow: {a: 1, b: 'foo'}, row: {a: 1, b: 'bar'}});
   s.push({type: 'remove', row: {a: 1, b: 'bar'}});
@@ -150,6 +154,7 @@ test('fan-out,fan-in pairing does not duplicate pushes', () => {
 
   const fanIn = new FanIn(fanOut, [filter1, filter2, filter3]);
   const out = new Catch(fanIn);
+  fanOut.setFanIn(fanIn);
 
   s.push({type: 'add', row: {a: 1, b: 'foo'}});
   s.push({type: 'add', row: {a: 2, b: 'foo'}});

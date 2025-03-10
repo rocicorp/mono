@@ -77,6 +77,7 @@ test('destroy a pipeline that has forking', () => {
   const filter2 = new Filter(fanOut, () => true);
   const filter3 = new Filter(fanOut, () => true);
   const fanIn = new FanIn(fanOut, [filter1, filter2, filter3]);
+  fanOut.setFanIn(fanIn);
   const out = new Catch(fanIn);
 
   ms.push({type: 'add', row: {a: 1, b: 'foo'}});
