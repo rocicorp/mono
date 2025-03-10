@@ -1345,3 +1345,74 @@ describe('queriesPatch with lastPatch', () => {
     ]);
   });
 });
+
+test('gotCallback, add same got callback twice', () => {
+  const queryHash = '12hwg3ihkijhm';
+  const experimentalWatch = createExperimentalWatchMock();
+  const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+  const maxRecentQueriesSize = 0;
+  const queryManager = new QueryManager(
+    'client1',
+    schema.tables,
+    send,
+    experimentalWatch,
+    maxRecentQueriesSize,
+  );
+  expect(experimentalWatch).toBeCalledTimes(1);
+  const watchCallback = experimentalWatch.mock.calls[0][0];
+
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+  };
+
+  const gotCallback = vi.fn<(got: boolean) => void>();
+  const rem1 = queryManager.add(ast, undefined, gotCallback);
+  expect(gotCallback).toBeCalledTimes(1);
+  expect(gotCallback).toBeCalledWith(false);
+  gotCallback.mockClear();
+
+  const rem2 = queryManager.add(ast, undefined, gotCallback);
+  expect(gotCallback).toBeCalledTimes(1);
+  expect(gotCallback).toBeCalledWith(false);
+  gotCallback.mockClear();
+
+  expect(send).toBeCalledTimes(1);
+  expect(send).toBeCalledWith([
+    'changeDesiredQueries',
+    {
+      desiredQueriesPatch: [
+        {
+          op: 'put',
+          hash: queryHash,
+          ast: {
+            table: 'issues',
+            alias: undefined,
+            where: undefined,
+            related: undefined,
+            start: undefined,
+            orderBy: [['id', 'asc']],
+            limit: undefined,
+            schema: undefined,
+          } satisfies AST,
+          ttl: undefined,
+        },
+      ],
+    },
+  ]);
+
+  watchCallback([
+    {
+      op: 'add',
+      key: toGotQueriesKey(queryHash) as string & IndexKey,
+      newValue: 'unused',
+    },
+  ]);
+
+  expect(gotCallback).toBeCalledTimes(2);
+  expect(gotCallback).nthCalledWith(1, true);
+  expect(gotCallback).nthCalledWith(2, true);
+
+  rem1();
+  rem2();
+});
