@@ -51,6 +51,12 @@ export function newQueryDelegate(
 ): QueryDelegate {
   const sources = new Map<string, Source>();
   return {
+    get lc() {
+      return lc;
+    },
+    get slowMaterializationThreshold() {
+      return undefined;
+    },
     getSource: (name: string) => {
       let source = sources.get(name);
       if (source) {

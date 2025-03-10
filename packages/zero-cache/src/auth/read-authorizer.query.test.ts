@@ -491,6 +491,12 @@ beforeEach(() => {
 
   const sources = new Map<string, Source>();
   queryDelegate = {
+    get lc() {
+      return lc;
+    },
+    get slowMaterializationThreshold() {
+      return undefined;
+    },
     getSource: (name: string) => {
       let source = sources.get(name);
       if (source) {

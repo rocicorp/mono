@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
@@ -25,6 +26,8 @@ export type AddQuery = (
  * queries.
  */
 export class ZeroContext implements QueryDelegate {
+  readonly #lc: LogContext;
+
   // It is a bummer to have to maintain separate MemorySources here and copy the
   // data in from the Replicache db. But we want the data to be accessible via
   // pipelines *synchronously* and the core Replicache infra is all async. So
@@ -34,16 +37,29 @@ export class ZeroContext implements QueryDelegate {
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
+  readonly slowMaterializationTheshold: number | undefined;
   readonly staticQueryParameters = undefined;
 
   constructor(
+    lc: LogContext,
     mainSources: IVMSourceBranch,
     addQuery: AddQuery,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
+    slowMaterializationTheshold: number | undefined,
   ) {
+    this.#lc = lc;
     this.#mainSources = mainSources;
     this.#addQuery = addQuery;
     this.#batchViewUpdates = batchViewUpdates;
+    this.slowMaterializationTheshold = slowMaterializationTheshold;
+  }
+
+  get lc() {
+    return this.#lc;
+  }
+
+  get slowMaterializationThreshold() {
+    return this.slowMaterializationTheshold;
   }
 
   getSource(name: string): Source | undefined {
