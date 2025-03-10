@@ -609,12 +609,24 @@ export class QueryImpl<
   }
 
   materialize<T>(factory?: ViewFactory<TSchema, TTable, TReturn, T>): T {
+    const t0 = Date.now();
     const ast = this._completeAst();
     const queryCompleteResolver = resolver<true>();
     let queryGot = false;
     const ttl = undefined;
     const removeServerQuery = this.#delegate.addServerQuery(ast, ttl, got => {
       if (got) {
+        const t1 = Date.now();
+        // TODO: Make this configurable.
+        if (t1 - t0 > 1_000) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            'Slow query materialization (including server/network)',
+            this.hash(),
+            ast,
+            t1 - t0,
+          );
+        }
         queryGot = true;
         queryCompleteResolver.resolve(true);
       }
