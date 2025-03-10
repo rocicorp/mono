@@ -11,13 +11,14 @@ import {
 import {stringCompare} from '../../../../shared/src/string-compare.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
+import {compareTTL} from '../../../../zql/src/query/ttl.ts';
 import {stringify, type JSONObject} from '../../types/bigint-json.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
-import type {CVRFlushStats, CVRStore} from './cvr-store.ts';
+import {type CVRFlushStats, type CVRStore} from './cvr-store.ts';
 import {KeyColumns} from './key-columns.ts';
 import {
   cmpVersions,
@@ -241,7 +242,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
     // Find the new/changed desired queries.
     const needed: Set<string> = new Set();
-    for (const {hash, ttl} of queries) {
+    for (const {hash, ttl = -1} of queries) {
       const query = this._cvr.queries[hash];
       if (!query) {
         needed.add(hash);
@@ -258,12 +259,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         continue;
       }
 
-      if (
-        ttl !== oldClientState.ttl &&
-        oldClientState.ttl !== undefined &&
-        ttl !== undefined &&
-        ttl >= oldClientState.ttl
-      ) {
+      if (compareTTL(ttl, oldClientState.ttl) > 0) {
         needed.add(hash);
       }
     }
@@ -275,7 +271,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     client.desiredQueryIDs = [...union(current, needed)].sort(stringCompare);
 
     for (const id of needed) {
-      const {ast, ttl} = must(queries.find(({hash}) => hash === id));
+      const {ast, ttl = -1} = must(queries.find(({hash}) => hash === id));
       const query =
         this._cvr.queries[id] ??
         ({
@@ -289,7 +285,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
       query.clientState[clientID] = {
         inactivatedAt,
-        ttl,
+        ttl: normalizeTTL(ttl),
         version: newVersion,
       };
       this._cvr.queries[id] = query;
@@ -305,7 +301,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         client,
         false,
         inactivatedAt,
-        ttl,
+        normalizeTTL(ttl),
       );
     }
     return patches;
@@ -363,7 +359,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       }
       assertNotInternal(query);
 
-      let ttl: number | undefined;
+      let ttl = -1;
       if (inactivatedAt === undefined) {
         delete query.clientState[clientID];
       } else {
@@ -838,14 +834,14 @@ function mergeRefCounts(
 export function getInactiveQueries(cvr: CVR): {
   hash: string;
   inactivatedAt: number;
-  ttl: number | undefined;
+  ttl: number;
 }[] {
   const inactive: Map<
     string,
     {
       hash: string;
       inactivatedAt: number;
-      ttl: number | undefined;
+      ttl: number;
     }
   > = new Map();
   for (const [queryID, query] of Object.entries(cvr.queries)) {
@@ -858,8 +854,8 @@ export function getInactiveQueries(cvr: CVR): {
         const existing = inactive.get(queryID);
         if (existing) {
           // if one of them have no ttl, then we have no ttl
-          if (existing.ttl === undefined || ttl === undefined) {
-            existing.ttl = undefined;
+          if (existing.ttl < 0 || ttl < 0) {
+            existing.ttl = -1;
             existing.inactivatedAt = Math.max(
               existing.inactivatedAt,
               inactivatedAt,
@@ -875,7 +871,7 @@ export function getInactiveQueries(cvr: CVR): {
           inactive.set(queryID, {
             hash: queryID,
             inactivatedAt,
-            ttl: ttl ?? undefined,
+            ttl,
           });
         }
       }
@@ -887,10 +883,10 @@ export function getInactiveQueries(cvr: CVR): {
     if (a.ttl === b.ttl) {
       return a.inactivatedAt - b.inactivatedAt;
     }
-    if (a.ttl === undefined) {
+    if (a.ttl < 0) {
       return 1;
     }
-    if (b.ttl === undefined) {
+    if (b.ttl < 0) {
       return -1;
     }
     return a.inactivatedAt + a.ttl - b.inactivatedAt - b.ttl;
@@ -900,7 +896,7 @@ export function getInactiveQueries(cvr: CVR): {
 export function nextEvictionTime(cvr: CVR): number | undefined {
   let next: number | undefined;
   for (const {inactivatedAt, ttl} of getInactiveQueries(cvr)) {
-    if (ttl === undefined) {
+    if (ttl < 0) {
       continue;
     }
     const expire = inactivatedAt + ttl;
@@ -909,4 +905,8 @@ export function nextEvictionTime(cvr: CVR): number | undefined {
     }
   }
   return next;
+}
+
+function normalizeTTL(ttl: number): number {
+  return ttl < 0 ? -1 : ttl;
 }

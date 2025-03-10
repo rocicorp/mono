@@ -86,24 +86,23 @@ export type {
   SchemaValueWithCustomType,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
+export type {
+  DeleteID,
+  InsertValue,
+  ServerTransaction,
+  Transaction,
+  UpdateValue,
+  UpsertValue,
+} from '../../zql/src/mutate/custom.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,
   ExpressionFactory,
 } from '../../zql/src/query/expression.ts';
 export type {Query, Row} from '../../zql/src/query/query.ts';
+export {DEFAULT_TTL, type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export type {DBMutator, TableMutator} from './client/crud.ts';
 export type {CustomMutatorDefs, CustomMutatorImpl} from './client/custom.ts';
-export type {
-  DeleteID,
-  InsertValue,
-  UpdateValue,
-  UpsertValue,
-} from '../../zql/src/mutate/custom.ts';
 export type {ZeroOptions} from './client/options.ts';
 export {Zero} from './client/zero.ts';
-export type {
-  ServerTransaction,
-  Transaction,
-} from '../../zql/src/mutate/custom.ts';

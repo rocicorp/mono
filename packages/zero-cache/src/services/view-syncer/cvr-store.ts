@@ -309,7 +309,7 @@ export class CVRStore {
       ) {
         query.clientState[row.clientID] = {
           inactivatedAt: row.inactivatedAt ?? undefined,
-          ttl: row.ttl ?? undefined,
+          ttl: row.ttl ?? -1,
           version: versionFromString(row.patchVersion),
         };
       }
@@ -519,7 +519,7 @@ export class CVRStore {
     client: {id: string},
     deleted: boolean,
     inactivatedAt: number | undefined,
-    ttl: number | undefined,
+    ttl: number,
   ): void {
     const change: DesiresRow = {
       clientGroupID: this.#id,
@@ -528,7 +528,7 @@ export class CVRStore {
       inactivatedAt: inactivatedAt ?? null,
       patchVersion: versionString(newVersion),
       queryHash: query.id,
-      ttl: ttl ?? null,
+      ttl: ttl < 0 ? null : ttl,
     };
     this.#writes.add({
       stats: {desires: 1},

@@ -7,6 +7,7 @@ import type {
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
+import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 type Selector<E extends TableSchema> = keyof E['columns'];
@@ -203,7 +204,7 @@ export type PreloadOptions = {
    * Time To Live. This is the amount of time to keep the rows associated with
    * this query after {@linkcode cleanup} has been called.
    */
-  ttl?: number | undefined;
+  ttl?: TTL | undefined;
 };
 
 export type HumanReadable<T> = undefined extends T ? Expand<T> : Expand<T>[];
