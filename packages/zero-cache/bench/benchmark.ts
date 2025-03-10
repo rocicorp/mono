@@ -32,6 +32,12 @@ export function bench(opts: Options) {
   const sources = new Map<string, Source>();
   const tableSpecs = computeZqlSpecs(lc, db);
   const host: QueryDelegate = {
+    get lc() {
+      return lc;
+    },
+    get slowMaterializationThreshold() {
+      return undefined;
+    },
     getSource: (name: string) => {
       let source = sources.get(name);
       if (source) {

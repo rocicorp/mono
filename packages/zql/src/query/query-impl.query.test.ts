@@ -1,7 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import type {LogConfig} from '../../../otel/src/log-options.ts';
 import {deepClone} from '../../../shared/src/deep-clone.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
 import {
@@ -14,6 +13,7 @@ import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.ts';
 import type {AdvancedQuery} from './query-internal.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
+import {LogContext} from '@rocicorp/logger';
 
 /**
  * Some basic manual tests to get us started.
@@ -30,7 +30,7 @@ import {schema} from './test/test-schemas.ts';
  * write by hand.
  */
 
-const lc = createSilentLogContext();
+const lc = new LogContext('info');
 const logConfig: LogConfig = {
   format: 'text',
   level: 'debug',

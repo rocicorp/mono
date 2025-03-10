@@ -41,6 +41,7 @@ import {
   type Query,
 } from './query.ts';
 import type {TypedView} from './typed-view.ts';
+import type {LogContext} from '@rocicorp/logger';
 
 type AnyQuery = Query<Schema, string, any>;
 export const astForTestingSymbol = Symbol();
@@ -53,7 +54,7 @@ export function newQuery<
   schema: TSchema,
   table: TTable,
 ): Query<TSchema, TTable> {
-  return new QueryImpl(delegate, schema, table);
+  return new QueryImpl(delegate, schema, table, undefined, undefined);
 }
 
 function newQueryWithDetails<
@@ -80,6 +81,8 @@ export interface QueryDelegate extends BuilderDelegate {
   ): () => void;
   onTransactionCommit(cb: CommitListener): () => void;
   batchViewUpdates<T>(applyViewUpdates: () => T): T;
+  get lc(): LogContext;
+  get slowMaterializationThreshold(): number | undefined;
 }
 
 export function staticParam(
@@ -106,6 +109,7 @@ export abstract class AbstractQuery<
   readonly #tableName: TTable;
   readonly #ast: AST;
   readonly #format: Format;
+
   #hash: string = '';
 
   constructor(
@@ -589,6 +593,7 @@ export class QueryImpl<
     factoryOrTTL?: ViewFactory<TSchema, TTable, TReturn, T> | number,
     ttl: number = DEFAULT_TTL,
   ): T {
+    const t0 = Date.now();
     let factory: ViewFactory<TSchema, TTable, TReturn, T> | undefined;
     if (typeof factoryOrTTL === 'function') {
       factory = factoryOrTTL;
@@ -600,6 +605,25 @@ export class QueryImpl<
     let queryGot = false;
     const removeServerQuery = this.#delegate.addServerQuery(ast, ttl, got => {
       if (got) {
+        const t1 = Date.now();
+        if (
+          this.#delegate.slowMaterializationThreshold !== undefined &&
+          t1 - t0 > this.#delegate.slowMaterializationThreshold
+        ) {
+          this.#delegate.lc.warn?.(
+            'Slow query materialization (including server/network)',
+            this.hash(),
+            ast,
+            t1 - t0,
+          );
+        } else {
+          this.#delegate.lc.debug?.(
+            'Materialized query (including server/network)',
+            this.hash(),
+            ast,
+            t1 - t0,
+          );
+        }
         queryGot = true;
         queryCompleteResolver.resolve(true);
       }

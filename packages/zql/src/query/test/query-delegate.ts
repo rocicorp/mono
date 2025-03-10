@@ -39,6 +39,14 @@ export class QueryDelegateImpl implements QueryDelegate {
     this.#sources = sources ?? makeSources();
   }
 
+  get lc() {
+    return lc;
+  }
+
+  get slowMaterializationThreshold() {
+    return undefined;
+  }
+
   batchViewUpdates<T>(applyViewUpdates: () => T): T {
     return applyViewUpdates();
   }
