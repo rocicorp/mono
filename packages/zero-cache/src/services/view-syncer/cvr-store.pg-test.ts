@@ -746,4 +746,68 @@ describe('view-syncer/cvr-store', () => {
       {count: 1035n},
     ]);
   });
+
+  test('load with deleted client with remaining desires', async () => {
+    await db.unsafe(`
+      INSERT INTO "roze_1/cvr".clients ("clientGroupID", "clientID", "patchVersion", deleted)
+        VALUES('${CVR_ID}', 'client1', '01', false);
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion")
+        VALUES('${CVR_ID}', 'client1', 'foo', '01');
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "ttl", "inactivatedAt")
+        VALUES('${CVR_ID}', 'missing-client', 'foo', '01', '3600', '2025-03-10');
+    `);
+
+    const cvr = await store.load(lc, CONNECT_TIME);
+
+    expect(cvr).toMatchInlineSnapshot(`
+      {
+        "clientSchema": null,
+        "clients": {
+          "client1": {
+            "desiredQueryIDs": [
+              "foo",
+            ],
+            "id": "client1",
+          },
+        },
+        "id": "my-cvr",
+        "lastActive": 1725408000000,
+        "queries": {
+          "foo": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientState": {
+              "client1": {
+                "inactivatedAt": undefined,
+                "ttl": undefined,
+                "version": {
+                  "stateVersion": "01",
+                },
+              },
+              "missing-client": {
+                "inactivatedAt": 1741564800000,
+                "ttl": 3600000,
+                "version": {
+                  "stateVersion": "01",
+                },
+              },
+            },
+            "id": "foo",
+            "patchVersion": {
+              "stateVersion": "01",
+            },
+            "transformationHash": "foo-transformed",
+            "transformationVersion": {
+              "stateVersion": "01",
+            },
+          },
+        },
+        "replicaVersion": "01",
+        "version": {
+          "stateVersion": "03",
+        },
+      }
+    `);
+  });
 });
