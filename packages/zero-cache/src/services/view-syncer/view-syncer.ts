@@ -793,7 +793,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const hashToIDs = new Map<string, string[]>();
       const now = Date.now();
       const serverQueries = Object.entries(cvr.queries).map(([id, q]) => {
-        const {query, hash: transformationHash} = transformAndHashQuery(
+        const {query: ast, hash: transformationHash} = transformAndHashQuery(
           lc,
           q.ast,
           must(this.#pipelines.currentPermissions()).permissions ?? {
@@ -802,8 +802,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           this.#authData,
           q.internal,
         );
-        if (hashToIDs.has(transformationHash)) {
-          must(hashToIDs.get(transformationHash)).push(id);
+        const ids = hashToIDs.get(transformationHash);
+        if (ids) {
+          ids.push(id);
         } else {
           hashToIDs.set(transformationHash, [id]);
         }
@@ -811,7 +812,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           id,
           // TODO(mlaw): follow up to handle the case where we statically determine
           // the query cannot be run and is `undefined`.
-          ast: query,
+          ast,
           transformationHash,
           remove: expired(now, q),
         };
