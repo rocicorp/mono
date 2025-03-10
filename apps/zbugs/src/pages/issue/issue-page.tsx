@@ -22,7 +22,6 @@ import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
-import {minutes} from '../../../../../packages/shared/src/time.ts';
 import type {CommentRow, IssueRow, Schema, UserRow} from '../../../schema.ts';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
@@ -92,7 +91,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
         .orderBy('id', 'desc'),
     )
     .one();
-  const [issue, issueResult] = useQuery(q, {ttl: minutes(30)});
+  const [issue, issueResult] = useQuery(q, {ttl: '30m'});
   if (issue) {
     onReady();
   }
@@ -205,8 +204,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }
   const useQueryOptions = {
     enabled: listContext !== undefined && issueSnapshot !== undefined,
-    ttl: minutes(30),
-  };
+    ttl: '30m',
+  } as const;
   const [next] = useQuery(
     buildListQuery(z, listContext, displayed, 'next'),
     useQueryOptions,
@@ -236,7 +235,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const [allComments, allCommentsResult] = useQuery(
     commentQuery(z, displayed),
-    {enabled: displayAllComments && displayed !== undefined, ttl: minutes(30)},
+    {enabled: displayAllComments && displayed !== undefined, ttl: '30m'},
   );
 
   const [comments, hasOlderComments] = useMemo(() => {
@@ -961,7 +960,7 @@ function useEmojiChangeListener(
     z.query.emoji
       .where('subjectID', issueID ?? '')
       .related('creator', creator => creator.one()),
-    {enabled, ttl: minutes(10)},
+    {enabled, ttl: '10m'},
   );
 
   const lastEmojis = useRef<Map<string, Emoji> | undefined>();

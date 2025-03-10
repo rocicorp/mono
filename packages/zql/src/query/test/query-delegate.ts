@@ -10,6 +10,7 @@ import type {
   GotCallback,
   QueryDelegate,
 } from '../query-impl.ts';
+import type {TTL} from '../ttl.ts';
 import {
   commentSchema,
   issueLabelSchema,
@@ -31,7 +32,7 @@ export class QueryDelegateImpl implements QueryDelegate {
   readonly #sources: Record<string, Source> = makeSources();
   readonly #commitListeners: Set<CommitListener> = new Set();
 
-  readonly addedServerQueries: {ast: AST; ttl: number | undefined}[] = [];
+  readonly addedServerQueries: {ast: AST; ttl: TTL}[] = [];
   readonly gotCallbacks: (GotCallback | undefined)[] = [];
   synchronouslyCallNextGotCallback = false;
 
@@ -57,7 +58,7 @@ export class QueryDelegateImpl implements QueryDelegate {
   }
   addServerQuery(
     ast: AST,
-    ttl?: number | undefined,
+    ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ): () => void {
     this.addedServerQueries.push({ast, ttl});

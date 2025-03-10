@@ -10,12 +10,13 @@ import type {
   GotCallback,
   QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
+import type {TTL} from '../../../zql/src/query/ttl.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 
 export type AddQuery = (
   ast: AST,
-  ttl: number | undefined,
+  ttl: TTL,
   gotCallback: GotCallback | undefined,
 ) => () => void;
 
@@ -50,11 +51,7 @@ export class ZeroContext implements QueryDelegate {
     return this.#mainSources.getSource(name);
   }
 
-  addServerQuery(
-    ast: AST,
-    ttl?: number | undefined,
-    gotCallback?: GotCallback | undefined,
-  ) {
+  addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback | undefined) {
     return this.#addQuery(ast, ttl, gotCallback);
   }
 
