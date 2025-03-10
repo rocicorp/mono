@@ -2,6 +2,7 @@ import type {LogConfig} from '../../../../otel/src/log-options.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {MemoryStorage} from '../../ivm/memory-storage.ts';
+import type {Input} from '../../ivm/operator.ts';
 import type {Source} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
 import type {
@@ -73,6 +74,9 @@ export class QueryDelegateImpl implements QueryDelegate {
   }
   createStorage() {
     return new MemoryStorage();
+  }
+  decorateInput(input: Input, _description: string): Input {
+    return input;
   }
 }
 

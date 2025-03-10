@@ -87,7 +87,10 @@ export const pushBodySchema = v.object({
   clientGroupID: v.string(),
   mutations: v.array(mutationSchema),
   pushVersion: v.number(),
-  schemaVersion: v.number(),
+  // For legacy (CRUD) mutations, the schema is tied to the client group /
+  // sync connection. For custom mutations, schema versioning is delegated
+  // to the custom protocol / api-server.
+  schemaVersion: v.number().optional(),
   timestamp: v.number(),
   requestID: v.string(),
 });

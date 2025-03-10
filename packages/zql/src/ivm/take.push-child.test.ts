@@ -1,13 +1,11 @@
 import {expect, test} from 'vitest';
-import type {Input, Storage} from './operator.ts';
-import {Take} from './take.ts';
 import {
-  runJoinTest,
-  type Joins,
+  runPushTest,
   type SourceContents,
   type Sources,
-} from './test/join-push-tests.ts';
+} from './test/push-tests.ts';
 import type {Format} from './view.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
 
 const sources: Sources = {
   issue: {
@@ -16,7 +14,6 @@ const sources: Sources = {
       text: {type: 'string'},
     },
     primaryKeys: ['id'],
-    sorts: [['id', 'asc']],
   },
   comment: {
     columns: {
@@ -25,7 +22,6 @@ const sources: Sources = {
       text: {type: 'string'},
     },
     primaryKeys: ['id'],
-    sorts: [['id', 'asc']],
   },
 };
 
@@ -54,15 +50,22 @@ const sourceContents: SourceContents = {
   ],
 };
 
-const joins: Joins = {
-  comments: {
-    parentKey: ['id'],
-    parentSource: 'issue',
-    childKey: ['issueID'],
-    childSource: 'comment',
-    relationshipName: 'comments',
-  },
-};
+const ast: AST = {
+  table: 'issue',
+  orderBy: [['id', 'asc']],
+  related: [
+    {
+      system: 'client',
+      correlation: {parentField: ['id'], childField: ['issueID']},
+      subquery: {
+        table: 'comment',
+        alias: 'comments',
+        orderBy: [['id', 'asc']],
+      },
+    },
+  ],
+  limit: 2,
+} as const;
 
 const format: Format = {
   singular: false,
@@ -75,10 +78,10 @@ const format: Format = {
 };
 
 test('child change, parent is within bound', () => {
-  const {log, data, actualStorage, pushes} = runJoinTest({
+  const {log, data, actualStorage, pushes} = runPushTest({
     sources,
     sourceContents,
-    joins,
+    ast,
     pushes: [
       [
         'comment',
@@ -89,10 +92,6 @@ test('child change, parent is within bound', () => {
       ],
     ],
     format,
-    addPostJoinsOperator: (i: Input, storage: Storage) => ({
-      name: 'take',
-      op: new Take(i, storage, 2),
-    }),
   });
 
   expect(data).toMatchInlineSnapshot(`
@@ -127,29 +126,19 @@ test('child change, parent is within bound', () => {
     ]
   `);
 
-  expect(log.filter(msg => msg[0] === 'take')).toMatchInlineSnapshot(`
-        [
-          [
-            "take",
-            "push",
-            {
-              "child": {
-                "row": {
-                  "id": "c3",
-                  "issueID": "i2",
-                  "text": "i2 c3 text",
-                },
-                "type": "add",
-              },
-              "row": {
-                "id": "i2",
-                "text": "second issue",
-              },
-              "type": "child",
-            },
-          ],
-        ]
-    `);
+  expect(log.filter(msg => msg[0] === ':take')).toMatchInlineSnapshot(`
+    [
+      [
+        ":take",
+        "fetch",
+        {
+          "constraint": {
+            "id": "i2",
+          },
+        },
+      ],
+    ]
+  `);
 
   expect(pushes).toMatchInlineSnapshot(`
     [
@@ -177,7 +166,7 @@ test('child change, parent is within bound', () => {
     ]
   `);
 
-  expect(actualStorage['take']).toMatchInlineSnapshot(`
+  expect(actualStorage[':take']).toMatchInlineSnapshot(`
         {
           "["take"]": {
             "bound": {
@@ -195,10 +184,10 @@ test('child change, parent is within bound', () => {
 });
 
 test('child change, parent is after bound', () => {
-  const {log, data, actualStorage, pushes} = runJoinTest({
+  const {log, data, actualStorage, pushes} = runPushTest({
     sources,
     sourceContents,
-    joins,
+    ast,
     pushes: [
       [
         'comment',
@@ -209,10 +198,6 @@ test('child change, parent is after bound', () => {
       ],
     ],
     format,
-    addPostJoinsOperator: (i: Input, storage: Storage) => ({
-      name: 'take',
-      op: new Take(i, storage, 2),
-    }),
   });
 
   expect(data).toMatchInlineSnapshot(`
@@ -241,11 +226,23 @@ test('child change, parent is after bound', () => {
     ]
   `);
 
-  expect(log.filter(msg => msg[0] === 'take')).toHaveLength(0);
+  expect(log.filter(msg => msg[0] === ':take')).toMatchInlineSnapshot(`
+    [
+      [
+        ":take",
+        "fetch",
+        {
+          "constraint": {
+            "id": "i3",
+          },
+        },
+      ],
+    ]
+  `);
 
   expect(pushes).toHaveLength(0);
 
-  expect(actualStorage['take']).toMatchInlineSnapshot(`
+  expect(actualStorage[':take']).toMatchInlineSnapshot(`
         {
           "["take"]": {
             "bound": {

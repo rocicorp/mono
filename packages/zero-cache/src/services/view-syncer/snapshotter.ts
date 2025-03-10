@@ -6,7 +6,7 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.ts';
 import type {LiteAndZqlSpec, LiteTableSpecWithKeys} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {type JSONValue} from '../../types/bigint-json.ts';
+import {stringify, type JSONValue} from '../../types/bigint-json.ts';
 import {
   normalizedKeyOrder,
   type RowKey,
@@ -392,7 +392,11 @@ class Diff implements SnapshotDiff {
             let prevValue = this.prev.getRow(tableSpec, rowKey) ?? null;
             let nextValue =
               op === SET_OP ? this.curr.getRow(tableSpec, rowKey) : null;
-
+            if (nextValue === undefined) {
+              throw new Error(
+                `Missing value for ${table} ${stringify(rowKey)}`,
+              );
+            }
             // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
             this.checkThatDiffIsValid(stateVersion, op, prevValue, nextValue);
 

@@ -171,7 +171,7 @@ const testWithMoreRelationshipsRelationships = relationships(
   }),
 );
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [
     testSchema,
     testSchemaWithNulls,
@@ -657,7 +657,7 @@ describe('schema structure', () => {
       }),
     }));
 
-    const schema = createSchema(1, {
+    const schema = createSchema({
       tables: [comment, issue],
       relationships: [issueRelationships],
     });
@@ -703,7 +703,7 @@ describe('schema structure', () => {
       }),
     }));
 
-    const schema = createSchema(1, {
+    const schema = createSchema({
       tables: [issue, comment],
       relationships: [issueRelationships, commentRelationships],
     });

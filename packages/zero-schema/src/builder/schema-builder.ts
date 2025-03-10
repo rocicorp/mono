@@ -1,4 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import {h64} from '../../../shared/src/hash.ts';
+import {mapEntries} from '../../../shared/src/objects.ts';
+import {
+  normalizeClientSchema,
+  type ClientSchema,
+} from '../../../zero-protocol/src/client-schema.ts';
 import type {
   Relationship,
   RelationshipsSchema,
@@ -8,7 +14,6 @@ import type {Relationships} from './relationship-builder.ts';
 import {type TableBuilderWithColumns} from './table-builder.ts';
 
 export type Schema = {
-  readonly version: number;
   readonly tables: {readonly [table: string]: TableSchema};
   readonly relationships: {readonly [table: string]: RelationshipsSchema};
 };
@@ -18,29 +23,16 @@ export type Schema = {
  * You can assign them to any value you like. E.g.,
  *
  * ```ts
- * createSchema(1, {rsdfgafg: table('users')...}, {sdfd: relationships(users, ...)})
+ * createSchema({rsdfgafg: table('users')...}, {sdfd: relationships(users, ...)})
  * ```
- *
- * @param version The version of the schema. Only needs to be incremented
- * when the backend Postgres schema moves forward in a way that is not
- * compatible with the frontend. As in, if:
- * 1. Columns are removed
- * 2. Optional columns are made required
- *
- * Adding columns, adding tables, adding relationships, making
- * required columns optional are all backwards compatible changes and
- * do not require bumping the schema version.
  */
 export function createSchema<
   const TTables extends readonly TableBuilderWithColumns<TableSchema>[],
   const TRelationships extends readonly Relationships[],
->(
-  version: number,
-  options: {
-    readonly tables: TTables;
-    readonly relationships?: TRelationships | undefined;
-  },
-): {
+>(options: {
+  readonly tables: TTables;
+  readonly relationships?: TRelationships | undefined;
+}): {
   version: number;
   tables: {
     readonly [K in TTables[number]['schema']['name']]: Extract<
@@ -87,7 +79,6 @@ export function createSchema<
   });
 
   return {
-    version,
     tables: retTables,
     relationships: retRelationships,
   } as any;
@@ -115,4 +106,24 @@ function checkRelationship(
       source = tables[connection.destSchema];
     });
   });
+}
+
+export function clientSchemaFrom(schema: Schema): {
+  clientSchema: ClientSchema;
+  hash: string;
+} {
+  const client = {
+    tables: mapEntries(schema.tables, (name, {serverName, columns}) => [
+      serverName ?? name,
+      {
+        columns: mapEntries(columns, (name, {serverName, type}) => [
+          serverName ?? name,
+          {type},
+        ]),
+      },
+    ]),
+  };
+  const clientSchema = normalizeClientSchema(client);
+  const hash = h64(JSON.stringify(clientSchema)).toString(36);
+  return {clientSchema, hash};
 }

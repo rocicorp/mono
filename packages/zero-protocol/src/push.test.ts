@@ -8,7 +8,7 @@ import {
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import {mapCRUD} from './push.ts';
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [
     table('issue')
       .from('issues')

@@ -1,14 +1,11 @@
 import {expect, suite, test} from 'vitest';
-import {Exists} from './exists.ts';
-import type {Input, Storage} from './operator.ts';
-import {Take} from './take.ts';
 import {
-  runJoinTest,
-  type Joins,
+  runPushTest,
   type SourceContents,
   type Sources,
-} from './test/join-push-tests.ts';
+} from './test/push-tests.ts';
 import type {Format} from './view.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
 
 const sources: Sources = {
   issue: {
@@ -17,7 +14,6 @@ const sources: Sources = {
       text: {type: 'string'},
     },
     primaryKeys: ['id'],
-    sorts: [['id', 'asc']],
   },
   comment: {
     columns: {
@@ -26,7 +22,6 @@ const sources: Sources = {
       text: {type: 'string'},
     },
     primaryKeys: ['id'],
-    sorts: [['id', 'asc']],
   },
 };
 
@@ -56,16 +51,6 @@ const sourceContents: SourceContents = {
   ],
 };
 
-const joins: Joins = {
-  comments: {
-    parentKey: ['id'],
-    parentSource: 'issue',
-    childKey: ['issueID'],
-    childSource: 'comment',
-    relationshipName: 'comments',
-  },
-};
-
 const format: Format = {
   singular: false,
   relationships: {
@@ -75,7 +60,6 @@ const format: Format = {
     },
   },
 };
-
 suite('EXISTS 1 to many', () => {
   const sources: Sources = {
     comment: {
@@ -84,7 +68,6 @@ suite('EXISTS 1 to many', () => {
         issueID: {type: 'string'},
       },
       primaryKeys: ['id'],
-      sorts: [['id', 'asc']],
     },
     issue: {
       columns: {
@@ -92,7 +75,6 @@ suite('EXISTS 1 to many', () => {
         title: {type: 'string'},
       },
       primaryKeys: ['id'],
-      sorts: [['id', 'asc']],
     },
   };
 
@@ -121,15 +103,24 @@ suite('EXISTS 1 to many', () => {
     ],
   };
 
-  const joins: Joins = {
-    children: {
-      parentKey: ['issueID'],
-      parentSource: 'comment',
-      childKey: ['id'],
-      childSource: 'issue',
-      relationshipName: 'issue',
+  const ast: AST = {
+    table: 'comment',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      related: {
+        system: 'client',
+        correlation: {parentField: ['issueID'], childField: ['id']},
+        subquery: {
+          table: 'issue',
+          alias: 'issue',
+          orderBy: [['id', 'asc']],
+        },
+      },
+      op: 'EXISTS',
     },
-  };
+    limit: 2,
+  } as const;
 
   const format: Format = {
     singular: false,
@@ -150,10 +141,10 @@ suite('EXISTS 1 to many', () => {
      * 4. `exists` receives the child remove for `c3` and used to throw because the size is 0,
      * but this assert is currently disabled as a work around and the remove is just dropped
      */
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       format,
       pushes: [
         [
@@ -163,16 +154,6 @@ suite('EXISTS 1 to many', () => {
             row: {id: 'i1', title: 'issue 1'},
           },
         ],
-      ],
-      addPostJoinsOperator: [
-        (i: Input, storage: Storage) => ({
-          name: 'exists',
-          op: new Exists(i, storage, 'issue', ['issueID'], 'EXISTS'),
-        }),
-        (i: Input, storage: Storage) => ({
-          name: 'take',
-          op: new Take(i, storage, 2),
-        }),
       ],
     });
 
@@ -191,10 +172,95 @@ suite('EXISTS 1 to many', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
+    expect(log.filter(msg => msg[0] === ':exists(issue)'))
+      .toMatchInlineSnapshot(`
+        [
+          [
+            ":exists(issue)",
+            "push",
+            {
+              "row": {
+                "id": "c1",
+                "issueID": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":exists(issue)",
+            "fetch",
+            {
+              "constraint": undefined,
+              "reverse": true,
+              "start": {
+                "basis": "after",
+                "row": {
+                  "id": "c2",
+                  "issueID": "i1",
+                },
+              },
+            },
+          ],
+          [
+            ":exists(issue)",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
+                "row": {
+                  "id": "c2",
+                  "issueID": "i1",
+                },
+              },
+            },
+          ],
+          [
+            ":exists(issue)",
+            "push",
+            {
+              "row": {
+                "id": "c2",
+                "issueID": "i1",
+              },
+              "type": "remove",
+            },
+          ],
+          [
+            ":exists(issue)",
+            "fetch",
+            {
+              "constraint": undefined,
+              "reverse": true,
+              "start": {
+                "basis": "after",
+                "row": {
+                  "id": "c4",
+                  "issueID": "i2",
+                },
+              },
+            },
+          ],
+          [
+            ":exists(issue)",
+            "fetch",
+            {
+              "constraint": undefined,
+              "start": {
+                "basis": "at",
+                "row": {
+                  "id": "c4",
+                  "issueID": "i2",
+                },
+              },
+            },
+          ],
+        ]
+      `);
+    expect(log.filter(msg => msg[0] === ':take')).toMatchInlineSnapshot(`
       [
         [
-          "exists",
+          ":take",
           "push",
           {
             "row": {
@@ -205,91 +271,7 @@ suite('EXISTS 1 to many', () => {
           },
         ],
         [
-          "exists",
-          "fetch",
-          {
-            "constraint": undefined,
-            "reverse": true,
-            "start": {
-              "basis": "after",
-              "row": {
-                "id": "c2",
-                "issueID": "i1",
-              },
-            },
-          },
-        ],
-        [
-          "exists",
-          "fetch",
-          {
-            "constraint": undefined,
-            "start": {
-              "basis": "at",
-              "row": {
-                "id": "c2",
-                "issueID": "i1",
-              },
-            },
-          },
-        ],
-        [
-          "exists",
-          "push",
-          {
-            "row": {
-              "id": "c2",
-              "issueID": "i1",
-            },
-            "type": "remove",
-          },
-        ],
-        [
-          "exists",
-          "fetch",
-          {
-            "constraint": undefined,
-            "reverse": true,
-            "start": {
-              "basis": "after",
-              "row": {
-                "id": "c4",
-                "issueID": "i2",
-              },
-            },
-          },
-        ],
-        [
-          "exists",
-          "fetch",
-          {
-            "constraint": undefined,
-            "start": {
-              "basis": "at",
-              "row": {
-                "id": "c4",
-                "issueID": "i2",
-              },
-            },
-          },
-        ],
-      ]
-    `);
-    expect(log.filter(msg => msg[0] === 'take')).toMatchInlineSnapshot(`
-      [
-        [
-          "take",
-          "push",
-          {
-            "row": {
-              "id": "c1",
-              "issueID": "i1",
-            },
-            "type": "remove",
-          },
-        ],
-        [
-          "take",
+          ":take",
           "push",
           {
             "row": {
@@ -300,7 +282,7 @@ suite('EXISTS 1 to many', () => {
           },
         ],
         [
-          "take",
+          ":take",
           "push",
           {
             "row": {
@@ -378,7 +360,7 @@ suite('EXISTS 1 to many', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(issue)']).toMatchInlineSnapshot(`
       {
         "row/["i1"]/["c1"]": 0,
         "row/["i1"]/["c2"]": 0,
@@ -387,7 +369,7 @@ suite('EXISTS 1 to many', () => {
       }
     `);
 
-    expect(actualStorage['take']).toMatchInlineSnapshot(`
+    expect(actualStorage[':take']).toMatchInlineSnapshot(`
       {
         "["take"]": {
           "bound": {
@@ -406,12 +388,28 @@ suite('EXISTS 1 to many', () => {
 });
 
 suite('EXISTS', () => {
-  const existsType = 'EXISTS';
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      related: {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['issueID']},
+        subquery: {
+          table: 'comment',
+          alias: 'comments',
+          orderBy: [['id', 'asc']],
+        },
+      },
+      op: 'EXISTS',
+    },
+  } as const;
   test('parent add that has no children is not pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'issue',
@@ -422,10 +420,6 @@ suite('EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -460,11 +454,13 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`[]`);
+    expect(
+      log.filter(msg => msg[0] === ':exists(comments)'),
+    ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 0,
@@ -476,10 +472,10 @@ suite('EXISTS', () => {
   });
 
   test('parent add that has children is pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -497,10 +493,6 @@ suite('EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -546,21 +538,22 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "row": {
-              "id": "i5",
-              "text": "fifth issue",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "row": {
+                "id": "i5",
+                "text": "fifth issue",
+              },
+              "type": "add",
             },
-            "type": "add",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -588,7 +581,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 0,
@@ -600,10 +593,10 @@ suite('EXISTS', () => {
   });
 
   test('parent remove that has no children is not pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'issue',
@@ -614,10 +607,6 @@ suite('EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -652,12 +641,13 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`[]`);
+    expect(
+      log.filter(msg => msg[0] === ':exists(comments)'),
+    ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    // i2 size is removed
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i3"]": 2,
@@ -667,10 +657,10 @@ suite('EXISTS', () => {
   });
 
   test('parent remove that has children is pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'issue',
@@ -681,10 +671,6 @@ suite('EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -708,21 +694,22 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "row": {
-              "id": "i1",
-              "text": "first issue",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "row": {
+                "id": "i1",
+                "text": "first issue",
+              },
+              "type": "remove",
             },
-            "type": "remove",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -751,7 +738,7 @@ suite('EXISTS', () => {
     `);
 
     // i1 size is removed
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i2"]": 0,
         "row//["i3"]": 2,
@@ -761,10 +748,10 @@ suite('EXISTS', () => {
   });
 
   test('parent edit that has no children is not pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'issue',
@@ -776,10 +763,6 @@ suite('EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -814,11 +797,13 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`[]`);
+    expect(
+      log.filter(msg => msg[0] === ':exists(comments)'),
+    ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 0,
@@ -829,10 +814,10 @@ suite('EXISTS', () => {
   });
 
   test('parent edit that has children is pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'issue',
@@ -844,10 +829,6 @@ suite('EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -882,25 +863,26 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "oldRow": {
-              "id": "i1",
-              "text": "first issue",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "oldRow": {
+                "id": "i1",
+                "text": "first issue",
+              },
+              "row": {
+                "id": "i1",
+                "text": "first issue v2",
+              },
+              "type": "edit",
             },
-            "row": {
-              "id": "i1",
-              "text": "first issue v2",
-            },
-            "type": "edit",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -918,7 +900,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 0,
@@ -929,10 +911,10 @@ suite('EXISTS', () => {
   });
 
   test('child add resulting in one child causes push of parent add', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -943,10 +925,6 @@ suite('EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -992,21 +970,22 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "row": {
-              "id": "i2",
-              "text": "second issue",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "row": {
+                "id": "i2",
+                "text": "second issue",
+              },
+              "type": "add",
             },
-            "type": "add",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -1034,7 +1013,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 1,
@@ -1045,10 +1024,10 @@ suite('EXISTS', () => {
   });
 
   test('child add resulting in > 1 child is pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -1059,10 +1038,6 @@ suite('EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -1102,29 +1077,30 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "child": {
-              "row": {
-                "id": "c4",
-                "issueID": "i1",
-                "text": "i1 c4 text",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "child": {
+                "row": {
+                  "id": "c4",
+                  "issueID": "i1",
+                  "text": "i1 c4 text",
+                },
+                "type": "add",
               },
-              "type": "add",
+              "row": {
+                "id": "i1",
+                "text": "first issue",
+              },
+              "type": "child",
             },
-            "row": {
-              "id": "i1",
-              "text": "first issue",
-            },
-            "type": "child",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -1152,7 +1128,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 2,
         "row//["i2"]": 0,
@@ -1163,10 +1139,10 @@ suite('EXISTS', () => {
   });
 
   test('child remove resulting in no children causes push of parent remove', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -1177,10 +1153,6 @@ suite('EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -1204,21 +1176,22 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "row": {
-              "id": "i1",
-              "text": "first issue",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "row": {
+                "id": "i1",
+                "text": "first issue",
+              },
+              "type": "remove",
             },
-            "type": "remove",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -1246,7 +1219,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 0,
         "row//["i2"]": 0,
@@ -1257,10 +1230,10 @@ suite('EXISTS', () => {
   });
 
   test('child remove resulting in > 0 children is pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -1271,10 +1244,6 @@ suite('EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -1304,29 +1273,30 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "child": {
-              "row": {
-                "id": "c3",
-                "issueID": "i3",
-                "text": "i3 c3 text",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "child": {
+                "row": {
+                  "id": "c3",
+                  "issueID": "i3",
+                  "text": "i3 c3 text",
+                },
+                "type": "remove",
               },
-              "type": "remove",
+              "row": {
+                "id": "i3",
+                "text": "third issue",
+              },
+              "type": "child",
             },
-            "row": {
-              "id": "i3",
-              "text": "third issue",
-            },
-            "type": "child",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -1354,7 +1324,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 0,
@@ -1365,10 +1335,10 @@ suite('EXISTS', () => {
   });
 
   test('child edit is pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -1380,10 +1350,6 @@ suite('EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -1418,34 +1384,35 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "child": {
-              "oldRow": {
-                "id": "c3",
-                "issueID": "i3",
-                "text": "i3 c3 text",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "child": {
+                "oldRow": {
+                  "id": "c3",
+                  "issueID": "i3",
+                  "text": "i3 c3 text",
+                },
+                "row": {
+                  "id": "c3",
+                  "issueID": "i3",
+                  "text": "i3 c3 text v2",
+                },
+                "type": "edit",
               },
               "row": {
-                "id": "c3",
-                "issueID": "i3",
-                "text": "i3 c3 text v2",
+                "id": "i3",
+                "text": "third issue",
               },
-              "type": "edit",
+              "type": "child",
             },
-            "row": {
-              "id": "i3",
-              "text": "third issue",
-            },
-            "type": "child",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -1475,7 +1442,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 0,
@@ -1486,10 +1453,10 @@ suite('EXISTS', () => {
   });
 
   test('child edit changes correlation', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -1501,10 +1468,6 @@ suite('EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -1539,32 +1502,33 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "row": {
-              "id": "i1",
-              "text": "first issue",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "row": {
+                "id": "i1",
+                "text": "first issue",
+              },
+              "type": "remove",
             },
-            "type": "remove",
-          },
-        ],
-        [
-          "exists",
-          "push",
-          {
-            "row": {
-              "id": "i2",
-              "text": "second issue",
+          ],
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "row": {
+                "id": "i2",
+                "text": "second issue",
+              },
+              "type": "add",
             },
-            "type": "add",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -1613,7 +1577,7 @@ suite('EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 0,
         "row//["i2"]": 1,
@@ -1630,12 +1594,28 @@ suite('EXISTS', () => {
 });
 
 suite('NOT EXISTS', () => {
-  const existsType = 'NOT EXISTS';
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      related: {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['issueID']},
+        subquery: {
+          table: 'comment',
+          alias: 'comments',
+          orderBy: [['id', 'asc']],
+        },
+      },
+      op: 'NOT EXISTS',
+    },
+  } as const;
   test('parent add that has no children is pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'issue',
@@ -1646,10 +1626,6 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -1672,21 +1648,22 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "row": {
-              "id": "i5",
-              "text": "fifth issue",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "row": {
+                "id": "i5",
+                "text": "fifth issue",
+              },
+              "type": "add",
             },
-            "type": "add",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -1705,7 +1682,7 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 0,
@@ -1717,10 +1694,10 @@ suite('NOT EXISTS', () => {
   });
 
   test('parent add that has children is not pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -1738,10 +1715,6 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -1759,11 +1732,13 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`[]`);
+    expect(
+      log.filter(msg => msg[0] === ':exists(comments)'),
+    ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 0,
@@ -1775,10 +1750,10 @@ suite('NOT EXISTS', () => {
   });
 
   test('parent remove that has no children is pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'issue',
@@ -1789,10 +1764,6 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -1805,21 +1776,22 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "row": {
-              "id": "i2",
-              "text": "first issue",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "row": {
+                "id": "i2",
+                "text": "first issue",
+              },
+              "type": "remove",
             },
-            "type": "remove",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -1839,7 +1811,7 @@ suite('NOT EXISTS', () => {
     `);
 
     // i2 size is removed
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i3"]": 2,
@@ -1849,10 +1821,10 @@ suite('NOT EXISTS', () => {
   });
 
   test('parent remove that has children is not pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'issue',
@@ -1863,10 +1835,6 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -1884,12 +1852,14 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`[]`);
+    expect(
+      log.filter(msg => msg[0] === ':exists(comments)'),
+    ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
     // i1 size is removed
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i2"]": 0,
         "row//["i3"]": 2,
@@ -1899,10 +1869,10 @@ suite('NOT EXISTS', () => {
   });
 
   test('parent edit that has no children is pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'issue',
@@ -1914,10 +1884,6 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -1935,25 +1901,26 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "oldRow": {
-              "id": "i2",
-              "text": "second issue",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "oldRow": {
+                "id": "i2",
+                "text": "second issue",
+              },
+              "row": {
+                "id": "i2",
+                "text": "second issue v2",
+              },
+              "type": "edit",
             },
-            "row": {
-              "id": "i2",
-              "text": "second issue v2",
-            },
-            "type": "edit",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -1971,7 +1938,7 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 0,
@@ -1982,10 +1949,10 @@ suite('NOT EXISTS', () => {
   });
 
   test('parent edit that has children is not pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'issue',
@@ -1997,10 +1964,6 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2018,11 +1981,13 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`[]`);
+    expect(
+      log.filter(msg => msg[0] === ':exists(comments)'),
+    ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 0,
@@ -2033,10 +1998,10 @@ suite('NOT EXISTS', () => {
   });
 
   test('child add resulting in one child causes push of parent remove', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -2047,10 +2012,6 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2063,21 +2024,22 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "row": {
-              "id": "i2",
-              "text": "second issue",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "row": {
+                "id": "i2",
+                "text": "second issue",
+              },
+              "type": "remove",
             },
-            "type": "remove",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -2096,7 +2058,7 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 1,
@@ -2107,10 +2069,10 @@ suite('NOT EXISTS', () => {
   });
 
   test('child add resulting in > 1 child is not pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -2121,10 +2083,6 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2142,11 +2100,13 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`[]`);
+    expect(
+      log.filter(msg => msg[0] === ':exists(comments)'),
+    ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 2,
         "row//["i2"]": 0,
@@ -2157,10 +2117,10 @@ suite('NOT EXISTS', () => {
   });
 
   test('child remove resulting in no children causes push of parent add', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -2171,10 +2131,6 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2197,21 +2153,22 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "row": {
-              "id": "i1",
-              "text": "first issue",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "row": {
+                "id": "i1",
+                "text": "first issue",
+              },
+              "type": "add",
             },
-            "type": "add",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -2230,7 +2187,7 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 0,
         "row//["i2"]": 0,
@@ -2241,10 +2198,10 @@ suite('NOT EXISTS', () => {
   });
 
   test('child remove resulting in > 0 children is not pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -2255,10 +2212,6 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2276,11 +2229,13 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`[]`);
+    expect(
+      log.filter(msg => msg[0] === ':exists(comments)'),
+    ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 0,
@@ -2291,10 +2246,10 @@ suite('NOT EXISTS', () => {
   });
 
   test('child edit is not pushed', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -2306,10 +2261,6 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2327,11 +2278,13 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`[]`);
+    expect(
+      log.filter(msg => msg[0] === ':exists(comments)'),
+    ).toMatchInlineSnapshot(`[]`);
 
     expect(pushes).toMatchInlineSnapshot(`[]`);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 1,
         "row//["i2"]": 0,
@@ -2342,10 +2295,10 @@ suite('NOT EXISTS', () => {
   });
 
   test('child edit changes correlation', () => {
-    const {log, data, actualStorage, pushes} = runJoinTest({
+    const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents,
-      joins,
+      ast,
       pushes: [
         [
           'comment',
@@ -2357,10 +2310,6 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
-      addPostJoinsOperator: (i: Input, storage: Storage) => ({
-        name: 'exists',
-        op: new Exists(i, storage, 'comments', ['id'], existsType),
-      }),
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2378,32 +2327,33 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(log.filter(msg => msg[0] === 'exists')).toMatchInlineSnapshot(`
-      [
+    expect(log.filter(msg => msg[0] === ':exists(comments)'))
+      .toMatchInlineSnapshot(`
         [
-          "exists",
-          "push",
-          {
-            "row": {
-              "id": "i1",
-              "text": "first issue",
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "row": {
+                "id": "i1",
+                "text": "first issue",
+              },
+              "type": "add",
             },
-            "type": "add",
-          },
-        ],
-        [
-          "exists",
-          "push",
-          {
-            "row": {
-              "id": "i2",
-              "text": "second issue",
+          ],
+          [
+            ":exists(comments)",
+            "push",
+            {
+              "row": {
+                "id": "i2",
+                "text": "second issue",
+              },
+              "type": "remove",
             },
-            "type": "remove",
-          },
-        ],
-      ]
-    `);
+          ],
+        ]
+      `);
 
     expect(pushes).toMatchInlineSnapshot(`
       [
@@ -2434,7 +2384,7 @@ suite('NOT EXISTS', () => {
       ]
     `);
 
-    expect(actualStorage['exists']).toMatchInlineSnapshot(`
+    expect(actualStorage[':exists(comments)']).toMatchInlineSnapshot(`
       {
         "row//["i1"]": 0,
         "row//["i2"]": 1,

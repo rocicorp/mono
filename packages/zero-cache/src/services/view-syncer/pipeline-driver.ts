@@ -2,6 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {buildPipeline} from '../../../../zql/src/builder/builder.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
@@ -20,11 +21,12 @@ import {
 } from '../../auth/load-permissions.ts';
 import type {LogConfig} from '../../config/zero-config.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
-import type {LiteAndZqlSpec} from '../../db/specs.ts';
+import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import type {RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
-import type {AppID} from '../../types/shards.ts';
+import type {ShardID} from '../../types/shards.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
+import {checkClientSchema} from './client-schema.ts';
 import type {ClientGroupStorage} from './database-storage.ts';
 import {Snapshotter, type SnapshotDiff} from './snapshotter.ts';
 
@@ -69,10 +71,10 @@ export class PipelineDriver {
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
   readonly #storage: ClientGroupStorage;
-  readonly #appID: string;
+  readonly #shardID: ShardID;
   readonly #clientGroupID: string;
   readonly #logConfig: LogConfig;
-  #tableSpecs: Map<string, LiteAndZqlSpec> | null = null;
+  readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   #streamer: Streamer | null = null;
   #replicaVersion: string | null = null;
   #permissions: LoadedPermissions | null = null;
@@ -81,14 +83,14 @@ export class PipelineDriver {
     lc: LogContext,
     logConfig: LogConfig,
     snapshotter: Snapshotter,
-    {appID}: AppID,
+    shardID: ShardID,
     storage: ClientGroupStorage,
     clientGroupID: string,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
     this.#storage = storage;
-    this.#appID = appID;
+    this.#shardID = shardID;
     this.#clientGroupID = clientGroupID;
     this.#logConfig = logConfig;
   }
@@ -99,11 +101,21 @@ export class PipelineDriver {
    *
    * Must only be called once.
    */
-  init() {
+  init(clientSchema: ClientSchema | null) {
     assert(!this.#snapshotter.initialized(), 'Already initialized');
 
     const {db} = this.#snapshotter.init().current();
-    this.#tableSpecs = computeZqlSpecs(this.#lc, db.db);
+    const fullTables = new Map<string, LiteTableSpec>();
+    computeZqlSpecs(this.#lc, db.db, this.#tableSpecs, fullTables);
+    if (clientSchema) {
+      checkClientSchema(
+        this.#shardID,
+        clientSchema,
+        this.#tableSpecs,
+        fullTables,
+      );
+    }
+
     const {replicaVersion} = getSubscriptionState(db);
     this.#replicaVersion = replicaVersion;
   }
@@ -148,7 +160,7 @@ export class PipelineDriver {
     const res = reloadPermissionsIfChanged(
       this.#lc,
       this.#snapshotter.current().db,
-      this.#appID,
+      this.#shardID.appID,
       this.#permissions,
     );
     if (res.changed) {
@@ -174,18 +186,24 @@ export class PipelineDriver {
    * to its initial state. This should be called in response to a schema change,
    * as TableSources need to be recomputed.
    */
-  reset() {
-    const tableSpecs = this.#tableSpecs;
-    assert(tableSpecs);
+  reset(clientSchema: ClientSchema | null) {
     for (const {input} of this.#pipelines.values()) {
       input.destroy();
     }
     this.#pipelines.clear();
     this.#tables.clear();
-    tableSpecs.clear();
 
     const {db} = this.#snapshotter.current();
-    computeZqlSpecs(this.#lc, db.db, tableSpecs);
+    const fullTables = new Map<string, LiteTableSpec>();
+    computeZqlSpecs(this.#lc, db.db, this.#tableSpecs, fullTables);
+    if (clientSchema) {
+      checkClientSchema(
+        this.#shardID,
+        clientSchema,
+        this.#tableSpecs,
+        fullTables,
+      );
+    }
     const {replicaVersion} = getSubscriptionState(db);
     this.#replicaVersion = replicaVersion;
   }
@@ -233,6 +251,7 @@ export class PipelineDriver {
     const input = buildPipeline(query, {
       getSource: name => this.#getSource(name),
       createStorage: () => this.#createStorage(),
+      decorateInput: input => input,
     });
     const schema = input.getSchema();
     input.setOutput({
@@ -250,7 +269,7 @@ export class PipelineDriver {
     }
 
     const res = input.fetch({});
-    const streamer = new Streamer(must(this.#tableSpecs)).accumulate(
+    const streamer = new Streamer(this.#tableSpecs).accumulate(
       hash,
       schema,
       toAdds(res),
@@ -320,7 +339,7 @@ export class PipelineDriver {
     numChanges: number;
     changes: Iterable<RowChange>;
   } {
-    assert(this.initialized() && this.#tableSpecs);
+    assert(this.initialized());
     const diff = this.#snapshotter.advance(this.#tableSpecs);
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(`${prev.version} => ${curr.version}: ${changes} changes`);
@@ -359,7 +378,6 @@ export class PipelineDriver {
 
   /** Implements `BuilderDelegate.getSource()` */
   #getSource(tableName: string): Source {
-    assert(this.#tableSpecs, 'Pipelines have not be initialized');
     let source = this.#tables.get(tableName);
     if (source) {
       return source;
@@ -413,7 +431,7 @@ export class PipelineDriver {
 
   #startAccumulating() {
     assert(this.#streamer === null);
-    this.#streamer = new Streamer(must(this.#tableSpecs));
+    this.#streamer = new Streamer(this.#tableSpecs);
   }
 
   #stopAccumulating(): Streamer {

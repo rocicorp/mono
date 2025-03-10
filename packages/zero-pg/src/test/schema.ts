@@ -6,7 +6,7 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 
-export const schema = createSchema(1, {
+export const schema = createSchema({
   tables: [
     table('basic')
       .columns({

@@ -11,6 +11,7 @@ import type {LogConfig} from '../../../otel/src/log-options.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-impl.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
 
 export const createSource: SourceFactory = (
   lc: LogContext,
@@ -83,6 +84,9 @@ export function newQueryDelegate(
 
     createStorage() {
       return new MemoryStorage();
+    },
+    decorateInput(input: Input): Input {
+      return input;
     },
     addServerQuery() {
       return () => {};

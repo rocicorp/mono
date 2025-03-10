@@ -42,7 +42,6 @@ const APP_ID = 'fooz';
 const SHARD_NUM = 0;
 const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 const CG_ID = 'abc';
-const TEST_SCHEMA_VERSION = 1;
 
 const sqlSchema = /* sql */ `
 CREATE TABLE "${APP_ID}.permissions" (
@@ -140,7 +139,7 @@ function createReplicaTables(db: Database) {
   db.exec(sqlSchema);
 }
 
-const schema = createSchema(TEST_SCHEMA_VERSION, {
+const schema = createSchema({
   tables: [
     table('user')
       .columns({
@@ -395,7 +394,7 @@ function procMutation(
       timestamp: Date.now(),
     },
     authorizer,
-    TEST_SCHEMA_VERSION,
+    undefined,
   );
 }
 

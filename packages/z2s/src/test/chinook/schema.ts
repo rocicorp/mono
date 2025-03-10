@@ -216,7 +216,7 @@ const playlistRelationships = relationships(playlist, ({many}) => ({
   ),
 }));
 
-export const schema = createSchema(1, {
+export const schema = createSchema({
   tables: [
     album,
     artist,

@@ -34,6 +34,7 @@ import {
 } from '../../../zql/src/builder/builder.ts';
 import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {
@@ -282,7 +283,7 @@ type AuthData = {
   };
 };
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [
     user,
     issue,
@@ -523,6 +524,9 @@ beforeEach(() => {
 
     createStorage() {
       return new MemoryStorage();
+    },
+    decorateInput(input: Input): Input {
+      return input;
     },
     addServerQuery() {
       return () => {};

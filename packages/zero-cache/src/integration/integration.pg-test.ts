@@ -63,7 +63,7 @@ const nopk = table('nopk')
   })
   .primaryKey('id');
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [foo, bar, nopk],
 });
 

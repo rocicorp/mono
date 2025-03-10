@@ -26,12 +26,14 @@ import {
 } from '../../../shared/src/browser-env.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {CloseConnectionMessage} from '../../../zero-protocol/src/close-connection.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
@@ -64,7 +66,10 @@ import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  type Schema,
+  clientSchemaFrom,
+} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   type NameMapper,
   clientToServer,
@@ -121,6 +126,7 @@ import {
   reportReloadReason,
   resetBackoff,
 } from './reload-error-handler.ts';
+import type {WriteTransaction} from './replicache-types.ts';
 import {
   ServerError,
   isAuthError,
@@ -130,8 +136,6 @@ import {
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
-import type {WriteTransaction} from './replicache-types.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -226,7 +230,7 @@ function updateNeededReloadReason(
         "The server no longer supports this client's protocol version.";
       break;
     case 'SchemaVersionNotSupported':
-      reasonMsg = "The server no longer supports this client's schema version.";
+      reasonMsg = 'Client and server schemas incompatible.';
       break;
     default:
       unreachable(type);
@@ -279,6 +283,7 @@ export class Zero<
   readonly #lc: LogContext;
   readonly #logOptions: LogOptions;
   readonly #enableAnalytics: boolean;
+  readonly #clientSchema: ClientSchema;
 
   readonly #pokeHandler: PokeHandler;
   readonly #queryManager: QueryManager;
@@ -465,10 +470,13 @@ export class Zero<
 
     this.storageKey = storageKey ?? '';
 
+    const {clientSchema, hash} = clientSchemaFrom(schema);
+    this.#clientSchema = clientSchema;
+
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
-      // The schema stored in IDB is dependent upon both the application schema
+      // The schema stored in IDB is dependent upon both the ClientSchema
       // and the AST schema (i.e. PROTOCOL_VERSION).
-      schemaVersion: `${schema.version}.${PROTOCOL_VERSION}`,
+      schemaVersion: `${PROTOCOL_VERSION}.${hash}`,
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
@@ -825,12 +833,21 @@ export class Zero<
         return this.#handleErrorMessage(lc, downMessage);
 
       case 'pong':
+        // Receiving a pong means that the connection is healthy, as the
+        // initial schema / versioning negotiations would produce an error
+        // before a ping-pong timeout.
+        resetBackoff();
         return this.#onPong();
 
       case 'pokeStart':
         return this.#handlePokeStart(lc, downMessage);
 
       case 'pokePart':
+        if (downMessage[1].rowsPatch) {
+          // Receiving row data indicates that the client is in a good state
+          // and can reset the reload backoff state.
+          resetBackoff();
+        }
         return this.#handlePokePart(lc, downMessage);
 
       case 'pokeEnd':
@@ -1006,11 +1023,15 @@ export class Zero<
     } else if (this.#initConnectionQueries === undefined) {
       // if #initConnectionQueries was undefined that means we never
       // sent `initConnection` to the server inside the sec-protocol header.
+      const clientSchema = this.#clientSchema;
       send(socket, [
         'initConnection',
         {
           desiredQueriesPatch: [...queriesPatch.values()],
           deleted: skipEmptyDeletedClients(this.#deletedClients),
+          // The clientSchema only needs to be sent for the very first request.
+          // Henceforth it is stored with the CVR and verified automatically.
+          ...(this.#connectCookie === null ? {clientSchema} : {}),
         },
       ]);
       this.#deletedClients = undefined;
@@ -1097,7 +1118,7 @@ export class Zero<
       this.#connectCookie,
       this.clientID,
       await this.clientGroupID,
-      this.#options.schema.version,
+      this.#clientSchema,
       this.userID,
       this.#rep.auth,
       this.#lastMutationIDReceived,
@@ -1216,7 +1237,6 @@ export class Zero<
   }
 
   #handlePokeStart(_lc: LogContext, pokeMessage: PokeStartMessage): void {
-    resetBackoff();
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeStart(pokeMessage[1]);
   }
@@ -1326,8 +1346,6 @@ export class Zero<
           clientGroupID: req.clientGroupID,
           mutations: [zeroM],
           pushVersion: req.pushVersion,
-          // Zero schema versions are always numbers.
-          schemaVersion: parseInt(req.schemaVersion),
           requestID,
         },
       ];
@@ -1661,7 +1679,7 @@ export class Zero<
   }
 
   /**
-   * Starts a a ping and waits for a pong.
+   * Starts a ping and waits for a pong.
    *
    * If it takes too long to get a pong we disconnect and this returns
    * {@code PingResult.TimedOut}.
@@ -1769,7 +1787,7 @@ export async function createSocket(
   baseCookie: NullableVersion,
   clientID: string,
   clientGroupID: string,
-  schemaVersion: number,
+  clientSchema: ClientSchema,
   userID: string,
   auth: string | undefined,
   lmid: number,
@@ -1791,7 +1809,6 @@ export async function createSocket(
   const {searchParams} = url;
   searchParams.set('clientID', clientID);
   searchParams.set('clientGroupID', clientGroupID);
-  searchParams.set('schemaVersion', schemaVersion.toString());
   searchParams.set('userID', userID);
   searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));
   searchParams.set('ts', String(performance.now()));
@@ -1830,6 +1847,9 @@ export async function createSocket(
       {
         desiredQueriesPatch: [...queriesPatch.values()],
         deleted: skipEmptyDeletedClients(deletedClients),
+        // The clientSchema only needs to be sent for the very first request.
+        // Henceforth it is stored with the CVR and verified automatically.
+        ...(baseCookie === null ? {clientSchema} : {}),
       },
     ],
     auth,

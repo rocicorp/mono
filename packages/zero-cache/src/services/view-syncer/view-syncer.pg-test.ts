@@ -12,6 +12,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import type {ErrorBody} from '../../../../zero-protocol/src/error.ts';
@@ -23,7 +24,10 @@ import type {
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {QueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  clientSchemaFrom,
+  createSchema,
+} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {
   json,
   number,
@@ -278,7 +282,7 @@ const users = table('users')
   })
   .primaryKey('id');
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [issues, comments, issueLabels, labels, users],
   relationships: [
     relationships(comments, connect => ({
@@ -290,6 +294,9 @@ const schema = createSchema(1, {
     })),
   ],
 });
+
+const {clientSchema: defaultClientSchema} = clientSchemaFrom(schema);
+
 type Schema = typeof schema;
 
 type AuthData = {
@@ -467,10 +474,11 @@ async function setup(permissions: PermissionsConfig | undefined) {
   function connectWithQueueAndSource(
     ctx: SyncContext,
     desiredQueriesPatch: QueriesPatch,
+    clientSchema: ClientSchema = defaultClientSchema,
   ): {queue: Queue<Downstream>; source: Source<Downstream>} {
     const source = vs.initConnection(ctx, [
       'initConnection',
-      {desiredQueriesPatch},
+      {desiredQueriesPatch, clientSchema},
     ]);
     const queue = new Queue<Downstream>();
 
@@ -487,8 +495,13 @@ async function setup(permissions: PermissionsConfig | undefined) {
     return {queue, source};
   }
 
-  function connect(ctx: SyncContext, desiredQueriesPatch: QueriesPatch) {
-    return connectWithQueueAndSource(ctx, desiredQueriesPatch).queue;
+  function connect(
+    ctx: SyncContext,
+    desiredQueriesPatch: QueriesPatch,
+    clientSchema?: ClientSchema,
+  ) {
+    return connectWithQueueAndSource(ctx, desiredQueriesPatch, clientSchema)
+      .queue;
   }
 
   async function nextPoke(client: Queue<Downstream>): Promise<Downstream[]> {
@@ -567,10 +580,12 @@ describe('view-syncer/service', () => {
   let connect: (
     ctx: SyncContext,
     desiredQueriesPatch: QueriesPatch,
+    clientSchema?: ClientSchema,
   ) => Queue<Downstream>;
   let connectWithQueueAndSource: (
     ctx: SyncContext,
     desiredQueriesPatch: QueriesPatch,
+    clientSchema?: ClientSchema,
   ) => {
     queue: Queue<Downstream>;
     source: Source<Downstream>;
@@ -1839,6 +1854,84 @@ describe('view-syncer/service', () => {
     });
   });
 
+  test('initial hydration, schema unsupported', async () => {
+    const client = connect(
+      {...SYNC_CONTEXT, schemaVersion: 1},
+      [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
+      {
+        tables: {foo: {columns: {bar: {type: 'string'}}}},
+      },
+    );
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+      ]
+    `);
+    stateChanges.push({state: 'version-ready'});
+
+    const dequeuePromise = client.dequeue();
+    await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
+    await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
+      kind: ErrorKind.SchemaVersionNotSupported,
+      message:
+        'The "foo" table does not exist or is not one of the replicated tables: "comments","issueLabels","issues","labels","users".',
+    });
+  });
+
   test('initial hydration, schemaVersion unsupported with bad query', async () => {
     // Simulate a connection when the replica is already ready.
     stateChanges.push({state: 'version-ready'});
@@ -2673,6 +2766,94 @@ describe('view-syncer/service', () => {
         ],
       ]
     `);
+  });
+
+  test('process advancement with schema change that breaks client support', async () => {
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+      ]
+    `);
+
+    stateChanges.push({state: 'version-ready'});
+    expect((await nextPoke(client))[0]).toEqual([
+      'pokeStart',
+      {
+        baseCookie: '00:01',
+        cookie: '01',
+        pokeID: '01',
+        schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
+      },
+    ]);
+
+    replicator.processTransaction('07', messages.dropColumn('issues', 'owner'));
+
+    stateChanges.push({state: 'version-ready'});
+
+    const dequeuePromise = client.dequeue();
+    await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
+    await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
+      kind: ErrorKind.SchemaVersionNotSupported,
+      message:
+        'The "issues"."owner" column does not exist or is not one of the replicated columns: "big","id","json","parent","title".',
+    });
   });
 
   test('catchup client', async () => {

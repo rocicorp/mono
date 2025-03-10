@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {ident} from 'pg-format';
 import type postgres from 'postgres';
 import {stringCompare} from '../../../../../shared/src/string-compare.ts';
+import type {ClientSchema} from '../../../../../zero-protocol/src/client-schema.ts';
 import {
   type JSONObject,
   type JSONValue,
@@ -32,6 +33,7 @@ export type InstancesRow = {
   replicaVersion: string | null;
   owner: string | null;
   grantedAt: number | null;
+  clientSchema: ClientSchema | null;
 };
 
 function createInstancesTable(shard: ShardID) {
@@ -42,7 +44,8 @@ CREATE TABLE ${schema(shard)}.instances (
   "lastActive"     TIMESTAMPTZ NOT NULL, -- For garbage collection
   "replicaVersion" TEXT,                 -- Identifies the replica (i.e. initial-sync point) from which the CVR data comes.
   "owner"          TEXT,                 -- The ID of the task / server that has been granted ownership of the CVR.
-  "grantedAt"      TIMESTAMPTZ           -- The time at which the current owner was last granted ownership (most recent connection time).
+  "grantedAt"      TIMESTAMPTZ,          -- The time at which the current owner was last granted ownership (most recent connection time).
+  "clientSchema"   JSONB                 -- ClientSchema of the client group
 );
 `;
 }
