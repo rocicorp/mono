@@ -230,7 +230,7 @@ function updateNeededReloadReason(
         "The server no longer supports this client's protocol version.";
       break;
     case 'SchemaVersionNotSupported':
-      reasonMsg = "Client and server schemas incompatible.";
+      reasonMsg = 'Client and server schemas incompatible.';
       break;
     default:
       unreachable(type);
