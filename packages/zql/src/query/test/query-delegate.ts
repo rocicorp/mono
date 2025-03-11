@@ -1,4 +1,4 @@
-import type {LogConfig} from '../../../../otel/src/log-options.ts';
+import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {MemoryStorage} from '../../ivm/memory-storage.ts';
@@ -21,12 +21,6 @@ import {
 } from './test-schemas.ts';
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 export class QueryDelegateImpl implements QueryDelegate {
   readonly #sources: Record<string, Source> = makeSources();
@@ -93,38 +87,44 @@ function makeSources() {
   };
 
   return {
-    user: createSource(lc, logConfig, 'user', user.columns, user.primaryKey),
+    user: createSource(
+      lc,
+      testLogConfig,
+      'user',
+      user.columns,
+      user.primaryKey,
+    ),
     issue: createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'issue',
       issue.columns,
       issue.primaryKey,
     ),
     comment: createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'comment',
       comment.columns,
       comment.primaryKey,
     ),
     revision: createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'revision',
       revision.columns,
       revision.primaryKey,
     ),
     label: createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'label',
       label.columns,
       label.primaryKey,
     ),
     issueLabel: createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'issueLabel',
       issueLabel.columns,
       issueLabel.primaryKey,

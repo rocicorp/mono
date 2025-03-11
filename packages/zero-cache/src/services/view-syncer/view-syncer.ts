@@ -123,6 +123,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #stateChanges: Subscription<ReplicaState>;
   readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
+  readonly #slowHydrateThreshold: number;
 
   // Note: It is fine to update this variable outside of the lock.
   #lastConnectTime = 0;
@@ -165,6 +166,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     pipelineDriver: PipelineDriver,
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
+    slowHydrateThreshold: number,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     maxRowCount = DEFAULT_MAX_ROW_COUNT,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
@@ -176,6 +178,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#stateChanges = versionChanges;
     this.#drainCoordinator = drainCoordinator;
     this.#keepaliveMs = keepaliveMs;
+    this.#slowHydrateThreshold = slowHydrateThreshold;
     this.#cvrStore = new CVRStore(
       lc,
       db,
@@ -921,12 +924,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       const pipelines = this.#pipelines;
-      function* generateRowChanges() {
+      function* generateRowChanges(slowHydrateThreshold: number) {
         for (const q of addQueries) {
-          lc.debug?.(`adding pipeline for query ${q.id}`, q.ast);
+          lc = lc
+            .withContext('hash', q.id)
+            .withContext('transformationHash', q.transformationHash);
+          lc.debug?.(`adding pipeline for query`, q.ast);
           const start = performance.now();
           yield* pipelines.addQuery(q.transformationHash, q.ast);
           const end = performance.now();
+          if (end - start > slowHydrateThreshold) {
+            lc.warn?.('slow hydration for query', end - start, q.ast);
+          }
           manualSpan(tracer, 'vs.addAndConsumeQuery', end - start, {
             hash: q.id,
             transformationHash: q.transformationHash,
@@ -937,7 +946,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // a single generator in order to maximize de-duping.
       const processTime = await this.#processChanges(
         lc,
-        generateRowChanges(),
+        generateRowChanges(this.#slowHydrateThreshold),
         updater,
         pokers,
         hashToIDs,

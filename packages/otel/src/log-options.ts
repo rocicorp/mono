@@ -34,6 +34,13 @@ export const logOptions = {
     ],
   },
 
+  slowHydrateThreshold: {
+    type: v.number().default(100),
+    desc: [
+      `The number of milliseconds a query hydration must take to print a slow warning.`,
+    ],
+  },
+
   ivmSampling: {
     type: v.number().default(5000),
     desc: [

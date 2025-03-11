@@ -20,12 +20,9 @@ import {
 } from '../../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import {getSchema} from '../auth/load-permissions.ts';
-import {
-  ZERO_ENV_VAR_PREFIX,
-  zeroOptions,
-  type LogConfig,
-} from '../config/zero-config.ts';
+import {ZERO_ENV_VAR_PREFIX, zeroOptions} from '../config/zero-config.ts';
 import type {Input} from '../../../zql/src/ivm/operator.ts';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 
 const options = {
   replicaFile: zeroOptions.replica.file,
@@ -52,12 +49,6 @@ const config = parseOptions(
 runtimeDebugFlags.trackRowsVended = true;
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 const db = new Database(lc, config.replicaFile);
 const schema = getSchema(lc, db);
@@ -70,7 +61,7 @@ const host: QueryDelegate = {
     }
     source = new TableSource(
       lc,
-      logConfig,
+      testLogConfig,
       '',
       db,
       name,
