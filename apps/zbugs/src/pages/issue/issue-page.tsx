@@ -91,10 +91,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
         .orderBy('id', 'desc'),
     )
     .one();
-  const [issue, issueResult] = useQuery(q, {ttl: '30m'});
-  if (issue) {
-    onReady();
-  }
+
+  const [issue, issueResult] = useQuery(q, {ttl: '1d'});
+  useEffect(() => {
+    if (issue) {
+      onReady();
+    }
+  }, [issue, onReady]);
 
   const login = useLogin();
 
@@ -204,7 +207,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }
   const useQueryOptions = {
     enabled: listContext !== undefined && issueSnapshot !== undefined,
-    ttl: '30m',
   } as const;
   const [next] = useQuery(
     buildListQuery(z, listContext, displayed, 'next'),
@@ -235,7 +237,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const [allComments, allCommentsResult] = useQuery(
     commentQuery(z, displayed),
-    {enabled: displayAllComments && displayed !== undefined, ttl: '30m'},
+    {enabled: displayAllComments && displayed !== undefined, ttl: '1d'},
   );
 
   const [comments, hasOlderComments] = useMemo(() => {
@@ -960,7 +962,7 @@ function useEmojiChangeListener(
     z.query.emoji
       .where('subjectID', issueID ?? '')
       .related('creator', creator => creator.one()),
-    {enabled, ttl: '10m'},
+    {enabled},
   );
 
   const lastEmojis = useRef<Map<string, Emoji> | undefined>();
