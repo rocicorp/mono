@@ -46,10 +46,13 @@ export type CaughtChange =
  */
 export class Catch implements Output {
   #input: Input;
+  readonly #fetchOnPush: boolean;
   readonly pushes: CaughtChange[] = [];
+  readonly pushesWithFetch: {change: CaughtChange; fetch: CaughtNode[]}[] = [];
 
-  constructor(input: Input) {
+  constructor(input: Input, fetchOnPush = false) {
     this.#input = input;
+    this.#fetchOnPush = fetchOnPush;
     input.setOutput(this);
   }
 
@@ -62,7 +65,17 @@ export class Catch implements Output {
   }
 
   push(change: Change) {
-    this.pushes.push(expandChange(change));
+    const fetch = this.#fetchOnPush
+      ? [...this.#input.fetch({})].map(expandNode)
+      : [];
+    const expandedChange = expandChange(change);
+    if (this.#fetchOnPush) {
+      this.pushesWithFetch.push({
+        change: expandedChange,
+        fetch,
+      });
+    }
+    this.pushes.push(expandedChange);
   }
 
   reset() {
