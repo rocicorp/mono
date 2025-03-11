@@ -218,33 +218,3 @@ export class FanIn implements Operator {
     }
   }
 }
-
-/**
- * Why does `or`:
- * 1. Only push a single change for a given type?
- * 2. Prefer `child` over `add` and `remove`?
- * 3. Prefer `edit` over `add` and `remove`?
- *
- * (1) - because `or` duplicates a change on fan-out:
- *
- *    x > 1 OR x > 2 OR x > 3
- *
- *           FanOut
- *         /   |    \
- *      x>1   x>2   x>3
- *       \     |     /
- *        \    |    /
- *           FanIn
- *
- * All branches could evaluate to true, resulting in 3 `add` or `remove` changes for
- * the same change.
- *
- * And edit can be split into add and remove by the above graph.
- * A single `remove` and single `add` should be output by the `fan-in` (or those two changes rolled into edit).
- *
- * (2) - similar reasoning to the above.
- * If a branch outputs `child` while other branches may output `add` or `remove`, the `child`
- * change logically subsumes them. <--- can you be more specific here?
- *
- * (3) - similar reasoning to the above.
- */

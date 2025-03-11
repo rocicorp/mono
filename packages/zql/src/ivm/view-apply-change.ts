@@ -266,7 +266,7 @@ export function applyChange(
           view[pos] = makeEntryPreserveRelationships(
             change.node.row,
             view[pos],
-            schema.relationships,
+            format.relationships,
           );
           refCountMap.set(view[pos], rc);
         } else {
@@ -294,7 +294,7 @@ export function applyChange(
               makeEntryPreserveRelationships(
                 change.node.row,
                 oldEntry,
-                schema.relationships,
+                format.relationships,
               ),
             );
           }
@@ -328,7 +328,7 @@ function binarySearch(view: EntryList, target: Entry, comparator: Comparator) {
 function makeEntryPreserveRelationships(
   row: Row,
   entry: Entry,
-  relationships: {[key: string]: SourceSchema},
+  relationships: {[key: string]: Format},
 ): Entry {
   const result: Entry = {...row};
   for (const relationship in relationships) {
