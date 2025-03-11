@@ -80,7 +80,7 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
   await z.mutate.issue.insert({id: 'a', value: 1});
   await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
 
-  await 1;
+  await tickAFewTimes(clock, 0);
   expect(mockSocket.messages).to.have.lengthOf(1);
   expect(mockSocket.closed).toBe(false);
   expect(z.connectionState).eq(ConnectionState.Connected);
