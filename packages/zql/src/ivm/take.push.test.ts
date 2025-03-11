@@ -7,7 +7,7 @@ import {runPushTest, type Sources} from './test/push-tests.ts';
 suite('take with no partition', () => {
   suite('add', () => {
     test('limit 0', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -16,6 +16,7 @@ suite('take with no partition', () => {
         limit: 0,
         pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
       });
+      expect(data).toMatchInlineSnapshot(`[]`);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -36,7 +37,7 @@ suite('take with no partition', () => {
     });
 
     test('less than limit add row at start', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -45,6 +46,29 @@ suite('take with no partition', () => {
         limit: 5,
         pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 50,
+            "id": "i4",
+          },
+          {
+            "created": 100,
+            "id": "i1",
+            "text": null,
+          },
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+          {
+            "created": 300,
+            "id": "i3",
+            "text": null,
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -105,7 +129,7 @@ suite('take with no partition', () => {
     });
 
     test('less than limit add row at end', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -114,6 +138,29 @@ suite('take with no partition', () => {
         limit: 5,
         pushes: [{type: 'add', row: {id: 'i4', created: 350}}],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 100,
+            "id": "i1",
+            "text": null,
+          },
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+          {
+            "created": 300,
+            "id": "i3",
+            "text": null,
+          },
+          {
+            "created": 350,
+            "id": "i4",
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -172,7 +219,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit add row after bound', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -182,6 +229,25 @@ suite('take with no partition', () => {
         limit: 3,
         pushes: [{type: 'add', row: {id: 'i5', created: 350}}],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 100,
+            "id": "i1",
+            "text": null,
+          },
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+          {
+            "created": 300,
+            "id": "i3",
+            "text": null,
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -218,7 +284,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit add row at start', () => {
-      const {messages, storage, pushesWithFetch} = takeNoPartitionTest({
+      const {data, messages, storage, pushesWithFetch} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -229,6 +295,24 @@ suite('take with no partition', () => {
         pushes: [{type: 'add', row: {id: 'i5', created: 50}}],
         fetchOnPush: true,
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 50,
+            "id": "i5",
+          },
+          {
+            "created": 100,
+            "id": "i1",
+            "text": null,
+          },
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -390,7 +474,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit add row at end', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushesWithFetch} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -399,7 +483,26 @@ suite('take with no partition', () => {
         ],
         limit: 3,
         pushes: [{type: 'add', row: {id: 'i5', created: 250}}],
+        fetchOnPush: true,
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 100,
+            "id": "i1",
+            "text": null,
+          },
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+          {
+            "created": 250,
+            "id": "i5",
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -470,28 +573,90 @@ suite('take with no partition', () => {
           },
         }
       `);
-      expect(pushes).toMatchInlineSnapshot(`
+      expect(pushesWithFetch).toMatchInlineSnapshot(`
         [
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 250,
-                "id": "i5",
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 250,
+                  "id": "i5",
+                },
               },
+              "type": "add",
             },
-            "type": "add",
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 250,
+                  "id": "i5",
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            ],
           },
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 300,
-                "id": "i3",
-                "text": null,
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
               },
+              "type": "remove",
             },
-            "type": "remove",
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 250,
+                  "id": "i5",
+                },
+              },
+            ],
           },
         ]
       `);
@@ -500,7 +665,7 @@ suite('take with no partition', () => {
 
   suite('remove', () => {
     test('limit 0', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -509,6 +674,7 @@ suite('take with no partition', () => {
         limit: 0,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
       });
+      expect(data).toMatchInlineSnapshot(`[]`);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -529,7 +695,7 @@ suite('take with no partition', () => {
     });
 
     test('less than limit remove row at start', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -538,6 +704,20 @@ suite('take with no partition', () => {
         limit: 5,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+          {
+            "created": 300,
+            "id": "i3",
+            "text": null,
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -629,7 +809,7 @@ suite('take with no partition', () => {
     });
 
     test('less than limit remove row at end', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -638,6 +818,20 @@ suite('take with no partition', () => {
         limit: 5,
         pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 100,
+            "id": "i1",
+            "text": null,
+          },
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -729,7 +923,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit remove row after bound', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -739,6 +933,25 @@ suite('take with no partition', () => {
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i4', created: 400}}],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 100,
+            "id": "i1",
+            "text": null,
+          },
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+          {
+            "created": 300,
+            "id": "i3",
+            "text": null,
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -775,7 +988,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit remove row at start with row after', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushesWithFetch} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -784,7 +997,27 @@ suite('take with no partition', () => {
         ],
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+        fetchOnPush: true,
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+          {
+            "created": 300,
+            "id": "i3",
+            "text": null,
+          },
+          {
+            "created": 400,
+            "id": "i4",
+            "text": null,
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -871,35 +1104,83 @@ suite('take with no partition', () => {
           },
         }
       `);
-      expect(pushes).toMatchInlineSnapshot(`
+      expect(pushesWithFetch).toMatchInlineSnapshot(`
         [
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 100,
-                "id": "i1",
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                },
               },
+              "type": "remove",
             },
-            "type": "remove",
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            ],
           },
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 400,
-                "id": "i4",
-                "text": null,
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": null,
+                },
               },
+              "type": "add",
             },
-            "type": "add",
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": null,
+                },
+              },
+            ],
           },
         ]
       `);
     });
 
     test('at limit remove row at start with row after, limit 2', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushesWithFetch} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -908,7 +1189,22 @@ suite('take with no partition', () => {
         ],
         limit: 2,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+        fetchOnPush: true,
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+          {
+            "created": 300,
+            "id": "i3",
+            "text": null,
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -995,35 +1291,67 @@ suite('take with no partition', () => {
           },
         }
       `);
-      expect(pushes).toMatchInlineSnapshot(`
+      expect(pushesWithFetch).toMatchInlineSnapshot(`
         [
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 100,
-                "id": "i1",
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                },
               },
+              "type": "remove",
             },
-            "type": "remove",
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+            ],
           },
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 300,
-                "id": "i3",
-                "text": null,
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
               },
+              "type": "add",
             },
-            "type": "add",
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            ],
           },
         ]
       `);
     });
 
     test('at limit remove row at start with row after, limit 1', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushesWithFetch} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -1032,7 +1360,17 @@ suite('take with no partition', () => {
         ],
         limit: 1,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+        fetchOnPush: true,
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -1119,35 +1457,50 @@ suite('take with no partition', () => {
           },
         }
       `);
-      expect(pushes).toMatchInlineSnapshot(`
+      expect(pushesWithFetch).toMatchInlineSnapshot(`
         [
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 100,
-                "id": "i1",
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                },
               },
+              "type": "remove",
             },
-            "type": "remove",
+            "fetch": [],
           },
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 200,
-                "id": "i2",
-                "text": null,
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
               },
+              "type": "add",
             },
-            "type": "add",
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+            ],
           },
         ]
       `);
     });
 
     test('at limit remove row at start no row after', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -1156,6 +1509,20 @@ suite('take with no partition', () => {
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+          {
+            "created": 300,
+            "id": "i3",
+            "text": null,
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -1247,7 +1614,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit remove row at end with row after', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushesWithFetch} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -1256,7 +1623,27 @@ suite('take with no partition', () => {
         ],
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
+        fetchOnPush: true,
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 100,
+            "id": "i1",
+            "text": null,
+          },
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+          {
+            "created": 400,
+            "id": "i4",
+            "text": null,
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -1343,35 +1730,83 @@ suite('take with no partition', () => {
           },
         }
       `);
-      expect(pushes).toMatchInlineSnapshot(`
+      expect(pushesWithFetch).toMatchInlineSnapshot(`
         [
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 300,
-                "id": "i3",
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                },
               },
+              "type": "remove",
             },
-            "type": "remove",
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+            ],
           },
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 400,
-                "id": "i4",
-                "text": null,
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": null,
+                },
               },
+              "type": "add",
             },
-            "type": "add",
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": null,
+                },
+              },
+            ],
           },
         ]
       `);
     });
 
     test('at limit remove row at end, no row after', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushes} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -1380,6 +1815,20 @@ suite('take with no partition', () => {
         limit: 3,
         pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 100,
+            "id": "i1",
+            "text": null,
+          },
+          {
+            "created": 200,
+            "id": "i2",
+            "text": null,
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -1482,7 +1931,7 @@ suite('take with no partition', () => {
     } as const;
 
     test('limit 0', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushes} = takeNoPartitionTest({
         ...base,
         limit: 0,
         pushes: [
@@ -1493,6 +1942,7 @@ suite('take with no partition', () => {
           },
         ],
       });
+      expect(data).toMatchInlineSnapshot(`[]`);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -1520,7 +1970,7 @@ suite('take with no partition', () => {
 
     describe('less than limit ', () => {
       test('edit row at start', () => {
-        const {messages, storage, pushes} = takeNoPartitionTest({
+        const {data, messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 5,
           pushes: [
@@ -1531,6 +1981,30 @@ suite('take with no partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "created": 100,
+              "id": "i1",
+              "text": "a2",
+            },
+            {
+              "created": 200,
+              "id": "i2",
+              "text": "b",
+            },
+            {
+              "created": 300,
+              "id": "i3",
+              "text": "c",
+            },
+            {
+              "created": 400,
+              "id": "i4",
+              "text": "d",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -1606,7 +2080,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row at end', () => {
-        const {messages, storage, pushes} = takeNoPartitionTest({
+        const {data, messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 5,
           pushes: [
@@ -1617,6 +2091,30 @@ suite('take with no partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "created": 100,
+              "id": "i1",
+              "text": "a",
+            },
+            {
+              "created": 200,
+              "id": "i2",
+              "text": "b",
+            },
+            {
+              "created": 300,
+              "id": "i3",
+              "text": "c",
+            },
+            {
+              "created": 400,
+              "id": "i4",
+              "text": "d2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -1694,7 +2192,7 @@ suite('take with no partition', () => {
 
     describe('at limit', () => {
       test('edit row after boundary', () => {
-        const {messages, storage, pushes} = takeNoPartitionTest({
+        const {data, messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -1705,6 +2203,25 @@ suite('take with no partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "created": 100,
+              "id": "i1",
+              "text": "a",
+            },
+            {
+              "created": 200,
+              "id": "i2",
+              "text": "b",
+            },
+            {
+              "created": 300,
+              "id": "i3",
+              "text": "c",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -1747,7 +2264,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row before boundary', () => {
-        const {messages, storage, pushes} = takeNoPartitionTest({
+        const {data, messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -1758,6 +2275,25 @@ suite('take with no partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "created": 100,
+              "id": "i1",
+              "text": "a",
+            },
+            {
+              "created": 200,
+              "id": "i2",
+              "text": "b2",
+            },
+            {
+              "created": 300,
+              "id": "i3",
+              "text": "c",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -1833,7 +2369,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row at boundary', () => {
-        const {messages, storage, pushes} = takeNoPartitionTest({
+        const {data, messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -1844,6 +2380,25 @@ suite('take with no partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "created": 100,
+              "id": "i1",
+              "text": "a",
+            },
+            {
+              "created": 200,
+              "id": "i2",
+              "text": "b",
+            },
+            {
+              "created": 300,
+              "id": "i3",
+              "text": "c2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -1919,7 +2474,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row before boundary, changing its order', () => {
-        const {messages, storage, pushes} = takeNoPartitionTest({
+        const {data, messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -1930,6 +2485,25 @@ suite('take with no partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "created": 50,
+              "id": "i2",
+              "text": "b2",
+            },
+            {
+              "created": 100,
+              "id": "i1",
+              "text": "a",
+            },
+            {
+              "created": 300,
+              "id": "i3",
+              "text": "c",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -2005,7 +2579,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row after boundary to make it the new boundary', () => {
-        const {messages, storage, pushes} = takeNoPartitionTest({
+        const {data, messages, storage, pushesWithFetch} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -2015,7 +2589,27 @@ suite('take with no partition', () => {
               row: {id: 'i4', created: 250, text: 'd'},
             },
           ],
+          fetchOnPush: true,
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "created": 100,
+              "id": "i1",
+              "text": "a",
+            },
+            {
+              "created": 200,
+              "id": "i2",
+              "text": "b",
+            },
+            {
+              "created": 250,
+              "id": "i4",
+              "text": "d",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -2056,11 +2650,11 @@ suite('take with no partition', () => {
               "push",
               {
                 "row": {
-                  "created": 300,
-                  "id": "i3",
-                  "text": "c",
+                  "created": 250,
+                  "id": "i4",
+                  "text": "d",
                 },
-                "type": "remove",
+                "type": "add",
               },
             ],
             [
@@ -2068,11 +2662,11 @@ suite('take with no partition', () => {
               "push",
               {
                 "row": {
-                  "created": 250,
-                  "id": "i4",
-                  "text": "d",
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c",
                 },
-                "type": "add",
+                "type": "remove",
               },
             ],
           ]
@@ -2094,36 +2688,100 @@ suite('take with no partition', () => {
             },
           }
         `);
-        expect(pushes).toMatchInlineSnapshot(`
+        expect(pushesWithFetch).toMatchInlineSnapshot(`
           [
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 300,
-                  "id": "i3",
-                  "text": "c",
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "created": 250,
+                    "id": "i4",
+                    "text": "d",
+                  },
                 },
+                "type": "add",
               },
-              "type": "remove",
+              "fetch": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 100,
+                    "id": "i1",
+                    "text": "a",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 200,
+                    "id": "i2",
+                    "text": "b",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 250,
+                    "id": "i4",
+                    "text": "d",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
+                },
+              ],
             },
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 250,
-                  "id": "i4",
-                  "text": "d",
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
                 },
+                "type": "remove",
               },
-              "type": "add",
+              "fetch": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 100,
+                    "id": "i1",
+                    "text": "a",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 200,
+                    "id": "i2",
+                    "text": "b",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 250,
+                    "id": "i4",
+                    "text": "d",
+                  },
+                },
+              ],
             },
           ]
         `);
       });
 
       test('edit row before boundary to make it new boundary', () => {
-        const {messages, storage, pushes} = takeNoPartitionTest({
+        const {data, messages, storage, pushes} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -2134,6 +2792,25 @@ suite('take with no partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "created": 100,
+              "id": "i1",
+              "text": "a",
+            },
+            {
+              "created": 300,
+              "id": "i3",
+              "text": "c",
+            },
+            {
+              "created": 350,
+              "id": "i2",
+              "text": "b2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -2224,7 +2901,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row before boundary to fetch new boundary', () => {
-        const {messages, storage, pushes} = takeNoPartitionTest({
+        const {data, messages, storage, pushesWithFetch} = takeNoPartitionTest({
           ...base,
           limit: 3,
           pushes: [
@@ -2234,7 +2911,27 @@ suite('take with no partition', () => {
               row: {id: 'i2', created: 450, text: 'b2'},
             },
           ],
+          fetchOnPush: true,
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "created": 100,
+              "id": "i1",
+              "text": "a",
+            },
+            {
+              "created": 300,
+              "id": "i3",
+              "text": "c",
+            },
+            {
+              "created": 400,
+              "id": "i4",
+              "text": "d",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -2312,29 +3009,77 @@ suite('take with no partition', () => {
             },
           }
         `);
-        expect(pushes).toMatchInlineSnapshot(`
+        expect(pushesWithFetch).toMatchInlineSnapshot(`
           [
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 200,
-                  "id": "i2",
-                  "text": "b",
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "created": 200,
+                    "id": "i2",
+                    "text": "b",
+                  },
                 },
+                "type": "remove",
               },
-              "type": "remove",
+              "fetch": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 100,
+                    "id": "i1",
+                    "text": "a",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
+                },
+              ],
             },
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 400,
-                  "id": "i4",
-                  "text": "d",
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "created": 400,
+                    "id": "i4",
+                    "text": "d",
+                  },
                 },
+                "type": "add",
               },
-              "type": "add",
+              "fetch": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 100,
+                    "id": "i1",
+                    "text": "a",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 400,
+                    "id": "i4",
+                    "text": "d",
+                  },
+                },
+              ],
             },
           ]
         `);
@@ -2342,7 +3087,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit 1', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {data, messages, storage, pushes} = takeNoPartitionTest({
         ...base,
         limit: 1,
         pushes: [
@@ -2353,6 +3098,15 @@ suite('take with no partition', () => {
           },
         ],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "created": 50,
+            "id": "i1",
+            "text": "a2",
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -2432,7 +3186,7 @@ suite('take with no partition', () => {
 suite('take with partition', () => {
   suite('add', () => {
     test('limit 0', () => {
-      const {messages, storage, pushes} = takeTestWithPartition({
+      const {data, messages, storage, pushes} = takeTestWithPartition({
         sourceRows: [
           {id: 'c1', issueID: 'i1', created: 100, text: null},
           {id: 'c2', issueID: 'i1', created: 200, text: null},
@@ -2441,6 +3195,18 @@ suite('take with partition', () => {
         limit: 0,
         pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [],
+            "id": "i1",
+          },
+          {
+            "comments": [],
+            "id": "i2",
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -2462,7 +3228,7 @@ suite('take with partition', () => {
     });
 
     test('less than limit add row at start', () => {
-      const {messages, storage, pushes} = takeTestWithPartition({
+      const {data, messages, storage, pushes} = takeTestWithPartition({
         sourceRows: [
           {id: 'c1', issueID: 'i1', created: 100, text: null},
           {id: 'c2', issueID: 'i1', created: 200, text: null},
@@ -2473,6 +3239,55 @@ suite('take with partition', () => {
         limit: 5,
         pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [
+              {
+                "created": 100,
+                "id": "c1",
+                "issueID": "i1",
+                "text": null,
+              },
+              {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": null,
+              },
+              {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": null,
+              },
+            ],
+            "id": "i1",
+          },
+          {
+            "comments": [
+              {
+                "created": 150,
+                "id": "c6",
+                "issueID": "i2",
+              },
+              {
+                "created": 400,
+                "id": "c4",
+                "issueID": "i2",
+                "text": null,
+              },
+              {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": null,
+              },
+            ],
+            "id": "i2",
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -2583,7 +3398,7 @@ suite('take with partition', () => {
     });
 
     test('at limit add row at end', () => {
-      const {messages, storage, pushes} = takeTestWithPartition({
+      const {data, messages, storage, pushesWithFetch} = takeTestWithPartition({
         sourceRows: [
           {id: 'c1', issueID: 'i1', created: 100, text: null},
           {id: 'c2', issueID: 'i1', created: 200, text: null},
@@ -2597,7 +3412,57 @@ suite('take with partition', () => {
         ],
         limit: 3,
         pushes: [{type: 'add', row: {id: 'c8', issueID: 'i2', created: 550}}],
+        fetchOnPush: true,
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [
+              {
+                "created": 100,
+                "id": "c1",
+                "issueID": "i1",
+                "text": null,
+              },
+              {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": null,
+              },
+              {
+                "created": 580,
+                "id": "c3",
+                "issueID": "i1",
+                "text": null,
+              },
+            ],
+            "id": "i1",
+          },
+          {
+            "comments": [
+              {
+                "created": 400,
+                "id": "c4",
+                "issueID": "i2",
+                "text": null,
+              },
+              {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": null,
+              },
+              {
+                "created": 550,
+                "id": "c8",
+                "issueID": "i2",
+              },
+            ],
+            "id": "i2",
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -2740,55 +3605,214 @@ suite('take with partition', () => {
           },
         }
       `);
-      expect(pushes).toMatchInlineSnapshot(`
+      expect(pushesWithFetch).toMatchInlineSnapshot(`
         [
           {
-            "child": {
-              "change": {
-                "node": {
-                  "relationships": {},
-                  "row": {
-                    "created": 550,
-                    "id": "c8",
-                    "issueID": "i2",
+            "change": {
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "created": 550,
+                      "id": "c8",
+                      "issueID": "i2",
+                    },
                   },
+                  "type": "add",
                 },
-                "type": "add",
+                "relationshipName": "comments",
               },
-              "relationshipName": "comments",
+              "row": {
+                "id": "i2",
+              },
+              "type": "child",
             },
-            "row": {
-              "id": "i2",
-            },
-            "type": "child",
+            "fetch": [
+              {
+                "relationships": {
+                  "comments": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "created": 100,
+                        "id": "c1",
+                        "issueID": "i1",
+                        "text": null,
+                      },
+                    },
+                    {
+                      "relationships": {},
+                      "row": {
+                        "created": 200,
+                        "id": "c2",
+                        "issueID": "i1",
+                        "text": null,
+                      },
+                    },
+                    {
+                      "relationships": {},
+                      "row": {
+                        "created": 580,
+                        "id": "c3",
+                        "issueID": "i1",
+                        "text": null,
+                      },
+                    },
+                  ],
+                },
+                "row": {
+                  "id": "i1",
+                },
+              },
+              {
+                "relationships": {
+                  "comments": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "created": 400,
+                        "id": "c4",
+                        "issueID": "i2",
+                        "text": null,
+                      },
+                    },
+                    {
+                      "relationships": {},
+                      "row": {
+                        "created": 500,
+                        "id": "c5",
+                        "issueID": "i2",
+                        "text": null,
+                      },
+                    },
+                    {
+                      "relationships": {},
+                      "row": {
+                        "created": 550,
+                        "id": "c8",
+                        "issueID": "i2",
+                      },
+                    },
+                    {
+                      "relationships": {},
+                      "row": {
+                        "created": 600,
+                        "id": "c6",
+                        "issueID": "i2",
+                        "text": null,
+                      },
+                    },
+                  ],
+                },
+                "row": {
+                  "id": "i2",
+                },
+              },
+            ],
           },
           {
-            "child": {
-              "change": {
-                "node": {
-                  "relationships": {},
-                  "row": {
-                    "created": 600,
-                    "id": "c6",
-                    "issueID": "i2",
-                    "text": null,
+            "change": {
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "created": 600,
+                      "id": "c6",
+                      "issueID": "i2",
+                      "text": null,
+                    },
                   },
+                  "type": "remove",
                 },
-                "type": "remove",
+                "relationshipName": "comments",
               },
-              "relationshipName": "comments",
+              "row": {
+                "id": "i2",
+              },
+              "type": "child",
             },
-            "row": {
-              "id": "i2",
-            },
-            "type": "child",
+            "fetch": [
+              {
+                "relationships": {
+                  "comments": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "created": 100,
+                        "id": "c1",
+                        "issueID": "i1",
+                        "text": null,
+                      },
+                    },
+                    {
+                      "relationships": {},
+                      "row": {
+                        "created": 200,
+                        "id": "c2",
+                        "issueID": "i1",
+                        "text": null,
+                      },
+                    },
+                    {
+                      "relationships": {},
+                      "row": {
+                        "created": 580,
+                        "id": "c3",
+                        "issueID": "i1",
+                        "text": null,
+                      },
+                    },
+                  ],
+                },
+                "row": {
+                  "id": "i1",
+                },
+              },
+              {
+                "relationships": {
+                  "comments": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "created": 400,
+                        "id": "c4",
+                        "issueID": "i2",
+                        "text": null,
+                      },
+                    },
+                    {
+                      "relationships": {},
+                      "row": {
+                        "created": 500,
+                        "id": "c5",
+                        "issueID": "i2",
+                        "text": null,
+                      },
+                    },
+                    {
+                      "relationships": {},
+                      "row": {
+                        "created": 550,
+                        "id": "c8",
+                        "issueID": "i2",
+                      },
+                    },
+                  ],
+                },
+                "row": {
+                  "id": "i2",
+                },
+              },
+            ],
           },
         ]
       `);
     });
 
     test('add with non-fetched partition value', () => {
-      const {messages, storage, pushes} = takeTestWithPartition({
+      const {data, messages, storage, pushes} = takeTestWithPartition({
         sourceRows: [
           {id: 'c1', issueID: 'i1', created: 100, text: null},
           {id: 'c2', issueID: 'i1', created: 200, text: null},
@@ -2799,6 +3823,50 @@ suite('take with partition', () => {
         limit: 3,
         pushes: [{type: 'add', row: {id: 'c6', issueID: '3', created: 550}}],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [
+              {
+                "created": 100,
+                "id": "c1",
+                "issueID": "i1",
+                "text": null,
+              },
+              {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": null,
+              },
+              {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": null,
+              },
+            ],
+            "id": "i1",
+          },
+          {
+            "comments": [
+              {
+                "created": 400,
+                "id": "c4",
+                "issueID": "i2",
+                "text": null,
+              },
+              {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": null,
+              },
+            ],
+            "id": "i2",
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -2849,7 +3917,7 @@ suite('take with partition', () => {
 
   suite('remove', () => {
     test('limit 0', () => {
-      const {messages, storage, pushes} = takeTestWithPartition({
+      const {data, messages, storage, pushes} = takeTestWithPartition({
         sourceRows: [
           {id: 'c1', issueID: 'i1', created: 100, text: null},
           {id: 'c2', issueID: 'i1', created: 200, text: null},
@@ -2860,6 +3928,18 @@ suite('take with partition', () => {
           {type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}},
         ],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [],
+            "id": "i1",
+          },
+          {
+            "comments": [],
+            "id": "i2",
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -2881,7 +3961,7 @@ suite('take with partition', () => {
     });
 
     test('less than limit remove row at start', () => {
-      const {messages, storage, pushes} = takeTestWithPartition({
+      const {data, messages, storage, pushes} = takeTestWithPartition({
         sourceRows: [
           {id: 'c1', issueID: 'i1', created: 100, text: null},
           {id: 'c2', issueID: 'i1', created: 200, text: null},
@@ -2894,6 +3974,44 @@ suite('take with partition', () => {
           {type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}},
         ],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [
+              {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": null,
+              },
+              {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": null,
+              },
+            ],
+            "id": "i1",
+          },
+          {
+            "comments": [
+              {
+                "created": 400,
+                "id": "c4",
+                "issueID": "i2",
+                "text": null,
+              },
+              {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": null,
+              },
+            ],
+            "id": "i2",
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -3041,7 +4159,7 @@ suite('take with partition', () => {
     });
 
     test('remove row unfetched partition', () => {
-      const {messages, storage, pushes} = takeTestWithPartition({
+      const {data, messages, storage, pushes} = takeTestWithPartition({
         sourceRows: [
           {id: 'c1', issueID: 'i1', created: 100, text: null},
           {id: 'c2', issueID: 'i1', created: 200, text: null},
@@ -3055,6 +4173,50 @@ suite('take with partition', () => {
           {type: 'remove', row: {id: 'c6', issueID: 'i3', created: 600}},
         ],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [
+              {
+                "created": 100,
+                "id": "c1",
+                "issueID": "i1",
+                "text": null,
+              },
+              {
+                "created": 200,
+                "id": "c2",
+                "issueID": "i1",
+                "text": null,
+              },
+              {
+                "created": 300,
+                "id": "c3",
+                "issueID": "i1",
+                "text": null,
+              },
+            ],
+            "id": "i1",
+          },
+          {
+            "comments": [
+              {
+                "created": 400,
+                "id": "c4",
+                "issueID": "i2",
+                "text": null,
+              },
+              {
+                "created": 500,
+                "id": "c5",
+                "issueID": "i2",
+                "text": null,
+              },
+            ],
+            "id": "i2",
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -3115,7 +4277,7 @@ suite('take with partition', () => {
     } as const;
 
     test('limit 0', () => {
-      const {messages, storage, pushes} = takeTestWithPartition({
+      const {data, messages, storage, pushes} = takeTestWithPartition({
         ...base,
         limit: 0,
         pushes: [
@@ -3126,6 +4288,18 @@ suite('take with partition', () => {
           },
         ],
       });
+      expect(data).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [],
+            "id": "i1",
+          },
+          {
+            "comments": [],
+            "id": "i2",
+          },
+        ]
+      `);
       expect(messages).toMatchInlineSnapshot(`
         [
           [
@@ -3155,7 +4329,7 @@ suite('take with partition', () => {
 
     describe('less than limit ', () => {
       test('edit row at start', () => {
-        const {messages, storage, pushes} = takeTestWithPartition({
+        const {data, messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 5,
           pushes: [
@@ -3166,6 +4340,50 @@ suite('take with partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "comments": [
+                {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a2",
+                },
+                {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+              ],
+              "id": "i1",
+            },
+            {
+              "comments": [
+                {
+                  "created": 400,
+                  "id": "c4",
+                  "issueID": "i2",
+                  "text": "d",
+                },
+                {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+              ],
+              "id": "i2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -3301,7 +4519,7 @@ suite('take with partition', () => {
       });
 
       test('edit row at end', () => {
-        const {messages, storage, pushes} = takeTestWithPartition({
+        const {data, messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 5,
           pushes: [
@@ -3312,6 +4530,50 @@ suite('take with partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "comments": [
+                {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+              ],
+              "id": "i1",
+            },
+            {
+              "comments": [
+                {
+                  "created": 400,
+                  "id": "c4",
+                  "issueID": "i2",
+                  "text": "d",
+                },
+                {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e2",
+                },
+              ],
+              "id": "i2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -3449,7 +4711,7 @@ suite('take with partition', () => {
 
     describe('at limit', () => {
       test('edit row after boundary', () => {
-        const {messages, storage, pushes} = takeTestWithPartition({
+        const {data, messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 2,
           pushes: [
@@ -3460,6 +4722,44 @@ suite('take with partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "comments": [
+                {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+              ],
+              "id": "i1",
+            },
+            {
+              "comments": [
+                {
+                  "created": 400,
+                  "id": "c4",
+                  "issueID": "i2",
+                  "text": "d",
+                },
+                {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+              ],
+              "id": "i2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -3515,7 +4815,7 @@ suite('take with partition', () => {
       });
 
       test('edit row before boundary', () => {
-        const {messages, storage, pushes} = takeTestWithPartition({
+        const {data, messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 3,
           pushes: [
@@ -3526,6 +4826,50 @@ suite('take with partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "comments": [
+                {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b2",
+                },
+                {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+              ],
+              "id": "i1",
+            },
+            {
+              "comments": [
+                {
+                  "created": 400,
+                  "id": "c4",
+                  "issueID": "i2",
+                  "text": "d",
+                },
+                {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+              ],
+              "id": "i2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -3661,7 +5005,7 @@ suite('take with partition', () => {
       });
 
       test('edit row at boundary', () => {
-        const {messages, storage, pushes} = takeTestWithPartition({
+        const {data, messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 3,
           pushes: [
@@ -3672,6 +5016,50 @@ suite('take with partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "comments": [
+                {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+              ],
+              "id": "i1",
+            },
+            {
+              "comments": [
+                {
+                  "created": 400,
+                  "id": "c4",
+                  "issueID": "i2",
+                  "text": "d",
+                },
+                {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+              ],
+              "id": "i2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -3807,7 +5195,7 @@ suite('take with partition', () => {
       });
 
       test('edit row at boundary, making it not the boundary', () => {
-        const {messages, storage, pushes} = takeTestWithPartition({
+        const {data, messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 3,
           pushes: [
@@ -3818,6 +5206,50 @@ suite('take with partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "comments": [
+                {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                {
+                  "created": 150,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+                {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+              ],
+              "id": "i1",
+            },
+            {
+              "comments": [
+                {
+                  "created": 400,
+                  "id": "c4",
+                  "issueID": "i2",
+                  "text": "d",
+                },
+                {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+              ],
+              "id": "i2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -3972,7 +5404,7 @@ suite('take with partition', () => {
       });
 
       test('edit row at boundary, making it fall outside the window', () => {
-        const {messages, storage, pushes} = takeTestWithPartition({
+        const {data, messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 2,
           pushes: [
@@ -3983,6 +5415,50 @@ suite('take with partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "comments": [
+                {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+              ],
+              "id": "i1",
+            },
+            {
+              "comments": [
+                {
+                  "created": 400,
+                  "id": "c4",
+                  "issueID": "i2",
+                  "text": "d",
+                },
+                {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+              ],
+              "id": "i2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -4020,47 +5496,6 @@ suite('take with partition', () => {
                     "text": "b",
                   },
                 },
-              },
-            ],
-            [
-              ".comments:take",
-              "push",
-              {
-                "row": {
-                  "created": 200,
-                  "id": "c2",
-                  "issueID": "i1",
-                  "text": "b",
-                },
-                "type": "remove",
-              },
-            ],
-            [
-              ":source(issue)",
-              "fetch",
-              {
-                "constraint": {
-                  "id": "i1",
-                },
-              },
-            ],
-            [
-              ":join(comments)",
-              "push",
-              {
-                "child": {
-                  "row": {
-                    "created": 200,
-                    "id": "c2",
-                    "issueID": "i1",
-                    "text": "b",
-                  },
-                  "type": "remove",
-                },
-                "row": {
-                  "id": "i1",
-                },
-                "type": "child",
               },
             ],
             [
@@ -4142,27 +5577,6 @@ suite('take with partition', () => {
                   "node": {
                     "relationships": {},
                     "row": {
-                      "created": 200,
-                      "id": "c2",
-                      "issueID": "i1",
-                      "text": "b",
-                    },
-                  },
-                  "type": "remove",
-                },
-                "relationshipName": "comments",
-              },
-              "row": {
-                "id": "i1",
-              },
-              "type": "child",
-            },
-            {
-              "child": {
-                "change": {
-                  "node": {
-                    "relationships": {},
-                    "row": {
                       "created": 300,
                       "id": "c3",
                       "issueID": "i1",
@@ -4183,7 +5597,7 @@ suite('take with partition', () => {
       });
 
       test('edit row before boundary, changing its order', () => {
-        const {messages, storage, pushes} = takeTestWithPartition({
+        const {data, messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 3,
           pushes: [
@@ -4194,6 +5608,50 @@ suite('take with partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "comments": [
+                {
+                  "created": 50,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b2",
+                },
+                {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+              ],
+              "id": "i1",
+            },
+            {
+              "comments": [
+                {
+                  "created": 400,
+                  "id": "c4",
+                  "issueID": "i2",
+                  "text": "d",
+                },
+                {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+              ],
+              "id": "i2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -4329,17 +5787,57 @@ suite('take with partition', () => {
       });
 
       test('edit row after boundary to make it the new boundary', () => {
-        const {messages, storage, pushes} = takeTestWithPartition({
-          ...base,
-          limit: 2,
-          pushes: [
+        const {data, messages, storage, pushesWithFetch} =
+          takeTestWithPartition({
+            ...base,
+            limit: 2,
+            pushes: [
+              {
+                type: 'edit',
+                oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+                row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
+              },
+            ],
+            fetchOnPush: true,
+          });
+        expect(data).toMatchInlineSnapshot(`
+          [
             {
-              type: 'edit',
-              oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-              row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
+              "comments": [
+                {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a",
+                },
+                {
+                  "created": 150,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c2",
+                },
+              ],
+              "id": "i1",
             },
-          ],
-        });
+            {
+              "comments": [
+                {
+                  "created": 400,
+                  "id": "c4",
+                  "issueID": "i2",
+                  "text": "d",
+                },
+                {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+              ],
+              "id": "i2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -4385,47 +5883,6 @@ suite('take with partition', () => {
               "push",
               {
                 "row": {
-                  "created": 200,
-                  "id": "c2",
-                  "issueID": "i1",
-                  "text": "b",
-                },
-                "type": "remove",
-              },
-            ],
-            [
-              ":source(issue)",
-              "fetch",
-              {
-                "constraint": {
-                  "id": "i1",
-                },
-              },
-            ],
-            [
-              ":join(comments)",
-              "push",
-              {
-                "child": {
-                  "row": {
-                    "created": 200,
-                    "id": "c2",
-                    "issueID": "i1",
-                    "text": "b",
-                  },
-                  "type": "remove",
-                },
-                "row": {
-                  "id": "i1",
-                },
-                "type": "child",
-              },
-            ],
-            [
-              ".comments:take",
-              "push",
-              {
-                "row": {
                   "created": 150,
                   "id": "c3",
                   "issueID": "i1",
@@ -4455,6 +5912,47 @@ suite('take with partition', () => {
                     "text": "c2",
                   },
                   "type": "add",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "row": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                "type": "remove",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                  "type": "remove",
                 },
                 "row": {
                   "id": "i1",
@@ -4492,56 +5990,181 @@ suite('take with partition', () => {
             },
           }
         `);
-        expect(pushes).toMatchInlineSnapshot(`
+        expect(pushesWithFetch).toMatchInlineSnapshot(`
           [
             {
-              "child": {
-                "change": {
-                  "node": {
-                    "relationships": {},
-                    "row": {
-                      "created": 200,
-                      "id": "c2",
-                      "issueID": "i1",
-                      "text": "b",
+              "change": {
+                "child": {
+                  "change": {
+                    "node": {
+                      "relationships": {},
+                      "row": {
+                        "created": 150,
+                        "id": "c3",
+                        "issueID": "i1",
+                        "text": "c2",
+                      },
                     },
+                    "type": "add",
                   },
-                  "type": "remove",
+                  "relationshipName": "comments",
                 },
-                "relationshipName": "comments",
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
-              "row": {
-                "id": "i1",
-              },
-              "type": "child",
+              "fetch": [
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 100,
+                          "id": "c1",
+                          "issueID": "i1",
+                          "text": "a",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 150,
+                          "id": "c3",
+                          "issueID": "i1",
+                          "text": "c2",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 200,
+                          "id": "c2",
+                          "issueID": "i1",
+                          "text": "b",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i1",
+                  },
+                },
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 400,
+                          "id": "c4",
+                          "issueID": "i2",
+                          "text": "d",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 500,
+                          "id": "c5",
+                          "issueID": "i2",
+                          "text": "e",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                  },
+                },
+              ],
             },
             {
-              "child": {
-                "change": {
-                  "node": {
-                    "relationships": {},
-                    "row": {
-                      "created": 150,
-                      "id": "c3",
-                      "issueID": "i1",
-                      "text": "c2",
+              "change": {
+                "child": {
+                  "change": {
+                    "node": {
+                      "relationships": {},
+                      "row": {
+                        "created": 200,
+                        "id": "c2",
+                        "issueID": "i1",
+                        "text": "b",
+                      },
                     },
+                    "type": "remove",
                   },
-                  "type": "add",
+                  "relationshipName": "comments",
                 },
-                "relationshipName": "comments",
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
-              "row": {
-                "id": "i1",
-              },
-              "type": "child",
+              "fetch": [
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 100,
+                          "id": "c1",
+                          "issueID": "i1",
+                          "text": "a",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 150,
+                          "id": "c3",
+                          "issueID": "i1",
+                          "text": "c2",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i1",
+                  },
+                },
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 400,
+                          "id": "c4",
+                          "issueID": "i2",
+                          "text": "d",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 500,
+                          "id": "c5",
+                          "issueID": "i2",
+                          "text": "e",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                  },
+                },
+              ],
             },
           ]
         `);
       });
 
       test('edit row before boundary to make it new boundary', () => {
-        const {messages, storage, pushes} = takeTestWithPartition({
+        const {data, messages, storage, pushes} = takeTestWithPartition({
           ...base,
           limit: 2,
           pushes: [
@@ -4552,6 +6175,44 @@ suite('take with partition', () => {
             },
           ],
         });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "comments": [
+                {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                {
+                  "created": 250,
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "a2",
+                },
+              ],
+              "id": "i1",
+            },
+            {
+              "comments": [
+                {
+                  "created": 400,
+                  "id": "c4",
+                  "issueID": "i2",
+                  "text": "d",
+                },
+                {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+              ],
+              "id": "i2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -4705,17 +6366,57 @@ suite('take with partition', () => {
       });
 
       test('edit row before boundary to fetch new boundary', () => {
-        const {messages, storage, pushes} = takeTestWithPartition({
-          ...base,
-          limit: 2,
-          pushes: [
+        const {data, messages, storage, pushesWithFetch} =
+          takeTestWithPartition({
+            ...base,
+            limit: 2,
+            pushes: [
+              {
+                type: 'edit',
+                oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+                row: {id: 'c1', issueID: 'i1', created: 350, text: 'a2'},
+              },
+            ],
+            fetchOnPush: true,
+          });
+        expect(data).toMatchInlineSnapshot(`
+          [
             {
-              type: 'edit',
-              oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
-              row: {id: 'c1', issueID: 'i1', created: 350, text: 'a2'},
+              "comments": [
+                {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+              ],
+              "id": "i1",
             },
-          ],
-        });
+            {
+              "comments": [
+                {
+                  "created": 400,
+                  "id": "c4",
+                  "issueID": "i2",
+                  "text": "d",
+                },
+                {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+              ],
+              "id": "i2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -4867,49 +6568,156 @@ suite('take with partition', () => {
             },
           }
         `);
-        expect(pushes).toMatchInlineSnapshot(`
+        expect(pushesWithFetch).toMatchInlineSnapshot(`
           [
             {
-              "child": {
-                "change": {
-                  "node": {
-                    "relationships": {},
-                    "row": {
-                      "created": 100,
-                      "id": "c1",
-                      "issueID": "i1",
-                      "text": "a",
+              "change": {
+                "child": {
+                  "change": {
+                    "node": {
+                      "relationships": {},
+                      "row": {
+                        "created": 100,
+                        "id": "c1",
+                        "issueID": "i1",
+                        "text": "a",
+                      },
                     },
+                    "type": "remove",
                   },
-                  "type": "remove",
+                  "relationshipName": "comments",
                 },
-                "relationshipName": "comments",
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
-              "row": {
-                "id": "i1",
-              },
-              "type": "child",
+              "fetch": [
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 200,
+                          "id": "c2",
+                          "issueID": "i1",
+                          "text": "b",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i1",
+                  },
+                },
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 400,
+                          "id": "c4",
+                          "issueID": "i2",
+                          "text": "d",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 500,
+                          "id": "c5",
+                          "issueID": "i2",
+                          "text": "e",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                  },
+                },
+              ],
             },
             {
-              "child": {
-                "change": {
-                  "node": {
-                    "relationships": {},
-                    "row": {
-                      "created": 300,
-                      "id": "c3",
-                      "issueID": "i1",
-                      "text": "c",
+              "change": {
+                "child": {
+                  "change": {
+                    "node": {
+                      "relationships": {},
+                      "row": {
+                        "created": 300,
+                        "id": "c3",
+                        "issueID": "i1",
+                        "text": "c",
+                      },
                     },
+                    "type": "add",
                   },
-                  "type": "add",
+                  "relationshipName": "comments",
                 },
-                "relationshipName": "comments",
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
-              "row": {
-                "id": "i1",
-              },
-              "type": "child",
+              "fetch": [
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 200,
+                          "id": "c2",
+                          "issueID": "i1",
+                          "text": "b",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 300,
+                          "id": "c3",
+                          "issueID": "i1",
+                          "text": "c",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i1",
+                  },
+                },
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 400,
+                          "id": "c4",
+                          "issueID": "i2",
+                          "text": "d",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 500,
+                          "id": "c5",
+                          "issueID": "i2",
+                          "text": "e",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                  },
+                },
+              ],
             },
           ]
         `);
@@ -4918,17 +6726,57 @@ suite('take with partition', () => {
 
     describe('changing partition value', () => {
       test('move to from first partition to second', () => {
-        const {messages, storage, pushes} = takeTestWithPartition({
-          ...base,
-          limit: 2,
-          pushes: [
+        const {data, messages, storage, pushesWithFetch} =
+          takeTestWithPartition({
+            ...base,
+            limit: 2,
+            pushes: [
+              {
+                type: 'edit',
+                oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+                row: {id: 'c1', issueID: 'i2', created: 100, text: 'a2'},
+              },
+            ],
+            fetchOnPush: true,
+          });
+        expect(data).toMatchInlineSnapshot(`
+          [
             {
-              type: 'edit',
-              oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
-              row: {id: 'c1', issueID: 'i2', created: 100, text: 'a2'},
+              "comments": [
+                {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                {
+                  "created": 300,
+                  "id": "c3",
+                  "issueID": "i1",
+                  "text": "c",
+                },
+              ],
+              "id": "i1",
             },
-          ],
-        });
+            {
+              "comments": [
+                {
+                  "created": 100,
+                  "id": "c1",
+                  "issueID": "i2",
+                  "text": "a2",
+                },
+                {
+                  "created": 400,
+                  "id": "c4",
+                  "issueID": "i2",
+                  "text": "d",
+                },
+              ],
+              "id": "i2",
+            },
+          ]
+        `);
         expect(messages).toMatchInlineSnapshot(`
           [
             [
@@ -5207,91 +7055,323 @@ suite('take with partition', () => {
             },
           }
         `);
-        expect(pushes).toMatchInlineSnapshot(`
+        expect(pushesWithFetch).toMatchInlineSnapshot(`
           [
             {
-              "child": {
-                "change": {
-                  "node": {
-                    "relationships": {},
-                    "row": {
-                      "created": 100,
-                      "id": "c1",
-                      "issueID": "i1",
-                      "text": "a",
+              "change": {
+                "child": {
+                  "change": {
+                    "node": {
+                      "relationships": {},
+                      "row": {
+                        "created": 100,
+                        "id": "c1",
+                        "issueID": "i1",
+                        "text": "a",
+                      },
                     },
+                    "type": "remove",
                   },
-                  "type": "remove",
+                  "relationshipName": "comments",
                 },
-                "relationshipName": "comments",
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
-              "row": {
-                "id": "i1",
-              },
-              "type": "child",
+              "fetch": [
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 200,
+                          "id": "c2",
+                          "issueID": "i1",
+                          "text": "b",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i1",
+                  },
+                },
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 400,
+                          "id": "c4",
+                          "issueID": "i2",
+                          "text": "d",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 500,
+                          "id": "c5",
+                          "issueID": "i2",
+                          "text": "e",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                  },
+                },
+              ],
             },
             {
-              "child": {
-                "change": {
-                  "node": {
-                    "relationships": {},
-                    "row": {
-                      "created": 300,
-                      "id": "c3",
-                      "issueID": "i1",
-                      "text": "c",
+              "change": {
+                "child": {
+                  "change": {
+                    "node": {
+                      "relationships": {},
+                      "row": {
+                        "created": 300,
+                        "id": "c3",
+                        "issueID": "i1",
+                        "text": "c",
+                      },
                     },
+                    "type": "add",
                   },
-                  "type": "add",
+                  "relationshipName": "comments",
                 },
-                "relationshipName": "comments",
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
-              "row": {
-                "id": "i1",
-              },
-              "type": "child",
+              "fetch": [
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 200,
+                          "id": "c2",
+                          "issueID": "i1",
+                          "text": "b",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 300,
+                          "id": "c3",
+                          "issueID": "i1",
+                          "text": "c",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i1",
+                  },
+                },
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 400,
+                          "id": "c4",
+                          "issueID": "i2",
+                          "text": "d",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 500,
+                          "id": "c5",
+                          "issueID": "i2",
+                          "text": "e",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                  },
+                },
+              ],
             },
             {
-              "child": {
-                "change": {
-                  "node": {
-                    "relationships": {},
-                    "row": {
-                      "created": 100,
-                      "id": "c1",
-                      "issueID": "i2",
-                      "text": "a2",
+              "change": {
+                "child": {
+                  "change": {
+                    "node": {
+                      "relationships": {},
+                      "row": {
+                        "created": 100,
+                        "id": "c1",
+                        "issueID": "i2",
+                        "text": "a2",
+                      },
                     },
+                    "type": "add",
                   },
-                  "type": "add",
+                  "relationshipName": "comments",
                 },
-                "relationshipName": "comments",
+                "row": {
+                  "id": "i2",
+                },
+                "type": "child",
               },
-              "row": {
-                "id": "i2",
-              },
-              "type": "child",
+              "fetch": [
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 200,
+                          "id": "c2",
+                          "issueID": "i1",
+                          "text": "b",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 300,
+                          "id": "c3",
+                          "issueID": "i1",
+                          "text": "c",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i1",
+                  },
+                },
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 100,
+                          "id": "c1",
+                          "issueID": "i2",
+                          "text": "a2",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 400,
+                          "id": "c4",
+                          "issueID": "i2",
+                          "text": "d",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 500,
+                          "id": "c5",
+                          "issueID": "i2",
+                          "text": "e",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                  },
+                },
+              ],
             },
             {
-              "child": {
-                "change": {
-                  "node": {
-                    "relationships": {},
-                    "row": {
-                      "created": 500,
-                      "id": "c5",
-                      "issueID": "i2",
-                      "text": "e",
+              "change": {
+                "child": {
+                  "change": {
+                    "node": {
+                      "relationships": {},
+                      "row": {
+                        "created": 500,
+                        "id": "c5",
+                        "issueID": "i2",
+                        "text": "e",
+                      },
                     },
+                    "type": "remove",
                   },
-                  "type": "remove",
+                  "relationshipName": "comments",
                 },
-                "relationshipName": "comments",
+                "row": {
+                  "id": "i2",
+                },
+                "type": "child",
               },
-              "row": {
-                "id": "i2",
-              },
-              "type": "child",
+              "fetch": [
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 200,
+                          "id": "c2",
+                          "issueID": "i1",
+                          "text": "b",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 300,
+                          "id": "c3",
+                          "issueID": "i1",
+                          "text": "c",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i1",
+                  },
+                },
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 100,
+                          "id": "c1",
+                          "issueID": "i2",
+                          "text": "a2",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 400,
+                          "id": "c4",
+                          "issueID": "i2",
+                          "text": "d",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                  },
+                },
+              ],
             },
           ]
         `);
@@ -5339,8 +7419,11 @@ function takeNoPartitionTest(t: TakeTest) {
     pushes: t.pushes.map(change => [testTableName, change]),
     fetchOnPush: t.fetchOnPush,
   });
-
+  if (result.pushes.length > 1 && !t.fetchOnPush) {
+    throw new Error('Test with multiple pushes should use fetchOnPush');
+  }
   return {
+    data: result.data,
     messages: result.log,
     storage: result.actualStorage[':take'],
     pushes: result.pushes,
@@ -5404,10 +7487,16 @@ function takeTestWithPartition(t: TakeTest) {
       },
     },
     pushes: t.pushes.map(change => ['comment', change]),
+    fetchOnPush: t.fetchOnPush,
   });
+  if (result.pushes.length > 1 && !t.fetchOnPush) {
+    throw new Error('Test with multiple pushes should use fetchOnPush');
+  }
   return {
+    data: result.data,
     messages: result.log,
     storage: result.actualStorage['.comments:take'],
     pushes: result.pushes,
+    pushesWithFetch: result.pushesWithFetch,
   };
 }

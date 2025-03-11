@@ -349,13 +349,13 @@ export class Take implements Operator {
       }
 
       if (newBound?.push) {
+        this.#output.push(change);
         this.#setTakeState(
           takeStateKey,
           takeState.size,
           newBound.node.row,
           maxBound,
         );
-        this.#output.push(change);
         this.#output.push({
           type: 'add',
           node: newBound.node,
@@ -481,10 +481,6 @@ export class Take implements Operator {
         maxBound,
       );
       this.#output.push({
-        type: 'remove',
-        node: change.oldNode,
-      });
-      this.#output.push({
         type: 'add',
         node: newBoundNode,
       });
@@ -514,21 +510,19 @@ export class Take implements Operator {
         2,
       );
 
+      this.#output.push({
+        type: 'add',
+        node: change.node,
+      });
       this.#setTakeState(
         takeStateKey,
         takeState.size,
         newBoundNode.row,
         maxBound,
       );
-
       this.#output.push({
         type: 'remove',
         node: oldBoundNode,
-      });
-
-      this.#output.push({
-        type: 'add',
-        node: change.node,
       });
 
       return;
@@ -567,17 +561,16 @@ export class Take implements Operator {
         return;
       }
 
+      this.#output.push({
+        type: 'remove',
+        node: change.oldNode,
+      });
       this.#setTakeState(
         takeStateKey,
         takeState.size,
         afterBoundNode.row,
         maxBound,
       );
-
-      this.#output.push({
-        type: 'remove',
-        node: change.oldNode,
-      });
       this.#output.push({
         type: 'add',
         node: afterBoundNode,
