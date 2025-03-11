@@ -574,6 +574,564 @@ test('overlay-source-isolation', () => {
   expect(o3.fetches).toEqual([[], [], asNodes([{a: 2}])]);
 });
 
+test('overlay-source-isolation with split edit', () => {
+  // Ok this is a little tricky. We are trying to show that overlays
+  // only show up for one output at a time. But because calling outputs
+  // is synchronous with push, it's a little tough to catch (especially
+  // without involving joins, which is the reason we care about this).
+  // To do so, we arrange for each output to call fetch when any of the
+  // *other* outputs are pushed to. Then we can observe that the overlay
+  // only shows up in the cases it is supposed to.
+
+  const sort = [['a', 'asc']] as const;
+  const s = createSource(
+    lc,
+    logConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}, c: {type: 'number'}},
+    ['a'],
+  );
+  const o1 = new OverlaySpy(s.connect(sort));
+  const o2 = new OverlaySpy(s.connect(sort, undefined, new Set(['b', 'c'])));
+  const o3 = new OverlaySpy(s.connect(sort, undefined, new Set(['c'])));
+
+  function fetchAll() {
+    o1.fetch({});
+    o2.fetch({});
+    o3.fetch({});
+  }
+
+  function clearAll() {
+    o1.fetches.length = 0;
+    o2.fetches.length = 0;
+    o3.fetches.length = 0;
+  }
+
+  o1.onPush = fetchAll;
+  o2.onPush = fetchAll;
+  o3.onPush = fetchAll;
+
+  s.push({type: 'add', row: {a: 2, b: 'foo', c: 1}});
+  s.push({type: 'add', row: {a: 3, b: 'bar', c: 1}});
+
+  clearAll();
+
+  s.push({
+    type: 'edit',
+    oldRow: {a: 2, b: 'foo', c: 1},
+    row: {a: 2, b: 'foo2', c: 1},
+  });
+
+  // 1 push for o1, 2 pushes for o2 (because it splits the edit) and
+  // 1 push for o3
+  expect(o1.fetches.length).toEqual(4);
+  expect(o2.fetches.length).toEqual(4);
+  expect(o3.fetches.length).toEqual(4);
+
+  expect(o1.fetches).toMatchInlineSnapshot(`
+    [
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+    ]
+  `);
+
+  expect(o2.fetches).toMatchInlineSnapshot(`
+    [
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+    ]
+  `);
+
+  expect(o3.fetches).toMatchInlineSnapshot(`
+    [
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+    ]
+  `);
+
+  clearAll();
+
+  s.push({
+    type: 'edit',
+    oldRow: {a: 3, b: 'bar', c: 1},
+    row: {a: 3, b: 'bar', c: 2},
+  });
+
+  // 1 push for o1, 2 pushes for o2 and o3 (because they split edit)
+  expect(o1.fetches.length).toEqual(5);
+  expect(o2.fetches.length).toEqual(5);
+  expect(o3.fetches.length).toEqual(5);
+
+  expect(o1.fetches).toMatchInlineSnapshot(`
+    [
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 2,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 2,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 2,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 2,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 2,
+          },
+        },
+      ],
+    ]
+  `);
+  expect(o2.fetches).toMatchInlineSnapshot(`
+    [
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 2,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 2,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 2,
+          },
+        },
+      ],
+    ]
+  `);
+  expect(o3.fetches).toMatchInlineSnapshot(`
+    [
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
+          },
+        },
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 2,
+          },
+        },
+      ],
+    ]
+  `);
+});
+
 suite('overlay-vs-fetch-start', () => {
   function t(c: {
     startData: Row[];

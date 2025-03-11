@@ -3,7 +3,7 @@ import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {Change, ChildChange} from './change.ts';
-import {compareValues, valuesEqual, type Node} from './data.ts';
+import {compareValues, type Node} from './data.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -168,11 +168,7 @@ export class Join implements Input {
             change.node.row,
             this.#parentKey,
           ),
-          `Parent edit must not change relationship. ${JSON.stringify(
-            change.oldNode.row,
-          )},  ${JSON.stringify(change.node.row)}, ${JSON.stringify(
-            this.#parentKey,
-          )}`,
+          `Parent edit must not change relationship.`,
         );
         this.#output.push({
           type: 'edit',
