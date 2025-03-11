@@ -1,9 +1,6 @@
 import {describe, expect, suite, test} from 'vitest';
-import type {JSONObject} from '../../../shared/src/json.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import {type CaughtChange} from './catch.ts';
-import {type SnitchMessage} from './snitch.ts';
 import type {SourceChange} from './source.ts';
 import {runPushTest, type Sources} from './test/push-tests.ts';
 
@@ -221,7 +218,7 @@ suite('take with no partition', () => {
     });
 
     test('at limit add row at start', () => {
-      const {messages, storage, pushes} = takeNoPartitionTest({
+      const {messages, storage, pushesWithFetch} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
           {id: 'i2', created: 200, text: null},
@@ -230,6 +227,7 @@ suite('take with no partition', () => {
         ],
         limit: 3,
         pushes: [{type: 'add', row: {id: 'i5', created: 50}}],
+        fetchOnPush: true,
       });
       expect(messages).toMatchInlineSnapshot(`
         [
@@ -265,11 +263,10 @@ suite('take with no partition', () => {
             "push",
             {
               "row": {
-                "created": 300,
-                "id": "i3",
-                "text": null,
+                "created": 50,
+                "id": "i5",
               },
-              "type": "remove",
+              "type": "add",
             },
           ],
           [
@@ -277,10 +274,11 @@ suite('take with no partition', () => {
             "push",
             {
               "row": {
-                "created": 50,
-                "id": "i5",
+                "created": 300,
+                "id": "i3",
+                "text": null,
               },
-              "type": "add",
+              "type": "remove",
             },
           ],
         ]
@@ -302,28 +300,90 @@ suite('take with no partition', () => {
           },
         }
       `);
-      expect(pushes).toMatchInlineSnapshot(`
+      expect(pushesWithFetch).toMatchInlineSnapshot(`
         [
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 300,
-                "id": "i3",
-                "text": null,
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 50,
+                  "id": "i5",
+                },
               },
+              "type": "add",
             },
-            "type": "remove",
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 50,
+                  "id": "i5",
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
+              },
+            ],
           },
           {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 50,
-                "id": "i5",
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": null,
+                },
               },
+              "type": "remove",
             },
-            "type": "add",
+            "fetch": [
+              {
+                "relationships": {},
+                "row": {
+                  "created": 50,
+                  "id": "i5",
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 100,
+                  "id": "i1",
+                  "text": null,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "created": 200,
+                  "id": "i2",
+                  "text": null,
+                },
+              },
+            ],
           },
         ]
       `);
@@ -374,11 +434,10 @@ suite('take with no partition', () => {
             "push",
             {
               "row": {
-                "created": 300,
-                "id": "i3",
-                "text": null,
+                "created": 250,
+                "id": "i5",
               },
-              "type": "remove",
+              "type": "add",
             },
           ],
           [
@@ -386,10 +445,11 @@ suite('take with no partition', () => {
             "push",
             {
               "row": {
-                "created": 250,
-                "id": "i5",
+                "created": 300,
+                "id": "i3",
+                "text": null,
               },
-              "type": "add",
+              "type": "remove",
             },
           ],
         ]
@@ -416,22 +476,22 @@ suite('take with no partition', () => {
             "node": {
               "relationships": {},
               "row": {
+                "created": 250,
+                "id": "i5",
+              },
+            },
+            "type": "add",
+          },
+          {
+            "node": {
+              "relationships": {},
+              "row": {
                 "created": 300,
                 "id": "i3",
                 "text": null,
               },
             },
             "type": "remove",
-          },
-          {
-            "node": {
-              "relationships": {},
-              "row": {
-                "created": 250,
-                "id": "i5",
-              },
-            },
-            "type": "add",
           },
         ]
       `);
@@ -2576,6 +2636,45 @@ suite('take with partition', () => {
             "push",
             {
               "row": {
+                "created": 550,
+                "id": "c8",
+                "issueID": "i2",
+              },
+              "type": "add",
+            },
+          ],
+          [
+            ":source(issue)",
+            "fetch",
+            {
+              "constraint": {
+                "id": "i2",
+              },
+            },
+          ],
+          [
+            ":join(comments)",
+            "push",
+            {
+              "child": {
+                "row": {
+                  "created": 550,
+                  "id": "c8",
+                  "issueID": "i2",
+                },
+                "type": "add",
+              },
+              "row": {
+                "id": "i2",
+              },
+              "type": "child",
+            },
+          ],
+          [
+            ".comments:take",
+            "push",
+            {
+              "row": {
                 "created": 600,
                 "id": "c6",
                 "issueID": "i2",
@@ -2605,45 +2704,6 @@ suite('take with partition', () => {
                   "text": null,
                 },
                 "type": "remove",
-              },
-              "row": {
-                "id": "i2",
-              },
-              "type": "child",
-            },
-          ],
-          [
-            ".comments:take",
-            "push",
-            {
-              "row": {
-                "created": 550,
-                "id": "c8",
-                "issueID": "i2",
-              },
-              "type": "add",
-            },
-          ],
-          [
-            ":source(issue)",
-            "fetch",
-            {
-              "constraint": {
-                "id": "i2",
-              },
-            },
-          ],
-          [
-            ":join(comments)",
-            "push",
-            {
-              "child": {
-                "row": {
-                  "created": 550,
-                  "id": "c8",
-                  "issueID": "i2",
-                },
-                "type": "add",
               },
               "row": {
                 "id": "i2",
@@ -2688,13 +2748,12 @@ suite('take with partition', () => {
                 "node": {
                   "relationships": {},
                   "row": {
-                    "created": 600,
-                    "id": "c6",
+                    "created": 550,
+                    "id": "c8",
                     "issueID": "i2",
-                    "text": null,
                   },
                 },
-                "type": "remove",
+                "type": "add",
               },
               "relationshipName": "comments",
             },
@@ -2709,12 +2768,13 @@ suite('take with partition', () => {
                 "node": {
                   "relationships": {},
                   "row": {
-                    "created": 550,
-                    "id": "c8",
+                    "created": 600,
+                    "id": "c6",
                     "issueID": "i2",
+                    "text": null,
                   },
                 },
-                "type": "add",
+                "type": "remove",
               },
               "relationshipName": "comments",
             },
@@ -5040,47 +5100,6 @@ suite('take with partition', () => {
               "push",
               {
                 "row": {
-                  "created": 500,
-                  "id": "c5",
-                  "issueID": "i2",
-                  "text": "e",
-                },
-                "type": "remove",
-              },
-            ],
-            [
-              ":source(issue)",
-              "fetch",
-              {
-                "constraint": {
-                  "id": "i2",
-                },
-              },
-            ],
-            [
-              ":join(comments)",
-              "push",
-              {
-                "child": {
-                  "row": {
-                    "created": 500,
-                    "id": "c5",
-                    "issueID": "i2",
-                    "text": "e",
-                  },
-                  "type": "remove",
-                },
-                "row": {
-                  "id": "i2",
-                },
-                "type": "child",
-              },
-            ],
-            [
-              ".comments:take",
-              "push",
-              {
-                "row": {
                   "created": 100,
                   "id": "c1",
                   "issueID": "i2",
@@ -5110,6 +5129,47 @@ suite('take with partition', () => {
                     "text": "a2",
                   },
                   "type": "add",
+                },
+                "row": {
+                  "id": "i2",
+                },
+                "type": "child",
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "row": {
+                  "created": 500,
+                  "id": "c5",
+                  "issueID": "i2",
+                  "text": "e",
+                },
+                "type": "remove",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i2",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "row": {
+                    "created": 500,
+                    "id": "c5",
+                    "issueID": "i2",
+                    "text": "e",
+                  },
+                  "type": "remove",
                 },
                 "row": {
                   "id": "i2",
@@ -5197,27 +5257,6 @@ suite('take with partition', () => {
                   "node": {
                     "relationships": {},
                     "row": {
-                      "created": 500,
-                      "id": "c5",
-                      "issueID": "i2",
-                      "text": "e",
-                    },
-                  },
-                  "type": "remove",
-                },
-                "relationshipName": "comments",
-              },
-              "row": {
-                "id": "i2",
-              },
-              "type": "child",
-            },
-            {
-              "child": {
-                "change": {
-                  "node": {
-                    "relationships": {},
-                    "row": {
                       "created": 100,
                       "id": "c1",
                       "issueID": "i2",
@@ -5233,6 +5272,27 @@ suite('take with partition', () => {
               },
               "type": "child",
             },
+            {
+              "child": {
+                "change": {
+                  "node": {
+                    "relationships": {},
+                    "row": {
+                      "created": 500,
+                      "id": "c5",
+                      "issueID": "i2",
+                      "text": "e",
+                    },
+                  },
+                  "type": "remove",
+                },
+                "relationshipName": "comments",
+              },
+              "row": {
+                "id": "i2",
+              },
+              "type": "child",
+            },
           ]
         `);
       });
@@ -5240,19 +5300,14 @@ suite('take with partition', () => {
   });
 });
 
-type TakeTestResults = {
-  messages: SnitchMessage[];
-  storage: JSONObject;
-  pushes: CaughtChange[];
-};
-
 type TakeTest = {
   sourceRows: readonly Row[];
   limit: number;
   pushes: SourceChange[];
+  fetchOnPush?: boolean | undefined;
 };
 
-function takeNoPartitionTest(t: TakeTest): TakeTestResults {
+function takeNoPartitionTest(t: TakeTest) {
   const testTableName = 'testTable';
   const ast: AST = {
     table: 'testTable',
@@ -5282,16 +5337,18 @@ function takeNoPartitionTest(t: TakeTest): TakeTestResults {
       relationships: {},
     },
     pushes: t.pushes.map(change => [testTableName, change]),
+    fetchOnPush: t.fetchOnPush,
   });
 
   return {
     messages: result.log,
     storage: result.actualStorage[':take'],
     pushes: result.pushes,
+    pushesWithFetch: result.pushesWithFetch,
   };
 }
 
-function takeTestWithPartition(t: TakeTest): TakeTestResults {
+function takeTestWithPartition(t: TakeTest) {
   const sources: Sources = {
     issue: {
       columns: {

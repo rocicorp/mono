@@ -288,6 +288,7 @@ export class Take implements Operator {
         type: 'remove',
         node: boundNode,
       };
+      this.#output.push(change);
       this.#setTakeState(
         takeStateKey,
         takeState.size,
@@ -298,7 +299,6 @@ export class Take implements Operator {
         maxBound,
       );
       this.#output.push(removeChange);
-      this.#output.push(change);
     } else if (change.type === 'remove') {
       if (takeState.bound === undefined) {
         // change is after bound
