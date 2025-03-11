@@ -307,7 +307,7 @@ function logIfSlow(
     for (const [key, value] of Object.entries(attrs)) {
       lc = lc.withContext(key, value);
     }
-    lc.warn?.('Slow query', elapsed);
+    lc.warn?.('Slow SQLite query', elapsed);
     manualSpan(tracer, 'db.slow-query', elapsed, attrs);
   }
 }

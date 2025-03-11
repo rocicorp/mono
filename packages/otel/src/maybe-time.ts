@@ -13,7 +13,7 @@ export function timeSampled<T>(
     const result = cb();
     const duration = performance.now() - start;
     if (duration > threshold) {
-      lc.info?.(`${prefix()} duration: ${duration}ms`);
+      lc.warn?.(`${prefix()} duration: ${duration}ms`);
     }
 
     return result;

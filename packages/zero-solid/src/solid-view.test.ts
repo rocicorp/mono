@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import {expect, test, vi} from 'vitest';
-import type {LogConfig} from '../../otel/src/log-options.ts';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {unreachable} from '../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {stringCompare} from '../../shared/src/string-compare.ts';
@@ -17,12 +17,6 @@ import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
 import {SolidView, solidViewFactory} from './solid-view.ts';
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 test('basics', () => {
   const ms = new MemorySource(
@@ -135,7 +129,7 @@ test('single-format', () => {
 test('hydrate-empty', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
@@ -162,7 +156,7 @@ test('hydrate-empty', () => {
 test('tree', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
@@ -450,7 +444,7 @@ test('tree', () => {
 test('tree-single', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
@@ -1158,7 +1152,7 @@ test('collapse-single', () => {
 test('basic with edit pushes', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {id: {type: 'number'}, b: {type: 'string'}},
     ['id'],
@@ -1209,7 +1203,7 @@ test('basic with edit pushes', () => {
 test('tree edit', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {
       id: {type: 'number'},
@@ -1435,7 +1429,7 @@ test('tree edit', () => {
 test('edit to change the order', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
