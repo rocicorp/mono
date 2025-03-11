@@ -97,8 +97,6 @@ export class TransactionImpl implements Transaction<Schema> {
     this.clientID = repTx.clientID;
     this.mutationID = repTx.mutationID;
     this.reason = repTx.reason === 'initial' ? 'optimistic' : 'rebase';
-    // ~ Note: we will likely need to leverage proxies one day to create
-    // ~ crud mutators and queries on demand for users with very large schemas.
     this.mutate = makeSchemaCRUD(
       schema,
       repTx,
@@ -150,11 +148,21 @@ function makeSchemaCRUD(
   tx: WriteTransaction,
   ivmBranch: IVMSourceBranch | undefined,
 ) {
-  const mutate: Record<string, TableCRUD<TableSchema>> = {};
-  for (const [name] of Object.entries(schema.tables)) {
-    mutate[name] = makeTableCRUD(schema, name, tx, ivmBranch);
-  }
-  return mutate;
+  // Only creates the CRUD mutators on demand
+  // rather than creating them all up-front for each mutation.
+  return new Proxy(
+    {},
+    {
+      get(target: Record<string, TableCRUD<TableSchema>>, prop: string) {
+        if (prop in target) {
+          return target[prop];
+        }
+
+        target[prop] = makeTableCRUD(schema, prop, tx, ivmBranch);
+        return target[prop];
+      },
+    },
+  ) as SchemaCRUD<Schema>;
 }
 
 function makeSchemaQuery(
@@ -163,7 +171,6 @@ function makeSchemaQuery(
   ivmBranch: IVMSourceBranch,
   slowMaterializeThreshold: number,
 ) {
-  const rv = {} as Record<string, Query<Schema, string>>;
   const context = new ZeroContext(
     lc,
     ivmBranch,
@@ -172,11 +179,19 @@ function makeSchemaQuery(
     slowMaterializeThreshold,
   );
 
-  for (const name of Object.keys(schema.tables)) {
-    rv[name] = newQuery(context, schema, name);
-  }
+  return new Proxy(
+    {},
+    {
+      get(target: Record<string, Query<Schema, string>>, prop: string) {
+        if (prop in target) {
+          return target[prop];
+        }
 
-  return rv as SchemaQuery<Schema>;
+        target[prop] = newQuery(context, schema, prop);
+        return target[prop];
+      },
+    },
+  ) as SchemaQuery<Schema>;
 }
 
 function makeTableCRUD(
