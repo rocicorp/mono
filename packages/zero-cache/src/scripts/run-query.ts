@@ -92,6 +92,7 @@ const host: QueryDelegate = {
   addServerQuery() {
     return () => {};
   },
+  onQueryMaterialized() {},
   onTransactionCommit() {
     return () => {};
   },

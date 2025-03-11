@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
@@ -35,16 +36,22 @@ export class ZeroContext implements QueryDelegate {
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
+  readonly slowMaterializeThreshold: number;
+  readonly lc: LogContext;
   readonly staticQueryParameters = undefined;
 
   constructor(
+    lc: LogContext,
     mainSources: IVMSourceBranch,
     addQuery: AddQuery,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
+    slowMaterializeThreshold: number,
   ) {
     this.#mainSources = mainSources;
     this.#addQuery = addQuery;
     this.#batchViewUpdates = batchViewUpdates;
+    this.lc = lc;
+    this.slowMaterializeThreshold = slowMaterializeThreshold;
   }
 
   getSource(name: string): Source | undefined {
@@ -53,6 +60,27 @@ export class ZeroContext implements QueryDelegate {
 
   addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback | undefined) {
     return this.#addQuery(ast, ttl, gotCallback);
+  }
+
+  onQueryMaterialized(hash: string, ast: AST, duration: number): void {
+    if (
+      this.slowMaterializeThreshold !== undefined &&
+      duration > this.slowMaterializeThreshold
+    ) {
+      this.lc.warn?.(
+        'Slow query materialization (including server/network)',
+        hash,
+        ast,
+        duration,
+      );
+    } else {
+      this.lc.debug?.(
+        'Materialized query (including server/network)',
+        hash,
+        ast,
+        duration,
+      );
+    }
   }
 
   createStorage(): Storage {

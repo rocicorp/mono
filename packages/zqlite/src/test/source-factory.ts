@@ -91,6 +91,7 @@ export function newQueryDelegate(
     addServerQuery() {
       return () => {};
     },
+    onQueryMaterialized() {},
     onTransactionCommit() {
       return () => {};
     },

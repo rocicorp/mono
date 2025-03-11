@@ -412,6 +412,7 @@ export class Zero<
       schema,
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
+      slowMaterializeThreshold = 5_000,
     } = options as ZeroAdvancedOptions<S>;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -581,9 +582,11 @@ export class Zero<
     );
 
     this.#zeroContext = new ZeroContext(
+      this.#lc,
       this.#ivmMain,
       (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
       batchViewUpdates,
+      slowMaterializeThreshold,
     );
 
     rep.experimentalWatch(

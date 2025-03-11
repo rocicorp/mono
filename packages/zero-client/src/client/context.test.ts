@@ -10,6 +10,7 @@ import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import {type AddQuery, ZeroContext} from './context.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
+import {LogContext} from '@rocicorp/logger';
 
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();
@@ -33,9 +34,11 @@ test('getSource', () => {
   });
 
   const context = new ZeroContext(
+    new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
     testBatchViewUpdates,
+    5_000,
   );
 
   const source = context.getSource('users');
@@ -103,9 +106,11 @@ const schema = createSchema({
 
 test('processChanges', () => {
   const context = new ZeroContext(
+    new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
     testBatchViewUpdates,
+    5_000,
   );
   const out = new Catch(
     context.getSource('t1')!.connect([
@@ -166,9 +171,11 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
     ]);
   };
   const context = new ZeroContext(
+    new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
     batchViewUpdates,
+    5_000,
   );
   const out = new Catch(
     context.getSource('t1')!.connect([
@@ -218,9 +225,11 @@ test('transactions', () => {
   });
 
   const context = new ZeroContext(
+    new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
     testBatchViewUpdates,
+    5_000,
   );
   const servers = context.getSource('server')!;
   const flair = context.getSource('flair')!;
@@ -291,9 +300,11 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
     batchViewUpdatesCalls++;
   };
   const context = new ZeroContext(
+    new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
     batchViewUpdates,
+    5_000,
   );
 
   expect(batchViewUpdatesCalls).toEqual(0);
@@ -308,9 +319,11 @@ test('batchViewUpdates returns value', () => {
     batchViewUpdatesCalls++;
   };
   const context = new ZeroContext(
+    new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
     batchViewUpdates,
+    5_000,
   );
 
   expect(batchViewUpdatesCalls).toEqual(0);
