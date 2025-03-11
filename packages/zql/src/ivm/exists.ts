@@ -76,7 +76,10 @@ export class Exists implements Operator {
     this.#relationshipName = relationshipName;
     this.#input.setOutput(this);
     this.#storage = storage as ExistsStorage;
-    assert(this.#input.getSchema().relationships[relationshipName]);
+    assert(
+      this.#input.getSchema().relationships[relationshipName],
+      `Input schema missing ${relationshipName}`,
+    );
     this.#not = type === 'NOT EXISTS';
     this.#parentJoinKey = parentJoinKey;
 
