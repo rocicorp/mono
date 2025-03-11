@@ -15,10 +15,14 @@ const dbTypes = {
   json: ['jsonb', 'json'],
 } as const;
 
-export function generateSchema(rng: Rng, faker: Faker): Schema {
+export function generateSchema(
+  rng: Rng,
+  faker: Faker,
+  numTables?: number,
+): Schema {
   const tables = generateUniqueValues(
     faker.word.noun,
-    Math.floor(rng() * 10) + 1,
+    numTables ?? Math.floor(rng() * 10) + 1,
   ).map(name => generateTable(name, rng, faker));
   const relationships = generateRelationships(rng, tables);
 
