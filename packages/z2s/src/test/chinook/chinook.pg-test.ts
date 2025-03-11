@@ -30,7 +30,10 @@ import {schema} from './schema.ts';
 import type {Query} from '../../../../zql/src/query/query.ts';
 import {formatPg} from '../../sql.ts';
 import {compile} from '../../compiler.ts';
-import type {JSONValue} from '../../../../shared/src/json.ts';
+import type {
+  JSONValue,
+  ReadonlyJSONValue,
+} from '../../../../shared/src/json.ts';
 import {MemorySource} from '../../../../zql/src/ivm/memory-source.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../../zql/src/query/test/query-delegate.ts';
 import type {AdvancedQuery} from '../../../../zql/src/query/query-internal.ts';
@@ -42,6 +45,7 @@ import type {Change} from '../../../../zql/src/ivm/change.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
 import {wrapIterable} from '../../../../shared/src/iterables.ts';
+import type {TableSchema} from '../../../../zero-schema/src/table-schema.ts';
 
 let pg: PostgresDB;
 let sqlite: Database;
@@ -248,7 +252,7 @@ async function checkPush(
     0,
   );
 
-  const interval = Math.floor(totalNumRows / 20);
+  const interval = Math.floor(totalNumRows / 10);
   const removedRows = await checkRemove(
     interval,
     copyRows(),
@@ -257,8 +261,14 @@ async function checkPush(
     memoryQuery,
   );
   await checkAddBack(removedRows, pg, zqliteQuery, memoryQuery);
-  checkEditToRandom();
-  checkEditToMatch();
+  const editedRows = await checkEditToRandom(
+    interval,
+    copyRows(),
+    pg,
+    zqliteQuery,
+    memoryQuery,
+  );
+  await checkEditToMatch(editedRows, pg, zqliteQuery, memoryQuery);
 }
 
 // Removes all rows that are in the result set
@@ -279,7 +289,6 @@ async function checkRemove(
 
   let numOps = 0;
   const removedRows: [string, Row][] = [];
-  const removals = new Set<string>();
   while (tables.length > 0) {
     ++numOps;
     const tableIndex = Math.floor(Math.random() * tables.length);
@@ -302,25 +311,14 @@ async function checkRemove(
         .map(col => sql`${sql(col)} = ${row[col] ?? null}`)
         .reduce((l, r) => sql`${l} AND ${r}`)}`;
 
-      try {
-        must(zqliteQueryDelegate.getSource(table)).push({
-          type: 'remove',
-          row,
-        });
-        must(memoryQueryDelegate.getSource(table)).push({
-          type: 'remove',
-          row,
-        });
-        removals.add(`${table}-${JSON.stringify(row)}`);
-      } catch (e) {
-        throw new Error(
-          `Failed removal of ${JSON.stringify(
-            row,
-          )} for ${table} contained ${removals.has(
-            `${table}-${JSON.stringify(row)}`,
-          )}`,
-        );
-      }
+      must(zqliteQueryDelegate.getSource(table)).push({
+        type: 'remove',
+        row,
+      });
+      must(memoryQueryDelegate.getSource(table)).push({
+        type: 'remove',
+        row,
+      });
 
       const pgResult = await sql.unsafe(
         sqlQuery.text,
@@ -367,19 +365,143 @@ async function checkAddBack(
     expect(zqliteMaterialized.data).toEqualNullish(pgResult);
     expect(zqlMaterialized.data).toEqualNullish(pgResult);
   }
+
+  zqlMaterialized.destroy();
+  zqliteMaterialized.destroy();
 }
 
-// Edits rows that are in the result set to random values
-// re-runs pg query after each operation.
-// Randomly choses a table on each iteration.
-function checkEditToRandom() {}
+// TODO: we should handle foreign keys more intelligently
+async function checkEditToRandom(
+  removalInterval: number,
+  queryRows: Map<string, Row[]>,
+  sql: PostgresDB,
+  zqliteQuery: Query<Schema, keyof Schema['tables']>,
+  memoryQuery: Query<Schema, keyof Schema['tables']>,
+): Promise<[table: string, [original: Row, edited: Row]][]> {
+  const tables = [...queryRows.keys()];
 
-// Edits rows that are not in the result set to values
-// that should cause inclusion in the result set.
-// re-runs pg query after each operation.
-//
-// Randomly choses a table on each iteration.
-function checkEditToMatch() {}
+  const zqliteMaterialized = zqliteQuery.materialize();
+  const zqlMaterialized = memoryQuery.materialize();
+  const sqlQuery = formatPg(compile(ast(zqliteQuery), format(zqliteQuery)));
+
+  let numOps = 0;
+  const editedRows: [string, [original: Row, edited: Row]][] = [];
+  while (tables.length > 0) {
+    ++numOps;
+    const tableIndex = Math.floor(Math.random() * tables.length);
+    const table = tables[tableIndex];
+    const rows = must(queryRows.get(table));
+    const rowIndex = Math.floor(Math.random() * rows.length);
+    const row = must(rows[rowIndex]);
+    rows.splice(rowIndex, 1);
+
+    if (rows.length === 0) {
+      tables.splice(tableIndex, 1);
+    }
+
+    if (numOps % removalInterval === 0) {
+      const tableSchema = schema.tables[table as keyof Schema['tables']];
+      const {primaryKey} = tableSchema;
+      const editedRow = assignRandomValues(tableSchema, row);
+      editedRows.push([table, [row, editedRow]]);
+
+      await sql`UPDATE ${sql(table)} SET ${sql(editedRow)} WHERE ${primaryKey
+        .map(col => sql`${sql(col)} = ${row[col] ?? null}`)
+        .reduce((l, r) => sql`${l} AND ${r}`)}`;
+
+      must(zqliteQueryDelegate.getSource(table)).push({
+        type: 'edit',
+        oldRow: row,
+        row: editedRow,
+      });
+      must(memoryQueryDelegate.getSource(table)).push({
+        type: 'edit',
+        oldRow: row,
+        row: editedRow,
+      });
+
+      const pgResult = await sql.unsafe(
+        sqlQuery.text,
+        sqlQuery.values as JSONValue[],
+      );
+      // TODO: relationships return `undefined` from ZQL and `null` from PG
+      expect(zqliteMaterialized.data).toEqualNullish(pgResult);
+      expect(zqlMaterialized.data).toEqualNullish(pgResult);
+    }
+  }
+
+  zqliteMaterialized.destroy();
+  zqlMaterialized.destroy();
+
+  return editedRows;
+}
+
+function assignRandomValues(schema: TableSchema, row: Row): Row {
+  const newRow: Record<string, ReadonlyJSONValue | undefined> = {...row};
+  for (const [col, colSchema] of Object.entries(schema.columns)) {
+    if (schema.primaryKey.includes(col)) {
+      continue;
+    }
+    switch (colSchema.type) {
+      case 'boolean':
+        newRow[col] = Math.random() > 0.5;
+        break;
+      case 'number':
+        newRow[col] = Math.floor(Math.random() * 100);
+        break;
+      case 'string':
+        newRow[col] = Math.random().toString(36).substring(7);
+        break;
+      case 'json':
+        newRow[col] = {random: Math.random()};
+        break;
+      case 'null':
+        newRow[col] = null;
+        break;
+    }
+  }
+  return newRow;
+}
+
+async function checkEditToMatch(
+  rowsToEdit: [string, [original: Row, edited: Row]][],
+  sql: PostgresDB,
+  zqliteQuery: Query<Schema, keyof Schema['tables']>,
+  memoryQuery: Query<Schema, keyof Schema['tables']>,
+) {
+  const zqliteMaterialized = zqliteQuery.materialize();
+  const zqlMaterialized = memoryQuery.materialize();
+  const sqlQuery = formatPg(compile(ast(zqliteQuery), format(zqliteQuery)));
+
+  for (const [table, [original, edited]] of rowsToEdit) {
+    const tableSchema = schema.tables[table as keyof Schema['tables']];
+    const {primaryKey} = tableSchema;
+    await sql`UPDATE ${sql(table)} SET ${sql(original)} WHERE ${primaryKey
+      .map(col => sql`${sql(col)} = ${original[col] ?? null}`)
+      .reduce((l, r) => sql`${l} AND ${r}`)}`;
+
+    must(zqliteQueryDelegate.getSource(table)).push({
+      type: 'edit',
+      oldRow: edited,
+      row: original,
+    });
+    must(memoryQueryDelegate.getSource(table)).push({
+      type: 'edit',
+      oldRow: edited,
+      row: original,
+    });
+
+    const pgResult = await pg.unsafe(
+      sqlQuery.text,
+      sqlQuery.values as JSONValue[],
+    );
+    expect(zqliteMaterialized.data).toEqualNullish(pgResult);
+    expect(zqlMaterialized.data).toEqualNullish(pgResult);
+  }
+
+  zqlMaterialized.destroy();
+  zqliteMaterialized.destroy();
+}
 
 function gatherRows(q: AnyAdvancedQuery): Map<string, Map<string, Row>> {
   const rows = new Map<string, Map<string, Row>>();
