@@ -1,4 +1,4 @@
-import {escapeLike, type TTL} from '@rocicorp/zero';
+import {escapeLike} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
@@ -28,6 +28,7 @@ import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import type {ListContext} from '../../routes.ts';
 import {preload} from '../../zero-setup.ts';
+import {CACHE_NONE} from '../../query-cache-policy.ts';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -56,9 +57,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const sortDirection =
     qs.get('sortDir')?.toLowerCase() === 'asc' ? 'asc' : 'desc';
 
-  // TODO: debounce
-  let ttl: TTL = '1h';
-
   let q = z.query.issue
     .orderBy(sortField, sortDirection)
     .orderBy('id', sortDirection)
@@ -81,7 +79,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }
 
   if (textFilter) {
-    ttl = '10m';
     q = q.where(({or, cmp, exists}) =>
       or(
         cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
@@ -97,7 +94,21 @@ export function ListPage({onReady}: {onReady: () => void}) {
     q = q.whereExists('labels', q => q.where('name', label));
   }
 
-  const [issues, issuesResult] = useQuery(q, {ttl});
+  // TODO: We can get away with CACHE_NONE here because we know that all issues
+  // are preloaded. Once we update zbugs to preload only a prefix of issues,
+  // we'll want to change this to:
+  //
+  // textFilter == textFilterQuery ? CACHE_AWHILE : CACHE_NONE
+  //
+  // This is because we'll want to cache these searches for awhile so the user
+  // can navigate back to them speedily. But we won't want to cache them if the
+  // user is typing in the search box because it will create zillions of cached
+  // queries.
+  //
+  // Right now setting the TTL dynamically this way doesn't work because you
+  // can't update a query's TTL after it's been created. This is being worked
+  // on here: https://github.com/rocicorp/mono/pull/3972
+  const [issues, issuesResult] = useQuery(q, CACHE_NONE);
 
   useEffect(() => {
     if (issues.length > 0 || issuesResult.type === 'complete') {
