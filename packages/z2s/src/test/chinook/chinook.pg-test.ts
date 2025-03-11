@@ -27,7 +27,7 @@ import {
 import {newQueryDelegate} from '../../../../zqlite/src/test/source-factory.ts';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {schema} from './schema.ts';
-import type {Query} from '../../../../zql/src/query/query.ts';
+import type {Operator, Query} from '../../../../zql/src/query/query.ts';
 import {formatPg} from '../../sql.ts';
 import {compile} from '../../compiler.ts';
 import type {
@@ -46,6 +46,7 @@ import {must} from '../../../../shared/src/must.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
 import {wrapIterable} from '../../../../shared/src/iterables.ts';
 import type {TableSchema} from '../../../../zero-schema/src/table-schema.ts';
+import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 
 let pg: PostgresDB;
 let sqlite: Database;
@@ -99,6 +100,8 @@ function makeMemorySources() {
   );
 }
 
+const data: Map<string, Row[]> = new Map();
+
 beforeEach(async () => {
   pg = await testDBs.create('chinook');
   sqlite = new Database(lc, ':memory:');
@@ -116,6 +119,7 @@ beforeEach(async () => {
   await Promise.all(
     tables.map(async table => {
       const rows = await zqliteQueries[table].run();
+      data.set(table, rows);
       for (const row of rows) {
         memorySources[table].push({
           type: 'add',
@@ -201,6 +205,104 @@ describe('1 level related', () => {
   );
 });
 
+function randomRowAndColumn(table: string) {
+  const rows = must(data.get(table));
+  const randomRow = rows[Math.floor(Math.random() * rows.length)];
+  const columns = Object.keys(randomRow);
+  const columnIndex = Math.floor(Math.random() * columns.length);
+  const randomColumn = columns[columnIndex];
+  return {randomRow, randomColumn};
+}
+
+function randomOperator(): Operator {
+  const operators = ['=', '!=', '>', '>=', '<', '<='] as const;
+  return operators[Math.floor(Math.random() * operators.length)];
+}
+
+describe('or', () => {
+  // This is currently unsupported in z2s
+  // test.each(tables.map(table => [table]))('0-branches %s', async table => {
+  //   await checkZqlAndSql(
+  //     pg,
+  //     (zqliteQueries[table] as AnyQuery).where(({or}) => or()),
+  //     (memoryQueries[table] as AnyQuery).where(({or}) => or()),
+  //   );
+  // });
+
+  test.each(tables.map(table => [table]))('1-branch %s', async table => {
+    const {randomRow, randomColumn} = randomRowAndColumn(table);
+    await checkZqlAndSql(
+      pg,
+      (zqliteQueries[table] as AnyQuery).where(({or, cmp}) =>
+        or(cmp(randomColumn as any, '=', randomRow[randomColumn])),
+      ),
+      (memoryQueries[table] as AnyQuery).where(({or, cmp}) =>
+        or(cmp(randomColumn as any, '=', randomRow[randomColumn])),
+      ),
+    );
+  });
+
+  test.each(tables.map(table => [table]))('N-branches %s', async table => {
+    const n = 5;
+    const rowsAndColumns = Array.from({length: n}, () =>
+      randomRowAndColumn(table),
+    );
+    const operators = Array.from({length: n}, () => randomOperator());
+    function q({or, cmp}: ExpressionBuilder<any, any>) {
+      return or(
+        ...rowsAndColumns.map(({randomRow, randomColumn}, i) =>
+          cmp(randomColumn as any, operators[i], randomRow[randomColumn]),
+        ),
+      );
+    }
+    await checkZqlAndSql(
+      pg,
+      (zqliteQueries[table] as AnyQuery).where(q),
+      (memoryQueries[table] as AnyQuery).where(q),
+    );
+  });
+
+  // This checks the short-circuit case of edit
+  // that previously broke us. See discord-repro.pg-test.ts
+  test.each(tables.map(table => [table]))(
+    'contradictory-branches %s',
+    async table => {
+      const {randomRow, randomColumn} = randomRowAndColumn(table);
+      function q({or, cmp}: ExpressionBuilder<any, any>) {
+        return or(
+          cmp(randomColumn as any, '=', randomRow[randomColumn]),
+          cmp(randomColumn as any, '!=', randomRow[randomColumn]),
+        );
+      }
+      await checkZqlAndSql(
+        pg,
+        (zqliteQueries[table] as AnyQuery).where(q),
+        (memoryQueries[table] as AnyQuery).where(q),
+        true,
+        [[table, randomRow]],
+      );
+    },
+  );
+
+  test('exists in a branch', async () => {
+    for (let i = 0; i < 4; ++i) {
+      const {randomRow} = randomRowAndColumn('invoice');
+      const q = ({or, cmp, exists}: ExpressionBuilder<Schema, 'invoice'>) =>
+        or(
+          cmp('customer_id', '=', randomRow.customer_id as number),
+          exists('lines'),
+        );
+      await checkZqlAndSql(
+        pg,
+        zqliteQueries.invoice.where(q),
+        memoryQueries.invoice.where(q),
+        true,
+        [['invoice', randomRow]],
+      );
+    }
+  });
+});
+
 async function checkZqlAndSql(
   pg: PostgresDB,
   zqliteQuery: Query<Schema, keyof Schema['tables']>,
@@ -209,19 +311,20 @@ async function checkZqlAndSql(
   // There are some perf issues to debug where some
   // tests take too long to run push checks.
   shouldCheckPush = true,
+  mustEditRows?: [table: string, row: Row][],
 ) {
   const pgResult = await runZqlAsSql(pg, zqliteQuery);
   const zqliteResult = await zqliteQuery.run();
   const zqlMemResult = await memoryQuery.run();
   // In failure output:
   // `-` is PG
-  // `+` is ZQLite
+  // `+` is ZQL
   expect(zqliteResult).toEqual(pgResult);
   expect(zqlMemResult).toEqual(pgResult);
 
   // now check pushes
   if (shouldCheckPush) {
-    await checkPush(pg, zqliteQuery, memoryQuery);
+    await checkPush(pg, zqliteQuery, memoryQuery, mustEditRows);
   }
 }
 
@@ -229,6 +332,7 @@ async function checkPush(
   pg: PostgresDB,
   zqliteQuery: Query<Schema, keyof Schema['tables']>,
   memoryQuery: Query<Schema, keyof Schema['tables']>,
+  mustEditRows?: [table: string, row: Row][],
 ) {
   const queryRows = gatherRows(memoryQuery as unknown as AnyAdvancedQuery);
 
@@ -253,6 +357,7 @@ async function checkPush(
     pg,
     zqliteQuery,
     memoryQuery,
+    mustEditRows,
   );
   await checkAddBack(removedRows, pg, zqliteQuery, memoryQuery);
   const editedRows = await checkEditToRandom(
@@ -261,6 +366,7 @@ async function checkPush(
     pg,
     zqliteQuery,
     memoryQuery,
+    mustEditRows,
   );
   await checkEditToMatch(editedRows, pg, zqliteQuery, memoryQuery);
 }
@@ -274,6 +380,7 @@ async function checkRemove(
   sql: PostgresDB,
   zqliteQuery: Query<Schema, keyof Schema['tables']>,
   memoryQuery: Query<Schema, keyof Schema['tables']>,
+  mustEditRows: [table: string, row: Row][] = [],
 ): Promise<[table: string, row: Row][]> {
   const tables = [...queryRows.keys()];
 
@@ -283,6 +390,7 @@ async function checkRemove(
 
   let numOps = 0;
   const removedRows: [string, Row][] = [];
+  const seen = new Set<string>();
   while (tables.length > 0) {
     ++numOps;
     const tableIndex = Math.floor(Math.random() * tables.length);
@@ -299,35 +407,51 @@ async function checkRemove(
     // doing this for all rows of a large table
     // is too slow we only do it every `removalInterval`
     if (numOps % removalInterval === 0) {
-      removedRows.push([table, row]);
-      const {primaryKey} = schema.tables[table as keyof Schema['tables']];
-      await sql`DELETE FROM ${sql(table)} WHERE ${primaryKey
-        .map(col => sql`${sql(col)} = ${row[col] ?? null}`)
-        .reduce((l, r) => sql`${l} AND ${r}`)}`;
-
-      must(zqliteQueryDelegate.getSource(table)).push({
-        type: 'remove',
-        row,
-      });
-      must(memoryQueryDelegate.getSource(table)).push({
-        type: 'remove',
-        row,
-      });
-
-      const pgResult = await sql.unsafe(
-        sqlQuery.text,
-        sqlQuery.values as JSONValue[],
-      );
-      // TODO: relationships return `undefined` from ZQL and `null` from PG
-      expect(zqliteMaterialized.data).toEqualNullish(pgResult);
-      expect(zqlMaterialized.data).toEqualNullish(pgResult);
+      await run(table, row);
     }
+  }
+
+  for (const [table, row] of mustEditRows) {
+    if (!seen.has(pullPrimaryKey(table, row))) {
+      await run(table, row);
+    }
+  }
+
+  async function run(table: string, row: Row) {
+    seen.add(pullPrimaryKey(table, row));
+    removedRows.push([table, row]);
+    const {primaryKey} = schema.tables[table as keyof Schema['tables']];
+    await sql`DELETE FROM ${sql(table)} WHERE ${primaryKey
+      .map(col => sql`${sql(col)} = ${row[col] ?? null}`)
+      .reduce((l, r) => sql`${l} AND ${r}`)}`;
+
+    must(zqliteQueryDelegate.getSource(table)).push({
+      type: 'remove',
+      row,
+    });
+    must(memoryQueryDelegate.getSource(table)).push({
+      type: 'remove',
+      row,
+    });
+
+    const pgResult = await sql.unsafe(
+      sqlQuery.text,
+      sqlQuery.values as JSONValue[],
+    );
+    // TODO: empty single relationships return `undefined` from ZQL and `null` from PG
+    expect(zqliteMaterialized.data).toEqualNullish(pgResult);
+    expect(zqlMaterialized.data).toEqualNullish(pgResult);
   }
 
   zqliteMaterialized.destroy();
   zqlMaterialized.destroy();
 
   return removedRows;
+}
+
+function pullPrimaryKey(table: string, row: Row): string {
+  const {primaryKey} = schema.tables[table as keyof Schema['tables']];
+  return primaryKey.map(col => row[col] ?? '').join('-');
 }
 
 async function checkAddBack(
@@ -371,6 +495,7 @@ async function checkEditToRandom(
   sql: PostgresDB,
   zqliteQuery: Query<Schema, keyof Schema['tables']>,
   memoryQuery: Query<Schema, keyof Schema['tables']>,
+  mustEditRows: [table: string, row: Row][] = [],
 ): Promise<[table: string, [original: Row, edited: Row]][]> {
   const tables = [...queryRows.keys()];
 
@@ -380,6 +505,7 @@ async function checkEditToRandom(
 
   let numOps = 0;
   const editedRows: [string, [original: Row, edited: Row]][] = [];
+  const seen = new Set<string>();
   while (tables.length > 0) {
     ++numOps;
     const tableIndex = Math.floor(Math.random() * tables.length);
@@ -394,34 +520,45 @@ async function checkEditToRandom(
     }
 
     if (numOps % removalInterval === 0) {
-      const tableSchema = schema.tables[table as keyof Schema['tables']];
-      const {primaryKey} = tableSchema;
-      const editedRow = assignRandomValues(tableSchema, row);
-      editedRows.push([table, [row, editedRow]]);
-
-      await sql`UPDATE ${sql(table)} SET ${sql(editedRow)} WHERE ${primaryKey
-        .map(col => sql`${sql(col)} = ${row[col] ?? null}`)
-        .reduce((l, r) => sql`${l} AND ${r}`)}`;
-
-      must(zqliteQueryDelegate.getSource(table)).push({
-        type: 'edit',
-        oldRow: row,
-        row: editedRow,
-      });
-      must(memoryQueryDelegate.getSource(table)).push({
-        type: 'edit',
-        oldRow: row,
-        row: editedRow,
-      });
-
-      const pgResult = await sql.unsafe(
-        sqlQuery.text,
-        sqlQuery.values as JSONValue[],
-      );
-      // TODO: relationships return `undefined` from ZQL and `null` from PG
-      expect(zqliteMaterialized.data).toEqualNullish(pgResult);
-      expect(zqlMaterialized.data).toEqualNullish(pgResult);
+      await run(table, row);
     }
+  }
+
+  for (const [table, row] of mustEditRows) {
+    if (!seen.has(pullPrimaryKey(table, row))) {
+      await run(table, row);
+    }
+  }
+
+  async function run(table: string, row: Row) {
+    seen.add(pullPrimaryKey(table, row));
+    const tableSchema = schema.tables[table as keyof Schema['tables']];
+    const {primaryKey} = tableSchema;
+    const editedRow = assignRandomValues(tableSchema, row);
+    editedRows.push([table, [row, editedRow]]);
+
+    await sql`UPDATE ${sql(table)} SET ${sql(editedRow)} WHERE ${primaryKey
+      .map(col => sql`${sql(col)} = ${row[col] ?? null}`)
+      .reduce((l, r) => sql`${l} AND ${r}`)}`;
+
+    must(zqliteQueryDelegate.getSource(table)).push({
+      type: 'edit',
+      oldRow: row,
+      row: editedRow,
+    });
+    must(memoryQueryDelegate.getSource(table)).push({
+      type: 'edit',
+      oldRow: row,
+      row: editedRow,
+    });
+
+    const pgResult = await sql.unsafe(
+      sqlQuery.text,
+      sqlQuery.values as JSONValue[],
+    );
+    // TODO: relationships return `undefined` from ZQL and `null` from PG
+    expect(zqliteMaterialized.data).toEqualNullish(pgResult);
+    expect(zqlMaterialized.data).toEqualNullish(pgResult);
   }
 
   zqliteMaterialized.destroy();

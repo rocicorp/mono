@@ -68,10 +68,6 @@ test('discord report https://discord.com/channels/830183651022471199/13475501749
     )
 
     Below is the same form. Using `closed` to stand in for `shared` and `comments` to stand in for `states`.
-
-    The bug report is seeing no rows returned whereas this repro retracts the wrong rows.
-
-    The "no rows returned" error could be due to the combination of currently active queries in their app.
    */
   const q = issueQuery
     .where('id', 'issue1')
@@ -127,7 +123,5 @@ test('discord report https://discord.com/channels/830183651022471199/13475501749
     },
   });
 
-  // the data post-edit should be the same as the view when hydrated from scratch
-  // but it is not! `view.data` is empty!
   expect(view.data).toEqual(q.materialize().data);
 });
