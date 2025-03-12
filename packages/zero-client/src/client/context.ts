@@ -50,7 +50,6 @@ export class ZeroContext implements QueryDelegate {
     this.#mainSources = mainSources;
     this.#addQuery = addQuery;
     this.#updateQuery = updateQuery;
-
     this.#batchViewUpdates = batchViewUpdates;
     this.lc = lc;
     this.slowMaterializeThreshold = slowMaterializeThreshold;
