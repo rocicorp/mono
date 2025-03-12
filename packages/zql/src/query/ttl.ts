@@ -52,7 +52,7 @@ export function compareTTL(a: TTL, b: TTL): number {
 
 export function normalizeTTL(ttl: TTL): string | number {
   if (typeof ttl === 'string') {
-    ttl = parseTTL(ttl);
+    return ttl;
   }
 
   if (ttl < 0) {
