@@ -5800,3 +5800,4439 @@ describe('joins with compound join keys', () => {
     `);
   });
 });
+
+suite('test overlay on many:one pushes', () => {
+  const sources: Sources = {
+    issue: {
+      columns: {
+        id: {type: 'string'},
+        ownerID: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+    user: {
+      columns: {
+        id: {type: 'string'},
+        name: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+  } as const;
+
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+    related: [
+      {
+        system: 'client',
+        correlation: {parentField: ['ownerID'], childField: ['id']},
+        subquery: {
+          table: 'user',
+          alias: 'owner',
+          orderBy: [['id', 'asc']],
+        },
+      },
+    ],
+  } as const;
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      owner: {
+        singular: true,
+        relationships: {},
+      },
+    },
+  } as const;
+
+  test('add child', () => {
+    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+      sources,
+      sourceContents: {
+        issue: [
+          {id: 'i0', ownerID: 'u0'},
+          {id: 'i1', ownerID: 'u1'},
+          {id: 'i2', ownerID: 'u1'},
+          {id: 'i3', ownerID: 'u2'},
+        ],
+        user: [
+          {id: 'u0', name: 'Fritz'},
+          {id: 'u2', name: 'Arv'},
+        ],
+      },
+      ast,
+      format,
+      pushes: [['user', {type: 'add', row: {id: 'u1', name: 'Aaron'}}]],
+      fetchOnPush: true,
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          ".owner:source(user)",
+          "push",
+          {
+            "row": {
+              "id": "u1",
+              "name": "Aaron",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "ownerID": "u1",
+            },
+          },
+        ],
+        [
+          ":join(owner)",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "u1",
+                "name": "Aaron",
+              },
+              "type": "add",
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":join(owner)",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "u1",
+                "name": "Aaron",
+              },
+              "type": "add",
+            },
+            "row": {
+              "id": "i2",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i0",
+          "owner": {
+            "id": "u0",
+            "name": "Fritz",
+          },
+          "ownerID": "u0",
+        },
+        {
+          "id": "i1",
+          "owner": {
+            "id": "u1",
+            "name": "Aaron",
+          },
+          "ownerID": "u1",
+        },
+        {
+          "id": "i2",
+          "owner": {
+            "id": "u1",
+            "name": "Aaron",
+          },
+          "ownerID": "u1",
+        },
+        {
+          "id": "i3",
+          "owner": {
+            "id": "u2",
+            "name": "Arv",
+          },
+          "ownerID": "u2",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ":join(owner)": {
+          ""pKeySet","u0","i0",": true,
+          ""pKeySet","u1","i1",": true,
+          ""pKeySet","u1","i2",": true,
+          ""pKeySet","u2","i3",": true,
+        },
+      }
+    `);
+    expect(pushesWithFetch).toMatchInlineSnapshot(`
+      [
+        {
+          "change": {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "id": "u1",
+                    "name": "Aaron",
+                  },
+                },
+                "type": "add",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerID": "u0",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [],
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Arv",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerID": "u2",
+              },
+            },
+          ],
+        },
+        {
+          "change": {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "id": "u1",
+                    "name": "Aaron",
+                  },
+                },
+                "type": "add",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i2",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerID": "u0",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Arv",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerID": "u2",
+              },
+            },
+          ],
+        },
+      ]
+    `);
+  });
+
+  test('remove child', () => {
+    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+      sources,
+      sourceContents: {
+        issue: [
+          {id: 'i0', ownerID: 'u0'},
+          {id: 'i1', ownerID: 'u1'},
+          {id: 'i2', ownerID: 'u1'},
+          {id: 'i3', ownerID: 'u2'},
+        ],
+        user: [
+          {id: 'u0', name: 'Fritz'},
+          {id: 'u1', name: 'Aaron'},
+          {id: 'u2', name: 'Arv'},
+        ],
+      },
+      ast,
+      format,
+      pushes: [['user', {type: 'remove', row: {id: 'u1', name: 'Aaron'}}]],
+      fetchOnPush: true,
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          ".owner:source(user)",
+          "push",
+          {
+            "row": {
+              "id": "u1",
+              "name": "Aaron",
+            },
+            "type": "remove",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "ownerID": "u1",
+            },
+          },
+        ],
+        [
+          ":join(owner)",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "u1",
+                "name": "Aaron",
+              },
+              "type": "remove",
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":join(owner)",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "u1",
+                "name": "Aaron",
+              },
+              "type": "remove",
+            },
+            "row": {
+              "id": "i2",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i0",
+          "owner": {
+            "id": "u0",
+            "name": "Fritz",
+          },
+          "ownerID": "u0",
+        },
+        {
+          "id": "i1",
+          "owner": undefined,
+          "ownerID": "u1",
+        },
+        {
+          "id": "i2",
+          "owner": undefined,
+          "ownerID": "u1",
+        },
+        {
+          "id": "i3",
+          "owner": {
+            "id": "u2",
+            "name": "Arv",
+          },
+          "ownerID": "u2",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ":join(owner)": {
+          ""pKeySet","u0","i0",": true,
+          ""pKeySet","u1","i1",": true,
+          ""pKeySet","u1","i2",": true,
+          ""pKeySet","u2","i3",": true,
+        },
+      }
+    `);
+    expect(pushesWithFetch).toMatchInlineSnapshot(`
+      [
+        {
+          "change": {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "id": "u1",
+                    "name": "Aaron",
+                  },
+                },
+                "type": "remove",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerID": "u0",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [],
+              },
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Arv",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerID": "u2",
+              },
+            },
+          ],
+        },
+        {
+          "change": {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "id": "u1",
+                    "name": "Aaron",
+                  },
+                },
+                "type": "remove",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i2",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerID": "u0",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [],
+              },
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [],
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Arv",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerID": "u2",
+              },
+            },
+          ],
+        },
+      ]
+    `);
+  });
+
+  test('edit child', () => {
+    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+      sources,
+      sourceContents: {
+        issue: [
+          {id: 'i0', ownerID: 'u0'},
+          {id: 'i1', ownerID: 'u1'},
+          {id: 'i2', ownerID: 'u1'},
+          {id: 'i3', ownerID: 'u2'},
+        ],
+        user: [
+          {id: 'u0', name: 'Fritz'},
+          {id: 'u1', name: 'Aaron'},
+          {id: 'u2', name: 'Arv'},
+        ],
+      },
+      ast,
+      format,
+      pushes: [
+        [
+          'user',
+          {
+            type: 'edit',
+            oldRow: {id: 'u1', name: 'Aaron'},
+            row: {id: 'u1', name: 'Boogs'},
+          },
+        ],
+      ],
+      fetchOnPush: true,
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          ".owner:source(user)",
+          "push",
+          {
+            "oldRow": {
+              "id": "u1",
+              "name": "Aaron",
+            },
+            "row": {
+              "id": "u1",
+              "name": "Boogs",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "ownerID": "u1",
+            },
+          },
+        ],
+        [
+          ":join(owner)",
+          "push",
+          {
+            "child": {
+              "oldRow": {
+                "id": "u1",
+                "name": "Aaron",
+              },
+              "row": {
+                "id": "u1",
+                "name": "Boogs",
+              },
+              "type": "edit",
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":join(owner)",
+          "push",
+          {
+            "child": {
+              "oldRow": {
+                "id": "u1",
+                "name": "Aaron",
+              },
+              "row": {
+                "id": "u1",
+                "name": "Boogs",
+              },
+              "type": "edit",
+            },
+            "row": {
+              "id": "i2",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i0",
+          "owner": {
+            "id": "u0",
+            "name": "Fritz",
+          },
+          "ownerID": "u0",
+        },
+        {
+          "id": "i1",
+          "owner": {
+            "id": "u1",
+            "name": "Boogs",
+          },
+          "ownerID": "u1",
+        },
+        {
+          "id": "i2",
+          "owner": {
+            "id": "u1",
+            "name": "Boogs",
+          },
+          "ownerID": "u1",
+        },
+        {
+          "id": "i3",
+          "owner": {
+            "id": "u2",
+            "name": "Arv",
+          },
+          "ownerID": "u2",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ":join(owner)": {
+          ""pKeySet","u0","i0",": true,
+          ""pKeySet","u1","i1",": true,
+          ""pKeySet","u1","i2",": true,
+          ""pKeySet","u2","i3",": true,
+        },
+      }
+    `);
+    expect(pushesWithFetch).toMatchInlineSnapshot(`
+      [
+        {
+          "change": {
+            "child": {
+              "change": {
+                "oldRow": {
+                  "id": "u1",
+                  "name": "Aaron",
+                },
+                "row": {
+                  "id": "u1",
+                  "name": "Boogs",
+                },
+                "type": "edit",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerID": "u0",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Boogs",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Arv",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerID": "u2",
+              },
+            },
+          ],
+        },
+        {
+          "change": {
+            "child": {
+              "change": {
+                "oldRow": {
+                  "id": "u1",
+                  "name": "Aaron",
+                },
+                "row": {
+                  "id": "u1",
+                  "name": "Boogs",
+                },
+                "type": "edit",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i2",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerID": "u0",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Boogs",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Boogs",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Arv",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerID": "u2",
+              },
+            },
+          ],
+        },
+      ]
+    `);
+  });
+
+  test('edit grandchild', () => {
+    const sources: Sources = {
+      issue: {
+        columns: {
+          id: {type: 'string'},
+          ownerID: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+      user: {
+        columns: {
+          id: {type: 'string'},
+          name: {type: 'string'},
+          stateID: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+      state: {
+        columns: {
+          id: {type: 'string'},
+          name: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+    } as const;
+
+    const ast: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+      related: [
+        {
+          system: 'client',
+          correlation: {parentField: ['ownerID'], childField: ['id']},
+          subquery: {
+            table: 'user',
+            alias: 'owner',
+            orderBy: [['id', 'asc']],
+            related: [
+              {
+                system: 'client',
+                correlation: {parentField: ['stateID'], childField: ['id']},
+                subquery: {
+                  table: 'state',
+                  alias: 'state',
+                  orderBy: [['id', 'asc']],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    } as const;
+
+    const format: Format = {
+      singular: false,
+      relationships: {
+        owner: {
+          singular: true,
+          relationships: {
+            state: {
+              singular: true,
+              relationships: {},
+            },
+          },
+        },
+      },
+    } as const;
+    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+      sources,
+      sourceContents: {
+        issue: [
+          {id: 'i0', ownerID: 'u0'},
+          {id: 'i1', ownerID: 'u1'},
+          {id: 'i2', ownerID: 'u1'},
+          {id: 'i3', ownerID: 'u2'},
+        ],
+        user: [
+          {id: 'u0', name: 'Fritz', stateID: 's0'},
+          {id: 'u1', name: 'Aaron', stateID: 's0'},
+          {id: 'u2', name: 'Arv', stateID: 's1'},
+        ],
+        state: [
+          {id: 's0', name: 'Hawaii'},
+          {id: 's1', name: 'CA'},
+        ],
+      },
+      ast,
+      format,
+      pushes: [
+        [
+          'state',
+          {
+            type: 'edit',
+            oldRow: {id: 's0', name: 'Hawaii'},
+            row: {id: 's0', name: 'HI'},
+          },
+        ],
+      ],
+      fetchOnPush: true,
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          ".owner.state:source(state)",
+          "push",
+          {
+            "oldRow": {
+              "id": "s0",
+              "name": "Hawaii",
+            },
+            "row": {
+              "id": "s0",
+              "name": "HI",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          ".owner:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "stateID": "s0",
+            },
+          },
+        ],
+        [
+          ".owner:join(state)",
+          "push",
+          {
+            "child": {
+              "oldRow": {
+                "id": "s0",
+                "name": "Hawaii",
+              },
+              "row": {
+                "id": "s0",
+                "name": "HI",
+              },
+              "type": "edit",
+            },
+            "row": {
+              "id": "u0",
+              "name": "Fritz",
+              "stateID": "s0",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "ownerID": "u0",
+            },
+          },
+        ],
+        [
+          ":join(owner)",
+          "push",
+          {
+            "child": {
+              "child": {
+                "oldRow": {
+                  "id": "s0",
+                  "name": "Hawaii",
+                },
+                "row": {
+                  "id": "s0",
+                  "name": "HI",
+                },
+                "type": "edit",
+              },
+              "row": {
+                "id": "u0",
+                "name": "Fritz",
+                "stateID": "s0",
+              },
+              "type": "child",
+            },
+            "row": {
+              "id": "i0",
+              "ownerID": "u0",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ".owner:join(state)",
+          "push",
+          {
+            "child": {
+              "oldRow": {
+                "id": "s0",
+                "name": "Hawaii",
+              },
+              "row": {
+                "id": "s0",
+                "name": "HI",
+              },
+              "type": "edit",
+            },
+            "row": {
+              "id": "u1",
+              "name": "Aaron",
+              "stateID": "s0",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "ownerID": "u1",
+            },
+          },
+        ],
+        [
+          ":join(owner)",
+          "push",
+          {
+            "child": {
+              "child": {
+                "oldRow": {
+                  "id": "s0",
+                  "name": "Hawaii",
+                },
+                "row": {
+                  "id": "s0",
+                  "name": "HI",
+                },
+                "type": "edit",
+              },
+              "row": {
+                "id": "u1",
+                "name": "Aaron",
+                "stateID": "s0",
+              },
+              "type": "child",
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":join(owner)",
+          "push",
+          {
+            "child": {
+              "child": {
+                "oldRow": {
+                  "id": "s0",
+                  "name": "Hawaii",
+                },
+                "row": {
+                  "id": "s0",
+                  "name": "HI",
+                },
+                "type": "edit",
+              },
+              "row": {
+                "id": "u1",
+                "name": "Aaron",
+                "stateID": "s0",
+              },
+              "type": "child",
+            },
+            "row": {
+              "id": "i2",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i0",
+          "owner": {
+            "id": "u0",
+            "name": "Fritz",
+            "state": {
+              "id": "s0",
+              "name": "HI",
+            },
+            "stateID": "s0",
+          },
+          "ownerID": "u0",
+        },
+        {
+          "id": "i1",
+          "owner": {
+            "id": "u1",
+            "name": "Aaron",
+            "state": {
+              "id": "s0",
+              "name": "HI",
+            },
+            "stateID": "s0",
+          },
+          "ownerID": "u1",
+        },
+        {
+          "id": "i2",
+          "owner": {
+            "id": "u1",
+            "name": "Aaron",
+            "state": {
+              "id": "s0",
+              "name": "HI",
+            },
+            "stateID": "s0",
+          },
+          "ownerID": "u1",
+        },
+        {
+          "id": "i3",
+          "owner": {
+            "id": "u2",
+            "name": "Arv",
+            "state": {
+              "id": "s1",
+              "name": "CA",
+            },
+            "stateID": "s1",
+          },
+          "ownerID": "u2",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".owner:join(state)": {
+          ""pKeySet","s0","u0",": true,
+          ""pKeySet","s0","u1",": true,
+          ""pKeySet","s1","u2",": true,
+        },
+        ":join(owner)": {
+          ""pKeySet","u0","i0",": true,
+          ""pKeySet","u1","i1",": true,
+          ""pKeySet","u1","i2",": true,
+          ""pKeySet","u2","i3",": true,
+        },
+      }
+    `);
+    expect(pushesWithFetch).toMatchInlineSnapshot(`
+      [
+        {
+          "change": {
+            "child": {
+              "change": {
+                "child": {
+                  "change": {
+                    "oldRow": {
+                      "id": "s0",
+                      "name": "Hawaii",
+                    },
+                    "row": {
+                      "id": "s0",
+                      "name": "HI",
+                    },
+                    "type": "edit",
+                  },
+                  "relationshipName": "state",
+                },
+                "row": {
+                  "id": "u0",
+                  "name": "Fritz",
+                  "stateID": "s0",
+                },
+                "type": "child",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i0",
+              "ownerID": "u0",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerID": "u0",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "Hawaii",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "Hawaii",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u2",
+                      "name": "Arv",
+                      "stateID": "s1",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerID": "u2",
+              },
+            },
+          ],
+        },
+        {
+          "change": {
+            "child": {
+              "change": {
+                "child": {
+                  "change": {
+                    "oldRow": {
+                      "id": "s0",
+                      "name": "Hawaii",
+                    },
+                    "row": {
+                      "id": "s0",
+                      "name": "HI",
+                    },
+                    "type": "edit",
+                  },
+                  "relationshipName": "state",
+                },
+                "row": {
+                  "id": "u1",
+                  "name": "Aaron",
+                  "stateID": "s0",
+                },
+                "type": "child",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i1",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerID": "u0",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "Hawaii",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u2",
+                      "name": "Arv",
+                      "stateID": "s1",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerID": "u2",
+              },
+            },
+          ],
+        },
+        {
+          "change": {
+            "child": {
+              "change": {
+                "child": {
+                  "change": {
+                    "oldRow": {
+                      "id": "s0",
+                      "name": "Hawaii",
+                    },
+                    "row": {
+                      "id": "s0",
+                      "name": "HI",
+                    },
+                    "type": "edit",
+                  },
+                  "relationshipName": "state",
+                },
+                "row": {
+                  "id": "u1",
+                  "name": "Aaron",
+                  "stateID": "s0",
+                },
+                "type": "child",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i2",
+              "ownerID": "u1",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerID": "u0",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u2",
+                      "name": "Arv",
+                      "stateID": "s1",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerID": "u2",
+              },
+            },
+          ],
+        },
+      ]
+    `);
+  });
+});
+
+suite('test overlay on many:many (no junction) pushes', () => {
+  const sources: Sources = {
+    issue: {
+      columns: {
+        id: {type: 'string'},
+        ownerName: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+    user: {
+      columns: {
+        id: {type: 'string'},
+        name: {type: 'string'},
+        num: {type: 'number'},
+      },
+      primaryKeys: ['id'],
+    },
+  } as const;
+
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+    related: [
+      {
+        system: 'client',
+        correlation: {parentField: ['ownerName'], childField: ['name']},
+        subquery: {
+          table: 'user',
+          alias: 'ownerByName',
+          orderBy: [
+            ['num', 'asc'],
+            ['id', 'asc'],
+          ],
+        },
+      },
+    ],
+  } as const;
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      ownerByName: {
+        singular: false,
+        relationships: {},
+      },
+    },
+  } as const;
+
+  test('add child', () => {
+    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+      sources,
+      sourceContents: {
+        issue: [
+          {id: 'i0', ownerName: 'Fritz'},
+          {id: 'i1', ownerName: 'Aaron'},
+          {id: 'i2', ownerName: 'Aaron'},
+          {id: 'i3', ownerName: 'Arv'},
+        ],
+        user: [
+          {id: 'u0', name: 'Fritz', num: 0},
+          {id: 'u1', name: 'Aaron', num: 1},
+          {id: 'u3', name: 'Aaron', num: 3},
+          {id: 'u4', name: 'Arv', num: 4},
+        ],
+      },
+      ast,
+      format,
+      pushes: [['user', {type: 'add', row: {id: 'u2', name: 'Aaron', num: 2}}]],
+      fetchOnPush: true,
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          ".ownerByName:source(user)",
+          "push",
+          {
+            "row": {
+              "id": "u2",
+              "name": "Aaron",
+              "num": 2,
+            },
+            "type": "add",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "ownerName": "Aaron",
+            },
+          },
+        ],
+        [
+          ":join(ownerByName)",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "u2",
+                "name": "Aaron",
+                "num": 2,
+              },
+              "type": "add",
+            },
+            "row": {
+              "id": "i1",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":join(ownerByName)",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "u2",
+                "name": "Aaron",
+                "num": 2,
+              },
+              "type": "add",
+            },
+            "row": {
+              "id": "i2",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i0",
+          "ownerByName": [
+            {
+              "id": "u0",
+              "name": "Fritz",
+              "num": 0,
+            },
+          ],
+          "ownerName": "Fritz",
+        },
+        {
+          "id": "i1",
+          "ownerByName": [
+            {
+              "id": "u1",
+              "name": "Aaron",
+              "num": 1,
+            },
+            {
+              "id": "u2",
+              "name": "Aaron",
+              "num": 2,
+            },
+            {
+              "id": "u3",
+              "name": "Aaron",
+              "num": 3,
+            },
+          ],
+          "ownerName": "Aaron",
+        },
+        {
+          "id": "i2",
+          "ownerByName": [
+            {
+              "id": "u1",
+              "name": "Aaron",
+              "num": 1,
+            },
+            {
+              "id": "u2",
+              "name": "Aaron",
+              "num": 2,
+            },
+            {
+              "id": "u3",
+              "name": "Aaron",
+              "num": 3,
+            },
+          ],
+          "ownerName": "Aaron",
+        },
+        {
+          "id": "i3",
+          "ownerByName": [
+            {
+              "id": "u4",
+              "name": "Arv",
+              "num": 4,
+            },
+          ],
+          "ownerName": "Arv",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ":join(ownerByName)": {
+          ""pKeySet","Aaron","i1",": true,
+          ""pKeySet","Aaron","i2",": true,
+          ""pKeySet","Arv","i3",": true,
+          ""pKeySet","Fritz","i0",": true,
+        },
+      }
+    `);
+    expect(pushesWithFetch).toMatchInlineSnapshot(`
+      [
+        {
+          "change": {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "id": "u2",
+                    "name": "Aaron",
+                    "num": 2,
+                  },
+                },
+                "type": "add",
+              },
+              "relationshipName": "ownerByName",
+            },
+            "row": {
+              "id": "i1",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "num": 0,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerName": "Fritz",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "num": 1,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "num": 2,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "num": 3,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "num": 1,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "num": 3,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u4",
+                      "name": "Arv",
+                      "num": 4,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerName": "Arv",
+              },
+            },
+          ],
+        },
+        {
+          "change": {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "id": "u2",
+                    "name": "Aaron",
+                    "num": 2,
+                  },
+                },
+                "type": "add",
+              },
+              "relationshipName": "ownerByName",
+            },
+            "row": {
+              "id": "i2",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "num": 0,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerName": "Fritz",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "num": 1,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "num": 2,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "num": 3,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "num": 1,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "num": 2,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "num": 3,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u4",
+                      "name": "Arv",
+                      "num": 4,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerName": "Arv",
+              },
+            },
+          ],
+        },
+      ]
+    `);
+  });
+
+  test('remove child', () => {
+    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+      sources,
+      sourceContents: {
+        issue: [
+          {id: 'i0', ownerName: 'Fritz'},
+          {id: 'i1', ownerName: 'Aaron'},
+          {id: 'i2', ownerName: 'Aaron'},
+          {id: 'i3', ownerName: 'Arv'},
+        ],
+        user: [
+          {id: 'u0', name: 'Fritz', num: 0},
+          {id: 'u1', name: 'Aaron', num: 1},
+          {id: 'u2', name: 'Aaron', num: 2},
+          {id: 'u3', name: 'Aaron', num: 3},
+          {id: 'u4', name: 'Arv', num: 4},
+        ],
+      },
+      ast,
+      format,
+      pushes: [
+        ['user', {type: 'remove', row: {id: 'u2', name: 'Aaron', num: 2}}],
+      ],
+      fetchOnPush: true,
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          ".ownerByName:source(user)",
+          "push",
+          {
+            "row": {
+              "id": "u2",
+              "name": "Aaron",
+              "num": 2,
+            },
+            "type": "remove",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "ownerName": "Aaron",
+            },
+          },
+        ],
+        [
+          ":join(ownerByName)",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "u2",
+                "name": "Aaron",
+                "num": 2,
+              },
+              "type": "remove",
+            },
+            "row": {
+              "id": "i1",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":join(ownerByName)",
+          "push",
+          {
+            "child": {
+              "row": {
+                "id": "u2",
+                "name": "Aaron",
+                "num": 2,
+              },
+              "type": "remove",
+            },
+            "row": {
+              "id": "i2",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i0",
+          "ownerByName": [
+            {
+              "id": "u0",
+              "name": "Fritz",
+              "num": 0,
+            },
+          ],
+          "ownerName": "Fritz",
+        },
+        {
+          "id": "i1",
+          "ownerByName": [
+            {
+              "id": "u1",
+              "name": "Aaron",
+              "num": 1,
+            },
+            {
+              "id": "u3",
+              "name": "Aaron",
+              "num": 3,
+            },
+          ],
+          "ownerName": "Aaron",
+        },
+        {
+          "id": "i2",
+          "ownerByName": [
+            {
+              "id": "u1",
+              "name": "Aaron",
+              "num": 1,
+            },
+            {
+              "id": "u3",
+              "name": "Aaron",
+              "num": 3,
+            },
+          ],
+          "ownerName": "Aaron",
+        },
+        {
+          "id": "i3",
+          "ownerByName": [
+            {
+              "id": "u4",
+              "name": "Arv",
+              "num": 4,
+            },
+          ],
+          "ownerName": "Arv",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ":join(ownerByName)": {
+          ""pKeySet","Aaron","i1",": true,
+          ""pKeySet","Aaron","i2",": true,
+          ""pKeySet","Arv","i3",": true,
+          ""pKeySet","Fritz","i0",": true,
+        },
+      }
+    `);
+    expect(pushesWithFetch).toMatchInlineSnapshot(`
+      [
+        {
+          "change": {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "id": "u2",
+                    "name": "Aaron",
+                    "num": 2,
+                  },
+                },
+                "type": "remove",
+              },
+              "relationshipName": "ownerByName",
+            },
+            "row": {
+              "id": "i1",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "num": 0,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerName": "Fritz",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "num": 1,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "num": 3,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "num": 1,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "num": 2,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "num": 3,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u4",
+                      "name": "Arv",
+                      "num": 4,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerName": "Arv",
+              },
+            },
+          ],
+        },
+        {
+          "change": {
+            "child": {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "id": "u2",
+                    "name": "Aaron",
+                    "num": 2,
+                  },
+                },
+                "type": "remove",
+              },
+              "relationshipName": "ownerByName",
+            },
+            "row": {
+              "id": "i2",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "num": 0,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerName": "Fritz",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "num": 1,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "num": 3,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "num": 1,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "num": 3,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u4",
+                      "name": "Arv",
+                      "num": 4,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerName": "Arv",
+              },
+            },
+          ],
+        },
+      ]
+    `);
+  });
+
+  test('edit child', () => {
+    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+      sources,
+      sourceContents: {
+        issue: [
+          {id: 'i0', ownerName: 'Fritz'},
+          {id: 'i1', ownerName: 'Aaron'},
+          {id: 'i2', ownerName: 'Aaron'},
+          {id: 'i3', ownerName: 'Arv'},
+        ],
+        user: [
+          {id: 'u0', name: 'Fritz', num: 0},
+          {id: 'u1', name: 'Aaron', num: 1},
+          {id: 'u2', name: 'Aaron', num: 2},
+          {id: 'u3', name: 'Aaron', num: 3},
+          {id: 'u4', name: 'Arv', num: 4},
+        ],
+      },
+      ast,
+      format,
+      pushes: [
+        [
+          'user',
+          {
+            type: 'edit',
+            oldRow: {id: 'u2', name: 'Aaron', num: 2},
+            row: {id: 'u2', name: 'Aaron', num: 5},
+          },
+        ],
+      ],
+      fetchOnPush: true,
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          ".ownerByName:source(user)",
+          "push",
+          {
+            "oldRow": {
+              "id": "u2",
+              "name": "Aaron",
+              "num": 2,
+            },
+            "row": {
+              "id": "u2",
+              "name": "Aaron",
+              "num": 5,
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "ownerName": "Aaron",
+            },
+          },
+        ],
+        [
+          ":join(ownerByName)",
+          "push",
+          {
+            "child": {
+              "oldRow": {
+                "id": "u2",
+                "name": "Aaron",
+                "num": 2,
+              },
+              "row": {
+                "id": "u2",
+                "name": "Aaron",
+                "num": 5,
+              },
+              "type": "edit",
+            },
+            "row": {
+              "id": "i1",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":join(ownerByName)",
+          "push",
+          {
+            "child": {
+              "oldRow": {
+                "id": "u2",
+                "name": "Aaron",
+                "num": 2,
+              },
+              "row": {
+                "id": "u2",
+                "name": "Aaron",
+                "num": 5,
+              },
+              "type": "edit",
+            },
+            "row": {
+              "id": "i2",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i0",
+          "ownerByName": [
+            {
+              "id": "u0",
+              "name": "Fritz",
+              "num": 0,
+            },
+          ],
+          "ownerName": "Fritz",
+        },
+        {
+          "id": "i1",
+          "ownerByName": [
+            {
+              "id": "u1",
+              "name": "Aaron",
+              "num": 1,
+            },
+            {
+              "id": "u3",
+              "name": "Aaron",
+              "num": 3,
+            },
+            {
+              "id": "u2",
+              "name": "Aaron",
+              "num": 5,
+            },
+          ],
+          "ownerName": "Aaron",
+        },
+        {
+          "id": "i2",
+          "ownerByName": [
+            {
+              "id": "u1",
+              "name": "Aaron",
+              "num": 1,
+            },
+            {
+              "id": "u3",
+              "name": "Aaron",
+              "num": 3,
+            },
+            {
+              "id": "u2",
+              "name": "Aaron",
+              "num": 5,
+            },
+          ],
+          "ownerName": "Aaron",
+        },
+        {
+          "id": "i3",
+          "ownerByName": [
+            {
+              "id": "u4",
+              "name": "Arv",
+              "num": 4,
+            },
+          ],
+          "ownerName": "Arv",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ":join(ownerByName)": {
+          ""pKeySet","Aaron","i1",": true,
+          ""pKeySet","Aaron","i2",": true,
+          ""pKeySet","Arv","i3",": true,
+          ""pKeySet","Fritz","i0",": true,
+        },
+      }
+    `);
+    expect(pushesWithFetch).toMatchInlineSnapshot(`
+      [
+        {
+          "change": {
+            "child": {
+              "change": {
+                "oldRow": {
+                  "id": "u2",
+                  "name": "Aaron",
+                  "num": 2,
+                },
+                "row": {
+                  "id": "u2",
+                  "name": "Aaron",
+                  "num": 5,
+                },
+                "type": "edit",
+              },
+              "relationshipName": "ownerByName",
+            },
+            "row": {
+              "id": "i1",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "num": 0,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerName": "Fritz",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "num": 1,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "num": 3,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "num": 5,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "num": 1,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "num": 2,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "num": 3,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "num": 2,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u4",
+                      "name": "Arv",
+                      "num": 4,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerName": "Arv",
+              },
+            },
+          ],
+        },
+        {
+          "change": {
+            "child": {
+              "change": {
+                "oldRow": {
+                  "id": "u2",
+                  "name": "Aaron",
+                  "num": 2,
+                },
+                "row": {
+                  "id": "u2",
+                  "name": "Aaron",
+                  "num": 5,
+                },
+                "type": "edit",
+              },
+              "relationshipName": "ownerByName",
+            },
+            "row": {
+              "id": "i2",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "num": 0,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerName": "Fritz",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "num": 1,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "num": 3,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "num": 5,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "num": 1,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "num": 3,
+                    },
+                  },
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "num": 5,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u4",
+                      "name": "Arv",
+                      "num": 4,
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerName": "Arv",
+              },
+            },
+          ],
+        },
+      ]
+    `);
+  });
+
+  test('edit grandchild', () => {
+    const sources: Sources = {
+      issue: {
+        columns: {
+          id: {type: 'string'},
+          ownerName: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+      user: {
+        columns: {
+          id: {type: 'string'},
+          name: {type: 'string'},
+          stateID: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+      state: {
+        columns: {
+          id: {type: 'string'},
+          name: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+    } as const;
+
+    const ast: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+      related: [
+        {
+          system: 'client',
+          correlation: {parentField: ['ownerName'], childField: ['name']},
+          subquery: {
+            table: 'user',
+            alias: 'ownerByName',
+            orderBy: [['id', 'asc']],
+            related: [
+              {
+                system: 'client',
+                correlation: {parentField: ['stateID'], childField: ['id']},
+                subquery: {
+                  table: 'state',
+                  alias: 'state',
+                  orderBy: [['id', 'asc']],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    } as const;
+
+    const format: Format = {
+      singular: false,
+      relationships: {
+        ownerByName: {
+          singular: false,
+          relationships: {
+            state: {
+              singular: true,
+              relationships: {},
+            },
+          },
+        },
+      },
+    } as const;
+    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+      sources,
+      sourceContents: {
+        issue: [
+          {id: 'i0', ownerName: 'Fritz'},
+          {id: 'i1', ownerName: 'Aaron'},
+          {id: 'i2', ownerName: 'Aaron'},
+          {id: 'i3', ownerName: 'Arv'},
+        ],
+        user: [
+          {id: 'u0', name: 'Fritz', stateID: 's1'},
+          {id: 'u1', name: 'Aaron', stateID: 's1'},
+          {id: 'u2', name: 'Aaron', stateID: 's0'},
+          {id: 'u3', name: 'Aaron', stateID: 's0'},
+          {id: 'u4', name: 'Arv', stateID: 's1'},
+        ],
+        state: [
+          {id: 's0', name: 'Hawaii'},
+          {id: 's1', name: 'CA'},
+        ],
+      },
+      ast,
+      format,
+      pushes: [
+        [
+          'state',
+          {
+            type: 'edit',
+            oldRow: {id: 's0', name: 'Hawaii'},
+            row: {id: 's0', name: 'HI'},
+          },
+        ],
+      ],
+      fetchOnPush: true,
+    });
+
+    expect(log).toMatchInlineSnapshot(`
+      [
+        [
+          ".ownerByName.state:source(state)",
+          "push",
+          {
+            "oldRow": {
+              "id": "s0",
+              "name": "Hawaii",
+            },
+            "row": {
+              "id": "s0",
+              "name": "HI",
+            },
+            "type": "edit",
+          },
+        ],
+        [
+          ".ownerByName:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "stateID": "s0",
+            },
+          },
+        ],
+        [
+          ".ownerByName:join(state)",
+          "push",
+          {
+            "child": {
+              "oldRow": {
+                "id": "s0",
+                "name": "Hawaii",
+              },
+              "row": {
+                "id": "s0",
+                "name": "HI",
+              },
+              "type": "edit",
+            },
+            "row": {
+              "id": "u2",
+              "name": "Aaron",
+              "stateID": "s0",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "ownerName": "Aaron",
+            },
+          },
+        ],
+        [
+          ":join(ownerByName)",
+          "push",
+          {
+            "child": {
+              "child": {
+                "oldRow": {
+                  "id": "s0",
+                  "name": "Hawaii",
+                },
+                "row": {
+                  "id": "s0",
+                  "name": "HI",
+                },
+                "type": "edit",
+              },
+              "row": {
+                "id": "u2",
+                "name": "Aaron",
+                "stateID": "s0",
+              },
+              "type": "child",
+            },
+            "row": {
+              "id": "i1",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":join(ownerByName)",
+          "push",
+          {
+            "child": {
+              "child": {
+                "oldRow": {
+                  "id": "s0",
+                  "name": "Hawaii",
+                },
+                "row": {
+                  "id": "s0",
+                  "name": "HI",
+                },
+                "type": "edit",
+              },
+              "row": {
+                "id": "u2",
+                "name": "Aaron",
+                "stateID": "s0",
+              },
+              "type": "child",
+            },
+            "row": {
+              "id": "i2",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ".ownerByName:join(state)",
+          "push",
+          {
+            "child": {
+              "oldRow": {
+                "id": "s0",
+                "name": "Hawaii",
+              },
+              "row": {
+                "id": "s0",
+                "name": "HI",
+              },
+              "type": "edit",
+            },
+            "row": {
+              "id": "u3",
+              "name": "Aaron",
+              "stateID": "s0",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "ownerName": "Aaron",
+            },
+          },
+        ],
+        [
+          ":join(ownerByName)",
+          "push",
+          {
+            "child": {
+              "child": {
+                "oldRow": {
+                  "id": "s0",
+                  "name": "Hawaii",
+                },
+                "row": {
+                  "id": "s0",
+                  "name": "HI",
+                },
+                "type": "edit",
+              },
+              "row": {
+                "id": "u3",
+                "name": "Aaron",
+                "stateID": "s0",
+              },
+              "type": "child",
+            },
+            "row": {
+              "id": "i1",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":join(ownerByName)",
+          "push",
+          {
+            "child": {
+              "child": {
+                "oldRow": {
+                  "id": "s0",
+                  "name": "Hawaii",
+                },
+                "row": {
+                  "id": "s0",
+                  "name": "HI",
+                },
+                "type": "edit",
+              },
+              "row": {
+                "id": "u3",
+                "name": "Aaron",
+                "stateID": "s0",
+              },
+              "type": "child",
+            },
+            "row": {
+              "id": "i2",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+        ],
+      ]
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i0",
+          "ownerByName": [
+            {
+              "id": "u0",
+              "name": "Fritz",
+              "state": {
+                "id": "s1",
+                "name": "CA",
+              },
+              "stateID": "s1",
+            },
+          ],
+          "ownerName": "Fritz",
+        },
+        {
+          "id": "i1",
+          "ownerByName": [
+            {
+              "id": "u1",
+              "name": "Aaron",
+              "state": {
+                "id": "s1",
+                "name": "CA",
+              },
+              "stateID": "s1",
+            },
+            {
+              "id": "u2",
+              "name": "Aaron",
+              "state": {
+                "id": "s0",
+                "name": "HI",
+              },
+              "stateID": "s0",
+            },
+            {
+              "id": "u3",
+              "name": "Aaron",
+              "state": {
+                "id": "s0",
+                "name": "HI",
+              },
+              "stateID": "s0",
+            },
+          ],
+          "ownerName": "Aaron",
+        },
+        {
+          "id": "i2",
+          "ownerByName": [
+            {
+              "id": "u1",
+              "name": "Aaron",
+              "state": {
+                "id": "s1",
+                "name": "CA",
+              },
+              "stateID": "s1",
+            },
+            {
+              "id": "u2",
+              "name": "Aaron",
+              "state": {
+                "id": "s0",
+                "name": "HI",
+              },
+              "stateID": "s0",
+            },
+            {
+              "id": "u3",
+              "name": "Aaron",
+              "state": {
+                "id": "s0",
+                "name": "HI",
+              },
+              "stateID": "s0",
+            },
+          ],
+          "ownerName": "Aaron",
+        },
+        {
+          "id": "i3",
+          "ownerByName": [
+            {
+              "id": "u4",
+              "name": "Arv",
+              "state": {
+                "id": "s1",
+                "name": "CA",
+              },
+              "stateID": "s1",
+            },
+          ],
+          "ownerName": "Arv",
+        },
+      ]
+    `);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".ownerByName:join(state)": {
+          ""pKeySet","s0","u2",": true,
+          ""pKeySet","s0","u3",": true,
+          ""pKeySet","s1","u0",": true,
+          ""pKeySet","s1","u1",": true,
+          ""pKeySet","s1","u4",": true,
+        },
+        ":join(ownerByName)": {
+          ""pKeySet","Aaron","i1",": true,
+          ""pKeySet","Aaron","i2",": true,
+          ""pKeySet","Arv","i3",": true,
+          ""pKeySet","Fritz","i0",": true,
+        },
+      }
+    `);
+    expect(pushesWithFetch).toMatchInlineSnapshot(`
+      [
+        {
+          "change": {
+            "child": {
+              "change": {
+                "child": {
+                  "change": {
+                    "oldRow": {
+                      "id": "s0",
+                      "name": "Hawaii",
+                    },
+                    "row": {
+                      "id": "s0",
+                      "name": "HI",
+                    },
+                    "type": "edit",
+                  },
+                  "relationshipName": "state",
+                },
+                "row": {
+                  "id": "u2",
+                  "name": "Aaron",
+                  "stateID": "s0",
+                },
+                "type": "child",
+              },
+              "relationshipName": "ownerByName",
+            },
+            "row": {
+              "id": "i1",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "stateID": "s1",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerName": "Fritz",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s1",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "Hawaii",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s1",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "Hawaii",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "Hawaii",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u4",
+                      "name": "Arv",
+                      "stateID": "s1",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerName": "Arv",
+              },
+            },
+          ],
+        },
+        {
+          "change": {
+            "child": {
+              "change": {
+                "child": {
+                  "change": {
+                    "oldRow": {
+                      "id": "s0",
+                      "name": "Hawaii",
+                    },
+                    "row": {
+                      "id": "s0",
+                      "name": "HI",
+                    },
+                    "type": "edit",
+                  },
+                  "relationshipName": "state",
+                },
+                "row": {
+                  "id": "u2",
+                  "name": "Aaron",
+                  "stateID": "s0",
+                },
+                "type": "child",
+              },
+              "relationshipName": "ownerByName",
+            },
+            "row": {
+              "id": "i2",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "stateID": "s1",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerName": "Fritz",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s1",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "Hawaii",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s1",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "Hawaii",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u4",
+                      "name": "Arv",
+                      "stateID": "s1",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerName": "Arv",
+              },
+            },
+          ],
+        },
+        {
+          "change": {
+            "child": {
+              "change": {
+                "child": {
+                  "change": {
+                    "oldRow": {
+                      "id": "s0",
+                      "name": "Hawaii",
+                    },
+                    "row": {
+                      "id": "s0",
+                      "name": "HI",
+                    },
+                    "type": "edit",
+                  },
+                  "relationshipName": "state",
+                },
+                "row": {
+                  "id": "u3",
+                  "name": "Aaron",
+                  "stateID": "s0",
+                },
+                "type": "child",
+              },
+              "relationshipName": "ownerByName",
+            },
+            "row": {
+              "id": "i1",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "stateID": "s1",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerName": "Fritz",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s1",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s1",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "Hawaii",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u4",
+                      "name": "Arv",
+                      "stateID": "s1",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerName": "Arv",
+              },
+            },
+          ],
+        },
+        {
+          "change": {
+            "child": {
+              "change": {
+                "child": {
+                  "change": {
+                    "oldRow": {
+                      "id": "s0",
+                      "name": "Hawaii",
+                    },
+                    "row": {
+                      "id": "s0",
+                      "name": "HI",
+                    },
+                    "type": "edit",
+                  },
+                  "relationshipName": "state",
+                },
+                "row": {
+                  "id": "u3",
+                  "name": "Aaron",
+                  "stateID": "s0",
+                },
+                "type": "child",
+              },
+              "relationshipName": "ownerByName",
+            },
+            "row": {
+              "id": "i2",
+              "ownerName": "Aaron",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "stateID": "s1",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerName": "Fritz",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s1",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s1",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u2",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u3",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerName": "Aaron",
+              },
+            },
+            {
+              "relationships": {
+                "ownerByName": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u4",
+                      "name": "Arv",
+                      "stateID": "s1",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerName": "Arv",
+              },
+            },
+          ],
+        },
+      ]
+    `);
+  });
+});

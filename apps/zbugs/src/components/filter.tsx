@@ -20,7 +20,7 @@ export const Filter = memo(function Filter({onSelect}: Props) {
   const z = useZero();
   const [isOpen, setIsOpen] = useState(false);
 
-  const [unsortedLabels] = useQuery(z.query.label, {ttl: '1d'});
+  const [unsortedLabels] = useQuery(z.query.label);
   // TODO: Support case-insensitive sorting in ZQL.
   const labels = useMemo(
     () => unsortedLabels.toSorted((a, b) => a.name.localeCompare(b.name)),

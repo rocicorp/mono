@@ -32,7 +32,6 @@ import {
 } from './expression.ts';
 import type {AdvancedQuery} from './query-internal.ts';
 import {
-  DEFAULT_TTL,
   type GetFilterType,
   type HumanReadable,
   type Operator,
@@ -40,7 +39,7 @@ import {
   type PullRow,
   type Query,
 } from './query.ts';
-import type {TTL} from './ttl.ts';
+import {DEFAULT_TTL, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 type AnyQuery = Query<Schema, string, any>;
@@ -587,7 +586,7 @@ export class QueryImpl<
 
   materialize<T>(
     factoryOrTTL?: ViewFactory<TSchema, TTable, TReturn, T> | number,
-    ttl: number = DEFAULT_TTL,
+    ttl: TTL = DEFAULT_TTL,
   ): T {
     const t0 = Date.now();
     let factory: ViewFactory<TSchema, TTable, TReturn, T> | undefined;

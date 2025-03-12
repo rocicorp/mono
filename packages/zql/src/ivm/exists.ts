@@ -196,11 +196,7 @@ export class Exists implements Operator {
             case 'remove': {
               let size = this.#getSize(change.node);
               if (size !== undefined) {
-                // Work around for issue https://bugs.rocicorp.dev/issue/3204
-                // assert(size > 0);
-                if (size === 0) {
-                  return;
-                }
+                assert(size > 0);
                 size--;
                 this.#setSize(change.node, size);
               } else {

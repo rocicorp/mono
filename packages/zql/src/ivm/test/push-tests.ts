@@ -54,6 +54,7 @@ export type PushTest = {
   ast: AST;
   format: Format;
   pushes: Pushes;
+  fetchOnPush?: boolean | undefined;
 };
 
 export function runPushTest(t: PushTest) {
@@ -112,10 +113,34 @@ export function runPushTest(t: PushTest) {
   expect(actualStorage).toEqual(actualStorage2);
 
   view.flush();
+
+  if (!t.fetchOnPush) {
+    return {
+      log,
+      actualStorage,
+      pushes: catchOp.pushes,
+      data,
+    };
+  }
+
+  const {
+    finalOutput: catchOp2,
+    log: log3,
+    actualStorage: actualStorage3,
+  } = innerTest(j => {
+    const c = new Catch(j, t.fetchOnPush);
+    c.fetch();
+    return c;
+  });
+
+  expect(actualStorage).toEqual(actualStorage3);
+
   return {
     log,
     actualStorage,
-    pushes: catchOp.pushes,
+    pushes: catchOp2.pushes,
+    logWithFetch: log3,
+    pushesWithFetch: catchOp2.pushesWithFetch,
     data,
   };
 }
