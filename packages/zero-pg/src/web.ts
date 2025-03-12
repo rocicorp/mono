@@ -13,7 +13,6 @@ import {
   TransactionImpl,
   type CustomMutatorDefs,
 } from './custom.ts';
-import {first} from '../../shared/src/iterables.ts';
 import {LogContext} from '@rocicorp/logger';
 import {createLogContext} from './logging.ts';
 import {
@@ -26,6 +25,13 @@ import {
 } from '../../zql/src/mutate/custom.ts';
 import {makeSchemaQuery} from './query.ts';
 import {assert} from '../../shared/src/asserts.ts';
+import {
+  upstreamSchema,
+  type ShardID,
+} from '../../zero-cache/src/types/shards.ts';
+import {formatPg} from '../../z2s/src/sql.ts';
+import {sql} from '../../z2s/src/sql.ts';
+import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
 
 export type PushHandler = (
   headers: Headers,
@@ -33,10 +39,6 @@ export type PushHandler = (
 ) => Promise<PushResponse>;
 
 type Headers = {authorization?: string | undefined};
-
-function pgZeroSchema(shardID: string) {
-  return `zero_${shardID}`;
-}
 
 export class PushProcessor<
   S extends Schema,
@@ -46,12 +48,12 @@ export class PushProcessor<
   readonly #dbConnectionProvider: ConnectionProvider<TDBTransaction>;
   readonly #customMutatorDefs: MD;
   readonly #lc: LogContext;
-  readonly #shardID: string;
+  readonly #shardID: ShardID;
   readonly #mutate: (dbTransaction: DBTransaction<unknown>) => SchemaCRUD<S>;
   readonly #query: (dbTransaction: DBTransaction<unknown>) => SchemaQuery<S>;
 
   constructor(
-    shardID: string,
+    shardID: ShardID,
     schema: S,
     dbConnectionProvider: ConnectionProvider<TDBTransaction>,
     customMutatorDefs: MD,
@@ -106,6 +108,30 @@ export class PushProcessor<
         false,
       );
     } catch (e) {
+      if (e instanceof OutOfOrderMutation) {
+        return {
+          id: {
+            clientID: m.clientID,
+            id: m.id,
+          },
+          result: {
+            error: 'ooo-mutation',
+            details: e.message,
+          },
+        };
+      }
+
+      if (e instanceof MutationAlreadyProcessedError) {
+        this.#lc.warn?.(e.message);
+        return {
+          id: {
+            clientID: m.clientID,
+            id: m.id,
+          },
+          result: {},
+        };
+      }
+
       const ret = await this.#processMutationImpl(
         dbConnection,
         headers,
@@ -141,55 +167,25 @@ export class PushProcessor<
         'crud mutators are deprecated in favor of custom mutators.',
       );
     }
-    const pgSchema = pgZeroSchema(this.#shardID);
 
     return dbConnection.transaction(async (dbTx): Promise<MutationResponse> => {
-      const id = {
-        clientID: m.clientID,
-        id: m.id,
-      } as const;
-      const client = first(
-        await dbTx.query(
-          `select * from "${pgSchema}"."clients" where "clientID" = $1`,
-          [m.clientID],
-        ),
-      ) as {lastMutationID: bigint} | undefined;
-      const lmid = client?.lastMutationID ?? 0n;
-      const expected = lmid + 1n;
-
-      if (m.id < expected) {
-        this.#lc.warn?.(`Mutation ${m.id} already processed. Skipping.`);
-        return {id, result: {}};
-      }
-      if (m.id > expected) {
-        // if m.id is 1, then client can interpret this like client-not-found
-        // and nuke client state.
-        return {
-          id,
-          result: {
-            error: 'ooo-mutation',
-          },
-        };
-      }
+      await checkAndIncrementLastMutationID(
+        dbTx,
+        this.#shardID,
+        req.clientGroupID,
+        m.clientID,
+        m.id,
+      );
 
       if (!errorMode) {
         await this.#dispatchMutation(dbTx, headers, m);
       }
 
-      if (expected === 1n) {
-        await dbTx.query(
-          `insert into "${pgSchema}"."clients" ("clientGroupID", "clientID", "lastMutationID") values ($1, $2, $3)`,
-          [req.clientGroupID, m.clientID, expected],
-        );
-      } else {
-        await dbTx.query(
-          `update "${pgSchema}"."clients" set "lastMutationID" = $1 where "clientID" = $2 and "clientGroupID" = $3`,
-          [expected, m.clientID, req.clientGroupID],
-        );
-      }
-
       return {
-        id,
+        id: {
+          clientID: m.clientID,
+          id: m.id,
+        },
         result: {},
       };
     });
@@ -219,5 +215,49 @@ export class PushProcessor<
 
     const [namespace, name] = splitMutatorKey(m.name);
     return this.#customMutatorDefs[namespace][name](zeroTx, m.args[0]);
+  }
+}
+
+async function checkAndIncrementLastMutationID(
+  tx: DBTransaction<unknown>,
+  shard: ShardID,
+  clientGroupID: string,
+  clientID: string,
+  receivedMutationID: number,
+) {
+  const formatted = formatPg(
+    sql`INSERT INTO ${sql.ident(upstreamSchema(shard))}.clients 
+    as current ("clientGroupID", "clientID", "lastMutationID")
+        VALUES (${clientGroupID}, ${clientID}, ${1})
+    ON CONFLICT ("clientGroupID", "clientID")
+    DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
+    RETURNING "lastMutationID"`,
+  );
+
+  const [{lastMutationID}] = (await tx.query(
+    formatted.text,
+    formatted.values,
+  )) as {lastMutationID: bigint}[];
+
+  if (receivedMutationID < lastMutationID) {
+    throw new MutationAlreadyProcessedError(
+      clientID,
+      receivedMutationID,
+      lastMutationID,
+    );
+  } else if (receivedMutationID > lastMutationID) {
+    throw new OutOfOrderMutation(clientID, receivedMutationID, lastMutationID);
+  }
+}
+
+class OutOfOrderMutation extends Error {
+  constructor(
+    clientID: string,
+    receivedMutationID: number,
+    lastMutationID: bigint,
+  ) {
+    super(
+      `Client ${clientID} sent mutation ID ${receivedMutationID} but expected ${lastMutationID}`,
+    );
   }
 }

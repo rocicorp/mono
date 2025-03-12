@@ -415,7 +415,7 @@ async function checkSchemaVersionAndIncrementLastMutationID(
   }
 }
 
-class MutationAlreadyProcessedError extends Error {
+export class MutationAlreadyProcessedError extends Error {
   constructor(clientID: string, received: number, actual: bigint) {
     super(
       `Ignoring mutation from ${clientID} with ID ${received} as it was already processed. Expected: ${actual}`,
