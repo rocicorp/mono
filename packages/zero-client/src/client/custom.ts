@@ -20,6 +20,10 @@ import {
   WriteTransactionImpl,
   zeroData,
 } from '../../../replicache/src/transactions.ts';
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
+import {ZeroContext} from './context.ts';
+import type {LogContext} from '@rocicorp/logger';
 
 /**
  * An instance of this is passed to custom mutator implementations and
@@ -82,14 +86,17 @@ export type MakeCustomMutatorInterface<
   : never;
 
 export class TransactionImpl implements Transaction<Schema> {
-  constructor(repTx: WriteTransaction, schema: Schema) {
+  constructor(
+    lc: LogContext,
+    repTx: WriteTransaction,
+    schema: Schema,
+    slowMaterializeThreshold: number,
+  ) {
     const castedRepTx = repTx as WriteTransactionImpl;
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
     this.clientID = repTx.clientID;
     this.mutationID = repTx.mutationID;
     this.reason = repTx.reason === 'initial' ? 'optimistic' : 'rebase';
-    // ~ Note: we will likely need to leverage proxies one day to create
-    // ~ crud mutators and queries on demand for users with very large schemas.
     this.mutate = makeSchemaCRUD(
       schema,
       repTx,
@@ -105,7 +112,15 @@ export class TransactionImpl implements Transaction<Schema> {
             'zero was not set on replicache internal options!',
           ) as IVMSourceBranch),
     );
-    this.query = {};
+    this.query = makeSchemaQuery(
+      lc,
+      schema,
+      must(
+        castedRepTx[zeroData],
+        'zero was not set on replicache internal options!',
+      ) as IVMSourceBranch,
+      slowMaterializeThreshold,
+    );
   }
 
   readonly clientID: ClientID;
@@ -117,11 +132,13 @@ export class TransactionImpl implements Transaction<Schema> {
 }
 
 export function makeReplicacheMutator(
+  lc: LogContext,
   mutator: CustomMutatorImpl<Schema>,
   schema: Schema,
+  slowMaterializeThreshold: number,
 ) {
   return (repTx: WriteTransaction, args: ReadonlyJSONValue): Promise<void> => {
-    const tx = new TransactionImpl(repTx, schema);
+    const tx = new TransactionImpl(lc, repTx, schema, slowMaterializeThreshold);
     return mutator(tx, args);
   };
 }
@@ -131,11 +148,50 @@ function makeSchemaCRUD(
   tx: WriteTransaction,
   ivmBranch: IVMSourceBranch | undefined,
 ) {
-  const mutate: Record<string, TableCRUD<TableSchema>> = {};
-  for (const [name] of Object.entries(schema.tables)) {
-    mutate[name] = makeTableCRUD(schema, name, tx, ivmBranch);
-  }
-  return mutate;
+  // Only creates the CRUD mutators on demand
+  // rather than creating them all up-front for each mutation.
+  return new Proxy(
+    {},
+    {
+      get(target: Record<string, TableCRUD<TableSchema>>, prop: string) {
+        if (prop in target) {
+          return target[prop];
+        }
+
+        target[prop] = makeTableCRUD(schema, prop, tx, ivmBranch);
+        return target[prop];
+      },
+    },
+  ) as SchemaCRUD<Schema>;
+}
+
+function makeSchemaQuery(
+  lc: LogContext,
+  schema: Schema,
+  ivmBranch: IVMSourceBranch,
+  slowMaterializeThreshold: number,
+) {
+  const context = new ZeroContext(
+    lc,
+    ivmBranch,
+    () => () => {},
+    applyViewUpdates => applyViewUpdates(),
+    slowMaterializeThreshold,
+  );
+
+  return new Proxy(
+    {},
+    {
+      get(target: Record<string, Query<Schema, string>>, prop: string) {
+        if (prop in target) {
+          return target[prop];
+        }
+
+        target[prop] = newQuery(context, schema, prop);
+        return target[prop];
+      },
+    },
+  ) as SchemaQuery<Schema>;
 }
 
 function makeTableCRUD(
