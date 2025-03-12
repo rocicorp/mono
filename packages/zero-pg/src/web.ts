@@ -209,6 +209,6 @@ export class PushProcessor<
     );
 
     const [namespace, name] = splitMutatorKey(m.name);
-    return this.#customMutatorDefs[namespace][name](zeroTx, m.args);
+    return this.#customMutatorDefs[namespace][name](zeroTx, m.args[0]);
   }
 }
