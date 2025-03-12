@@ -771,42 +771,42 @@ describe('initConnection', () => {
         initConnectionMessageSchema,
       ),
     ).toMatchInlineSnapshot(`
-        [
-          "initConnection",
-          {
-            "clientSchema": {
-              "tables": {
-                "e": {
-                  "columns": {
-                    "id": {
-                      "type": "string",
-                    },
-                    "value": {
-                      "type": "string",
-                    },
+      [
+        "initConnection",
+        {
+          "clientSchema": {
+            "tables": {
+              "e": {
+                "columns": {
+                  "id": {
+                    "type": "string",
+                  },
+                  "value": {
+                    "type": "string",
                   },
                 },
               },
             },
-            "desiredQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "e",
-                },
-                "hash": "29j3x0l4bxthp",
-                "op": "put",
-                "ttl": 10000,
-              },
-            ],
           },
-        ]
-      `);
+          "desiredQueriesPatch": [
+            {
+              "ast": {
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "table": "e",
+              },
+              "hash": "29j3x0l4bxthp",
+              "op": "put",
+              "ttl": 0,
+            },
+          ],
+        },
+      ]
+    `);
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
@@ -868,47 +868,47 @@ describe('initConnection', () => {
         initConnectionMessageSchema,
       ),
     ).toMatchInlineSnapshot(`
-                [
-                  "initConnection",
-                  {
-                    "clientSchema": {
-                      "tables": {
-                        "e": {
-                          "columns": {
-                            "id": {
-                              "type": "string",
-                            },
-                            "value": {
-                              "type": "string",
-                            },
-                          },
-                        },
-                      },
-                    },
-                    "deleted": {
-                      "clientIDs": [
-                        "a",
-                      ],
-                    },
-                    "desiredQueriesPatch": [
-                      {
-                        "ast": {
-                          "orderBy": [
-                            [
-                              "id",
-                              "asc",
-                            ],
-                          ],
-                          "table": "e",
-                        },
-                        "hash": "29j3x0l4bxthp",
-                        "op": "put",
-                        "ttl": 10000,
-                      },
-                    ],
+      [
+        "initConnection",
+        {
+          "clientSchema": {
+            "tables": {
+              "e": {
+                "columns": {
+                  "id": {
+                    "type": "string",
                   },
-                ]
-              `);
+                  "value": {
+                    "type": "string",
+                  },
+                },
+              },
+            },
+          },
+          "deleted": {
+            "clientIDs": [
+              "a",
+            ],
+          },
+          "desiredQueriesPatch": [
+            {
+              "ast": {
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "table": "e",
+              },
+              "hash": "29j3x0l4bxthp",
+              "op": "put",
+              "ttl": 0,
+            },
+          ],
+        },
+      ]
+    `);
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
@@ -934,42 +934,42 @@ describe('initConnection', () => {
     mockSocket.onUpstream = msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-                          [
-                            "initConnection",
-                            {
-                              "clientSchema": {
-                                "tables": {
-                                  "e": {
-                                    "columns": {
-                                      "id": {
-                                        "type": "string",
-                                      },
-                                      "value": {
-                                        "type": "string",
-                                      },
-                                    },
-                                  },
-                                },
-                              },
-                              "desiredQueriesPatch": [
-                                {
-                                  "ast": {
-                                    "orderBy": [
-                                      [
-                                        "id",
-                                        "asc",
-                                      ],
-                                    ],
-                                    "table": "e",
-                                  },
-                                  "hash": "29j3x0l4bxthp",
-                                  "op": "put",
-                                  "ttl": 10000,
-                                },
-                              ],
-                            },
-                          ]
-                        `);
+          [
+            "initConnection",
+            {
+              "clientSchema": {
+                "tables": {
+                  "e": {
+                    "columns": {
+                      "id": {
+                        "type": "string",
+                      },
+                      "value": {
+                        "type": "string",
+                      },
+                    },
+                  },
+                },
+              },
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "e",
+                  },
+                  "hash": "29j3x0l4bxthp",
+                  "op": "put",
+                  "ttl": 0,
+                },
+              ],
+            },
+          ]
+        `);
 
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     };
@@ -1001,47 +1001,47 @@ describe('initConnection', () => {
     mockSocket.onUpstream = msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-                            [
-                              "initConnection",
-                              {
-                                "clientSchema": {
-                                  "tables": {
-                                    "e": {
-                                      "columns": {
-                                        "id": {
-                                          "type": "string",
-                                        },
-                                        "value": {
-                                          "type": "string",
-                                        },
-                                      },
-                                    },
-                                  },
-                                },
-                                "deleted": {
-                                  "clientIDs": [
-                                    "a",
-                                  ],
-                                },
-                                "desiredQueriesPatch": [
-                                  {
-                                    "ast": {
-                                      "orderBy": [
-                                        [
-                                          "id",
-                                          "asc",
-                                        ],
-                                      ],
-                                      "table": "e",
-                                    },
-                                    "hash": "29j3x0l4bxthp",
-                                    "op": "put",
-                                    "ttl": 10000,
-                                  },
-                                ],
-                              },
-                            ]
-                          `);
+          [
+            "initConnection",
+            {
+              "clientSchema": {
+                "tables": {
+                  "e": {
+                    "columns": {
+                      "id": {
+                        "type": "string",
+                      },
+                      "value": {
+                        "type": "string",
+                      },
+                    },
+                  },
+                },
+              },
+              "deleted": {
+                "clientIDs": [
+                  "a",
+                ],
+              },
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "e",
+                  },
+                  "hash": "29j3x0l4bxthp",
+                  "op": "put",
+                  "ttl": 0,
+                },
+              ],
+            },
+          ]
+        `);
 
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     };
@@ -1082,7 +1082,7 @@ describe('initConnection', () => {
               } satisfies AST,
               hash: '29j3x0l4bxthp',
               op: 'put',
-              ttl: 10000,
+              ttl: 0,
             },
           ],
         },

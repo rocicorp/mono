@@ -103,8 +103,6 @@ export type Row<T extends TableSchema | Query<ZeroSchema, string, any>> =
     ? TReturn
     : never;
 
-export const DEFAULT_TTL = 10_000;
-
 export interface Query<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
