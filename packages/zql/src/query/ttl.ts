@@ -49,3 +49,30 @@ export function compareTTL(a: TTL, b: TTL): number {
   }
   return ap - bp;
 }
+
+export function formatTTL(ttl: TTL): string | number {
+  if (typeof ttl === 'string') {
+    return ttl;
+  }
+
+  if (ttl < 0) {
+    return 'forever';
+  }
+
+  if (ttl === 0) {
+    return 'none';
+  }
+
+  let shortest = ttl.toString();
+  const lengthOfNumber = shortest.length;
+  for (const unit of ['y', 'd', 'h', 'm', 's'] as const) {
+    const multi = multiplier[unit];
+    const value = ttl / multi;
+    const candidate = `${value}${unit}`;
+    if (candidate.length < shortest.length) {
+      shortest = candidate;
+    }
+  }
+
+  return shortest.length < lengthOfNumber ? shortest : ttl;
+}
