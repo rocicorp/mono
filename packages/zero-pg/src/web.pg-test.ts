@@ -213,6 +213,58 @@ test('lmid still moves forward if the mutator implementation throws', async () =
   await checkClientsTable(pg, 3);
 });
 
+test('token with and without `Bearer` prefix', async () => {
+  const processor = new PushProcessor(
+    '0',
+    {
+      tables: {},
+      relationships: {},
+      version: 1,
+    },
+    () => new Connection(pg),
+    mutators,
+  );
+
+  let result = await processor.process(
+    {authorization: 'no-bearer'},
+    makePush(1),
+  );
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "mutations": [
+        {
+          "id": {
+            "clientID": "cid",
+            "id": 1,
+          },
+          "result": {
+            "details": "Authorization header must start with \`Bearer \`. This is a bug in the Zero Pusher service.",
+            "error": "app",
+          },
+        },
+      ],
+    }
+  `);
+  result = await processor.process(
+    {authorization: 'Bearer sdfsdf'},
+    makePush(1),
+  );
+  expect(result).toMatchInlineSnapshot(`
+              {
+                "mutations": [
+                  {
+                    "id": {
+                      "clientID": "cid",
+                      "id": 1,
+                    },
+                    "result": {},
+                  },
+                ],
+              }
+            `);
+});
+
 async function checkClientsTable(
   pg: PostgresDB,
   expectedLmid: number | undefined,
