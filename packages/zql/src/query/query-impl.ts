@@ -78,6 +78,7 @@ export interface QueryDelegate extends BuilderDelegate {
     ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ): () => void;
+  updateServerQuery(ast: AST, ttl: TTL): void;
   onTransactionCommit(cb: CommitListener): () => void;
   batchViewUpdates<T>(applyViewUpdates: () => T): T;
   onQueryMaterialized(hash: string, ast: AST, duration: number): void;
@@ -547,6 +548,7 @@ export abstract class AbstractQuery<
     cleanup: () => void;
     complete: Promise<void>;
   };
+  abstract updateTTL(ttl: TTL): void;
 }
 
 export const completedAstSymbol = Symbol();
@@ -630,6 +632,10 @@ export class QueryImpl<
     );
 
     return view as T;
+  }
+
+  override updateTTL(ttl: TTL): void {
+    this.#delegate.updateServerQuery(this._completeAst(), ttl);
   }
 
   run(): Promise<HumanReadable<TReturn>> {

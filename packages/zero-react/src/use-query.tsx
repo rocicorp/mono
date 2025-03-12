@@ -213,6 +213,8 @@ export class ViewStore {
         },
       ) as ViewWrapper<TSchema, TTable, TReturn>;
       this.#views.set(hash, existing);
+    } else {
+      existing.updateTTL(ttl);
     }
     return existing as ViewWrapper<TSchema, TTable, TReturn>;
   }
@@ -256,7 +258,7 @@ class ViewWrapper<
   readonly #query: AdvancedQuery<TSchema, TTable, TReturn>;
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
-  readonly #ttl: TTL;
+  #ttl: TTL;
 
   constructor(
     query: AdvancedQuery<TSchema, TTable, TReturn>,
@@ -326,4 +328,9 @@ class ViewWrapper<
       }
     };
   };
+
+  updateTTL(ttl: TTL): void {
+    this.#ttl = ttl;
+    this.#query.updateTTL(ttl);
+  }
 }

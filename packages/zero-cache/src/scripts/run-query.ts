@@ -2,6 +2,7 @@
 import chalk from 'chalk';
 import 'dotenv/config';
 
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {parseOptions} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -9,6 +10,7 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {buildPipeline} from '../../../zql/src/builder/builder.ts';
 import {Catch} from '../../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
 import {
   newQuery,
   type QueryDelegate,
@@ -21,8 +23,6 @@ import {
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import {getSchema} from '../auth/load-permissions.ts';
 import {ZERO_ENV_VAR_PREFIX, zeroOptions} from '../config/zero-config.ts';
-import type {Input} from '../../../zql/src/ivm/operator.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 
 const options = {
   replicaFile: zeroOptions.replica.file,
@@ -83,6 +83,7 @@ const host: QueryDelegate = {
   addServerQuery() {
     return () => {};
   },
+  updateServerQuery() {},
   onQueryMaterialized() {},
   onTransactionCommit() {
     return () => {};

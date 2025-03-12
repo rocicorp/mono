@@ -13,10 +13,9 @@ function newMockQuery(
     hash() {
       return query;
     },
-    materialize() {
-      return view;
-    },
+    materialize: vi.fn().mockImplementation(() => view),
     format: {singular},
+    updateTTL: vi.fn<AdvancedQuery<Schema, string>['updateTTL']>(),
   } as unknown as AdvancedQuery<Schema, string>;
 }
 
@@ -81,6 +80,47 @@ describe('ViewStore', () => {
       cleanup1();
 
       vi.advanceTimersByTime(100);
+
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+    });
+
+    test('Using the same query with different TTL should reuse views', () => {
+      const viewStore = new ViewStore();
+
+      const q1 = newMockQuery('query1');
+      const view1 = viewStore.getView('client1', q1, true, '1s');
+      expect(q1.updateTTL).not.toHaveBeenCalled();
+      expect(q1.materialize).toHaveBeenCalledExactlyOnceWith('1s');
+
+      const q2 = newMockQuery('query1');
+      const view2 = viewStore.getView('client1', q2, true, '1m');
+      // Same query hash so call updateTTL on the existing one.
+      expect(q2.updateTTL).not.toHaveBeenCalled();
+      expect(q2.materialize).not.toHaveBeenCalled();
+      expect(q1.updateTTL).toHaveBeenCalledExactlyOnceWith('1m');
+
+      expect(view1).toBe(view2);
+
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+    });
+
+    test('Using the same query with same TTL but different representation', () => {
+      const viewStore = new ViewStore();
+
+      const q1 = newMockQuery('query1');
+      const view1 = viewStore.getView('client1', q1, true, '60s');
+      expect(q1.updateTTL).not.toHaveBeenCalled();
+      expect(q1.materialize).toHaveBeenCalledTimes(1);
+
+      const q2 = newMockQuery('query1');
+      const view2 = viewStore.getView('client1', q2, true, '1m');
+      expect(q1.updateTTL).toHaveBeenCalledExactlyOnceWith('1m');
+
+      const q3 = newMockQuery('query1');
+      const view3 = viewStore.getView('client1', q3, true, 60_000);
+
+      expect(view1).toBe(view2);
+      expect(view1).toBe(view3);
 
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
     });

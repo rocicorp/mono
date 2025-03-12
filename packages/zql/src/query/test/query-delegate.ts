@@ -1,4 +1,6 @@
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
+import {assert} from '../../../../shared/src/asserts.ts';
+import {deepEqual} from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {MemoryStorage} from '../../ivm/memory-storage.ts';
@@ -52,6 +54,7 @@ export class QueryDelegateImpl implements QueryDelegate {
       listener();
     }
   }
+
   addServerQuery(
     ast: AST,
     ttl: TTL,
@@ -65,12 +68,23 @@ export class QueryDelegateImpl implements QueryDelegate {
     }
     return () => {};
   }
+
+  updateServerQuery(ast: AST, ttl: TTL): void {
+    const query = this.addedServerQueries.find(({ast: otherAST}) =>
+      deepEqual(otherAST, ast),
+    );
+    assert(query);
+    query.ttl = ttl;
+  }
+
   getSource(name: string): Source {
     return this.#sources[name];
   }
+
   createStorage() {
     return new MemoryStorage();
   }
+
   decorateInput(input: Input, _description: string): Input {
     return input;
   }

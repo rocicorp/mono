@@ -1,6 +1,7 @@
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {assert} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
 import {hashOfAST} from '../../../zero-protocol/src/ast-hash.ts';
 import {
   mapAST,
@@ -163,25 +164,7 @@ export class QueryManager {
       ]);
     } else {
       ++entry.count;
-
-      // If the query already exists and the new ttl is larger than the old one
-      // we send a changeDesiredQueries message to the server to update the ttl.
-      if (compareTTL(ttl, entry.ttl) > 0) {
-        entry.ttl = ttl;
-        this.#send([
-          'changeDesiredQueries',
-          {
-            desiredQueriesPatch: [
-              {
-                op: 'put',
-                hash: astHash,
-                ast: entry.normalized,
-                ttl: parseTTL(ttl),
-              },
-            ],
-          },
-        ]);
-      }
+      this.#updateEntry(entry, astHash, ttl);
 
       if (gotCallback) {
         entry.gotCallbacks.push(gotCallback);
@@ -200,6 +183,34 @@ export class QueryManager {
       removed = true;
       this.#remove(entry, astHash, gotCallback);
     };
+  }
+
+  update(ast: AST, ttl: TTL) {
+    const normalized = normalizeAST(ast);
+    const astHash = hashOfAST(normalized);
+    const entry = must(this.#queries.get(astHash));
+    this.#updateEntry(entry, astHash, ttl);
+  }
+
+  #updateEntry(entry: Entry, hash: string, ttl: TTL): void {
+    // If the query already exists and the new ttl is larger than the old one
+    // we send a changeDesiredQueries message to the server to update the ttl.
+    if (compareTTL(ttl, entry.ttl) > 0) {
+      entry.ttl = ttl;
+      this.#send([
+        'changeDesiredQueries',
+        {
+          desiredQueriesPatch: [
+            {
+              op: 'put',
+              hash,
+              ast: entry.normalized,
+              ttl: parseTTL(ttl),
+            },
+          ],
+        },
+      ]);
+    }
   }
 
   #remove(entry: Entry, astHash: string, gotCallback: GotCallback | undefined) {

@@ -4,6 +4,7 @@ import type {Format} from '../ivm/view.ts';
 import {ExpressionBuilder} from './expression.ts';
 import {AbstractQuery} from './query-impl.ts';
 import type {HumanReadable, PullRow, Query} from './query.ts';
+import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 export function staticQuery<
@@ -58,5 +59,9 @@ export class StaticQuery<
     complete: Promise<void>;
   } {
     throw new Error('StaticQuery cannot be preloaded');
+  }
+
+  updateTTL(_ttl: TTL): void {
+    throw new Error('StaticQuery cannot have a TTL');
   }
 }

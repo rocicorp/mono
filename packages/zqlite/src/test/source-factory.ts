@@ -1,17 +1,17 @@
 import type {LogContext} from '@rocicorp/logger';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {SourceFactory} from '../../../zql/src/ivm/test/source-factory.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-impl.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
 import {TableSource, toSQLiteTypeName} from '../table-source.ts';
-import type {QueryDelegate} from '../../../zql/src/query/query-impl.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
-import type {Input} from '../../../zql/src/ivm/operator.ts';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
 
 export const createSource: SourceFactory = (
   lc: LogContext,
@@ -91,6 +91,7 @@ export function newQueryDelegate(
     addServerQuery() {
       return () => {};
     },
+    updateServerQuery() {},
     onQueryMaterialized() {},
     onTransactionCommit() {
       return () => {};

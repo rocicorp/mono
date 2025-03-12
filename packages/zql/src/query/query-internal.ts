@@ -16,4 +16,5 @@ export interface AdvancedQuery<
   ): T;
   get format(): Format;
   hash(): string;
+  updateTTL(ttl: TTL): void;
 }
