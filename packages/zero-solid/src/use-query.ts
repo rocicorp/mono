@@ -6,9 +6,9 @@ import type {
 } from '../../zero/src/advanced.ts';
 import {DEFAULT_TTL, type Schema, type TTL} from '../../zero/src/zero.ts';
 import {
-  SolidView,
   solidViewFactory,
   type QueryResultDetails,
+  type SolidView,
 } from './solid-view.ts';
 
 export type QueryResult<TReturn> = readonly [
