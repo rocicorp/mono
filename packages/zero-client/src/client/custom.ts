@@ -1,11 +1,12 @@
+import type {LogContext} from '@rocicorp/logger';
+import {
+  WriteTransactionImpl,
+  zeroData,
+} from '../../../replicache/src/transactions.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {ClientID} from '../types/client-state.ts';
-import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
-import type {WriteTransaction} from './replicache-types.ts';
-import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {
   DeleteID,
   InsertValue,
@@ -16,14 +17,13 @@ import type {
   UpdateValue,
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
-import {
-  WriteTransactionImpl,
-  zeroData,
-} from '../../../replicache/src/transactions.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
+import type {ClientID} from '../types/client-state.ts';
 import {ZeroContext} from './context.ts';
-import type {LogContext} from '@rocicorp/logger';
+import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
+import type {IVMSourceBranch} from './ivm-branch.ts';
+import type {WriteTransaction} from './replicache-types.ts';
 
 /**
  * An instance of this is passed to custom mutator implementations and
@@ -175,6 +175,7 @@ function makeSchemaQuery(
     lc,
     ivmBranch,
     () => () => {},
+    () => {},
     applyViewUpdates => applyViewUpdates(),
     slowMaterializeThreshold,
   );
