@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {compareTTL, formatTTL, parseTTL} from './ttl.ts';
+import {compareTTL, normalizeTTL, parseTTL} from './ttl.ts';
 
 test.each([
   ['none', 0],
@@ -58,6 +58,6 @@ test.each([
   [1.5 * 24 * 60 * 60 * 1000, '36h'],
   [1.5 * 365 * 24 * 60 * 60 * 1000, '1.5y'],
   [1.25 * 365 * 24 * 60 * 60 * 1000, '1.25y'],
-] as const)('formatTTL(%o) === %o', (ttl, expected) => {
-  expect(formatTTL(ttl)).toBe(expected);
+] as const)('normalizeTTL(%o) === %o', (ttl, expected) => {
+  expect(normalizeTTL(ttl)).toBe(expected);
 });
