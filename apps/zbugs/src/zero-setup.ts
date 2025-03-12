@@ -77,11 +77,11 @@ export function preload(z: Zero<Schema>) {
           .limit(INITIAL_COMMENT_LIMIT)
           .orderBy('created', 'desc'),
       )
-      .preload({ttl: '1d'});
+      .preload({ttl: 'forever'});
   });
 
-  z.query.user.preload({ttl: '1d'});
-  z.query.label.preload({ttl: '1d'});
+  z.query.user.preload({ttl: 'forever'});
+  z.query.label.preload({ttl: 'forever'});
 }
 
 // To enable accessing zero in the devtools easily.

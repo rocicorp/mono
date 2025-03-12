@@ -33,7 +33,6 @@ export const Nav = memo(() => {
   const zero = useZero();
   const [user] = useQuery(
     zero.query.user.where('id', login.loginState?.decoded.sub ?? '').one(),
-    {ttl: '10m'},
   );
 
   const [showIssueModal, setShowIssueModal] = useState(false);
