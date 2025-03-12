@@ -42,5 +42,4 @@ export const pushHandler: PushHandler = createPushHandler({
   dbConnectionProvider: () => new Connection(mutatorSql),
   mutators: {},
   schema,
-  shardID: '0',
 });

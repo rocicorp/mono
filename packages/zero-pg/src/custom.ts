@@ -11,6 +11,7 @@ import type {
 } from '../../zql/src/mutate/custom.ts';
 import {PushProcessor, type PushHandler} from './web.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
+import type {ShardID} from '../../zero-cache/src/types/shards.ts';
 
 export interface Transaction<S extends Schema, TWrappedTransaction>
   extends TransactionBase<S> {
@@ -43,7 +44,7 @@ type Options<
   schema: S;
   dbConnectionProvider: ConnectionProvider<TDBTransaction>;
   mutators: MD;
-  shardID?: string;
+  shardID?: ShardID;
 };
 
 export function createPushHandler<
@@ -57,7 +58,10 @@ export function createPushHandler<
   shardID,
 }: Options<S, TDBTransaction, MD>): PushHandler {
   const processor = new PushProcessor(
-    shardID ?? '0',
+    shardID ?? {
+      appID: 'zero',
+      shardNum: 0,
+    },
     schema,
     dbConnectionProvider,
     mutators,
