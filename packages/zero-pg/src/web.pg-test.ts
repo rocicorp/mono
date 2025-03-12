@@ -40,6 +40,11 @@ function makePush(
   };
 }
 
+const shardID = {
+  appID: 'zero',
+  shardNum: 0,
+} as const;
+
 const mutators = {
   foo: {
     bar: () => Promise.resolve(),
@@ -50,7 +55,7 @@ const mutators = {
 describe('out of order mutation', () => {
   test('first mutation is out of order', async () => {
     const processor = new PushProcessor(
-      '0',
+      shardID,
       {
         tables: {},
         relationships: {},
@@ -69,6 +74,7 @@ describe('out of order mutation', () => {
             id: 15,
           },
           result: {
+            details: 'Client cid sent mutation ID 15 but expected 1',
             error: 'ooo-mutation',
           },
         },
@@ -80,7 +86,7 @@ describe('out of order mutation', () => {
 
   test('later mutations are out of order', async () => {
     const processor = new PushProcessor(
-      '0',
+      shardID,
       {
         tables: {},
         relationships: {},
@@ -110,6 +116,7 @@ describe('out of order mutation', () => {
             id: 3,
           },
           result: {
+            details: 'Client cid sent mutation ID 3 but expected 2',
             error: 'ooo-mutation',
           },
         },
@@ -122,7 +129,7 @@ describe('out of order mutation', () => {
 
 test('first mutation', async () => {
   const processor = new PushProcessor(
-    '0',
+    shardID,
     {
       tables: {},
       relationships: {},
@@ -149,7 +156,7 @@ test('first mutation', async () => {
 
 test('previously seen mutation', async () => {
   const processor = new PushProcessor(
-    '0',
+    shardID,
     {
       tables: {},
       relationships: {},
@@ -180,7 +187,7 @@ test('previously seen mutation', async () => {
 
 test('lmid still moves forward if the mutator implementation throws', async () => {
   const processor = new PushProcessor(
-    '0',
+    shardID,
     {
       tables: {},
       relationships: {},
@@ -215,7 +222,7 @@ test('lmid still moves forward if the mutator implementation throws', async () =
 
 test('token with and without `Bearer` prefix', async () => {
   const processor = new PushProcessor(
-    '0',
+    shardID,
     {
       tables: {},
       relationships: {},
