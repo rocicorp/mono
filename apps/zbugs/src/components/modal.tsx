@@ -16,11 +16,11 @@ import {Confirm} from './confirm.tsx';
 interface Props {
   title?: string | undefined;
   isOpen: boolean;
-  center: boolean;
+  center?: boolean | undefined;
   className?: string | undefined;
   onDismiss: () => void;
   children?: React.ReactNode;
-  size: keyof typeof sizeClasses;
+  size?: keyof typeof sizeClasses | undefined;
   isDirty?: (() => boolean) | undefined;
 }
 const sizeClasses = {
@@ -31,8 +31,8 @@ const sizeClasses = {
 export function Modal({
   title,
   isOpen,
-  center,
-  size,
+  center = true,
+  size = 'normal',
   className,
   onDismiss,
   children,
@@ -126,11 +126,6 @@ export function Modal({
     document.getElementById('root-modal') as Element,
   );
 }
-
-Modal.defaultProps = {
-  size: 'normal',
-  center: true,
-};
 
 export function ModalBody({children}: {children: React.ReactNode}) {
   return (

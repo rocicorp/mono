@@ -56,6 +56,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const sortDirection =
     qs.get('sortDir')?.toLowerCase() === 'asc' ? 'asc' : 'desc';
 
+  // TODO: debounce
   let ttl: TTL = '1h';
 
   let q = z.query.issue
@@ -97,9 +98,12 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }
 
   const [issues, issuesResult] = useQuery(q, {ttl});
-  if (issues.length > 0 || issuesResult.type === 'complete') {
-    onReady();
-  }
+
+  useEffect(() => {
+    if (issues.length > 0 || issuesResult.type === 'complete') {
+      onReady();
+    }
+  }, [issues.length, issuesResult.type, onReady]);
 
   useEffect(() => {
     if (issuesResult.type === 'complete') {

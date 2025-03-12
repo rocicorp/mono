@@ -45,7 +45,7 @@ export function UserPicker({
     }
   }
 
-  const [unsortedUsers] = useQuery(q, {ttl: '1h'});
+  const [unsortedUsers] = useQuery(q);
   // TODO: Support case-insensitive sorting in ZQL.
   const users = useMemo(
     () => unsortedUsers.toSorted((a, b) => a.login.localeCompare(b.login)),
