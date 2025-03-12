@@ -1,3 +1,4 @@
+import {LogContext} from '@rocicorp/logger';
 import {expect, test} from 'vitest';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {assert} from '../../../shared/src/asserts.ts';
@@ -7,10 +8,10 @@ import {Catch} from '../../../zql/src/ivm/catch.ts';
 import {Join} from '../../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
-import {type AddQuery, ZeroContext} from './context.ts';
+import {ZeroContext} from './context.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
-import {LogContext} from '@rocicorp/logger';
+import type {QueryManager} from './query-manager.ts';
 
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();
@@ -36,7 +37,7 @@ test('getSource', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    null as unknown as AddQuery,
+    null as unknown as QueryManager,
     testBatchViewUpdates,
     5_000,
   );
@@ -108,7 +109,7 @@ test('processChanges', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    null as unknown as AddQuery,
+    null as unknown as QueryManager,
     testBatchViewUpdates,
     5_000,
   );
@@ -173,7 +174,7 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    null as unknown as AddQuery,
+    null as unknown as QueryManager,
     batchViewUpdates,
     5_000,
   );
@@ -227,7 +228,7 @@ test('transactions', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    null as unknown as AddQuery,
+    null as unknown as QueryManager,
     testBatchViewUpdates,
     5_000,
   );
@@ -302,7 +303,7 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    null as unknown as AddQuery,
+    null as unknown as QueryManager,
     batchViewUpdates,
     5_000,
   );
@@ -321,7 +322,7 @@ test('batchViewUpdates returns value', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    null as unknown as AddQuery,
+    null as unknown as QueryManager,
     batchViewUpdates,
     5_000,
   );

@@ -14,12 +14,15 @@ import type {
 import type {TTL} from '../../../zql/src/query/ttl.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
+import type {QueryManager} from './query-manager.ts';
 
 export type AddQuery = (
   ast: AST,
   ttl: TTL,
   gotCallback: GotCallback | undefined,
 ) => () => void;
+
+export type UpdateQuery = (ast: AST, ttl: TTL) => void;
 
 /**
  * ZeroContext glues together zql and Replicache. It listens to changes in
@@ -32,7 +35,7 @@ export class ZeroContext implements QueryDelegate {
   // pipelines *synchronously* and the core Replicache infra is all async. So
   // that needs to be fixed.
   readonly #mainSources: IVMSourceBranch;
-  readonly #addQuery: AddQuery;
+  readonly #queryManager: QueryManager;
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
@@ -43,12 +46,12 @@ export class ZeroContext implements QueryDelegate {
   constructor(
     lc: LogContext,
     mainSources: IVMSourceBranch,
-    addQuery: AddQuery,
+    queryManager: QueryManager,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
     slowMaterializeThreshold: number,
   ) {
     this.#mainSources = mainSources;
-    this.#addQuery = addQuery;
+    this.#queryManager = queryManager;
     this.#batchViewUpdates = batchViewUpdates;
     this.lc = lc;
     this.slowMaterializeThreshold = slowMaterializeThreshold;
@@ -59,7 +62,11 @@ export class ZeroContext implements QueryDelegate {
   }
 
   addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback | undefined) {
-    return this.#addQuery(ast, ttl, gotCallback);
+    return this.#queryManager.add(ast, ttl, gotCallback);
+  }
+
+  updateServerQuery(ast: AST, ttl: TTL): void {
+    this.#queryManager.update(ast, ttl);
   }
 
   onQueryMaterialized(hash: string, ast: AST, duration: number): void {
