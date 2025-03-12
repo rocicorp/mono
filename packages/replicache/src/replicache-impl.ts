@@ -1228,11 +1228,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       }
     }
     if (refreshResult !== undefined) {
-      this.#zero?.advance(
-        refreshResult.oldHead,
-        refreshResult.newHead,
-        refreshResult.diffs.get('') ?? [],
-      );
       await this.#subscriptions.fire(refreshResult.diffs);
     }
   }

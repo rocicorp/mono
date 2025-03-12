@@ -304,6 +304,11 @@ export async function refresh(
     }
     return undefined;
   }
+
+  // Advance zero here before setting refresh hashes
+  // since we must advance before delegating control of the microtask
+  // loop.
+  zero?.advance(result.oldHead, result.newHead, result.diffs.get('') ?? []);
   await setRefreshHashes([result.newPerdagClientHeadHash]);
   return {
     oldHead: result.oldHead,
