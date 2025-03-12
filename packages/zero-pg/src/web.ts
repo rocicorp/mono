@@ -25,6 +25,7 @@ import {
   type DBTransaction,
 } from '../../zql/src/mutate/custom.ts';
 import {makeSchemaQuery} from './query.ts';
+import {assert} from '../../shared/src/asserts.ts';
 
 export type PushHandler = (
   headers: Headers,
@@ -199,9 +200,17 @@ export class PushProcessor<
     headers: Headers,
     m: Mutation,
   ): Promise<void> {
+    let {authorization} = headers;
+    if (authorization !== undefined) {
+      assert(
+        authorization.toLowerCase().startsWith('bearer '),
+        'Authorization header must start with `Bearer `. This is a bug in the Zero Pusher service.',
+      );
+      authorization = authorization.substring('Bearer '.length);
+    }
     const zeroTx = new TransactionImpl(
       dbTx,
-      headers.authorization,
+      authorization,
       m.clientID,
       m.id,
       this.#mutate(dbTx),
