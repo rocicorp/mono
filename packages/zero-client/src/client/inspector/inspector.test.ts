@@ -1,8 +1,8 @@
 import {beforeEach, expect, test, vi} from 'vitest';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
-import {schema} from '../../../zql/src/query/test/test-schemas.ts';
-import {nanoid} from '../util/nanoid.ts';
-import {MockSocket, zeroForTest} from './test-utils.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
+import {nanoid} from '../../util/nanoid.ts';
+import {MockSocket, zeroForTest} from '../test-utils.ts';
 
 const rafMock = vi.fn<typeof requestAnimationFrame>();
 
@@ -27,20 +27,15 @@ beforeEach(() => {
 test('basics', async () => {
   const z = zeroForTest();
   const inspector = await z.inspect();
-  expect(inspector.clientID).toBe(z.clientID);
-  expect(inspector.clientGroupID).toBe(await z.clientGroupID);
-
-  const {clientID, clientGroupID} = inspector;
 
   expect(inspector.client).toEqual({
     clientGroup: {
-      clientGroupID,
+      id: await z.clientGroupID,
     },
-    clientGroupID,
-    clientID,
+    id: z.clientID,
   });
   expect(inspector.clientGroup).toEqual({
-    clientGroupID,
+    id: await z.clientGroupID,
   });
 
   await z.close();
@@ -56,17 +51,15 @@ test('basics 2 clients', async () => {
   expect(await inspector.clients()).toEqual([
     {
       clientGroup: {
-        clientGroupID: await z1.clientGroupID,
+        id: await z1.clientGroupID,
       },
-      clientID: z1.clientID,
-      clientGroupID: await z1.clientGroupID,
+      id: z1.clientID,
     },
     {
       clientGroup: {
-        clientGroupID: await z2.clientGroupID,
+        id: await z2.clientGroupID,
       },
-      clientID: z2.clientID,
-      clientGroupID: await z2.clientGroupID,
+      id: z2.clientID,
     },
   ]);
 
@@ -118,26 +111,23 @@ test('queries', async () => {
   expect(await inspector.clients()).toEqual([
     {
       clientGroup: {
-        clientGroupID: await z1.clientGroupID,
+        id: await z1.clientGroupID,
       },
-      clientGroupID: await z1.clientGroupID,
-      clientID: z1.clientID,
+      id: z1.clientID,
     },
     {
       clientGroup: {
-        clientGroupID: await z2.clientGroupID,
+        id: await z2.clientGroupID,
       },
-      clientGroupID: await z2.clientGroupID,
-      clientID: z2.clientID,
+      id: z2.clientID,
     },
   ]);
   expect(await inspector.clientsWithQueries()).toEqual([
     {
       clientGroup: {
-        clientGroupID: await z1.clientGroupID,
+        id: await z1.clientGroupID,
       },
-      clientGroupID: await z1.clientGroupID,
-      clientID: z1.clientID,
+      id: z1.clientID,
     },
   ]);
   expect(await inspector.client.queries()).toEqual([

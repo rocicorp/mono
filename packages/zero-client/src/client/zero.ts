@@ -101,7 +101,7 @@ import {
   appendPath,
   toWSString,
 } from './http-string.ts';
-import type {Inspector} from './inspector-types.ts';
+import type {Inspector} from './inspector/types.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
@@ -1783,7 +1783,7 @@ export class Zero<
   }
 
   async inspect(): Promise<Inspector> {
-    const m = await import('./inspector.ts');
+    const m = await import('./inspector/inspector.ts');
     return m.newInspector(this.#rep);
   }
 }

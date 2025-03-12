@@ -1,38 +1,38 @@
-import type {BTreeRead} from '../../../replicache/src/btree/read.ts';
-import {type Read} from '../../../replicache/src/dag/store.ts';
-import {readFromHash} from '../../../replicache/src/db/read.ts';
-import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
+import type {BTreeRead} from '../../../../replicache/src/btree/read.ts';
+import {type Read} from '../../../../replicache/src/dag/store.ts';
+import {readFromHash} from '../../../../replicache/src/db/read.ts';
+import * as FormatVersion from '../../../../replicache/src/format-version-enum.ts';
 import {
   getClientGroup,
   getClientGroups,
-} from '../../../replicache/src/persist/client-groups.ts';
+} from '../../../../replicache/src/persist/client-groups.ts';
 import {
   getClient,
   getClients,
   type ClientMap,
-} from '../../../replicache/src/persist/clients.ts';
-import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
-import {withRead} from '../../../replicache/src/with-transactions.ts';
-import {assert} from '../../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import * as valita from '../../../shared/src/valita.ts';
-import {compile} from '../../../z2s/src/compiler.ts';
-import {formatPg} from '../../../z2s/src/sql.ts';
-import {astSchema, type AST} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {Format} from '../../../zql/src/ivm/view.ts';
+} from '../../../../replicache/src/persist/clients.ts';
+import type {ReplicacheImpl} from '../../../../replicache/src/replicache-impl.ts';
+import {withRead} from '../../../../replicache/src/with-transactions.ts';
+import {assert} from '../../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
+import * as valita from '../../../../shared/src/valita.ts';
+import {compile} from '../../../../z2s/src/compiler.ts';
+import {formatPg} from '../../../../z2s/src/sql.ts';
+import {astSchema, type AST} from '../../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {Format} from '../../../../zql/src/ivm/view.ts';
+import {
+  desiredQueriesPrefixForClient,
+  ENTITIES_KEY_PREFIX,
+  toGotQueriesKey,
+} from '../keys.ts';
+import type {MutatorDefs} from '../replicache-types.ts';
 import type {
   ClientGroup as ClientGroupInterface,
   Client as ClientInterface,
   Inspector as InspectorInterface,
   Query as QueryInterface,
-} from './inspector-types.ts';
-import {
-  desiredQueriesPrefixForClient,
-  ENTITIES_KEY_PREFIX,
-  toGotQueriesKey,
-} from './keys.ts';
-import type {MutatorDefs} from './replicache-types.ts';
+} from './types.ts';
 
 type Rep = ReplicacheImpl<MutatorDefs>;
 
@@ -42,16 +42,12 @@ export async function newInspector(rep: Rep): Promise<InspectorInterface> {
 }
 
 class Inspector implements InspectorInterface {
-  readonly clientID: string;
-  readonly clientGroupID: string;
   readonly #rep: Rep;
   readonly client: Client;
   readonly clientGroup: ClientGroup;
 
   constructor(rep: ReplicacheImpl, clientID: string, clientGroupID: string) {
     this.#rep = rep;
-    this.clientID = clientID;
-    this.clientGroupID = clientGroupID;
     this.client = new Client(rep, clientID, clientGroupID);
     this.clientGroup = this.client.clientGroup;
   }
@@ -64,12 +60,14 @@ class Inspector implements InspectorInterface {
     return withDagRead(this.#rep, async dagRead => {
       const allClients = await clients(this.#rep, dagRead);
       const clientsWithQueries: ClientInterface[] = [];
-      for (const client of allClients) {
-        const queries = await client.queries();
-        if (queries.length > 0) {
-          clientsWithQueries.push(client);
-        }
-      }
+      await Promise.all(
+        allClients.map(async client => {
+          const queries = await client.queries();
+          if (queries.length > 0) {
+            clientsWithQueries.push(client);
+          }
+        }),
+      );
       return clientsWithQueries;
     });
   }
@@ -86,21 +84,19 @@ class Inspector implements InspectorInterface {
 
 class Client implements ClientInterface {
   readonly #rep: Rep;
-  readonly clientID: string;
-  readonly clientGroupID: string;
+  readonly id: string;
   readonly clientGroup: ClientGroup;
 
-  constructor(rep: Rep, clientID: string, clientGroupID: string) {
+  constructor(rep: Rep, id: string, clientGroupID: string) {
     this.#rep = rep;
-    this.clientID = clientID;
-    this.clientGroupID = clientGroupID;
+    this.id = id;
     this.clientGroup = new ClientGroup(rep, clientGroupID);
   }
 
   queries(): Promise<QueryInterface[]> {
     return withDagRead(this.#rep, async dagRead => {
-      const prefix = desiredQueriesPrefixForClient(this.clientID);
-      const tree = await getBTree(dagRead, this.clientID);
+      const prefix = desiredQueriesPrefixForClient(this.id);
+      const tree = await getBTree(dagRead, this.id);
       const qs: QueryInterface[] = [];
       for await (const [key, value] of tree.scan(prefix)) {
         if (!key.startsWith(prefix)) {
@@ -118,7 +114,7 @@ class Client implements ClientInterface {
 
   map(): Promise<Map<string, ReadonlyJSONValue>> {
     return withDagRead(this.#rep, async dagRead => {
-      const tree = await getBTree(dagRead, this.clientID);
+      const tree = await getBTree(dagRead, this.id);
       const map = new Map<string, ReadonlyJSONValue>();
       for await (const [key, value] of tree.scan('')) {
         map.set(key, value);
@@ -130,7 +126,7 @@ class Client implements ClientInterface {
   rows(tableName: string): Promise<Row[]> {
     return withDagRead(this.#rep, async dagRead => {
       const prefix = ENTITIES_KEY_PREFIX + tableName;
-      const tree = await getBTree(dagRead, this.clientID);
+      const tree = await getBTree(dagRead, this.id);
       const rows: Row[] = [];
       for await (const [key, value] of tree.scan(prefix)) {
         if (!key.startsWith(prefix)) {
@@ -145,20 +141,16 @@ class Client implements ClientInterface {
 
 class ClientGroup implements ClientGroupInterface {
   readonly #rep: Rep;
-  readonly clientGroupID: string;
+  readonly id: string;
 
-  constructor(rep: Rep, clientGroupID: string) {
+  constructor(rep: Rep, id: string) {
     this.#rep = rep;
-    this.clientGroupID = clientGroupID;
+    this.id = id;
   }
 
   clients(): Promise<ClientInterface[]> {
     return withDagRead(this.#rep, dagRead =>
-      clients(
-        this.#rep,
-        dagRead,
-        ([_, v]) => v.clientGroupID === this.clientGroupID,
-      ),
+      clients(this.#rep, dagRead, ([_, v]) => v.clientGroupID === this.id),
     );
   }
 

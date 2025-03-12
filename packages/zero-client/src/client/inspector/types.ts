@@ -1,12 +1,10 @@
-import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
 
 export interface GetInspector {
   inspect(): Promise<Inspector>;
 }
 
 export interface Inspector {
-  readonly clientID: string;
-  readonly clientGroupID: string;
   readonly client: Client;
   readonly clientGroup: ClientGroup;
   clients(): Promise<Client[]>;
@@ -15,14 +13,13 @@ export interface Inspector {
 }
 
 export interface Client {
-  readonly clientID: string;
-  readonly clientGroupID: string;
+  readonly id: string;
   readonly clientGroup: ClientGroup;
   queries(): Promise<Query[]>;
 }
 
 export interface ClientGroup {
-  readonly clientGroupID: string;
+  readonly id: string;
   clients(): Promise<Client[]>;
   queries(): Promise<Query[]>;
 }
