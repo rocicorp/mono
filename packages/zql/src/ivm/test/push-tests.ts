@@ -136,9 +136,10 @@ export function runPushTest(t: PushTest) {
   expect(actualStorage).toEqual(actualStorage3);
 
   return {
-    log: log3,
+    log,
     actualStorage,
     pushes: catchOp2.pushes,
+    logWithFetch: log3,
     pushesWithFetch: catchOp2.pushesWithFetch,
     data,
   };
