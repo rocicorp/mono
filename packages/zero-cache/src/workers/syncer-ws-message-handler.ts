@@ -56,6 +56,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
       .withContext('clientGroupID', clientGroupID)
       .withContext('wsID', wsID);
     this.#authData = tokenData?.decoded;
+    this.#token = tokenData?.raw;
     this.#clientGroupID = clientGroupID;
     this.#pusher = pusher;
     this.#syncContext = {
