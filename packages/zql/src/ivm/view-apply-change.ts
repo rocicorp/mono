@@ -256,8 +256,8 @@ export function applyChange(
         // @ts-expect-error parentEntry is readonly
         parentEntry[relationship] = newEntry;
       } else {
-        const view = parentEntry[relationship] as EntryList | undefined;
-        assertArray(view);
+        const view = parentEntry[relationship];
+        assertEntryList(view);
         // If the order changed due to the edit, we need to remove and reinsert.
         if (schema.compareRows(change.oldNode.row, change.node.row) === 0) {
           const {pos, found} = binarySearch(
@@ -268,6 +268,7 @@ export function applyChange(
           assert(found, 'node does not exists');
           const rc = must(refCountMap.get(view[pos]));
           refCountMap.delete(view[pos]);
+          // @ts-expect-error view is readonly
           view[pos] = makeEntryPreserveRelationships(
             change.node.row,
             view[pos],
@@ -286,6 +287,7 @@ export function applyChange(
           const rc = must(refCountMap.get(oldEntry));
           if (rc === 1) {
             refCountMap.delete(oldEntry);
+            // @ts-expect-error view is readonly
             view.splice(pos, 1);
           } else {
             refCountMap.set(oldEntry, rc - 1);
@@ -321,6 +323,7 @@ export function applyChange(
                 format.relationships,
               );
             }
+            // @ts-expect-error view is readonly
             view.splice(pos, deleteCount, newEntry);
             refCountMap.set(newEntry, rc);
           }
@@ -372,4 +375,8 @@ function getChildEntryList(
   const view = parentEntry[relationship] as unknown;
   assertArray(view);
   return view as EntryList;
+}
+
+function assertEntryList(v: unknown): asserts v is EntryList {
+  assertArray(v);
 }
