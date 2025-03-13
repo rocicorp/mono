@@ -18,7 +18,6 @@ import type {
 import {diffBinarySearch} from '../../../replicache/src/subscriptions.ts';
 import {readFromHash} from '../../../replicache/src/db/read.ts';
 import type {ZeroReadOptions} from '../../../replicache/src/replicache-options.ts';
-import type {TransactionReason} from '../../../replicache/src/transactions.ts';
 import type {LazyStore} from '../../../replicache/src/dag/lazy-store.ts';
 
 /**
@@ -88,19 +87,10 @@ export class IVMSourceBranch {
    * Fork the branch and patch it up to match the desired head.
    */
   async forkToHead(
-    reason: TransactionReason,
     store: LazyStore,
     desiredHead: Hash,
     readOptions?: ZeroReadOptions | undefined,
   ): Promise<IVMSourceBranch> {
-    if (reason === 'initial') {
-      assert(
-        this.hash === desiredHead,
-        'main branch must be at desired head for `initial`',
-      );
-      return this;
-    }
-
     const fork = this.fork();
 
     if (fork.hash === desiredHead) {
