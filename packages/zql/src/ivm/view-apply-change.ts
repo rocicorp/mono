@@ -244,11 +244,11 @@ export function applyChange(
     }
     case 'edit': {
       if (singular) {
-        assertObject(parentEntry[relationship]);
         const existing = parentEntry[relationship];
+        assertEntry(existing);
         const rc = must(refCountMap.get(existing));
         const newEntry = {
-          ...parentEntry[relationship],
+          ...existing,
           ...change.node.row,
         };
         refCountMap.set(newEntry, rc);
@@ -379,4 +379,8 @@ function getChildEntryList(
 
 function assertEntryList(v: unknown): asserts v is EntryList {
   assertArray(v);
+}
+
+function assertEntry(v: unknown): asserts v is Entry {
+  assertObject(v);
 }
