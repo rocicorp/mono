@@ -1,4 +1,5 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {
   AST,
   Condition,
@@ -174,8 +175,6 @@ function transformExistsCondition(
 
   op satisfies 'NOT EXISTS';
 
-  // If there are subquery properties, use the callback form
-
   if (hasSubQueryProps) {
     if (prefix === '.where') {
       return `.where(({exists, not}) => not(exists('${relationship}', q => q${astToZQL(
@@ -190,7 +189,6 @@ function transformExistsCondition(
     )}))`;
   }
 
-  // Handle NOT EXISTS
   if (prefix === '.where') {
     return `.where(({exists, not}) => not(exists('${relationship}')))`;
   }
@@ -201,14 +199,10 @@ function transformExistsCondition(
 }
 
 function extractRelationshipName(related: CorrelatedSubquery): string {
-  // Try to extract the relationship name from the alias
-  const {alias} = related.subquery;
-  if (alias && alias.startsWith(SUBQ_PREFIX)) {
-    return alias.substring(SUBQ_PREFIX.length);
-  }
-
-  // Fallback: use the table name
-  return related.subquery.table;
+  const alias = must(related.subquery.alias);
+  return alias.startsWith(SUBQ_PREFIX)
+    ? alias.substring(SUBQ_PREFIX.length)
+    : alias;
 }
 
 function transformRelated(related: CorrelatedSubquery): string {
