@@ -19,6 +19,7 @@
     "wal2_bench": "tsx ./bench/wal2-bench.ts"
   },
   "dependencies": {
+    "@databases/sql": "^3.3.0",
     "@drdgvhbh/postgres-error-codes": "^0.0.6",
     "@fastify/cors": "^10.0.0",
     "@fastify/websocket": "^11.0.0",

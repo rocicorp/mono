@@ -1,8 +1,8 @@
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
-import {generateSchema} from './schema-gen.ts';
+import type {StaticQuery} from '../static-query.ts';
 import {generateQuery} from './query-gen.ts';
-import type {StaticQuery} from '../../../zql/src/query/static-query.ts';
+import {generateSchema} from './schema-gen.ts';
 
 test('stable generation', () => {
   const randomizer = generateMersenne53Randomizer(42);

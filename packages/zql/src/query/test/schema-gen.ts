@@ -1,11 +1,11 @@
 import type {Faker} from '@faker-js/faker';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   Relationship,
   RelationshipsSchema,
   SchemaValue,
   TableSchema,
-} from '../../../zero-schema/src/table-schema.ts';
+} from '../../../../zero-schema/src/table-schema.ts';
 import {generateUniqueValues, selectRandom, shuffle, type Rng} from './util.ts';
 
 const dbTypes = {

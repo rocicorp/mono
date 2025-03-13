@@ -1,4 +1,7 @@
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Faker} from '@faker-js/faker';
+import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {staticQuery} from '../static-query.ts';
+import type {Dataset} from './data-gen.ts';
 import {
   ast,
   randomValueForType,
@@ -7,17 +10,13 @@ import {
   type AnyQuery,
   type Rng,
 } from './util.ts';
-import {staticQuery} from '../../../zql/src/query/static-query.ts';
-
-import type {Dataset} from './data-gen.ts';
-import type {Faker} from '@faker-js/faker';
 
 export function generateQuery(
   schema: Schema,
   data: Dataset,
   rng: Rng,
   faker: Faker,
-) {
+): AnyQuery {
   const rootTable = selectRandom(rng, Object.keys(schema.tables));
   return augmentQuery(schema, data, rng, faker, staticQuery(schema, rootTable));
 }

@@ -1,6 +1,6 @@
+import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {generateSchema} from './schema-gen.ts';
-import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 
 test('stable generation', () => {
   const rng = generateMersenne53Randomizer(400);
