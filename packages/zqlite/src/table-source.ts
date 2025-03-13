@@ -36,6 +36,7 @@ import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import type {
   Source,
   SourceChange,
+  SourceChangeSet,
   SourceInput,
 } from '../../zql/src/ivm/source.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
@@ -50,6 +51,7 @@ type Statements = {
   readonly delete: Statement;
   readonly update: Statement | undefined;
   readonly checkExists: Statement;
+  readonly getExisting: Statement;
 };
 
 let eventCount = 0;
@@ -170,6 +172,14 @@ export class TableSource implements Source {
             this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
             ' AND ',
           )} LIMIT 1`,
+        ),
+      ),
+      getExisting: db.prepare(
+        compile(
+          sql`SELECT * FROM ${sql.ident(this.#table)} WHERE ${sql.join(
+            this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
+            ' AND ',
+          )}`,
         ),
       ),
     };
@@ -321,20 +331,38 @@ export class TableSource implements Source {
     }
   }
 
-  push(change: SourceChange): void {
+  push(change: SourceChange | SourceChangeSet): void {
     for (const _ of this.genPush(change)) {
       // Nothing to do.
     }
   }
 
-  *genPush(change: SourceChange) {
+  *genPush(change: SourceChange | SourceChangeSet) {
     const exists = (row: Row) =>
-      this.#stmts.checkExists.get<{exists: number}>(
+      this.#stmts.checkExists.get<{exists: number} | undefined>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
       )?.exists === 1;
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
     const setSplitEditOverlay = (o: Overlay | undefined) =>
       (this.#splitEditOverlay = o);
+
+    if (change.type === 'set') {
+      const existing = this.#stmts.getExisting.get<Row | undefined>(
+        ...toSQLiteTypes(this.#primaryKey, change.row, this.#columns),
+      );
+      if (existing !== undefined) {
+        change = {
+          type: 'edit',
+          oldRow: existing,
+          row: change.row,
+        };
+      } else {
+        change = {
+          type: 'add',
+          row: change.row,
+        };
+      }
+    }
 
     for (const x of genPush(
       change,

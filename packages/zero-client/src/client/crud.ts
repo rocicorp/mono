@@ -302,7 +302,7 @@ export async function upsertImpl(
   await tx.set(key, val);
   if (ivmBranch) {
     must(ivmBranch.getSource(arg.tableName)).push({
-      type: 'add',
+      type: 'set',
       row: arg.value,
     });
   }

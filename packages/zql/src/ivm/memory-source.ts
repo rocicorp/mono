@@ -36,7 +36,12 @@ import {
   type Start,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Source, SourceChange, SourceInput} from './source.ts';
+import type {
+  Source,
+  SourceChange,
+  SourceChangeSet,
+  SourceInput,
+} from './source.ts';
 import type {Stream} from './stream.ts';
 
 export type Overlay = {
@@ -324,19 +329,35 @@ export class MemorySource implements Source {
     return this.#fetch(req, connection);
   }
 
-  push(change: SourceChange): void {
+  push(change: SourceChange | SourceChangeSet): void {
     for (const _ of this.genPush(change)) {
       // Nothing to do.
     }
   }
 
-  *genPush(change: SourceChange) {
+  *genPush(change: SourceChange | SourceChangeSet) {
     const primaryIndex = this.#getPrimaryIndex();
     const {data} = primaryIndex;
     const exists = (row: Row) => data.has(row);
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
     const setSplitEditOverlay = (o: Overlay | undefined) =>
       (this.#splitEditOverlay = o);
+
+    if (change.type === 'set') {
+      const existing = data.get(change.row);
+      if (existing !== undefined) {
+        change = {
+          type: 'edit',
+          row: change.row,
+          oldRow: existing,
+        };
+      } else {
+        change = {
+          type: 'add',
+          row: change.row,
+        };
+      }
+    }
 
     for (const x of genPush(
       change,
