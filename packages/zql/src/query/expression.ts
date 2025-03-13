@@ -266,7 +266,7 @@ const negateOperatorMap = {
   ['NOT EXISTS']: 'EXISTS',
 } as const;
 
-function negateOperator<OP extends keyof typeof negateOperatorMap>(
+export function negateOperator<OP extends keyof typeof negateOperatorMap>(
   op: OP,
 ): (typeof negateOperatorMap)[OP] {
   return must(negateOperatorMap[op]);

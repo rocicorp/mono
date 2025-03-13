@@ -1,17 +1,15 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type {Faker} from '@faker-js/faker';
-import type {ValueType} from '../../../zero-schema/src/table-schema.ts';
-import {
-  AbstractQuery,
-  astForTestingSymbol,
-} from '../../../zql/src/query/query-impl.ts';
-import type {Query} from '../../../zql/src/query/query.ts';
+import type {ValueType} from '../../../../zero-schema/src/table-schema.ts';
+import {AbstractQuery, astForTestingSymbol} from '../query-impl.ts';
+import type {Query} from '../query.ts';
 
 export type Rng = () => number;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyQuery = Query<any, any, any>;
 
 export function ast(query: AnyQuery) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (query as AbstractQuery<any, any>)[astForTestingSymbol];
 }
 
