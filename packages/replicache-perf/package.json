@@ -26,7 +26,7 @@
     "shared": "0.0.0",
     "tsx": "^4.19.1",
     "typescript": "^5.7.3",
-    "vite": "^6.2.0",
+    "vite": "6.2.1",
     "xbytes": "^1.7.0"
   },
   "eslintConfig": {
