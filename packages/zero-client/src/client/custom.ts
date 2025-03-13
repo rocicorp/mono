@@ -100,17 +100,10 @@ export class TransactionImpl implements Transaction<Schema> {
     this.mutate = makeSchemaCRUD(
       schema,
       repTx,
-      // CRUD operators should not mutate the IVM store directly
-      // for `initial`. The IVM store will be updated via calls to `advance`
-      // after the transaction has been committed to the Replicache b-tree.
-      // Mutating the IVM store in the mutator would cause us to synchronously
-      // notify listeners of IVM while we're inside of the Replicache DB transaction.
-      repTx.reason === 'initial'
-        ? undefined
-        : (must(
-            castedRepTx[zeroData],
-            'zero was not set on replicache internal options!',
-          ) as IVMSourceBranch),
+      must(
+        castedRepTx[zeroData],
+        'zero was not set on replicache internal options!',
+      ) as IVMSourceBranch,
     );
     this.query = makeSchemaQuery(
       lc,
@@ -146,7 +139,7 @@ export function makeReplicacheMutator(
 function makeSchemaCRUD(
   schema: Schema,
   tx: WriteTransaction,
-  ivmBranch: IVMSourceBranch | undefined,
+  ivmBranch: IVMSourceBranch,
 ) {
   // Only creates the CRUD mutators on demand
   // rather than creating them all up-front for each mutation.
@@ -199,7 +192,7 @@ function makeTableCRUD(
   schema: Schema,
   tableName: string,
   tx: WriteTransaction,
-  ivmBranch: IVMSourceBranch | undefined,
+  ivmBranch: IVMSourceBranch,
 ) {
   const table = must(schema.tables[tableName]);
   const {primaryKey} = table;
