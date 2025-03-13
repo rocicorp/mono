@@ -301,27 +301,19 @@ export function applyChange(
               schema.compareRows,
             );
             let rc = 1;
-            let newEntry: Entry;
+            const newEntry = makeEntryPreserveRelationships(
+              change.node.row,
+              oldEntry,
+              format.relationships,
+            );
             let deleteCount = 0;
             if (found) {
-              // We changed a row to a row that already exists.
-              // The existing row should increase its ref count.
-              // We preserver the relationships of the existing row.
+              // We changed a row to a row that already exists. The existing row
+              // should increase its ref count.
               deleteCount = 1;
-              const oldEntry = view[pos];
-              rc = must(refCountMap.get(oldEntry)) + 1;
-              refCountMap.delete(oldEntry);
-              newEntry = makeEntryPreserveRelationships(
-                change.node.row,
-                oldEntry,
-                format.relationships,
-              );
-            } else {
-              newEntry = makeEntryPreserveRelationships(
-                change.node.row,
-                oldEntry,
-                format.relationships,
-              );
+              const existing = view[pos];
+              rc = must(refCountMap.get(existing)) + 1;
+              refCountMap.delete(existing);
             }
             // @ts-expect-error view is readonly
             view.splice(pos, deleteCount, newEntry);
