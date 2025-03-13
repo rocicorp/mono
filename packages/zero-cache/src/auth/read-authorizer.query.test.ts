@@ -2,6 +2,7 @@
 /* eslint-disable arrow-body-style */
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
@@ -49,7 +50,6 @@ import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import {transformQuery} from './read-authorizer.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 
 const zeroConfig = {
   log: testLogConfig,
@@ -526,6 +526,7 @@ beforeEach(() => {
     addServerQuery() {
       return () => {};
     },
+    updateServerQuery() {},
     onQueryMaterialized() {},
     onTransactionCommit() {
       return () => {};

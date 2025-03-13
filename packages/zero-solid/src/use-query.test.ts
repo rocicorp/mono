@@ -1,11 +1,18 @@
-import {testEffect} from '@solidjs/testing-library';
+import {renderHook, testEffect} from '@solidjs/testing-library';
 import {createEffect, createSignal} from 'solid-js';
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {must} from '../../shared/src/must.ts';
-import {createSchema, number, string, table} from '../../zero/src/zero.ts';
+import {
+  createSchema,
+  number,
+  string,
+  table,
+  type TTL,
+} from '../../zero/src/zero.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
+import {solidViewFactory} from './solid-view.ts';
 import {useQuery} from './use-query.ts';
 
 function setupTestEnvironment() {
@@ -55,6 +62,42 @@ test('useQuery', async () => {
     {a: 3, b: 'c'},
   ]);
   expect(resultType()).toEqual({type: 'complete'});
+});
+
+test('useQuery with ttl', () => {
+  const {tableQuery, queryDelegate} = setupTestEnvironment();
+  const [ttl, setTTL] = createSignal<TTL>('1m');
+
+  const materializeSpy = vi.spyOn(tableQuery, 'materialize');
+  const addServerQuerySpy = vi.spyOn(queryDelegate, 'addServerQuery');
+  const updateServerQuerySpy = vi.spyOn(queryDelegate, 'updateServerQuery');
+
+  const querySignal = vi.fn(() => tableQuery);
+
+  renderHook(useQuery, {
+    initialProps: [querySignal, () => ({ttl: ttl()})],
+  });
+
+  expect(querySignal).toHaveBeenCalledTimes(1);
+  expect(addServerQuerySpy).toHaveBeenCalledTimes(1);
+  expect(updateServerQuerySpy).toHaveBeenCalledTimes(0);
+  expect(materializeSpy).toHaveBeenCalledExactlyOnceWith(
+    solidViewFactory,
+    '1m',
+  );
+  addServerQuerySpy.mockClear();
+  materializeSpy.mockClear();
+
+  setTTL('10m');
+  expect(addServerQuerySpy).toHaveBeenCalledTimes(0);
+  expect(updateServerQuerySpy).toHaveBeenCalledExactlyOnceWith(
+    {
+      orderBy: [['a', 'asc']],
+      table: 'table',
+    },
+    '10m',
+  );
+  expect(materializeSpy).toHaveBeenCalledTimes(0);
 });
 
 test('useQuery deps change', async () => {

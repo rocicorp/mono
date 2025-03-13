@@ -1,12 +1,13 @@
 import {first} from '../../shared/src/iterables.ts';
 import {compile} from '../../z2s/src/compiler.ts';
 import {formatPg} from '../../z2s/src/sql.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {SchemaQuery, DBTransaction} from '../../zql/src/mutate/custom.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
+import type {DBTransaction, SchemaQuery} from '../../zql/src/mutate/custom.ts';
 import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import type {HumanReadable, PullRow, Query} from '../../zql/src/query/query.ts';
+import type {TTL} from '../../zql/src/query/ttl.ts';
 import type {TypedView} from '../../zql/src/query/typed-view.ts';
 
 export function makeSchemaQuery<S extends Schema>(
@@ -108,5 +109,9 @@ export class Z2SQuery<
 
   materialize(): TypedView<HumanReadable<TReturn>> {
     throw new Error('Z2SQuery cannot be materialized');
+  }
+
+  updateTTL(_ttl: TTL): void {
+    throw new Error('Z2SQuery cannot have a TTL');
   }
 }

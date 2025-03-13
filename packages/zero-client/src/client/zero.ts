@@ -502,6 +502,7 @@ export class Zero<
       lc,
       this.#ivmMain,
       (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
+      (ast, ttl) => this.#queryManager.update(ast, ttl),
       batchViewUpdates,
       slowMaterializeThreshold,
     );
