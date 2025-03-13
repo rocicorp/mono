@@ -1,4 +1,4 @@
-import {expect, suite, test} from 'vitest';
+import {describe, expect, suite, test} from 'vitest';
 import type {
   Condition,
   SimpleOperator,
@@ -51,6 +51,94 @@ class OverlaySpy implements Output {
     this.onPush();
   }
 }
+
+describe('set', () => {
+  test('set something that does not yet exist', () => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}},
+      ['a'],
+    );
+    const conn = ms.connect([['a', 'asc']]);
+    const c = new Catch(conn);
+    ms.push({
+      type: 'set',
+      row: {a: 'a', b: 'b'},
+    });
+    expect(c.pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {},
+            "row": {
+              "a": "a",
+              "b": "b",
+            },
+          },
+          "type": "add",
+        },
+      ]
+    `);
+    expect(c.fetch()).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": "a",
+            "b": "b",
+          },
+        },
+      ]
+    `);
+  });
+  test('set something that already exists', () => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}},
+      ['a'],
+    );
+    ms.push({
+      type: 'set',
+      row: {a: 'a', b: 'b'},
+    });
+    const conn = ms.connect([['a', 'asc']]);
+    const c = new Catch(conn);
+    ms.push({
+      type: 'set',
+      row: {a: 'a', b: 'b2'},
+    });
+    expect(c.pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "oldRow": {
+            "a": "a",
+            "b": "b",
+          },
+          "row": {
+            "a": "a",
+            "b": "b2",
+          },
+          "type": "edit",
+        },
+      ]
+    `);
+    expect(c.fetch()).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": "a",
+            "b": "b2",
+          },
+        },
+      ]
+    `);
+  });
+});
 
 test('simple-fetch', () => {
   const sort = [['a', 'asc']] as const;
