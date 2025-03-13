@@ -229,3 +229,58 @@ test('sql getter', async () => {
     `SELECT * FROM "issue" WHERE ("id" = $1 OR "id" != $2)`,
   );
 });
+
+test('zql getter', async () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'or',
+      conditions: [
+        {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: '1'},
+        },
+        {
+          type: 'simple',
+          op: '!=',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: '2'},
+        },
+      ],
+    },
+  };
+  const z1 = zeroForTest({schema});
+  await z1.triggerConnected();
+  await z1.triggerPoke(null, '1', {
+    desiredQueriesPatches: {
+      [z1.clientID]: [
+        {
+          op: 'put',
+          hash: 'hash1',
+          ast: {
+            ...ast,
+            table: 'issues',
+          },
+          ttl: 1000,
+        },
+      ],
+    },
+  });
+
+  await nextRaf();
+
+  const inspector = await z1.inspect();
+  const queries = await inspector.client.queries();
+  expect(queries).toEqual([
+    {
+      ast,
+      got: false,
+      id: 'hash1',
+    },
+  ]);
+  expect(queries[0].zql).toBe(
+    "issue.where(({cmp, or}) => or(cmp('id', '1'), cmp('id', '!=', '2')))",
+  );
+});
