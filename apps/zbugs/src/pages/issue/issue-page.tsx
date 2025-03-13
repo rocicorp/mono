@@ -56,6 +56,7 @@ import {preload} from '../../zero-setup.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
+import {CACHE_AWHILE} from '../../query-cache-policy.ts';
 
 const emojiToastShowDuration = 3_000;
 
@@ -92,7 +93,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     )
     .one();
 
-  const [issue, issueResult] = useQuery(q, {ttl: '1d'});
+  const [issue, issueResult] = useQuery(q, CACHE_AWHILE);
   useEffect(() => {
     if (issue) {
       onReady();
@@ -237,7 +238,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const [allComments, allCommentsResult] = useQuery(
     commentQuery(z, displayed),
-    {enabled: displayAllComments && displayed !== undefined, ttl: '1d'},
+    {enabled: displayAllComments && displayed !== undefined, ...CACHE_AWHILE},
   );
 
   const [comments, hasOlderComments] = useMemo(() => {

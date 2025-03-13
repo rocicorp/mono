@@ -4,6 +4,7 @@ import {Atom} from './atom.ts';
 import {clearJwt, getJwt, getRawJwt} from './jwt.ts';
 import {INITIAL_COMMENT_LIMIT} from './pages/issue/issue-page.tsx';
 import {mark} from './perf-log.ts';
+import {CACHE_FOREVER} from './query-cache-policy.ts';
 
 export type LoginState = {
   encoded: string;
@@ -58,14 +59,16 @@ export function preload(z: Zero<Schema>) {
 
   didPreload = true;
 
+  // TODO: Need to implement infinite scroll and simplify this!
+  // Instead of doing two queries, we should do one with a reasonable limit that
+  // we expand during scrolling.
   const baseIssueQuery = z.query.issue
     .related('labels')
     .related('viewState', q => q.where('userID', z.userID));
 
-  const {cleanup, complete} = baseIssueQuery.preload({ttl: 0});
+  const {complete} = baseIssueQuery.preload(CACHE_FOREVER);
   complete.then(() => {
     mark('preload complete');
-    cleanup();
     baseIssueQuery
       .related('creator')
       .related('assignee')
@@ -77,11 +80,11 @@ export function preload(z: Zero<Schema>) {
           .limit(INITIAL_COMMENT_LIMIT)
           .orderBy('created', 'desc'),
       )
-      .preload({ttl: 'forever'});
+      .preload(CACHE_FOREVER);
   });
 
-  z.query.user.preload({ttl: 'forever'});
-  z.query.label.preload({ttl: 'forever'});
+  z.query.user.preload(CACHE_FOREVER);
+  z.query.label.preload(CACHE_FOREVER);
 }
 
 // To enable accessing zero in the devtools easily.
