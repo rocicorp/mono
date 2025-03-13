@@ -21,6 +21,7 @@ import {formatPg} from '../../../../z2s/src/sql.ts';
 import {astSchema, type AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {Format} from '../../../../zql/src/ivm/view.ts';
+import {astToZQL} from '../../../../zql/src/query/ast-to-zql.ts';
 import {
   desiredQueriesPrefixForClient,
   ENTITIES_KEY_PREFIX,
@@ -57,19 +58,9 @@ class Inspector implements InspectorInterface {
   }
 
   clientsWithQueries(): Promise<ClientInterface[]> {
-    return withDagRead(this.#rep, async dagRead => {
-      const allClients = await clients(this.#rep, dagRead);
-      const clientsWithQueries: ClientInterface[] = [];
-      await Promise.all(
-        allClients.map(async client => {
-          const queries = await client.queries();
-          if (queries.length > 0) {
-            clientsWithQueries.push(client);
-          }
-        }),
-      );
-      return clientsWithQueries;
-    });
+    return withDagRead(this.#rep, dagRead =>
+      clientsWithQueries(this.#rep, dagRead),
+    );
   }
 
   clientGroups(): Promise<ClientGroup[]> {
@@ -154,8 +145,32 @@ class ClientGroup implements ClientGroupInterface {
     );
   }
 
+  clientsWithQueries(): Promise<ClientInterface[]> {
+    return withDagRead(this.#rep, dagRead =>
+      clientsWithQueries(
+        this.#rep,
+        dagRead,
+        ([_, v]) => v.clientGroupID === this.id,
+      ),
+    );
+  }
+
   queries(): Promise<QueryInterface[]> {
-    throw new Error('Method not implemented.');
+    return withDagRead(this.#rep, async dagRead => {
+      const cs = await clients(
+        this.#rep,
+        dagRead,
+        ([_, v]) => v.clientGroupID === this.id,
+      );
+      const qs: Map<string, QueryInterface> = new Map();
+      await Promise.all(
+        cs.map(async client => {
+          const clientQueries = await client.queries();
+          clientQueries.forEach(q => qs.set(q.id, q));
+        }),
+      );
+      return [...qs.values()];
+    });
   }
 }
 
@@ -203,6 +218,24 @@ async function clients(
     );
 }
 
+async function clientsWithQueries(
+  rep: Rep,
+  dagRead: Read,
+  predicate: (entry: MapEntry<ClientMap>) => boolean = () => true,
+): Promise<ClientInterface[]> {
+  const allClients = await clients(rep, dagRead, predicate);
+  const clientsWithQueries: ClientInterface[] = [];
+  await Promise.all(
+    allClients.map(async client => {
+      const queries = await client.queries();
+      if (queries.length > 0) {
+        clientsWithQueries.push(client);
+      }
+    }),
+  );
+  return clientsWithQueries;
+}
+
 class Query implements QueryInterface {
   readonly id: string;
   readonly ast: AST;
@@ -221,5 +254,9 @@ class Query implements QueryInterface {
     };
     const sqlQuery = formatPg(compile(this.ast, format));
     return sqlQuery.text;
+  }
+
+  get zql(): string {
+    return this.ast.table + astToZQL(this.ast);
   }
 }

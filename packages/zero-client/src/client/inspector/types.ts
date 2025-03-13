@@ -29,4 +29,5 @@ export interface Query {
   readonly ast: AST;
   readonly got: boolean;
   readonly sql: string;
+  readonly zql: string;
 }
