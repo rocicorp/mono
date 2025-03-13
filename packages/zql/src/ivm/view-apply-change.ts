@@ -245,11 +245,16 @@ export function applyChange(
     case 'edit': {
       if (singular) {
         assertObject(parentEntry[relationship]);
-        // @ts-expect-error parentEntry is readonly
-        parentEntry[relationship] = {
+        const existing = parentEntry[relationship];
+        const rc = must(refCountMap.get(existing));
+        const newEntry = {
           ...parentEntry[relationship],
           ...change.node.row,
         };
+        refCountMap.set(newEntry, rc);
+        refCountMap.delete(existing);
+        // @ts-expect-error parentEntry is readonly
+        parentEntry[relationship] = newEntry;
       } else {
         const view = parentEntry[relationship] as EntryList | undefined;
         assertArray(view);
@@ -278,7 +283,13 @@ export function applyChange(
           );
           assert(found, 'node does not exists');
           const oldEntry = view[pos];
-          view.splice(pos, 1);
+          const rc = must(refCountMap.get(oldEntry));
+          if (rc === 1) {
+            refCountMap.delete(oldEntry);
+            view.splice(pos, 1);
+          } else {
+            refCountMap.set(oldEntry, rc - 1);
+          }
 
           // Insert
           {
@@ -287,16 +298,31 @@ export function applyChange(
               change.node.row,
               schema.compareRows,
             );
-            assert(!found, 'node already exists');
-            view.splice(
-              pos,
-              0,
-              makeEntryPreserveRelationships(
+            let rc = 1;
+            let newEntry: Entry;
+            let deleteCount = 0;
+            if (found) {
+              // We changed a row to a row that already exists.
+              // The existing row should increase its ref count.
+              // We preserver the relationships of the existing row.
+              deleteCount = 1;
+              const oldEntry = view[pos];
+              rc = must(refCountMap.get(oldEntry)) + 1;
+              refCountMap.delete(oldEntry);
+              newEntry = makeEntryPreserveRelationships(
                 change.node.row,
                 oldEntry,
                 format.relationships,
-              ),
-            );
+              );
+            } else {
+              newEntry = makeEntryPreserveRelationships(
+                change.node.row,
+                oldEntry,
+                format.relationships,
+              );
+            }
+            view.splice(pos, deleteCount, newEntry);
+            refCountMap.set(newEntry, rc);
           }
         }
       }

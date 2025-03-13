@@ -1024,5 +1024,647 @@ describe('applyChange', () => {
         }),
       ).toThrowError(new Error('node does not exist'));
     });
+
+    test('edit, singular: false', () => {
+      const refCountMap = new Map<Entry, number>();
+      const schema = {
+        tableName: 'event',
+        columns: {
+          id: {type: 'string'},
+          name: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        system: 'client',
+        relationships: {},
+        isHidden: false,
+        compareRows: makeComparator([['id', 'asc']]),
+      } as const;
+      const root = {'': []};
+      const format = {
+        singular: false,
+        relationships: {},
+      };
+
+      const apply = (change: ViewChange) =>
+        applyChange(root, change, schema, '', format, refCountMap);
+
+      apply({
+        type: 'add',
+        node: {
+          row: {
+            id: '1',
+            name: 'Aaron',
+          },
+          relationships: {},
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": [
+            {
+              "id": "1",
+              "name": "Aaron",
+            },
+          ],
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "1",
+            "name": "Aaron",
+          } => 1,
+        }
+      `);
+
+      apply({
+        type: 'edit',
+        oldNode: {
+          row: {
+            id: '1',
+            name: 'N/A',
+          },
+        },
+        node: {
+          row: {
+            id: '1',
+            name: 'Greg',
+          },
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": [
+            {
+              "id": "1",
+              "name": "Greg",
+            },
+          ],
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "1",
+            "name": "Greg",
+          } => 1,
+        }
+      `);
+
+      for (let i = 0; i < 2; i++) {
+        apply({
+          type: 'add',
+          node: {
+            row: {
+              id: '1',
+              name: 'Aaron',
+            },
+            relationships: {},
+          },
+        });
+      }
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": [
+            {
+              "id": "1",
+              "name": "Aaron",
+            },
+          ],
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "1",
+            "name": "Aaron",
+          } => 3,
+        }
+      `);
+
+      apply({
+        type: 'edit',
+        oldNode: {
+          row: {
+            id: '1',
+            name: 'Aaron',
+          },
+        },
+        node: {
+          row: {
+            id: '1',
+            name: 'Greg',
+          },
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": [
+            {
+              "id": "1",
+              "name": "Greg",
+            },
+          ],
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "1",
+            "name": "Greg",
+          } => 3,
+        }
+      `);
+    });
+
+    test('edit primary key, singular: false', () => {
+      const refCountMap = new Map<Entry, number>();
+      const schema = {
+        tableName: 'event',
+        columns: {
+          id: {type: 'string'},
+          name: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        system: 'client',
+        relationships: {},
+        isHidden: false,
+        compareRows: makeComparator([['id', 'asc']]),
+      } as const;
+      const root = {'': []};
+      const format = {
+        singular: false,
+        relationships: {},
+      };
+
+      const apply = (change: ViewChange) =>
+        applyChange(root, change, schema, '', format, refCountMap);
+
+      apply({
+        type: 'add',
+        node: {
+          row: {
+            id: '1',
+            name: 'Aaron',
+          },
+          relationships: {},
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": [
+            {
+              "id": "1",
+              "name": "Aaron",
+            },
+          ],
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "1",
+            "name": "Aaron",
+          } => 1,
+        }
+      `);
+
+      apply({
+        type: 'edit',
+        oldNode: {
+          row: {
+            id: '1',
+            name: 'N/A',
+          },
+        },
+        node: {
+          row: {
+            id: '2',
+            name: 'Greg',
+          },
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": [
+            {
+              "id": "2",
+              "name": "Greg",
+            },
+          ],
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "2",
+            "name": "Greg",
+          } => 1,
+        }
+      `);
+      apply({
+        type: 'remove',
+        node: {
+          row: {
+            id: '2',
+            name: 'Greg',
+          },
+          relationships: {},
+        },
+      });
+
+      for (let i = 0; i < 2; i++) {
+        apply({
+          type: 'add',
+          node: {
+            row: {
+              id: '1',
+              name: 'Aaron',
+            },
+            relationships: {},
+          },
+        });
+      }
+      expect(root).toMatchInlineSnapshot(`
+    {
+      "": [
+        {
+          "id": "1",
+          "name": "Aaron",
+        },
+      ],
+    }
+  `);
+
+      for (let i = 0; i < 2; i++) {
+        apply({
+          type: 'add',
+          node: {
+            row: {
+              id: '2',
+              name: 'Greg',
+            },
+            relationships: {},
+          },
+        });
+      }
+
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": [
+            {
+              "id": "1",
+              "name": "Aaron",
+            },
+            {
+              "id": "2",
+              "name": "Greg",
+            },
+          ],
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "1",
+            "name": "Aaron",
+          } => 2,
+          {
+            "id": "2",
+            "name": "Greg",
+          } => 2,
+        }
+      `);
+
+      apply({
+        type: 'edit',
+        oldNode: {
+          row: {
+            id: '1',
+            name: 'Aaron',
+          },
+        },
+        node: {
+          row: {
+            id: '2',
+            name: 'Greg',
+          },
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": [
+            {
+              "id": "1",
+              "name": "Aaron",
+            },
+            {
+              "id": "2",
+              "name": "Greg",
+            },
+          ],
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "1",
+            "name": "Aaron",
+          } => 1,
+          {
+            "id": "2",
+            "name": "Greg",
+          } => 3,
+        }
+      `);
+    });
+
+    test('edit, singular: true', () => {
+      const refCountMap = new Map<Entry, number>();
+      const schema = {
+        tableName: 'event',
+        columns: {
+          id: {type: 'string'},
+          name: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        system: 'client',
+        relationships: {},
+        isHidden: false,
+        compareRows: makeComparator([['id', 'asc']]),
+      } as const;
+      const root = {'': undefined};
+      const format = {
+        singular: true,
+        relationships: {},
+      };
+
+      const apply = (change: ViewChange) =>
+        applyChange(root, change, schema, '', format, refCountMap);
+
+      apply({
+        type: 'add',
+        node: {
+          row: {
+            id: '1',
+            name: 'Aaron',
+          },
+          relationships: {},
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": {
+            "id": "1",
+            "name": "Aaron",
+          },
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "1",
+            "name": "Aaron",
+          } => 1,
+        }
+      `);
+
+      apply({
+        type: 'edit',
+        oldNode: {
+          row: {
+            id: '1',
+            name: 'N/A',
+          },
+        },
+        node: {
+          row: {
+            id: '1',
+            name: 'Greg',
+          },
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": {
+            "id": "1",
+            "name": "Greg",
+          },
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "1",
+            "name": "Greg",
+          } => 1,
+        }
+      `);
+
+      apply({
+        type: 'add',
+        node: {
+          row: {
+            id: '1',
+            name: 'Greg',
+          },
+          relationships: {},
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": {
+            "id": "1",
+            "name": "Greg",
+          },
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "1",
+            "name": "Greg",
+          } => 2,
+        }
+      `);
+
+      apply({
+        type: 'edit',
+        oldNode: {
+          row: {
+            id: '2',
+            name: 'Greg',
+          },
+        },
+        node: {
+          row: {
+            id: '1',
+            name: 'Aaron',
+          },
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": {
+            "id": "1",
+            "name": "Aaron",
+          },
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "1",
+            "name": "Aaron",
+          } => 2,
+        }
+      `);
+    });
+
+    test('edit primary key, singular: true', () => {
+      const refCountMap = new Map<Entry, number>();
+      const schema = {
+        tableName: 'event',
+        columns: {
+          id: {type: 'string'},
+          name: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        system: 'client',
+        relationships: {},
+        isHidden: false,
+        compareRows: makeComparator([['id', 'asc']]),
+      } as const;
+      const root = {'': undefined};
+      const format = {
+        singular: true,
+        relationships: {},
+      };
+
+      const apply = (change: ViewChange) =>
+        applyChange(root, change, schema, '', format, refCountMap);
+
+      apply({
+        type: 'add',
+        node: {
+          row: {
+            id: '1',
+            name: 'Aaron',
+          },
+          relationships: {},
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": {
+            "id": "1",
+            "name": "Aaron",
+          },
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "1",
+            "name": "Aaron",
+          } => 1,
+        }
+      `);
+
+      apply({
+        type: 'edit',
+        oldNode: {
+          row: {
+            id: '1',
+            name: 'N/A',
+          },
+        },
+        node: {
+          row: {
+            id: '2',
+            name: 'Greg',
+          },
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": {
+            "id": "2",
+            "name": "Greg",
+          },
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "2",
+            "name": "Greg",
+          } => 1,
+        }
+      `);
+
+      apply({
+        type: 'add',
+        node: {
+          row: {
+            id: '2',
+            name: 'Greg',
+          },
+          relationships: {},
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": {
+            "id": "2",
+            "name": "Greg",
+          },
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "2",
+            "name": "Greg",
+          } => 2,
+        }
+      `);
+
+      apply({
+        type: 'edit',
+        oldNode: {
+          row: {
+            id: '2',
+            name: 'Greg',
+          },
+        },
+        node: {
+          row: {
+            id: '1',
+            name: 'Aaron',
+          },
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": {
+            "id": "1",
+            "name": "Aaron",
+          },
+        }
+      `);
+      expect(refCountMap).toMatchInlineSnapshot(`
+        Map {
+          {
+            "id": "1",
+            "name": "Aaron",
+          } => 2,
+        }
+      `);
+    });
   });
 });
