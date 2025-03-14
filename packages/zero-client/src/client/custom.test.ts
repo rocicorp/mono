@@ -4,10 +4,9 @@ import {
   TransactionImpl,
   type CustomMutatorDefs,
   type MakeCustomMutatorInterfaces,
-  type Transaction,
 } from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
-import type {InsertValue} from '../../../zql/src/mutate/custom.ts';
+import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {createDb} from './test/create-db.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
@@ -236,7 +235,9 @@ describe('rebasing custom mutators', () => {
         reason: 'rebase',
         has: () => false,
         set: () => {},
-        [zeroData]: branch,
+        [zeroData]: {
+          ivmSources: branch,
+        },
       } as unknown as WriteTransaction,
       schema,
       10,

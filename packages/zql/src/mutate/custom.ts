@@ -28,6 +28,7 @@ export interface TransactionBase<S extends Schema> {
 
   readonly mutate: SchemaCRUD<S>;
   readonly query: SchemaQuery<S>;
+  readonly token: string | undefined;
 }
 
 export type Transaction<S extends Schema, TWrappedTransaction = unknown> =
@@ -39,7 +40,17 @@ export interface ServerTransaction<S extends Schema, TWrappedTransaction>
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
-  readonly token: string | undefined;
+}
+
+/**
+ * An instance of this is passed to custom mutator implementations and
+ * allows reading and writing to the database and IVM at the head
+ * at which the mutator is being applied.
+ */
+export interface ClientTransaction<S extends Schema>
+  extends TransactionBase<S> {
+  readonly location: 'client';
+  readonly reason: 'optimistic' | 'rebase';
 }
 
 export interface Row {
@@ -66,17 +77,6 @@ export interface DBTransaction<T> extends Queryable {
 
 interface Queryable {
   query: (query: string, args: unknown[]) => Promise<Iterable<Row>>;
-}
-
-/**
- * An instance of this is passed to custom mutator implementations and
- * allows reading and writing to the database and IVM at the head
- * at which the mutator is being applied.
- */
-export interface ClientTransaction<S extends Schema>
-  extends TransactionBase<S> {
-  readonly location: 'client';
-  readonly reason: 'optimistic' | 'rebase';
 }
 
 export type SchemaCRUD<S extends Schema> = {
