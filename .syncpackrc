@@ -2,8 +2,12 @@
   "semverGroups": [
     {
       "range": "~",
-      "dependencies": ["typescript"],
-      "packages": ["**"]
+      "dependencies": [
+        "typescript"
+      ],
+      "packages": [
+        "**"
+      ]
     }
   ]
 }
