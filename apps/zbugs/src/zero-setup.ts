@@ -1,5 +1,6 @@
 import {Zero} from '@rocicorp/zero';
-import {type Schema, schema} from '../schema.ts';
+import {type Schema, schema} from '../shared/schema.ts';
+import {createMutators, type Mutators} from '../shared/mutators.ts';
 import {Atom} from './atom.ts';
 import {clearJwt, getJwt, getRawJwt} from './jwt.ts';
 import {mark} from './perf-log.ts';
@@ -14,7 +15,7 @@ export type LoginState = {
   };
 };
 
-const zeroAtom = new Atom<Zero<Schema>>();
+const zeroAtom = new Atom<Zero<Schema, Mutators>>();
 const authAtom = new Atom<LoginState>();
 const jwt = getJwt();
 const encodedJwt = getRawJwt();
@@ -34,6 +35,7 @@ authAtom.onChange(auth => {
     logLevel: 'info',
     server: import.meta.env.VITE_PUBLIC_SERVER,
     userID: auth?.decoded?.sub ?? 'anon',
+    mutators: createMutators(import.meta.env.VITE_PUBLIC_JWK),
     auth: (error?: 'invalid-token') => {
       if (error === 'invalid-token') {
         clearJwt();
@@ -51,7 +53,7 @@ authAtom.onChange(auth => {
 
 let didPreload = false;
 
-export function preload(z: Zero<Schema>) {
+export function preload(z: Zero<Schema, Mutators>) {
   if (didPreload) {
     return;
   }
@@ -87,9 +89,9 @@ export function preload(z: Zero<Schema>) {
 }
 
 // To enable accessing zero in the devtools easily.
-function exposeDevHooks(z: Zero<Schema>) {
+function exposeDevHooks(z: Zero<Schema, Mutators>) {
   const casted = window as unknown as {
-    z?: Zero<Schema>;
+    z?: Zero<Schema, Mutators>;
   };
   casted.z = z;
 }

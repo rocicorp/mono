@@ -11,7 +11,6 @@ import {
   useRole,
   useTransitionStatus,
 } from '@floating-ui/react';
-import {nanoid} from 'nanoid';
 import {
   forwardRef,
   memo,
@@ -32,6 +31,7 @@ import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {type ButtonProps} from './button.tsx';
 import {EmojiPicker} from './emoji-picker.tsx';
 import {EmojiPill} from './emoji-pill.tsx';
+import {nanoid} from 'nanoid';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 
@@ -54,22 +54,26 @@ export const EmojiPanel = memo(
 
       const addEmoji = useCallback(
         (unicode: string, annotation: string) => {
-          const id = nanoid();
-          z.mutate.emoji.insert({
-            id,
-            value: unicode,
+          const args = {
+            id: nanoid(),
+            unicode,
             annotation,
             subjectID,
             creatorID: z.userID,
             created: Date.now(),
-          });
+          } as const;
+          if (commentID !== undefined) {
+            z.mutate.emoji.addToComment(args);
+          } else {
+            z.mutate.emoji.addToIssue(args);
+          }
         },
-        [subjectID, z],
+        [subjectID, commentID, z],
       );
 
       const removeEmoji = useCallback(
         (id: string) => {
-          z.mutate.emoji.delete({id});
+          z.mutate.emoji.remove(id);
         },
         [z],
       );

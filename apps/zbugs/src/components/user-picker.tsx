@@ -1,7 +1,7 @@
 import {type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useMemo, useState} from 'react';
-import {type Schema} from '../../schema.ts';
+import {type Schema} from '../../shared/schema.ts';
 import avatarIcon from '../assets/icons/avatar-default.svg';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
 import {useZero} from '../hooks/use-zero.ts';

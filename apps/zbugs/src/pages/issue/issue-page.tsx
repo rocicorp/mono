@@ -22,7 +22,12 @@ import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
-import type {CommentRow, IssueRow, Schema, UserRow} from '../../../schema.ts';
+import type {
+  CommentRow,
+  IssueRow,
+  Schema,
+  UserRow,
+} from '../../../shared/schema.ts';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import {commentQuery} from '../../comment-query.ts';
@@ -57,6 +62,7 @@ import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
 import {CACHE_AWHILE} from '../../query-cache-policy.ts';
+import type {Mutators} from '../../../shared/mutators.ts';
 
 const emojiToastShowDuration = 3_000;
 
@@ -158,9 +164,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     ) {
       // only set to viewed if the user has looked at it for > 1 second
       const handle = setTimeout(() => {
-        z.mutate.viewState.upsert({
+        z.mutate.viewState.set({
           issueID: displayed.id,
-          userID: z.userID,
           viewed: Date.now(),
         });
       }, 1000);
@@ -357,7 +362,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const remove = () => {
     // TODO: Implement undo - https://github.com/rocicorp/undo
-    z.mutate.issue.delete({id: displayed.id});
+    z.mutate.issue.delete(displayed.id);
     navigate(listContext?.href ?? links.home());
   };
 
@@ -575,13 +580,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               <LabelPicker
                 selected={labelSet}
                 onAssociateLabel={labelID =>
-                  z.mutate.issueLabel.insert({
+                  z.mutate.issue.addLabel({
                     issueID: displayed.id,
                     labelID,
                   })
                 }
                 onDisassociateLabel={labelID =>
-                  z.mutate.issueLabel.delete({
+                  z.mutate.issue.removeLabel({
                     issueID: displayed.id,
                     labelID,
                   })
@@ -899,7 +904,7 @@ function noop() {
 }
 
 function buildListQuery(
-  z: Zero<Schema>,
+  z: Zero<Schema, Mutators>,
   listContext: ListContext | undefined,
   issue: Row<Schema['tables']['issue']> | undefined,
   dir: 'next' | 'prev',
