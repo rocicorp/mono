@@ -70,7 +70,7 @@ jobs:
           node-version: 20.x
           cache: 'npm'
 
+      - run: npm ci
       - name: Install Playwright
         run: npx playwright install --with-deps
-
       - run: npm run test
