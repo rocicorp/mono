@@ -8,7 +8,7 @@ type Primitive = undefined | null | boolean | string | number | symbol | bigint;
  * reference equality.
  */
 
-export class CustomKeySet<V> implements Set<V> {
+export class CustomKeySet<V> {
   readonly [Symbol.toStringTag] = 'CustomKeySet';
   readonly #toKey: (value: V) => Primitive;
   readonly #map = new Map<Primitive, V>();
@@ -36,7 +36,7 @@ export class CustomKeySet<V> implements Set<V> {
   }
 
   forEach(
-    callbackfn: (value: V, value2: V, set: Set<V>) => void,
+    callbackfn: (value: V, value2: V, set: CustomKeySet<V>) => void,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     thisArg?: any,
   ): void {
