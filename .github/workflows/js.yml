@@ -19,8 +19,6 @@ jobs:
       TURBO_TEAM: rocicorp
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
@@ -46,8 +44,6 @@ jobs:
       TURBO_TEAM: rocicorp
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
@@ -68,8 +64,6 @@ jobs:
       TURBO_TEAM: rocicorp
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
@@ -90,8 +84,6 @@ jobs:
       TURBO_TEAM: rocicorp
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
@@ -112,8 +104,6 @@ jobs:
       TURBO_TEAM: rocicorp
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
