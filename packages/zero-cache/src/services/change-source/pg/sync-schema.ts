@@ -13,6 +13,25 @@ import {
 } from '../../replicator/schema/replication-state.ts';
 import {initialSync, type InitialSyncOptions} from './initial-sync.ts';
 
+const schemaVersionMigrationMap: IncrementalMigrationMap = {
+  // There's no incremental migration from v1. Just reset the replica.
+  4: {
+    migrateSchema: () => {
+      throw new AutoResetSignal('upgrading replica to new schema');
+    },
+    minSafeVersion: 3,
+  },
+
+  5: {
+    migrateSchema: (_, db) => {
+      db.exec(CREATE_RUNTIME_EVENTS_TABLE);
+    },
+    migrateData: (_, db) => {
+      recordEvent(db, 'upgrade');
+    },
+  },
+};
+
 export async function initSyncSchema(
   log: LogContext,
   debugName: string,
@@ -27,30 +46,32 @@ export async function initSyncSchema(
     minSafeVersion: 1,
   };
 
-  const schemaVersionMigrationMap: IncrementalMigrationMap = {
-    // There's no incremental migration from v1. Just reset the replica.
-    4: {
-      migrateSchema: () => {
-        throw new AutoResetSignal('upgrading replica to new schema');
-      },
-      minSafeVersion: 3,
-    },
-
-    5: {
-      migrateSchema: (_, db) => {
-        db.exec(CREATE_RUNTIME_EVENTS_TABLE);
-      },
-      migrateData: (_, db) => {
-        recordEvent(db, 'upgrade');
-      },
-    },
-  };
-
   await runSchemaMigrations(
     log,
     debugName,
     dbPath,
     setupMigration,
+    schemaVersionMigrationMap,
+  );
+}
+
+export async function upgradeSyncSchema(
+  log: LogContext,
+  debugName: string,
+  dbPath: string,
+) {
+  await runSchemaMigrations(
+    log,
+    debugName,
+    dbPath,
+    // setupMigration should never be invoked
+    {
+      migrateSchema: () => {
+        throw new Error(
+          'This should only be called for already synced replicas',
+        );
+      },
+    },
     schemaVersionMigrationMap,
   );
 }
