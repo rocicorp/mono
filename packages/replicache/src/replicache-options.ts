@@ -251,7 +251,10 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
  * `mutatorImpl` is a function that was created by Zero
  *
  */
-export interface ZeroTxData {}
+export interface ZeroTxData {
+  ivmSources: unknown;
+  token: string | undefined;
+}
 
 export type ZeroReadOptions = {
   openLazyRead?: Read | undefined;
@@ -263,6 +266,8 @@ export type ZeroReadOptions = {
  * Prevents us from creating any direct dependencies on Zero.
  */
 export interface ZeroOption {
+  auth: string;
+
   /**
    * Allow Zero to initialize its IVM state from the given hash and dag.
    */

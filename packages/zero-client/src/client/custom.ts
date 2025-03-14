@@ -8,12 +8,13 @@ import {must} from '../../../shared/src/must.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {
+  ClientTransaction,
   DeleteID,
   InsertValue,
   SchemaCRUD,
   SchemaQuery,
   TableCRUD,
-  TransactionBase,
+  Transaction,
   UpdateValue,
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
@@ -24,16 +25,6 @@ import {ZeroContext} from './context.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-
-/**
- * An instance of this is passed to custom mutator implementations and
- * allows reading and writing to the database and IVM at the head
- * at which the mutator is being applied.
- */
-export interface Transaction<S extends Schema> extends TransactionBase<S> {
-  readonly location: 'client';
-  readonly reason: 'optimistic' | 'rebase';
-}
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
@@ -86,7 +77,7 @@ export type MakeCustomMutatorInterface<
   ? (...args: Args) => Promise<void>
   : never;
 
-export class TransactionImpl<S extends Schema> implements Transaction<S> {
+export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
   constructor(
     lc: LogContext,
     repTx: WriteTransaction,
@@ -98,23 +89,22 @@ export class TransactionImpl<S extends Schema> implements Transaction<S> {
     this.clientID = repTx.clientID;
     this.mutationID = repTx.mutationID;
     this.reason = repTx.reason === 'initial' ? 'optimistic' : 'rebase';
+    const txData = must(
+      castedRepTx[zeroData],
+      'zero was not set on replicache internal options!',
+    );
     this.mutate = makeSchemaCRUD(
       schema,
       repTx,
-      must(
-        castedRepTx[zeroData],
-        'zero was not set on replicache internal options!',
-      ) as IVMSourceBranch,
+      txData.ivmSources as IVMSourceBranch,
     );
     this.query = makeSchemaQuery(
       lc,
       schema,
-      must(
-        castedRepTx[zeroData],
-        'zero was not set on replicache internal options!',
-      ) as IVMSourceBranch,
+      txData.ivmSources as IVMSourceBranch,
       slowMaterializeThreshold,
     );
+    this.token = txData.token;
   }
 
   readonly clientID: ClientID;
@@ -123,6 +113,7 @@ export class TransactionImpl<S extends Schema> implements Transaction<S> {
   readonly location = 'client';
   readonly mutate: SchemaCRUD<S>;
   readonly query: SchemaQuery<S>;
+  readonly token: string | undefined;
 }
 
 export function makeReplicacheMutator<S extends Schema>(

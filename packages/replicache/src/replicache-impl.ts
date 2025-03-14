@@ -215,7 +215,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   pushURL: string;
 
   /** The authorization token used when doing a push request. */
-  auth: string;
+  #auth: string;
 
   /** The name of the Replicache database. Populated by {@link ReplicacheOptions#name}. */
   readonly name: string;
@@ -239,6 +239,18 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    */
   get idbName(): string {
     return makeIDBName(this.name, this.schemaVersion);
+  }
+
+  set auth(auth: string) {
+    if (this.#zero) {
+      this.#zero.auth = auth;
+    }
+
+    this.#auth = auth;
+  }
+
+  get auth() {
+    return this.#auth;
   }
 
   /** The schema version of the data understood by this application. */
@@ -424,7 +436,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       onClientsDeleted = () => {},
     } = implOptions;
     this.#zero = implOptions.zero;
-    this.auth = auth ?? '';
+    this.#auth = auth ?? '';
     this.pullURL = pullURL;
     this.pushURL = pushURL;
     this.name = name;
