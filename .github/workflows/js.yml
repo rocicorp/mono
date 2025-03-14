@@ -23,7 +23,9 @@ jobs:
         with:
           node-version: 20.x
           cache: 'npm'
+
       - name: Cache node_modules
+        id: cache
         uses: actions/cache@v3
         with:
           path: |
@@ -49,13 +51,18 @@ jobs:
         with:
           node-version: 20.x
           cache: 'npm'
+
       - name: Restore cached node_modules
+        id: cache
         uses: actions/cache@v3
         with:
           path: |
             node_modules
             node_modules/.vite-temp
           key: npm-${{ hashFiles('package-lock.json') }}
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: npm ci
       - run: npm run check-format
 
   lint:
@@ -71,13 +78,18 @@ jobs:
         with:
           node-version: 20.x
           cache: 'npm'
+
       - name: Restore cached node_modules
+        id: cache
         uses: actions/cache@v3
         with:
           path: |
             node_modules
             node_modules/.vite-temp
           key: npm-${{ hashFiles('package-lock.json') }}
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: npm ci
       - run: npm run lint
 
   check-types:
@@ -93,13 +105,18 @@ jobs:
         with:
           node-version: 20.x
           cache: 'npm'
+
       - name: Restore cached node_modules
         uses: actions/cache@v3
+        id: cache
         with:
           path: |
             node_modules
             node_modules/.vite-temp
           key: npm-${{ hashFiles('package-lock.json') }}
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: npm ci
       - run: npm run check-types
 
   test:
@@ -115,13 +132,18 @@ jobs:
         with:
           node-version: 20.x
           cache: 'npm'
+
       - name: Restore cached node_modules
+        id: cache
         uses: actions/cache@v3
         with:
           path: |
             node_modules
             node_modules/.vite-temp
           key: npm-${{ hashFiles('package-lock.json') }}
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: npm ci
 
       - name: Cache Playwright
         id: cache-playwright
@@ -131,7 +153,6 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
-
       - name: Install Playwright Deps
         if: steps.cache-playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps

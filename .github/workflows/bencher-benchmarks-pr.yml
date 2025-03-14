@@ -107,7 +107,6 @@ jobs:
           key: npm-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             npm-
-
       - name: Install dependencies
         if: steps.cache.outputs.cache-hit != 'true'
         run: npm ci
@@ -120,7 +119,6 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
-
       - name: Install Playwright Deps
         if: steps.cache-playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
