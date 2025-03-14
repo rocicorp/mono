@@ -9,6 +9,7 @@ import {
 } from '../../../zero-schema/src/compiled-permissions.ts';
 import {isSchemaConfig} from '../../../zero-schema/src/schema-config.ts';
 import {appOptions, shardOptions, zeroOptions} from '../config/zero-config.ts';
+import {logOptions} from '../../../otel/src/log-options.ts';
 
 export const deployPermissionsOptions = {
   schema: {
@@ -37,6 +38,8 @@ export const deployPermissionsOptions = {
   app: {id: appOptions.id},
 
   shard: shardOptions,
+
+  log: logOptions,
 
   output: {
     file: {

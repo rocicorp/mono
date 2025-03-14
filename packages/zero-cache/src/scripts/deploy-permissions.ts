@@ -31,7 +31,7 @@ const config = parseOptions(
 const shard = getShardID(config);
 const app = appSchema(shard);
 
-const lc = new LogContext('debug', {}, consoleLogSink);
+const lc = new LogContext(config.log.level, {}, consoleLogSink);
 
 async function validatePermissions(
   db: PostgresDB,
