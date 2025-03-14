@@ -23,7 +23,6 @@
     "@rocicorp/prettier-config": "^0.2.0",
     "fast-check": "^3.18.0",
     "nanoid": "^5.1.2",
-    "playwright": "^1.43.1",
     "shared": "0.0.0",
     "typescript": "~5.7.3"
   },
