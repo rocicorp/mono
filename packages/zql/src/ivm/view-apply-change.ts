@@ -136,20 +136,12 @@ export function applyChange(
           refCountMap.set(newEntry, 1);
         }
       } else {
-        const view = getChildEntryList(parentEntry, relationship);
-        const {pos, found} = binarySearch(view, newEntry, schema.compareRows);
-
-        let deleteCount = 0;
-        let rc = 1;
-        if (found) {
-          deleteCount = 1;
-          rc = must(refCountMap.get(view[pos])) + 1;
-          refCountMap.delete(view[pos]);
-        }
-
-        // @ts-expect-error view is readonly
-        view.splice(pos, deleteCount, newEntry);
-        refCountMap.set(newEntry, rc);
+        insertAndUpdateRefCount(
+          refCountMap,
+          getChildEntryList(parentEntry, relationship),
+          newEntry,
+          schema.compareRows,
+        );
       }
       for (const [relationship, children] of Object.entries(
         change.node.relationships,
@@ -190,21 +182,12 @@ export function applyChange(
           refCountMap.set(oldEntry, rc - 1);
         }
       } else {
-        const view = getChildEntryList(parentEntry, relationship);
-        const {pos, found} = binarySearch(
-          view,
+        removeAndsUpdateRefCount(
+          refCountMap,
+          getChildEntryList(parentEntry, relationship),
           change.node.row,
           schema.compareRows,
         );
-        assert(found, 'node does not exist');
-        const rc = must(refCountMap.get(view[pos]));
-        if (rc === 1) {
-          refCountMap.delete(view[pos]);
-          // @ts-expect-error view is readonly
-          view.splice(pos, 1);
-        } else {
-          refCountMap.set(view[pos], rc - 1);
-        }
       }
       // Needed to ensure cleanup of operator state is fully done.
       drainStreams(change.node);
@@ -265,7 +248,7 @@ export function applyChange(
             change.oldNode.row,
             schema.compareRows,
           );
-          assert(found, 'node does not exists');
+          assert(found, 'node does not exist');
           const rc = must(refCountMap.get(view[pos]));
           refCountMap.delete(view[pos]);
           // @ts-expect-error view is readonly
@@ -277,48 +260,25 @@ export function applyChange(
           refCountMap.set(view[pos], rc);
         } else {
           // Remove
-          const {pos, found} = binarySearch(
+          const oldEntry = removeAndsUpdateRefCount(
+            refCountMap,
             view,
             change.oldNode.row,
             schema.compareRows,
           );
-          assert(found, 'node does not exists');
-          const oldEntry = view[pos];
-          const rc = must(refCountMap.get(oldEntry));
-          if (rc === 1) {
-            refCountMap.delete(oldEntry);
-            // @ts-expect-error view is readonly
-            view.splice(pos, 1);
-          } else {
-            refCountMap.set(oldEntry, rc - 1);
-          }
 
           // Insert
-          {
-            const {pos, found} = binarySearch(
-              view,
-              change.node.row,
-              schema.compareRows,
-            );
-            let rc = 1;
-            const newEntry = makeEntryPreserveRelationships(
-              change.node.row,
-              oldEntry,
-              format.relationships,
-            );
-            let deleteCount = 0;
-            if (found) {
-              // We changed a row to a row that already exists. The existing row
-              // should increase its ref count.
-              deleteCount = 1;
-              const existing = view[pos];
-              rc = must(refCountMap.get(existing)) + 1;
-              refCountMap.delete(existing);
-            }
-            // @ts-expect-error view is readonly
-            view.splice(pos, deleteCount, newEntry);
-            refCountMap.set(newEntry, rc);
-          }
+          const newEntry = makeEntryPreserveRelationships(
+            change.node.row,
+            oldEntry,
+            format.relationships,
+          );
+          insertAndUpdateRefCount(
+            refCountMap,
+            view,
+            newEntry,
+            schema.compareRows,
+          );
         }
       }
       break;
@@ -326,6 +286,48 @@ export function applyChange(
     default:
       unreachable(change);
   }
+}
+
+function insertAndUpdateRefCount(
+  refCountMap: RefCountMap,
+  view: EntryList,
+  newEntry: Entry,
+  compareRows: Comparator,
+): void {
+  const {pos, found} = binarySearch(view, newEntry, compareRows);
+
+  let deleteCount = 0;
+  let rc = 1;
+  if (found) {
+    deleteCount = 1;
+    rc = must(refCountMap.get(view[pos])) + 1;
+    refCountMap.delete(view[pos]);
+  }
+
+  // @ts-expect-error view is readonly
+  view.splice(pos, deleteCount, newEntry);
+  refCountMap.set(newEntry, rc);
+}
+
+function removeAndsUpdateRefCount(
+  refCountMap: RefCountMap,
+  view: EntryList,
+  target: Row,
+  compareRows: Comparator,
+): Entry {
+  const {pos, found} = binarySearch(view, target, compareRows);
+  assert(found, 'node does not exist');
+  const oldEntry = view[pos];
+  const rc = must(refCountMap.get(oldEntry));
+  if (rc === 1) {
+    refCountMap.delete(oldEntry);
+    // @ts-expect-error view is readonly
+    view.splice(pos, 1);
+  } else {
+    refCountMap.set(oldEntry, rc - 1);
+  }
+
+  return oldEntry;
 }
 
 // TODO: Do not return an object. It puts unnecessary pressure on the GC.
@@ -364,7 +366,7 @@ function getChildEntryList(
   parentEntry: Entry,
   relationship: string,
 ): EntryList {
-  const view = parentEntry[relationship] as unknown;
+  const view = parentEntry[relationship];
   assertArray(view);
   return view as EntryList;
 }

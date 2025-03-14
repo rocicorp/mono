@@ -1,7 +1,7 @@
 import type {Ordering, System} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import type {Comparator} from './data.ts';
 
 /**
  * Information about the nodes output by an operator.
@@ -20,6 +20,6 @@ export type SourceSchema = {
   // E.g., maybe a user can see an object because of an entry in the session table.
   // We should not sync the data from the session table to the client.
   readonly system: System;
-  readonly compareRows: (r1: Row, r2: Row) => number;
+  readonly compareRows: Comparator;
   readonly sort: Ordering;
 };
