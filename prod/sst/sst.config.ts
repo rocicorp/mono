@@ -58,7 +58,7 @@ export default $config({
       ZERO_UPSTREAM_DB: process.env.ZERO_UPSTREAM_DB!,
       ZERO_CVR_DB: process.env.ZERO_CVR_DB!,
       ZERO_CHANGE_DB: process.env.ZERO_CHANGE_DB!,
-      ZERO_AUTH_SECRET: process.env.ZERO_AUTH_SECRET!,
+      ZERO_AUTH_JWK: process.env.ZERO_AUTH_JWK!,
       AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID!,
       AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
       ZERO_LOG_FORMAT: "json",
