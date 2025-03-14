@@ -1,6 +1,6 @@
 import {Zero} from '@rocicorp/zero';
-import {type Schema, schema} from '../schema.ts';
-import {mutators, type Mutators} from '../mutators.ts';
+import {type Schema, schema} from '../shared/schema.ts';
+import {mutators, type Mutators} from '../shared/mutators.ts';
 import {Atom} from './atom.ts';
 import {clearJwt, getJwt, getRawJwt} from './jwt.ts';
 import {INITIAL_COMMENT_LIMIT} from './pages/issue/issue-page.tsx';

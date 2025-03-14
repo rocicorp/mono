@@ -6,8 +6,8 @@ import {
   type Row,
 } from '@rocicorp/zero/pg';
 import postgres, {type JSONValue} from 'postgres';
-import {schema} from '../schema.ts';
-import {mutators} from '../mutators.ts';
+import {schema} from '../shared/schema.ts';
+import {mutators} from '../shared/mutators.ts';
 
 class Connection implements DBConnection<postgres.TransactionSql> {
   readonly #pg: postgres.Sql;

@@ -22,7 +22,12 @@ import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
-import type {CommentRow, IssueRow, Schema, UserRow} from '../../../schema.ts';
+import type {
+  CommentRow,
+  IssueRow,
+  Schema,
+  UserRow,
+} from '../../../shared/schema.ts';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import {commentQuery} from '../../comment-query.ts';
@@ -57,7 +62,7 @@ import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
 import {CACHE_AWHILE} from '../../query-cache-policy.ts';
-import type {Mutators} from '../../../mutators.ts';
+import type {Mutators} from '../../../shared/mutators.ts';
 
 const emojiToastShowDuration = 3_000;
 
@@ -162,7 +167,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
       const handle = setTimeout(() => {
         z.mutate.viewState.set({
           issueID: displayed.id,
-          userID: z.userID,
           viewed: Date.now(),
         });
       }, 1000);

@@ -1,6 +1,6 @@
 import type {Zero} from '@rocicorp/zero';
-import type {IssueRow, Schema} from '../schema.ts';
-import type {Mutators} from '../mutators.ts';
+import type {IssueRow, Schema} from '../shared/schema.ts';
+import type {Mutators} from '../shared/mutators.ts';
 
 export function commentQuery(
   z: Zero<Schema, Mutators>,

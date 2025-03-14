@@ -26,7 +26,6 @@ export function CommentComposer({
       z.mutate.comment.add({
         id: nanoid(),
         issueID,
-        creatorID: z.userID,
         body: currentBody,
         created: Date.now(),
       });
