@@ -2,7 +2,6 @@ import {Zero} from '@rocicorp/zero';
 import {type Schema, schema} from '../schema.ts';
 import {Atom} from './atom.ts';
 import {clearJwt, getJwt, getRawJwt} from './jwt.ts';
-import {INITIAL_COMMENT_LIMIT} from './pages/issue/issue-page.tsx';
 import {mark} from './perf-log.ts';
 import {CACHE_FOREVER} from './query-cache-policy.ts';
 
