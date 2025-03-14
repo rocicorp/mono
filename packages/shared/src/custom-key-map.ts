@@ -7,7 +7,7 @@ type Primitive = undefined | null | boolean | string | number | symbol | bigint;
  * This allows for using objects as keys in a {@link Map} without worrying about
  * reference equality.
  */
-export class CustomKeyMap<K, V> implements Map<K, V> {
+export class CustomKeyMap<K, V> {
   readonly [Symbol.toStringTag] = 'CustomKeyMap';
   readonly #toKey: (key: K) => Primitive;
   readonly #map = new Map<Primitive, readonly [K, V]>();
@@ -33,7 +33,7 @@ export class CustomKeyMap<K, V> implements Map<K, V> {
   }
 
   forEach(
-    callbackfn: (value: V, key: K, map: Map<K, V>) => void,
+    callbackfn: (value: V, key: K, map: CustomKeyMap<K, V>) => void,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     thisArg?: any,
   ): void {
