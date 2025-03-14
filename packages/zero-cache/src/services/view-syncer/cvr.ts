@@ -178,9 +178,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     const newVersion = this._ensureNewVersion();
     this._cvrStore.insertClient(client, newVersion);
 
-    console.log('ensureClient', id);
     if (!this._cvr.queries[CLIENT_LMID_QUERY_ID]) {
-      console.log('ensureClient adding lmids query');
       const lmidsQuery: InternalQueryRecord = {
         id: CLIENT_LMID_QUERY_ID,
         ast: {

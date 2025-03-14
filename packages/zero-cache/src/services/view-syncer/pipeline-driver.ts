@@ -243,7 +243,6 @@ export class PipelineDriver {
    * @return The rows from the initial hydration of the query.
    */
   *addQuery(hash: string, query: AST): Iterable<RowChange> {
-    this.#lc.info?.('PipelineDriver.addQuery', hash, JSON.stringify(query));
     assert(this.initialized());
     if (this.#pipelines.has(hash)) {
       this.#lc.info?.(`query ${hash} already added`, query);
@@ -353,7 +352,6 @@ export class PipelineDriver {
   }
 
   *#advance(diff: SnapshotDiff): Iterable<RowChange> {
-    this.#lc.info?.('diff', JSON.stringify(diff));
     for (const {table, prevValue, nextValue} of diff) {
       if (prevValue) {
         if (nextValue) {
@@ -420,7 +418,6 @@ export class PipelineDriver {
   *#push(table: string, change: SourceChange): Iterable<RowChange> {
     const source = this.#tables.get(table);
     if (!source) {
-      this.#lc.info?.(table, 'source not found');
       return;
     }
 
