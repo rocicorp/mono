@@ -395,7 +395,7 @@ class TransactionProcessor {
 
   // Updates by default are applied as UPDATE commands to support partial
   // row specifications from the change source. In particular, this is needed
-  // to handle updates for which large TOAST'd values are not sent:
+  // to handle updates for which large TOASTed values are not sent:
   //
   // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-TUPLEDATA
   //
@@ -407,7 +407,7 @@ class TransactionProcessor {
   // In order to facilitate "resumptive" replication, the logic falls back to
   // an INSERT if the update did not change any rows.
   // TODO: Figure out a solution for resumptive replication of rows
-  //       with TOAST'd values.
+  //       with TOASTed values.
   processUpdate(update: MessageUpdate) {
     const table = liteTableName(update.relation);
     const newRow = liteRow(update.new, this.#tableSpec(table));
