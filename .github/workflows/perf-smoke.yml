@@ -44,9 +44,9 @@ jobs:
         if: steps.cache-playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
 
-      #   # We build in root to get turbo caching...
-      # - name: Build
-      #   run: npm run build
+        # We build in root to get turbo caching...
+      - name: Build
+        run: npm run build
 
       - name: Run benchmark
         shell: bash
