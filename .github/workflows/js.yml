@@ -123,6 +123,18 @@ jobs:
         with:
           path: node_modules
           key: npm-${{ hashFiles('package-lock.json') }}
+
+      - name: Cache Playwright
+        id: cache-playwright
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
       - name: Install Playwright Deps
+        if: steps.cache-playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
+
       - run: npm run test
