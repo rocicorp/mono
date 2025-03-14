@@ -587,7 +587,7 @@ export class QueryImpl<
   }
 
   materialize<T>(
-    factoryOrTTL?: ViewFactory<TSchema, TTable, TReturn, T> | number,
+    factoryOrTTL?: ViewFactory<TSchema, TTable, TReturn, T> | TTL,
     ttl: TTL = DEFAULT_TTL,
   ): T {
     const t0 = Date.now();
