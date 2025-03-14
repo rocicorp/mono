@@ -15,10 +15,16 @@ import {
   type SubscriberContext,
 } from './change-streamer.ts';
 
+// v1: Client-side support for JSON_FORMAT. Introduced in 0.18.
+export const PROTOCOL_VERSION = 1;
+const MIN_SUPPORTED_PROTOCOL_VERSION = 0;
+
 const DIRECT_PATH_PATTERN = '/replication/:version/changes';
 const TENANT_PATH_PATTERN = '/:tenant' + DIRECT_PATH_PATTERN;
+const PATH_REGEX =
+  /(?<tenant>[^/]+\/)?\/replication\/v(?<version>\d+)\/changes$/;
 
-const V0_CHANGES_PATH = '/replication/v0/changes';
+const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
 
 export class ChangeStreamerHttpServer extends HttpService {
   readonly id = 'change-streamer-http-server';
@@ -75,8 +81,8 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
   constructor(lc: LogContext, uri: string) {
     const url = new URL(uri);
     url.pathname += url.pathname.endsWith('/')
-      ? V0_CHANGES_PATH.substring(1)
-      : V0_CHANGES_PATH;
+      ? CHANGES_PATH.substring(1)
+      : CHANGES_PATH;
     uri = url.toString();
     this.#lc = lc;
     this.#uri = uri;
@@ -95,6 +101,7 @@ type RequestHeaders = Pick<IncomingMessage, 'url' | 'headers'>;
 
 export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
   const url = new URL(req.url ?? '', req.headers.origin ?? 'http://localhost');
+  checkPath(url.pathname);
   const params = new URLParams(url);
 
   return {
@@ -104,6 +111,24 @@ export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
     watermark: params.get('watermark', true),
     initial: params.getBoolean('initial'),
   };
+}
+
+function checkPath(pathname: string) {
+  const match = PATH_REGEX.exec(pathname);
+  if (!match) {
+    throw new Error(`invalid path: ${pathname}`);
+  }
+  const v = Number(match.groups?.version);
+  if (
+    Number.isNaN(v) ||
+    v > PROTOCOL_VERSION ||
+    v < MIN_SUPPORTED_PROTOCOL_VERSION
+  ) {
+    throw new Error(
+      `Cannot service client at protocol v${v}. ` +
+        `Supported protocols: [v${MIN_SUPPORTED_PROTOCOL_VERSION} ... v${PROTOCOL_VERSION}]`,
+    );
+  }
 }
 
 function getParams(ctx: SubscriberContext): URLSearchParams {
