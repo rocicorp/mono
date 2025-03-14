@@ -934,7 +934,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           yield* pipelines.addQuery(q.transformationHash, q.ast);
           const end = performance.now();
           if (end - start > slowHydrateThreshold) {
-            lc.warn?.('slow hydration for query', end - start, q.ast);
+            lc.warn?.('Slow query materialization', end - start, q.ast);
           }
           manualSpan(tracer, 'vs.addAndConsumeQuery', end - start, {
             hash: q.id,
