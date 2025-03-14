@@ -46,12 +46,9 @@ jobs:
         if: steps.cache-playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
 
-        # We build in root to get turbo caching...
-      - name: Build
-        run: npm run build
-
       - name: Run benchmark
         shell: bash
         working-directory: packages/replicache-perf
         run: |
+          npm run build
           npx tsx src/runner.ts --format=json --run='populate 1024x1000 \(clean, indexes: 0\)'
