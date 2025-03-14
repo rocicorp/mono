@@ -485,6 +485,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async #updateCVRConfig(
     lc: LogContext,
     cvr: CVRSnapshot,
+    clientID: string,
     fn: (updater: CVRConfigDrivenUpdater) => PatchToVersion[],
   ): Promise<CVRSnapshot> {
     const updater = new CVRConfigDrivenUpdater(
@@ -492,7 +493,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       cvr,
       this.#shard,
     );
-
+    updater.ensureClient(clientID);
     const patches = fn(updater);
 
     this.#cvr = (await updater.flush(lc, true, this.#lastConnectTime)).cvr;
@@ -603,7 +604,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const deletedClientIDs: string[] = [];
       const deletedClientGroupIDs: string[] = [];
 
-      cvr = await this.#updateCVRConfig(lc, cvr, updater => {
+      cvr = await this.#updateCVRConfig(lc, cvr, clientID, updater => {
         const patches: PatchToVersion[] = [];
 
         if (clientSchema) {
@@ -737,6 +738,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
 
     for (const [hash, query] of gotQueries) {
+      this.#lc.info?.('hydrateUnchangedQueries', hash, JSON.stringify(query));
       const {ast, transformationHash} = query;
       if (
         !query.internal &&
@@ -787,6 +789,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * This must be called from within the #lock.
    */
   #syncQueryPipelineSet(lc: LogContext, cvr: CVRSnapshot) {
+    this.#lc.info?.(
+      'syncQueryPipelinesSet cvr queries',
+      JSON.stringify(cvr.queries),
+    );
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async () => {
       assert(this.#pipelines.initialized());
 
@@ -821,6 +827,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         };
       });
 
+      this.#lc.info?.(
+        'syncQueryPipelinesSet server queries',
+        JSON.stringify(serverQueries),
+      );
       const addQueries = serverQueries.filter(
         q => !q.remove && !hydratedQueries.has(q.transformationHash),
       );
@@ -880,6 +890,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     unhydrateQueries: string[],
     hashToIDs: Map<string, string[]>,
   ): Promise<void> {
+    this.#lc.info?.(
+      'addAndRemoveQueries',
+      JSON.stringify(addQueries),
+      JSON.stringify(removeQueries),
+      JSON.stringify(unhydrateQueries),
+    );
     return startAsyncSpan(tracer, 'vs.#addAndRemoveQueries', async () => {
       assert(
         addQueries.length > 0 ||
@@ -1093,6 +1109,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     hashToIDs: Map<string, string[]>,
   ) {
     return startAsyncSpan(tracer, 'vs.#processChanges', async () => {
+      lc.info?.('processChanges!!!');
       const start = Date.now();
       let lapStart = start;
       let totalProcessingTime = 0;
@@ -1116,6 +1133,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       await startAsyncSpan(tracer, 'loopingChanges', async span => {
         for (const change of changes) {
+          lc.info?.('loopingChanges!!!', JSON.stringify(change));
           const {
             type,
             queryHash: transformationHash,
@@ -1221,7 +1239,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         ),
       );
 
-      lc.debug?.(`applying ${numChanges} to advance to ${version}`);
+      lc.info?.(`applying ${numChanges} to advance to ${version}`);
       const hashToIDs = createHashToIDs(cvr);
 
       try {

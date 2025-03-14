@@ -140,6 +140,7 @@ export class ClientHandler {
   ): PokeHandler {
     const pokeID = versionToCookie(tentativeVersion);
     const lc = this.#lc.withContext('pokeID', pokeID);
+    this.#lc.info?.('startPoke!!!!!');
 
     if (schemaVersions && this.#schemaVersion) {
       const schemaVersionError = getErrorForClientIfSchemaVersionNotSupported(
@@ -187,6 +188,8 @@ export class ClientHandler {
 
     const addPatch = (patchToVersion: PatchToVersion) => {
       const {patch, toVersion} = patchToVersion;
+      this.#lc.info?.('addPatch!!!!!');
+      this.#lc.info?.(JSON.stringify(patchToVersion, undefined, 2));
       if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
         return;
       }

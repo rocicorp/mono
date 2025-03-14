@@ -166,7 +166,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     this.#shard = shard;
   }
 
-  #ensureClient(id: string): ClientRecord {
+  ensureClient(id: string): ClientRecord {
     let client = this._cvr.clients[id];
     if (client) {
       return client;
@@ -178,7 +178,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     const newVersion = this._ensureNewVersion();
     this._cvrStore.insertClient(client, newVersion);
 
+    console.log('ensureClient', id);
     if (!this._cvr.queries[CLIENT_LMID_QUERY_ID]) {
+      console.log('ensureClient adding lmids query');
       const lmidsQuery: InternalQueryRecord = {
         id: CLIENT_LMID_QUERY_ID,
         ast: {
@@ -237,7 +239,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     queries: Readonly<{hash: string; ast: AST; ttl?: number | undefined}>[],
   ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
-    const client = this.#ensureClient(clientID);
+    const client = this.ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
 
     // Find the new/changed desired queries.
@@ -339,7 +341,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     inactivatedAt: number | undefined,
   ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
-    const client = this.#ensureClient(clientID);
+    const client = this.ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
     const unwanted = new Set(queryHashes);
     const remove = intersection(unwanted, current);
@@ -394,7 +396,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   }
 
   clearDesiredQueries(clientID: string): PatchToVersion[] {
-    const client = this.#ensureClient(clientID);
+    const client = this.ensureClient(clientID);
     return this.#deleteQueries(clientID, client.desiredQueryIDs, undefined);
   }
 
