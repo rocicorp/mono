@@ -33,7 +33,7 @@ export class CustomKeyMap<K, V> {
   }
 
   forEach(
-    callbackfn: (value: V, key: K, map: Map<K, V>) => void,
+    callbackfn: (value: V, key: K, map: CustomKeyMap<K, V>) => void,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     thisArg?: any,
   ): void {
