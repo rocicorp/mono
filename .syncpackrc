@@ -1,0 +1,9 @@
+{
+  "semverGroups": [
+    {
+      "range": "~",
+      "dependencies": ["typescript"],
+      "packages": ["**"]
+    }
+  ]
+}
