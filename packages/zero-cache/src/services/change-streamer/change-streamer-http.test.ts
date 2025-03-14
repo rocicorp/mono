@@ -21,6 +21,7 @@ import {
   ChangeStreamerHttpClient,
   ChangeStreamerHttpServer,
   getSubscriberContext,
+  PROTOCOL_VERSION,
 } from './change-streamer-http.ts';
 import type {Downstream, SubscriberContext} from './change-streamer.ts';
 
@@ -99,6 +100,12 @@ describe('change-streamer/http', () => {
       [
         'invalid querystring - missing watermark',
         `/api/replication/v0/changes?id=foo&replicaVersion=bar&initial=true`,
+      ],
+      [
+        // Change the error message as necessary
+        `Cannot service client at protocol v2. Supported protocols: [v0 ... v1]`,
+        `/api/replication/v${PROTOCOL_VERSION + 1}/changes` +
+          `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
     ])('%s: %s', async (error, path) => {
       for (const baseURL of [serverURL, dispatcherURL]) {

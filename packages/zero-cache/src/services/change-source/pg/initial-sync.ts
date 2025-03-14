@@ -16,7 +16,11 @@ import {
 import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import type {LexiVersion} from '../../../types/lexi-version.ts';
-import {liteValues, type LiteValueType} from '../../../types/lite.ts';
+import {
+  JSON_STRINGIFIED,
+  liteValues,
+  type LiteValueType,
+} from '../../../types/lite.ts';
 import {liteTableName} from '../../../types/names.ts';
 import {pgClient, type PostgresDB} from '../../../types/pg.ts';
 import type {ShardConfig, ShardID} from '../../../types/shards.ts';
@@ -338,7 +342,7 @@ async function copy(
         const values: LiteValueType[] = [];
         for (let j = i; j < i + INSERT_BATCH_SIZE; j++) {
           values.push(
-            ...liteValues(rows[j], table, 'json-as-string'),
+            ...liteValues(rows[j], table, JSON_STRINGIFIED),
             initialVersion,
           );
         }
@@ -347,7 +351,7 @@ async function copy(
       // Remaining set of rows is < INSERT_BATCH_SIZE
       for (; i < rows.length; i++) {
         insertStmt.run([
-          ...liteValues(rows[i], table, 'json-as-string'),
+          ...liteValues(rows[i], table, JSON_STRINGIFIED),
           initialVersion,
         ]);
       }

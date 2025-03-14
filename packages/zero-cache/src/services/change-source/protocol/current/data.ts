@@ -14,6 +14,17 @@ import type {Satisfies} from '../../../../types/satisfies.ts';
 
 export const beginSchema = v.object({
   tag: v.literal('begin'),
+  // The format of values of "json"-typed columns (e.g. "JSON" and "JSONB").
+  // - 'p' is for parsed JSON, which may include JSON values or JSON objects.
+  //   These values are parsed and stringified at every process boundary
+  //   between the change-source and the replica.
+  // - 's' is for stringified JSON. These values skip the parsing and
+  //   stringification, and are directly ferried to the replica as a JSON
+  //   string. For JSON values this improves performance by 20~25% in the
+  //   change-streamer and 25~30% in the replicator.
+  //
+  // If absent, the format is assumed to be 'p' (parsed JSON objects/values).
+  json: v.union(v.literal('p'), v.literal('s')).optional(),
 });
 
 export const commitSchema = v.object({
