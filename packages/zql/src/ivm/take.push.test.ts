@@ -7380,6 +7380,322 @@ suite('take with partition', () => {
   });
 });
 
+test('repro shortcut', () => {
+  const {data, messages, storage, pushes} = takeNoPartitionTest({
+    sourceRows: [],
+    limit: 1000,
+    pushes: [
+      {type: 'add', row: {id: 'i1', created: 50}},
+      {type: 'add', row: {id: 'i2', created: 60}},
+      {type: 'add', row: {id: 'i3', created: 70}},
+      {type: 'remove', row: {id: 'i3', created: 70}},
+      {type: 'remove', row: {id: 'i2', created: 60}},
+      {type: 'remove', row: {id: 'i1', created: 50}},
+    ],
+    fetchOnPush: true,
+  });
+  expect(data).toMatchInlineSnapshot(`[]`);
+  expect(messages).toMatchInlineSnapshot(`
+    [
+      [
+        ":source(testTable)",
+        "push",
+        {
+          "row": {
+            "created": 50,
+            "id": "i1",
+          },
+          "type": "add",
+        },
+      ],
+      [
+        ":take",
+        "push",
+        {
+          "row": {
+            "created": 50,
+            "id": "i1",
+          },
+          "type": "add",
+        },
+      ],
+      [
+        ":source(testTable)",
+        "push",
+        {
+          "row": {
+            "created": 60,
+            "id": "i2",
+          },
+          "type": "add",
+        },
+      ],
+      [
+        ":take",
+        "push",
+        {
+          "row": {
+            "created": 60,
+            "id": "i2",
+          },
+          "type": "add",
+        },
+      ],
+      [
+        ":source(testTable)",
+        "push",
+        {
+          "row": {
+            "created": 70,
+            "id": "i3",
+          },
+          "type": "add",
+        },
+      ],
+      [
+        ":take",
+        "push",
+        {
+          "row": {
+            "created": 70,
+            "id": "i3",
+          },
+          "type": "add",
+        },
+      ],
+      [
+        ":source(testTable)",
+        "push",
+        {
+          "row": {
+            "created": 70,
+            "id": "i3",
+          },
+          "type": "remove",
+        },
+      ],
+      [
+        ":source(testTable)",
+        "fetch",
+        {
+          "constraint": undefined,
+          "reverse": true,
+          "start": {
+            "basis": "after",
+            "row": {
+              "created": 70,
+              "id": "i3",
+            },
+          },
+        },
+      ],
+      [
+        ":source(testTable)",
+        "fetch",
+        {
+          "constraint": undefined,
+          "start": {
+            "basis": "at",
+            "row": {
+              "created": 70,
+              "id": "i3",
+            },
+          },
+        },
+      ],
+      [
+        ":take",
+        "push",
+        {
+          "row": {
+            "created": 70,
+            "id": "i3",
+          },
+          "type": "remove",
+        },
+      ],
+      [
+        ":source(testTable)",
+        "push",
+        {
+          "row": {
+            "created": 60,
+            "id": "i2",
+          },
+          "type": "remove",
+        },
+      ],
+      [
+        ":source(testTable)",
+        "fetch",
+        {
+          "constraint": undefined,
+          "reverse": true,
+          "start": {
+            "basis": "after",
+            "row": {
+              "created": 60,
+              "id": "i2",
+            },
+          },
+        },
+      ],
+      [
+        ":source(testTable)",
+        "fetch",
+        {
+          "constraint": undefined,
+          "start": {
+            "basis": "at",
+            "row": {
+              "created": 60,
+              "id": "i2",
+            },
+          },
+        },
+      ],
+      [
+        ":take",
+        "push",
+        {
+          "row": {
+            "created": 60,
+            "id": "i2",
+          },
+          "type": "remove",
+        },
+      ],
+      [
+        ":source(testTable)",
+        "push",
+        {
+          "row": {
+            "created": 50,
+            "id": "i1",
+          },
+          "type": "remove",
+        },
+      ],
+      [
+        ":source(testTable)",
+        "fetch",
+        {
+          "constraint": undefined,
+          "reverse": true,
+          "start": {
+            "basis": "after",
+            "row": {
+              "created": 50,
+              "id": "i1",
+            },
+          },
+        },
+      ],
+      [
+        ":source(testTable)",
+        "fetch",
+        {
+          "constraint": undefined,
+          "start": {
+            "basis": "at",
+            "row": {
+              "created": 50,
+              "id": "i1",
+            },
+          },
+        },
+      ],
+      [
+        ":take",
+        "push",
+        {
+          "row": {
+            "created": 50,
+            "id": "i1",
+          },
+          "type": "remove",
+        },
+      ],
+    ]
+  `);
+  expect(storage).toMatchInlineSnapshot(`
+    {
+      "["take"]": {
+        "bound": undefined,
+        "size": 0,
+      },
+      "maxBound": {
+        "created": 70,
+        "id": "i3",
+      },
+    }
+  `);
+  expect(pushes).toMatchInlineSnapshot(`
+    [
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "created": 50,
+            "id": "i1",
+          },
+        },
+        "type": "add",
+      },
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "created": 60,
+            "id": "i2",
+          },
+        },
+        "type": "add",
+      },
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "created": 70,
+            "id": "i3",
+          },
+        },
+        "type": "add",
+      },
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "created": 70,
+            "id": "i3",
+          },
+        },
+        "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "created": 60,
+            "id": "i2",
+          },
+        },
+        "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {},
+          "row": {
+            "created": 50,
+            "id": "i1",
+          },
+        },
+        "type": "remove",
+      },
+    ]
+  `);
+});
+
 type TakeTest = {
   sourceRows: readonly Row[];
   limit: number;
