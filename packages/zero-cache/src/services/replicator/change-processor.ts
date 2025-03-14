@@ -395,7 +395,7 @@ class TransactionProcessor {
 
   // Updates by default are applied as UPDATE commands to support partial
   // row specifications from the change source. In particular, this is needed
-  // to handle updates for which large TOASTed values are not sent:
+  // to handle updates for which unchanged TOASTed values are not sent:
   //
   // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-TUPLEDATA
   //
