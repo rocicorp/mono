@@ -4,11 +4,12 @@ import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
 import 'dotenv/config';
 import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
-import {SignJWT} from 'jose';
+import {SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
 import {pushHandler} from './push.ts';
 import type {ReadonlyJSONObject} from '@rocicorp/zero';
+import {must} from '../../../packages/shared/src/must.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -18,6 +19,8 @@ declare module 'fastify' {
 
 const sql = postgres(process.env.ZERO_UPSTREAM_DB as string);
 type QueryParams = {redirect?: string | undefined};
+
+const privateJwk = JSON.parse(process.env.ZERO_AUTH_JWK as string) as JWK;
 
 export const fastify = Fastify({
   logger: true,
@@ -89,9 +92,9 @@ fastify.get<{
   };
 
   const jwt = await new SignJWT(jwtPayload)
-    .setProtectedHeader({alg: 'HS256'})
+    .setProtectedHeader({alg: must(privateJwk.alg)})
     .setExpirationTime('30days')
-    .sign(new TextEncoder().encode(process.env.ZERO_AUTH_SECRET));
+    .sign(privateJwk);
 
   reply
     .cookie('jwt', jwt, {
