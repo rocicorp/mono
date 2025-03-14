@@ -24,7 +24,7 @@
     "fast-check": "^3.18.0",
     "nanoid": "^5.1.2",
     "shared": "0.0.0",
-    "typescript": "^5.7.3"
+    "typescript": "~5.7.3"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"
