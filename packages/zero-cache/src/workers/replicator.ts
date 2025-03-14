@@ -3,7 +3,7 @@ import * as v from '../../../shared/src/valita.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {ReplicaOptions} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
-import {upgradeSyncSchema} from '../services/change-source/pg/sync-schema.ts';
+import {upgradeReplica} from '../services/change-source/replica-schema.ts';
 import {Notifier} from '../services/replicator/notifier.ts';
 import type {
   ReplicaState,
@@ -42,7 +42,7 @@ async function connect(
 
   // Perform any upgrades to the replica in case the backup is an
   // earlier version.
-  await upgradeSyncSchema(lc, `${mode}-replica`, file);
+  await upgradeReplica(lc, `${mode}-replica`, file);
 
   // Start by folding any (e.g. restored) WAL(2) files into the main db.
   replica.pragma('journal_mode = delete');
