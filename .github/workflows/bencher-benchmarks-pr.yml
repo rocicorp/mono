@@ -13,6 +13,9 @@ jobs:
     permissions:
       pull-requests: write
     runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: rocicorp
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -21,7 +24,21 @@ jobs:
           cache: 'npm'
       - uses: bencherdev/bencher@main
 
-      - run: npm ci
+      - name: Cache node_modules
+        id: cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            node_modules/.vite-temp
+          key: npm-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-
+
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: npm ci
+
       - run: npm run build
 
       - name: Build npm zero package
@@ -69,6 +86,9 @@ jobs:
     permissions:
       pull-requests: write
     runs-on: self-hosted
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: rocicorp
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -77,9 +97,32 @@ jobs:
           cache: 'npm'
       - uses: bencherdev/bencher@main
 
-      - run: npm ci
+      - name: Cache node_modules
+        id: cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            node_modules/.vite-temp
+          key: npm-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            npm-
+
+      - name: Install dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Cache Playwright
+        id: cache-playwright
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
 
       - name: Install Playwright Deps
+        if: steps.cache-playwright.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps
 
       - name: Run benchmarks
