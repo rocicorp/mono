@@ -25,7 +25,6 @@ import {
 } from '../../../shared/src/browser-env.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
@@ -82,6 +81,7 @@ import * as ConnectionState from './connection-state-enum.ts';
 import {ZeroContext} from './context.ts';
 import {
   type BatchMutator,
+  type CRUDMutator,
   type DBMutator,
   type WithCRUD,
   makeCRUDMutate,
@@ -124,7 +124,6 @@ import {
   reportReloadReason,
   resetBackoff,
 } from './reload-error-handler.ts';
-import type {WriteTransaction} from './replicache-types.ts';
 import {
   ServerError,
   isAuthError,
@@ -449,28 +448,53 @@ export class Zero<
     });
     const logOptions = this.#logOptions;
 
-    const replicacheMutators = {
+    const replicacheMutators: MutatorDefs & {
+      [CRUD_MUTATION_NAME]: CRUDMutator;
+    } = {
       [CRUD_MUTATION_NAME]: makeCRUDMutator(schema),
     };
     this.#ivmMain = new IVMSourceBranch(schema.tables);
 
+    function assertUnique(key: string) {
+      assert(
+        replicacheMutators[key] === undefined,
+        `A mutator, or mutator namespace, has already been defined for ${key}`,
+      );
+    }
+
     const lc = new LogContext(logOptions.logLevel, {}, logOptions.logSink);
-    for (const [namespace, mutatorsForNamespace] of Object.entries(
-      options.mutators ?? {},
-    )) {
-      for (const [name, mutator] of Object.entries(
-        mutatorsForNamespace as Record<string, CustomMutatorImpl<Schema>>,
+    if (options.mutators) {
+      for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
+        options.mutators,
       )) {
-        (replicacheMutators as MutatorDefs)[customMutatorKey(namespace, name)] =
-          makeReplicacheMutator(
+        if (typeof mutatorOrMutators === 'function') {
+          const key = namespaceOrKey as string;
+          assertUnique(key);
+          replicacheMutators[key] = makeReplicacheMutator(
             lc,
-            mutator,
+            mutatorOrMutators,
             schema,
             slowMaterializeThreshold,
-          ) as (
-            repTx: WriteTransaction,
-            args: ReadonlyJSONValue,
-          ) => Promise<void>;
+          );
+          continue;
+        }
+        if (typeof mutatorOrMutators === 'object') {
+          for (const [name, mutator] of Object.entries(mutatorOrMutators)) {
+            const key = customMutatorKey(
+              namespaceOrKey as string,
+              name as string,
+            );
+            assertUnique(key);
+            replicacheMutators[key] = makeReplicacheMutator(
+              lc,
+              mutator as CustomMutatorImpl<S>,
+              schema,
+              slowMaterializeThreshold,
+            );
+          }
+          continue;
+        }
+        unreachable(mutatorOrMutators);
       }
     }
 
@@ -563,22 +587,29 @@ export class Zero<
     if (options.mutators) {
       mutate = {};
       mutateBatch = undefined;
-    }
-    for (const [namespace, mutatorsForNamespace] of Object.entries(
-      options.mutators ?? {},
-    )) {
-      let existing = mutate[namespace];
-      if (existing === undefined) {
-        existing = {};
-        mutate[namespace] = existing;
-      }
 
-      for (const name of Object.keys(
-        mutatorsForNamespace as Record<string, CustomMutatorImpl<Schema>>,
+      for (const [namespaceOrKey, mutatorsOrMutator] of Object.entries(
+        options.mutators,
       )) {
-        existing[name] = must(rep.mutate[customMutatorKey(namespace, name)]);
+        if (typeof mutatorsOrMutator === 'function') {
+          mutate[namespaceOrKey] = must(rep.mutate[namespaceOrKey as string]);
+          continue;
+        }
+
+        let existing = mutate[namespaceOrKey];
+        if (existing === undefined) {
+          existing = {};
+          mutate[namespaceOrKey] = existing;
+        }
+
+        for (const name of Object.keys(mutatorsOrMutator)) {
+          existing[name] = must(
+            rep.mutate[customMutatorKey(namespaceOrKey as string, name)],
+          );
+        }
       }
     }
+
     this.mutate = mutate;
     this.mutateBatch = mutateBatch;
 

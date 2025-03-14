@@ -558,6 +558,13 @@ const appMessages = new ReplicationMessages(
   'this_app',
 );
 
+const app2Messages = new ReplicationMessages(
+  {
+    clients: ['clientGroupID', 'clientID'],
+  },
+  'this_app_2',
+);
+
 describe('view-syncer/service', () => {
   let storageDB: Database;
   let replicaDbFile: DbFile;
@@ -2848,6 +2855,107 @@ describe('view-syncer/service', () => {
       message:
         'The "issues"."owner" column does not exist or is not one of the replicated columns: "big","id","json","parent","title".',
     });
+  });
+
+  test('process advancement with lmid change, client has no queries.  See https://bugs.rocicorp.dev/issue/3628', async () => {
+    const client = connect(SYNC_CONTEXT, []);
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+      ]
+    `);
+
+    stateChanges.push({state: 'version-ready'});
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:01",
+            "cookie": "01",
+            "pokeID": "01",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "01",
+            "pokeID": "01",
+          },
+        ],
+      ]
+    `);
+
+    replicator.processTransaction(
+      '02',
+      app2Messages.update('clients', {
+        clientGroupID: serviceID,
+        clientID: SYNC_CONTEXT.clientID,
+        userID: null,
+        lastMutationID: 43,
+      }),
+    );
+    stateChanges.push({state: 'version-ready'});
+
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01",
+            "cookie": "02",
+            "pokeID": "02",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "lastMutationIDChanges": {
+              "foo": 43,
+            },
+            "pokeID": "02",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "02",
+            "pokeID": "02",
+          },
+        ],
+      ]
+    `);
   });
 
   test('catchup client', async () => {

@@ -21,10 +21,9 @@
     "@rocicorp/rails": "^0.10.0",
     "fast-check": "^3.18.0",
     "nanoid": "^5.1.2",
-    "playwright": "^1.43.1",
     "replicache": "15.2.1",
     "shared": "0.0.0",
-    "typescript": "^5.7.3",
+    "typescript": "~5.7.3",
     "zero-protocol": "0.0.0",
     "zod": "^3.21.4"
   },

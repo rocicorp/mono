@@ -485,6 +485,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async #updateCVRConfig(
     lc: LogContext,
     cvr: CVRSnapshot,
+    clientID: string,
     fn: (updater: CVRConfigDrivenUpdater) => PatchToVersion[],
   ): Promise<CVRSnapshot> {
     const updater = new CVRConfigDrivenUpdater(
@@ -492,7 +493,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       cvr,
       this.#shard,
     );
-
+    updater.ensureClient(clientID);
     const patches = fn(updater);
 
     this.#cvr = (await updater.flush(lc, true, this.#lastConnectTime)).cvr;
@@ -603,7 +604,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const deletedClientIDs: string[] = [];
       const deletedClientGroupIDs: string[] = [];
 
-      cvr = await this.#updateCVRConfig(lc, cvr, updater => {
+      cvr = await this.#updateCVRConfig(lc, cvr, clientID, updater => {
         const patches: PatchToVersion[] = [];
 
         if (clientSchema) {

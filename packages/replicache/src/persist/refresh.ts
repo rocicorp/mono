@@ -235,13 +235,9 @@ export async function refresh(
 
         let newMemdagHeadHash = perdagClientGroupHeadHash;
         if (newMemdagMutations.length > 0) {
-          const zeroData = await zero?.getTxData?.(
-            'rebase',
-            newMemdagHeadHash,
-            {
-              openLazyRead: memdagWrite,
-            },
-          );
+          const zeroData = await zero?.getTxData?.(newMemdagHeadHash, {
+            openLazyRead: memdagWrite,
+          });
           for (let i = newMemdagMutations.length - 1; i >= 0; i--) {
             newMemdagHeadHash = (
               await rebaseMutationAndPutCommit(

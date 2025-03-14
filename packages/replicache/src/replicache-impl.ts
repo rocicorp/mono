@@ -774,7 +774,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       }
 
       // Replay.
-      const zeroData = await this.#zero?.getTxData?.('rebase', syncHead);
+      const zeroData = await this.#zero?.getTxData?.(syncHead);
       for (const mutation of replayMutations) {
         // TODO(greg): I'm not sure why this was in Replicache#_mutate...
         // Ensure that we run initial pending subscribe functions before starting a
@@ -1497,7 +1497,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           clientID,
           await dbWrite.getMutationID(),
           'initial',
-          await this.#zero?.getTxData('initial', headHash, {
+          await this.#zero?.getTxData(headHash, {
             openLazyRead: dagWrite,
           }),
           dbWrite,
