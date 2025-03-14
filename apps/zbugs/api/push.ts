@@ -6,7 +6,8 @@ import {
   type Row,
 } from '@rocicorp/zero/pg';
 import postgres, {type JSONValue} from 'postgres';
-import {schema} from '../schema.ts';
+import {schema} from '../shared/schema.ts';
+import {createMutators} from '../shared/mutators.ts';
 
 class Connection implements DBConnection<postgres.TransactionSql> {
   readonly #pg: postgres.Sql;
@@ -40,6 +41,6 @@ const mutatorSql = postgres(process.env.ZERO_UPSTREAM_DB as string);
 
 export const pushHandler: PushHandler = createPushHandler({
   dbConnectionProvider: () => new Connection(mutatorSql),
-  mutators: {},
+  mutators: createMutators(process.env.VITE_PUBLIC_JWK as string),
   schema,
 });

@@ -73,7 +73,7 @@ export type MakeCustomMutatorInterface<
   S extends Schema,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   F,
-> = F extends (tx: Transaction<S>, ...args: infer Args) => Promise<void>
+> = F extends (tx: ClientTransaction<S>, ...args: infer Args) => Promise<void>
   ? (...args: Args) => Promise<void>
   : never;
 
