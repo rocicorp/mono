@@ -77,7 +77,7 @@ export function preload(z: Zero<Schema>) {
         comments
           .related('creator')
           .related('emoji', emoji => emoji.related('creator'))
-          .limit(INITIAL_COMMENT_LIMIT)
+          .limit(10)
           .orderBy('created', 'desc'),
       )
       .preload(CACHE_FOREVER);
