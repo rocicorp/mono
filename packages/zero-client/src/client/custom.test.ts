@@ -4,9 +4,10 @@ import {
   TransactionImpl,
   type CustomMutatorDefs,
   type MakeCustomMutatorInterfaces,
+  type Transaction,
 } from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
-import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
+import type {InsertValue} from '../../../zql/src/mutate/custom.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {createDb} from './test/create-db.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
@@ -66,13 +67,57 @@ test('argument types are preserved on the generated mutator interface', () => {
   }>();
 });
 
-test('cannot support non-namespace custom mutators', () => {
-  ({
-    // @ts-expect-error - all mutators must be in a namespace
-    setTitle: (_tx, _a: {id: string; title: string}) => {
-      throw new Error('not implemented');
+test('supports mutators without a namespace', async () => {
+  const z = zeroForTest({
+    logLevel: 'debug',
+    schema,
+    mutators: {
+      createIssue: async (
+        tx: Transaction<Schema>,
+        args: InsertValue<typeof schema.tables.issue>,
+      ) => {
+        await tx.mutate.issue.insert(args);
+      },
     },
-  }) satisfies CustomMutatorDefs<Schema>;
+  });
+
+  await z.mutate.createIssue({
+    id: '1',
+    title: 'no-namespace',
+    closed: false,
+    ownerId: '',
+    description: '',
+  });
+
+  const issues = await z.query.issue.run();
+  expect(issues[0].title).toEqual('no-namespace');
+});
+
+test('detects collisions in mutator names', () => {
+  expect(() =>
+    zeroForTest({
+      logLevel: 'debug',
+      schema,
+      mutators: {
+        'issue': {
+          create: async (
+            tx: Transaction<Schema>,
+            args: InsertValue<typeof schema.tables.issue>,
+          ) => {
+            await tx.mutate.issue.insert(args);
+          },
+        },
+        'issue|create': async (
+          tx: Transaction<Schema>,
+          args: InsertValue<typeof schema.tables.issue>,
+        ) => {
+          await tx.mutate.issue.insert(args);
+        },
+      },
+    }),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: A mutator, or mutator namespace, has already been defined for issue|create]`,
+  );
 });
 
 test('custom mutators write to the local store', async () => {
@@ -99,7 +144,7 @@ test('custom mutators write to the local store', async () => {
           await tx.mutate.issue.update({id, title: '🤡'});
         },
       },
-    } as const satisfies CustomMutatorDefs<Schema>,
+    } satisfies CustomMutatorDefs<Schema>,
   });
 
   await z.mutate.issue.create({
