@@ -35,9 +35,7 @@ jobs:
           restore-keys: |
             npm-
 
-      - name: Install dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: npm ci
+      - run: npm ci
 
       - run: npm run build
 
@@ -107,9 +105,8 @@ jobs:
           key: npm-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             npm-
-      - name: Install dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: npm ci
+
+      - run: npm ci
 
       - name: Cache Playwright
         id: cache-playwright
