@@ -19,7 +19,7 @@
     "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.2.0",
     "shared": "0.0.0",
-    "typescript": "^5.7.3"
+    "typescript": "~5.7.3"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"

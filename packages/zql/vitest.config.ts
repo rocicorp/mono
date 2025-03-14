@@ -6,6 +6,9 @@ export default mergeConfig(
   defineConfig({
     test: {
       testTimeout: 20_000,
+      browser: {
+        enabled: false,
+      },
     },
   }),
 );

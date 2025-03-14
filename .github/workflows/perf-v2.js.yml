@@ -30,20 +30,8 @@ jobs:
           key: npm-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             npm-
-      - name: Install dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: npm ci
-
-      - name: Cache Playwright
-        id: cache-playwright
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
-      - name: Install Playwright Deps
-        if: steps.cache-playwright.outputs.cache-hit != 'true'
+      - run: npm ci
+      - name: Install Playwright
         run: npx playwright install --with-deps
 
       - run: npm run build
