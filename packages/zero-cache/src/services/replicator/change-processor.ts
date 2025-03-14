@@ -393,36 +393,55 @@ class TransactionProcessor {
     );
   }
 
-  // Note: Updates are applied as "upserts", so that the `new` row
-  // is guaranteed to exist even if its previous incarnation did not.
-  // This is necessary to facilitate "resumptive" replication, whereby
-  // rows of tables that were not initially-synced are introduced into
-  // into the replica via updates. Resumptive replication can happen
-  // when (1) an existing table is added to the apps publication or
+  // Updates by default are applied as UPDATE commands to support partial
+  // row specifications from the change source. In particular, this is needed
+  // to handle updates for which large TOAST'd values are not sent:
+  //
+  // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-TUPLEDATA
+  //
+  // However, in certain cases an UPDATE may be received for a row that
+  // was not initially synced, such as when:
+  // (1) an existing table is added to the app's publication, or
   // (2) a new sharding key is added to a shard during resharding.
+  //
+  // In order to facilitate "resumptive" replication, the logic falls back to
+  // an INSERT if the update did not change any rows.
+  // TODO: Figure out a solution for resumptive replication of rows
+  //       with TOAST'd values.
   processUpdate(update: MessageUpdate) {
     const table = liteTableName(update.relation);
     const newRow = liteRow(update.new, this.#tableSpec(table));
+    const row = {...newRow.row, [ZERO_VERSION_COLUMN_NAME]: this.#version};
+
     // update.key is set with the old values if the key has changed.
     const oldKey = update.key
       ? this.#getKey(liteRow(update.key, this.#tableSpec(table)), update)
       : null;
     const newKey = this.#getKey(newRow, update);
 
-    const oldKeyString = oldKey ? this.#logDeleteOp(table, oldKey) : null;
-    const newKeyString = this.#logSetOp(table, newKey);
-
-    if (oldKey && oldKeyString !== newKeyString) {
-      // Because the change is applied with an INSERT instead of an UPDATE,
-      // the previous row, if its key was different, is explicitly deleted.
-      // In general, it is expected changing the key of a row is an
-      // uncommon operation.
-      this.#delete(table, oldKey);
+    if (oldKey) {
+      this.#logDeleteOp(table, oldKey);
     }
-    this.#upsert(table, {
-      ...newRow.row,
-      [ZERO_VERSION_COLUMN_NAME]: this.#version,
-    });
+    this.#logSetOp(table, newKey);
+
+    const currKey = oldKey ?? newKey;
+    const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
+    const setExprs = Object.keys(row).map(col => `${id(col)}=?`);
+
+    const {changes} = this.#db.run(
+      `
+      UPDATE ${id(table)}
+        SET ${setExprs.join(',')}
+        WHERE ${conds.join(' AND ')}
+      `,
+      [...Object.values(row), ...Object.values(currKey)],
+    );
+
+    // If the UPDATE did not affect any rows, perform an UPSERT of the
+    // new row for resumptive replication.
+    if (changes === 0) {
+      this.#upsert(table, row);
+    }
   }
 
   processDelete(del: MessageDelete) {
