@@ -187,7 +187,7 @@ export interface Query<
 
   one(): Query<TSchema, TTable, TReturn | undefined>;
 
-  materialize(ttl?: number): TypedView<HumanReadable<TReturn>>;
+  materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
 
   run(): Promise<HumanReadable<TReturn>>;
 
