@@ -13,7 +13,7 @@ import {
 } from '../../replicator/schema/replication-state.ts';
 import {initialSync, type InitialSyncOptions} from './initial-sync.ts';
 
-const schemaVersionMigrationMap: IncrementalMigrationMap = {
+export const schemaVersionMigrationMap: IncrementalMigrationMap = {
   // There's no incremental migration from v1. Just reset the replica.
   4: {
     migrateSchema: () => {
