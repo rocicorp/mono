@@ -15,7 +15,6 @@ import type {
   ZeroOption,
   ZeroReadOptions,
 } from '../../../replicache/src/replicache-options.ts';
-import type {TransactionReason} from '../../../replicache/src/transactions.ts';
 
 export class ZeroRep implements ZeroOption {
   readonly #context: ZeroContext;
@@ -54,7 +53,6 @@ export class ZeroRep implements ZeroOption {
   }
 
   getTxData = (
-    reason: TransactionReason,
     desiredHead: Hash,
     readOptions?: ZeroReadOptions | undefined,
   ): Promise<IVMSourceBranch> | undefined => {
@@ -66,7 +64,6 @@ export class ZeroRep implements ZeroOption {
     }
 
     return this.#ivmMain.forkToHead(
-      reason,
       must(this.#store),
       desiredHead,
       readOptions,

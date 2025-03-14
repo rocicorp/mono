@@ -11,35 +11,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  setup:
-    name: Setup Dependencies
-    runs-on: ubuntu-latest
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: rocicorp
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20.x
-          cache: 'npm'
-
-      - name: Cache node_modules
-        id: cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            node_modules
-            node_modules/.vite-temp
-          key: npm-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-
-      - run: npm ci
-
   format:
     name: Prettier
     runs-on: ubuntu-latest
-    needs: setup
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -49,24 +23,12 @@ jobs:
         with:
           node-version: 20.x
           cache: 'npm'
-
-      - name: Restore cached node_modules
-        id: cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            node_modules
-            node_modules/.vite-temp
-          key: npm-${{ hashFiles('package-lock.json') }}
-      - name: Install dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: npm ci
+      - run: npm ci
       - run: npm run check-format
 
   lint:
     name: Lint
     runs-on: ubuntu-latest
-    needs: setup
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -76,24 +38,12 @@ jobs:
         with:
           node-version: 20.x
           cache: 'npm'
-
-      - name: Restore cached node_modules
-        id: cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            node_modules
-            node_modules/.vite-temp
-          key: npm-${{ hashFiles('package-lock.json') }}
-      - name: Install dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: npm ci
+      - run: npm ci
       - run: npm run lint
 
   check-types:
     name: Check Types
     runs-on: ubuntu-latest
-    needs: setup
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -104,23 +54,12 @@ jobs:
           node-version: 20.x
           cache: 'npm'
 
-      - name: Restore cached node_modules
-        uses: actions/cache@v3
-        id: cache
-        with:
-          path: |
-            node_modules
-            node_modules/.vite-temp
-          key: npm-${{ hashFiles('package-lock.json') }}
-      - name: Install dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: npm ci
+      - run: npm ci
       - run: npm run check-types
 
   test:
     name: Test
     runs-on: ubuntu-22.04
-    needs: setup
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -131,27 +70,7 @@ jobs:
           node-version: 20.x
           cache: 'npm'
 
-      - name: Restore cached node_modules
-        id: cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            node_modules
-            node_modules/.vite-temp
-          key: npm-${{ hashFiles('package-lock.json') }}
-      - name: Install dependencies
-        if: steps.cache.outputs.cache-hit != 'true'
-        run: npm ci
-
-      - name: Cache Playwright
-        id: cache-playwright
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
+      - run: npm ci
       - name: Install Playwright
         run: npx playwright install --with-deps
-
       - run: npm run test

@@ -39,15 +39,11 @@ export interface Transaction<S extends Schema> extends TransactionBase<S> {
  * The shape which a user's custom mutator definitions must conform to.
  */
 export type CustomMutatorDefs<S extends Schema> = {
-  readonly [Table in keyof S['tables']]?: {
-    readonly [key: string]: CustomMutatorImpl<S>;
-  };
-} & {
-  // The user is not required to associate mutators with tables.
-  // Maybe that have some other arbitrary way to namespace.
-  [namespace: string]: {
-    [key: string]: CustomMutatorImpl<S>;
-  };
+  [namespaceOrKey: string]:
+    | {
+        [key: string]: CustomMutatorImpl<S>;
+      }
+    | CustomMutatorImpl<S>;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -69,12 +65,17 @@ export type MakeCustomMutatorInterfaces<
   S extends Schema,
   MD extends CustomMutatorDefs<S>,
 > = {
-  readonly [Table in keyof MD]: {
-    readonly [P in keyof MD[Table]]: MakeCustomMutatorInterface<
-      S,
-      MD[Table][P]
-    >;
-  };
+  readonly [NamespaceOrName in keyof MD]: MD[NamespaceOrName] extends (
+    tx: Transaction<S>,
+    ...args: infer Args
+  ) => Promise<void>
+    ? (...args: Args) => Promise<void>
+    : {
+        readonly [P in keyof MD[NamespaceOrName]]: MakeCustomMutatorInterface<
+          S,
+          MD[NamespaceOrName][P]
+        >;
+      };
 };
 
 export type MakeCustomMutatorInterface<
@@ -85,11 +86,11 @@ export type MakeCustomMutatorInterface<
   ? (...args: Args) => Promise<void>
   : never;
 
-export class TransactionImpl implements Transaction<Schema> {
+export class TransactionImpl<S extends Schema> implements Transaction<S> {
   constructor(
     lc: LogContext,
     repTx: WriteTransaction,
-    schema: Schema,
+    schema: S,
     slowMaterializeThreshold: number,
   ) {
     const castedRepTx = repTx as WriteTransactionImpl;
@@ -100,17 +101,10 @@ export class TransactionImpl implements Transaction<Schema> {
     this.mutate = makeSchemaCRUD(
       schema,
       repTx,
-      // CRUD operators should not mutate the IVM store directly
-      // for `initial`. The IVM store will be updated via calls to `advance`
-      // after the transaction has been committed to the Replicache b-tree.
-      // Mutating the IVM store in the mutator would cause us to synchronously
-      // notify listeners of IVM while we're inside of the Replicache DB transaction.
-      repTx.reason === 'initial'
-        ? undefined
-        : (must(
-            castedRepTx[zeroData],
-            'zero was not set on replicache internal options!',
-          ) as IVMSourceBranch),
+      must(
+        castedRepTx[zeroData],
+        'zero was not set on replicache internal options!',
+      ) as IVMSourceBranch,
     );
     this.query = makeSchemaQuery(
       lc,
@@ -127,14 +121,14 @@ export class TransactionImpl implements Transaction<Schema> {
   readonly mutationID: number;
   readonly reason: 'optimistic' | 'rebase';
   readonly location = 'client';
-  readonly mutate: SchemaCRUD<Schema>;
-  readonly query: SchemaQuery<Schema>;
+  readonly mutate: SchemaCRUD<S>;
+  readonly query: SchemaQuery<S>;
 }
 
-export function makeReplicacheMutator(
+export function makeReplicacheMutator<S extends Schema>(
   lc: LogContext,
-  mutator: CustomMutatorImpl<Schema>,
-  schema: Schema,
+  mutator: CustomMutatorImpl<S>,
+  schema: S,
   slowMaterializeThreshold: number,
 ) {
   return (repTx: WriteTransaction, args: ReadonlyJSONValue): Promise<void> => {
@@ -143,10 +137,10 @@ export function makeReplicacheMutator(
   };
 }
 
-function makeSchemaCRUD(
-  schema: Schema,
+function makeSchemaCRUD<S extends Schema>(
+  schema: S,
   tx: WriteTransaction,
-  ivmBranch: IVMSourceBranch | undefined,
+  ivmBranch: IVMSourceBranch,
 ) {
   // Only creates the CRUD mutators on demand
   // rather than creating them all up-front for each mutation.
@@ -162,12 +156,12 @@ function makeSchemaCRUD(
         return target[prop];
       },
     },
-  ) as SchemaCRUD<Schema>;
+  ) as SchemaCRUD<S>;
 }
 
-function makeSchemaQuery(
+function makeSchemaQuery<S extends Schema>(
   lc: LogContext,
-  schema: Schema,
+  schema: S,
   ivmBranch: IVMSourceBranch,
   slowMaterializeThreshold: number,
 ) {
@@ -183,7 +177,7 @@ function makeSchemaQuery(
   return new Proxy(
     {},
     {
-      get(target: Record<string, Query<Schema, string>>, prop: string) {
+      get(target: Record<string, Query<S, string>>, prop: string) {
         if (prop in target) {
           return target[prop];
         }
@@ -192,14 +186,14 @@ function makeSchemaQuery(
         return target[prop];
       },
     },
-  ) as SchemaQuery<Schema>;
+  ) as SchemaQuery<S>;
 }
 
 function makeTableCRUD(
   schema: Schema,
   tableName: string,
   tx: WriteTransaction,
-  ivmBranch: IVMSourceBranch | undefined,
+  ivmBranch: IVMSourceBranch,
 ) {
   const table = must(schema.tables[tableName]);
   const {primaryKey} = table;

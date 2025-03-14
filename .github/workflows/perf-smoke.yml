@@ -19,29 +19,9 @@ jobs:
         with:
           node-version: 20.x
           cache: 'npm'
-
-      - name: Cache node_modules
-        id: cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            node_modules
-            node_modules/.vite-temp
-          key: npm-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-
       - run: npm ci
-      - name: Cache Playwright
-        id: cache-playwright
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
       - name: Install Playwright
         run: npx playwright install --with-deps
-
       - name: Run benchmark
         shell: bash
         working-directory: packages/replicache-perf

@@ -7,7 +7,6 @@ import type {MutatorDefs, RequestOptions} from './types.ts';
 import type {Hash} from './hash.ts';
 import type {InternalDiff} from './btree/node.ts';
 import type {Read, Store} from './dag/store.ts';
-import type {TransactionReason} from './transactions.ts';
 
 /**
  * The options passed to {@link Replicache}.
@@ -278,7 +277,6 @@ export interface ZeroOption {
    * object for use in Zero's mutators.
    */
   getTxData(
-    reason: TransactionReason,
     desiredHead: Hash,
     readOptions?: ZeroReadOptions | undefined,
   ): Promise<ZeroTxData> | undefined;
