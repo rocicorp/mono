@@ -60,9 +60,7 @@ import {CACHE_AWHILE} from '../../query-cache-policy.ts';
 
 const emojiToastShowDuration = 3_000;
 
-// One more than we display so we can detect if there are more
-// to load.
-export const INITIAL_COMMENT_LIMIT = 101;
+export const INITIAL_COMMENT_LIMIT = 100;
 
 export function IssuePage({onReady}: {onReady: () => void}) {
   const z = useZero();
@@ -87,7 +85,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
       comments
         .related('creator')
         .related('emoji', emoji => emoji.related('creator'))
-        .limit(INITIAL_COMMENT_LIMIT)
+        // One more than we display so we can detect if there are more to load.
+        .limit(INITIAL_COMMENT_LIMIT + 1)
         .orderBy('created', 'desc')
         .orderBy('id', 'desc'),
     )
@@ -249,8 +248,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
       return [allComments, false];
     }
     return [
-      displayed.comments.slice(0, 100).reverse(),
-      displayed.comments.length > 100,
+      displayed.comments.slice(0, INITIAL_COMMENT_LIMIT).reverse(),
+      displayed.comments.length > INITIAL_COMMENT_LIMIT,
     ];
   }, [displayed?.comments, allCommentsResult.type, allComments]);
 
