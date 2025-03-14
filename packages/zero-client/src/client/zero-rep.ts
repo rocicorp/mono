@@ -17,11 +17,17 @@ import type {
 } from '../../../replicache/src/replicache-options.ts';
 import type {TransactionReason} from '../../../replicache/src/transactions.ts';
 
+type TxData = {
+  ivmSources: IVMSourceBranch;
+  token: string | undefined;
+};
+
 export class ZeroRep implements ZeroOption {
   readonly #context: ZeroContext;
   readonly #ivmMain: IVMSourceBranch;
   readonly #customMutatorsEnabled: boolean;
   #store: LazyStore | undefined;
+  #auth: string | undefined;
 
   constructor(
     context: ZeroContext,
@@ -31,6 +37,14 @@ export class ZeroRep implements ZeroOption {
     this.#context = context;
     this.#ivmMain = ivmMain;
     this.#customMutatorsEnabled = customMutatorsEnabled;
+  }
+
+  set auth(auth: string) {
+    if (auth === '') {
+      this.#auth = undefined;
+    } else {
+      this.#auth = auth;
+    }
   }
 
   async init(hash: Hash, store: LazyStore) {
@@ -57,7 +71,7 @@ export class ZeroRep implements ZeroOption {
     reason: TransactionReason,
     desiredHead: Hash,
     readOptions?: ZeroReadOptions | undefined,
-  ): Promise<IVMSourceBranch> | undefined => {
+  ): Promise<TxData> | undefined => {
     // getTxData requires some extensive testing for complete confidence
     // that it will not break. Do not enable `getTxData` unless the user
     // has opted into custom mutators.
@@ -65,12 +79,12 @@ export class ZeroRep implements ZeroOption {
       return;
     }
 
-    return this.#ivmMain.forkToHead(
-      reason,
-      must(this.#store),
-      desiredHead,
-      readOptions,
-    );
+    return this.#ivmMain
+      .forkToHead(reason, must(this.#store), desiredHead, readOptions)
+      .then(branch => ({
+        ivmSources: branch,
+        token: this.#auth,
+      }));
   };
 
   advance = (expectedHash: Hash, newHash: Hash, diffs: InternalDiff): void => {
