@@ -3,8 +3,7 @@
     {
       "range": "~",
       "dependencies": [
-        "typescript",
-        "playwright"
+        "typescript"
       ],
       "packages": [
         "**"
