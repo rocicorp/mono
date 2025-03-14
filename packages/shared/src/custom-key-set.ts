@@ -8,7 +8,7 @@ type Primitive = undefined | null | boolean | string | number | symbol | bigint;
  * reference equality.
  */
 
-export class CustomKeySet<V> implements Set<V> {
+export class CustomKeySet<V> {
   readonly [Symbol.toStringTag] = 'CustomKeySet';
   readonly #toKey: (value: V) => Primitive;
   readonly #map = new Map<Primitive, V>();
@@ -53,17 +53,17 @@ export class CustomKeySet<V> implements Set<V> {
     return this.#map.size;
   }
 
-  *entries(): SetIterator<[V, V]> {
+  *entries(): IterableIterator<[V, V]> {
     for (const value of this.#map.values()) {
       yield [value, value];
     }
   }
 
-  keys(): SetIterator<V> {
+  keys(): IterableIterator<V> {
     return this.#map.values();
   }
 
-  values(): SetIterator<V> {
+  values(): IterableIterator<V> {
     return this.#map.values();
   }
 

@@ -7,7 +7,7 @@ type Primitive = undefined | null | boolean | string | number | symbol | bigint;
  * This allows for using objects as keys in a {@link Map} without worrying about
  * reference equality.
  */
-export class CustomKeyMap<K, V> implements Map<K, V> {
+export class CustomKeyMap<K, V> {
   readonly [Symbol.toStringTag] = 'CustomKeyMap';
   readonly #toKey: (key: K) => Primitive;
   readonly #map = new Map<Primitive, readonly [K, V]>();
@@ -59,19 +59,19 @@ export class CustomKeyMap<K, V> implements Map<K, V> {
     return this.#map.size;
   }
 
-  *entries(): MapIterator<[K, V]> {
+  *entries(): IterableIterator<[K, V]> {
     for (const entry of this.#map.values()) {
       yield entry.slice(0, 2) as [K, V];
     }
   }
 
-  *keys(): MapIterator<K> {
+  *keys(): IterableIterator<K> {
     for (const entry of this.#map.values()) {
       yield entry[0];
     }
   }
 
-  *values(): MapIterator<V> {
+  *values(): IterableIterator<V> {
     for (const entry of this.#map.values()) {
       yield entry[1];
     }
