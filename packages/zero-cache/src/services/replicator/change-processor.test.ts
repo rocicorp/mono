@@ -203,6 +203,64 @@ describe('replicator/incremental-sync', () => {
       },
     },
     {
+      name: 'partial update rows',
+      setup: `
+      CREATE TABLE issues(
+        issueID INTEGER,
+        bool BOOL,
+        big INTEGER,
+        flt REAL,
+        description TEXT,
+        json JSON,
+        _0_version TEXT,
+        PRIMARY KEY(issueID, bool)
+      );
+      INSERT INTO issues (issueID, bool, big, flt, description, json, _0_version)
+        VALUES (123, true, 9223372036854775807, 123.456, 'hello', 'world', '06');
+      `,
+      downstream: [
+        ['begin', issues.begin(), {commitWatermark: '0a'}],
+        [
+          'data',
+          issues.update('issues', {
+            issueID: 123,
+            bool: true,
+            description: 'bello',
+          }),
+        ],
+        [
+          'data',
+          issues.update('issues', {
+            issueID: 123,
+            bool: true,
+            json: {wor: 'ld'},
+          }),
+        ],
+        ['commit', issues.commit(), {watermark: '0a'}],
+      ],
+      data: {
+        issues: [
+          {
+            issueID: 123n,
+            big: 9223372036854775807n,
+            flt: 123.456,
+            bool: 1n,
+            description: 'bello',
+            json: '{"wor":"ld"}',
+            ['_0_version']: '0a',
+          },
+        ],
+        ['_zero.changeLog']: [
+          {
+            stateVersion: '0a',
+            table: 'issues',
+            op: 's',
+            rowKey: '{"bool":1,"issueID":123}',
+          },
+        ],
+      },
+    },
+    {
       name: 'update rows with multiple key columns and key value updates',
       setup: `
       CREATE TABLE issues(

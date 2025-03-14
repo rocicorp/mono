@@ -3,6 +3,7 @@ import * as v from '../../../shared/src/valita.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {ReplicaOptions} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
+import {upgradeReplica} from '../services/change-source/replica-schema.ts';
 import {Notifier} from '../services/replicator/notifier.ts';
 import type {
   ReplicaState,
@@ -30,13 +31,18 @@ export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
 const MILLIS_PER_HOUR = 1000 * 60 * 60;
 const MB = 1024 * 1024;
 
-function connect(
+async function connect(
   lc: LogContext,
   {file, vacuumIntervalHours}: ReplicaOptions,
   walMode: 'wal' | 'wal2',
-): Database {
+  mode: ReplicaFileMode,
+): Promise<Database> {
   const replica = new Database(lc, file);
   const start = Date.now();
+
+  // Perform any upgrades to the replica in case the backup is an
+  // earlier version.
+  await upgradeReplica(lc, `${mode}-replica`, file);
 
   // Start by folding any (e.g. restored) WAL(2) files into the main db.
   replica.pragma('journal_mode = delete');
@@ -94,16 +100,16 @@ function connect(
   return replica;
 }
 
-export function setupReplica(
+export async function setupReplica(
   lc: LogContext,
   mode: ReplicaFileMode,
   replicaOptions: ReplicaOptions,
-): Database {
+): Promise<Database> {
   lc.info?.(`setting up ${mode} replica`);
 
   switch (mode) {
     case 'backup': {
-      const replica = connect(lc, replicaOptions, 'wal');
+      const replica = await connect(lc, replicaOptions, 'wal', mode);
       // https://litestream.io/tips/#disable-autocheckpoints-for-high-write-load-servers
       replica.pragma('wal_autocheckpoint = 0');
       return replica;
@@ -123,11 +129,11 @@ export function setupReplica(
       replica.close();
       lc.info?.(`finished copy (${Date.now() - start} ms)`);
 
-      return connect(lc, {...replicaOptions, file: copyLocation}, 'wal2');
+      return connect(lc, {...replicaOptions, file: copyLocation}, 'wal2', mode);
     }
 
     case 'serving':
-      return connect(lc, replicaOptions, 'wal2');
+      return connect(lc, replicaOptions, 'wal2', mode);
 
     default:
       throw new Error(`Invalid ReplicaMode ${mode}`);

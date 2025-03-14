@@ -1,7 +1,8 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {deepFreeze} from '../frozen-json.ts';
 import {assertHash, fakeHash, makeNewFakeHashFunction} from '../hash.ts';
 import {
+  using,
   withRead,
   withWrite,
   withWriteNoImplicitCommit,
@@ -154,6 +155,30 @@ test('chunksPersisted', async () => {
     expect(read.isMemOnlyChunkHash(testValue1MemOnlyChunk.hash)).to.be.false;
     expect(read.isMemOnlyChunkHash(testValue2MemOnlyChunk.hash)).to.be.true;
     expect(read.isMemOnlyChunkHash(testValue3MemOnlyChunk.hash)).to.be.false;
+  });
+});
+
+test('source read is not closed when provided', async () => {
+  const {sourceStore, lazyStore} = createLazyStoreForTest();
+  const testValue1 = 'testValue1';
+  const testValue1Hash = await withWrite(sourceStore, async write => {
+    const testValue1Chunk = write.createChunk(testValue1, []);
+    await write.putChunk(testValue1Chunk);
+    await write.setHead('testHeadSource', testValue1Chunk.hash);
+    return testValue1Chunk.hash;
+  });
+
+  await withWrite(lazyStore, async write => {
+    await write.setHead('testHeadLazy', testValue1Hash);
+  });
+
+  let releaseSpy: ReturnType<typeof vi.spyOn> | undefined;
+  await withRead(sourceStore, async sourceRead => {
+    releaseSpy = vi.spyOn(sourceRead, 'release');
+    await using(lazyStore.read(sourceRead), async read => {
+      expect((await read.getChunk(testValue1Hash))?.data).to.equal(testValue1);
+    });
+    expect(releaseSpy).not.toBeCalled();
   });
 });
 
