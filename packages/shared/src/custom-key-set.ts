@@ -53,17 +53,17 @@ export class CustomKeySet<V> implements Set<V> {
     return this.#map.size;
   }
 
-  *entries(): IterableIterator<[V, V]> {
+  *entries(): SetIterator<[V, V]> {
     for (const value of this.#map.values()) {
       yield [value, value];
     }
   }
 
-  keys(): IterableIterator<V> {
+  keys(): SetIterator<V> {
     return this.#map.values();
   }
 
-  values(): IterableIterator<V> {
+  values(): SetIterator<V> {
     return this.#map.values();
   }
 

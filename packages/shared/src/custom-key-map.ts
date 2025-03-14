@@ -59,19 +59,19 @@ export class CustomKeyMap<K, V> implements Map<K, V> {
     return this.#map.size;
   }
 
-  *entries(): IterableIterator<[K, V]> {
+  *entries(): MapIterator<[K, V]> {
     for (const entry of this.#map.values()) {
       yield entry.slice(0, 2) as [K, V];
     }
   }
 
-  *keys(): IterableIterator<K> {
+  *keys(): MapIterator<K> {
     for (const entry of this.#map.values()) {
       yield entry[0];
     }
   }
 
-  *values(): IterableIterator<V> {
+  *values(): MapIterator<V> {
     for (const entry of this.#map.values()) {
       yield entry[1];
     }
