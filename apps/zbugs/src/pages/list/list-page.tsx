@@ -28,7 +28,7 @@ import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import type {ListContext} from '../../routes.ts';
 import {preload} from '../../zero-setup.ts';
-import {CACHE_NONE} from '../../query-cache-policy.ts';
+import {CACHE_AWHILE, CACHE_NONE} from '../../query-cache-policy.ts';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -94,21 +94,12 @@ export function ListPage({onReady}: {onReady: () => void}) {
     q = q.whereExists('labels', q => q.where('name', label));
   }
 
-  // TODO: We can get away with CACHE_NONE here because we know that all issues
-  // are preloaded. Once we update zbugs to preload only a prefix of issues,
-  // we'll want to change this to:
-  //
-  // textFilter == textFilterQuery ? CACHE_AWHILE : CACHE_NONE
-  //
-  // This is because we'll want to cache these searches for awhile so the user
-  // can navigate back to them speedily. But we won't want to cache them if the
-  // user is typing in the search box because it will create zillions of cached
-  // queries.
-  //
-  // Right now setting the TTL dynamically this way doesn't work because you
-  // can't update a query's TTL after it's been created. This is being worked
-  // on here: https://github.com/rocicorp/mono/pull/3972
-  const [issues, issuesResult] = useQuery(q, CACHE_NONE);
+  // We don't want to cache every single keystroke. We already debounce
+  // keystrokes for the URL, so we just reuse that.
+  const [issues, issuesResult] = useQuery(
+    q,
+    textFilterQuery === textFilter ? CACHE_AWHILE : CACHE_NONE,
+  );
 
   useEffect(() => {
     if (issues.length > 0 || issuesResult.type === 'complete') {
