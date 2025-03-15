@@ -26,7 +26,7 @@ import {SUBQ_PREFIX} from './query-impl.ts';
  * ```
  */
 export function astToZQL(ast: AST): string {
-  let code = '';
+  let code = 'x';
 
   // Handle where conditions
   if (ast.where) {
