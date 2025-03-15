@@ -11,7 +11,6 @@ import {rowSchema} from '../../../../zero-protocol/src/data.ts';
 import type {DeleteClientsBody} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {
-  PokeEndBody,
   PokePartBody,
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
@@ -87,7 +86,6 @@ export class ClientHandler {
   readonly #lc: LogContext;
   readonly #downstream: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
-  readonly #protocolVersion: number;
   readonly #schemaVersion: number | null;
 
   constructor(
@@ -97,7 +95,6 @@ export class ClientHandler {
     wsID: string,
     shard: ShardID,
     baseCookie: string | null,
-    protocolVersion: number,
     schemaVersion: number | null,
     downstream: Subscription<Downstream>,
   ) {
@@ -108,17 +105,11 @@ export class ClientHandler {
     this.#lc = lc;
     this.#downstream = downstream;
     this.#baseVersion = cookieToVersion(baseCookie);
-    this.#protocolVersion = protocolVersion;
     this.#schemaVersion = schemaVersion;
   }
 
   version(): NullableCVRVersion {
     return this.#baseVersion;
-  }
-
-  supportsRevisedCookieProtocol() {
-    // https://github.com/rocicorp/mono/pull/3735
-    return this.#protocolVersion >= 5;
   }
 
   fail(e: unknown) {
@@ -162,7 +153,7 @@ export class ClientHandler {
     const cookie = versionToCookie(tentativeVersion);
     lc.info?.(`starting poke from ${baseCookie} to ${cookie}`);
 
-    const pokeStart: PokeStartBody = {pokeID, baseCookie, cookie};
+    const pokeStart: PokeStartBody = {pokeID, baseCookie};
     if (schemaVersions) {
       pokeStart.schemaVersions = schemaVersions;
     }
@@ -246,7 +237,7 @@ export class ClientHandler {
           if (cmpVersions(this.#baseVersion, finalVersion) === 0) {
             return; // Nothing changed and nothing was sent.
           }
-          this.#downstream.push(['pokeStart', {...pokeStart, cookie}]);
+          this.#downstream.push(['pokeStart', pokeStart]);
         } else if (cmpVersions(this.#baseVersion, finalVersion) >= 0) {
           // Sanity check: If the poke was started, the finalVersion
           // must be > #baseVersion.
@@ -256,12 +247,7 @@ export class ClientHandler {
           );
         }
         flushBody();
-        this.#downstream.push([
-          'pokeEnd',
-          this.supportsRevisedCookieProtocol()
-            ? {pokeID, cookie}
-            : ({pokeID} as PokeEndBody),
-        ]);
+        this.#downstream.push(['pokeEnd', {pokeID, cookie}]);
         this.#baseVersion = finalVersion;
       },
     };
@@ -364,13 +350,4 @@ export function ensureSafeJSON(row: JSONObject): SafeJSONObject {
   return modified.length
     ? {...row, ...Object.fromEntries(modified)}
     : (row as SafeJSONObject);
-}
-
-export function revisedCookieProtocolSupportedByAll(clients: ClientHandler[]) {
-  for (const c of clients) {
-    if (!c.supportsRevisedCookieProtocol()) {
-      return false;
-    }
-  }
-  return true;
 }

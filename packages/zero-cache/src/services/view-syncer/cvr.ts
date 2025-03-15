@@ -124,7 +124,6 @@ export class CVRUpdater {
 
   async flush(
     lc: LogContext,
-    skipNoopFlushes: boolean,
     lastConnectTime: number,
     lastActive = Date.now(),
   ): Promise<{
@@ -136,7 +135,6 @@ export class CVRUpdater {
     const flushed = await this._cvrStore.flush(
       this._orig.version,
       this._cvr.version,
-      skipNoopFlushes,
       lastConnectTime,
       lastActive,
     );
@@ -428,14 +426,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     this._cvrStore.deleteClientGroup(clientGroupID);
   }
 
-  flush(
-    lc: LogContext,
-    skipNoopFlushes: boolean,
-    lastConnectTime: number,
-    lastActive = Date.now(),
-  ) {
+  flush(lc: LogContext, lastConnectTime: number, lastActive = Date.now()) {
     // TODO: Add cleanup of no-longer-desired got queries and constituent rows.
-    return super.flush(lc, skipNoopFlushes, lastConnectTime, lastActive);
+    return super.flush(lc, lastConnectTime, lastActive);
   }
 }
 

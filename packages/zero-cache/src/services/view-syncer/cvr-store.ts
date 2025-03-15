@@ -652,7 +652,6 @@ export class CVRStore {
   async #flush(
     expectedCurrentVersion: CVRVersion,
     newVersion: CVRVersion,
-    skipNoopFlushes: boolean,
     lastConnectTime: number,
     lastActive: number,
   ): Promise<CVRFlushStats | null> {
@@ -686,11 +685,7 @@ export class CVRStore {
         }
       }
     }
-    if (
-      skipNoopFlushes &&
-      this.#pendingRowRecordUpdates.size === 0 &&
-      this.#writes.size === 0
-    ) {
+    if (this.#pendingRowRecordUpdates.size === 0 && this.#writes.size === 0) {
       return null;
     }
     this.#setLastActive(lastActive);
@@ -757,7 +752,6 @@ export class CVRStore {
   async flush(
     expectedCurrentVersion: CVRVersion,
     newVersion: CVRVersion,
-    skipNoopFlushes: boolean,
     lastConnectTime: number,
     lastActive: number,
   ): Promise<CVRFlushStats | null> {
@@ -765,7 +759,6 @@ export class CVRStore {
       return await this.#flush(
         expectedCurrentVersion,
         newVersion,
-        skipNoopFlushes,
         lastConnectTime,
         lastActive,
       );

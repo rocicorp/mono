@@ -7,7 +7,6 @@ import type {
   PokePartMessage,
   PokeStartMessage,
 } from '../../../../zero-protocol/src/poke.ts';
-import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {JSONObject} from '../../types/bigint-json.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import {Subscription} from '../../types/subscription.ts';
@@ -41,7 +40,6 @@ describe('view-syncer/client-handler', () => {
       'ws1',
       SHARD,
       '121',
-      PROTOCOL_VERSION,
       schemaVersion,
       subscription,
     );
@@ -70,7 +68,6 @@ describe('view-syncer/client-handler', () => {
         'pokeStart',
         {
           baseCookie: '121',
-          cookie: '123',
           pokeID: '123',
           schemaVersions: {
             maxSupportedVersion: 1,
@@ -89,7 +86,6 @@ describe('view-syncer/client-handler', () => {
         'pokeStart',
         {
           baseCookie: '123',
-          cookie: '129',
           pokeID: '129',
           schemaVersions: {
             maxSupportedVersion: 1,
@@ -130,7 +126,6 @@ describe('view-syncer/client-handler', () => {
         'ws1',
         SHARD,
         '121',
-        PROTOCOL_VERSION,
         schemaVersion,
         subscriptions[0],
       ),
@@ -142,7 +137,6 @@ describe('view-syncer/client-handler', () => {
         'ws2',
         SHARD,
         '120:01',
-        PROTOCOL_VERSION,
         schemaVersion,
         subscriptions[1],
       ),
@@ -154,7 +148,6 @@ describe('view-syncer/client-handler', () => {
         'ws3',
         SHARD,
         '11z',
-        PROTOCOL_VERSION,
         schemaVersion,
         subscriptions[2],
       ),
@@ -285,7 +278,7 @@ describe('view-syncer/client-handler', () => {
     expect(received[0]).toEqual([
       [
         'pokeStart',
-        {pokeID: '123', baseCookie: '121', cookie: '123', schemaVersions},
+        {pokeID: '123', baseCookie: '121', schemaVersions},
       ] satisfies PokeStartMessage,
       ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
@@ -294,7 +287,7 @@ describe('view-syncer/client-handler', () => {
     expect(received[1]).toEqual([
       [
         'pokeStart',
-        {pokeID: '121', baseCookie: '120:01', cookie: '121', schemaVersions},
+        {pokeID: '121', baseCookie: '120:01', schemaVersions},
       ] satisfies PokeStartMessage,
       [
         'pokePart',
@@ -326,7 +319,7 @@ describe('view-syncer/client-handler', () => {
       // Second poke
       [
         'pokeStart',
-        {pokeID: '123', baseCookie: '121', cookie: '123', schemaVersions},
+        {pokeID: '123', baseCookie: '121', schemaVersions},
       ] satisfies PokeStartMessage,
       ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
@@ -335,7 +328,7 @@ describe('view-syncer/client-handler', () => {
     expect(received[2]).toEqual([
       [
         'pokeStart',
-        {pokeID: '121', baseCookie: '11z', cookie: '121', schemaVersions},
+        {pokeID: '121', baseCookie: '11z', schemaVersions},
       ] satisfies PokeStartMessage,
       [
         'pokePart',
@@ -374,7 +367,7 @@ describe('view-syncer/client-handler', () => {
       // Second poke
       [
         'pokeStart',
-        {pokeID: '123', baseCookie: '121', cookie: '123', schemaVersions},
+        {pokeID: '123', baseCookie: '121', schemaVersions},
       ] satisfies PokeStartMessage,
       ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
@@ -400,7 +393,6 @@ describe('view-syncer/client-handler', () => {
       'ws1',
       SHARD,
       '120',
-      PROTOCOL_VERSION,
       schemaVersion,
       subscription,
     );
@@ -463,7 +455,6 @@ describe('view-syncer/client-handler', () => {
         'ws1',
         SHARD,
         '121',
-        PROTOCOL_VERSION,
         schemaVersion,
         downstream,
       );
