@@ -13,7 +13,7 @@
     "download-deps": "bash ./deps/download.sh",
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "test": "turbo run --concurrency 1 test",
+    "test": "vitest run",
     "lint": "turbo run lint",
     "format": "turbo run format",
     "check-format": "turbo run check-format",
