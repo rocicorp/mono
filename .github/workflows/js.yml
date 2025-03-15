@@ -76,7 +76,7 @@ jobs:
       - name: Run tests
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            npm run test -- --changed ${{ github.event.pull_request.base.sha }}
+            npm run test -- --changed ${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}
           else
             npm run test
           fi
