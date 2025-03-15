@@ -9,5 +9,5 @@
     },
     "declaration": true
   },
-  "include": [".", "../schema.ts"]
+  "include": [".", "../shared/*"]
 }

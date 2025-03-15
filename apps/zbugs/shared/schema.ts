@@ -3,6 +3,7 @@ import {
   boolean,
   createSchema,
   definePermissions,
+  enumeration,
   NOBODY_CAN,
   number,
   relationships,
@@ -20,7 +21,7 @@ const user = table('user')
     login: string(),
     name: string().optional(),
     avatar: string(),
-    role: string(),
+    role: enumeration<'user' | 'crew'>(),
   })
   .primaryKey('id');
 
