@@ -242,6 +242,9 @@ export function dataTypeToZqlValueType(
     case 'boolean':
       return 'boolean';
 
+    // Note: Ensure that all types with a json representation are configured in
+    //       `pg.ts:registerPostgresTypeParsers()` to avoid JSON parsing and
+    //       instead ferry the original JSON strings from postgres.
     case 'json':
     case 'jsonb':
       return 'json';

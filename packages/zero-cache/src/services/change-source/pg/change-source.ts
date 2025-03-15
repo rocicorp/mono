@@ -491,7 +491,11 @@ class ChangeMaker {
     switch (msg.tag) {
       case 'begin':
         return [
-          ['begin', msg, {commitWatermark: toLexiVersion(must(msg.commitLsn))}],
+          [
+            'begin',
+            {...msg, json: 's'},
+            {commitWatermark: toLexiVersion(must(msg.commitLsn))},
+          ],
         ];
 
       case 'delete': {

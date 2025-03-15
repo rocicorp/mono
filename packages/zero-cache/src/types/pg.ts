@@ -42,8 +42,11 @@ export function registerPostgresTypeParsers() {
   setTypeParser(builtins.DATE, dateToUTCMidnight);
   setTypeParser(builtinsDATEARRAY, val => array.parse(val, dateToUTCMidnight));
 
-  // TODO: Override JSON parsing and replicate as strings to eliminate the
-  //       parse/serialize overhead.
+  // Note: Make sure all 'json' valued types from
+  //       `lite.ts:dataTypeToZqlValueType()` are configured here to return
+  //       original JSON strings from Postgres.
+  setTypeParser(builtins.JSON, x => x);
+  setTypeParser(builtins.JSONB, x => x);
 }
 
 const WITH_HH_MM_TIMEZONE = /[+-]\d\d:\d\d$/;
