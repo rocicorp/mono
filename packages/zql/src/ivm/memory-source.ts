@@ -359,45 +359,67 @@ export class MemorySource implements Source {
       }
     }
 
-    for (const x of genPush(
-      change,
-      exists,
-      this.#connections.entries(),
-      setOverlay,
-      setSplitEditOverlay,
-    )) {
-      yield x;
+    let pushError;
+    /**
+     * IVM pipelines might fail but that should not prevent
+     * us from updating the source.
+     *
+     * If pipelines fail then open queries are
+     * incorrect but new queries will be correct
+     * when the source is kept up to date.
+     */
+    try {
+      for (const x of genPush(
+        change,
+        exists,
+        this.#connections.entries(),
+        setOverlay,
+        setSplitEditOverlay,
+      )) {
+        yield x;
+      }
+    } catch (e) {
+      pushError = e;
     }
 
-    for (const {data} of this.#indexes.values()) {
-      switch (change.type) {
-        case 'add': {
-          const added = data.add(change.row);
-          // must succeed since we checked has() above.
-          assert(added);
-          break;
-        }
-        case 'remove': {
-          const removed = data.delete(change.row);
-          // must succeed since we checked has() above.
-          assert(removed);
-          break;
-        }
-        case 'edit': {
-          // TODO: We could see if the PK (form the index tree's perspective)
-          // changed and if not we could use set.
+    try {
+      for (const {data} of this.#indexes.values()) {
+        switch (change.type) {
+          case 'add': {
+            const added = data.add(change.row);
+            // must succeed since we checked has() above.
+            assert(added);
+            break;
+          }
+          case 'remove': {
+            const removed = data.delete(change.row);
+            // must succeed since we checked has() above.
+            assert(removed);
+            break;
+          }
+          case 'edit': {
+            // TODO: We could see if the PK (form the index tree's perspective)
+            // changed and if not we could use set.
 
-          // We cannot just do `set` with the new value since the `oldRow` might
-          // not map to the same entry as the new `row` in the index btree.
-          const removed = data.delete(change.oldRow);
-          // must succeed since we checked has() above.
-          assert(removed);
-          data.add(change.row);
-          break;
+            // We cannot just do `set` with the new value since the `oldRow` might
+            // not map to the same entry as the new `row` in the index btree.
+            const removed = data.delete(change.oldRow);
+            // must succeed since we checked has() above.
+            assert(removed);
+            data.add(change.row);
+            break;
+          }
+          default:
+            unreachable(change);
         }
-        default:
-          unreachable(change);
       }
+    } catch (e) {
+      if (pushError !== undefined) {
+        throw new Error(`Got error ${e} which was proceeded by a push error.`, {
+          cause: pushError,
+        });
+      }
+      throw e;
     }
   }
 }
