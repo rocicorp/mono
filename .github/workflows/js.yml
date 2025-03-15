@@ -65,6 +65,8 @@ jobs:
       TURBO_TEAM: rocicorp
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
       - uses: actions/setup-node@v4
         with:
           node-version: 20.x
@@ -72,11 +74,11 @@ jobs:
 
       - run: npm ci
       - name: Install Playwright
-        run: npx playwright install --with-deps
+        run: npx playwright install chromium firefox webkit --with-deps
       - name: Run tests
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            npm run test -- --changed origin/main
+            npm run test -- --changed ${{ github.event.pull_request.base.sha }}
           else
             npm run test
           fi
