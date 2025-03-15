@@ -59,7 +59,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -73,4 +73,10 @@ jobs:
       - run: npm ci
       - name: Install Playwright
         run: npx playwright install --with-deps
-      - run: npm run test
+      - name: Run tests
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            npm run test -- --changed origin/main
+          else
+            npm run test
+          fi
