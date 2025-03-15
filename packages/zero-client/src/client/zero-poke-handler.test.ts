@@ -794,7 +794,6 @@ suite('onPokeErrors', () => {
         pokeHandler.handlePokeStart({
           pokeID: 'poke1',
           baseCookie: '1',
-          cookie: '2',
           schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
         });
         pokeHandler.handlePokePart({pokeID: 'poke2'});
@@ -806,7 +805,6 @@ suite('onPokeErrors', () => {
         pokeHandler.handlePokeStart({
           pokeID: 'poke1',
           baseCookie: '1',
-          cookie: '2',
           schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
         });
         pokeHandler.handlePokeEnd({pokeID: 'poke2', cookie: '2'});
@@ -1145,7 +1143,6 @@ test('handlePoke returns the last mutation id change for this client from pokePa
   pokeHandler.handlePokeStart({
     pokeID: 'poke1',
     baseCookie: '1',
-    cookie: '2',
     schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
   });
   const lastMutationIDChangeForSelf0 = pokeHandler.handlePokePart({

@@ -22,7 +22,13 @@ import type {LiteTableSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
 import {stringify} from '../../types/bigint-json.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
-import {liteRow, type LiteRow, type LiteRowKey} from '../../types/lite.ts';
+import {
+  JSON_PARSED,
+  liteRow,
+  type JSONFormat,
+  type LiteRow,
+  type LiteRowKey,
+} from '../../types/lite.ts';
 import {liteTableName} from '../../types/names.ts';
 import {normalizedKeyOrder} from '../../types/row-key.ts';
 import {id} from '../../types/sql.ts';
@@ -136,6 +142,7 @@ export class ChangeProcessor {
   #beginTransaction(
     lc: LogContext,
     commitVersion: string,
+    jsonFormat: JSONFormat,
   ): TransactionProcessor {
     let start = Date.now();
     for (let i = 0; ; i++) {
@@ -146,6 +153,7 @@ export class ChangeProcessor {
           this.#txMode,
           this.#tableSpecs,
           commitVersion,
+          jsonFormat,
         );
       } catch (e) {
         // The db occasionally errors with a 'database is locked' error when
@@ -179,7 +187,11 @@ export class ChangeProcessor {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
-      this.#currentTx = this.#beginTransaction(lc, must(watermark));
+      this.#currentTx = this.#beginTransaction(
+        lc,
+        must(watermark),
+        msg.json ?? JSON_PARSED,
+      );
       return false;
     }
 
@@ -279,6 +291,7 @@ class TransactionProcessor {
   readonly #txMode: TransactionMode;
   readonly #version: LexiVersion;
   readonly #tableSpecs: Map<string, LiteTableSpec>;
+  readonly #jsonFormat: JSONFormat;
 
   #schemaChanged = false;
 
@@ -288,9 +301,11 @@ class TransactionProcessor {
     txMode: TransactionMode,
     tableSpecs: Map<string, LiteTableSpec>,
     commitVersion: LexiVersion,
+    jsonFormat: JSONFormat,
   ) {
     this.#startMs = Date.now();
     this.#txMode = txMode;
+    this.#jsonFormat = jsonFormat;
 
     if (txMode === 'CONCURRENT') {
       // Although the Replicator / Incremental Syncer is the only writer of the replica,
@@ -361,7 +376,11 @@ class TransactionProcessor {
 
   processInsert(insert: MessageInsert) {
     const table = liteTableName(insert.relation);
-    const newRow = liteRow(insert.new, this.#tableSpec(table));
+    const newRow = liteRow(
+      insert.new,
+      this.#tableSpec(table),
+      this.#jsonFormat,
+    );
 
     this.#upsert(table, {
       ...newRow.row,
@@ -410,12 +429,19 @@ class TransactionProcessor {
   //       with TOASTed values.
   processUpdate(update: MessageUpdate) {
     const table = liteTableName(update.relation);
-    const newRow = liteRow(update.new, this.#tableSpec(table));
+    const newRow = liteRow(
+      update.new,
+      this.#tableSpec(table),
+      this.#jsonFormat,
+    );
     const row = {...newRow.row, [ZERO_VERSION_COLUMN_NAME]: this.#version};
 
     // update.key is set with the old values if the key has changed.
     const oldKey = update.key
-      ? this.#getKey(liteRow(update.key, this.#tableSpec(table)), update)
+      ? this.#getKey(
+          liteRow(update.key, this.#tableSpec(table), this.#jsonFormat),
+          update,
+        )
       : null;
     const newKey = this.#getKey(newRow, update);
 
@@ -446,7 +472,10 @@ class TransactionProcessor {
 
   processDelete(del: MessageDelete) {
     const table = liteTableName(del.relation);
-    const rowKey = this.#getKey(liteRow(del.key, this.#tableSpec(table)), del);
+    const rowKey = this.#getKey(
+      liteRow(del.key, this.#tableSpec(table), this.#jsonFormat),
+      del,
+    );
 
     this.#delete(table, rowKey);
 

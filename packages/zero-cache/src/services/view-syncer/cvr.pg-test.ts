@@ -202,7 +202,6 @@ describe('view-syncer/cvr', () => {
     const flushed = (
       await new CVRUpdater(pgStore, cvr, cvr.replicaVersion).flush(
         lc,
-        true,
         LAST_CONNECT,
         Date.UTC(2024, 3, 20),
       )
@@ -278,7 +277,6 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 20),
     );
@@ -532,7 +530,6 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 24),
     );
@@ -624,18 +621,16 @@ describe('view-syncer/cvr', () => {
       ON_FAILURE,
     );
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
-    const updater = new CVRUpdater(cvrStore, cvr, cvr.replicaVersion);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     // Simulate an external modification, incrementing the patch version.
     await db`UPDATE "dapp_3/cvr".instances SET version = '1a9:03' WHERE "clientGroupID" = 'abc123'`;
 
+    // force a flush to trigger detection
+    updater.ensureClient('client-foo');
+
     await expect(
-      updater.flush(
-        lc,
-        false, // force flush to trigger detection
-        LAST_CONNECT,
-        Date.UTC(2024, 4, 19),
-      ),
+      updater.flush(lc, LAST_CONNECT, Date.UTC(2024, 4, 19)),
     ).rejects.toThrow(ConcurrentModificationException);
 
     // The last active time should not have been modified.
@@ -673,7 +668,7 @@ describe('view-syncer/cvr', () => {
       ON_FAILURE,
     );
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
-    const updater = new CVRUpdater(cvrStore, cvr, cvr.replicaVersion);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     // Simulate an ownership change.
     await db`
@@ -681,13 +676,11 @@ describe('view-syncer/cvr', () => {
                              "grantedAt" = ${LAST_CONNECT + 1}
     WHERE "clientGroupID" = 'abc123'`;
 
+    // force flush to trigger detection
+    updater.ensureClient('client-bar');
+
     await expect(
-      updater.flush(
-        lc,
-        false, // force flush to trigger detection
-        LAST_CONNECT,
-        Date.UTC(2024, 4, 19),
-      ),
+      updater.flush(lc, LAST_CONNECT, Date.UTC(2024, 4, 19)),
     ).rejects.toThrow(OwnershipError);
 
     // The last active time should not have been modified.
@@ -930,7 +923,6 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 24),
     );
@@ -1245,7 +1237,6 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated2} = await updater2.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 24, 1),
     );
@@ -1319,7 +1310,6 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -1621,7 +1611,6 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -2052,7 +2041,6 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     let {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -2294,7 +2282,6 @@ describe('view-syncer/cvr', () => {
 
     ({cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 2),
     ));
@@ -2618,7 +2605,6 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -3065,7 +3051,6 @@ describe('view-syncer/cvr', () => {
     // Note: Must flush before generating config patches.
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -3590,7 +3575,6 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -3926,7 +3910,6 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -4155,7 +4138,6 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -4371,7 +4353,7 @@ describe('view-syncer/cvr', () => {
       const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
       updater.markDesiredQueriesAsInactive('fooClient', ['oneHash'], now);
 
-      const {cvr: updated} = await updater.flush(lc, true, LAST_CONNECT, now);
+      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now);
       expect(updated).toEqual({
         clients: {
           fooClient: {
@@ -4514,7 +4496,7 @@ describe('view-syncer/cvr', () => {
       const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
       updater.markDesiredQueriesAsInactive('fooClient', ['oneHash'], now);
 
-      const {cvr: updated} = await updater.flush(lc, true, LAST_CONNECT, now);
+      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now);
       expect(updated.queries).toEqual({
         oneHash: {
           ast: {
@@ -4679,7 +4661,7 @@ describe('view-syncer/cvr', () => {
         ]
       `);
 
-      const {cvr: updated} = await updater.flush(lc, true, LAST_CONNECT, now);
+      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now);
       expect(updated).toEqual({
         clients: {
           fooClient: {
@@ -4825,7 +4807,7 @@ describe('view-syncer/cvr', () => {
           },
         ]
       `);
-      const {cvr: updated} = await updater.flush(lc, true, LAST_CONNECT, now);
+      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now);
       expect(
         (updated.queries.oneHash as ClientQueryRecord).clientState.fooClient,
       ).toMatchInlineSnapshot(`
@@ -4968,7 +4950,6 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.now(),
     );
@@ -5353,7 +5334,6 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -5568,7 +5548,6 @@ describe('view-syncer/cvr', () => {
       updater.deleteClientGroup('def456');
       const {cvr: updated2} = await updater.flush(
         lc,
-        true,
         LAST_CONNECT,
         Date.UTC(2024, 3, 23, 1),
       );

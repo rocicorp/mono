@@ -735,7 +735,8 @@ describe('integration', {timeout: 30000}, () => {
         `.simple();
       } else {
         await streamCustomChanges([
-          ['begin', {tag: 'begin'}, {commitWatermark: '102'}],
+          // Unlike initial sync, this transaction uses JSON_STRINGIFIED.
+          ['begin', {tag: 'begin', json: 's'}, {commitWatermark: '102'}],
           [
             'data',
             {
@@ -749,10 +750,10 @@ describe('integration', {timeout: 30000}, () => {
                 id: 'voo',
                 ['far_id']: 'doo',
                 b: null,
-                j1: 'foo',
-                j2: false,
-                j3: 456.789,
-                j4: {bar: 'baz'},
+                j1: '"foo"',
+                j2: 'false',
+                j3: '456.789',
+                j4: '{"bar":"baz"}',
               },
             },
           ],
@@ -769,10 +770,10 @@ describe('integration', {timeout: 30000}, () => {
                 id: 'bar',
                 ['far_id']: 'not_baz',
                 b: true,
-                j1: {foo: 'bar\u0000'},
-                j2: true,
-                j3: 123,
-                j4: 'string',
+                j1: '{"foo":"bar\\u0000"}',
+                j2: 'true',
+                j3: '123',
+                j4: '"string"',
               },
               key: null,
             },

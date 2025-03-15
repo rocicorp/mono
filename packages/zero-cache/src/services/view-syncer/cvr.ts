@@ -124,7 +124,6 @@ export class CVRUpdater {
 
   async flush(
     lc: LogContext,
-    skipNoopFlushes: boolean,
     lastConnectTime: number,
     lastActive = Date.now(),
   ): Promise<{
@@ -136,7 +135,6 @@ export class CVRUpdater {
     const flushed = await this._cvrStore.flush(
       this._orig.version,
       this._cvr.version,
-      skipNoopFlushes,
       lastConnectTime,
       lastActive,
     );
@@ -166,7 +164,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     this.#shard = shard;
   }
 
-  #ensureClient(id: string): ClientRecord {
+  ensureClient(id: string): ClientRecord {
     let client = this._cvr.clients[id];
     if (client) {
       return client;
@@ -237,7 +235,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     queries: Readonly<{hash: string; ast: AST; ttl?: number | undefined}>[],
   ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
-    const client = this.#ensureClient(clientID);
+    const client = this.ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
 
     // Find the new/changed desired queries.
@@ -339,7 +337,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     inactivatedAt: number | undefined,
   ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
-    const client = this.#ensureClient(clientID);
+    const client = this.ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
     const unwanted = new Set(queryHashes);
     const remove = intersection(unwanted, current);
@@ -394,7 +392,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   }
 
   clearDesiredQueries(clientID: string): PatchToVersion[] {
-    const client = this.#ensureClient(clientID);
+    const client = this.ensureClient(clientID);
     return this.#deleteQueries(clientID, client.desiredQueryIDs, undefined);
   }
 
@@ -428,14 +426,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     this._cvrStore.deleteClientGroup(clientGroupID);
   }
 
-  flush(
-    lc: LogContext,
-    skipNoopFlushes: boolean,
-    lastConnectTime: number,
-    lastActive = Date.now(),
-  ) {
+  flush(lc: LogContext, lastConnectTime: number, lastActive = Date.now()) {
     // TODO: Add cleanup of no-longer-desired got queries and constituent rows.
-    return super.flush(lc, skipNoopFlushes, lastConnectTime, lastActive);
+    return super.flush(lc, lastConnectTime, lastActive);
   }
 }
 

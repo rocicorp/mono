@@ -38,9 +38,9 @@ test('protocol versions', () => {
   // Then update the version number of the `CHANGE_SOURCE_PATH`
   // in current and export it appropriately as the new version
   // in `mod.ts`.
-  t(current, '1c43bn5dzejyy', '/changes/v0/stream');
+  t(current, '3lxrltn74rwl7', '/changes/v0/stream');
   // During initial development, we use v0 as a non-stable
   // version (i.e. breaking change are allowed). Once the
   // protocol graduates to v1, versions must be stable.
-  t(v0, '1c43bn5dzejyy', '/changes/v0/stream');
+  t(v0, '3lxrltn74rwl7', '/changes/v0/stream');
 });

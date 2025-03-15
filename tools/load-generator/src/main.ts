@@ -17,6 +17,7 @@ const options = {
     key: v.string().default('id'),
     bools: v.array(v.string()).optional(),
     ints: v.array(v.string()).optional(),
+    jsonbs: v.array(v.string()).optional(),
   },
 };
 
@@ -36,15 +37,21 @@ async function run() {
   perturb.ints?.forEach(col =>
     assignments.push(`${id(col)} = ${id(col)} + FLOOR(RANDOM() * 2) - 1`),
   );
+  perturb.jsonbs?.forEach(col =>
+    assignments.push(
+      `${id(col)} = jsonb_set(
+         ${id(col)}, '{_rand}'::text[], (random()::text)::jsonb, true
+       )`,
+    ),
+  );
   const stmt = `
   UPDATE ${id(perturb.table)} 
     SET ${assignments.join(',')} 
     WHERE ${id(perturb.key)} = `;
 
   lc.info?.(`Looking up ${perturb.table} ids`);
-  const keys = await db<{key: string}[]>`SELECT ${db(perturb.key)} FROM ${db(
-    perturb.table,
-  )}`.values();
+  const keys = await db<{key: string}[]>`
+  SELECT ${db(perturb.key)} FROM ${db(perturb.table)} LIMIT 10000`.values();
   lc.info?.(
     `Randomly perturbing ${keys.length} rows at ${qps} qps with ${stmt}?`,
   );

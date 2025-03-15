@@ -395,7 +395,7 @@ describe('view-syncer/cvr-store', () => {
       );
     }
     await updater.received(lc, rows);
-    cvr = (await updater.flush(lc, true, CONNECT_TIME, now)).cvr;
+    cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
@@ -450,7 +450,7 @@ describe('view-syncer/cvr-store', () => {
       );
     }
     await updater.received(lc, rows);
-    await updater.flush(lc, true, CONNECT_TIME, now);
+    await updater.flush(lc, CONNECT_TIME, now);
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
@@ -534,7 +534,7 @@ describe('view-syncer/cvr-store', () => {
         );
       }
       await updater.received(lc, rows);
-      cvr = (await updater.flush(lc, true, CONNECT_TIME, now)).cvr;
+      cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
 
       // add a random sleep for varying the asynchronicity
       // between the CVR flush and the async row flush.
@@ -607,7 +607,7 @@ describe('view-syncer/cvr-store', () => {
         );
       }
       await updater.received(lc, rows);
-      cvr = (await updater.flush(lc, true, CONNECT_TIME, now)).cvr;
+      cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
 
       // add a random sleep for varying the asynchronicity
       // between the CVR flush and the async row flush.
@@ -628,7 +628,7 @@ describe('view-syncer/cvr-store', () => {
     // Empty rows.
     const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
     await updater.received(lc, rows);
-    await updater.flush(lc, true, CONNECT_TIME, now);
+    await updater.flush(lc, CONNECT_TIME, now);
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
@@ -691,7 +691,7 @@ describe('view-syncer/cvr-store', () => {
       );
     }
     await updater.received(lc, rows);
-    cvr = (await updater.flush(lc, true, CONNECT_TIME, now)).cvr;
+    cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`

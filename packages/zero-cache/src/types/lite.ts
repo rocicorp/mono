@@ -20,6 +20,11 @@ function columnType(col: string, table: LiteTableSpec) {
   return spec.dataType;
 }
 
+export const JSON_STRINGIFIED = 's';
+export const JSON_PARSED = 'p';
+
+export type JSONFormat = typeof JSON_STRINGIFIED | typeof JSON_PARSED;
+
 /**
  * Creates a LiteRow from the supplied RowValue. A copy of the `row`
  * is made only if a value conversion is performed.
@@ -27,6 +32,7 @@ function columnType(col: string, table: LiteTableSpec) {
 export function liteRow(
   row: RowValue,
   table: LiteTableSpec,
+  jsonFormat: JSONFormat,
 ): {row: LiteRow; numCols: number} {
   let copyNeeded = false;
   let numCols = 0;
@@ -34,7 +40,7 @@ export function liteRow(
   for (const key in row) {
     numCols++;
     const val = row[key];
-    const liteVal = liteValue(val, columnType(key, table));
+    const liteVal = liteValue(val, columnType(key, table), jsonFormat);
     if (val !== liteVal) {
       copyNeeded = true;
       break;
@@ -48,7 +54,7 @@ export function liteRow(
   const converted: Record<string, LiteValueType> = {};
   for (const key in row) {
     numCols++;
-    converted[key] = liteValue(row[key], columnType(key, table));
+    converted[key] = liteValue(row[key], columnType(key, table), jsonFormat);
   }
   return {row: converted, numCols};
 }
@@ -56,10 +62,10 @@ export function liteRow(
 export function liteValues(
   row: RowValue,
   table: LiteTableSpec,
-  jsonAsString?: 'json-as-string',
+  jsonFormat: JSONFormat,
 ): LiteValueType[] {
   return Object.entries(row).map(([col, val]) =>
-    liteValue(val, columnType(col, table), jsonAsString),
+    liteValue(val, columnType(col, table), jsonFormat),
   );
 }
 
@@ -76,14 +82,14 @@ export function liteValues(
 export function liteValue(
   val: PostgresValueType,
   pgType: string,
-  jsonAsString?: 'json-as-string',
+  jsonFormat: JSONFormat,
 ): LiteValueType {
   if (val instanceof Uint8Array || val === null) {
     return val;
   }
   const valueType = dataTypeToZqlValueType(pgType);
   if (valueType === 'json') {
-    if (jsonAsString && typeof val === 'string') {
+    if (jsonFormat === JSON_STRINGIFIED && typeof val === 'string') {
       // JSON and JSONB values are already strings if the JSON was not parsed.
       return val;
     }

@@ -39,7 +39,6 @@ import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.t
 import type {ActivityBasedService} from '../service.ts';
 import {
   ClientHandler,
-  revisedCookieProtocolSupportedByAll,
   type PatchToVersion,
   type PokeHandler,
   type RowPatch,
@@ -391,14 +390,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Source<Downstream> {
     return startSpan(tracer, 'vs.initConnection', () => {
       this.#lastConnectTime = Date.now();
-      const {
-        clientID,
-        wsID,
-        baseCookie,
-        protocolVersion,
-        schemaVersion,
-        tokenData,
-      } = ctx;
+      const {clientID, wsID, baseCookie, schemaVersion, tokenData} = ctx;
       this.#authData = pickToken(this.#authData, tokenData?.decoded);
 
       const lc = this.#lc
@@ -422,7 +414,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         wsID,
         this.#shard,
         baseCookie,
-        protocolVersion,
         schemaVersion,
         downstream,
       );
@@ -485,6 +476,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async #updateCVRConfig(
     lc: LogContext,
     cvr: CVRSnapshot,
+    clientID: string,
     fn: (updater: CVRConfigDrivenUpdater) => PatchToVersion[],
   ): Promise<CVRSnapshot> {
     const updater = new CVRConfigDrivenUpdater(
@@ -492,10 +484,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       cvr,
       this.#shard,
     );
-
+    updater.ensureClient(clientID);
     const patches = fn(updater);
 
-    this.#cvr = (await updater.flush(lc, true, this.#lastConnectTime)).cvr;
+    this.#cvr = (await updater.flush(lc, this.#lastConnectTime)).cvr;
 
     if (cmpVersions(cvr.version, this.#cvr.version) < 0) {
       // Send pokes to catch up clients that are up to date.
@@ -603,7 +595,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const deletedClientIDs: string[] = [];
       const deletedClientGroupIDs: string[] = [];
 
-      cvr = await this.#updateCVRConfig(lc, cvr, updater => {
+      cvr = await this.#updateCVRConfig(lc, cvr, clientID, updater => {
         const patches: PatchToVersion[] = [];
 
         if (clientSchema) {
@@ -957,13 +949,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       // Commit the changes and update the CVR snapshot.
-      this.#cvr = (
-        await updater.flush(
-          lc,
-          revisedCookieProtocolSupportedByAll(clients),
-          this.#lastConnectTime,
-        )
-      ).cvr;
+      this.#cvr = (await updater.flush(lc, this.#lastConnectTime)).cvr;
       const finalVersion = this.#cvr.version;
 
       // Before ending the poke, catch up clients that were behind the old CVR.
@@ -1213,7 +1199,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Only poke clients that are at the cvr.version. New clients that
       // are behind need to first be caught up when their initConnection
       // message is processed (and #syncQueryPipelines is called).
-      const clients = this.#getClients(cvr.version);
       const pokers = this.#getClients(cvr.version).map(c =>
         c.startPoke(
           updater.updatedVersion(),
@@ -1235,13 +1220,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       // Commit the changes and update the CVR snapshot.
-      this.#cvr = (
-        await updater.flush(
-          lc,
-          revisedCookieProtocolSupportedByAll(clients),
-          this.#lastConnectTime,
-        )
-      ).cvr;
+      this.#cvr = (await updater.flush(lc, this.#lastConnectTime)).cvr;
       const finalVersion = this.#cvr.version;
 
       // Signal clients to commit.

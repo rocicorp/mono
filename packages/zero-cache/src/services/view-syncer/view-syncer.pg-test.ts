@@ -7,6 +7,7 @@ import {
   test,
   vi,
 } from 'vitest';
+import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {h128} from '../../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
@@ -72,7 +73,6 @@ import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
-import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 
 const APP_ID = 'this_app';
 const SHARD_NUM = 2;
@@ -558,6 +558,13 @@ const appMessages = new ReplicationMessages(
   'this_app',
 );
 
+const app2Messages = new ReplicationMessages(
+  {
+    clients: ['clientGroupID', 'clientID'],
+  },
+  'this_app_2',
+);
+
 describe('view-syncer/service', () => {
   let storageDB: Database;
   let replicaDbFile: DbFile;
@@ -758,7 +765,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -819,7 +825,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": "00:01",
-            "cookie": "01",
             "pokeID": "01",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -1405,7 +1410,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -1509,7 +1513,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": "00:01",
-            "cookie": "01",
             "pokeID": "01",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -1784,7 +1787,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -1862,7 +1864,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -1965,7 +1966,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -2038,7 +2038,6 @@ describe('view-syncer/service', () => {
         "pokeStart",
         {
           "baseCookie": "00:01",
-          "cookie": "01",
           "pokeID": "01",
           "schemaVersions": {
             "maxSupportedVersion": 3,
@@ -2079,7 +2078,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": "01",
-            "cookie": "123",
             "pokeID": "123",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -2221,7 +2219,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": "123",
-            "cookie": "124",
             "pokeID": "124",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -2361,7 +2358,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -2428,7 +2424,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": "00:01",
-            "cookie": "00:02",
             "pokeID": "00:02",
           },
         ],
@@ -2488,7 +2483,6 @@ describe('view-syncer/service', () => {
         "pokeStart",
         {
           "baseCookie": "00:02",
-          "cookie": "01",
           "pokeID": "01",
           "schemaVersions": {
             "maxSupportedVersion": 3,
@@ -2502,7 +2496,6 @@ describe('view-syncer/service', () => {
         "pokeStart",
         {
           "baseCookie": null,
-          "cookie": "01",
           "pokeID": "01",
           "schemaVersions": {
             "maxSupportedVersion": 3,
@@ -2548,7 +2541,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": "01",
-            "cookie": "123",
             "pokeID": "123",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -2604,7 +2596,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -2663,7 +2654,6 @@ describe('view-syncer/service', () => {
       'pokeStart',
       {
         baseCookie: '00:01',
-        cookie: '01',
         pokeID: '01',
         schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
       },
@@ -2683,7 +2673,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": "01",
-            "cookie": "07",
             "pokeID": "07",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -2772,7 +2761,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -2831,7 +2819,6 @@ describe('view-syncer/service', () => {
       'pokeStart',
       {
         baseCookie: '00:01',
-        cookie: '01',
         pokeID: '01',
         schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
       },
@@ -2850,6 +2837,104 @@ describe('view-syncer/service', () => {
     });
   });
 
+  test('process advancement with lmid change, client has no queries.  See https://bugs.rocicorp.dev/issue/3628', async () => {
+    const client = connect(SYNC_CONTEXT, []);
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+      ]
+    `);
+
+    stateChanges.push({state: 'version-ready'});
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "00:01",
+            "pokeID": "01",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "01",
+            "pokeID": "01",
+          },
+        ],
+      ]
+    `);
+
+    replicator.processTransaction(
+      '02',
+      app2Messages.update('clients', {
+        clientGroupID: serviceID,
+        clientID: SYNC_CONTEXT.clientID,
+        userID: null,
+        lastMutationID: 43,
+      }),
+    );
+    stateChanges.push({state: 'version-ready'});
+
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01",
+            "pokeID": "02",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "lastMutationIDChanges": {
+              "foo": 43,
+            },
+            "pokeID": "02",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "02",
+            "pokeID": "02",
+          },
+        ],
+      ]
+    `);
+  });
+
   test('catchup client', async () => {
     const client1 = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
@@ -2860,7 +2945,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "00:01",
             "pokeID": "00:01",
           },
         ],
@@ -2985,7 +3069,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": "01",
-            "cookie": "123:01",
             "pokeID": "123:01",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -3072,7 +3155,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": "123",
-            "cookie": "123:01",
             "pokeID": "123:01",
           },
         ],
@@ -3137,7 +3219,6 @@ describe('view-syncer/service', () => {
     const preAdvancement = (await nextPoke(client1))[0][1] as PokeStartBody;
     expect(preAdvancement).toEqual({
       baseCookie: '00:01',
-      cookie: '01',
       pokeID: '01',
       schemaVersions: {minSupportedVersion: 2, maxSupportedVersion: 3},
     });
@@ -3169,7 +3250,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "123:01",
             "pokeID": "123:01",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -3356,7 +3436,7 @@ describe('view-syncer/service', () => {
       await cvrStore.load(lc, Date.now()),
       '07',
       REPLICA_VERSION,
-    ).flush(lc, true, Date.now(), Date.now());
+    ).flush(lc, Date.now(), Date.now());
 
     // Connect the client.
     const client = connect(SYNC_CONTEXT, [
@@ -3397,7 +3477,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "07:02",
             "pokeID": "07:02",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -3519,7 +3598,7 @@ describe('view-syncer/service', () => {
       await cvrStore.load(lc, Date.now()),
       '07',
       '1' + REPLICA_VERSION, // CVR is at a newer replica version.
-    ).flush(lc, true, Date.now(), Date.now());
+    ).flush(lc, Date.now(), Date.now());
 
     // Connect the client.
     const client = connect(SYNC_CONTEXT, [
@@ -3575,7 +3654,7 @@ describe('view-syncer/service', () => {
       await cvrStore.load(lc, Date.now()),
       '07',
       REPLICA_VERSION,
-    ).flush(lc, true, Date.now(), Date.now());
+    ).flush(lc, Date.now(), Date.now());
 
     // Connect the client with a base cookie from the future.
     const client = connect({...SYNC_CONTEXT, baseCookie: '08'}, [
@@ -3665,7 +3744,6 @@ describe('view-syncer/service', () => {
           "pokeStart",
           {
             "baseCookie": "01",
-            "cookie": "123",
             "pokeID": "123",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -6486,7 +6564,6 @@ describe('view-syncer/service', () => {
             "pokeStart",
             {
               "baseCookie": null,
-              "cookie": "00:01",
               "pokeID": "00:01",
             },
           ],
@@ -6786,7 +6863,6 @@ describe('view-syncer/service', () => {
             "pokeStart",
             {
               "baseCookie": "01",
-              "cookie": "123:04",
               "pokeID": "123:04",
               "schemaVersions": {
                 "maxSupportedVersion": 3,
@@ -6949,7 +7025,6 @@ describe('view-syncer/service', () => {
             "pokeStart",
             {
               "baseCookie": "123:02",
-              "cookie": "123:03",
               "pokeID": "123:03",
             },
           ],
@@ -7049,7 +7124,6 @@ describe('permissions', () => {
           "pokeStart",
           {
             "baseCookie": "00:01",
-            "cookie": "01",
             "pokeID": "01",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -7128,7 +7202,6 @@ describe('permissions', () => {
           "pokeStart",
           {
             "baseCookie": null,
-            "cookie": "01:02",
             "pokeID": "01:02",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -7317,7 +7390,6 @@ describe('permissions', () => {
           "pokeStart",
           {
             "baseCookie": "00:01",
-            "cookie": "01",
             "pokeID": "01",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -7414,7 +7486,6 @@ describe('permissions', () => {
           "pokeStart",
           {
             "baseCookie": "01",
-            "cookie": "05",
             "pokeID": "05",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -7502,7 +7573,6 @@ describe('permissions', () => {
           "pokeStart",
           {
             "baseCookie": "00:01",
-            "cookie": "01",
             "pokeID": "01",
             "schemaVersions": {
               "maxSupportedVersion": 3,
@@ -7567,7 +7637,6 @@ describe('permissions', () => {
           "pokeStart",
           {
             "baseCookie": "00:01",
-            "cookie": "01",
             "pokeID": "01",
             "schemaVersions": {
               "maxSupportedVersion": 3,
