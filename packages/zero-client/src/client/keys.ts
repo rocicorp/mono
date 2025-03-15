@@ -4,7 +4,7 @@ import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {primaryKeyValueSchema} from '../../../zero-protocol/src/primary-key.ts';
 
-const DESIRED_QUERIES_KEY_PREFIX = 'd/';
+export const DESIRED_QUERIES_KEY_PREFIX = 'd/';
 export const GOT_QUERIES_KEY_PREFIX = 'g/';
 export const ENTITIES_KEY_PREFIX = 'e/';
 
