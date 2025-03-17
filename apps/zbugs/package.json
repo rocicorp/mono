@@ -18,6 +18,7 @@
     "transform-query": "tsx ../../packages/zero-cache/src/scripts/transform-query.ts",
     "run-query": "tsx ../../packages/zero-cache/src/scripts/run-query.ts",
     "run-query-brk": "tsx --inspect-brk ../../packages/zero-cache/src/scripts/run-query.ts",
+    "create-keys": "tsx ../../packages/zero-cache/src/scripts/create-jwk.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "analyze": "analyze -c vite.config.ts"

@@ -1,25 +1,8 @@
-import {exportJWK, generateKeyPair, SignJWT, type JWTPayload} from 'jose';
+import {SignJWT, type JWTPayload} from 'jose';
 import {describe, expect, test} from 'vitest';
 import {must} from '../../../shared/src/must.ts';
 import type {AuthConfig} from '../config/zero-config.ts';
-import {verifyToken} from './jwt.ts';
-
-async function generateJwkKeys() {
-  const {publicKey, privateKey} = await generateKeyPair('PS256');
-
-  const privateJwk = await exportJWK(privateKey);
-  const publicJwk = await exportJWK(publicKey);
-
-  privateJwk.kid = 'key-2024-001';
-  privateJwk.use = 'sig';
-  privateJwk.alg = 'PS256';
-
-  publicJwk.kid = privateJwk.kid;
-  publicJwk.use = privateJwk.use;
-  publicJwk.alg = privateJwk.alg;
-
-  return {privateJwk, publicJwk};
-}
+import {createJwkPair, verifyToken} from './jwt.ts';
 
 describe('symmetric key', () => {
   const key = 'ab'.repeat(16);
@@ -34,7 +17,7 @@ describe('symmetric key', () => {
 });
 
 describe('jwk', async () => {
-  const {privateJwk, publicJwk} = await generateJwkKeys();
+  const {privateJwk, publicJwk} = await createJwkPair();
   async function makeToken(tokenData: JWTPayload) {
     const token = await new SignJWT(tokenData)
       .setProtectedHeader({

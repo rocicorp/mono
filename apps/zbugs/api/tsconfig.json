@@ -1,8 +1,6 @@
 {
   "extends": "../../../tsconfig.json",
   "compilerOptions": {
-    "composite": true,
-    "allowSyntheticDefaultImports": true,
     "baseUrl": "../../packages",
     "paths": {
       "@rocicorp/zero/pg": ["./zero/src/pg.ts"]

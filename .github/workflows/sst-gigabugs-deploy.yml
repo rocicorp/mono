@@ -73,7 +73,7 @@ jobs:
           ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
           ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}
           ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}
-          ZERO_AUTH_SECRET: ${{ secrets.GIGABUGS_ZERO_JWT_SECRET }}
+          ZERO_AUTH_JWK: ${{ secrets.GIGABUGS_ZERO_AUTH_JWK }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
@@ -91,7 +91,7 @@ jobs:
           ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
           ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}2
           ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}2
-          ZERO_AUTH_SECRET: ${{ secrets.GIGABUGS_ZERO_JWT_SECRET }}
+          ZERO_AUTH_JWK: ${{ secrets.GIGABUGS_ZERO_AUTH_JWK }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
