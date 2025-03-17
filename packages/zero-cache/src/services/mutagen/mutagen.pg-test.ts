@@ -51,7 +51,9 @@ async function createTables(db: PostgresDB) {
       );
       CREATE TABLE types (
         id TEXT PRIMARY KEY,
-        num NUMERIC
+        num NUMERIC,
+        time1 TIMESTAMPTZ,
+        time2 TIMESTAMPTZ
       );
       CREATE TABLE fk_ref (
         id text,
@@ -740,6 +742,8 @@ describe('processMutation', {timeout: 15000}, () => {
                 value: {
                   id: '1',
                   num: 23.45,
+                  time1: 1742246216309,
+                  time2: '2025-03-17T21:18:42.792Z',
                 },
               },
             ],
@@ -754,7 +758,14 @@ describe('processMutation', {timeout: 15000}, () => {
     expect(error).undefined;
 
     await expectTables(db, {
-      types: [{id: '1', num: 23.45}],
+      types: [
+        {
+          id: '1',
+          num: 23.45,
+          time1: 1742246216309,
+          time2: 1742246322792,
+        },
+      ],
       [`${APP_ID}_${SHARD_NUM}.clients`]: [
         {
           clientGroupID: 'abc',
