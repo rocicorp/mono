@@ -43,7 +43,7 @@ export default {
       screenshotFailures: false,
       instances: [
         {browser: 'chromium'},
-        // {browser: 'firefox'},
+        {browser: 'firefox'},
         {browser: 'webkit'},
       ],
     },
