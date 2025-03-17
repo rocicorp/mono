@@ -112,14 +112,12 @@ export class ExpressionBuilder<
   or = or;
   not = not;
 
-  exists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+  exists = <TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb?: (
       query: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
     ) => Query<TSchema, any>,
-  ): Condition {
-    return this.#exists(relationship, cb);
-  }
+  ): Condition => this.#exists(relationship, cb);
 }
 
 export function and(...conditions: (Condition | undefined)[]): Condition {
