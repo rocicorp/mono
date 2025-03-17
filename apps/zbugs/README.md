@@ -54,7 +54,10 @@ ZERO_LOG_FORMAT = "text"
 # Secret used to sign and verify the JWT
 # Set this to something real if you intend to deploy
 # the app.
-ZERO_AUTH_JWK = "TODO"
+# You can create a JWK pair via `npm run create-keys`
+# The public key goes here and in `VITE_PUBLIC_JWK`.
+# Only the API server needs the private key.
+ZERO_AUTH_JWK='TODO'
 
 #### ZBugs API Server Variables ####
 
@@ -69,6 +72,7 @@ GITHUB_CLIENT_SECRET = ""
 
 #### Vite Variables ####
 VITE_PUBLIC_SERVER="http://localhost:4848"
+VITE_PUBLIC_JWK='TODO'
 ```
 
 Then start the server:
