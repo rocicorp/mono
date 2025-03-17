@@ -19,8 +19,7 @@ declare module 'fastify' {
 
 const sql = postgres(process.env.ZERO_UPSTREAM_DB as string);
 type QueryParams = {redirect?: string | undefined};
-
-const privateJwk = JSON.parse(process.env.ZERO_AUTH_JWK as string) as JWK;
+let privateJwk: JWK | undefined;
 
 export const fastify = Fastify({
   logger: true,
@@ -53,6 +52,9 @@ fastify.register(oauthPlugin, {
 fastify.get<{
   Querystring: QueryParams;
 }>('/api/login/github/callback', async function (request, reply) {
+  if (!privateJwk) {
+    privateJwk = JSON.parse(process.env.PRIVATE_JWK as string) as JWK;
+  }
   const {token} =
     await this.githubOAuth2.getAccessTokenFromAuthorizationCodeFlow(request);
 
