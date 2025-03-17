@@ -56,6 +56,7 @@ type EditViewChange = {
 
 /**
  * This is a subset of WeakMap but restricted to what we need.
+ * @deprecated Not used anymore. This will be removed in the future.
  */
 export interface RefCountMap {
   get(entry: Entry): number | undefined;
