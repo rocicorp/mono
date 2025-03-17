@@ -69,7 +69,23 @@ export function applyChange(
   schema: SourceSchema,
   relationship: string,
   format: Format,
-) {
+): void;
+/** @deprecated Use the version without the `refCountMap` parameter. */
+export function applyChange(
+  parentEntry: Entry,
+  change: ViewChange,
+  schema: SourceSchema,
+  relationship: string,
+  format: Format,
+  refCountMap?: unknown,
+): void;
+export function applyChange(
+  parentEntry: Entry,
+  change: ViewChange,
+  schema: SourceSchema,
+  relationship: string,
+  format: Format,
+): void {
   if (schema.isHidden) {
     switch (change.type) {
       case 'add':
