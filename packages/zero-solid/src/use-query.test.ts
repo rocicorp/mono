@@ -10,6 +10,7 @@ import {
   type TTL,
 } from '../../zero/src/zero.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import {refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {solidViewFactory} from './solid-view.ts';
@@ -45,8 +46,8 @@ test('useQuery', async () => {
 
   const [rows, resultType] = useQuery(() => tableQuery);
   expect(rows()).toEqual([
-    {a: 1, b: 'a'},
-    {a: 2, b: 'b'},
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
   ]);
   expect(resultType()).toEqual({type: 'unknown'});
 
@@ -57,9 +58,9 @@ test('useQuery', async () => {
   queryDelegate.commit();
 
   expect(rows()).toEqual([
-    {a: 1, b: 'a'},
-    {a: 2, b: 'b'},
-    {a: 3, b: 'c'},
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
+    {a: 3, b: 'c', [refCountSymbol]: 1},
   ]);
   expect(resultType()).toEqual({type: 'complete'});
 });
@@ -122,7 +123,7 @@ test('useQuery deps change', async () => {
     resultDetailsLog.push(resultDetails());
   });
 
-  expect(rowLog).toEqual([[{a: 1, b: 'a'}]]);
+  expect(rowLog).toEqual([[{a: 1, b: 'a', [refCountSymbol]: 1}]]);
   expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
   resetLogs();
 
@@ -134,7 +135,7 @@ test('useQuery deps change', async () => {
   resetLogs();
 
   setA(2);
-  expect(rowLog).toEqual([[{a: 2, b: 'b'}]]);
+  expect(rowLog).toEqual([[{a: 2, b: 'b', [refCountSymbol]: 1}]]);
   expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
   resetLogs();
 
@@ -152,14 +153,14 @@ test('useQuery deps change testEffect', () => {
   return testEffect(done =>
     createEffect((run: number = 0) => {
       if (run === 0) {
-        expect(rows()).toEqual([{a: 1, b: 'a'}]);
+        expect(rows()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
         ms.push({type: 'edit', oldRow: {a: 1, b: 'a'}, row: {a: 1, b: 'a2'}});
         queryDelegate.commit();
       } else if (run === 1) {
-        expect(rows()).toEqual([{a: 1, b: 'a2'}]);
+        expect(rows()).toEqual([{a: 1, b: 'a2', [refCountSymbol]: 1}]);
         setA(2);
       } else if (run === 2) {
-        expect(rows()).toEqual([{a: 2, b: 'b'}]);
+        expect(rows()).toEqual([{a: 2, b: 'b', [refCountSymbol]: 1}]);
         done();
       }
       return run + 1;
