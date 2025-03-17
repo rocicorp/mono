@@ -19,6 +19,7 @@ function forLoop(): Benchmark {
           sum += key + value;
         }
       }
+      // eslint-disable-next-line no-console
       console.log(sum);
     },
   };
@@ -35,6 +36,7 @@ function forEach(): Benchmark {
           sum += key + value;
         });
       }
+      // eslint-disable-next-line no-console
       console.log(sum);
     },
   };

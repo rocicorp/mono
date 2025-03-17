@@ -1,4 +1,5 @@
 {
+  "name": "replicache-perf",
   "private": true,
   "scripts": {
     "format": "prettier --write .",

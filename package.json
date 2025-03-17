@@ -1,5 +1,6 @@
 {
   "name": "@rocicorp/mono",
+  "packageManager": "npm@10.9.2",
   "version": "0.0.0",
   "private": true,
   "workspaces": [
@@ -29,7 +30,7 @@
     "prettier": "^3.0.3",
     "syncpack": "^12.3.2",
     "tsx": "^4.19.1",
-    "turbo": "^1.13.2",
+    "turbo": "^2.4.4",
     "vitest": "3.0.8"
   },
   "eslintConfig": {

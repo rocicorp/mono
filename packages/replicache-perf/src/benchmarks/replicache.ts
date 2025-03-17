@@ -1,25 +1,24 @@
 import {resolver} from '@rocicorp/resolver';
 import {ReplicacheImpl} from '../../../replicache/src/impl.ts';
+import type {IndexDefinitions} from '../../../replicache/src/index-defs.ts';
 import {dropIDBStoreWithMemFallback} from '../../../replicache/src/kv/idb-store-with-mem-fallback.ts';
+import type {PatchOperation} from '../../../replicache/src/patch-operation.ts';
+import type {ReplicacheOptions} from '../../../replicache/src/replicache-options.ts';
 import type {
-  IndexDefinitions,
-  JSONValue,
-  MutatorDefs,
-  PatchOperation,
   ReadTransaction,
-  ReplicacheOptions,
   WriteTransaction,
-} from '../../../replicache/src/mod.ts';
+} from '../../../replicache/src/transactions.ts';
+import type {MutatorDefs} from '../../../replicache/src/types.ts';
 import {assert} from '../../../shared/src/asserts.ts';
-import {deepEqual} from '../../../shared/src/json.ts';
+import {deepEqual, type JSONValue} from '../../../shared/src/json.ts';
 import {randomUint64} from '../../../shared/src/random-uint64.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Bencher, Benchmark} from '../benchmark.ts';
 import {
-  type TestDataObject,
   getTmcwData,
   jsonArrayTestData,
   jsonObjectTestData,
+  type TestDataObject,
 } from '../data.ts';
 
 const valSize = 1024;
@@ -422,6 +421,7 @@ export function benchmarkStartupUsingBasicReadsFromPersistedData(opts: {
         }
       });
       bencher.stop();
+      // eslint-disable-next-line no-console
       console.log(getCount);
     },
   };
@@ -470,6 +470,7 @@ export function benchmarkStartupUsingScanFromPersistedData(opts: {
           // use the value to be confident we're not optimizing away.
           count += Object.keys(value as TestDataObject).length;
         }
+        // eslint-disable-next-line no-console
         console.log(count);
       });
       bencher.stop();
@@ -511,6 +512,7 @@ export function benchmarkReadTransaction(opts: {
         }
       });
       bench.stop();
+      // eslint-disable-next-line no-console
       console.log(getCount, hasCount);
     },
   };
@@ -540,6 +542,7 @@ export function benchmarkScan(opts: {numKeys: number}): Benchmark {
           // use the value to be confident we're not optimizing away.
           count += (value as ArrayLike<unknown>).length;
         }
+        // eslint-disable-next-line no-console
         console.log(count);
       });
     },
