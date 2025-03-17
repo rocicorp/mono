@@ -28,6 +28,7 @@ import {
   type JSONFormat,
   type LiteRow,
   type LiteRowKey,
+  type LiteValueType,
 } from '../../types/lite.ts';
 import {liteTableName} from '../../types/names.ts';
 import {normalizedKeyOrder} from '../../types/row-key.ts';
@@ -369,9 +370,14 @@ class TransactionProcessor {
     }
     // For the common case (replica identity default), the row is already the
     // key for deletes and updates, in which case a new object can be avoided.
-    return numCols === keyColumns.length
-      ? row
-      : Object.fromEntries(keyColumns.map(col => [col, row[col]]));
+    if (numCols === keyColumns.length) {
+      return row;
+    }
+    const key: Record<string, LiteValueType> = {};
+    for (const col of keyColumns) {
+      key[col] = row[col];
+    }
+    return key;
   }
 
   processInsert(insert: MessageInsert) {
