@@ -115,6 +115,7 @@ test('basic query', async () => {
         "id": "0001",
         "ownerId": "0001",
         "title": "issue 1",
+        Symbol(rc): 1,
       },
       {
         "closed": false,
@@ -122,6 +123,7 @@ test('basic query', async () => {
         "id": "0002",
         "ownerId": "0002",
         "title": "issue 2",
+        Symbol(rc): 1,
       },
       {
         "closed": false,
@@ -129,6 +131,7 @@ test('basic query', async () => {
         "id": "0003",
         "ownerId": null,
         "title": "issue 3",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -147,6 +150,7 @@ test('null compare', async () => {
         "id": "0003",
         "ownerId": null,
         "title": "issue 3",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -163,6 +167,7 @@ test('null compare', async () => {
         "id": "0001",
         "ownerId": "0001",
         "title": "issue 1",
+        Symbol(rc): 1,
       },
       {
         "closed": false,
@@ -170,6 +175,7 @@ test('null compare', async () => {
         "id": "0002",
         "ownerId": "0002",
         "title": "issue 2",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -188,6 +194,7 @@ test('or', async () => {
         "id": "0001",
         "ownerId": "0001",
         "title": "issue 1",
+        Symbol(rc): 1,
       },
       {
         "closed": false,
@@ -195,6 +202,7 @@ test('or', async () => {
         "id": "0002",
         "ownerId": "0002",
         "title": "issue 2",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -228,10 +236,12 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
           {
             "id": "0001",
             "name": "bug",
+            Symbol(rc): 1,
           },
         ],
         "ownerId": "0001",
         "title": "issue 1",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -295,6 +305,7 @@ test('schema applied `one`', async () => {
               "id": "0001",
               "metadata": "{"registrar":"github","login":"alicegh"}",
               "name": "Alice",
+              Symbol(rc): 1,
             },
             "authorId": "0001",
             "createdAt": 1,
@@ -306,15 +317,18 @@ test('schema applied `one`', async () => {
                 "commentId": "0001",
                 "id": "0001",
                 "text": "revision 1",
+                Symbol(rc): 1,
               },
             ],
             "text": "comment 1",
+            Symbol(rc): 1,
           },
           {
             "author": {
               "id": "0002",
               "metadata": "{"registar":"google","login":"bob@gmail.com","altContacts":["bobwave","bobyt","bobplus"]}",
               "name": "Bob",
+              Symbol(rc): 1,
             },
             "authorId": "0002",
             "createdAt": 2,
@@ -322,6 +336,7 @@ test('schema applied `one`', async () => {
             "issueId": "0001",
             "revisions": [],
             "text": "comment 2",
+            Symbol(rc): 1,
           },
         ],
         "description": "description 1",
@@ -330,9 +345,11 @@ test('schema applied `one`', async () => {
           "id": "0001",
           "metadata": "{"registrar":"github","login":"alicegh"}",
           "name": "Alice",
+          Symbol(rc): 1,
         },
         "ownerId": "0001",
         "title": "issue 1",
+        Symbol(rc): 1,
       },
     ]
   `);

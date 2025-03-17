@@ -84,10 +84,12 @@ test('Zero Junction', async () => {
           {
             "id": "a1",
             "name": "Mason Ho",
+            Symbol(rc): 2,
           },
         ],
         "id": "e1",
         "name": "Buffalo Big Board Classic",
+        Symbol(rc): 1,
       },
     ]
   `);
