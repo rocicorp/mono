@@ -5,6 +5,7 @@ import {
   unreachable,
 } from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {drainStreams, type Comparator, type Node} from './data.ts';
 import type {SourceSchema} from './schema.ts';
@@ -114,35 +115,33 @@ export function applyChange(
   switch (change.type) {
     case 'add': {
       // TODO: Only create a new entry if we need to mutate the existing one.
-      const newEntry: Entry = {
-        ...change.node.row,
-      };
+      let newEntry: Writable<Entry>;
+
+      let rc = 1;
       if (singular) {
         const oldEntry = parentEntry[relationship] as Entry | undefined;
         if (oldEntry !== undefined) {
           assert(
-            schema.compareRows(oldEntry, newEntry) === 0,
+            schema.compareRows(oldEntry, change.node.row) === 0,
             'single output already exists',
           );
           // adding same again.
-          const rc = must(refCountMap.get(oldEntry));
+          rc = must(refCountMap.get(oldEntry)) + 1;
           refCountMap.delete(oldEntry);
-          // @ts-expect-error parentEntry is readonly
-          parentEntry[relationship] = newEntry;
-          refCountMap.set(newEntry, rc + 1);
-        } else {
-          // @ts-expect-error parentEntry is readonly
-          parentEntry[relationship] = newEntry;
-          refCountMap.set(newEntry, 1);
         }
+
+        newEntry = makeNewEntryWithRefCount(change.node.row, rc, refCountMap);
+
+        (parentEntry as Writable<Entry>)[relationship] = newEntry;
       } else {
-        insertAndUpdateRefCount(
+        newEntry = makeNewEntryAndInsert(
+          change.node.row,
           refCountMap,
           getChildEntryList(parentEntry, relationship),
-          newEntry,
           schema.compareRows,
         );
       }
+
       for (const [relationship, children] of Object.entries(
         change.node.relationships,
       )) {
@@ -154,8 +153,8 @@ export function applyChange(
         }
 
         const newView = childFormat.singular ? undefined : ([] as EntryList);
-        // @ts-expect-error newEntry is readonly
         newEntry[relationship] = newView;
+
         for (const node of children()) {
           applyChange(
             newEntry,
@@ -176,13 +175,12 @@ export function applyChange(
         const rc = must(refCountMap.get(oldEntry));
         if (rc === 1) {
           refCountMap.delete(oldEntry);
-          // @ts-expect-error parentEntry is readonly
-          parentEntry[relationship] = undefined;
+          (parentEntry as Writable<Entry>)[relationship] = undefined;
         } else {
           refCountMap.set(oldEntry, rc - 1);
         }
       } else {
-        removeAndsUpdateRefCount(
+        removeAndUpdateRefCount(
           refCountMap,
           getChildEntryList(parentEntry, relationship),
           change.node.row,
@@ -196,8 +194,7 @@ export function applyChange(
     case 'child': {
       let existing: Entry;
       if (singular) {
-        assertObject(parentEntry[relationship]);
-        existing = parentEntry[relationship];
+        existing = getSingularEntry(parentEntry, relationship);
       } else {
         const view = getChildEntryList(parentEntry, relationship);
         const {pos, found} = binarySearch(
@@ -230,14 +227,13 @@ export function applyChange(
         const existing = parentEntry[relationship];
         assertEntry(existing);
         const rc = must(refCountMap.get(existing));
-        const newEntry = {
-          ...existing,
-          ...change.node.row,
-        };
-        refCountMap.set(newEntry, rc);
+        const newEntry = makeNewEntryWithRefCount(
+          {...existing, ...change.node.row},
+          rc,
+          refCountMap,
+        );
         refCountMap.delete(existing);
-        // @ts-expect-error parentEntry is readonly
-        parentEntry[relationship] = newEntry;
+        (parentEntry as Writable<Entry>)[relationship] = newEntry;
       } else {
         const view = parentEntry[relationship];
         assertEntryList(view);
@@ -249,18 +245,22 @@ export function applyChange(
             schema.compareRows,
           );
           assert(found, 'node does not exist');
-          const rc = must(refCountMap.get(view[pos]));
-          refCountMap.delete(view[pos]);
-          // @ts-expect-error view is readonly
-          view[pos] = makeEntryPreserveRelationships(
+          const oldEntry = view[pos];
+          const rc = must(refCountMap.get(oldEntry));
+          refCountMap.delete(oldEntry);
+
+          const newEntry = makeEntryPreserveRelationships(
             change.node.row,
-            view[pos],
+            oldEntry,
             format.relationships,
+            rc,
+            refCountMap,
           );
-          refCountMap.set(view[pos], rc);
+
+          (view as Writable<EntryList>)[pos] = newEntry;
         } else {
           // Remove
-          const oldEntry = removeAndsUpdateRefCount(
+          const oldEntry = removeAndUpdateRefCount(
             refCountMap,
             view,
             change.oldNode.row,
@@ -268,19 +268,17 @@ export function applyChange(
           );
 
           // Insert
-          const newEntry = makeEntryPreserveRelationships(
+          insertAndSetRefCount(
+            refCountMap,
+            view,
             change.node.row,
             oldEntry,
             format.relationships,
-          );
-          insertAndUpdateRefCount(
-            refCountMap,
-            view,
-            newEntry,
             schema.compareRows,
           );
         }
       }
+
       break;
     }
     default:
@@ -288,13 +286,13 @@ export function applyChange(
   }
 }
 
-function insertAndUpdateRefCount(
+function makeNewEntryAndInsert(
+  newRow: Row,
   refCountMap: RefCountMap,
   view: EntryList,
-  newEntry: Entry,
   compareRows: Comparator,
-): void {
-  const {pos, found} = binarySearch(view, newEntry, compareRows);
+): Writable<Entry> {
+  const {pos, found} = binarySearch(view, newRow, compareRows);
 
   let deleteCount = 0;
   let rc = 1;
@@ -304,25 +302,55 @@ function insertAndUpdateRefCount(
     refCountMap.delete(view[pos]);
   }
 
-  // @ts-expect-error view is readonly
-  view.splice(pos, deleteCount, newEntry);
-  refCountMap.set(newEntry, rc);
+  const newEntry = makeNewEntryWithRefCount(newRow, rc, refCountMap);
+
+  (view as Writable<EntryList>).splice(pos, deleteCount, newEntry);
+
+  return newEntry;
 }
 
-function removeAndsUpdateRefCount(
+function insertAndSetRefCount(
   refCountMap: RefCountMap,
   view: EntryList,
-  target: Row,
+  newRow: Row,
+  oldEntry: Entry,
+  relationships: {[key: string]: Format},
+  compareRows: Comparator,
+): void {
+  const {pos, found} = binarySearch(view, newRow, compareRows);
+
+  let deleteCount = 0;
+  let rc = 1;
+  if (found) {
+    deleteCount = 1;
+    rc = must(refCountMap.get(view[pos])) + 1;
+    refCountMap.delete(view[pos]);
+  }
+
+  const newEntry = makeEntryPreserveRelationships(
+    newRow,
+    oldEntry,
+    relationships,
+    rc,
+    refCountMap,
+  );
+
+  (view as Writable<EntryList>).splice(pos, deleteCount, newEntry);
+}
+
+function removeAndUpdateRefCount(
+  refCountMap: RefCountMap,
+  view: EntryList,
+  row: Row,
   compareRows: Comparator,
 ): Entry {
-  const {pos, found} = binarySearch(view, target, compareRows);
+  const {pos, found} = binarySearch(view, row, compareRows);
   assert(found, 'node does not exist');
   const oldEntry = view[pos];
   const rc = must(refCountMap.get(oldEntry));
   if (rc === 1) {
     refCountMap.delete(oldEntry);
-    // @ts-expect-error view is readonly
-    view.splice(pos, 1);
+    (view as Writable<EntryList>).splice(pos, 1);
   } else {
     refCountMap.set(oldEntry, rc - 1);
   }
@@ -331,7 +359,7 @@ function removeAndsUpdateRefCount(
 }
 
 // TODO: Do not return an object. It puts unnecessary pressure on the GC.
-function binarySearch(view: EntryList, target: Entry, comparator: Comparator) {
+function binarySearch(view: EntryList, target: Row, comparator: Comparator) {
   let low = 0;
   let high = view.length - 1;
   while (low <= high) {
@@ -349,17 +377,18 @@ function binarySearch(view: EntryList, target: Entry, comparator: Comparator) {
 }
 
 function makeEntryPreserveRelationships(
-  row: Row,
-  entry: Entry,
+  newRow: Row,
+  oldEntry: Entry,
   relationships: {[key: string]: Format},
+  rc: number,
+  refCountMap: RefCountMap,
 ): Entry {
-  const result: Entry = {...row};
+  const entry = makeNewEntryWithRefCount(newRow, rc, refCountMap);
   for (const relationship in relationships) {
-    assert(!(relationship in row), 'Relationship already exists');
-    // @ts-expect-error entry is readonly
-    result[relationship] = entry[relationship];
+    assert(!(relationship in newRow), 'Relationship already exists');
+    entry[relationship] = oldEntry[relationship];
   }
-  return result;
+  return entry;
 }
 
 function getChildEntryList(
@@ -377,4 +406,20 @@ function assertEntryList(v: unknown): asserts v is EntryList {
 
 function assertEntry(v: unknown): asserts v is Entry {
   assertObject(v);
+}
+
+function getSingularEntry(parentEntry: Entry, relationship: string): Entry {
+  const e = parentEntry[relationship];
+  assertObject(e);
+  return e as Entry;
+}
+
+function makeNewEntryWithRefCount(
+  row: Row,
+  rc: number,
+  refCountMap: RefCountMap,
+): Writable<Entry> {
+  const entry = {...row} as Writable<Entry>;
+  refCountMap.set(entry, rc);
+  return entry;
 }
