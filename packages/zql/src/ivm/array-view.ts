@@ -32,7 +32,6 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   #dirty = false;
   #complete = false;
-  readonly #refCountMap = new WeakMap<Entry, number>();
 
   constructor(
     input: Input,
@@ -97,7 +96,6 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
         this.#schema,
         '',
         this.#format,
-        this.#refCountMap,
       );
     }
     this.flush();
@@ -105,14 +103,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   push(change: Change): void {
     this.#dirty = true;
-    applyChange(
-      this.#root,
-      change,
-      this.#schema,
-      '',
-      this.#format,
-      this.#refCountMap,
-    );
+    applyChange(this.#root, change, this.#schema, '', this.#format);
   }
 
   flush() {

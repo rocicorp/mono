@@ -51,21 +51,25 @@ suite('take with no partition', () => {
           {
             "created": 50,
             "id": "i4",
+            Symbol(rc): 1,
           },
           {
             "created": 100,
             "id": "i1",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -144,20 +148,24 @@ suite('take with no partition', () => {
             "created": 100,
             "id": "i1",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 350,
             "id": "i4",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -235,16 +243,19 @@ suite('take with no partition', () => {
             "created": 100,
             "id": "i1",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -300,16 +311,19 @@ suite('take with no partition', () => {
           {
             "created": 50,
             "id": "i5",
+            Symbol(rc): 1,
           },
           {
             "created": 100,
             "id": "i1",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -491,15 +505,18 @@ suite('take with no partition', () => {
             "created": 100,
             "id": "i1",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 250,
             "id": "i5",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -710,11 +727,13 @@ suite('take with no partition', () => {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -824,11 +843,13 @@ suite('take with no partition', () => {
             "created": 100,
             "id": "i1",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -939,16 +960,19 @@ suite('take with no partition', () => {
             "created": 100,
             "id": "i1",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -1005,16 +1029,19 @@ suite('take with no partition', () => {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 400,
             "id": "i4",
             "text": null,
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -1197,11 +1224,13 @@ suite('take with no partition', () => {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -1368,6 +1397,7 @@ suite('take with no partition', () => {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -1515,11 +1545,13 @@ suite('take with no partition', () => {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -1631,16 +1663,19 @@ suite('take with no partition', () => {
             "created": 100,
             "id": "i1",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 400,
             "id": "i4",
             "text": null,
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -1821,11 +1856,13 @@ suite('take with no partition', () => {
             "created": 100,
             "id": "i1",
             "text": null,
+            Symbol(rc): 1,
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -1987,21 +2024,25 @@ suite('take with no partition', () => {
               "created": 100,
               "id": "i1",
               "text": "a2",
+              Symbol(rc): 1,
             },
             {
               "created": 200,
               "id": "i2",
               "text": "b",
+              Symbol(rc): 1,
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
+              Symbol(rc): 1,
             },
             {
               "created": 400,
               "id": "i4",
               "text": "d",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -2097,21 +2138,25 @@ suite('take with no partition', () => {
               "created": 100,
               "id": "i1",
               "text": "a",
+              Symbol(rc): 1,
             },
             {
               "created": 200,
               "id": "i2",
               "text": "b",
+              Symbol(rc): 1,
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
+              Symbol(rc): 1,
             },
             {
               "created": 400,
               "id": "i4",
               "text": "d2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -2209,16 +2254,19 @@ suite('take with no partition', () => {
               "created": 100,
               "id": "i1",
               "text": "a",
+              Symbol(rc): 1,
             },
             {
               "created": 200,
               "id": "i2",
               "text": "b",
+              Symbol(rc): 1,
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -2281,16 +2329,19 @@ suite('take with no partition', () => {
               "created": 100,
               "id": "i1",
               "text": "a",
+              Symbol(rc): 1,
             },
             {
               "created": 200,
               "id": "i2",
               "text": "b2",
+              Symbol(rc): 1,
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -2386,16 +2437,19 @@ suite('take with no partition', () => {
               "created": 100,
               "id": "i1",
               "text": "a",
+              Symbol(rc): 1,
             },
             {
               "created": 200,
               "id": "i2",
               "text": "b",
+              Symbol(rc): 1,
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -2491,16 +2545,19 @@ suite('take with no partition', () => {
               "created": 50,
               "id": "i2",
               "text": "b2",
+              Symbol(rc): 1,
             },
             {
               "created": 100,
               "id": "i1",
               "text": "a",
+              Symbol(rc): 1,
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -2597,16 +2654,19 @@ suite('take with no partition', () => {
               "created": 100,
               "id": "i1",
               "text": "a",
+              Symbol(rc): 1,
             },
             {
               "created": 200,
               "id": "i2",
               "text": "b",
+              Symbol(rc): 1,
             },
             {
               "created": 250,
               "id": "i4",
               "text": "d",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -2798,16 +2858,19 @@ suite('take with no partition', () => {
               "created": 100,
               "id": "i1",
               "text": "a",
+              Symbol(rc): 1,
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
+              Symbol(rc): 1,
             },
             {
               "created": 350,
               "id": "i2",
               "text": "b2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -2919,16 +2982,19 @@ suite('take with no partition', () => {
               "created": 100,
               "id": "i1",
               "text": "a",
+              Symbol(rc): 1,
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
+              Symbol(rc): 1,
             },
             {
               "created": 400,
               "id": "i4",
               "text": "d",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -3104,6 +3170,7 @@ suite('take with no partition', () => {
             "created": 50,
             "id": "i1",
             "text": "a2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -3200,10 +3267,12 @@ suite('take with partition', () => {
           {
             "comments": [],
             "id": "i1",
+            Symbol(rc): 1,
           },
           {
             "comments": [],
             "id": "i2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -3248,21 +3317,25 @@ suite('take with partition', () => {
                 "id": "c1",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 200,
                 "id": "c2",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 300,
                 "id": "c3",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
             ],
             "id": "i1",
+            Symbol(rc): 1,
           },
           {
             "comments": [
@@ -3270,21 +3343,25 @@ suite('take with partition', () => {
                 "created": 150,
                 "id": "c6",
                 "issueID": "i2",
+                Symbol(rc): 1,
               },
               {
                 "created": 400,
                 "id": "c4",
                 "issueID": "i2",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 500,
                 "id": "c5",
                 "issueID": "i2",
                 "text": null,
+                Symbol(rc): 1,
               },
             ],
             "id": "i2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -3423,21 +3500,25 @@ suite('take with partition', () => {
                 "id": "c1",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 200,
                 "id": "c2",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 580,
                 "id": "c3",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
             ],
             "id": "i1",
+            Symbol(rc): 1,
           },
           {
             "comments": [
@@ -3446,20 +3527,24 @@ suite('take with partition', () => {
                 "id": "c4",
                 "issueID": "i2",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 500,
                 "id": "c5",
                 "issueID": "i2",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 550,
                 "id": "c8",
                 "issueID": "i2",
+                Symbol(rc): 1,
               },
             ],
             "id": "i2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -3832,21 +3917,25 @@ suite('take with partition', () => {
                 "id": "c1",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 200,
                 "id": "c2",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 300,
                 "id": "c3",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
             ],
             "id": "i1",
+            Symbol(rc): 1,
           },
           {
             "comments": [
@@ -3855,15 +3944,18 @@ suite('take with partition', () => {
                 "id": "c4",
                 "issueID": "i2",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 500,
                 "id": "c5",
                 "issueID": "i2",
                 "text": null,
+                Symbol(rc): 1,
               },
             ],
             "id": "i2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -3933,10 +4025,12 @@ suite('take with partition', () => {
           {
             "comments": [],
             "id": "i1",
+            Symbol(rc): 1,
           },
           {
             "comments": [],
             "id": "i2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -3983,15 +4077,18 @@ suite('take with partition', () => {
                 "id": "c2",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 300,
                 "id": "c3",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
             ],
             "id": "i1",
+            Symbol(rc): 1,
           },
           {
             "comments": [
@@ -4000,15 +4097,18 @@ suite('take with partition', () => {
                 "id": "c4",
                 "issueID": "i2",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 500,
                 "id": "c5",
                 "issueID": "i2",
                 "text": null,
+                Symbol(rc): 1,
               },
             ],
             "id": "i2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -4182,21 +4282,25 @@ suite('take with partition', () => {
                 "id": "c1",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 200,
                 "id": "c2",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 300,
                 "id": "c3",
                 "issueID": "i1",
                 "text": null,
+                Symbol(rc): 1,
               },
             ],
             "id": "i1",
+            Symbol(rc): 1,
           },
           {
             "comments": [
@@ -4205,15 +4309,18 @@ suite('take with partition', () => {
                 "id": "c4",
                 "issueID": "i2",
                 "text": null,
+                Symbol(rc): 1,
               },
               {
                 "created": 500,
                 "id": "c5",
                 "issueID": "i2",
                 "text": null,
+                Symbol(rc): 1,
               },
             ],
             "id": "i2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -4293,10 +4400,12 @@ suite('take with partition', () => {
           {
             "comments": [],
             "id": "i1",
+            Symbol(rc): 1,
           },
           {
             "comments": [],
             "id": "i2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -4349,21 +4458,25 @@ suite('take with partition', () => {
                   "id": "c1",
                   "issueID": "i1",
                   "text": "a2",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 200,
                   "id": "c2",
                   "issueID": "i1",
                   "text": "b",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 300,
                   "id": "c3",
                   "issueID": "i1",
                   "text": "c",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i1",
+              Symbol(rc): 1,
             },
             {
               "comments": [
@@ -4372,15 +4485,18 @@ suite('take with partition', () => {
                   "id": "c4",
                   "issueID": "i2",
                   "text": "d",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 500,
                   "id": "c5",
                   "issueID": "i2",
                   "text": "e",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -4539,21 +4655,25 @@ suite('take with partition', () => {
                   "id": "c1",
                   "issueID": "i1",
                   "text": "a",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 200,
                   "id": "c2",
                   "issueID": "i1",
                   "text": "b",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 300,
                   "id": "c3",
                   "issueID": "i1",
                   "text": "c",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i1",
+              Symbol(rc): 1,
             },
             {
               "comments": [
@@ -4562,15 +4682,18 @@ suite('take with partition', () => {
                   "id": "c4",
                   "issueID": "i2",
                   "text": "d",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 500,
                   "id": "c5",
                   "issueID": "i2",
                   "text": "e2",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -4731,15 +4854,18 @@ suite('take with partition', () => {
                   "id": "c1",
                   "issueID": "i1",
                   "text": "a",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 200,
                   "id": "c2",
                   "issueID": "i1",
                   "text": "b",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i1",
+              Symbol(rc): 1,
             },
             {
               "comments": [
@@ -4748,15 +4874,18 @@ suite('take with partition', () => {
                   "id": "c4",
                   "issueID": "i2",
                   "text": "d",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 500,
                   "id": "c5",
                   "issueID": "i2",
                   "text": "e",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -4835,21 +4964,25 @@ suite('take with partition', () => {
                   "id": "c1",
                   "issueID": "i1",
                   "text": "a",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 200,
                   "id": "c2",
                   "issueID": "i1",
                   "text": "b2",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 300,
                   "id": "c3",
                   "issueID": "i1",
                   "text": "c",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i1",
+              Symbol(rc): 1,
             },
             {
               "comments": [
@@ -4858,15 +4991,18 @@ suite('take with partition', () => {
                   "id": "c4",
                   "issueID": "i2",
                   "text": "d",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 500,
                   "id": "c5",
                   "issueID": "i2",
                   "text": "e",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -5025,21 +5161,25 @@ suite('take with partition', () => {
                   "id": "c1",
                   "issueID": "i1",
                   "text": "a",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 200,
                   "id": "c2",
                   "issueID": "i1",
                   "text": "b",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 300,
                   "id": "c3",
                   "issueID": "i1",
                   "text": "c2",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i1",
+              Symbol(rc): 1,
             },
             {
               "comments": [
@@ -5048,15 +5188,18 @@ suite('take with partition', () => {
                   "id": "c4",
                   "issueID": "i2",
                   "text": "d",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 500,
                   "id": "c5",
                   "issueID": "i2",
                   "text": "e",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -5215,21 +5358,25 @@ suite('take with partition', () => {
                   "id": "c1",
                   "issueID": "i1",
                   "text": "a",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 150,
                   "id": "c3",
                   "issueID": "i1",
                   "text": "c2",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 200,
                   "id": "c2",
                   "issueID": "i1",
                   "text": "b",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i1",
+              Symbol(rc): 1,
             },
             {
               "comments": [
@@ -5238,15 +5385,18 @@ suite('take with partition', () => {
                   "id": "c4",
                   "issueID": "i2",
                   "text": "d",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 500,
                   "id": "c5",
                   "issueID": "i2",
                   "text": "e",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -5424,21 +5574,25 @@ suite('take with partition', () => {
                   "id": "c1",
                   "issueID": "i1",
                   "text": "a",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 200,
                   "id": "c2",
                   "issueID": "i1",
                   "text": "b",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 300,
                   "id": "c3",
                   "issueID": "i1",
                   "text": "c",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i1",
+              Symbol(rc): 1,
             },
             {
               "comments": [
@@ -5447,15 +5601,18 @@ suite('take with partition', () => {
                   "id": "c4",
                   "issueID": "i2",
                   "text": "d",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 500,
                   "id": "c5",
                   "issueID": "i2",
                   "text": "e",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -5617,21 +5774,25 @@ suite('take with partition', () => {
                   "id": "c2",
                   "issueID": "i1",
                   "text": "b2",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 100,
                   "id": "c1",
                   "issueID": "i1",
                   "text": "a",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 300,
                   "id": "c3",
                   "issueID": "i1",
                   "text": "c",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i1",
+              Symbol(rc): 1,
             },
             {
               "comments": [
@@ -5640,15 +5801,18 @@ suite('take with partition', () => {
                   "id": "c4",
                   "issueID": "i2",
                   "text": "d",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 500,
                   "id": "c5",
                   "issueID": "i2",
                   "text": "e",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -5809,15 +5973,18 @@ suite('take with partition', () => {
                   "id": "c1",
                   "issueID": "i1",
                   "text": "a",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 150,
                   "id": "c3",
                   "issueID": "i1",
                   "text": "c2",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i1",
+              Symbol(rc): 1,
             },
             {
               "comments": [
@@ -5826,15 +5993,18 @@ suite('take with partition', () => {
                   "id": "c4",
                   "issueID": "i2",
                   "text": "d",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 500,
                   "id": "c5",
                   "issueID": "i2",
                   "text": "e",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -6184,15 +6354,18 @@ suite('take with partition', () => {
                   "id": "c2",
                   "issueID": "i1",
                   "text": "b",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 250,
                   "id": "c1",
                   "issueID": "i1",
                   "text": "a2",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i1",
+              Symbol(rc): 1,
             },
             {
               "comments": [
@@ -6201,15 +6374,18 @@ suite('take with partition', () => {
                   "id": "c4",
                   "issueID": "i2",
                   "text": "d",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 500,
                   "id": "c5",
                   "issueID": "i2",
                   "text": "e",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -6388,15 +6564,18 @@ suite('take with partition', () => {
                   "id": "c2",
                   "issueID": "i1",
                   "text": "b",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 300,
                   "id": "c3",
                   "issueID": "i1",
                   "text": "c",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i1",
+              Symbol(rc): 1,
             },
             {
               "comments": [
@@ -6405,15 +6584,18 @@ suite('take with partition', () => {
                   "id": "c4",
                   "issueID": "i2",
                   "text": "d",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 500,
                   "id": "c5",
                   "issueID": "i2",
                   "text": "e",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i2",
+              Symbol(rc): 1,
             },
           ]
         `);
@@ -6748,15 +6930,18 @@ suite('take with partition', () => {
                   "id": "c2",
                   "issueID": "i1",
                   "text": "b",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 300,
                   "id": "c3",
                   "issueID": "i1",
                   "text": "c",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i1",
+              Symbol(rc): 1,
             },
             {
               "comments": [
@@ -6765,15 +6950,18 @@ suite('take with partition', () => {
                   "id": "c1",
                   "issueID": "i2",
                   "text": "a2",
+                  Symbol(rc): 1,
                 },
                 {
                   "created": 400,
                   "id": "c4",
                   "issueID": "i2",
                   "text": "d",
+                  Symbol(rc): 1,
                 },
               ],
               "id": "i2",
+              Symbol(rc): 1,
             },
           ]
         `);

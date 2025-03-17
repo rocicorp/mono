@@ -1,4 +1,5 @@
 import {describe, expect, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {deepClone} from '../../../shared/src/deep-clone.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -13,7 +14,6 @@ import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.ts';
 import type {AdvancedQuery} from './query-internal.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 
 /**
  * Some basic manual tests to get us started.
@@ -633,6 +633,7 @@ describe('joins and filters', () => {
                   "registrar": "github",
                 },
                 "name": "Alice",
+                Symbol(rc): 1,
               },
               "authorId": "0001",
               "createdAt": 1,
@@ -644,9 +645,11 @@ describe('joins and filters', () => {
                   "commentId": "0001",
                   "id": "0001",
                   "text": "revision 1",
+                  Symbol(rc): 1,
                 },
               ],
               "text": "comment 1",
+              Symbol(rc): 1,
             },
             {
               "author": {
@@ -661,6 +664,7 @@ describe('joins and filters', () => {
                   "registar": "google",
                 },
                 "name": "Bob",
+                Symbol(rc): 1,
               },
               "authorId": "0002",
               "createdAt": 2,
@@ -668,6 +672,7 @@ describe('joins and filters', () => {
               "issueId": "0001",
               "revisions": [],
               "text": "comment 2",
+              Symbol(rc): 1,
             },
           ],
           "description": "description 1",
@@ -679,9 +684,11 @@ describe('joins and filters', () => {
               "registrar": "github",
             },
             "name": "Alice",
+            Symbol(rc): 1,
           },
           "ownerId": "0001",
           "title": "issue 1",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -738,6 +745,7 @@ test('run', async () => {
             "id": "0001",
             "issueId": "0001",
             "text": "comment 1",
+            Symbol(rc): 1,
           },
           {
             "authorId": "0002",
@@ -745,6 +753,7 @@ test('run', async () => {
             "id": "0002",
             "issueId": "0001",
             "text": "comment 2",
+            Symbol(rc): 1,
           },
         ],
         "description": "description 1",
@@ -753,6 +762,7 @@ test('run', async () => {
           {
             "id": "0001",
             "name": "label 1",
+            Symbol(rc): 1,
           },
         ],
         "owner": {
@@ -762,9 +772,11 @@ test('run', async () => {
             "registrar": "github",
           },
           "name": "Alice",
+          Symbol(rc): 1,
         },
         "ownerId": "0001",
         "title": "issue 1",
+        Symbol(rc): 1,
       },
       {
         "closed": false,
@@ -784,9 +796,11 @@ test('run', async () => {
             "registar": "google",
           },
           "name": "Bob",
+          Symbol(rc): 1,
         },
         "ownerId": "0002",
         "title": "issue 2",
+        Symbol(rc): 1,
       },
       {
         "closed": false,
@@ -797,6 +811,7 @@ test('run', async () => {
         "owner": undefined,
         "ownerId": null,
         "title": "issue 3",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -833,25 +848,33 @@ test('json columns are returned as JS objects', async () => {
   addData(queryDelegate);
 
   const rows = await newQuery(queryDelegate, schema, 'user').run();
-  expect(rows).toEqual([
-    {
-      id: '0001',
-      metadata: {
-        login: 'alicegh',
-        registrar: 'github',
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "id": "0001",
+        "metadata": {
+          "login": "alicegh",
+          "registrar": "github",
+        },
+        "name": "Alice",
+        Symbol(rc): 1,
       },
-      name: 'Alice',
-    },
-    {
-      id: '0002',
-      metadata: {
-        altContacts: ['bobwave', 'bobyt', 'bobplus'],
-        login: 'bob@gmail.com',
-        registar: 'google',
+      {
+        "id": "0002",
+        "metadata": {
+          "altContacts": [
+            "bobwave",
+            "bobyt",
+            "bobplus",
+          ],
+          "login": "bob@gmail.com",
+          "registar": "google",
+        },
+        "name": "Bob",
+        Symbol(rc): 1,
       },
-      name: 'Bob',
-    },
-  ]);
+    ]
+  `);
 });
 
 test('complex expression', async () => {
@@ -872,6 +895,7 @@ test('complex expression', async () => {
         "id": "0001",
         "ownerId": "0001",
         "title": "issue 1",
+        Symbol(rc): 1,
       },
       {
         "closed": false,
@@ -879,6 +903,7 @@ test('complex expression', async () => {
         "id": "0002",
         "ownerId": "0002",
         "title": "issue 2",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -900,6 +925,7 @@ test('complex expression', async () => {
         "id": "0001",
         "ownerId": "0001",
         "title": "issue 1",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -913,36 +939,43 @@ test('null compare', async () => {
     .where('ownerId', 'IS', null)
     .run();
 
-  expect(rows).toEqual([
-    {
-      closed: false,
-      description: 'description 3',
-      id: '0003',
-      ownerId: null,
-      title: 'issue 3',
-    },
-  ]);
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "description": "description 3",
+        "id": "0003",
+        "ownerId": null,
+        "title": "issue 3",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   rows = await newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS NOT', null)
     .run();
 
-  expect(rows).toEqual([
-    {
-      closed: false,
-      description: 'description 1',
-      id: '0001',
-      ownerId: '0001',
-      title: 'issue 1',
-    },
-    {
-      closed: false,
-      description: 'description 2',
-      id: '0002',
-      ownerId: '0002',
-      title: 'issue 2',
-    },
-  ]);
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+        Symbol(rc): 1,
+      },
+      {
+        "closed": false,
+        "description": "description 2",
+        "id": "0002",
+        "ownerId": "0002",
+        "title": "issue 2",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 });
 
 test('literal filter', async () => {
@@ -959,29 +992,34 @@ test('literal filter', async () => {
     .where(({cmpLit}) => cmpLit(true, '=', true))
     .run();
 
-  expect(rows).toEqual([
-    {
-      closed: false,
-      description: 'description 1',
-      id: '0001',
-      ownerId: '0001',
-      title: 'issue 1',
-    },
-    {
-      closed: false,
-      description: 'description 2',
-      id: '0002',
-      ownerId: '0002',
-      title: 'issue 2',
-    },
-    {
-      closed: false,
-      description: 'description 3',
-      id: '0003',
-      ownerId: null,
-      title: 'issue 3',
-    },
-  ]);
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+        Symbol(rc): 1,
+      },
+      {
+        "closed": false,
+        "description": "description 2",
+        "id": "0002",
+        "ownerId": "0002",
+        "title": "issue 2",
+        Symbol(rc): 1,
+      },
+      {
+        "closed": false,
+        "description": "description 3",
+        "id": "0003",
+        "ownerId": null,
+        "title": "issue 3",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 });
 
 test('join with compound keys', async () => {
@@ -1073,15 +1111,18 @@ test('join with compound keys', async () => {
             "b2": 2,
             "b3": 3,
             "id": 0,
+            Symbol(rc): 1,
           },
           {
             "b1": 1,
             "b2": 2,
             "b3": 4,
             "id": 1,
+            Symbol(rc): 1,
           },
         ],
         "id": 0,
+        Symbol(rc): 1,
       },
       {
         "a1": 2,
@@ -1093,9 +1134,11 @@ test('join with compound keys', async () => {
             "b2": 3,
             "b3": 5,
             "id": 2,
+            Symbol(rc): 1,
           },
         ],
         "id": 1,
+        Symbol(rc): 1,
       },
       {
         "a1": 2,
@@ -1107,9 +1150,11 @@ test('join with compound keys', async () => {
             "b2": 3,
             "b3": 5,
             "id": 2,
+            Symbol(rc): 1,
           },
         ],
         "id": 2,
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -1174,10 +1219,12 @@ test('where exists', () => {
           {
             "id": "0001",
             "name": "bug",
+            Symbol(rc): 1,
           },
         ],
         "ownerId": "0002",
         "title": "issue 2",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -1253,10 +1300,12 @@ test('duplicative where exists', () => {
           {
             "id": "0001",
             "name": "bug",
+            Symbol(rc): 1,
           },
         ],
         "ownerId": "0002",
         "title": "issue 2",
+        Symbol(rc): 1,
       },
     ]
   `);

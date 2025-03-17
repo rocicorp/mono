@@ -13,6 +13,7 @@ import type {Input} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import {Take} from '../../zql/src/ivm/take.ts';
 import {createSource} from '../../zql/src/ivm/test/source-factory.ts';
+import {refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
 import {SolidView, solidViewFactory} from './solid-view.ts';
 
@@ -47,8 +48,8 @@ test('basics', () => {
   );
 
   const state0 = [
-    {a: 1, b: 'a'},
-    {a: 2, b: 'b'},
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state0);
 
@@ -59,9 +60,9 @@ test('basics', () => {
   commit();
 
   const state1 = [
-    {a: 1, b: 'a'},
-    {a: 2, b: 'b'},
-    {a: 3, b: 'c'},
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
+    {a: 3, b: 'c', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state1);
 
@@ -71,7 +72,7 @@ test('basics', () => {
   expect(view.data).toEqual(state1);
   commit();
 
-  const state2 = [{a: 3, b: 'c'}];
+  const state2 = [{a: 3, b: 'c', [refCountSymbol]: 1}];
   expect(view.data).toEqual(state2);
 
   ms.push({row: {a: 3, b: 'c'}, type: 'remove'});
@@ -106,7 +107,7 @@ test('single-format', () => {
     true,
   );
 
-  const state0 = {a: 1, b: 'a'};
+  const state0 = {a: 1, b: 'a', [refCountSymbol]: 1};
   expect(view.data).toEqual(state0);
 
   // trying to add another element should be an error
@@ -221,14 +222,17 @@ test('tree', () => {
           id: 2,
           name: 'foobar',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
       name: 'foobar',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -239,14 +243,17 @@ test('tree', () => {
           id: 4,
           name: 'monkey',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
       name: 'monkey',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state0);
@@ -265,8 +272,10 @@ test('tree', () => {
           id: 2,
           name: 'foobar',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 1,
@@ -277,14 +286,17 @@ test('tree', () => {
           id: 2,
           name: 'foobar',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
       name: 'foobar',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -295,14 +307,17 @@ test('tree', () => {
           id: 4,
           name: 'monkey',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
       name: 'monkey',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state1);
@@ -321,14 +336,17 @@ test('tree', () => {
           id: 2,
           name: 'foobar',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
       name: 'foobar',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -339,14 +357,17 @@ test('tree', () => {
           id: 4,
           name: 'monkey',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
       name: 'monkey',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state2);
@@ -368,6 +389,7 @@ test('tree', () => {
       name: 'foo',
       childID: 2,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -378,14 +400,17 @@ test('tree', () => {
           id: 4,
           name: 'monkey',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
       name: 'monkey',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state3);
@@ -411,14 +436,17 @@ test('tree', () => {
           id: 2,
           name: 'foobaz',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
       name: 'foobaz',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -429,14 +457,17 @@ test('tree', () => {
           id: 4,
           name: 'monkey',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
       name: 'monkey',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ]);
 });
@@ -505,7 +536,9 @@ test('tree-single', () => {
       id: 2,
       name: 'foobar',
       childID: null,
+      [refCountSymbol]: 1,
     },
+    [refCountSymbol]: 1,
   };
   expect(view.data).toEqual(state0);
 
@@ -523,6 +556,7 @@ test('tree-single', () => {
     name: 'foo',
     childID: 2,
     child: undefined,
+    [refCountSymbol]: 1,
   };
   expect(view.data).toEqual(state1);
 
@@ -661,9 +695,11 @@ test('collapse', () => {
         {
           id: 1,
           name: 'label',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state1);
@@ -773,13 +809,16 @@ test('collapse', () => {
         {
           id: 1,
           name: 'label',
+          [refCountSymbol]: 1,
         },
         {
           id: 2,
           name: 'label2',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state3);
@@ -890,13 +929,16 @@ test('collapse', () => {
         {
           id: 1,
           name: 'label',
+          [refCountSymbol]: 1,
         },
         {
           id: 2,
           name: 'label2',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state4);
@@ -1008,13 +1050,16 @@ test('collapse', () => {
         {
           id: 1,
           name: 'label',
+          [refCountSymbol]: 1,
         },
         {
           id: 2,
           name: 'label2x',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ]);
 });
@@ -1143,8 +1188,10 @@ test('collapse-single', () => {
       labels: {
         id: 1,
         name: 'label',
+        [refCountSymbol]: 1,
       },
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ]);
 });
@@ -1174,8 +1221,8 @@ test('basic with edit pushes', () => {
   );
 
   const state0 = [
-    {id: 1, b: 'a'},
-    {id: 2, b: 'b'},
+    {id: 1, b: 'a', [refCountSymbol]: 1},
+    {id: 2, b: 'b', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state0);
 
@@ -1185,8 +1232,8 @@ test('basic with edit pushes', () => {
   commit();
 
   const state1 = [
-    {id: 1, b: 'a'},
-    {id: 2, b: 'b2'},
+    {id: 1, b: 'a', [refCountSymbol]: 1},
+    {id: 2, b: 'b2', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state1);
 
@@ -1195,8 +1242,8 @@ test('basic with edit pushes', () => {
   expect(view.data).toEqual(state1);
   commit();
   expect(view.data).toEqual([
-    {id: 1, b: 'a'},
-    {id: 3, b: 'b3'},
+    {id: 1, b: 'a', [refCountSymbol]: 1},
+    {id: 3, b: 'b3', [refCountSymbol]: 1},
   ]);
 });
 
@@ -1267,8 +1314,10 @@ test('tree edit', () => {
           name: 'foobar',
           data: 'b',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
@@ -1276,6 +1325,7 @@ test('tree edit', () => {
       data: 'b',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -1288,8 +1338,10 @@ test('tree edit', () => {
           name: 'monkey',
           data: 'd',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
@@ -1297,6 +1349,7 @@ test('tree edit', () => {
       data: 'd',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state0);
@@ -1323,8 +1376,10 @@ test('tree edit', () => {
           name: 'foobar',
           data: 'b',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
@@ -1332,6 +1387,7 @@ test('tree edit', () => {
       data: 'b',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -1344,8 +1400,10 @@ test('tree edit', () => {
           name: 'monkey',
           data: 'd',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
@@ -1353,6 +1411,7 @@ test('tree edit', () => {
       data: 'd',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state1);
@@ -1390,8 +1449,10 @@ test('tree edit', () => {
           name: 'foobar',
           data: 'b',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
@@ -1399,6 +1460,7 @@ test('tree edit', () => {
       data: 'b',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -1411,8 +1473,10 @@ test('tree edit', () => {
           name: 'monkey',
           data: 'd2',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
@@ -1420,6 +1484,7 @@ test('tree edit', () => {
       data: 'd2',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
 
@@ -1456,9 +1521,9 @@ test('edit to change the order', () => {
   );
 
   const state0 = [
-    {a: 10, b: 'a'},
-    {a: 20, b: 'b'},
-    {a: 30, b: 'c'},
+    {a: 10, b: 'a', [refCountSymbol]: 1},
+    {a: 20, b: 'b', [refCountSymbol]: 1},
+    {a: 30, b: 'c', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state0);
 
@@ -1472,9 +1537,9 @@ test('edit to change the order', () => {
   commit();
 
   const state1 = [
-    {a: 5, b: 'b2'},
-    {a: 10, b: 'a'},
-    {a: 30, b: 'c'},
+    {a: 5, b: 'b2', [refCountSymbol]: 1},
+    {a: 10, b: 'a', [refCountSymbol]: 1},
+    {a: 30, b: 'c', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state1);
 
@@ -1488,9 +1553,9 @@ test('edit to change the order', () => {
   commit();
 
   const state2 = [
-    {a: 4, b: 'b3'},
-    {a: 10, b: 'a'},
-    {a: 30, b: 'c'},
+    {a: 4, b: 'b3', [refCountSymbol]: 1},
+    {a: 10, b: 'a', [refCountSymbol]: 1},
+    {a: 30, b: 'c', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state2);
 
@@ -1504,9 +1569,9 @@ test('edit to change the order', () => {
   commit();
 
   expect(view.data).toEqual([
-    {a: 10, b: 'a'},
-    {a: 20, b: 'b4'},
-    {a: 30, b: 'c'},
+    {a: 10, b: 'a', [refCountSymbol]: 1},
+    {a: 20, b: 'b4', [refCountSymbol]: 1},
+    {a: 30, b: 'c', [refCountSymbol]: 1},
   ]);
 });
 
@@ -1610,9 +1675,11 @@ test('edit to preserve relationships', () => {
         {
           id: 1,
           name: 'label1',
+          [refCountSymbol]: 1,
         },
       ],
       title: 'issue1',
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
@@ -1620,9 +1687,11 @@ test('edit to preserve relationships', () => {
         {
           id: 2,
           name: 'label2',
+          [refCountSymbol]: 1,
         },
       ],
       title: 'issue2',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state1);
@@ -1646,9 +1715,11 @@ test('edit to preserve relationships', () => {
         {
           id: 1,
           name: 'label1',
+          [refCountSymbol]: 1,
         },
       ],
       title: 'issue1 changed',
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
@@ -1656,9 +1727,11 @@ test('edit to preserve relationships', () => {
         {
           id: 2,
           name: 'label2',
+          [refCountSymbol]: 1,
         },
       ],
       title: 'issue2',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state2);
@@ -1680,9 +1753,11 @@ test('edit to preserve relationships', () => {
         {
           id: 2,
           name: 'label2',
+          [refCountSymbol]: 1,
         },
       ],
       title: 'issue2',
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -1690,9 +1765,11 @@ test('edit to preserve relationships', () => {
         {
           id: 1,
           name: 'label1',
+          [refCountSymbol]: 1,
         },
       ],
       title: 'issue1 is now issue3',
+      [refCountSymbol]: 1,
     },
   ]);
 });
@@ -1799,9 +1876,11 @@ test('edit leaf', () => {
           issueId: 1,
           labelId: 1,
           extra: 'a',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state1);
@@ -1883,15 +1962,18 @@ test('edit leaf', () => {
           issueId: 1,
           labelId: 1,
           extra: 'a',
+          [refCountSymbol]: 1,
         },
         {
           id: 2,
           issueId: 1,
           labelId: 2,
           extra: 'b',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state3);
@@ -1955,7 +2037,7 @@ test('edit leaf', () => {
   expect(view.data).toEqual(state3);
   commit();
 
-  const state4 = [
+  expect(view.data).toEqual([
     {
       id: 1,
       labels: [
@@ -1964,18 +2046,20 @@ test('edit leaf', () => {
           issueId: 1,
           labelId: 1,
           extra: 'a',
+          [refCountSymbol]: 1,
         },
         {
           id: 2,
           issueId: 1,
           labelId: 2,
           extra: 'b2',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
-  ];
-  expect(view.data).toEqual(state4);
+  ]);
 });
 
 test('queryComplete promise', async () => {
@@ -2002,10 +2086,20 @@ test('queryComplete promise', async () => {
     queryCompleteResolver.promise,
   );
 
-  expect(view.data).toEqual([
-    {a: 1, b: 'a'},
-    {a: 2, b: 'b'},
-  ]);
+  expect(view.data).toMatchInlineSnapshot(`
+    [
+      {
+        "a": 1,
+        "b": "a",
+        Symbol(rc): 1,
+      },
+      {
+        "a": 2,
+        "b": "b",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   expect(view.resultDetails).toEqual({type: 'unknown'});
 

@@ -60,7 +60,7 @@ describe('applyChange', () => {
   describe('Multiple entries', () => {
     test('singular: false', () => {
       // This should really be a WeakMap but for testing purposes we use a Map.
-      const refCountMap = new Map<Entry, number>();
+
       const parentEntry: Entry = {'': []};
       const format: Format = {
         singular: false,
@@ -155,50 +155,27 @@ describe('applyChange', () => {
         ];
 
         for (const change of changes) {
-          applyChange(
-            parentEntry,
-            change,
-            schema,
-            relationship,
-            format,
-            refCountMap,
-          );
+          applyChange(parentEntry, change, schema, relationship, format);
         }
 
         expect(parentEntry).toMatchInlineSnapshot(`
-    {
-      "": [
-        {
-          "athletes": [
-            {
-              "id": "a1",
-              "name": "Mason Ho",
-            },
-          ],
-          "id": "e1",
-          "name": "Buffalo Big Board Classic",
-        },
-      ],
-    }
-  `);
-        expect(refCountMap).toMatchInlineSnapshot(`
-      Map {
-        {
-          "athletes": [
-            {
-              "id": "a1",
-              "name": "Mason Ho",
-            },
-          ],
-          "id": "e1",
-          "name": "Buffalo Big Board Classic",
-        } => 1,
-        {
-          "id": "a1",
-          "name": "Mason Ho",
-        } => 2,
-      }
-    `);
+          {
+            "": [
+              {
+                "athletes": [
+                  {
+                    "id": "a1",
+                    "name": "Mason Ho",
+                    Symbol(rc): 2,
+                  },
+                ],
+                "id": "e1",
+                "name": "Buffalo Big Board Classic",
+                Symbol(rc): 1,
+              },
+            ],
+          }
+        `);
       }
 
       {
@@ -239,50 +216,27 @@ describe('applyChange', () => {
         ];
 
         for (const change of changes) {
-          applyChange(
-            parentEntry,
-            change,
-            schema,
-            relationship,
-            format,
-            refCountMap,
-          );
+          applyChange(parentEntry, change, schema, relationship, format);
         }
 
         expect(parentEntry).toMatchInlineSnapshot(`
-      {
-        "": [
           {
-            "athletes": [
+            "": [
               {
-                "id": "a1",
-                "name": "Mason Ho",
+                "athletes": [
+                  {
+                    "id": "a1",
+                    "name": "Mason Ho",
+                    Symbol(rc): 1,
+                  },
+                ],
+                "id": "e1",
+                "name": "Buffalo Big Board Classic",
+                Symbol(rc): 1,
               },
             ],
-            "id": "e1",
-            "name": "Buffalo Big Board Classic",
-          },
-        ],
-      }
-    `);
-        expect(refCountMap).toMatchInlineSnapshot(`
-      Map {
-        {
-          "athletes": [
-            {
-              "id": "a1",
-              "name": "Mason Ho",
-            },
-          ],
-          "id": "e1",
-          "name": "Buffalo Big Board Classic",
-        } => 1,
-        {
-          "id": "a1",
-          "name": "Mason Ho",
-        } => 1,
-      }
-    `);
+          }
+        `);
       }
 
       {
@@ -323,34 +277,19 @@ describe('applyChange', () => {
         ];
 
         for (const change of changes) {
-          applyChange(
-            parentEntry,
-            change,
-            schema,
-            relationship,
-            format,
-            refCountMap,
-          );
+          applyChange(parentEntry, change, schema, relationship, format);
         }
 
         expect(parentEntry).toMatchInlineSnapshot(`
-      {
-        "": [
           {
-            "athletes": [],
-            "id": "e1",
-            "name": "Buffalo Big Board Classic",
-          },
-        ],
-      }
-    `);
-        expect(refCountMap).toMatchInlineSnapshot(`
-          Map {
-            {
-              "athletes": [],
-              "id": "e1",
-              "name": "Buffalo Big Board Classic",
-            } => 1,
+            "": [
+              {
+                "athletes": [],
+                "id": "e1",
+                "name": "Buffalo Big Board Classic",
+                Symbol(rc): 1,
+              },
+            ],
           }
         `);
       }
@@ -358,7 +297,7 @@ describe('applyChange', () => {
 
     test('singular: true', () => {
       // This should really be a WeakMap but for testing purposes we use a Map.
-      const refCountMap = new Map<Entry, number>();
+
       const parentEntry: Entry = {'': []};
       const format: Format = {
         singular: false,
@@ -453,14 +392,7 @@ describe('applyChange', () => {
         ];
 
         for (const change of changes) {
-          applyChange(
-            parentEntry,
-            change,
-            schema,
-            relationship,
-            format,
-            refCountMap,
-          );
+          applyChange(parentEntry, change, schema, relationship, format);
         }
 
         expect(parentEntry).toMatchInlineSnapshot(`
@@ -470,27 +402,13 @@ describe('applyChange', () => {
                 "athletes": {
                   "id": "a1",
                   "name": "Mason Ho",
+                  Symbol(rc): 2,
                 },
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
+                Symbol(rc): 1,
               },
             ],
-          }
-        `);
-        expect(refCountMap).toMatchInlineSnapshot(`
-          Map {
-            {
-              "athletes": {
-                "id": "a1",
-                "name": "Mason Ho",
-              },
-              "id": "e1",
-              "name": "Buffalo Big Board Classic",
-            } => 1,
-            {
-              "id": "a1",
-              "name": "Mason Ho",
-            } => 2,
           }
         `);
       }
@@ -533,14 +451,7 @@ describe('applyChange', () => {
         ];
 
         for (const change of changes) {
-          applyChange(
-            parentEntry,
-            change,
-            schema,
-            relationship,
-            format,
-            refCountMap,
-          );
+          applyChange(parentEntry, change, schema, relationship, format);
         }
 
         expect(parentEntry).toMatchInlineSnapshot(`
@@ -550,27 +461,13 @@ describe('applyChange', () => {
                 "athletes": {
                   "id": "a1",
                   "name": "Mason Ho",
+                  Symbol(rc): 1,
                 },
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
+                Symbol(rc): 1,
               },
             ],
-          }
-        `);
-        expect(refCountMap).toMatchInlineSnapshot(`
-          Map {
-            {
-              "athletes": {
-                "id": "a1",
-                "name": "Mason Ho",
-              },
-              "id": "e1",
-              "name": "Buffalo Big Board Classic",
-            } => 1,
-            {
-              "id": "a1",
-              "name": "Mason Ho",
-            } => 1,
           }
         `);
       }
@@ -613,14 +510,7 @@ describe('applyChange', () => {
         ];
 
         for (const change of changes) {
-          applyChange(
-            parentEntry,
-            change,
-            schema,
-            relationship,
-            format,
-            refCountMap,
-          );
+          applyChange(parentEntry, change, schema, relationship, format);
         }
 
         expect(parentEntry).toMatchInlineSnapshot(`
@@ -630,17 +520,9 @@ describe('applyChange', () => {
                 "athletes": undefined,
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
+                Symbol(rc): 1,
               },
             ],
-          }
-        `);
-        expect(refCountMap).toMatchInlineSnapshot(`
-          Map {
-            {
-              "athletes": undefined,
-              "id": "e1",
-              "name": "Buffalo Big Board Classic",
-            } => 1,
           }
         `);
       }
@@ -649,7 +531,6 @@ describe('applyChange', () => {
 
   describe('Simple', () => {
     test('singular: false', () => {
-      const refCountMap = new Map<Entry, number>();
       const schema = {
         tableName: 'event',
         columns: {
@@ -670,7 +551,7 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format, refCountMap);
+        applyChange(root, change, schema, '', format);
 
       apply({
         type: 'add',
@@ -683,15 +564,16 @@ describe('applyChange', () => {
         },
       });
       expect(root).toMatchInlineSnapshot(`
-    {
-      "": [
         {
-          "id": "1",
-          "name": "Aaron",
-        },
-      ],
-    }
-  `);
+          "": [
+            {
+              "id": "1",
+              "name": "Aaron",
+              Symbol(rc): 1,
+            },
+          ],
+        }
+      `);
 
       for (let i = 0; i < 5; i++) {
         apply({
@@ -706,31 +588,21 @@ describe('applyChange', () => {
         });
       }
       expect(root).toMatchInlineSnapshot(`
-    {
-      "": [
         {
-          "id": "1",
-          "name": "Aaron",
-        },
-        {
-          "id": "2",
-          "name": "Greg",
-        },
-      ],
-    }
-  `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-    Map {
-      {
-        "id": "1",
-        "name": "Aaron",
-      } => 1,
-      {
-        "id": "2",
-        "name": "Greg",
-      } => 5,
-    }
-  `);
+          "": [
+            {
+              "id": "1",
+              "name": "Aaron",
+              Symbol(rc): 1,
+            },
+            {
+              "id": "2",
+              "name": "Greg",
+              Symbol(rc): 5,
+            },
+          ],
+        }
+      `);
 
       for (let i = 0; i < 4; i++) {
         apply({
@@ -745,31 +617,21 @@ describe('applyChange', () => {
         });
       }
       expect(root).toMatchInlineSnapshot(`
-    {
-      "": [
         {
-          "id": "1",
-          "name": "Aaron",
-        },
-        {
-          "id": "2",
-          "name": "Greg",
-        },
-      ],
-    }
-  `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-    Map {
-      {
-        "id": "1",
-        "name": "Aaron",
-      } => 1,
-      {
-        "id": "2",
-        "name": "Greg",
-      } => 1,
-    }
-  `);
+          "": [
+            {
+              "id": "1",
+              "name": "Aaron",
+              Symbol(rc): 1,
+            },
+            {
+              "id": "2",
+              "name": "Greg",
+              Symbol(rc): 1,
+            },
+          ],
+        }
+      `);
 
       apply({
         type: 'remove',
@@ -783,23 +645,16 @@ describe('applyChange', () => {
       });
 
       expect(root).toMatchInlineSnapshot(`
-    {
-      "": [
         {
-          "id": "1",
-          "name": "Aaron",
-        },
-      ],
-    }
-  `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-    Map {
-      {
-        "id": "1",
-        "name": "Aaron",
-      } => 1,
-    }
-  `);
+          "": [
+            {
+              "id": "1",
+              "name": "Aaron",
+              Symbol(rc): 1,
+            },
+          ],
+        }
+      `);
 
       expect(() =>
         apply({
@@ -826,27 +681,19 @@ describe('applyChange', () => {
         },
       });
       expect(root).toMatchInlineSnapshot(`
-    {
-      "": [
         {
-          "id": "1",
-          "name": "Darick",
-        },
-      ],
-    }
-  `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-    Map {
-      {
-        "id": "1",
-        "name": "Darick",
-      } => 2,
-    }
-  `);
+          "": [
+            {
+              "id": "1",
+              "name": "Darick",
+              Symbol(rc): 2,
+            },
+          ],
+        }
+      `);
     });
 
     test('singular: true', () => {
-      const refCountMap = new Map<Entry, number>();
       const schema = {
         tableName: 'event',
         columns: {
@@ -867,7 +714,7 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format, refCountMap);
+        applyChange(root, change, schema, '', format);
 
       apply({
         type: 'add',
@@ -884,15 +731,8 @@ describe('applyChange', () => {
           "": {
             "id": "1",
             "name": "Aaron",
+            Symbol(rc): 1,
           },
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Aaron",
-          } => 1,
         }
       `);
 
@@ -924,15 +764,8 @@ describe('applyChange', () => {
           "": {
             "id": "1",
             "name": "Greg",
+            Symbol(rc): 2,
           },
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Greg",
-          } => 2,
         }
       `);
 
@@ -953,15 +786,8 @@ describe('applyChange', () => {
           "": {
             "id": "1",
             "name": "Greg",
+            Symbol(rc): 5,
           },
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Greg",
-          } => 5,
         }
       `);
 
@@ -982,15 +808,8 @@ describe('applyChange', () => {
           "": {
             "id": "1",
             "name": "Greg",
+            Symbol(rc): 1,
           },
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Greg",
-          } => 1,
         }
       `);
 
@@ -1009,7 +828,6 @@ describe('applyChange', () => {
           "": undefined,
         }
       `);
-      expect(refCountMap).toMatchInlineSnapshot(`Map {}`);
 
       expect(() =>
         apply({
@@ -1026,7 +844,6 @@ describe('applyChange', () => {
     });
 
     test('edit, singular: false', () => {
-      const refCountMap = new Map<Entry, number>();
       const schema = {
         tableName: 'event',
         columns: {
@@ -1047,7 +864,7 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format, refCountMap);
+        applyChange(root, change, schema, '', format);
 
       apply({
         type: 'add',
@@ -1065,16 +882,9 @@ describe('applyChange', () => {
             {
               "id": "1",
               "name": "Aaron",
+              Symbol(rc): 1,
             },
           ],
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Aaron",
-          } => 1,
         }
       `);
 
@@ -1099,16 +909,9 @@ describe('applyChange', () => {
             {
               "id": "1",
               "name": "Greg",
+              Symbol(rc): 1,
             },
           ],
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Greg",
-          } => 1,
         }
       `);
 
@@ -1130,16 +933,9 @@ describe('applyChange', () => {
             {
               "id": "1",
               "name": "Aaron",
+              Symbol(rc): 3,
             },
           ],
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Aaron",
-          } => 3,
         }
       `);
 
@@ -1164,22 +960,14 @@ describe('applyChange', () => {
             {
               "id": "1",
               "name": "Greg",
+              Symbol(rc): 3,
             },
           ],
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Greg",
-          } => 3,
         }
       `);
     });
 
     test('edit primary key, singular: false', () => {
-      const refCountMap = new Map<Entry, number>();
       const schema = {
         tableName: 'event',
         columns: {
@@ -1200,7 +988,7 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format, refCountMap);
+        applyChange(root, change, schema, '', format);
 
       apply({
         type: 'add',
@@ -1218,16 +1006,9 @@ describe('applyChange', () => {
             {
               "id": "1",
               "name": "Aaron",
+              Symbol(rc): 1,
             },
           ],
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Aaron",
-          } => 1,
         }
       `);
 
@@ -1252,18 +1033,12 @@ describe('applyChange', () => {
             {
               "id": "2",
               "name": "Greg",
+              Symbol(rc): 1,
             },
           ],
         }
       `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "2",
-            "name": "Greg",
-          } => 1,
-        }
-      `);
+
       apply({
         type: 'remove',
         node: {
@@ -1288,15 +1063,16 @@ describe('applyChange', () => {
         });
       }
       expect(root).toMatchInlineSnapshot(`
-    {
-      "": [
         {
-          "id": "1",
-          "name": "Aaron",
-        },
-      ],
-    }
-  `);
+          "": [
+            {
+              "id": "1",
+              "name": "Aaron",
+              Symbol(rc): 2,
+            },
+          ],
+        }
+      `);
 
       for (let i = 0; i < 2; i++) {
         apply({
@@ -1317,24 +1093,14 @@ describe('applyChange', () => {
             {
               "id": "1",
               "name": "Aaron",
+              Symbol(rc): 2,
             },
             {
               "id": "2",
               "name": "Greg",
+              Symbol(rc): 2,
             },
           ],
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Aaron",
-          } => 2,
-          {
-            "id": "2",
-            "name": "Greg",
-          } => 2,
         }
       `);
 
@@ -1359,30 +1125,19 @@ describe('applyChange', () => {
             {
               "id": "1",
               "name": "Aaron",
+              Symbol(rc): 1,
             },
             {
               "id": "2",
               "name": "Greg",
+              Symbol(rc): 3,
             },
           ],
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Aaron",
-          } => 1,
-          {
-            "id": "2",
-            "name": "Greg",
-          } => 3,
         }
       `);
     });
 
     test('edit, singular: true', () => {
-      const refCountMap = new Map<Entry, number>();
       const schema = {
         tableName: 'event',
         columns: {
@@ -1403,7 +1158,7 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format, refCountMap);
+        applyChange(root, change, schema, '', format);
 
       apply({
         type: 'add',
@@ -1420,15 +1175,8 @@ describe('applyChange', () => {
           "": {
             "id": "1",
             "name": "Aaron",
+            Symbol(rc): 1,
           },
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Aaron",
-          } => 1,
         }
       `);
 
@@ -1452,15 +1200,8 @@ describe('applyChange', () => {
           "": {
             "id": "1",
             "name": "Greg",
+            Symbol(rc): 1,
           },
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Greg",
-          } => 1,
         }
       `);
 
@@ -1479,15 +1220,8 @@ describe('applyChange', () => {
           "": {
             "id": "1",
             "name": "Greg",
+            Symbol(rc): 2,
           },
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Greg",
-          } => 2,
         }
       `);
 
@@ -1511,21 +1245,13 @@ describe('applyChange', () => {
           "": {
             "id": "1",
             "name": "Aaron",
+            Symbol(rc): 2,
           },
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Aaron",
-          } => 2,
         }
       `);
     });
 
     test('edit primary key, singular: true', () => {
-      const refCountMap = new Map<Entry, number>();
       const schema = {
         tableName: 'event',
         columns: {
@@ -1546,7 +1272,7 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format, refCountMap);
+        applyChange(root, change, schema, '', format);
 
       apply({
         type: 'add',
@@ -1563,15 +1289,8 @@ describe('applyChange', () => {
           "": {
             "id": "1",
             "name": "Aaron",
+            Symbol(rc): 1,
           },
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Aaron",
-          } => 1,
         }
       `);
 
@@ -1595,15 +1314,8 @@ describe('applyChange', () => {
           "": {
             "id": "2",
             "name": "Greg",
+            Symbol(rc): 1,
           },
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "2",
-            "name": "Greg",
-          } => 1,
         }
       `);
 
@@ -1622,15 +1334,8 @@ describe('applyChange', () => {
           "": {
             "id": "2",
             "name": "Greg",
+            Symbol(rc): 2,
           },
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "2",
-            "name": "Greg",
-          } => 2,
         }
       `);
 
@@ -1654,15 +1359,8 @@ describe('applyChange', () => {
           "": {
             "id": "1",
             "name": "Aaron",
+            Symbol(rc): 2,
           },
-        }
-      `);
-      expect(refCountMap).toMatchInlineSnapshot(`
-        Map {
-          {
-            "id": "1",
-            "name": "Aaron",
-          } => 2,
         }
       `);
     });

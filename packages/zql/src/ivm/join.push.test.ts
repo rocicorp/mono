@@ -215,9 +215,11 @@ suite('push one:many', () => {
             {
               "id": "c1",
               "issueID": "i1",
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -308,13 +310,16 @@ suite('push one:many', () => {
             {
               "id": "c1",
               "issueID": "i1",
+              Symbol(rc): 1,
             },
             {
               "id": "c2",
               "issueID": "i1",
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -407,6 +412,7 @@ suite('push one:many', () => {
         {
           "comments": [],
           "id": "i2",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -494,9 +500,11 @@ suite('push one:many', () => {
             {
               "id": "c1",
               "issueID": "i1",
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -573,6 +581,7 @@ suite('push one:many', () => {
         {
           "comments": [],
           "id": "i1",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1123,15 +1132,18 @@ suite('push one:many', () => {
                 "id": "c1",
                 "issueID": "i1",
                 "text": "comment 1",
+                Symbol(rc): 1,
               },
               {
                 "id": "c2",
                 "issueID": "i1",
                 "text": "comment 2",
+                Symbol(rc): 1,
               },
             ],
             "id": "i1",
             "text": "issue 1 edited",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -1245,15 +1257,18 @@ suite('push one:many', () => {
                 "id": "c1",
                 "issueID": "i1",
                 "text": "comment 1 edited",
+                Symbol(rc): 1,
               },
               {
                 "id": "c2",
                 "issueID": "i1",
                 "text": "comment 2",
+                Symbol(rc): 1,
               },
             ],
             "id": "i1",
             "text": "issue 1",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -1412,10 +1427,12 @@ suite('push one:many', () => {
                 "id": "c2",
                 "issueID": "i1",
                 "text": "comment 2",
+                Symbol(rc): 1,
               },
             ],
             "id": "i1",
             "text": "issue 1",
+            Symbol(rc): 1,
           },
           {
             "comments": [
@@ -1423,10 +1440,12 @@ suite('push one:many', () => {
                 "id": "c1",
                 "issueID": "i2",
                 "text": "comment 1.2",
+                Symbol(rc): 1,
               },
             ],
             "id": "i2",
             "text": "issue 2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -1588,10 +1607,12 @@ suite('push one:many', () => {
                 "id": "c2",
                 "issueID": "i2",
                 "text": "comment 2",
+                Symbol(rc): 1,
               },
             ],
             "id": "i2",
             "text": "issue 2",
+            Symbol(rc): 1,
           },
           {
             "comments": [
@@ -1599,10 +1620,12 @@ suite('push one:many', () => {
                 "id": "c3",
                 "issueID": "i3",
                 "text": "comment 3",
+                Symbol(rc): 1,
               },
             ],
             "id": "i3",
             "text": "issue 1.3",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -1760,8 +1783,10 @@ suite('push many:one', () => {
           "id": "i1",
           "owner": {
             "id": "u1",
+            Symbol(rc): 1,
           },
           "ownerID": "u1",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1850,6 +1875,7 @@ suite('push many:one', () => {
           "id": "i1",
           "owner": undefined,
           "ownerID": "u2",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1936,8 +1962,10 @@ suite('push many:one', () => {
           "id": "i1",
           "owner": {
             "id": "u1",
+            Symbol(rc): 1,
           },
           "ownerID": "u1",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -2051,15 +2079,19 @@ suite('push many:one', () => {
           "id": "i1",
           "owner": {
             "id": "u1",
+            Symbol(rc): 1,
           },
           "ownerID": "u1",
+          Symbol(rc): 1,
         },
         {
           "id": "i2",
           "owner": {
             "id": "u1",
+            Symbol(rc): 1,
           },
           "ownerID": "u1",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -2246,18 +2278,22 @@ suite('push many:one', () => {
             "owner": {
               "id": "u1",
               "text": "user 1",
+              Symbol(rc): 1,
             },
             "ownerID": "u1",
             "text": "item 1",
+            Symbol(rc): 1,
           },
           {
             "id": "i2",
             "owner": {
               "id": "u1",
               "text": "user 1",
+              Symbol(rc): 1,
             },
             "ownerID": "u1",
             "text": "item 2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -2545,30 +2581,36 @@ suite('push many:one', () => {
                   {
                     "id": "c1",
                     "issueID": "i1",
+                    Symbol(rc): 1,
                   },
                 ],
                 "id": "i1",
                 "ownerID": "u1",
                 "text": "item 1",
+                Symbol(rc): 1,
               },
               {
                 "comments": [
                   {
                     "id": "c2",
                     "issueID": "i2",
+                    Symbol(rc): 1,
                   },
                 ],
                 "id": "i2",
                 "ownerID": "u1",
                 "text": "item 2",
+                Symbol(rc): 1,
               },
             ],
             "text": "user 1",
+            Symbol(rc): 1,
           },
           {
             "id": "u2",
             "issues": [],
             "text": "user 2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -2712,12 +2754,14 @@ suite('push many:one', () => {
             "owner": undefined,
             "ownerID": "u1",
             "text": "item 1",
+            Symbol(rc): 1,
           },
           {
             "id": "i2",
             "owner": undefined,
             "ownerID": "u1",
             "text": "item 2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -2837,18 +2881,22 @@ suite('push many:one', () => {
             "owner": {
               "id": "u1",
               "text": "user 1 changed",
+              Symbol(rc): 1,
             },
             "ownerID": "u1",
             "text": "item 1",
+            Symbol(rc): 1,
           },
           {
             "id": "i2",
             "owner": {
               "id": "u1",
               "text": "user 1 changed",
+              Symbol(rc): 1,
             },
             "ownerID": "u1",
             "text": "item 2",
+            Symbol(rc): 1,
           },
         ]
       `);
@@ -3077,11 +3125,14 @@ suite('push one:many:many', () => {
                 {
                   "commentID": "c1",
                   "id": "r1",
+                  Symbol(rc): 1,
                 },
               ],
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -3215,11 +3266,14 @@ suite('push one:many:many', () => {
                 {
                   "commentID": "c1",
                   "id": "r1",
+                  Symbol(rc): 1,
                 },
               ],
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -3343,11 +3397,14 @@ suite('push one:many:many', () => {
                 {
                   "commentID": "c1",
                   "id": "r1",
+                  Symbol(rc): 1,
                 },
               ],
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -3669,9 +3726,12 @@ suite('push one:many:one', () => {
               "labelID": "l1",
               "labels": {
                 "id": "l1",
+                Symbol(rc): 1,
               },
+              Symbol(rc): 1,
             },
           ],
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -3805,9 +3865,12 @@ suite('push one:many:one', () => {
               "labelID": "l1",
               "labels": {
                 "id": "l1",
+                Symbol(rc): 1,
               },
+              Symbol(rc): 1,
             },
           ],
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -4002,9 +4065,12 @@ suite('push one:many:one', () => {
               "labelID": "l1",
               "labels": {
                 "id": "l1",
+                Symbol(rc): 1,
               },
+              Symbol(rc): 1,
             },
           ],
+          Symbol(rc): 1,
         },
         {
           "id": "i2",
@@ -4014,9 +4080,12 @@ suite('push one:many:one', () => {
               "labelID": "l1",
               "labels": {
                 "id": "l1",
+                Symbol(rc): 1,
               },
+              Symbol(rc): 1,
             },
           ],
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -4213,6 +4282,7 @@ describe('edit assignee', () => {
             {
               "name": "user 1",
               "userID": "u1",
+              Symbol(rc): 1,
             },
           ],
           "assigneeID": "u1",
@@ -4220,17 +4290,20 @@ describe('edit assignee', () => {
             {
               "name": "user 1",
               "userID": "u1",
+              Symbol(rc): 1,
             },
           ],
           "creatorID": "u1",
           "issueID": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "assignee": [
             {
               "name": "user 2",
               "userID": "u2",
+              Symbol(rc): 1,
             },
           ],
           "assigneeID": "u2",
@@ -4238,11 +4311,13 @@ describe('edit assignee', () => {
             {
               "name": "user 2",
               "userID": "u2",
+              Symbol(rc): 1,
             },
           ],
           "creatorID": "u2",
           "issueID": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -4530,11 +4605,13 @@ describe('edit assignee', () => {
               "id": 1,
               "name": "user 1",
               "userID": "u1",
+              Symbol(rc): 1,
             },
             {
               "id": 1.5,
               "name": "user 1.5",
               "userID": "u1",
+              Symbol(rc): 1,
             },
           ],
           "assigneeID": "u1",
@@ -4543,16 +4620,19 @@ describe('edit assignee', () => {
               "id": 1,
               "name": "user 1",
               "userID": "u1",
+              Symbol(rc): 1,
             },
             {
               "id": 1.5,
               "name": "user 1.5",
               "userID": "u1",
+              Symbol(rc): 1,
             },
           ],
           "creatorID": "u1",
           "issueID": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "assignee": [
@@ -4560,6 +4640,7 @@ describe('edit assignee', () => {
               "id": 2,
               "name": "user 2",
               "userID": "u2",
+              Symbol(rc): 1,
             },
           ],
           "assigneeID": "u2",
@@ -4568,11 +4649,13 @@ describe('edit assignee', () => {
               "id": 2,
               "name": "user 2",
               "userID": "u2",
+              Symbol(rc): 1,
             },
           ],
           "creatorID": "u2",
           "issueID": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -4839,17 +4922,20 @@ describe('edit assignee', () => {
             {
               "name": "user 1",
               "userID": "u1",
+              Symbol(rc): 1,
             },
           ],
           "creatorID": "u1",
           "issueID": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "assignee": [
             {
               "name": "user 2",
               "userID": "u2",
+              Symbol(rc): 1,
             },
           ],
           "assigneeID": "u2",
@@ -4857,11 +4943,13 @@ describe('edit assignee', () => {
             {
               "name": "user 2",
               "userID": "u2",
+              Symbol(rc): 1,
             },
           ],
           "creatorID": "u2",
           "issueID": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -5152,16 +5240,19 @@ describe('edit assignee', () => {
               "id": 1,
               "name": "user 1",
               "userID": "u1",
+              Symbol(rc): 1,
             },
             {
               "id": 1.5,
               "name": "user 1.5",
               "userID": "u1",
+              Symbol(rc): 1,
             },
           ],
           "creatorID": "u1",
           "issueID": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "assignee": [
@@ -5169,6 +5260,7 @@ describe('edit assignee', () => {
               "id": 2,
               "name": "user 2",
               "userID": "u2",
+              Symbol(rc): 1,
             },
           ],
           "assigneeID": "u2",
@@ -5177,11 +5269,13 @@ describe('edit assignee', () => {
               "id": 2,
               "name": "user 2",
               "userID": "u2",
+              Symbol(rc): 1,
             },
           ],
           "creatorID": "u2",
           "issueID": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -5501,9 +5595,11 @@ describe('joins with compound join keys', () => {
               "b2": 1,
               "b3": 3,
               "id": 0,
+              Symbol(rc): 1,
             },
           ],
           "id": 0,
+          Symbol(rc): 1,
         },
         {
           "a1": 4,
@@ -5515,9 +5611,11 @@ describe('joins with compound join keys', () => {
               "b2": 4,
               "b3": 6,
               "id": 1,
+              Symbol(rc): 1,
             },
           ],
           "id": 1,
+          Symbol(rc): 1,
         },
         {
           "a1": 7,
@@ -5529,9 +5627,11 @@ describe('joins with compound join keys', () => {
               "b2": 7,
               "b3": 9,
               "id": 2,
+              Symbol(rc): 1,
             },
           ],
           "id": 2,
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -5706,9 +5806,11 @@ describe('joins with compound join keys', () => {
               "b2": 1,
               "b3": 3,
               "id": 0,
+              Symbol(rc): 1,
             },
           ],
           "id": 0,
+          Symbol(rc): 1,
         },
         {
           "a1": 4,
@@ -5720,9 +5822,11 @@ describe('joins with compound join keys', () => {
               "b2": 4,
               "b3": 6,
               "id": 1,
+              Symbol(rc): 1,
             },
           ],
           "id": 1,
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -5933,32 +6037,40 @@ suite('test overlay on many:one pushes', () => {
           "owner": {
             "id": "u0",
             "name": "Fritz",
+            Symbol(rc): 1,
           },
           "ownerID": "u0",
+          Symbol(rc): 1,
         },
         {
           "id": "i1",
           "owner": {
             "id": "u1",
             "name": "Aaron",
+            Symbol(rc): 1,
           },
           "ownerID": "u1",
+          Symbol(rc): 1,
         },
         {
           "id": "i2",
           "owner": {
             "id": "u1",
             "name": "Aaron",
+            Symbol(rc): 1,
           },
           "ownerID": "u1",
+          Symbol(rc): 1,
         },
         {
           "id": "i3",
           "owner": {
             "id": "u2",
             "name": "Arv",
+            Symbol(rc): 1,
           },
           "ownerID": "u2",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -6243,26 +6355,32 @@ suite('test overlay on many:one pushes', () => {
           "owner": {
             "id": "u0",
             "name": "Fritz",
+            Symbol(rc): 1,
           },
           "ownerID": "u0",
+          Symbol(rc): 1,
         },
         {
           "id": "i1",
           "owner": undefined,
           "ownerID": "u1",
+          Symbol(rc): 1,
         },
         {
           "id": "i2",
           "owner": undefined,
           "ownerID": "u1",
+          Symbol(rc): 1,
         },
         {
           "id": "i3",
           "owner": {
             "id": "u2",
             "name": "Arv",
+            Symbol(rc): 1,
           },
           "ownerID": "u2",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -6552,32 +6670,40 @@ suite('test overlay on many:one pushes', () => {
           "owner": {
             "id": "u0",
             "name": "Fritz",
+            Symbol(rc): 1,
           },
           "ownerID": "u0",
+          Symbol(rc): 1,
         },
         {
           "id": "i1",
           "owner": {
             "id": "u1",
             "name": "Boogs",
+            Symbol(rc): 1,
           },
           "ownerID": "u1",
+          Symbol(rc): 1,
         },
         {
           "id": "i2",
           "owner": {
             "id": "u1",
             "name": "Boogs",
+            Symbol(rc): 1,
           },
           "ownerID": "u1",
+          Symbol(rc): 1,
         },
         {
           "id": "i3",
           "owner": {
             "id": "u2",
             "name": "Arv",
+            Symbol(rc): 1,
           },
           "ownerID": "u2",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -7076,10 +7202,13 @@ suite('test overlay on many:one pushes', () => {
             "state": {
               "id": "s0",
               "name": "HI",
+              Symbol(rc): 1,
             },
             "stateID": "s0",
+            Symbol(rc): 1,
           },
           "ownerID": "u0",
+          Symbol(rc): 1,
         },
         {
           "id": "i1",
@@ -7089,10 +7218,13 @@ suite('test overlay on many:one pushes', () => {
             "state": {
               "id": "s0",
               "name": "HI",
+              Symbol(rc): 1,
             },
             "stateID": "s0",
+            Symbol(rc): 1,
           },
           "ownerID": "u1",
+          Symbol(rc): 1,
         },
         {
           "id": "i2",
@@ -7102,10 +7234,13 @@ suite('test overlay on many:one pushes', () => {
             "state": {
               "id": "s0",
               "name": "HI",
+              Symbol(rc): 1,
             },
             "stateID": "s0",
+            Symbol(rc): 1,
           },
           "ownerID": "u1",
+          Symbol(rc): 1,
         },
         {
           "id": "i3",
@@ -7115,10 +7250,13 @@ suite('test overlay on many:one pushes', () => {
             "state": {
               "id": "s1",
               "name": "CA",
+              Symbol(rc): 1,
             },
             "stateID": "s1",
+            Symbol(rc): 1,
           },
           "ownerID": "u2",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -7731,9 +7869,11 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "id": "u0",
               "name": "Fritz",
               "num": 0,
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Fritz",
+          Symbol(rc): 1,
         },
         {
           "id": "i1",
@@ -7742,19 +7882,23 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "id": "u1",
               "name": "Aaron",
               "num": 1,
+              Symbol(rc): 1,
             },
             {
               "id": "u2",
               "name": "Aaron",
               "num": 2,
+              Symbol(rc): 1,
             },
             {
               "id": "u3",
               "name": "Aaron",
               "num": 3,
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Aaron",
+          Symbol(rc): 1,
         },
         {
           "id": "i2",
@@ -7763,19 +7907,23 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "id": "u1",
               "name": "Aaron",
               "num": 1,
+              Symbol(rc): 1,
             },
             {
               "id": "u2",
               "name": "Aaron",
               "num": 2,
+              Symbol(rc): 1,
             },
             {
               "id": "u3",
               "name": "Aaron",
               "num": 3,
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Aaron",
+          Symbol(rc): 1,
         },
         {
           "id": "i3",
@@ -7784,9 +7932,11 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "id": "u4",
               "name": "Arv",
               "num": 4,
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Arv",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -8154,9 +8304,11 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "id": "u0",
               "name": "Fritz",
               "num": 0,
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Fritz",
+          Symbol(rc): 1,
         },
         {
           "id": "i1",
@@ -8165,14 +8317,17 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "id": "u1",
               "name": "Aaron",
               "num": 1,
+              Symbol(rc): 1,
             },
             {
               "id": "u3",
               "name": "Aaron",
               "num": 3,
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Aaron",
+          Symbol(rc): 1,
         },
         {
           "id": "i2",
@@ -8181,14 +8336,17 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "id": "u1",
               "name": "Aaron",
               "num": 1,
+              Symbol(rc): 1,
             },
             {
               "id": "u3",
               "name": "Aaron",
               "num": 3,
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Aaron",
+          Symbol(rc): 1,
         },
         {
           "id": "i3",
@@ -8197,9 +8355,11 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "id": "u4",
               "name": "Arv",
               "num": 4,
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Arv",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -8573,9 +8733,11 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "id": "u0",
               "name": "Fritz",
               "num": 0,
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Fritz",
+          Symbol(rc): 1,
         },
         {
           "id": "i1",
@@ -8584,19 +8746,23 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "id": "u1",
               "name": "Aaron",
               "num": 1,
+              Symbol(rc): 1,
             },
             {
               "id": "u3",
               "name": "Aaron",
               "num": 3,
+              Symbol(rc): 1,
             },
             {
               "id": "u2",
               "name": "Aaron",
               "num": 5,
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Aaron",
+          Symbol(rc): 1,
         },
         {
           "id": "i2",
@@ -8605,19 +8771,23 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "id": "u1",
               "name": "Aaron",
               "num": 1,
+              Symbol(rc): 1,
             },
             {
               "id": "u3",
               "name": "Aaron",
               "num": 3,
+              Symbol(rc): 1,
             },
             {
               "id": "u2",
               "name": "Aaron",
               "num": 5,
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Aaron",
+          Symbol(rc): 1,
         },
         {
           "id": "i3",
@@ -8626,9 +8796,11 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "id": "u4",
               "name": "Arv",
               "num": 4,
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Arv",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -9244,11 +9416,14 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "state": {
                 "id": "s1",
                 "name": "CA",
+                Symbol(rc): 1,
               },
               "stateID": "s1",
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Fritz",
+          Symbol(rc): 1,
         },
         {
           "id": "i1",
@@ -9259,8 +9434,10 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "state": {
                 "id": "s1",
                 "name": "CA",
+                Symbol(rc): 1,
               },
               "stateID": "s1",
+              Symbol(rc): 1,
             },
             {
               "id": "u2",
@@ -9268,8 +9445,10 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "state": {
                 "id": "s0",
                 "name": "HI",
+                Symbol(rc): 1,
               },
               "stateID": "s0",
+              Symbol(rc): 1,
             },
             {
               "id": "u3",
@@ -9277,11 +9456,14 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "state": {
                 "id": "s0",
                 "name": "HI",
+                Symbol(rc): 1,
               },
               "stateID": "s0",
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Aaron",
+          Symbol(rc): 1,
         },
         {
           "id": "i2",
@@ -9292,8 +9474,10 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "state": {
                 "id": "s1",
                 "name": "CA",
+                Symbol(rc): 1,
               },
               "stateID": "s1",
+              Symbol(rc): 1,
             },
             {
               "id": "u2",
@@ -9301,8 +9485,10 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "state": {
                 "id": "s0",
                 "name": "HI",
+                Symbol(rc): 1,
               },
               "stateID": "s0",
+              Symbol(rc): 1,
             },
             {
               "id": "u3",
@@ -9310,11 +9496,14 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "state": {
                 "id": "s0",
                 "name": "HI",
+                Symbol(rc): 1,
               },
               "stateID": "s0",
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Aaron",
+          Symbol(rc): 1,
         },
         {
           "id": "i3",
@@ -9325,11 +9514,14 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "state": {
                 "id": "s1",
                 "name": "CA",
+                Symbol(rc): 1,
               },
               "stateID": "s1",
+              Symbol(rc): 1,
             },
           ],
           "ownerName": "Arv",
+          Symbol(rc): 1,
         },
       ]
     `);

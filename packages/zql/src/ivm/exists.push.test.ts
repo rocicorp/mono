@@ -165,9 +165,11 @@ suite('EXISTS 1 to many', () => {
             {
               "id": "i2",
               "title": "issue 2",
+              Symbol(rc): 1,
             },
           ],
           "issueID": "i2",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -532,10 +534,12 @@ suite('EXISTS', () => {
               "id": "c1",
               "issueID": "i1",
               "text": "i1 c1 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [
@@ -543,15 +547,18 @@ suite('EXISTS', () => {
               "id": "c2",
               "issueID": "i3",
               "text": "i3 c2 text",
+              Symbol(rc): 1,
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i3",
           "text": "third issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -605,10 +612,12 @@ suite('EXISTS', () => {
               "id": "c1",
               "issueID": "i1",
               "text": "i1 c1 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [
@@ -616,15 +625,18 @@ suite('EXISTS', () => {
               "id": "c2",
               "issueID": "i3",
               "text": "i3 c2 text",
+              Symbol(rc): 1,
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i3",
           "text": "third issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [
@@ -632,10 +644,12 @@ suite('EXISTS', () => {
               "id": "c4",
               "issueID": "i5",
               "text": "i2 c54 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i5",
           "text": "fifth issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -719,10 +733,12 @@ suite('EXISTS', () => {
               "id": "c1",
               "issueID": "i1",
               "text": "i1 c1 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [
@@ -730,15 +746,18 @@ suite('EXISTS', () => {
               "id": "c2",
               "issueID": "i3",
               "text": "i3 c2 text",
+              Symbol(rc): 1,
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i3",
           "text": "third issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -783,15 +802,18 @@ suite('EXISTS', () => {
               "id": "c2",
               "issueID": "i3",
               "text": "i3 c2 text",
+              Symbol(rc): 1,
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i3",
           "text": "third issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -875,10 +897,12 @@ suite('EXISTS', () => {
               "id": "c1",
               "issueID": "i1",
               "text": "i1 c1 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [
@@ -886,15 +910,18 @@ suite('EXISTS', () => {
               "id": "c2",
               "issueID": "i3",
               "text": "i3 c2 text",
+              Symbol(rc): 1,
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i3",
           "text": "third issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -941,10 +968,12 @@ suite('EXISTS', () => {
               "id": "c1",
               "issueID": "i1",
               "text": "i1 c1 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
           "text": "first issue v2",
+          Symbol(rc): 1,
         },
         {
           "comments": [
@@ -952,15 +981,18 @@ suite('EXISTS', () => {
               "id": "c2",
               "issueID": "i3",
               "text": "i3 c2 text",
+              Symbol(rc): 1,
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i3",
           "text": "third issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1037,10 +1069,12 @@ suite('EXISTS', () => {
               "id": "c1",
               "issueID": "i1",
               "text": "i1 c1 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [
@@ -1048,10 +1082,12 @@ suite('EXISTS', () => {
               "id": "c4",
               "issueID": "i2",
               "text": "i2 c4 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [
@@ -1059,15 +1095,18 @@ suite('EXISTS', () => {
               "id": "c2",
               "issueID": "i3",
               "text": "i3 c2 text",
+              Symbol(rc): 1,
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i3",
           "text": "third issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1150,15 +1189,18 @@ suite('EXISTS', () => {
               "id": "c1",
               "issueID": "i1",
               "text": "i1 c1 text",
+              Symbol(rc): 1,
             },
             {
               "id": "c4",
               "issueID": "i1",
               "text": "i1 c4 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [
@@ -1166,15 +1208,18 @@ suite('EXISTS', () => {
               "id": "c2",
               "issueID": "i3",
               "text": "i3 c2 text",
+              Symbol(rc): 1,
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i3",
           "text": "third issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1265,15 +1310,18 @@ suite('EXISTS', () => {
               "id": "c2",
               "issueID": "i3",
               "text": "i3 c2 text",
+              Symbol(rc): 1,
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i3",
           "text": "third issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1356,10 +1404,12 @@ suite('EXISTS', () => {
               "id": "c1",
               "issueID": "i1",
               "text": "i1 c1 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [
@@ -1367,10 +1417,12 @@ suite('EXISTS', () => {
               "id": "c2",
               "issueID": "i3",
               "text": "i3 c2 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i3",
           "text": "third issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1462,10 +1514,12 @@ suite('EXISTS', () => {
               "id": "c1",
               "issueID": "i1",
               "text": "i1 c1 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [
@@ -1473,15 +1527,18 @@ suite('EXISTS', () => {
               "id": "c2",
               "issueID": "i3",
               "text": "i3 c2 text",
+              Symbol(rc): 1,
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text v2",
+              Symbol(rc): 1,
             },
           ],
           "id": "i3",
           "text": "third issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1580,10 +1637,12 @@ suite('EXISTS', () => {
               "id": "c1",
               "issueID": "i2",
               "text": "i2 c1 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [
@@ -1591,15 +1650,18 @@ suite('EXISTS', () => {
               "id": "c2",
               "issueID": "i3",
               "text": "i3 c2 text",
+              Symbol(rc): 1,
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
+              Symbol(rc): 1,
             },
           ],
           "id": "i3",
           "text": "third issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1736,16 +1798,19 @@ suite('NOT EXISTS', () => {
           "comments": [],
           "id": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [],
           "id": "i5",
           "text": "fifth issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1825,11 +1890,13 @@ suite('NOT EXISTS', () => {
           "comments": [],
           "id": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1874,6 +1941,7 @@ suite('NOT EXISTS', () => {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1945,11 +2013,13 @@ suite('NOT EXISTS', () => {
           "comments": [],
           "id": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -1994,11 +2064,13 @@ suite('NOT EXISTS', () => {
           "comments": [],
           "id": "i2",
           "text": "second issue v2",
+          Symbol(rc): 1,
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -2074,11 +2146,13 @@ suite('NOT EXISTS', () => {
           "comments": [],
           "id": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -2122,6 +2196,7 @@ suite('NOT EXISTS', () => {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -2193,11 +2268,13 @@ suite('NOT EXISTS', () => {
           "comments": [],
           "id": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -2241,16 +2318,19 @@ suite('NOT EXISTS', () => {
           "comments": [],
           "id": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [],
           "id": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -2322,11 +2402,13 @@ suite('NOT EXISTS', () => {
           "comments": [],
           "id": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -2371,11 +2453,13 @@ suite('NOT EXISTS', () => {
           "comments": [],
           "id": "i2",
           "text": "second issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -2420,11 +2504,13 @@ suite('NOT EXISTS', () => {
           "comments": [],
           "id": "i1",
           "text": "first issue",
+          Symbol(rc): 1,
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
+          Symbol(rc): 1,
         },
       ]
     `);
