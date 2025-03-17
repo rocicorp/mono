@@ -60,6 +60,7 @@ export function newQueryDelegate(
       const tableSchema = schema.tables[name as keyof typeof schema.tables];
 
       // create the SQLite table
+      // TODO: name mapping!
       db.exec(`
       CREATE TABLE IF NOT EXISTS "${name}" (
         ${Object.entries(tableSchema.columns)

@@ -11,7 +11,7 @@
  * so that the test can be reproduced.
  */
 
-import '../nullish.ts';
+import '../comparePg.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../../../zero-cache/src/test/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
@@ -319,8 +319,8 @@ async function checkZqlAndSql(
   // In failure output:
   // `-` is PG
   // `+` is ZQL
-  expect(zqliteResult).toEqual(pgResult);
-  expect(zqlMemResult).toEqual(pgResult);
+  expect(zqliteResult).toEqualPg(pgResult);
+  expect(zqlMemResult).toEqualPg(pgResult);
 
   // now check pushes
   if (shouldCheckPush) {
@@ -386,7 +386,9 @@ async function checkRemove(
 
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
-  const sqlQuery = formatPg(compile(ast(zqliteQuery), format(zqliteQuery)));
+  const sqlQuery = formatPg(
+    compile(ast(zqliteQuery), schema.tables, format(zqliteQuery)),
+  );
 
   let numOps = 0;
   const removedRows: [string, Row][] = [];
@@ -439,8 +441,8 @@ async function checkRemove(
       sqlQuery.values as JSONValue[],
     );
     // TODO: empty single relationships return `undefined` from ZQL and `null` from PG
-    expect(zqliteMaterialized.data).toEqualNullish(pgResult);
-    expect(zqlMaterialized.data).toEqualNullish(pgResult);
+    expect(zqliteMaterialized.data).toEqualPg(pgResult);
+    expect(zqlMaterialized.data).toEqualPg(pgResult);
   }
 
   zqliteMaterialized.destroy();
@@ -462,7 +464,9 @@ async function checkAddBack(
 ) {
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
-  const sqlQuery = formatPg(compile(ast(zqliteQuery), format(zqliteQuery)));
+  const sqlQuery = formatPg(
+    compile(ast(zqliteQuery), schema.tables, format(zqliteQuery)),
+  );
 
   for (const [table, row] of rowsToAdd) {
     await sql`INSERT INTO ${sql(table)} ${sql(row)}`;
@@ -480,8 +484,8 @@ async function checkAddBack(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(zqliteMaterialized.data).toEqualNullish(pgResult);
-    expect(zqlMaterialized.data).toEqualNullish(pgResult);
+    expect(zqliteMaterialized.data).toEqualPg(pgResult);
+    expect(zqlMaterialized.data).toEqualPg(pgResult);
   }
 
   zqlMaterialized.destroy();
@@ -501,7 +505,9 @@ async function checkEditToRandom(
 
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
-  const sqlQuery = formatPg(compile(ast(zqliteQuery), format(zqliteQuery)));
+  const sqlQuery = formatPg(
+    compile(ast(zqliteQuery), schema.tables, format(zqliteQuery)),
+  );
 
   let numOps = 0;
   const editedRows: [string, [original: Row, edited: Row]][] = [];
@@ -557,8 +563,8 @@ async function checkEditToRandom(
       sqlQuery.values as JSONValue[],
     );
     // TODO: relationships return `undefined` from ZQL and `null` from PG
-    expect(zqliteMaterialized.data).toEqualNullish(pgResult);
-    expect(zqlMaterialized.data).toEqualNullish(pgResult);
+    expect(zqliteMaterialized.data).toEqualPg(pgResult);
+    expect(zqlMaterialized.data).toEqualPg(pgResult);
   }
 
   zqliteMaterialized.destroy();
@@ -602,7 +608,9 @@ async function checkEditToMatch(
 ) {
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
-  const sqlQuery = formatPg(compile(ast(zqliteQuery), format(zqliteQuery)));
+  const sqlQuery = formatPg(
+    compile(ast(zqliteQuery), schema.tables, format(zqliteQuery)),
+  );
 
   for (const [table, [original, edited]] of rowsToEdit) {
     const tableSchema = schema.tables[table as keyof Schema['tables']];
@@ -626,8 +634,8 @@ async function checkEditToMatch(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(zqliteMaterialized.data).toEqualNullish(pgResult);
-    expect(zqlMaterialized.data).toEqualNullish(pgResult);
+    expect(zqliteMaterialized.data).toEqualPg(pgResult);
+    expect(zqlMaterialized.data).toEqualPg(pgResult);
   }
 
   zqlMaterialized.destroy();
@@ -693,7 +701,7 @@ function runZqlAsSql(
   pg: PostgresDB,
   query: Query<Schema, keyof Schema['tables']>,
 ) {
-  const sqlQuery = formatPg(compile(ast(query), format(query)));
+  const sqlQuery = formatPg(compile(ast(query), schema.tables, format(query)));
   return pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]);
 }
 
