@@ -1,12 +1,11 @@
 import './test/comparePg.ts';
 import {beforeAll} from 'vitest';
-import {testDBs} from '../../zero-cache/src/test/db.ts';
+import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {compile} from './compiler.ts';
 import {createTableSQL, schema} from '../../zql/src/query/test/test-schemas.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {formatSqlite, sql} from './sql.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {
   completedAstSymbol,
@@ -17,13 +16,14 @@ import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
 import {describe, expect, test} from 'vitest';
 import {formatPg} from './sql.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
-import {fromSQLiteTypes, toSQLiteTypes} from '../../zqlite/src/table-source.ts';
+import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
 import {type Row} from '../../zero-protocol/src/data.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {
   clientToServer,
   serverToClient,
 } from '../../zero-schema/src/name-mapper.ts';
+import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 
 const lc = createSilentLogContext();
 
@@ -41,7 +41,6 @@ beforeAll(async () => {
   pg = await testDBs.create('compiler');
   await pg.unsafe(createTableSQL);
   sqlite = new Database(lc, ':memory:');
-  sqlite.exec(createTableSQL);
 
   const testData = {
     issue: Array.from({length: 3}, (_, i) => ({
@@ -100,26 +99,15 @@ beforeAll(async () => {
       ),
     );
     await pg`INSERT INTO ${pg(mapper.tableName(table))} ${pg(forPg)}`;
-    const sqliteSql = formatSqlite(
-      sql`INSERT INTO ${sql.ident(mapper.tableName(table))} (${sql.join(
-        columns.map(c => sql.ident(mapper.columnName(table, c))),
-        ', ',
-      )}) VALUES (${sql.join(
-        Object.values(columns).map(_ => sql`?`),
-        ',',
-      )})`,
-    );
-    const stmt = sqlite.prepare(sqliteSql.text);
-    for (const row of rows) {
-      stmt.run(
-        toSQLiteTypes(
-          columns,
-          row,
-          schema.tables[table as keyof Schema['tables']].columns,
-        ),
-      );
-    }
   }
+
+  await initialSync(
+    createSilentLogContext(),
+    {appID: 'compiler_pg_test', shardNum: 0, publications: []},
+    sqlite,
+    getConnectionURI(pg),
+    {tableCopyWorkers: 1, rowBatchSize: 10000},
+  );
 
   const queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
 
