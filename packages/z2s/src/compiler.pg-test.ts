@@ -1,25 +1,29 @@
 import './test/nullish.ts';
 import {beforeAll} from 'vitest';
-import {testDBs} from '../../zero-cache/src/test/db.ts';
+import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {compile} from './compiler.ts';
 import {createTableSQL, schema} from '../../zql/src/query/test/test-schemas.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {formatSqlite, sql} from './sql.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {
   completedAstSymbol,
   newQuery,
   QueryImpl,
 } from '../../zql/src/query/query-impl.ts';
-import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
+import {
+  mapResultToClientNames,
+  newQueryDelegate,
+} from '../../zqlite/src/test/source-factory.ts';
 import {describe, expect, test} from 'vitest';
 import {formatPg} from './sql.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
-import {fromSQLiteTypes, toSQLiteTypes} from '../../zqlite/src/table-source.ts';
+import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
 import {type Row} from '../../zero-protocol/src/data.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 
 const lc = createSilentLogContext();
 
@@ -37,7 +41,6 @@ beforeAll(async () => {
   pg = await testDBs.create('compiler');
   await pg.unsafe(createTableSQL);
   sqlite = new Database(lc, ':memory:');
-  sqlite.exec(createTableSQL);
 
   const testData = {
     issue: Array.from({length: 3}, (_, i) => ({
@@ -82,29 +85,27 @@ beforeAll(async () => {
     })),
   };
 
+  const mapper = clientToServer(schema.tables);
   for (const [table, rows] of Object.entries(testData)) {
     const columns = Object.keys(rows[0]);
-    await pg`INSERT INTO ${pg(table)} ${pg(rows)}`;
-    const sqliteSql = formatSqlite(
-      sql`INSERT INTO ${sql.ident(table)} (${sql.join(
-        columns.map(c => sql.ident(c)),
-        ', ',
-      )}) VALUES (${sql.join(
-        Object.values(columns).map(_ => sql`?`),
-        ',',
-      )})`,
+    const forPg = rows.map(row =>
+      columns.reduce(
+        (acc, c) => ({
+          ...acc,
+          [mapper.columnName(table, c)]: row[c as keyof typeof row],
+        }),
+        {} as Record<string, unknown>,
+      ),
     );
-    const stmt = sqlite.prepare(sqliteSql.text);
-    for (const row of rows) {
-      stmt.run(
-        toSQLiteTypes(
-          columns,
-          row,
-          schema.tables[table as keyof Schema['tables']].columns,
-        ),
-      );
-    }
+    await pg`INSERT INTO ${pg(mapper.tableName(table))} ${pg(forPg)}`;
   }
+  await initialSync(
+    lc,
+    {appID: 'compiler_pg_test', shardNum: 0, publications: []},
+    sqlite,
+    getConnectionURI(pg),
+    {tableCopyWorkers: 1, rowBatchSize: 10000},
+  );
 
   const queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
 
@@ -119,16 +120,22 @@ beforeAll(async () => {
     labelPgRows,
     revisionPgRows,
   ] = await Promise.all([
-    pg`SELECT * FROM "issue"`,
-    pg`SELECT * FROM "user"`,
-    pg`SELECT * FROM "comment"`,
+    pg`SELECT * FROM "issues"`,
+    pg`SELECT * FROM "users"`,
+    pg`SELECT * FROM "comments"`,
     pg`SELECT * FROM "issueLabel"`,
     pg`SELECT * FROM "label"`,
     pg`SELECT * FROM "revision"`,
   ]);
-  expect(issuePgRows).toEqual(testData.issue);
-  expect(userPgRows).toEqual(testData.user);
-  expect(commentPgRows.map(noBigint)).toEqual(testData.comment);
+  expect(mapResultToClientNames(issuePgRows, schema, 'issue')).toEqual(
+    testData.issue,
+  );
+  expect(mapResultToClientNames(userPgRows, schema, 'user')).toEqual(
+    testData.user,
+  );
+  expect(
+    mapResultToClientNames(commentPgRows.map(noBigint), schema, 'comment'),
+  ).toEqual(testData.comment);
   expect(issueLabelPgRows).toEqual(testData.issueLabel);
   expect(labelPgRows).toEqual(testData.label);
   expect(revisionPgRows).toEqual(testData.revision);
@@ -140,14 +147,38 @@ beforeAll(async () => {
     issueLabelLiteRows,
     labelLiteRows,
     revisionLiteRows,
-  ] = await Promise.all([
-    sqlite.prepare('SELECT * FROM "issue"').all<Row>(),
-    sqlite.prepare('SELECT * FROM "user"').all<Row>(),
-    sqlite.prepare('SELECT * FROM "comment"').all<Row>(),
-    sqlite.prepare('SELECT * FROM "issueLabel"').all<Row>(),
-    sqlite.prepare('SELECT * FROM "label"').all<Row>(),
-    sqlite.prepare('SELECT * FROM "revision"').all<Row>(),
-  ]);
+  ] = [
+    mapResultToClientNames(
+      sqlite.prepare('SELECT * FROM "issues"').all<Row>(),
+      schema,
+      'issue',
+    ) as Schema['tables']['issue'][],
+    mapResultToClientNames(
+      sqlite.prepare('SELECT * FROM "users"').all<Row>(),
+      schema,
+      'user',
+    ) as Schema['tables']['user'][],
+    mapResultToClientNames(
+      sqlite.prepare('SELECT * FROM "comments"').all<Row>(),
+      schema,
+      'comment',
+    ) as Schema['tables']['comment'][],
+    mapResultToClientNames(
+      sqlite.prepare('SELECT * FROM "issueLabel"').all<Row>(),
+      schema,
+      'issueLabel',
+    ) as Schema['tables']['issueLabel'][],
+    mapResultToClientNames(
+      sqlite.prepare('SELECT * FROM "label"').all<Row>(),
+      schema,
+      'label',
+    ) as Schema['tables']['label'][],
+    mapResultToClientNames(
+      sqlite.prepare('SELECT * FROM "revision"').all<Row>(),
+      schema,
+      'revision',
+    ) as Schema['tables']['revision'][],
+  ];
   expect(
     issueLiteRows.map(row => fromSQLiteTypes(schema.tables.issue.columns, row)),
   ).toEqual(testData.issue);
@@ -187,76 +218,96 @@ function noBigint(row: Record<string, unknown>) {
 describe('compiling ZQL to SQL', () => {
   test('basic where clause', async () => {
     const query = issueQuery.where('title', '=', 'issue 1');
-    const sqlQuery = formatPg(compile(ast(query)));
+    const sqlQuery = formatPg(compile(ast(query), schema.tables));
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(await query.run()).toEqual(pgResult);
+    expect(mapResultToClientNames(await query.run(), schema, 'issue')).toEqual(
+      pgResult,
+    );
   });
 
   test('multiple where clauses', async () => {
     const query = issueQuery
       .where('closed', '=', false)
       .where('ownerId', 'IS NOT', null);
-    const sqlQuery = formatPg(compile(ast(query)));
+    const sqlQuery = formatPg(compile(ast(query), schema.tables));
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(await query.run()).toEqual(pgResult);
+    expect(mapResultToClientNames(await query.run(), schema, 'issue')).toEqual(
+      pgResult,
+    );
   });
 
   test('whereExists with related table', async () => {
     const query = issueQuery.whereExists('labels', q =>
       q.where('name', '=', 'bug'),
     );
-    const sqlQuery = formatPg(compile(ast(query)));
+    const sqlQuery = formatPg(compile(ast(query), schema.tables));
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(await query.run()).toEqual(pgResult);
+    expect(mapResultToClientNames(await query.run(), schema, 'issue')).toEqual(
+      pgResult,
+    );
   });
 
   test('order by and limit', async () => {
     const query = issueQuery.orderBy('title', 'desc').limit(5);
-    const sqlQuery = formatPg(compile(ast(query)));
+    const sqlQuery = formatPg(compile(ast(query), schema.tables));
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(await query.run()).toEqual(pgResult);
+    expect(mapResultToClientNames(await query.run(), schema, 'issue')).toEqual(
+      pgResult,
+    );
   });
 
   test('1 to 1 foreign key relationship', async () => {
     const query = issueQuery.related('owner');
-    const sqlQuery = formatPg(compile(ast(query), format(query)));
+    const sqlQuery = formatPg(
+      compile(ast(query), schema.tables, format(query)),
+    );
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(await query.run()).toEqualNullish(pgResult);
+    expect(
+      mapResultToClientNames(await query.run(), schema, 'issue'),
+    ).toEqualNullish(pgResult);
   });
 
   test('1 to many foreign key relationship', async () => {
     const query = issueQuery.related('comments');
-    const sqlQuery = formatPg(compile(ast(query), format(query)));
+    const sqlQuery = formatPg(
+      compile(ast(query), schema.tables, format(query)),
+    );
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(await query.run()).toEqualNullish(pgResult);
+    expect(
+      mapResultToClientNames(await query.run(), schema, 'issue'),
+    ).toEqualNullish(pgResult);
   });
 
   test('junction relationship', async () => {
     const query = issueQuery.related('labels');
-    const sqlQuery = formatPg(compile(ast(query), format(query)));
+    const sqlQuery = formatPg(
+      compile(ast(query), schema.tables, format(query)),
+    );
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(await query.run()).toEqualNullish(pgResult);
+    expect(
+      mapResultToClientNames(await query.run(), schema, 'issue'),
+    ).toEqualNullish(pgResult);
   });
 
   test('nested related with where clauses', async () => {
@@ -265,12 +316,16 @@ describe('compiling ZQL to SQL', () => {
       .related('comments', q =>
         q.where('createdAt', '>', 1000).related('author'),
       );
-    const sqlQuery = formatPg(compile(ast(query), format(query)));
+    const sqlQuery = formatPg(
+      compile(ast(query), schema.tables, format(query)),
+    );
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(await query.run()).toEqual(pgResult);
+    expect(mapResultToClientNames(await query.run(), schema, 'issue')).toEqual(
+      pgResult,
+    );
   });
 
   test('complex query combining multiple features', async () => {
@@ -282,11 +337,15 @@ describe('compiling ZQL to SQL', () => {
         q.orderBy('createdAt', 'desc').limit(3).related('author'),
       )
       .orderBy('title', 'asc');
-    const sqlQuery = formatPg(compile(ast(query), format(query)));
+    const sqlQuery = formatPg(
+      compile(ast(query), schema.tables, format(query)),
+    );
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(await query.run()).toEqual(pgResult);
+    expect(mapResultToClientNames(await query.run(), schema, 'issue')).toEqual(
+      pgResult,
+    );
   });
 });

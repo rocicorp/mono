@@ -19,12 +19,16 @@ import type {PostgresDB} from '../../../../zero-cache/src/types/pg.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {writeChinook} from './get-deps.ts';
 import {
+  astForTestingSymbol,
   completedAstSymbol,
   newQuery,
   QueryImpl,
   type QueryDelegate,
 } from '../../../../zql/src/query/query-impl.ts';
-import {newQueryDelegate} from '../../../../zqlite/src/test/source-factory.ts';
+import {
+  mapResultToClientNames,
+  newQueryDelegate,
+} from '../../../../zqlite/src/test/source-factory.ts';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {schema} from './schema.ts';
 import type {Operator, Query} from '../../../../zql/src/query/query.ts';
@@ -316,11 +320,24 @@ async function checkZqlAndSql(
   const pgResult = await runZqlAsSql(pg, zqliteQuery);
   const zqliteResult = await zqliteQuery.run();
   const zqlMemResult = await memoryQuery.run();
+  const ast = (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol];
   // In failure output:
   // `-` is PG
   // `+` is ZQL
-  expect(zqliteResult).toEqual(pgResult);
-  expect(zqlMemResult).toEqual(pgResult);
+  expect(
+    mapResultToClientNames(
+      zqliteResult,
+      schema,
+      ast.table as keyof Schema['tables'],
+    ),
+  ).toEqual(pgResult);
+  expect(
+    mapResultToClientNames(
+      zqlMemResult,
+      schema,
+      ast.table as keyof Schema['tables'],
+    ),
+  ).toEqual(pgResult);
 
   // now check pushes
   if (shouldCheckPush) {
@@ -386,7 +403,9 @@ async function checkRemove(
 
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
-  const sqlQuery = formatPg(compile(ast(zqliteQuery), format(zqliteQuery)));
+  const sqlQuery = formatPg(
+    compile(ast(zqliteQuery), schema.tables, format(zqliteQuery)),
+  );
 
   let numOps = 0;
   const removedRows: [string, Row][] = [];
@@ -462,7 +481,9 @@ async function checkAddBack(
 ) {
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
-  const sqlQuery = formatPg(compile(ast(zqliteQuery), format(zqliteQuery)));
+  const sqlQuery = formatPg(
+    compile(ast(zqliteQuery), schema.tables, format(zqliteQuery)),
+  );
 
   for (const [table, row] of rowsToAdd) {
     await sql`INSERT INTO ${sql(table)} ${sql(row)}`;
@@ -501,7 +522,9 @@ async function checkEditToRandom(
 
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
-  const sqlQuery = formatPg(compile(ast(zqliteQuery), format(zqliteQuery)));
+  const sqlQuery = formatPg(
+    compile(ast(zqliteQuery), schema.tables, format(zqliteQuery)),
+  );
 
   let numOps = 0;
   const editedRows: [string, [original: Row, edited: Row]][] = [];
@@ -602,7 +625,9 @@ async function checkEditToMatch(
 ) {
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
-  const sqlQuery = formatPg(compile(ast(zqliteQuery), format(zqliteQuery)));
+  const sqlQuery = formatPg(
+    compile(ast(zqliteQuery), schema.tables, format(zqliteQuery)),
+  );
 
   for (const [table, [original, edited]] of rowsToEdit) {
     const tableSchema = schema.tables[table as keyof Schema['tables']];
@@ -693,7 +718,7 @@ function runZqlAsSql(
   pg: PostgresDB,
   query: Query<Schema, keyof Schema['tables']>,
 ) {
-  const sqlQuery = formatPg(compile(ast(query), format(query)));
+  const sqlQuery = formatPg(compile(ast(query), schema.tables, format(query)));
   return pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]);
 }
 

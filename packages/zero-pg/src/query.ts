@@ -47,6 +47,7 @@ export class Z2SQuery<
   TReturn = PullRow<TTable, TSchema>,
 > extends AbstractQuery<TSchema, TTable, TReturn> {
   readonly #dbTransaction: DBTransaction<unknown>;
+  readonly #schema: TSchema;
   #query:
     | {
         text: string;
@@ -63,6 +64,7 @@ export class Z2SQuery<
   ) {
     super(schema, tableName, ast, format);
     this.#dbTransaction = dbTransaction;
+    this.#schema = schema;
   }
 
   protected readonly _system = 'permissions';
@@ -82,7 +84,8 @@ export class Z2SQuery<
 
   async run(): Promise<HumanReadable<TReturn>> {
     const sqlQuery =
-      this.#query ?? formatPg(compile(this._completeAst(), this.format));
+      this.#query ??
+      formatPg(compile(this._completeAst(), this.#schema.tables, this.format));
     this.#query = sqlQuery;
     const result = await this.#dbTransaction.query(
       sqlQuery.text,

@@ -1,25 +1,75 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import {expect, test} from 'vitest';
-import {
-  any,
-  compile,
-  correlate,
-  distinctFrom,
-  limit,
-  makeJunctionJoin,
-  orderBy,
-  pullTablesForJunction,
-  simple,
-  valuePosition,
-} from './compiler.ts';
+import {Compiler} from './compiler.ts';
 import {formatPg} from './sql.ts';
+import {
+  boolean,
+  number,
+  string,
+  table,
+} from '../../zero-schema/src/builder/table-builder.ts';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 
 // Tests the output of basic primitives.
 // Top-level things like `SELECT` are tested by actually executing the SQL as inspecting
 // the output there is not easy and not as useful when we know each sub-component is generating
 // the correct output.
 
+const user = table('user')
+  .columns({
+    id: string(),
+    name: string(),
+    age: number(),
+  })
+  .primaryKey('id');
+
+const issue = table('issue')
+  .columns({
+    id: string(),
+    title: string(),
+    description: string(),
+    closed: boolean(),
+    ownerId: string().optional(),
+  })
+  .primaryKey('id');
+
+const issueLabel = table('issueLabel')
+  .from('issue_label')
+  .columns({
+    issueId: string().from('issue_id'),
+    labelId: string().from('label_id'),
+  })
+  .primaryKey('issueId', 'labelId');
+
+const label = table('label')
+  .columns({
+    id: string(),
+    name: string(),
+  })
+  .primaryKey('id');
+
+const parentTable = table('parent_table')
+  .columns({
+    id: string(),
+    other_id: string(),
+  })
+  .primaryKey('id');
+
+const childTable = table('child_table')
+  .columns({
+    id: string(),
+    parent_id: string(),
+    parent_other_id: string(),
+  })
+  .primaryKey('id');
+
+const schema = createSchema({
+  tables: [user, issue, issueLabel, label, parentTable, childTable],
+});
+
 test('limit', () => {
-  expect(formatPg(limit(10))).toMatchInlineSnapshot(`
+  const compiler = new Compiler(schema.tables);
+  expect(formatPg(compiler.limit(10))).toMatchInlineSnapshot(`
     {
       "text": "LIMIT $1",
       "values": [
@@ -27,7 +77,7 @@ test('limit', () => {
       ],
     }
   `);
-  expect(formatPg(limit(undefined))).toMatchInlineSnapshot(`
+  expect(formatPg(compiler.limit(undefined))).toMatchInlineSnapshot(`
     {
       "text": "",
       "values": [],
@@ -36,7 +86,8 @@ test('limit', () => {
 });
 
 test('orderBy', () => {
-  expect(formatPg(orderBy([]))).toMatchInlineSnapshot(`
+  const compiler = new Compiler(schema.tables);
+  expect(formatPg(compiler.orderBy([]))).toMatchInlineSnapshot(`
     {
       "text": "ORDER BY",
       "values": [],
@@ -44,7 +95,7 @@ test('orderBy', () => {
   `);
   expect(
     formatPg(
-      orderBy([
+      compiler.orderBy([
         ['name', 'asc'],
         ['age', 'desc'],
       ]),
@@ -57,7 +108,7 @@ test('orderBy', () => {
   `);
   expect(
     formatPg(
-      orderBy([
+      compiler.orderBy([
         ['name', 'asc'],
         ['age', 'desc'],
         ['id', 'asc'],
@@ -69,7 +120,7 @@ test('orderBy', () => {
       "values": [],
     }
   `);
-  expect(formatPg(orderBy(undefined))).toMatchInlineSnapshot(`
+  expect(formatPg(compiler.orderBy(undefined))).toMatchInlineSnapshot(`
     {
       "text": "",
       "values": [],
@@ -78,14 +129,18 @@ test('orderBy', () => {
 });
 
 test('any', () => {
+  const compiler = new Compiler(schema.tables);
   expect(
     formatPg(
-      any({
-        type: 'simple',
-        op: 'IN',
-        left: {type: 'column', name: 'name'},
-        right: {type: 'literal', value: [1, 2, 3]},
-      }),
+      compiler.any(
+        {
+          type: 'simple',
+          op: 'IN',
+          left: {type: 'column', name: 'name'},
+          right: {type: 'literal', value: [1, 2, 3]},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -102,12 +157,15 @@ test('any', () => {
 
   expect(
     formatPg(
-      any({
-        type: 'simple',
-        op: 'NOT IN',
-        left: {type: 'column', name: 'name'},
-        right: {type: 'literal', value: [1, 2, 3]},
-      }),
+      compiler.any(
+        {
+          type: 'simple',
+          op: 'NOT IN',
+          left: {type: 'column', name: 'name'},
+          right: {type: 'literal', value: [1, 2, 3]},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -124,15 +182,18 @@ test('any', () => {
 });
 
 test('valuePosition', () => {
-  expect(formatPg(valuePosition({type: 'column', name: 'name'})))
-    .toMatchInlineSnapshot(`
+  const compiler = new Compiler(schema.tables);
+  expect(
+    formatPg(compiler.valuePosition({type: 'column', name: 'name'}, 'user')),
+  ).toMatchInlineSnapshot(`
     {
       "text": ""name"",
       "values": [],
     }
   `);
-  expect(formatPg(valuePosition({type: 'literal', value: 'hello'})))
-    .toMatchInlineSnapshot(`
+  expect(
+    formatPg(compiler.valuePosition({type: 'literal', value: 'hello'}, 'user')),
+  ).toMatchInlineSnapshot(`
     {
       "text": "$1",
       "values": [
@@ -142,7 +203,14 @@ test('valuePosition', () => {
   `);
   expect(() =>
     formatPg(
-      valuePosition({type: 'static', anchor: 'authData', field: 'name'}),
+      compiler.valuePosition(
+        {
+          type: 'static',
+          anchor: 'authData',
+          field: 'name',
+        },
+        'user',
+      ),
     ),
   ).toThrow(
     'Static parameters must be bound to a value before compiling to SQL',
@@ -150,14 +218,18 @@ test('valuePosition', () => {
 });
 
 test('distinctFrom', () => {
+  const compiler = new Compiler(schema.tables);
   expect(
     formatPg(
-      distinctFrom({
-        type: 'simple',
-        op: 'IS',
-        left: {type: 'column', name: 'name'},
-        right: {type: 'literal', value: null},
-      }),
+      compiler.distinctFrom(
+        {
+          type: 'simple',
+          op: 'IS',
+          left: {type: 'column', name: 'name'},
+          right: {type: 'literal', value: null},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -170,12 +242,15 @@ test('distinctFrom', () => {
 
   expect(
     formatPg(
-      distinctFrom({
-        type: 'simple',
-        op: 'IS NOT',
-        left: {type: 'column', name: 'name'},
-        right: {type: 'literal', value: null},
-      }),
+      compiler.distinctFrom(
+        {
+          type: 'simple',
+          op: 'IS NOT',
+          left: {type: 'column', name: 'name'},
+          right: {type: 'literal', value: null},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -188,12 +263,17 @@ test('distinctFrom', () => {
 });
 
 test('correlate', () => {
+  const compiler = new Compiler(schema.tables);
   expect(
     formatPg(
-      correlate('parent_table', ['id', 'other_id'], 'child_table', [
-        'parent_id',
-        'parent_other_id',
-      ]),
+      compiler.correlate(
+        'parent_table',
+        'parent_table',
+        ['id', 'other_id'],
+        'child_table',
+        'child_table',
+        ['parent_id', 'parent_other_id'],
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -203,7 +283,16 @@ test('correlate', () => {
   `);
 
   expect(
-    formatPg(correlate('parent_table', ['id'], 'child_table', ['parent_id'])),
+    formatPg(
+      compiler.correlate(
+        'parent_table',
+        'parent_table',
+        ['id'],
+        'child_table',
+        'child_table',
+        ['parent_id'],
+      ),
+    ),
   ).toMatchInlineSnapshot(`
     {
       "text": ""parent_table"."id" = "child_table"."parent_id"",
@@ -211,8 +300,18 @@ test('correlate', () => {
     }
   `);
 
-  expect(formatPg(correlate('parent_table', [], 'child_table', [])))
-    .toMatchInlineSnapshot(`
+  expect(
+    formatPg(
+      compiler.correlate(
+        'parent_table',
+        'parent_table',
+        [],
+        'child_table',
+        'child_table',
+        [],
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
     {
       "text": "",
       "values": [],
@@ -221,22 +320,31 @@ test('correlate', () => {
 
   expect(() =>
     formatPg(
-      correlate('parent_table', ['id', 'other_id'], 'child_table', [
-        'parent_id',
-      ]),
+      compiler.correlate(
+        'parent_table',
+        'parent_table',
+        ['id', 'other_id'],
+        'child_table',
+        'child_table',
+        ['parent_id'],
+      ),
     ),
   ).toThrow('Assertion failed');
 });
 
 test('simple', () => {
+  const compiler = new Compiler(schema.tables);
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: '=',
-        left: {type: 'column', name: 'name'},
-        right: {type: 'literal', value: 'test'},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'name'},
+          right: {type: 'literal', value: 'test'},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -249,12 +357,15 @@ test('simple', () => {
 
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: '!=',
-        left: {type: 'column', name: 'name'},
-        right: {type: 'literal', value: 'test'},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: '!=',
+          left: {type: 'column', name: 'name'},
+          right: {type: 'literal', value: 'test'},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -267,12 +378,15 @@ test('simple', () => {
 
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: '>',
-        left: {type: 'column', name: 'age'},
-        right: {type: 'literal', value: 21},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: '>',
+          left: {type: 'column', name: 'age'},
+          right: {type: 'literal', value: 21},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -285,12 +399,15 @@ test('simple', () => {
 
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: '>=',
-        left: {type: 'column', name: 'age'},
-        right: {type: 'literal', value: 21},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: '>=',
+          left: {type: 'column', name: 'age'},
+          right: {type: 'literal', value: 21},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -303,12 +420,15 @@ test('simple', () => {
 
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: '<',
-        left: {type: 'column', name: 'age'},
-        right: {type: 'literal', value: 21},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: '<',
+          left: {type: 'column', name: 'age'},
+          right: {type: 'literal', value: 21},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -321,12 +441,15 @@ test('simple', () => {
 
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: '<=',
-        left: {type: 'column', name: 'age'},
-        right: {type: 'literal', value: 21},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: '<=',
+          left: {type: 'column', name: 'age'},
+          right: {type: 'literal', value: 21},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -339,12 +462,15 @@ test('simple', () => {
 
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: 'LIKE',
-        left: {type: 'column', name: 'name'},
-        right: {type: 'literal', value: '%test%'},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: 'LIKE',
+          left: {type: 'column', name: 'name'},
+          right: {type: 'literal', value: '%test%'},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -357,12 +483,15 @@ test('simple', () => {
 
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: 'NOT LIKE',
-        left: {type: 'column', name: 'name'},
-        right: {type: 'literal', value: '%test%'},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: 'NOT LIKE',
+          left: {type: 'column', name: 'name'},
+          right: {type: 'literal', value: '%test%'},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -375,12 +504,15 @@ test('simple', () => {
 
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: 'ILIKE',
-        left: {type: 'column', name: 'name'},
-        right: {type: 'literal', value: '%test%'},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: 'ILIKE',
+          left: {type: 'column', name: 'name'},
+          right: {type: 'literal', value: '%test%'},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -393,12 +525,15 @@ test('simple', () => {
 
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: 'NOT ILIKE',
-        left: {type: 'column', name: 'name'},
-        right: {type: 'literal', value: '%test%'},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: 'NOT ILIKE',
+          left: {type: 'column', name: 'name'},
+          right: {type: 'literal', value: '%test%'},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -411,12 +546,15 @@ test('simple', () => {
 
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: 'IN',
-        left: {type: 'column', name: 'id'},
-        right: {type: 'literal', value: [1, 2, 3]},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: 'IN',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: [1, 2, 3]},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -433,12 +571,15 @@ test('simple', () => {
 
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: 'NOT IN',
-        left: {type: 'column', name: 'id'},
-        right: {type: 'literal', value: [1, 2, 3]},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: 'NOT IN',
+          left: {type: 'column', name: 'id'},
+          right: {type: 'literal', value: [1, 2, 3]},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -455,12 +596,15 @@ test('simple', () => {
 
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: 'IS',
-        left: {type: 'column', name: 'name'},
-        right: {type: 'literal', value: null},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: 'IS',
+          left: {type: 'column', name: 'name'},
+          right: {type: 'literal', value: null},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -473,12 +617,15 @@ test('simple', () => {
 
   expect(
     formatPg(
-      simple({
-        type: 'simple',
-        op: 'IS NOT',
-        left: {type: 'column', name: 'name'},
-        right: {type: 'literal', value: null},
-      }),
+      compiler.simple(
+        {
+          type: 'simple',
+          op: 'IS NOT',
+          left: {type: 'column', name: 'name'},
+          right: {type: 'literal', value: null},
+        },
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -491,8 +638,9 @@ test('simple', () => {
 });
 
 test('pull tables for junction', () => {
+  const compiler = new Compiler(schema.tables);
   expect(
-    pullTablesForJunction({
+    compiler.pullTablesForJunction({
       correlation: {
         parentField: ['id'],
         childField: ['issue_id'],
@@ -545,20 +693,21 @@ test('pull tables for junction', () => {
 });
 
 test('make junction join', () => {
+  const compiler = new Compiler(schema.tables);
   expect(
     formatPg(
-      makeJunctionJoin({
+      compiler.makeJunctionJoin({
         correlation: {
           parentField: ['id'],
-          childField: ['issue_id'],
+          childField: ['issueId'],
         },
         subquery: {
-          table: 'issue_label',
+          table: 'issueLabel',
           alias: 'labels',
           related: [
             {
               correlation: {
-                parentField: ['label_id'],
+                parentField: ['labelId'],
                 childField: ['id'],
               },
               subquery: {
@@ -572,31 +721,32 @@ test('make junction join', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""issue_label" JOIN "label" as "table_1" ON "issue_label"."label_id" = "table_1"."id"",
+      "text": ""issue_label" as "issueLabel" JOIN "label" as "table_1" ON "issueLabel"."label_id" = "table_1"."id"",
       "values": [],
     }
   `);
 });
 
 test('related thru junction edge', () => {
+  const compiler = new Compiler(schema.tables);
   expect(
     formatPg(
-      compile({
+      compiler.compile({
         table: 'issue',
         related: [
           {
             correlation: {
               parentField: ['id'],
-              childField: ['issue_id'],
+              childField: ['issueId'],
             },
             hidden: true,
             subquery: {
-              table: 'issue_label',
+              table: 'issueLabel',
               alias: 'labels',
               related: [
                 {
                   correlation: {
-                    parentField: ['label_id'],
+                    parentField: ['labelId'],
                     childField: ['id'],
                   },
                   subquery: {
@@ -613,22 +763,23 @@ test('related thru junction edge', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT (
-          SELECT COALESCE(array_agg(row_to_json("inner_labels")) , ARRAY[]::json[]) FROM (SELECT "table_1".* FROM "issue_label" JOIN "label" as "table_1" ON "issue_label"."label_id" = "table_1"."id" WHERE ("issue"."id" = "issue_label"."issue_id")    ) "inner_labels"
-        ) as "labels",* FROM "issue"",
+            SELECT COALESCE(array_agg(row_to_json("inner_labels")) , ARRAY[]::json[]) FROM (SELECT "table_1".* FROM "issue_label" as "issueLabel" JOIN "label" as "table_1" ON "issueLabel"."label_id" = "table_1"."id" WHERE ("issue"."id" = "issueLabel"."issue_id")    ) "inner_labels"
+          ) as "labels","id","title","description","closed","ownerId" FROM "issue"",
       "values": [],
     }
   `);
 });
 
 test('related w/o junction edge', () => {
+  const compiler = new Compiler(schema.tables);
   expect(
     formatPg(
-      compile({
+      compiler.compile({
         table: 'issue',
         related: [
           {
             correlation: {
-              parentField: ['owner_id'],
+              parentField: ['ownerId'],
               childField: ['id'],
             },
             subquery: {
@@ -642,8 +793,8 @@ test('related w/o junction edge', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT (
-        SELECT COALESCE(array_agg(row_to_json("inner_owner")) , ARRAY[]::json[]) FROM (SELECT * FROM "user"  WHERE ("issue"."owner_id" = "user"."id")  ) "inner_owner"
-      ) as "owner",* FROM "issue"",
+          SELECT COALESCE(array_agg(row_to_json("inner_owner")) , ARRAY[]::json[]) FROM (SELECT "id","name","age" FROM "user"  WHERE ("issue"."ownerId" = "user"."id")  ) "inner_owner"
+        ) as "owner","id","title","description","closed","ownerId" FROM "issue"",
       "values": [],
     }
   `);
