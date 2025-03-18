@@ -52,6 +52,7 @@ export class Take implements Operator {
   readonly #limit: number;
   readonly #partitionKey: PartitionKey | undefined;
   readonly #partitionKeyComparator: Comparator | undefined;
+  // Fetch overlay needed for some split push cases.
   #rowHiddenFromFetch: Row | undefined;
 
   #output: Output = throwOutput;
