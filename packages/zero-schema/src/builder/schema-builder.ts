@@ -33,7 +33,6 @@ export function createSchema<
   readonly tables: TTables;
   readonly relationships?: TRelationships | undefined;
 }): {
-  version: number;
   tables: {
     readonly [K in TTables[number]['schema']['name']]: Extract<
       TTables[number]['schema'],
