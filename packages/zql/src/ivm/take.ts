@@ -49,6 +49,7 @@ export class Take implements Operator {
   readonly #limit: number;
   readonly #partitionKey: PartitionKey | undefined;
   readonly #partitionKeyComparator: Comparator | undefined;
+  #pendingAddRowOverlay: Row | undefined;
 
   #output: Output = throwOutput;
 
@@ -98,6 +99,15 @@ export class Take implements Operator {
       for (const inputNode of this.#input.fetch(req)) {
         if (this.getSchema().compareRows(takeState.bound, inputNode.row) < 0) {
           return;
+        }
+        if (
+          this.#pendingAddRowOverlay &&
+          this.getSchema().compareRows(
+            this.#pendingAddRowOverlay,
+            inputNode.row,
+          ) === 0
+        ) {
+          continue;
         }
         yield inputNode;
       }
@@ -288,17 +298,22 @@ export class Take implements Operator {
         type: 'remove',
         node: boundNode,
       };
+      this.#pendingAddRowOverlay = change.node.row;
+      try {
+        this.#setTakeState(
+          takeStateKey,
+          takeState.size,
+          beforeBoundNode === undefined ||
+            compareRows(change.node.row, beforeBoundNode.row) > 0
+            ? change.node.row
+            : beforeBoundNode.row,
+          maxBound,
+        );
+        this.#output.push(removeChange);
+      } finally {
+        this.#pendingAddRowOverlay = undefined;
+      }
       this.#output.push(change);
-      this.#setTakeState(
-        takeStateKey,
-        takeState.size,
-        beforeBoundNode === undefined ||
-          compareRows(change.node.row, beforeBoundNode.row) > 0
-          ? change.node.row
-          : beforeBoundNode.row,
-        maxBound,
-      );
-      this.#output.push(removeChange);
     } else if (change.type === 'remove') {
       if (takeState.bound === undefined) {
         // change is after bound
@@ -510,19 +525,24 @@ export class Take implements Operator {
         2,
       );
 
+      this.#pendingAddRowOverlay = change.node.row;
+      try {
+        this.#setTakeState(
+          takeStateKey,
+          takeState.size,
+          newBoundNode.row,
+          maxBound,
+        );
+        this.#output.push({
+          type: 'remove',
+          node: oldBoundNode,
+        });
+      } finally {
+        this.#pendingAddRowOverlay = change.node.row;
+      }
       this.#output.push({
         type: 'add',
         node: change.node,
-      });
-      this.#setTakeState(
-        takeStateKey,
-        takeState.size,
-        newBoundNode.row,
-        maxBound,
-      );
-      this.#output.push({
-        type: 'remove',
-        node: oldBoundNode,
       });
 
       return;

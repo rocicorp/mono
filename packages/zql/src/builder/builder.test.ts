@@ -700,28 +700,6 @@ test('self-join edit', () => {
               {
                 "relationships": {},
                 "row": {
-                  "id": 2,
-                  "name": "erik",
-                  "recruiterID": 1,
-                },
-              },
-            ],
-          },
-          "row": {
-            "id": 3,
-            "name": "greg",
-            "recruiterID": 2,
-          },
-        },
-        "type": "add",
-      },
-      {
-        "node": {
-          "relationships": {
-            "recruiter": [
-              {
-                "relationships": {},
-                "row": {
                   "id": 1,
                   "name": "aaron",
                   "recruiterID": null,
@@ -736,6 +714,28 @@ test('self-join edit', () => {
           },
         },
         "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {
+            "recruiter": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": 2,
+                  "name": "erik",
+                  "recruiterID": 1,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 3,
+            "name": "greg",
+            "recruiterID": 2,
+          },
+        },
+        "type": "add",
       },
     ]
   `);
@@ -1267,36 +1267,6 @@ test('exists junction', () => {
                     {
                       "relationships": {},
                       "row": {
-                        "code": "HI",
-                      },
-                    },
-                  ],
-                },
-                "row": {
-                  "stateCode": "HI",
-                  "userID": 2,
-                },
-              },
-            ],
-          },
-          "row": {
-            "id": 2,
-            "name": "erik",
-            "recruiterID": 1,
-          },
-        },
-        "type": "add",
-      },
-      {
-        "node": {
-          "relationships": {
-            "zsubq_userStates": [
-              {
-                "relationships": {
-                  "zsubq_states": [
-                    {
-                      "relationships": {},
-                      "row": {
                         "code": "AZ",
                       },
                     },
@@ -1332,6 +1302,36 @@ test('exists junction', () => {
           },
         },
         "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_userStates": [
+              {
+                "relationships": {
+                  "zsubq_states": [
+                    {
+                      "relationships": {},
+                      "row": {
+                        "code": "HI",
+                      },
+                    },
+                  ],
+                },
+                "row": {
+                  "stateCode": "HI",
+                  "userID": 2,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 2,
+            "name": "erik",
+            "recruiterID": 1,
+          },
+        },
+        "type": "add",
       },
     ]
   `);
@@ -1472,36 +1472,6 @@ test('duplicative exists junction', () => {
               {
                 "relationships": {},
                 "row": {
-                  "stateCode": "HI",
-                  "userID": 2,
-                },
-              },
-            ],
-            "zsubq_userStates_1": [
-              {
-                "relationships": {},
-                "row": {
-                  "stateCode": "HI",
-                  "userID": 2,
-                },
-              },
-            ],
-          },
-          "row": {
-            "id": 2,
-            "name": "erik",
-            "recruiterID": 1,
-          },
-        },
-        "type": "add",
-      },
-      {
-        "node": {
-          "relationships": {
-            "zsubq_userStates_0": [
-              {
-                "relationships": {},
-                "row": {
                   "stateCode": "AZ",
                   "userID": 3,
                 },
@@ -1538,6 +1508,36 @@ test('duplicative exists junction', () => {
           },
         },
         "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_userStates_0": [
+              {
+                "relationships": {},
+                "row": {
+                  "stateCode": "HI",
+                  "userID": 2,
+                },
+              },
+            ],
+            "zsubq_userStates_1": [
+              {
+                "relationships": {},
+                "row": {
+                  "stateCode": "HI",
+                  "userID": 2,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 2,
+            "name": "erik",
+            "recruiterID": 1,
+          },
+        },
+        "type": "add",
       },
     ]
   `);
@@ -1815,28 +1815,6 @@ test('exists self join', () => {
               {
                 "relationships": {},
                 "row": {
-                  "id": 2,
-                  "name": "erik",
-                  "recruiterID": 1,
-                },
-              },
-            ],
-          },
-          "row": {
-            "id": 3,
-            "name": "greg",
-            "recruiterID": 2,
-          },
-        },
-        "type": "add",
-      },
-      {
-        "node": {
-          "relationships": {
-            "zsubq_recruiter": [
-              {
-                "relationships": {},
-                "row": {
                   "id": 1,
                   "name": "aaron",
                   "recruiterID": null,
@@ -1851,6 +1829,28 @@ test('exists self join', () => {
           },
         },
         "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_recruiter": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": 2,
+                  "name": "erik",
+                  "recruiterID": 1,
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": 3,
+            "name": "greg",
+            "recruiterID": 2,
+          },
+        },
+        "type": "add",
       },
     ]
   `);
