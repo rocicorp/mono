@@ -16,7 +16,11 @@ import {
   clientToServer,
   serverToClient,
 } from '../../../zero-schema/src/name-mapper.ts';
-import {mapAST, type AST} from '../../../zero-protocol/src/ast.ts';
+import {
+  mapAST,
+  type AST,
+  type CompoundKey,
+} from '../../../zero-protocol/src/ast.ts';
 
 export const createSource: SourceFactory = (
   lc: LogContext,
@@ -144,7 +148,9 @@ export function newQueryDelegate(
             v,
           ]),
         ),
-        tableSchema.primaryKey,
+        tableSchema.primaryKey.map(k =>
+          clientToServerMapper.columnName(clientTableName, k),
+        ) as unknown as CompoundKey,
       );
 
       sources.set(serverTableName, source);
