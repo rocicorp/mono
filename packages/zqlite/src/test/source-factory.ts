@@ -13,6 +13,7 @@ import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
 import {TableSource, toSQLiteTypeName} from '../table-source.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
+import {mapAST, type AST} from '../../../zero-protocol/src/ast.ts';
 
 export const createSource: SourceFactory = (
   lc: LogContext,
@@ -96,6 +97,10 @@ export function newQueryDelegate(
 
       sources.set(serverTableName, source);
       return source;
+    },
+
+    mapAst(ast: AST): AST {
+      return mapAST(ast, mapper);
     },
 
     createStorage() {

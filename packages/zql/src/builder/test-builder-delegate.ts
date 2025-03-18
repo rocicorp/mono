@@ -1,5 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {JSONObject} from '../../../shared/src/json.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {MemoryStorage} from '../ivm/memory-storage.ts';
 import type {Storage, Input} from '../ivm/operator.ts';
 import {Snitch, type SnitchMessage} from '../ivm/snitch.ts';
@@ -26,6 +27,10 @@ export class TestBuilderDelegate implements BuilderDelegate {
       `Missing source ${tableName}`,
     );
     return this.#sources[tableName];
+  }
+
+  mapAst(ast: AST): AST {
+    return ast;
   }
 
   createStorage(name: string): Storage {
