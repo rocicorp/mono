@@ -62,11 +62,11 @@ type Queries = {
   customer: Query<Schema, 'customer'>;
   employee: Query<Schema, 'employee'>;
   genre: Query<Schema, 'genre'>;
-  media_type: Query<Schema, 'media_type'>;
+  mediaType: Query<Schema, 'mediaType'>;
   playlist: Query<Schema, 'playlist'>;
-  playlist_track: Query<Schema, 'playlist_track'>;
+  playlistTrack: Query<Schema, 'playlistTrack'>;
   invoice: Query<Schema, 'invoice'>;
-  invoice_line: Query<Schema, 'invoice_line'>;
+  invoiceLine: Query<Schema, 'invoiceLine'>;
   track: Query<Schema, 'track'>;
 };
 const zqliteQueries: Queries = {
@@ -75,11 +75,11 @@ const zqliteQueries: Queries = {
   customer: null,
   employee: null,
   genre: null,
-  media_type: null,
+  mediaType: null,
   playlist: null,
-  playlist_track: null,
+  playlistTrack: null,
   invoice: null,
-  invoice_line: null,
+  invoiceLine: null,
   track: null,
 } as any;
 const memoryQueries: Queries = {...zqliteQueries} as any;
@@ -289,7 +289,7 @@ describe('or', () => {
       const {randomRow} = randomRowAndColumn('invoice');
       const q = ({or, cmp, exists}: ExpressionBuilder<Schema, 'invoice'>) =>
         or(
-          cmp('customer_id', '=', randomRow.customer_id as number),
+          cmp('customerId', '=', randomRow.customer_id as number),
           exists('lines'),
         );
       await checkZqlAndSql(
