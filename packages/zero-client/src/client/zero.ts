@@ -1817,8 +1817,15 @@ export class Zero<
   }
 
   async inspect(): Promise<Inspector> {
-    const m = await import('./inspector/inspector.ts');
-    return m.newInspector(this.#rep);
+    // We use esbuild dropLabels to strip this code when we build the code for the bundle size dashboard.
+    // https://esbuild.github.io/api/#ignore-annotations
+    // /packages/zero/tool/build.ts
+
+    // eslint-disable-next-line no-unused-labels
+    BUNDLE_SIZE: {
+      const m = await import('./inspector/inspector.ts');
+      return m.newInspector(this.#rep);
+    }
   }
 }
 
