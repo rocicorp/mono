@@ -3,6 +3,7 @@
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import type {AST} from '../../zero-protocol/src/ast.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../zql/src/ivm/operator.ts';
 import type {Source} from '../../zql/src/ivm/source.ts';
@@ -25,6 +26,9 @@ export function bench(opts: Options) {
   const sources = new Map<string, Source>();
   const tableSpecs = computeZqlSpecs(lc, db);
   const host: QueryDelegate = {
+    mapAst(ast: AST): AST {
+      return ast;
+    },
     getSource: (name: string) => {
       let source = sources.get(name);
       if (source) {

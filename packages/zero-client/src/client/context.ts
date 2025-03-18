@@ -88,6 +88,10 @@ export class ZeroContext implements QueryDelegate {
     }
   }
 
+  mapAst(ast: AST): AST {
+    return ast;
+  }
+
   createStorage(): Storage {
     return new MemoryStorage();
   }

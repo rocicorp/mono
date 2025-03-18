@@ -54,6 +54,9 @@ const db = new Database(lc, config.replicaFile);
 const schema = getSchema(lc, db);
 const sources = new Map<string, TableSource>();
 const host: QueryDelegate = {
+  mapAst(ast: AST): AST {
+    return ast;
+  },
   getSource: (name: string) => {
     let source = sources.get(name);
     if (source) {

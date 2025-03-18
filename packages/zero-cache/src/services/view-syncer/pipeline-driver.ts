@@ -252,6 +252,7 @@ export class PipelineDriver {
       getSource: name => this.#getSource(name),
       createStorage: () => this.#createStorage(),
       decorateInput: input => input,
+      mapAst: ast => ast,
     });
     const schema = input.getSchema();
     input.setOutput({

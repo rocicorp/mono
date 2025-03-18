@@ -47,6 +47,10 @@ export class QueryDelegateImpl implements QueryDelegate {
     };
   }
 
+  mapAst(ast: AST): AST {
+    return ast;
+  }
+
   onQueryMaterialized() {}
 
   commit() {

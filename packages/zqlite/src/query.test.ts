@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import {beforeEach, expect, expectTypeOf, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
@@ -49,7 +50,7 @@ beforeEach(() => {
       title: 'issue 1',
       description: 'description 1',
       closed: false,
-      ownerId: '0001',
+      owner_id: '0001',
     },
   });
   issueSource.push({
@@ -59,7 +60,7 @@ beforeEach(() => {
       title: 'issue 2',
       description: 'description 2',
       closed: false,
-      ownerId: '0002',
+      owner_id: '0002',
     },
   });
   issueSource.push({
@@ -69,7 +70,7 @@ beforeEach(() => {
       title: 'issue 3',
       description: 'description 3',
       closed: false,
-      ownerId: null,
+      owner_id: null,
     },
   });
 
@@ -266,7 +267,7 @@ test('schema applied `one`', async () => {
     row: {
       id: '0001',
       authorId: '0001',
-      issueId: '0001',
+      issue_id: '0001',
       text: 'comment 1',
       createdAt: 1,
     },
@@ -276,7 +277,7 @@ test('schema applied `one`', async () => {
     row: {
       id: '0002',
       authorId: '0002',
-      issueId: '0001',
+      issue_id: '0001',
       text: 'comment 2',
       createdAt: 2,
     },
