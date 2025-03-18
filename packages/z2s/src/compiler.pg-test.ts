@@ -1,4 +1,4 @@
-import './test/nullish.ts';
+import './test/comparePg.ts';
 import {beforeAll} from 'vitest';
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
@@ -279,7 +279,7 @@ describe('compiling ZQL to SQL', () => {
     );
     expect(
       mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualNullish(pgResult);
+    ).toEqualPg(pgResult);
   });
 
   test('1 to many foreign key relationship', async () => {
@@ -293,7 +293,7 @@ describe('compiling ZQL to SQL', () => {
     );
     expect(
       mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualNullish(pgResult);
+    ).toEqualPg(pgResult);
   });
 
   test('junction relationship', async () => {
@@ -307,7 +307,7 @@ describe('compiling ZQL to SQL', () => {
     );
     expect(
       mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualNullish(pgResult);
+    ).toEqualPg(pgResult);
   });
 
   test('nested related with where clauses', async () => {

@@ -10,7 +10,10 @@ import type {Query} from '../../../zql/src/query/query.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import {newQueryDelegate} from '../../../zqlite/src/test/source-factory.ts';
+import {
+  mapResultToClientNames,
+  newQueryDelegate,
+} from '../../../zqlite/src/test/source-factory.ts';
 import {
   newQuery,
   type QueryDelegate,
@@ -31,15 +34,15 @@ beforeAll(async () => {
   sqlite = new Database(lc, ':memory:');
 
   await pg.unsafe(/*sql*/ `
-    INSERT INTO "issue" ("id", "title", "description", "closed", "ownerId") VALUES (
+    INSERT INTO "issues" ("id", "title", "description", "closed", "owner_id") VALUES (
       'issue1', 'Test Issue 1', 'Description for issue 1', false, 'user1'
     );
 
-    INSERT INTO "user" ("id", "name") VALUES (
+    INSERT INTO "users" ("id", "name") VALUES (
       'user1', 'User 1'
     );
 
-    INSERT INTO "comment" ("id", "authorId", "issueId", text, "createdAt") VALUES (
+    INSERT INTO "comments" ("id", "authorId", "issue_id", text, "createdAt") VALUES (
       'comment1', 'user1', 'issue1', 'Comment 1', 0
     );
   `);
@@ -84,7 +87,8 @@ test('discord report https://discord.com/channels/830183651022471199/13475501749
 
   const view = q.materialize();
 
-  expect(view.data).toMatchInlineSnapshot(`
+  expect(mapResultToClientNames(view.data, schema, 'issue'))
+    .toMatchInlineSnapshot(`
     [
       {
         "closed": false,
@@ -105,7 +109,7 @@ test('discord report https://discord.com/channels/830183651022471199/13475501749
     ]
   `);
 
-  queryDelegate.getSource('issue')?.push({
+  queryDelegate.getSource('issues')?.push({
     type: 'edit',
     oldRow: {
       id: 'issue1',
@@ -123,5 +127,7 @@ test('discord report https://discord.com/channels/830183651022471199/13475501749
     },
   });
 
-  expect(view.data).toEqual(q.materialize().data);
+  expect(mapResultToClientNames(view.data, schema, 'issue')).toEqual(
+    q.materialize().data,
+  );
 });
