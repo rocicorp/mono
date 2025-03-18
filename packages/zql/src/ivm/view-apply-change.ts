@@ -141,7 +141,7 @@ export function applyChange(
         if (oldEntry !== undefined) {
           assert(
             schema.compareRows(oldEntry, change.node.row) === 0,
-            `Singular relationship '${relationship}' should not have multiple rows.  You may need to declare this relationship with the \`many\` helper instead of the \`one\` helper in your schema.`,
+            `Singular relationship '${relationship}' should not have multiple rows. You may need to declare this relationship with the \`many\` helper instead of the \`one\` helper in your schema.`,
           );
           // adding same again.
           rc = oldEntry[refCountSymbol] + 1;
