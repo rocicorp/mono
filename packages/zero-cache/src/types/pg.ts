@@ -156,8 +156,8 @@ export const postgresTypeConfig = (
     // JS number is 53 bits so this should generally not occur.
     // An API will be provided for users to override this type.
     numeric: {
-      to: 1700,
-      from: [1700],
+      to: builtins.NUMERIC as number,
+      from: [builtins.NUMERIC] as number[],
       serialize: (x: number) => String(x), // pg expects a string
       parse: (x: string | number) => Number(x),
     },
