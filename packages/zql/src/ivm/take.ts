@@ -52,7 +52,7 @@ export class Take implements Operator {
   readonly #limit: number;
   readonly #partitionKey: PartitionKey | undefined;
   readonly #partitionKeyComparator: Comparator | undefined;
-  #pendingAddOverlay: Row | undefined;
+  #rowHiddenFromFetch: Row | undefined;
 
   #output: Output = throwOutput;
 
@@ -104,9 +104,9 @@ export class Take implements Operator {
           return;
         }
         if (
-          this.#pendingAddOverlay &&
+          this.#rowHiddenFromFetch &&
           this.getSchema().compareRows(
-            this.#pendingAddOverlay,
+            this.#rowHiddenFromFetch,
             inputNode.row,
           ) === 0
         ) {
@@ -301,21 +301,20 @@ export class Take implements Operator {
         type: 'remove',
         node: boundNode,
       };
-      this.#pendingAddOverlay = change.node.row;
-      try {
-        this.#setTakeState(
-          takeStateKey,
-          takeState.size,
-          beforeBoundNode === undefined ||
-            compareRows(change.node.row, beforeBoundNode.row) > 0
-            ? change.node.row
-            : beforeBoundNode.row,
-          maxBound,
-        );
+      // Remove before add to maintain invariant that
+      // output size <= limit.
+      this.#setTakeState(
+        takeStateKey,
+        takeState.size,
+        beforeBoundNode === undefined ||
+          compareRows(change.node.row, beforeBoundNode.row) > 0
+          ? change.node.row
+          : beforeBoundNode.row,
+        maxBound,
+      );
+      this.#withRowHiddenFromFetch(change.node.row, () => {
         this.#output.push(removeChange);
-      } finally {
-        this.#pendingAddOverlay = undefined;
-      }
+      });
       this.#output.push(change);
     } else if (change.type === 'remove') {
       if (takeState.bound === undefined) {
@@ -527,22 +526,20 @@ export class Take implements Operator {
         }),
         2,
       );
-
-      this.#pendingAddOverlay = change.node.row;
-      try {
-        this.#setTakeState(
-          takeStateKey,
-          takeState.size,
-          newBoundNode.row,
-          maxBound,
-        );
+      // Remove before add to maintain invariant that
+      // output size <= limit.
+      this.#setTakeState(
+        takeStateKey,
+        takeState.size,
+        newBoundNode.row,
+        maxBound,
+      );
+      this.#withRowHiddenFromFetch(change.node.row, () => {
         this.#output.push({
           type: 'remove',
           node: oldBoundNode,
         });
-      } finally {
-        this.#pendingAddOverlay = undefined;
-      }
+      });
       this.#output.push({
         type: 'add',
         node: change.node,
@@ -602,6 +599,15 @@ export class Take implements Operator {
     }
 
     unreachable();
+  }
+
+  #withRowHiddenFromFetch(row: Row, fn: () => void) {
+    this.#rowHiddenFromFetch = row;
+    try {
+      fn();
+    } finally {
+      this.#rowHiddenFromFetch = undefined;
+    }
   }
 
   #setTakeState(
