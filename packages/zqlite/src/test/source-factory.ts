@@ -12,6 +12,7 @@ import type {QueryDelegate} from '../../../zql/src/query/query-impl.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
 import {TableSource, toSQLiteTypeName} from '../table-source.ts';
+import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
 
 export const createSource: SourceFactory = (
   lc: LogContext,
@@ -50,22 +51,32 @@ export function newQueryDelegate(
   schema: Schema,
 ): QueryDelegate {
   const sources = new Map<string, Source>();
+  const mapper = clientToServer(schema.tables);
   return {
-    getSource: (name: string) => {
-      let source = sources.get(name);
+    getSource: (tableName: string) => {
+      const serverTableName = mapper.tableName(tableName);
+      let source = sources.get(serverTableName);
       if (source) {
         return source;
       }
 
-      const tableSchema = schema.tables[name as keyof typeof schema.tables];
+      const tableSchema =
+        schema.tables[tableName as keyof typeof schema.tables];
 
       // create the SQLite table
       db.exec(`
-      CREATE TABLE IF NOT EXISTS "${name}" (
+      CREATE TABLE IF NOT EXISTS "${serverTableName}" (
         ${Object.entries(tableSchema.columns)
-          .map(([name, c]) => `"${name}" ${toSQLiteTypeName(c.type)}`)
+          .map(
+            ([name, c]) =>
+              `"${mapper.columnName(tableName, name)}" ${toSQLiteTypeName(
+                c.type,
+              )}`,
+          )
           .join(', ')},
-        PRIMARY KEY (${tableSchema.primaryKey.map(k => `"${k}"`).join(', ')})
+        PRIMARY KEY (${tableSchema.primaryKey
+          .map(k => `"${mapper.columnName(tableName, k)}"`)
+          .join(', ')})
       )`);
 
       source = new TableSource(
@@ -73,12 +84,17 @@ export function newQueryDelegate(
         logConfig,
         'query.test.ts',
         db,
-        name,
-        tableSchema.columns,
+        serverTableName,
+        Object.fromEntries(
+          Object.entries(tableSchema.columns).map(([k, v]) => [
+            mapper.columnName(tableName, k),
+            v,
+          ]),
+        ),
         tableSchema.primaryKey,
       );
 
-      sources.set(name, source);
+      sources.set(serverTableName, source);
       return source;
     },
 
