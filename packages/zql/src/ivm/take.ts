@@ -42,6 +42,9 @@ export type PartitionKey = PrimaryKey;
  * new incoming pushes should be accepted or rejected.
  *
  * Take can count rows globally or by unique value of some field.
+ *
+ * Maintains the invariant that its output size is always <= limit, even
+ * mid processing of a push.
  */
 export class Take implements Operator {
   readonly #input: Input;
@@ -49,7 +52,7 @@ export class Take implements Operator {
   readonly #limit: number;
   readonly #partitionKey: PartitionKey | undefined;
   readonly #partitionKeyComparator: Comparator | undefined;
-  #pendingAddRowOverlay: Row | undefined;
+  #pendingAddOverlay: Row | undefined;
 
   #output: Output = throwOutput;
 
@@ -101,9 +104,9 @@ export class Take implements Operator {
           return;
         }
         if (
-          this.#pendingAddRowOverlay &&
+          this.#pendingAddOverlay &&
           this.getSchema().compareRows(
-            this.#pendingAddRowOverlay,
+            this.#pendingAddOverlay,
             inputNode.row,
           ) === 0
         ) {
@@ -298,7 +301,7 @@ export class Take implements Operator {
         type: 'remove',
         node: boundNode,
       };
-      this.#pendingAddRowOverlay = change.node.row;
+      this.#pendingAddOverlay = change.node.row;
       try {
         this.#setTakeState(
           takeStateKey,
@@ -311,7 +314,7 @@ export class Take implements Operator {
         );
         this.#output.push(removeChange);
       } finally {
-        this.#pendingAddRowOverlay = undefined;
+        this.#pendingAddOverlay = undefined;
       }
       this.#output.push(change);
     } else if (change.type === 'remove') {
@@ -525,7 +528,7 @@ export class Take implements Operator {
         2,
       );
 
-      this.#pendingAddRowOverlay = change.node.row;
+      this.#pendingAddOverlay = change.node.row;
       try {
         this.#setTakeState(
           takeStateKey,
@@ -538,7 +541,7 @@ export class Take implements Operator {
           node: oldBoundNode,
         });
       } finally {
-        this.#pendingAddRowOverlay = undefined;
+        this.#pendingAddOverlay = undefined;
       }
       this.#output.push({
         type: 'add',
