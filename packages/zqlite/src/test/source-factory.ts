@@ -12,7 +12,10 @@ import type {QueryDelegate} from '../../../zql/src/query/query-impl.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
 import {TableSource, toSQLiteTypeName} from '../table-source.ts';
-import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
+import {
+  clientToServer,
+  serverToClient,
+} from '../../../zero-schema/src/name-mapper.ts';
 import {mapAST, type AST} from '../../../zero-protocol/src/ast.ts';
 
 export const createSource: SourceFactory = (
@@ -45,6 +48,53 @@ export const createSource: SourceFactory = (
   );
 };
 
+export function mapResultToClientNames<T, S extends Schema>(
+  result: unknown,
+  schema: S,
+  rootTable: keyof S['tables'] & string,
+): T {
+  const serverToClientMapper = serverToClient(schema.tables);
+  const clientToServerMapper = clientToServer(schema.tables);
+
+  function mapResult(result: unknown, schema: Schema, rootTable: string) {
+    // eslint-disable-next-line eqeqeq
+    if (result == null) {
+      return result;
+    }
+
+    if (Array.isArray(result)) {
+      return result.map(r => mapResultToClientNames(r, schema, rootTable)) as T;
+    }
+
+    const mappedResult: Record<string, unknown> = {};
+    const serverTableName = clientToServerMapper.tableName(rootTable);
+    for (const [serverCol, v] of Object.entries(result)) {
+      if (serverCol === '_0_version') {
+        continue;
+      }
+
+      try {
+        const clientCol = serverToClientMapper.columnName(
+          serverTableName,
+          serverCol,
+        );
+        mappedResult[clientCol] = v;
+      } catch (e) {
+        const relationship = schema.relationships[rootTable][serverCol];
+        mappedResult[serverCol] = mapResult(
+          v,
+          schema,
+          (relationship[1] ?? relationship[0]).destSchema,
+        );
+      }
+    }
+
+    return mappedResult as T;
+  }
+
+  return mapResult(result, schema, rootTable) as T;
+}
+
 export function newQueryDelegate(
   lc: LogContext,
   logConfig: LogConfig,
@@ -52,17 +102,18 @@ export function newQueryDelegate(
   schema: Schema,
 ): QueryDelegate {
   const sources = new Map<string, Source>();
-  const mapper = clientToServer(schema.tables);
+  const clientToServerMapper = clientToServer(schema.tables);
+  const serverToClientMapper = serverToClient(schema.tables);
   return {
-    getSource: (tableName: string) => {
-      const serverTableName = mapper.tableName(tableName);
+    getSource: (serverTableName: string) => {
+      const clientTableName = serverToClientMapper.tableName(serverTableName);
       let source = sources.get(serverTableName);
       if (source) {
         return source;
       }
 
       const tableSchema =
-        schema.tables[tableName as keyof typeof schema.tables];
+        schema.tables[clientTableName as keyof typeof schema.tables];
 
       // create the SQLite table
       db.exec(`
@@ -70,13 +121,14 @@ export function newQueryDelegate(
         ${Object.entries(tableSchema.columns)
           .map(
             ([name, c]) =>
-              `"${mapper.columnName(tableName, name)}" ${toSQLiteTypeName(
-                c.type,
-              )}`,
+              `"${clientToServerMapper.columnName(
+                clientTableName,
+                name,
+              )}" ${toSQLiteTypeName(c.type)}`,
           )
           .join(', ')},
         PRIMARY KEY (${tableSchema.primaryKey
-          .map(k => `"${mapper.columnName(tableName, k)}"`)
+          .map(k => `"${clientToServerMapper.columnName(clientTableName, k)}"`)
           .join(', ')})
       )`);
 
@@ -88,7 +140,7 @@ export function newQueryDelegate(
         serverTableName,
         Object.fromEntries(
           Object.entries(tableSchema.columns).map(([k, v]) => [
-            mapper.columnName(tableName, k),
+            clientToServerMapper.columnName(clientTableName, k),
             v,
           ]),
         ),
@@ -100,7 +152,7 @@ export function newQueryDelegate(
     },
 
     mapAst(ast: AST): AST {
-      return mapAST(ast, mapper);
+      return mapAST(ast, clientToServerMapper);
     },
 
     createStorage() {

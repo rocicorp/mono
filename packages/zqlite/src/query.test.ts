@@ -5,7 +5,10 @@ import {must} from '../../shared/src/must.ts';
 import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
 import {schema} from '../../zql/src/query/test/test-schemas.ts';
 import {Database} from './db.ts';
-import {newQueryDelegate} from './test/source-factory.ts';
+import {
+  mapResultToClientNames,
+  newQueryDelegate,
+} from './test/source-factory.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 
 let queryDelegate: QueryDelegate;
@@ -16,8 +19,8 @@ beforeEach(() => {
   const db = new Database(createSilentLogContext(), ':memory:');
   queryDelegate = newQueryDelegate(lc, testLogConfig, db, schema);
 
-  const userSource = must(queryDelegate.getSource('user'));
-  const issueSource = must(queryDelegate.getSource('issue'));
+  const userSource = must(queryDelegate.getSource('users'));
+  const issueSource = must(queryDelegate.getSource('issues'));
   const labelSource = must(queryDelegate.getSource('label'));
 
   userSource.push({
@@ -107,7 +110,7 @@ test('row type', () => {
 
 test('basic query', async () => {
   const query = newQuery(queryDelegate, schema, 'issue');
-  const data = await query.run();
+  const data = mapResultToClientNames(await query.run(), schema, 'issue');
   expect(data).toMatchInlineSnapshot(`
     [
       {
@@ -116,7 +119,6 @@ test('basic query', async () => {
         "id": "0001",
         "ownerId": "0001",
         "title": "issue 1",
-        Symbol(rc): 1,
       },
       {
         "closed": false,
@@ -124,7 +126,6 @@ test('basic query', async () => {
         "id": "0002",
         "ownerId": "0002",
         "title": "issue 2",
-        Symbol(rc): 1,
       },
       {
         "closed": false,
@@ -132,7 +133,6 @@ test('basic query', async () => {
         "id": "0003",
         "ownerId": null,
         "title": "issue 3",
-        Symbol(rc): 1,
       },
     ]
   `);
@@ -143,7 +143,7 @@ test('null compare', async () => {
     .where('ownerId', 'IS', null)
     .run();
 
-  expect(rows).toMatchInlineSnapshot(`
+  expect(mapResultToClientNames(rows, schema, 'issue')).toMatchInlineSnapshot(`
     [
       {
         "closed": false,
@@ -151,7 +151,6 @@ test('null compare', async () => {
         "id": "0003",
         "ownerId": null,
         "title": "issue 3",
-        Symbol(rc): 1,
       },
     ]
   `);
@@ -166,7 +165,7 @@ test('null compare', async () => {
         "closed": false,
         "description": "description 1",
         "id": "0001",
-        "ownerId": "0001",
+        "owner_id": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
       },
@@ -174,7 +173,7 @@ test('null compare', async () => {
         "closed": false,
         "description": "description 2",
         "id": "0002",
-        "ownerId": "0002",
+        "owner_id": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
       },
@@ -186,7 +185,7 @@ test('or', async () => {
   const query = newQuery(queryDelegate, schema, 'issue').where(({or, cmp}) =>
     or(cmp('ownerId', '=', '0001'), cmp('ownerId', '=', '0002')),
   );
-  const data = await query.run();
+  const data = mapResultToClientNames(await query.run(), schema, 'issue');
   expect(data).toMatchInlineSnapshot(`
     [
       {
@@ -195,7 +194,6 @@ test('or', async () => {
         "id": "0001",
         "ownerId": "0001",
         "title": "issue 1",
-        Symbol(rc): 1,
       },
       {
         "closed": false,
@@ -203,7 +201,6 @@ test('or', async () => {
         "id": "0002",
         "ownerId": "0002",
         "title": "issue 2",
-        Symbol(rc): 1,
       },
     ]
   `);
@@ -227,25 +224,24 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
     },
   });
 
-  expect(view.data).toMatchInlineSnapshot(`
-    [
-      {
-        "closed": false,
-        "description": "description 1",
-        "id": "0001",
-        "labels": [
-          {
-            "id": "0001",
-            "name": "bug",
-            Symbol(rc): 1,
-          },
-        ],
-        "ownerId": "0001",
-        "title": "issue 1",
-        Symbol(rc): 1,
-      },
-    ]
-  `);
+  expect(mapResultToClientNames(view.data, schema, 'issue'))
+    .toMatchInlineSnapshot(`
+      [
+        {
+          "closed": false,
+          "description": "description 1",
+          "id": "0001",
+          "labels": [
+            {
+              "id": "0001",
+              "name": "bug",
+            },
+          ],
+          "ownerId": "0001",
+          "title": "issue 1",
+        },
+      ]
+    `);
 
   labelSource.push({
     type: 'remove',
@@ -260,7 +256,7 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
 
 test('schema applied `one`', async () => {
   // test only one item is returned when `one` is applied to a relationship in the schema
-  const commentSource = must(queryDelegate.getSource('comment'));
+  const commentSource = must(queryDelegate.getSource('comments'));
   const revisionSource = must(queryDelegate.getSource('revision'));
   commentSource.push({
     type: 'add',
@@ -295,7 +291,7 @@ test('schema applied `one`', async () => {
     .related('owner')
     .related('comments', q => q.related('author').related('revisions'))
     .where('id', '=', '0001');
-  const data = await query.run();
+  const data = mapResultToClientNames(await query.run(), schema, 'issue');
   expect(data).toMatchInlineSnapshot(`
     [
       {
@@ -306,7 +302,6 @@ test('schema applied `one`', async () => {
               "id": "0001",
               "metadata": "{"registrar":"github","login":"alicegh"}",
               "name": "Alice",
-              Symbol(rc): 1,
             },
             "authorId": "0001",
             "createdAt": 1,
@@ -318,18 +313,15 @@ test('schema applied `one`', async () => {
                 "commentId": "0001",
                 "id": "0001",
                 "text": "revision 1",
-                Symbol(rc): 1,
               },
             ],
             "text": "comment 1",
-            Symbol(rc): 1,
           },
           {
             "author": {
               "id": "0002",
               "metadata": "{"registar":"google","login":"bob@gmail.com","altContacts":["bobwave","bobyt","bobplus"]}",
               "name": "Bob",
-              Symbol(rc): 1,
             },
             "authorId": "0002",
             "createdAt": 2,
@@ -337,7 +329,6 @@ test('schema applied `one`', async () => {
             "issueId": "0001",
             "revisions": [],
             "text": "comment 2",
-            Symbol(rc): 1,
           },
         ],
         "description": "description 1",
@@ -346,11 +337,9 @@ test('schema applied `one`', async () => {
           "id": "0001",
           "metadata": "{"registrar":"github","login":"alicegh"}",
           "name": "Alice",
-          Symbol(rc): 1,
         },
         "ownerId": "0001",
         "title": "issue 1",
-        Symbol(rc): 1,
       },
     ]
   `);
