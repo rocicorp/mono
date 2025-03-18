@@ -538,7 +538,7 @@ export class Take implements Operator {
           node: oldBoundNode,
         });
       } finally {
-        this.#pendingAddRowOverlay = change.node.row;
+        this.#pendingAddRowOverlay = undefined;
       }
       this.#output.push({
         type: 'add',

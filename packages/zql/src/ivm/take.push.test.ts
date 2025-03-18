@@ -472,7 +472,7 @@ suite('take with no partition', () => {
       `);
     });
 
-    test('singular, at limit add row at start', () => {
+    test('at limit add row at start, limit 1', () => {
       const {data, messages, storage, pushesWithFetch} = takeNoPartitionTest({
         sourceRows: [
           {id: 'i1', created: 100, text: null},
@@ -2905,6 +2905,14 @@ suite('take with no partition', () => {
                     "created": 200,
                     "id": "i2",
                     "text": "b",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 250,
+                    "id": "i4",
+                    "text": "d",
                   },
                 },
               ],
@@ -6319,6 +6327,15 @@ suite('take with partition', () => {
                           "id": "c1",
                           "issueID": "i1",
                           "text": "a",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 150,
+                          "id": "c3",
+                          "issueID": "i1",
+                          "text": "c2",
                         },
                       },
                     ],
