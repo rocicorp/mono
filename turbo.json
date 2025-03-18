@@ -1,19 +1,10 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": [
-    "**/.env.*local"
-  ],
+  "globalDependencies": ["**/.env.*local"],
   "tasks": {
     "build": {
-      "dependsOn": [
-        "^build"
-      ],
-      "outputs": [
-        "out/**",
-        "dist/**",
-        ".next/**",
-        "next-env.d.ts"
-      ],
+      "dependsOn": ["^build"],
+      "outputs": ["out/**", "dist/**", ".next/**", "next-env.d.ts", "build/**"],
       "inputs": [
         "$TURBO_DEFAULT$",
         "../zero-advanced/src/**/*.ts",
@@ -35,19 +26,13 @@
       "cache": true
     },
     "test": {
-      "dependsOn": [
-        "^test",
-        "build"
-      ]
+      "dependsOn": ["^test", "build"]
     },
     "test:watch": {
       "cache": false
     },
     "check-types": {
-      "dependsOn": [
-        "^check-types",
-        "build"
-      ],
+      "dependsOn": ["^check-types", "build"],
       "outputs": [],
       "inputs": [
         "$TURBO_DEFAULT$",
