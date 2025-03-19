@@ -33,6 +33,8 @@ Create a `.env` file in the `zbugs` directory:
 # In the future we will support other types of upstreams besides PG
 ZERO_UPSTREAM_DB = "postgresql://user:password@127.0.0.1:6434/postgres"
 
+ZERO_PUSH_URL = "http://localhost:5173/api/push"
+
 # A separate Postgres database we use to store CVRs. CVRs (client view records)
 # keep track of which clients have which data. This is how we know what diff to
 # send on reconnect. It can be same database as above, but it makes most sense
