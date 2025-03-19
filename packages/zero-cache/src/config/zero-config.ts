@@ -37,6 +37,8 @@ export const appOptions = {
       '',
       'Due to constraints on replication slot names, an App ID may only consist of',
       'lower-case letters, numbers, and the underscore character.',
+      '',
+      'Note that this option is used by both {bold zero-cache} and {bold zero-deploy-permissions}.',
     ],
   },
 
