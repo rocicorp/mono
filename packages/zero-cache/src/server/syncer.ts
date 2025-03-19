@@ -146,6 +146,7 @@ export default function runWorker(
       ? undefined
       : (id: string) =>
           new PusherService(
+            config,
             lc.withContext('clientGroupID', id),
             id,
             must(config.push.url),
