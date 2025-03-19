@@ -58,15 +58,23 @@ export function preload(z: Zero<Schema>) {
 
   didPreload = true;
 
-  // TODO: Need to implement infinite scroll and simplify this!
-  // Instead of doing two queries, we should do one with a reasonable limit that
-  // we expand during scrolling.
+  // Initially preload just open issues, the minimum we need to show the
+  // homepage.
+  //
+  // TODO: we can actually do better, we should really preload only first few
+  // pages and use infinite scroll. In practice for zbugs there are few enough
+  // open issues that loading all is fine. It would still be better to do
+  // infinite scroll for demo/educational purposes.
   const baseIssueQuery = z.query.issue
+    .where('open', true)
     .related('labels')
     .related('viewState', q => q.where('userID', z.userID));
 
-  const {complete} = baseIssueQuery.preload(CACHE_FOREVER);
+  // One the bare issues are loaded, also preload the details needed for the
+  // issue page, so that navigating into details is also fast.
+  const {complete, cleanup} = baseIssueQuery.preload(CACHE_FOREVER);
   complete.then(() => {
+    cleanup();
     mark('preload complete');
     baseIssueQuery
       .related('creator')
