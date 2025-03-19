@@ -74,7 +74,7 @@ jobs:
 
       - run: npm ci
       - name: Install Playwright
-        run: npx playwright install --with-deps
+        run: npx playwright install --with-deps --only-shell
       - name: Run tests
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then

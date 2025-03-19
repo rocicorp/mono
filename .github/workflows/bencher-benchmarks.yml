@@ -69,7 +69,7 @@ jobs:
       - run: npm ci
 
       - name: Install Playwright
-        run: npx playwright install --with-deps
+        run: npx playwright install --with-deps --only-shell
 
       - name: Run benchmarks
         working-directory: packages/zero-client
