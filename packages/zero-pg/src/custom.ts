@@ -56,18 +56,9 @@ export function createPushHandler<
   schema,
   dbConnectionProvider,
   mutators,
-  shardID,
 }: Options<S, TDBTransaction, MD>): PushHandler {
-  const processor = new PushProcessor(
-    shardID ?? {
-      appID: 'zero',
-      shardNum: 0,
-    },
-    schema,
-    dbConnectionProvider,
-    mutators,
-  );
-  return (headers, body) => processor.process(headers, body);
+  const processor = new PushProcessor(schema, dbConnectionProvider, mutators);
+  return (headers, params, body) => processor.process(headers, params, body);
 }
 
 export class TransactionImpl<S extends Schema, TWrappedTransaction>

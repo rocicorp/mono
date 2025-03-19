@@ -4,6 +4,17 @@ import type {Mutation, PushBody} from '../../../../zero-protocol/src/push.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {resolver} from '@rocicorp/resolver';
 
+const config = {
+  app: {
+    id: 'zero',
+    publications: [],
+  },
+  shard: {
+    id: 'zero',
+    num: 0,
+  },
+};
+
 describe('combine pushes', () => {
   test('empty array', () => {
     const [pushes, terminate] = combinePushes([]);
@@ -113,6 +124,7 @@ const lc = createSilentLogContext();
 describe('pusher service', () => {
   test('the service can be stopped', async () => {
     const pusher = new PusherService(
+      config,
       lc,
       'cgid',
       'http://exmaple.com',
@@ -133,6 +145,7 @@ describe('pusher service', () => {
     });
 
     const pusher = new PusherService(
+      config,
       lc,
       'cgid',
       'http://exmaple.com',
@@ -154,6 +167,32 @@ describe('pusher service', () => {
     fetch.mockReset();
   });
 
+  test('the service sends the app id and schema over the query params', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+    });
+
+    const pusher = new PusherService(
+      config,
+      lc,
+      'cgid',
+      'http://exmaple.com',
+      'api-key',
+    );
+    void pusher.run();
+
+    pusher.enqueuePush(makePush(1), 'jwt');
+
+    await pusher.stop();
+
+    expect(fetch.mock.calls[0][0]).toMatchInlineSnapshot(
+      `"http://exmaple.com?schema=zero_0&appID=zero"`,
+    );
+
+    fetch.mockReset();
+  });
+
   test('the service correctly batches pushes when the API server is delayed', async () => {
     const fetch = (global.fetch = vi.fn());
     const apiServerReturn = resolver();
@@ -162,6 +201,7 @@ describe('pusher service', () => {
     });
 
     const pusher = new PusherService(
+      config,
       lc,
       'cgid',
       'http://exmaple.com',

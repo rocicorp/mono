@@ -9,6 +9,10 @@ import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {Connection} from './test/util.ts';
 
 let pg: PostgresDB;
+const params = {
+  schema: 'zero_0',
+  appID: 'zero',
+};
 beforeEach(async () => {
   pg = await testDBs.create('zero-pg-web');
   await pg.unsafe(`
@@ -40,11 +44,6 @@ function makePush(
   };
 }
 
-const shardID = {
-  appID: 'zero',
-  shardNum: 0,
-} as const;
-
 const mutators = {
   foo: {
     bar: () => Promise.resolve(),
@@ -55,7 +54,6 @@ const mutators = {
 describe('out of order mutation', () => {
   test('first mutation is out of order', async () => {
     const processor = new PushProcessor(
-      shardID,
       {
         tables: {},
         relationships: {},
@@ -64,7 +62,7 @@ describe('out of order mutation', () => {
       () => new Connection(pg),
       mutators,
     );
-    const result = await processor.process({}, makePush(15));
+    const result = await processor.process({}, params, makePush(15));
 
     expect(result).toEqual({
       mutations: [
@@ -86,7 +84,6 @@ describe('out of order mutation', () => {
 
   test('later mutations are out of order', async () => {
     const processor = new PushProcessor(
-      shardID,
       {
         tables: {},
         relationships: {},
@@ -96,7 +93,7 @@ describe('out of order mutation', () => {
       mutators,
     );
 
-    expect(await processor.process({}, makePush(1))).toEqual({
+    expect(await processor.process({}, params, makePush(1))).toEqual({
       mutations: [
         {
           id: {
@@ -108,7 +105,7 @@ describe('out of order mutation', () => {
       ],
     });
 
-    expect(await processor.process({}, makePush(3))).toEqual({
+    expect(await processor.process({}, params, makePush(3))).toEqual({
       mutations: [
         {
           id: {
@@ -129,7 +126,6 @@ describe('out of order mutation', () => {
 
 test('first mutation', async () => {
   const processor = new PushProcessor(
-    shardID,
     {
       tables: {},
       relationships: {},
@@ -139,7 +135,7 @@ test('first mutation', async () => {
     mutators,
   );
 
-  expect(await processor.process({}, makePush(1))).toEqual({
+  expect(await processor.process({}, params, makePush(1))).toEqual({
     mutations: [
       {
         id: {
@@ -156,7 +152,6 @@ test('first mutation', async () => {
 
 test('previously seen mutation', async () => {
   const processor = new PushProcessor(
-    shardID,
     {
       tables: {},
       relationships: {},
@@ -166,11 +161,11 @@ test('previously seen mutation', async () => {
     mutators,
   );
 
-  await processor.process({}, makePush(1));
-  await processor.process({}, makePush(2));
-  await processor.process({}, makePush(3));
+  await processor.process({}, params, makePush(1));
+  await processor.process({}, params, makePush(2));
+  await processor.process({}, params, makePush(3));
 
-  expect(await processor.process({}, makePush(2))).toEqual({
+  expect(await processor.process({}, params, makePush(2))).toEqual({
     mutations: [
       {
         id: {
@@ -187,7 +182,6 @@ test('previously seen mutation', async () => {
 
 test('lmid still moves forward if the mutator implementation throws', async () => {
   const processor = new PushProcessor(
-    shardID,
     {
       tables: {},
       relationships: {},
@@ -197,10 +191,11 @@ test('lmid still moves forward if the mutator implementation throws', async () =
     mutators,
   );
 
-  await processor.process({}, makePush(1));
-  await processor.process({}, makePush(2));
+  await processor.process({}, params, makePush(1));
+  await processor.process({}, params, makePush(2));
   const result = await processor.process(
     {},
+    params,
     makePush(3, customMutatorKey('foo', 'baz')),
   );
   expect(result).toEqual({
@@ -222,7 +217,6 @@ test('lmid still moves forward if the mutator implementation throws', async () =
 
 test('token with and without `Bearer` prefix', async () => {
   const processor = new PushProcessor(
-    shardID,
     {
       tables: {},
       relationships: {},
@@ -234,6 +228,7 @@ test('token with and without `Bearer` prefix', async () => {
 
   let result = await processor.process(
     {authorization: 'no-bearer'},
+    params,
     makePush(1),
   );
 
@@ -255,6 +250,7 @@ test('token with and without `Bearer` prefix', async () => {
   `);
   result = await processor.process(
     {authorization: 'Bearer sdfsdf'},
+    params,
     makePush(1),
   );
   expect(result).toMatchInlineSnapshot(`
