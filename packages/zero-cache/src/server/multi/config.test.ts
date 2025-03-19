@@ -376,6 +376,8 @@ test('zero-cache --help', () => {
                                                                 Due to constraints on replication slot names, an App ID may only consist of                       
                                                                 lower-case letters, numbers, and the underscore character.                                        
                                                                                                                                                                   
+                                                                Note that this option is used by both zero-cache and zero-deploy-permissions.                     
+                                                                                                                                                                  
      --app-publications string[]                                default: []                                                                                       
        ZERO_APP_PUBLICATIONS env                                                                                                                                  
                                                                 Postgres PUBLICATIONs that define the tables and columns to                                       

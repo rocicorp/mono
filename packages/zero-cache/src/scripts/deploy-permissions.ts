@@ -129,7 +129,7 @@ async function deployPermissions(
 
       const {appID} = shard;
       lc.info?.(
-        `Deploying "${appID}" permissions to upstream@${db.options.host}`,
+        `Deploying permissions for --app-id "${appID}" to upstream@${db.options.host}`,
       );
       const [{hash: beforeHash}] = await tx<{hash: string}[]>`
         SELECT hash from ${tx(app)}.permissions`;
