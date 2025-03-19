@@ -1175,7 +1175,10 @@ export class Zero<
     this.#socket = ws;
     this.#socketResolver.resolve(ws);
 
-    getBrowserGlobal('window')?.addEventListener('pagehide', this.#onPageHide);
+    getBrowserGlobal('window')?.addEventListener?.(
+      'pagehide',
+      this.#onPageHide,
+    );
 
     try {
       l.debug?.('Waiting for connection to be acknowledged');
@@ -1264,7 +1267,7 @@ export class Zero<
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
     this.#pokeHandler.handleDisconnect();
 
-    getBrowserGlobal('window')?.removeEventListener(
+    getBrowserGlobal('window')?.removeEventListener?.(
       'pagehide',
       this.#onPageHide,
     );
