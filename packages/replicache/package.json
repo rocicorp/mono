@@ -39,7 +39,7 @@
     "shared": "0.0.0",
     "sinon": "^13.0.1",
     "tsc-alias": "^1.8.10",
-    "typescript": "~5.7.3",
+    "typescript": "~5.8.2",
     "vitest": "3.0.8"
   },
   "type": "module",
