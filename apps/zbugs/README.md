@@ -33,6 +33,7 @@ Create a `.env` file in the `zbugs` directory:
 # In the future we will support other types of upstreams besides PG
 ZERO_UPSTREAM_DB = "postgresql://user:password@127.0.0.1:6434/postgres"
 
+# Where to send custom mutations
 ZERO_PUSH_URL = "http://localhost:5173/api/push"
 
 # A separate Postgres database we use to store CVRs. CVRs (client view records)
@@ -53,13 +54,13 @@ ZERO_LOG_LEVEL = "info"
 # Use "json" for logs consumed by structured logging services.
 ZERO_LOG_FORMAT = "text"
 
-# Secret used to sign and verify the JWT
-# Set this to something real if you intend to deploy
-# the app.
+# Public key used to verify JWTs.
 # You can create a JWK pair via `npm run create-keys`
+# in the `zbugs` directory.
+#
 # The public key goes here and in `VITE_PUBLIC_JWK`.
-# Only the API server needs the private key.
-ZERO_AUTH_JWK='TODO'
+# The private key goes in `PRIVATE_JWK`
+ZERO_AUTH_JWK=''
 
 #### ZBugs API Server Variables ####
 
@@ -70,11 +71,14 @@ ZERO_AUTH_JWK='TODO'
 GITHUB_CLIENT_ID = ""
 # The secret for the client
 GITHUB_CLIENT_SECRET = ""
+# See comment on `ZERO_AUTH_JWK`
+PRIVATE_JWK = ""
 
 
 #### Vite Variables ####
 VITE_PUBLIC_SERVER="http://localhost:4848"
-VITE_PUBLIC_JWK='TODO'
+# See comment on `ZERO_AUTH_JWK`
+VITE_PUBLIC_JWK=''
 ```
 
 Then start the server:
