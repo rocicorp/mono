@@ -15,7 +15,7 @@ import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
-import {warm} from '../db/warm.ts';
+import {warmupConnections} from '../db/warmup.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
@@ -91,8 +91,8 @@ export default function runWorker(
   });
 
   const dbWarmup = Promise.allSettled([
-    warm(lc, cvrDB, 'cvr'),
-    warm(lc, upstreamDB, 'upstream'),
+    warmupConnections(lc, cvrDB, 'cvr'),
+    warmupConnections(lc, upstreamDB, 'upstream'),
   ]);
 
   const tmpDir = config.storageDBTmpDir ?? tmpdir();

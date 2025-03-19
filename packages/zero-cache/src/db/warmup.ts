@@ -1,7 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {PostgresDB} from '../types/pg.ts';
 
-export async function warm(lc: LogContext, db: PostgresDB, name: string) {
+export async function warmupConnections(
+  lc: LogContext,
+  db: PostgresDB,
+  name: string,
+) {
   const {max, host} = db.options;
   await Promise.allSettled(
     Array.from({length: max}, () => db`SELECT 1`.simple().execute()),

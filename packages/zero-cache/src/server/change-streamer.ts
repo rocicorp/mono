@@ -3,7 +3,7 @@ import {must} from '../../../shared/src/must.ts';
 import {DatabaseInitError} from '../../../zqlite/src/db.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
-import {warm} from '../db/warm.ts';
+import {warmupConnections} from '../db/warmup.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
@@ -40,7 +40,7 @@ export default async function runWorker(
     max: change.maxConns,
     connection: {['application_name']: 'zero-change-streamer'},
   });
-  void warm(lc, changeDB, 'change');
+  void warmupConnections(lc, changeDB, 'change');
 
   const {autoReset} = config;
   const shard = getShardConfig(config);
