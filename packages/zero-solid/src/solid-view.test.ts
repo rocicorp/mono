@@ -115,7 +115,9 @@ test('single-format', () => {
   expect(() => {
     ms.push({row: {a: 2, b: 'b'}, type: 'add'});
     commit();
-  }).toThrow('single output already exists');
+  }).toThrow(
+    "Singular relationship '' should not have multiple rows. You may need to declare this relationship with the `many` helper instead of the `one` helper in your schema.",
+  );
 
   // Adding the same element is not an error in the ArrayView but it is an error
   // in the Source. This case is tested in view-apply-change.ts.
