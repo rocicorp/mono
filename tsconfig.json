@@ -1,12 +1,13 @@
 {
   "compilerOptions": {
     "target": "es2022",
-    "module": "Node16",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
     "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
     "rewriteRelativeImportExtensions": true,
     "esModuleInterop": true,
-    "moduleResolution": "Node16",
+    "moduleResolution": "NodeNext",
     "moduleDetection": "force",
     "strict": true,
     "exactOptionalPropertyTypes": true,

@@ -20,6 +20,7 @@ import {toast, ToastContainer} from 'react-toastify';
 import {assert} from 'shared/src/asserts.js';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
+import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.ts';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
 import type {CommentRow, IssueRow, Schema, UserRow} from '../../../schema.ts';
@@ -51,12 +52,12 @@ import {
 } from '../../limits.ts';
 import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
+import {CACHE_AWHILE} from '../../query-cache-policy.ts';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.ts';
 import {preload} from '../../zero-setup.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {CACHE_AWHILE} from '../../query-cache-policy.ts';
 
 const emojiToastShowDuration = 3_000;
 
@@ -1038,7 +1039,7 @@ function useShowToastForNewComment(
     }
 
     for (const commentID of newCommentIDs) {
-      const index = comments.findLastIndex(c => c.id === commentID);
+      const index = findLastIndex(comments, c => c.id === commentID);
       if (index === -1) {
         continue;
       }

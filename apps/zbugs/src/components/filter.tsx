@@ -1,6 +1,7 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {memo, useMemo, useState} from 'react';
+import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';
 import labelIcon from '../assets/icons/label.svg';
 import {useZero} from '../hooks/use-zero.ts';
 import {Button} from './button.tsx';
@@ -23,7 +24,7 @@ export const Filter = memo(function Filter({onSelect}: Props) {
   const [unsortedLabels] = useQuery(z.query.label);
   // TODO: Support case-insensitive sorting in ZQL.
   const labels = useMemo(
-    () => unsortedLabels.toSorted((a, b) => a.name.localeCompare(b.name)),
+    () => toSorted(unsortedLabels, (a, b) => a.name.localeCompare(b.name)),
     [unsortedLabels],
   );
 
