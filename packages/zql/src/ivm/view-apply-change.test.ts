@@ -714,7 +714,7 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format);
+        applyChange(root, change, schema, relationship, format);
 
       apply({
         type: 'add',
@@ -747,7 +747,11 @@ describe('applyChange', () => {
             relationships: {},
           },
         }),
-      ).toThrowError(new Error('single output already exists'));
+      ).toThrowError(
+        new Error(
+          "Singular relationship '' should not have multiple rows. You may need to declare this relationship with the `many` helper instead of the `one` helper in your schema.",
+        ),
+      );
 
       apply({
         type: 'add',

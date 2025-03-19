@@ -147,7 +147,7 @@ test('single-format', () => {
   // trying to add another element should be an error
   // pipeline should have been configured with a limit of one
   expect(() => ms.push({row: {a: 2, b: 'b'}, type: 'add'})).toThrow(
-    'single output already exists',
+    "Singular relationship '' should not have multiple rows. You may need to declare this relationship with the `many` helper instead of the `one` helper in your schema.",
   );
 
   // Adding the same element is not an error in the ArrayView but it is an error
