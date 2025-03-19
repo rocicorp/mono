@@ -72,7 +72,7 @@
     "@vitest/runner": "3.0.8",
     "concurrently": "^8.2.1",
     "shared": "0.0.0",
-    "typescript": "~5.7.3",
+    "typescript": "~5.8.2",
     "vitest": "3.0.8"
   },
   "eslintConfig": {
