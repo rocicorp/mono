@@ -57,7 +57,7 @@
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
-    "@rocicorp/prettier-config": "^0.2.0",
+    "@rocicorp/prettier-config": "^0.3.0",
     "@vitest/runner": "3.0.8",
     "esbuild": "^0.25.0",
     "replicache": "15.2.1",

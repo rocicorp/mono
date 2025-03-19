@@ -17,7 +17,7 @@
     "@faker-js/faker": "^9.6.0",
     "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/logger": "^5.3.0",
-    "@rocicorp/prettier-config": "^0.2.0",
+    "@rocicorp/prettier-config": "^0.3.0",
     "@rocicorp/rails": "^0.10.0",
     "fast-check": "^3.18.0",
     "nanoid": "^5.1.2",

@@ -596,8 +596,8 @@ function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
     filter.op === 'ILIKE'
       ? 'LIKE'
       : filter.op === 'NOT ILIKE'
-      ? 'NOT LIKE'
-      : filter.op,
+        ? 'NOT LIKE'
+        : filter.op,
   )} ${valuePositionToSQL(filter.right)}`;
 }
 
@@ -621,10 +621,10 @@ function getJsType(value: unknown): ValueType {
   return typeof value === 'string'
     ? 'string'
     : typeof value === 'number'
-    ? 'number'
-    : typeof value === 'boolean'
-    ? 'boolean'
-    : 'json';
+      ? 'number'
+      : typeof value === 'boolean'
+        ? 'boolean'
+        : 'json';
 }
 
 /**

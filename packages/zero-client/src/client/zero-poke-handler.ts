@@ -95,8 +95,9 @@ export class PokeHandler {
   handlePokePart(pokePart: PokePartBody): number | undefined {
     if (pokePart.pokeID !== this.#receivingPoke?.pokeStart.pokeID) {
       this.#handlePokeError(
-        `pokePart for ${pokePart.pokeID}, when receiving ${this.#receivingPoke
-          ?.pokeStart.pokeID}`,
+        `pokePart for ${pokePart.pokeID}, when receiving ${
+          this.#receivingPoke?.pokeStart.pokeID
+        }`,
       );
       return;
     }
@@ -107,8 +108,9 @@ export class PokeHandler {
   handlePokeEnd(pokeEnd: PokeEndBody): void {
     if (pokeEnd.pokeID !== this.#receivingPoke?.pokeStart.pokeID) {
       this.#handlePokeError(
-        `pokeEnd for ${pokeEnd.pokeID}, when receiving ${this.#receivingPoke
-          ?.pokeStart.pokeID}`,
+        `pokeEnd for ${pokeEnd.pokeID}, when receiving ${
+          this.#receivingPoke?.pokeStart.pokeID
+        }`,
       );
       return;
     }

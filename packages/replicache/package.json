@@ -26,7 +26,7 @@
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
-    "@rocicorp/prettier-config": "^0.2.0",
+    "@rocicorp/prettier-config": "^0.3.0",
     "@types/command-line-usage": "^5.0.2",
     "@types/sinon": "^10.0.11",
     "@vitest/runner": "3.0.8",

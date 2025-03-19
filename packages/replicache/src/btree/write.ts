@@ -43,7 +43,7 @@ export class BTreeWrite extends BTreeRead {
   readonly #lock = new Lock();
   readonly #modified: Map<Hash, DataNodeImpl | InternalNodeImpl> = new Map();
 
-  protected declare _dagRead: Write;
+  declare protected _dagRead: Write;
 
   readonly minSize: number;
   readonly maxSize: number;

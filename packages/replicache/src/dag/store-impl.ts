@@ -110,7 +110,7 @@ export class WriteImpl
   extends ReadImpl
   implements Write, RefCountUpdatesDelegate
 {
-  protected declare readonly _tx: KVWrite;
+  declare protected readonly _tx: KVWrite;
   readonly #chunkHasher: ChunkHasher;
 
   readonly #putChunks = new Set<Hash>();
