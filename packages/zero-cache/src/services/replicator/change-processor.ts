@@ -131,8 +131,8 @@ export class ChangeProcessor {
         type === 'begin'
           ? downstream[2].commitWatermark
           : type === 'commit'
-          ? downstream[2].watermark
-          : undefined;
+            ? downstream[2].watermark
+            : undefined;
       return this.#processMessage(lc, message, watermark);
     } catch (e) {
       this.#fail(lc, e);
