@@ -92,12 +92,12 @@ export class Z2SQuery<
       sqlQuery.values,
     );
 
-    if (Array.isArray(result)) {
-      return result as HumanReadable<TReturn>;
-    }
-
     if (this.format.singular) {
       return first(result) as HumanReadable<TReturn>;
+    }
+
+    if (Array.isArray(result)) {
+      return result as HumanReadable<TReturn>;
     }
 
     return [...result] as HumanReadable<TReturn>;
