@@ -3,23 +3,23 @@
 /* eslint-disable */
 /* deno-fmt-ignore-file */
 
-declare module "sst" {
+declare module 'sst' {
   export interface Resource {
-    "replication-bucket": {
+    'replication-bucket': {
       name: string;
-      type: "sst.aws.Bucket";
+      type: 'sst.aws.Bucket';
     };
-    "replication-manager": {
+    'replication-manager': {
       service: string;
-      type: "sst.aws.Service";
+      type: 'sst.aws.Service';
       url: string;
     };
-    vpc: {
-      type: "sst.aws.Vpc";
+    'vpc': {
+      type: 'sst.aws.Vpc';
     };
   }
 }
 /// <reference path="sst-env.d.ts" />
 
-import "sst";
+import 'sst';
 export {};

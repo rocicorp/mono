@@ -12,5 +12,8 @@
   "dependencies": {
     "@rocicorp/zero": "file:rocicorp-zero.tgz"
   },
+  "devDependencies": {
+    "@rocicorp/prettier-config": "^0.3.0"
+  },
   "prettier": "@rocicorp/prettier-config"
 }

@@ -17,6 +17,7 @@
     "postgres": "^3.4.4"
   },
   "devDependencies": {
+    "@rocicorp/prettier-config": "^0.3.0",
     "shared": "0.0.0"
   },
   "prettier": "@rocicorp/prettier-config"

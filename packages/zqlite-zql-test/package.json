@@ -16,7 +16,7 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/logger": "^5.3.0",
-    "@rocicorp/prettier-config": "^0.2.0",
+    "@rocicorp/prettier-config": "^0.3.0",
     "@vitest/runner": "3.0.8",
     "typescript": "~5.7.3",
     "vitest": "3.0.8"
