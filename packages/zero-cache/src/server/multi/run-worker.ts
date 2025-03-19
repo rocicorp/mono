@@ -4,7 +4,6 @@ import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.t
 import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';
 import type {Service} from '../../services/service.ts';
 import {childWorker, type Worker} from '../../types/processes.ts';
-import {orTimeout} from '../../types/timeout.ts';
 import {createLogContext} from '../logging.ts';
 import {getMultiZeroConfig} from './config.ts';
 import {getTaskID} from './runtime.ts';
@@ -85,11 +84,8 @@ export async function runWorker(
 
   const s = tenants.length > 1 ? 's' : '';
   lc.info?.(`waiting for zero-cache${s} to be ready ...`);
-  if ((await orTimeout(processes.allWorkersReady(), 60_000)) === 'timed-out') {
-    lc.info?.(`timed out waiting for readiness (${Date.now() - startMs} ms)`);
-  } else {
-    lc.info?.(`zero-cache${s} ready (${Date.now() - startMs} ms)`);
-  }
+  await processes.allWorkersReady();
+  lc.info?.(`zero-cache${s} ready (${Date.now() - startMs} ms)`);
 
   const mainServices: Service[] = [];
   if (multiMode) {

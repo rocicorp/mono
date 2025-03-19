@@ -34,11 +34,12 @@ export class ServiceRunner<S extends Service> {
     this.#instances.set(id, service);
     void service
       .run()
-      .catch(e =>
-        this.#lc.error?.(
-          `Error running ${service.constructor?.name} ${service.id}`,
-          e,
-        ),
+      .catch(
+        e =>
+          this.#lc.error?.(
+            `Error running ${service.constructor?.name} ${service.id}`,
+            e,
+          ),
       )
       .finally(() => {
         this.#instances.delete(id);

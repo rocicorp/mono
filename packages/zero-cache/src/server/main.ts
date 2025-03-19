@@ -26,7 +26,6 @@ import {
   type Worker,
 } from '../types/processes.ts';
 import {getShardID} from '../types/shards.ts';
-import {orTimeout} from '../types/timeout.ts';
 import {
   createNotifierFrom,
   handleSubscriptionsFrom,
@@ -166,11 +165,13 @@ export default async function runWorker(
   }
 
   lc.info?.('waiting for workers to be ready ...');
-  if ((await orTimeout(processes.allWorkersReady(), 60_000)) === 'timed-out') {
-    lc.info?.(`timed out waiting for readiness (${Date.now() - startMs} ms)`);
-  } else {
-    lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
-  }
+  const logWaiting = setInterval(
+    () => lc.info?.(`still waiting for ${processes.initializing().join(', ')}`),
+    10_000,
+  );
+  await processes.allWorkersReady();
+  clearInterval(logWaiting);
+  lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
 
   const mainServices: Service[] = [];
   const {port} = config;
