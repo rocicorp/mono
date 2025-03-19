@@ -66,7 +66,7 @@ export default $config({
       ZERO_REPLICA_FILE: IS_EBS_STAGE
         ? '/data/sync-replica.db'
         : 'sync-replica.db',
-      ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250304-00`,
+      ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250319-00`,
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
       ZERO_APP_ID: process.env.ZERO_APP_ID || 'zero',
     };
