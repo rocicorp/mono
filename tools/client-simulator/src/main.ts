@@ -7,7 +7,7 @@ import * as v from '../../../packages/shared/src/valita.ts';
 import {initConnectionMessageSchema} from '../../../packages/zero-protocol/src/connect.ts';
 import {downstreamSchema} from '../../../packages/zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../packages/zero-protocol/src/protocol-version.ts';
-import initConnectionJSON from './init-connection.json';
+import initConnectionJSON from './init-connection.json' with {type: 'json'};
 
 const options = {
   viewSyncers: {type: v.array(v.string())},
