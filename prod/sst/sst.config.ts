@@ -269,7 +269,9 @@ export default $config({
             ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
             ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
           },
-          copyFiles: [{from: '../../apps/zbugs/schema.ts', to: './schema.ts'}],
+          copyFiles: [
+            {from: '../../apps/zbugs/shared/schema.ts', to: './schema.ts'},
+          ],
           nodejs: {install: ['@rocicorp/zero']},
         },
       );
@@ -290,7 +292,7 @@ export default $config({
         {
           // Pulumi operates with cwd at the package root.
           dir: join(process.cwd(), '../../packages/zero/'),
-          create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
+          create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/shared/schema.ts`,
           environment: {
             ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
             ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
