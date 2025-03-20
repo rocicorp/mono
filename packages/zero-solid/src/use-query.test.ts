@@ -1,5 +1,5 @@
 import {renderHook, testEffect} from '@solidjs/testing-library';
-import {createEffect, createSignal} from 'solid-js';
+import {createEffect, createRoot, createSignal} from 'solid-js';
 import {expect, test, vi} from 'vitest';
 import {must} from '../../shared/src/must.ts';
 import {
@@ -166,4 +166,29 @@ test('useQuery deps change testEffect', () => {
       return run + 1;
     }),
   );
+});
+
+test('useQuery shared view should only be destroyed once', () => {
+  createRoot(dispose => {
+    const {ms, tableQuery} = setupTestEnvironment();
+    const connectSpy = vi.spyOn(ms, 'connect');
+
+    const query = tableQuery.where('a', 1);
+    const [rows1] = useQuery(() => query);
+    const [rows2] = useQuery(() => query);
+
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+    // connect returns a SourceInput
+
+    expect(rows1()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
+    expect(rows2()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
+
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+    const sourceInput = connectSpy.mock.results[0].value;
+    const destroySpy = vi.spyOn(sourceInput, 'destroy');
+
+    dispose();
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+  });
 });
