@@ -1,4 +1,3 @@
-import type {LogicalReplicationService} from 'pg-logical-replication';
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {Acker} from './change-source.ts';
 
@@ -11,28 +10,28 @@ afterEach(() => {
 });
 
 test('acker', () => {
-  const service = {acknowledge: vi.fn()};
+  const sink = {push: vi.fn()};
 
   let acks = 0;
 
-  const expectAck = (expected: string) => {
-    expect(service.acknowledge).toBeCalledTimes(++acks);
-    expect(service.acknowledge.mock.calls[acks - 1][0]).toBe(expected);
+  const expectAck = (expected: bigint) => {
+    expect(sink.push).toBeCalledTimes(++acks);
+    expect(sink.push.mock.calls[acks - 1][0]).toBe(expected);
   };
 
-  const acker = new Acker(service as unknown as LogicalReplicationService);
+  const acker = new Acker(sink);
 
   acker.keepalive();
   acker.ack('0b');
-  expectAck('0/B');
+  expectAck(11n);
 
   // Should be a no-op (i.e. no '0/0' sent).
   vi.advanceTimersToNextTimer();
   acker.ack('0d');
-  expectAck('0/D');
+  expectAck(13n);
 
   // Keepalive ('0/0') is sent if no ack is sent before the timer fires.
   acker.keepalive();
   vi.advanceTimersToNextTimer();
-  expectAck('0/0');
+  expectAck(0n);
 });

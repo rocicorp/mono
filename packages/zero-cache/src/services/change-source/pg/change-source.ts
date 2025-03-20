@@ -2,19 +2,8 @@ import {
   PG_ADMIN_SHUTDOWN,
   PG_OBJECT_IN_USE,
 } from '@drdgvhbh/postgres-error-codes';
-import {Lock} from '@rocicorp/lock';
 import {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
-import {
-  LogicalReplicationService,
-  Pgoutput,
-  PgoutputPlugin,
-} from 'pg-logical-replication';
-import type {
-  MessageMessage,
-  MessageRelation,
-} from 'pg-logical-replication/dist/output-plugins/pgoutput/pgoutput.types.ts';
-import {DatabaseError} from 'pg-protocol';
+import postgres from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../../shared/src/asserts.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
@@ -36,14 +25,16 @@ import type {
 } from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {stringify} from '../../../types/bigint-json.ts';
-import {oneAfter, type LexiVersion} from '../../../types/lexi-version.ts';
 import {
-  pgClient,
-  registerPostgresTypeParsers,
-  type PostgresDB,
-} from '../../../types/pg.ts';
+  oneAfter,
+  versionFromLexi,
+  versionToLexi,
+  type LexiVersion,
+} from '../../../types/lexi-version.ts';
+import {pgClient, type PostgresDB} from '../../../types/pg.ts';
 import type {ShardConfig, ShardID} from '../../../types/shards.ts';
-import {Subscription} from '../../../types/subscription.ts';
+import type {Sink} from '../../../types/streams.ts';
+import {Subscription, type PendingResult} from '../../../types/subscription.ts';
 import type {
   ChangeSource,
   ChangeStream,
@@ -64,7 +55,13 @@ import type {
   Data,
 } from '../protocol/current/downstream.ts';
 import {replicationSlot, type InitialSyncOptions} from './initial-sync.ts';
-import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.ts';
+import type {
+  Message,
+  MessageMessage,
+  MessageRelation,
+} from './logical-replication/pgoutput.types.ts';
+import {subscribe} from './logical-replication/stream.ts';
+import {fromBigInt, toLexiVersion, type LSN} from './lsn.ts';
 import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.ts';
 import {updateShardSchema} from './schema/init.ts';
 import {getPublicationInfo, type PublishedSchema} from './schema/published.ts';
@@ -76,9 +73,6 @@ import {
 } from './schema/shard.ts';
 import {validate} from './schema/validation.ts';
 import {initSyncSchema} from './sync-schema.ts';
-
-// BigInt support from LogicalReplicationService.
-registerPostgresTypeParsers();
 
 /**
  * Initializes a Postgres change source, including the initial sync of the
@@ -205,32 +199,16 @@ class PostgresChangeSource implements ChangeSource {
       const config = await getInternalShardConfig(db, this.#shard);
       this.#lc.info?.(`starting replication stream@${slot}`);
 
-      // Enabling ssl according to the logic in:
-      // https://github.com/brianc/node-postgres/blob/95d7e620ef8b51743b4cbca05dd3c3ce858ecea7/packages/pg-connection-string/index.js#L90
-      const url = new URL(this.#upstreamUri);
-      let useSSL =
-        url.searchParams.get('ssl') !== '0' &&
-        url.searchParams.get('sslmode') !== 'disable';
-      this.#lc.debug?.(`connecting with ssl=${useSSL} ${url.search}`);
-
       for (let i = 0; i < MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE; i++) {
         try {
-          // Unlike the postgres.js client, the pg client does not have an option to
-          // only use SSL if the server supports it. We achieve it manually by
-          // trying SSL first, and then falling back to connecting without SSL.
-          return await this.#startStream(slot, clientWatermark, config, useSSL);
+          return await this.#startStream(db, slot, clientWatermark, config);
         } catch (e) {
-          if (e instanceof SSLUnsupportedError) {
-            this.#lc.info?.('retrying upstream connection without SSL');
-            useSSL = false;
-            i--; // don't use up an attempt.
-            await this.#stopExistingReplicationSlotSubscriber(db, slot); // Send another SIGTERM to the process
-          } else if (
+          if (
             // error: replication slot "zero_slot_change_source_test_id" is active for PID 268
-            e instanceof DatabaseError &&
+            e instanceof postgres.PostgresError &&
             e.code === PG_OBJECT_IN_USE
           ) {
-            // The freeing up of the replication slot is not transaction;
+            // The freeing up of the replication slot is not transactional;
             // sometimes it takes time for Postgres to consider the slot
             // inactive.
             this.#lc.warn?.(`attempt ${i + 1}: ${String(e)}`, e);
@@ -247,96 +225,51 @@ class PostgresChangeSource implements ChangeSource {
   }
 
   async #startStream(
+    db: PostgresDB,
     slot: string,
     clientWatermark: string,
     shardConfig: InternalShardConfig,
-    useSSL: boolean,
   ): Promise<ChangeStream> {
+    const clientStart = oneAfter(clientWatermark);
+    const {messages, acks} = await subscribe(
+      this.#lc,
+      db,
+      slot,
+      [...shardConfig.publications],
+      versionFromLexi(clientStart),
+    );
+
     const changes = Subscription.create<ChangeStreamMessage>({
-      cleanup: () => service.stop(),
+      cleanup: () => messages.cancel(),
     });
+    const acker = new Acker(acks);
 
-    // To avoid a race condition when handing off the replication stream
-    // between tasks, query the `confirmed_flush_lsn` for the replication
-    // slot only after the replication stream starts, as that is when it
-    // is guaranteed not to change (i.e. until we ACK a commit).
-    const {promise: started, resolve, reject} = resolver();
-
-    const ssl = useSSL ? {rejectUnauthorized: false} : undefined;
-    const handleError = (err: Error) => {
-      if (
-        useSSL &&
-        // https://github.com/brianc/node-postgres/blob/8b2768f91d284ff6b97070aaf6602560addac852/packages/pg/lib/connection.js#L74
-        err.message === 'The server does not support SSL connections'
-      ) {
-        reject(new SSLUnsupportedError());
-      } else {
-        const e = translateError(err);
-        reject(e);
-        changes.fail(e);
-      }
-    };
-
-    let acker: Acker | undefined = undefined;
     const changeMaker = new ChangeMaker(
       this.#lc,
       this.#shard,
       shardConfig,
       this.#upstreamUri,
     );
-    const lock = new Lock();
-    const service = new LogicalReplicationService(
-      {
-        connectionString: this.#upstreamUri,
-        ssl,
-        ['application_name']: `zero-replicator`,
-      },
-      {acknowledge: {auto: false, timeoutSeconds: 0}},
-    )
-      .on('start', resolve)
-      .on('heartbeat', (lsn, time, respond) => {
-        if (respond) {
-          // immediately set a timeout that responds with a keepalive if it
-          // takes too long for the 'status' message to flow to (and back from)
-          // the change-streamer.
-          acker?.keepalive();
 
-          // lock to ensure in-order processing
-          void lock.withLock(() => {
-            changes.push([
-              'status',
-              {lsn, time},
-              {watermark: toLexiVersion(lsn)},
-            ]);
-          });
-        }
-      })
-      .on('data', (lsn, msg) =>
-        // lock to ensure in-order processing
-        lock.withLock(async () => {
-          for (const change of await changeMaker.makeChanges(lsn, msg)) {
-            changes.push(change);
+    void (async function () {
+      try {
+        for await (const [lsn, msg] of messages) {
+          if (msg.tag === 'keepalive') {
+            changes.push(['status', msg, {watermark: versionToLexi(lsn)}]);
+            continue;
           }
-        }),
-      )
-      .on('error', handleError);
-
-    acker = new Acker(service);
-
-    const clientStart = oneAfter(clientWatermark);
-    service
-      .subscribe(
-        new PgoutputPlugin({
-          protoVersion: 1,
-          publicationNames: [...shardConfig.publications],
-          messages: true,
-        }),
-        slot,
-        fromLexiVersion(clientStart),
-      )
-      .then(() => changes.cancel(), handleError);
-
-    await started;
+          let last: PendingResult | undefined;
+          for (const change of await changeMaker.makeChanges(lsn, msg)) {
+            last = changes.push(change);
+          }
+          if (last) {
+            await last.result; // Allow the change-streamer to push back.
+          }
+        }
+      } catch (e) {
+        changes.fail(translateError(e));
+      }
+    })();
 
     this.#lc.info?.(
       `started replication stream@${slot} from ${clientWatermark} (replicaVersion: ${
@@ -374,11 +307,11 @@ class PostgresChangeSource implements ChangeSource {
 
 // Exported for testing.
 export class Acker {
-  #service: LogicalReplicationService;
+  #acks: Sink<bigint>;
   #keepaliveTimer: NodeJS.Timeout | undefined;
 
-  constructor(service: LogicalReplicationService) {
-    this.#service = service;
+  constructor(acks: Sink<bigint>) {
+    this.#acks = acks;
   }
 
   keepalive() {
@@ -408,14 +341,14 @@ export class Acker {
 
     // Note: Sending '0/0' means "keep alive but do not update confirmed_flush_lsn"
     // https://github.com/postgres/postgres/blob/3edc67d337c2e498dad1cd200e460f7c63e512e6/src/backend/replication/walsender.c#L2457
-    const lsn = watermark ? fromLexiVersion(watermark) : '0/0';
-    void this.#service.acknowledge(lsn);
+    const lsn = watermark ? versionFromLexi(watermark) : 0n;
+    this.#acks.push(lsn);
   }
 }
 
 type ReplicationError = {
-  lsn: string;
-  msg: Pgoutput.Message;
+  lsn: bigint;
+  msg: Message;
   err: unknown;
   lastLogTime: number;
 };
@@ -448,10 +381,7 @@ class ChangeMaker {
     );
   }
 
-  async makeChanges(
-    lsn: string,
-    msg: Pgoutput.Message,
-  ): Promise<ChangeStreamMessage[]> {
+  async makeChanges(lsn: bigint, msg: Message): Promise<ChangeStreamMessage[]> {
     if (this.#error) {
       this.#logError(this.#error);
       return [];
@@ -478,7 +408,9 @@ class ChangeMaker {
     // at most once a minute.
     if (now - lastLogTime > 60_000) {
       this.#lc.error?.(
-        `Unable to continue replication from LSN ${lsn}: ${String(err)}`,
+        `Unable to continue replication from LSN ${fromBigInt(lsn)}: ${String(
+          err,
+        )}`,
         // 'content' can be a large byte Buffer. Exclude it from logging output.
         {...msg, content: undefined},
       );
@@ -487,7 +419,7 @@ class ChangeMaker {
   }
 
   // eslint-disable-next-line require-await
-  async #makeChanges(msg: Pgoutput.Message): Promise<ChangeStreamData[]> {
+  async #makeChanges(msg: Message): Promise<ChangeStreamData[]> {
     switch (msg.tag) {
       case 'begin':
         return [
@@ -853,7 +785,7 @@ function translateError(e: unknown): Error {
   if (!(e instanceof Error)) {
     return new Error(String(e));
   }
-  if (e instanceof DatabaseError && e.code === PG_ADMIN_SHUTDOWN) {
+  if (e instanceof postgres.PostgresError && e.code === PG_ADMIN_SHUTDOWN) {
     return new ShutdownSignal(e);
   }
   return e;
@@ -880,8 +812,6 @@ function columnsByID(
   }
   return colsByID;
 }
-
-class SSLUnsupportedError extends Error {}
 
 export class UnsupportedSchemaChangeError extends Error {
   readonly name = 'UnsupportedSchemaChangeError';

@@ -42,12 +42,8 @@
     "jose": "^5.9.3",
     "json-custom-numbers": "^3.1.1",
     "nanoid": "^5.1.2",
-    "pg": "^8.14.1",
     "pg-format": "npm:pg-format-fix@^1.0.5",
-    "pg-logical-replication": "^2.0.7",
-    "pg-protocol": "^1.7.0",
     "postgres": "^3.4.4",
-    "postgres-array": "^3.0.2",
     "tsx": "^4.19.1",
     "url-pattern": "^1.0.3",
     "ws": "^8.18.1",
@@ -55,18 +51,11 @@
     "zql": "0.0.0",
     "zqlite": "0.0.0"
   },
-  "resolutions": {
-    "pg-types": "^4.0.2"
-  },
-  "overrides": {
-    "pg-types": "^4.0.2"
-  },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@testcontainers/postgresql": "^10.9.0",
     "@types/node": "^20.8.4",
-    "@types/pg": "^8.11.11",
     "@types/pg-format": "^1.0.5",
     "@types/strip-ansi": "^3.0.0",
     "@types/ws": "^8.5.12",

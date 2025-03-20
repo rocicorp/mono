@@ -1,19 +1,15 @@
-import pg from 'pg';
 import type postgres from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../test/db.ts';
+import {BYTEA, INT4, TEXT, VARCHAR} from './pg-types.ts';
 import {timestampToFpMillis, typeNameByOID} from './pg.ts';
 
 describe('types/pg-types', () => {
   test('typeNameByIOD', () => {
-    const {
-      types: {builtins},
-    } = pg;
-
-    expect(typeNameByOID[builtins.BYTEA]).toBe('bytea');
-    expect(typeNameByOID[builtins.INT4]).toBe('int4');
-    expect(typeNameByOID[builtins.TEXT]).toBe('text');
-    expect(typeNameByOID[builtins.VARCHAR]).toBe('varchar');
+    expect(typeNameByOID[BYTEA]).toBe('bytea');
+    expect(typeNameByOID[INT4]).toBe('int4');
+    expect(typeNameByOID[TEXT]).toBe('text');
+    expect(typeNameByOID[VARCHAR]).toBe('varchar');
     expect(typeNameByOID[1007]).toBe('int4[]');
 
     expect(() => (typeNameByOID[1007] = 'should not work')).toThrowError();
