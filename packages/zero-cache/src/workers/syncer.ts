@@ -11,6 +11,7 @@ import {type AuthConfig, type ZeroConfig} from '../config/zero-config.ts';
 import type {ConnectParams} from '../services/dispatcher/connect-params.ts';
 import {installWebSocketReceiver} from '../services/dispatcher/websocket-handoff.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
+import type {Pusher} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
 import {ServiceRunner} from '../services/runner.ts';
 import type {
@@ -25,7 +26,6 @@ import {Subscription} from '../types/subscription.ts';
 import {Connection, sendError} from './connection.ts';
 import {createNotifierFrom, subscribeTo} from './replicator.ts';
 import {SyncerWsMessageHandler} from './syncer-ws-message-handler.ts';
-import type {Pusher} from '../services/mutagen/pusher.ts';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -104,6 +104,7 @@ export class Syncer implements SingletonService {
           message: `Failed to decode auth token: ${String(e)}`,
         });
         ws.close(3000, 'Failed to decode JWT');
+        return;
       }
     }
 
