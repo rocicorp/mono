@@ -124,9 +124,17 @@ const pushOkSchema = v.object({
 
 const unsupportedPushVersionSchema = v.object({
   error: v.literal('unsupported-push-version'),
+  // optional for backwards compatibility
+  // This field is included so the client knows which mutations
+  // were not processed by the server.
+  mutationIDs: v.array(mutationIDSchema).optional(),
 });
 const unsupportedSchemaVersionSchema = v.object({
   error: v.literal('unsupported-schema-version'),
+  // optional for backwards compatibility
+  // This field is included so the client knows which mutations
+  // were not processed by the server.
+  mutationIDs: v.array(mutationIDSchema).optional(),
 });
 
 const pushErrorSchema = v.union(
@@ -150,6 +158,11 @@ export type PushBody = v.Infer<typeof pushBodySchema>;
 export type PushMessage = v.Infer<typeof pushMessageSchema>;
 export type PushResponse = v.Infer<typeof pushResponseSchema>;
 export type MutationResponse = v.Infer<typeof mutationResponseSchema>;
+export type MutationOk = v.Infer<typeof mutationOkSchema>;
+export type MutationError = v.Infer<typeof mutationErrorSchema>;
+export type PushError = v.Infer<typeof pushErrorSchema>;
+export type PushOk = v.Infer<typeof pushOkSchema>;
+export type MutationID = v.Infer<typeof mutationIDSchema>;
 
 export function mapCRUD(
   arg: CRUDMutationArg,
