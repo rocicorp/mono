@@ -1,4 +1,6 @@
+import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../../zero-protocol/src/data.ts';
 
 export interface GetInspector {
   inspect(): Promise<Inspector>;
@@ -16,11 +18,14 @@ export interface Client {
   readonly id: string;
   readonly clientGroup: ClientGroup;
   queries(): Promise<Query[]>;
+  map(): Promise<Map<string, ReadonlyJSONValue>>;
+  rows(tableName: string): Promise<Row[]>;
 }
 
 export interface ClientGroup {
   readonly id: string;
   clients(): Promise<Client[]>;
+  clientsWithQueries(): Promise<Client[]>;
   queries(): Promise<Query[]>;
 }
 
