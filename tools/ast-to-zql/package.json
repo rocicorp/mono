@@ -1,23 +1,21 @@
 {
-  "name": "zero-advanced",
-  "version": "0.0.0",
+  "name": "ast-to-zql",
   "private": true,
+  "version": "0.0.0",
   "type": "module",
-  "module": "true",
   "scripts": {
     "check-types": "tsc",
-    "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx"
   },
+  "dependencies": {},
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
-    "@rocicorp/prettier-config": "^0.3.0",
-    "zql": "0.0.0"
+    "@rocicorp/prettier-config": "^0.3.0"
   },
+  "prettier": "@rocicorp/prettier-config",
   "eslintConfig": {
     "extends": "../../eslint-config.json"
-  },
-  "prettier": "@rocicorp/prettier-config"
+  }
 }
