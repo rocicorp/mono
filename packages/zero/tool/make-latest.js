@@ -35,5 +35,5 @@ console.log(``);
 console.log(``);
 console.log(`Next steps:`);
 console.log(``);
-console.log('* Bump version om main if necessary.');
+console.log('* Bump version on main if necessary.');
 console.log(``);
