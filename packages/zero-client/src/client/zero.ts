@@ -899,10 +899,6 @@ export class Zero<
       case 'pull':
         return this.#handlePullResponse(lc, downMessage);
 
-      case 'warm':
-        // we ignore warming messages
-        break;
-
       case 'deleteClients':
         return this.#deleteClientsManager.clientsDeletedOnServer(
           downMessage[1],
