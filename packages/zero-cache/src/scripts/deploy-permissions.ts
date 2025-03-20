@@ -20,7 +20,10 @@ import {
 import {liteTableName} from '../types/names.ts';
 import {pgClient, type PostgresDB} from '../types/pg.ts';
 import {appSchema, getShardID, upstreamSchema} from '../types/shards.ts';
-import {deployPermissionsOptions, loadPermissions} from './permissions.ts';
+import {
+  deployPermissionsOptions,
+  loadSchemaAndPermissions,
+} from './permissions.ts';
 
 const config = parseOptions(
   deployPermissionsOptions,
@@ -168,7 +171,7 @@ async function writePermissionsFile(
   lc.info?.(`Wrote ${format} permissions to ${config.output.file}`);
 }
 
-const permissions = await loadPermissions(lc, config.schema.path);
+const {permissions} = await loadSchemaAndPermissions(lc, config.schema.path);
 if (config.output.file) {
   await writePermissionsFile(
     permissions,

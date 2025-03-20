@@ -21,22 +21,24 @@ import {
   runtimeDebugStats,
 } from '../../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
-import {getSchema} from '../auth/load-permissions.ts';
 import {ZERO_ENV_VAR_PREFIX, zeroOptions} from '../config/zero-config.ts';
+import {loadSchemaAndPermissions} from './permissions.ts';
 
 const options = {
   replicaFile: zeroOptions.replica.file,
-  debug: {
-    ast: {
-      type: v.string().optional(),
-      desc: ['AST for the query to be transformed or timed.'],
-    },
-    query: {
-      type: v.string().optional(),
-      desc: [
-        `Query to be timed in the form of: z.query.table.where(...).related(...).etc`,
-      ],
-    },
+  ast: {
+    type: v.string().optional(),
+    desc: ['AST for the query to be transformed or timed.'],
+  },
+  query: {
+    type: v.string().optional(),
+    desc: [
+      `Query to be timed in the form of: z.query.table.where(...).related(...).etc`,
+    ],
+  },
+  schema: {
+    type: v.string().default('./schema.ts'),
+    desc: ['Path to the schema file.'],
   },
 };
 
@@ -51,7 +53,7 @@ runtimeDebugFlags.trackRowsVended = true;
 const lc = createSilentLogContext();
 
 const db = new Database(lc, config.replicaFile);
-const schema = getSchema(lc, db);
+const {schema} = await loadSchemaAndPermissions(lc, './schema.ts');
 const sources = new Map<string, TableSource>();
 const host: QueryDelegate = {
   mapAst(ast: AST): AST {
@@ -99,10 +101,10 @@ const host: QueryDelegate = {
 let start: number;
 let end: number;
 const suppressError: Record<string, unknown> = {};
-if (config.debug.ast) {
-  [start, end] = runAst(JSON.parse(config.debug.ast) as AST);
-} else if (config.debug.query) {
-  [start, end] = runQuery(config.debug.query);
+if (config.ast) {
+  [start, end] = runAst(JSON.parse(config.ast) as AST);
+} else if (config.query) {
+  [start, end] = runQuery(config.query);
 } else {
   throw new Error('No query or AST provided');
 }
@@ -131,7 +133,11 @@ function runQuery(queryString: string): [number, number] {
   suppressError.q = q;
   suppressError.z = z;
 
+  console.log('schema', schema);
   eval(`q = ${queryString};`);
+  console.log('evaled to q:', q);
+  console.log('qstring:', queryString);
+
   const start = performance.now();
   q.run();
   const end = performance.now();
