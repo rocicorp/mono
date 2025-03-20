@@ -116,6 +116,8 @@ export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
   readonly token: string | undefined;
 }
 
+// TODO: wire into `PushResponseTracker` so we can give out promises for each mutation
+// when it is `initial`
 export function makeReplicacheMutator<S extends Schema>(
   lc: LogContext,
   mutator: CustomMutatorImpl<S>,
