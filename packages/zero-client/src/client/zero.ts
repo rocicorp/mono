@@ -1818,6 +1818,10 @@ export class Zero<
     return rv as MakeEntityQueriesFromSchema<S>;
   }
 
+  /**
+   * `inspect` returns an object that can be used to inspect the state of the
+   * queries a Zero instance uses. It is intended for debugging purposes.
+   */
   async inspect(): Promise<Inspector> {
     // We use esbuild dropLabels to strip this code when we build the code for the bundle size dashboard.
     // https://esbuild.github.io/api/#ignore-annotations
