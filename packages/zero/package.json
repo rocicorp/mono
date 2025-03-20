@@ -1,6 +1,18 @@
 {
   "name": "@rocicorp/zero",
   "version": "0.18.2025031804",
+  "description": "Zero is a web framework for serverless web development.",
+  "author": "Rocicorp, Inc.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rocicorp/mono.git",
+    "directory": "packages/zero"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://zero.rocicorp.dev",
+  "bugs": {
+    "url": "https://bugs.rocicorp.dev"
+  },
   "scripts": {
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && tsc-alias -p tsconfig.client.json && npx tsx tool/build.js",
