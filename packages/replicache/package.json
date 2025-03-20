@@ -1,9 +1,18 @@
 {
   "name": "replicache",
-  "description": "Realtime sync for any backend stack",
   "version": "15.2.1",
-  "repository": "github:rocicorp/replicache",
-  "license": "https://roci.dev/terms.html",
+  "description": "Realtime sync for any backend stack",
+  "author": "Rocicorp, Inc.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rocicorp/mono.git",
+    "directory": "packages/replicache"
+  },
+  "license": "Apache-2.0",
+  "homepage": "https://replicache.dev/",
+  "bugs": {
+    "url": "https://bugs.rocicorp.dev"
+  },
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
