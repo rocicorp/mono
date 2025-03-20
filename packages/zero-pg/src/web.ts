@@ -72,13 +72,6 @@ export class PushProcessor<
     params: Params,
     body: ReadonlyJSONObject,
   ): Promise<PushResponse> {
-    // TODO: Remove this once zbugs zero-cache and api server are both up to date.
-    if (params.schema === undefined) {
-      params = {
-        schema: 'zero_0',
-        appID: 'zero',
-      };
-    }
     const req = v.parse(body, pushBodySchema);
     const connection = await this.#dbConnectionProvider();
 
