@@ -5,6 +5,30 @@ import process from 'node:process';
 import {createInterface} from 'node:readline';
 import {format, resolveConfig} from 'prettier';
 import {astToZQL} from '../../packages/zql/src/query/ast-to-zql.ts';
+import * as v from '../../packages/shared/src/valita.ts';
+import {parseOptions} from '../../packages/shared/src/options.ts';
+import type {Schema} from '../../packages/zero-schema/src/builder/schema-builder.ts';
+import {createSilentLogContext} from '../../packages/shared/src/logging-test-utils.ts';
+import {loadSchemaAndPermissions} from '../../packages/zero-cache/src/scripts/permissions.ts';
+import {serverToClient} from '../../packages/zero-schema/src/name-mapper.ts';
+import {mapAST} from '../../packages/zero-protocol/src/ast.ts';
+
+const options = {
+  schema: {
+    type: v.string().optional(),
+    desc: [
+      'Path to the schema file. Use this to re-map the AST to client names.',
+    ],
+  },
+};
+
+const config = parseOptions(options, process.argv.slice(2));
+const lc = createSilentLogContext();
+
+let schema: Schema | undefined;
+if (config.schema) {
+  schema = (await loadSchemaAndPermissions(lc, config.schema)).schema;
+}
 
 function isStdinPiped(): boolean {
   return !process.stdin.isTTY;
@@ -66,7 +90,11 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    const ast = JSON.parse(input);
+    let ast = JSON.parse(input);
+    if (schema) {
+      const mapper = serverToClient(schema.tables);
+      ast = mapAST(ast, mapper);
+    }
 
     const zql = astToZQL(ast);
     const code = `query.${ast.table}${zql}`;
