@@ -66,7 +66,9 @@ describe('change-source/pg', {timeout: 30000}, () => {
       time TIME,
       dates DATE[],
       times TIMESTAMP[],
-      num NUMERIC
+      num NUMERIC,
+      j1 JSON,
+      j2 JSONB
     );
     CREATE TABLE compound_key_same_order(
       a TEXT NOT NULL,
@@ -176,7 +178,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
         await tx`INSERT INTO foo(id) VALUES('hello')`;
         await tx`INSERT INTO foo(id) VALUES('world')`;
         await tx`
-      INSERT INTO foo(id, int, big, flt, bool, timea, timeb, date, time, dates, times, num) 
+      INSERT INTO foo(id, int, big, flt, bool, timea, timeb, date, time, dates, times, num, j1, j2) 
         VALUES('datatypes',
                123456789, 
                987654321987654321, 
@@ -188,7 +190,9 @@ describe('change-source/pg', {timeout: 30000}, () => {
                '04:05:06.123456789',
                ARRAY['2001-02-03'::date, '2002-03-04'::date],
                ARRAY['2019-01-12T00:30:35.654321'::timestamp, '2019-01-12T00:30:35.123456'::timestamp],
-               123456789012
+               123456789012,
+               '{"foo":"bar"}',
+               '"json value"'
                )`;
         // schemaVersions
         await tx`
@@ -234,6 +238,8 @@ describe('change-source/pg', {timeout: 30000}, () => {
             dates: [Date.UTC(2001, 1, 3), Date.UTC(2002, 2, 4)],
             times: [1547253035654.321, 1547253035123.456],
             num: 123456789012,
+            j1: '{"foo":"bar"}',
+            j2: '"json value"',
           },
         },
       ]);
