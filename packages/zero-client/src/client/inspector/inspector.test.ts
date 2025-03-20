@@ -225,8 +225,8 @@ test('sql getter', async () => {
       id: 'hash1',
     },
   ]);
-  expect(queries[0].sql).toBe(
-    `SELECT * FROM "issue" WHERE ("id" = $1 OR "id" != $2)`,
+  expect(queries[0].sql).toMatchInlineSnapshot(
+    `"SELECT "issue"."id","issue"."title","issue"."description","issue"."closed","issue"."owner_id" as "ownerId" FROM "issues" as "issue" WHERE ("id" = $1 OR "id" != $2)"`,
   );
 });
 

@@ -282,6 +282,7 @@ export class Zero<
   readonly #lc: LogContext;
   readonly #logOptions: LogOptions;
   readonly #enableAnalytics: boolean;
+  readonly #schema: S;
   readonly #clientSchema: ClientSchema;
 
   readonly #pokeHandler: PokeHandler;
@@ -501,6 +502,7 @@ export class Zero<
 
     this.storageKey = storageKey ?? '';
 
+    this.#schema = schema;
     const {clientSchema, hash} = clientSchemaFrom(schema);
     this.#clientSchema = clientSchema;
 
@@ -1824,7 +1826,7 @@ export class Zero<
     // eslint-disable-next-line no-unused-labels
     BUNDLE_SIZE: {
       const m = await import('./inspector/inspector.ts');
-      return m.newInspector(this.#rep);
+      return m.newInspector(this.#rep, this.#schema);
     }
   }
 }

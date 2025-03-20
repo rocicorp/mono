@@ -20,6 +20,7 @@ import {compile} from '../../../../z2s/src/compiler.ts';
 import {formatPg} from '../../../../z2s/src/sql.ts';
 import {astSchema, type AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../../../zql/src/ivm/view.ts';
 import {astToZQL} from '../../../../zql/src/query/ast-to-zql.ts';
 import {
@@ -37,29 +38,41 @@ import type {
 
 type Rep = ReplicacheImpl<MutatorDefs>;
 
-export async function newInspector(rep: Rep): Promise<InspectorInterface> {
+export async function newInspector(
+  rep: Rep,
+  schema: Schema,
+): Promise<InspectorInterface> {
   const clientGroupID = await rep.clientGroupID;
-  return new Inspector(rep, rep.clientID, clientGroupID);
+  return new Inspector(rep, schema, rep.clientID, clientGroupID);
 }
 
 class Inspector implements InspectorInterface {
   readonly #rep: Rep;
   readonly client: Client;
   readonly clientGroup: ClientGroup;
+  readonly #schema: Schema;
 
-  constructor(rep: ReplicacheImpl, clientID: string, clientGroupID: string) {
+  constructor(
+    rep: ReplicacheImpl,
+    schema: Schema,
+    clientID: string,
+    clientGroupID: string,
+  ) {
     this.#rep = rep;
-    this.client = new Client(rep, clientID, clientGroupID);
+    this.#schema = schema;
+    this.client = new Client(rep, schema, clientID, clientGroupID);
     this.clientGroup = this.client.clientGroup;
   }
 
   clients(): Promise<ClientInterface[]> {
-    return withDagRead(this.#rep, dagRead => clients(this.#rep, dagRead));
+    return withDagRead(this.#rep, dagRead =>
+      clients(this.#rep, this.#schema, dagRead),
+    );
   }
 
   clientsWithQueries(): Promise<ClientInterface[]> {
     return withDagRead(this.#rep, dagRead =>
-      clientsWithQueries(this.#rep, dagRead),
+      clientsWithQueries(this.#rep, this.#schema, dagRead),
     );
   }
 
@@ -67,7 +80,8 @@ class Inspector implements InspectorInterface {
     return withDagRead(this.#rep, async dagRead => {
       const clientGroups = await getClientGroups(dagRead);
       return [...clientGroups.keys()].map(
-        clientGroupID => new ClientGroup(this.#rep, clientGroupID),
+        clientGroupID =>
+          new ClientGroup(this.#rep, this.#schema, clientGroupID),
       );
     });
   }
@@ -77,11 +91,13 @@ class Client implements ClientInterface {
   readonly #rep: Rep;
   readonly id: string;
   readonly clientGroup: ClientGroup;
+  readonly #schema: Schema;
 
-  constructor(rep: Rep, id: string, clientGroupID: string) {
+  constructor(rep: Rep, schema: Schema, id: string, clientGroupID: string) {
     this.#rep = rep;
+    this.#schema = schema;
     this.id = id;
-    this.clientGroup = new ClientGroup(rep, clientGroupID);
+    this.clientGroup = new ClientGroup(rep, schema, clientGroupID);
   }
 
   queries(): Promise<QueryInterface[]> {
@@ -96,7 +112,12 @@ class Client implements ClientInterface {
 
         const hash = key.substring(prefix.length);
         const got = await tree.has(toGotQueriesKey(hash));
-        const q = new Query(hash, valita.parse(value, astSchema), got);
+        const q = new Query(
+          hash,
+          valita.parse(value, astSchema),
+          got,
+          this.#schema,
+        );
         qs.push(q);
       }
       return qs;
@@ -133,15 +154,22 @@ class Client implements ClientInterface {
 class ClientGroup implements ClientGroupInterface {
   readonly #rep: Rep;
   readonly id: string;
+  readonly #schema: Schema;
 
-  constructor(rep: Rep, id: string) {
+  constructor(rep: Rep, schema: Schema, id: string) {
     this.#rep = rep;
+    this.#schema = schema;
     this.id = id;
   }
 
   clients(): Promise<ClientInterface[]> {
     return withDagRead(this.#rep, dagRead =>
-      clients(this.#rep, dagRead, ([_, v]) => v.clientGroupID === this.id),
+      clients(
+        this.#rep,
+        this.#schema,
+        dagRead,
+        ([_, v]) => v.clientGroupID === this.id,
+      ),
     );
   }
 
@@ -149,6 +177,7 @@ class ClientGroup implements ClientGroupInterface {
     return withDagRead(this.#rep, dagRead =>
       clientsWithQueries(
         this.#rep,
+        this.#schema,
         dagRead,
         ([_, v]) => v.clientGroupID === this.id,
       ),
@@ -159,6 +188,7 @@ class ClientGroup implements ClientGroupInterface {
     return withDagRead(this.#rep, async dagRead => {
       const cs = await clients(
         this.#rep,
+        this.#schema,
         dagRead,
         ([_, v]) => v.clientGroupID === this.id,
       );
@@ -198,15 +228,12 @@ async function getBTree(dagRead: Read, clientID: string): Promise<BTreeRead> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type MapEntry<T extends ReadonlyMap<any, any>> = T extends ReadonlyMap<
-  infer K,
-  infer V
->
-  ? readonly [K, V]
-  : never;
+type MapEntry<T extends ReadonlyMap<any, any>> =
+  T extends ReadonlyMap<infer K, infer V> ? readonly [K, V] : never;
 
 async function clients(
   rep: Rep,
+  schema: Schema,
   dagRead: Read,
   predicate: (entry: MapEntry<ClientMap>) => boolean = () => true,
 ): Promise<ClientInterface[]> {
@@ -214,16 +241,18 @@ async function clients(
   return [...clients.entries()]
     .filter(predicate)
     .map(
-      ([clientID, {clientGroupID}]) => new Client(rep, clientID, clientGroupID),
+      ([clientID, {clientGroupID}]) =>
+        new Client(rep, schema, clientID, clientGroupID),
     );
 }
 
 async function clientsWithQueries(
   rep: Rep,
+  schema: Schema,
   dagRead: Read,
   predicate: (entry: MapEntry<ClientMap>) => boolean = () => true,
 ): Promise<ClientInterface[]> {
-  const allClients = await clients(rep, dagRead, predicate);
+  const allClients = await clients(rep, schema, dagRead, predicate);
   const clientsWithQueries: ClientInterface[] = [];
   await Promise.all(
     allClients.map(async client => {
@@ -240,11 +269,13 @@ class Query implements QueryInterface {
   readonly id: string;
   readonly ast: AST;
   readonly got: boolean;
+  #schema: Schema;
 
-  constructor(id: string, ast: AST, got: boolean) {
+  constructor(id: string, ast: AST, got: boolean, schema: Schema) {
     this.id = id;
     this.ast = ast;
     this.got = got;
+    this.#schema = schema;
   }
 
   get sql(): string {
@@ -252,7 +283,7 @@ class Query implements QueryInterface {
       singular: false,
       relationships: {},
     };
-    const sqlQuery = formatPg(compile(this.ast, format));
+    const sqlQuery = formatPg(compile(this.ast, this.#schema.tables, format));
     return sqlQuery.text;
   }
 
