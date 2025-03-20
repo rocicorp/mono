@@ -99,7 +99,7 @@ function bumpCanaryVersion(version) {
 
 // To do a maintenance/cherry-pick release:
 // - create a maintenance release from tag you want to patch, like
-//   `main/zero/vX.Y`
+//   `maint/zero/vX.Y`
 // - cherry-pick the commit(s) you want into that branch
 // - push the branch to origin
 // - Run this command with the branch name as the first argument
