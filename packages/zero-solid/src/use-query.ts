@@ -35,9 +35,9 @@ export function useQuery<
     const ttl = normalize(options)?.ttl ?? DEFAULT_TTL;
     const view = getView(query, ttl);
 
-    onCleanup(() => {
-      releaseView(view);
-    });
+    // Use queueMicrotask to allow cleanup/create in the current microtask to
+    // reuse the view.
+    onCleanup(() => queueMicrotask(() => releaseView(query, view)));
     return view;
   });
 
@@ -46,7 +46,7 @@ export function useQuery<
 
 type UnknownSolidView = SolidView<HumanReadable<unknown>>;
 
-const views = new WeakMap<object, UnknownSolidView>();
+const views = new WeakMap<WeakKey, UnknownSolidView>();
 
 const viewRefCount = new RefCount<UnknownSolidView>();
 
@@ -71,8 +71,9 @@ function getView<
   return view as SolidView<HumanReadable<TReturn>>;
 }
 
-function releaseView(view: UnknownSolidView) {
+function releaseView(query: WeakKey, view: UnknownSolidView) {
   if (viewRefCount.dec(view)) {
+    views.delete(query);
     view.destroy();
   }
 }
