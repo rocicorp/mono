@@ -1,0 +1,73 @@
+{
+  "level": "WARN",
+  "worker": "syncer",
+  "pid": 52,
+  "component": "view-syncer",
+  "clientGroupID": "9jk8valdl4ccl2b5kr",
+  "instance": "1x2x2oqhig2",
+  "lock": "2699ndnfeb0",
+  "stateVersion": "51a82dc",
+  "hash": "28hu5zujsv3nb",
+  "transformationHash": "1sicmrv0a17df",
+  "limit": 1,
+  "table": "event",
+  "where": {
+    "type": "and",
+    "conditions": [
+      {
+        "op": "=",
+        "left": {"name": "name", "type": "column"},
+        "type": "simple",
+        "right": {"type": "literal", "value": "UKI US Open 2024"}
+      }
+    ]
+  },
+  "orderBy": [["id", "asc"]],
+  "related": [
+    {
+      "system": "client",
+      "subquery": {
+        "alias": "eventHandlerDogs",
+        "table": "event_handler_dog",
+        "orderBy": [
+          ["handler_id", "asc"],
+          ["id", "asc"]
+        ],
+        "related": [
+          {
+            "system": "client",
+            "subquery": {
+              "alias": "dog",
+              "table": "dog",
+              "orderBy": [
+                ["name", "asc"],
+                ["dog_id", "asc"]
+              ],
+              "where": {"type": "and", "conditions": []}
+            },
+            "correlation": {"childField": ["dog_id"], "parentField": ["dog_id"]}
+          },
+          {
+            "system": "client",
+            "subquery": {
+              "alias": "handler",
+              "table": "handler",
+              "orderBy": [
+                ["full_name", "asc"],
+                ["handler_id", "asc"]
+              ],
+              "where": {"type": "and", "conditions": []}
+            },
+            "correlation": {
+              "childField": ["handler_id"],
+              "parentField": ["handler_id"]
+            }
+          }
+        ],
+        "where": {"type": "and", "conditions": []}
+      },
+      "correlation": {"childField": ["event_id"], "parentField": ["id"]}
+    }
+  ],
+  "message": "Slow query materialization 655.031771000009"
+}

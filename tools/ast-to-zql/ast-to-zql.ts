@@ -1,6 +1,6 @@
 import process from 'node:process';
 import {createInterface} from 'node:readline';
-import {format} from 'prettier';
+import {format, resolveConfig} from 'prettier';
 import {astToZQL} from '../../packages/zql/src/query/ast-to-zql.ts';
 
 function readFromStdin(): Promise<string> {
@@ -24,15 +24,11 @@ function readFromStdin(): Promise<string> {
 
 async function formatOutput(content: string): Promise<string> {
   try {
-    // Format with prettier using auto-detected parser or specify one
-    // You might need to adjust parser option based on ZQL format
+    const options = (await resolveConfig(new URL(import.meta.url))) ?? {};
     return await format(content, {
-      parser: 'typescript', // Change to appropriate parser for your ZQL syntax
-      printWidth: 80,
-      tabWidth: 2,
-      useTabs: false,
+      ...options,
+      parser: 'typescript',
       semi: false,
-      arrowParens: 'avoid',
     });
   } catch (error) {
     // eslint-disable-next-line no-console
@@ -56,6 +52,7 @@ async function main(): Promise<void> {
 
     // Output the result
 
+    // eslint-disable-next-line no-console
     console.log(await formatOutput(code));
   } catch (error) {
     // eslint-disable-next-line no-console
