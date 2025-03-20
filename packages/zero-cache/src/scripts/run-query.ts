@@ -6,7 +6,11 @@ import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {parseOptions} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {
+  mapAST,
+  type AST,
+  type CompoundKey,
+} from '../../../zero-protocol/src/ast.ts';
 import {buildPipeline} from '../../../zql/src/builder/builder.ts';
 import {Catch} from '../../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
@@ -23,6 +27,10 @@ import {
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import {ZERO_ENV_VAR_PREFIX, zeroOptions} from '../config/zero-config.ts';
 import {loadSchemaAndPermissions} from './permissions.ts';
+import {
+  clientToServer,
+  serverToClient,
+} from '../../../zero-schema/src/name-mapper.ts';
 
 const options = {
   replicaFile: zeroOptions.replica.file,
@@ -53,14 +61,17 @@ runtimeDebugFlags.trackRowsVended = true;
 const lc = createSilentLogContext();
 
 const db = new Database(lc, config.replicaFile);
-const {schema} = await loadSchemaAndPermissions(lc, './schema.ts');
+const {schema} = await loadSchemaAndPermissions(lc, config.schema);
 const sources = new Map<string, TableSource>();
+const clientToServerMapper = clientToServer(schema.tables);
+const serverToClientMapper = serverToClient(schema.tables);
 const host: QueryDelegate = {
   mapAst(ast: AST): AST {
-    return ast;
+    return mapAST(ast, clientToServerMapper);
   },
-  getSource: (name: string) => {
-    let source = sources.get(name);
+  getSource: (serverTableName: string) => {
+    const clientTableName = serverToClientMapper.tableName(serverTableName);
+    let source = sources.get(serverTableName);
     if (source) {
       return source;
     }
@@ -69,12 +80,21 @@ const host: QueryDelegate = {
       testLogConfig,
       '',
       db,
-      name,
-      schema.tables[name].columns,
-      schema.tables[name].primaryKey,
+      serverTableName,
+      Object.fromEntries(
+        Object.entries(schema.tables[clientTableName].columns).map(
+          ([colName, column]) => [
+            clientToServerMapper.columnName(clientTableName, colName),
+            column,
+          ],
+        ),
+      ),
+      schema.tables[clientTableName].primaryKey.map(col =>
+        clientToServerMapper.columnName(clientTableName, col),
+      ) as unknown as CompoundKey,
     );
 
-    sources.set(name, source);
+    sources.set(serverTableName, source);
     return source;
   },
 
