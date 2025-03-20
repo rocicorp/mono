@@ -1,4 +1,5 @@
 import {createMemo, onCleanup, type Accessor} from 'solid-js';
+import {RefCount} from '../../shared/src/ref-count.ts';
 import type {
   AdvancedQuery,
   HumanReadable,
@@ -35,7 +36,7 @@ export function useQuery<
     const view = getView(query, ttl);
 
     onCleanup(() => {
-      view.destroy();
+      releaseView(view);
     });
     return view;
   });
@@ -43,7 +44,11 @@ export function useQuery<
   return [() => view().data, () => view().resultDetails];
 }
 
-const views = new WeakMap<object, SolidView<HumanReadable<unknown>>>();
+type UnknownSolidView = SolidView<HumanReadable<unknown>>;
+
+const views = new WeakMap<object, UnknownSolidView>();
+
+const viewRefCount = new RefCount<UnknownSolidView>();
 
 function getView<
   TSchema extends Schema,
@@ -62,7 +67,14 @@ function getView<
   } else {
     query.updateTTL(ttl);
   }
+  viewRefCount.inc(view);
   return view as SolidView<HumanReadable<TReturn>>;
+}
+
+function releaseView(view: UnknownSolidView) {
+  if (viewRefCount.dec(view)) {
+    view.destroy();
+  }
 }
 
 function normalize<T>(
