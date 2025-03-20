@@ -1,50 +1,17 @@
 import {PreciseDate} from '@google-cloud/precise-date';
 import {OID} from '@postgresql-typed/oids';
 import {LogContext} from '@rocicorp/logger';
-import pg from 'pg';
 import postgres, {type Notice, type PostgresType} from 'postgres';
-import array from 'postgres-array';
 import {randInt} from '../../../shared/src/rand.ts';
 import {BigIntJSON, type JSONValue} from './bigint-json.ts';
-
-const {
-  types: {builtins, setTypeParser},
-} = pg;
-
-const TIMESTAMP_TYPES = [builtins.TIMESTAMP, builtins.TIMESTAMPTZ];
-
-const TIMESTAMP_ARRAYS = [1115 /* timestamp[] */, 1185 /* timestamptz[] */];
-
-const builtinsDATEARRAY = 1182;
-
-const builtinsINT8ARRAY = 1016; // No definition in builtins for int8[]
-
-/** Registers types for the 'pg' library used by `pg-logical-replication`. */
-export function registerPostgresTypeParsers() {
-  setTypeParser(builtins.INT8, BigInt);
-  setTypeParser(builtinsINT8ARRAY, val => array.parse(val, BigInt));
-
-  // Returns a `js` number which can lose precision for large numbers.
-  // JS number is 53 bits so this should generally not occur.
-  // An API will be provided for users to override this type.
-  setTypeParser(builtins.NUMERIC, Number);
-
-  // For pg-logical-replication we convert timestamps directly to microseconds
-  // to facilitate serializing them in the Change stream.
-  for (const type of TIMESTAMP_TYPES) {
-    setTypeParser(type, timestampToFpMillis);
-  }
-  // Timestamps are converted to epoch microseconds via the PreciseDate object.
-  for (const type of TIMESTAMP_ARRAYS) {
-    setTypeParser(type, val => array.parse(val, timestampToFpMillis));
-  }
-  // Store dates as the epoch milliseconds at UTC midnight of the date.
-  setTypeParser(builtins.DATE, dateToUTCMidnight);
-  setTypeParser(builtinsDATEARRAY, val => array.parse(val, dateToUTCMidnight));
-
-  // TODO: Override JSON parsing and replicate as strings to eliminate the
-  //       parse/serialize overhead.
-}
+import {
+  DATE,
+  JSON,
+  JSONB,
+  NUMERIC,
+  TIMESTAMP,
+  TIMESTAMPTZ,
+} from './pg-types.ts';
 
 const WITH_HH_MM_TIMEZONE = /[+-]\d\d:\d\d$/;
 const WITH_HH_TIMEZONE = /[+-]\d\d$/;
@@ -132,22 +99,22 @@ export const postgresTypeConfig = (
   types: {
     bigint: postgres.BigInt,
     json: {
-      to: builtins.JSON as number,
-      from: [builtins.JSON, builtins.JSONB] as number[],
+      to: JSON,
+      from: [JSON, JSONB],
       serialize: BigIntJSON.stringify,
       parse: jsonAsString ? (x: string) => x : BigIntJSON.parse,
     },
     // Timestamps are converted to PreciseDate objects.
     timestamp: {
-      to: builtins.TIMESTAMP as number,
-      from: TIMESTAMP_TYPES as number[],
+      to: TIMESTAMP,
+      from: [TIMESTAMP, TIMESTAMPTZ],
       serialize: serializeTimestamp,
       parse: timestampToFpMillis,
     },
     // The DATE type is stored directly as the PG normalized date string.
     date: {
-      to: builtins.DATE as number,
-      from: [builtins.DATE] as number[],
+      to: DATE,
+      from: [DATE],
       serialize: (x: string | Date) =>
         (x instanceof Date ? x : new Date(x)).toISOString(),
       parse: dateToUTCMidnight,
@@ -156,8 +123,8 @@ export const postgresTypeConfig = (
     // JS number is 53 bits so this should generally not occur.
     // An API will be provided for users to override this type.
     numeric: {
-      to: builtins.NUMERIC as number,
-      from: [builtins.NUMERIC] as number[],
+      to: NUMERIC,
+      from: [NUMERIC],
       serialize: (x: number) => String(x), // pg expects a string
       parse: (x: string | number) => Number(x),
     },

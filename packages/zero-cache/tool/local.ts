@@ -12,55 +12,30 @@
  * ```
  */
 
+import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import 'dotenv/config';
-import {
-  LogicalReplicationService,
-  PgoutputPlugin,
-} from 'pg-logical-replication';
+import postgres from 'postgres';
+import {subscribe} from '../src/services/change-source/pg/logical-replication/stream.ts';
+import {stringify} from '../src/types/bigint-json.ts';
+import type {PostgresDB} from '../src/types/pg.ts';
 
 const slotName = 'zero_slot';
 const publicationNames = ['zero_data', 'zero_metadata'];
 
-const service = new LogicalReplicationService(
-  {},
-  {acknowledge: {auto: false, timeoutSeconds: 0}},
+const lc = new LogContext('debug', {}, consoleLogSink);
+const db = postgres() as PostgresDB;
+const {messages, acks} = await subscribe(
+  lc,
+  db,
+  slotName,
+  publicationNames,
+  0n,
 );
 
-const plugin = new PgoutputPlugin({
-  protoVersion: 1,
-  publicationNames,
-});
-
-service.on('data', (lsn, log) => {
-  console.log(
-    `"${lsn}": ${JSON.stringify(
-      log,
-      (_, v) => (typeof v === 'bigint' ? `BigInt(${v.toString()})` : v),
-      2,
-    )},`,
-  );
-});
-
-service.on('heartbeat', (_lsn, _timestamp, shouldRespond) => {
-  if (shouldRespond) {
-    service.acknowledge('0/0');
+for await (const [lsn, msg] of messages) {
+  if (msg.tag === 'keepalive') {
+    acks.push(0n);
+  } else {
+    lc.info?.(`"${lsn}": ${stringify(msg, null, 2)}`);
   }
-});
-
-service.on('error', err => {
-  console.error('On error', err);
-});
-
-console.debug('Connecting ...');
-
-(function proc() {
-  void service
-    .subscribe(plugin, slotName)
-    .catch(e => console.error('Thrown error', e))
-    .then(() => {
-      console.log('Setting timeout');
-      setTimeout(proc, 100);
-    });
-
-  console.debug('Connected!');
-})();
+}
