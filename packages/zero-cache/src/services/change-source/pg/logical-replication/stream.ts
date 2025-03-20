@@ -10,9 +10,6 @@ import {fromBigInt} from '../lsn.ts';
 import {PgoutputParser} from './pgoutput-parser.ts';
 import type {Message} from './pgoutput.types.ts';
 
-// Arbitrary array type to test if the PostgresDB client has fetched types.
-const INT4_ARRAY_TYPE = 1007;
-
 export type StreamMessage = [lsn: bigint, Message | {tag: 'keepalive'}];
 
 export async function subscribe(
@@ -104,6 +101,9 @@ function makeAck(lsn: bigint): Buffer {
   return x;
 }
 
+// Arbitrary array type to test if the PostgresDB client has fetched types.
+const INT4_ARRAY_TYPE = 1007;
+
 // postgres.js has default type parsers with user-defined overrides
 // configurable per-client (see `postgresTypeConfig` in types/pg.ts).
 //
@@ -133,7 +133,7 @@ async function getTypeParsers(lc: LogContext, db: PostgresDB) {
     const isArrayType = (parse as unknown as {array?: boolean}).array;
 
     // And then skips the first character when parsing the string,
-    // e.g. '{1,2,3}` it will parse `1,2,3}`.
+    // e.g. an array parser will parse '{1,2,3}' from '1,2,3}'.
     // https://github.com/porsager/postgres/blob/089214e85c23c90cf142d47fb30bd03f42874984/src/connection.js#L496
     return isArrayType ? (val: string) => parse(val.substring(1)) : parse;
   });
