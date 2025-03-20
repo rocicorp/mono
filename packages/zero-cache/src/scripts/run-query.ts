@@ -153,10 +153,7 @@ function runQuery(queryString: string): [number, number] {
   suppressError.q = q;
   suppressError.z = z;
 
-  console.log('schema', schema);
   eval(`q = ${queryString};`);
-  console.log('evaled to q:', q);
-  console.log('qstring:', queryString);
 
   const start = performance.now();
   q.run();
