@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {pipeline, Writable, type DuplexOptions} from 'node:stream';
+import {pipeline, Readable, Writable, type DuplexOptions} from 'node:stream';
 import {
   createWebSocketStream,
   type CloseEvent,
@@ -114,43 +114,56 @@ export function stream<In extends JSONValue, Out extends JSONValue>(
   }
 
   // Incoming transform.
+  pipe(duplex, instream, chunk => {
+    const json = BigIntJSON.parse(chunk.toString());
+    return v.parse(json, inSchema, 'passthrough');
+  });
+
+  return {outstream, instream};
+}
+
+export function pipe<T>(
+  source: Readable,
+  sink: Subscription<T>,
+  parse: (buffer: Buffer) => T | null,
+) {
   pipeline(
-    duplex,
+    source,
     new Writable({
       decodeStrings: false,
       write: (chunk, _encoding, callback) => {
-        let msg: In;
+        let msg: T | null;
         try {
-          const json = BigIntJSON.parse(chunk.toString());
-          msg = v.parse(json, inSchema, 'passthrough');
+          if ((msg = parse(chunk)) === null) {
+            callback();
+            return;
+          }
         } catch (err) {
           callback(ensureError(err));
           return;
         }
-        const {result} = instream.push(msg);
+        const {result} = sink.push(msg);
         // Inbound backpressure is exerted by unconsumed
         // messages in the subscription.
         void result.then(
           () => callback(),
-          err => callback(err),
+          err => callback(ensureError(err)),
         );
       },
       destroy: (err, callback) => {
         if (err) {
-          instream.fail(ensureError(err));
+          sink.fail(ensureError(err));
         }
         // Otherwise, final will handle the cancel.
         callback();
       },
       final: callback => {
-        instream.cancel();
+        sink.cancel();
         callback();
       },
     }),
-    close,
+    () => sink.cancel(),
   );
-
-  return {outstream, instream};
 }
 
 function ensureError(err: unknown) {

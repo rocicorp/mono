@@ -20,17 +20,25 @@ export type LSN = string;
 
 export type RecordType = Change['tag'];
 
-export function toLexiVersion(lsn: LSN): LexiVersion {
+export function toBigInt(lsn: LSN): bigint {
   const parts = lsn.split('/');
   assert(parts.length === 2, `Malformed LSN: "${lsn}"`);
   const high = BigInt(`0x${parts[0]}`);
   const low = BigInt(`0x${parts[1]}`);
   const val = (high << 32n) + low;
-  return versionToLexi(val);
+  return val;
+}
+
+export function toLexiVersion(lsn: LSN): LexiVersion {
+  return versionToLexi(toBigInt(lsn));
 }
 
 export function fromLexiVersion(lexi: LexiVersion): LSN {
   const val = versionFromLexi(lexi);
+  return fromBigInt(val);
+}
+
+export function fromBigInt(val: bigint): LSN {
   const high = val >> 32n;
   const low = val & 0xffffffffn;
   return `${high.toString(16).toUpperCase()}/${low.toString(16).toUpperCase()}`;
