@@ -92,6 +92,8 @@ async function verifyDependencies(external: Iterable<string>) {
   );
 }
 
+const dropLabels = forBundleSizeDashboard ? ['BUNDLE_SIZE'] : [];
+
 async function buildZeroClient() {
   const define = makeDefine('unknown');
   define['process.env.DISABLE_MUTATION_RECOVERY'] = 'true';
@@ -111,6 +113,7 @@ async function buildZeroClient() {
     // Use neutral to remove the automatic define for process.env.NODE_ENV
     platform: 'neutral',
     define,
+    dropLabels,
     outdir: basePath('out'),
     entryPoints,
   });
