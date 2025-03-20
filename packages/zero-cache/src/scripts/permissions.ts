@@ -10,6 +10,7 @@ import {
 import {isSchemaConfig} from '../../../zero-schema/src/schema-config.ts';
 import {appOptions, shardOptions, zeroOptions} from '../config/zero-config.ts';
 import {logOptions} from '../../../otel/src/log-options.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 
 export const deployPermissionsOptions = {
   schema: {
@@ -72,10 +73,10 @@ export const deployPermissionsOptions = {
   },
 };
 
-export async function loadPermissions(
+export async function loadSchemaAndPermissions(
   lc: LogContext,
   schemaPath: string,
-): Promise<PermissionsConfig> {
+): Promise<{schema: Schema; permissions: PermissionsConfig}> {
   const typeModuleErrorMessage = () =>
     `\n\nYou may need to add \` "type": "module" \` to the package.json file for ${schemaPath}.\n`;
 
@@ -115,7 +116,11 @@ export async function loadPermissions(
     const schemaConfig = module;
     const perms =
       await (schemaConfig.permissions as unknown as Promise<unknown>);
-    return v.parse(perms, permissionsConfigSchema);
+    const {schema} = schemaConfig;
+    return {
+      schema,
+      permissions: v.parse(perms, permissionsConfigSchema),
+    };
   } catch (e) {
     lc.error?.(`Failed to parse Permissions object`);
     throw e;
