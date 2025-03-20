@@ -262,9 +262,7 @@ class PostgresChangeSource implements ChangeSource {
           for (const change of await changeMaker.makeChanges(lsn, msg)) {
             last = changes.push(change);
           }
-          if (last) {
-            await last.result; // Allow the change-streamer to push back.
-          }
+          await last?.result; // Allow the change-streamer to push back.
         }
       } catch (e) {
         changes.fail(translateError(e));
