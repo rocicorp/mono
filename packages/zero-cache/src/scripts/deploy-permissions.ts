@@ -53,16 +53,21 @@ async function validatePermissions(
   }
 
   // Get the publications for the shard
-  const [{publications: shardPublications}] = await db<
-    {publications: string[]}[]
-  >`
+  const config = await db<{publications: string[]}[]>`
     SELECT publications FROM ${db(schema + '.' + SHARD_CONFIG_TABLE)}
   `;
-
+  if (config.length === 0) {
+    lc.warn?.(
+      `zero-cache has not yet initialized the upstream database.\n` +
+        `Deploying ${app} permissions without validating against published tables/columns.`,
+    );
+    return;
+  }
   lc.info?.(
     `Validating permissions against tables and columns published for "${app}".`,
   );
 
+  const [{publications: shardPublications}] = config;
   const {tables, publications} = await getPublicationInfo(
     db,
     shardPublications,
