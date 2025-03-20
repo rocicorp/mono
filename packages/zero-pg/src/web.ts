@@ -25,20 +25,24 @@ import {
 } from '../../zql/src/mutate/custom.ts';
 import {makeSchemaQuery} from './query.ts';
 import {assert} from '../../shared/src/asserts.ts';
-import {
-  upstreamSchema,
-  type ShardID,
-} from '../../zero-cache/src/types/shards.ts';
 import {formatPg} from '../../z2s/src/sql.ts';
 import {sql} from '../../z2s/src/sql.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
 
 export type PushHandler = (
   headers: Headers,
+  params: Params,
   body: ReadonlyJSONObject,
 ) => Promise<PushResponse>;
 
-type Headers = {authorization?: string | undefined};
+type Headers = {
+  authorization?: string | undefined;
+};
+
+type Params = {
+  schema: string;
+  appID: string;
+};
 
 export class PushProcessor<
   S extends Schema,
@@ -48,17 +52,14 @@ export class PushProcessor<
   readonly #dbConnectionProvider: ConnectionProvider<TDBTransaction>;
   readonly #customMutatorDefs: MD;
   readonly #lc: LogContext;
-  readonly #shardID: ShardID;
   readonly #mutate: (dbTransaction: DBTransaction<unknown>) => SchemaCRUD<S>;
   readonly #query: (dbTransaction: DBTransaction<unknown>) => SchemaQuery<S>;
 
   constructor(
-    shardID: ShardID,
     schema: S,
     dbConnectionProvider: ConnectionProvider<TDBTransaction>,
     customMutatorDefs: MD,
   ) {
-    this.#shardID = shardID;
     this.#dbConnectionProvider = dbConnectionProvider;
     this.#customMutatorDefs = customMutatorDefs;
     this.#lc = createLogContext('info');
@@ -68,6 +69,7 @@ export class PushProcessor<
 
   async process(
     headers: Headers,
+    params: Params,
     body: ReadonlyJSONObject,
   ): Promise<PushResponse> {
     const req = v.parse(body, pushBodySchema);
@@ -81,7 +83,13 @@ export class PushProcessor<
 
     const responses: MutationResponse[] = [];
     for (const m of req.mutations) {
-      const res = await this.#processMutation(connection, headers, req, m);
+      const res = await this.#processMutation(
+        connection,
+        headers,
+        params,
+        req,
+        m,
+      );
       responses.push(res);
       if ('error' in res.result) {
         break;
@@ -96,6 +104,7 @@ export class PushProcessor<
   async #processMutation(
     dbConnection: DBConnection<TDBTransaction>,
     headers: Headers,
+    params: Params,
     req: PushBody,
     m: Mutation,
   ): Promise<MutationResponse> {
@@ -103,6 +112,7 @@ export class PushProcessor<
       return await this.#processMutationImpl(
         dbConnection,
         headers,
+        params,
         req,
         m,
         false,
@@ -135,6 +145,7 @@ export class PushProcessor<
       const ret = await this.#processMutationImpl(
         dbConnection,
         headers,
+        params,
         req,
         m,
         true,
@@ -158,6 +169,7 @@ export class PushProcessor<
   #processMutationImpl(
     dbConnection: DBConnection<TDBTransaction>,
     headers: Headers,
+    params: Params,
     req: PushBody,
     m: Mutation,
     errorMode: boolean,
@@ -171,7 +183,7 @@ export class PushProcessor<
     return dbConnection.transaction(async (dbTx): Promise<MutationResponse> => {
       await checkAndIncrementLastMutationID(
         dbTx,
-        this.#shardID,
+        params.schema,
         req.clientGroupID,
         m.clientID,
         m.id,
@@ -220,13 +232,13 @@ export class PushProcessor<
 
 async function checkAndIncrementLastMutationID(
   tx: DBTransaction<unknown>,
-  shard: ShardID,
+  schema: string,
   clientGroupID: string,
   clientID: string,
   receivedMutationID: number,
 ) {
   const formatted = formatPg(
-    sql`INSERT INTO ${sql.ident(upstreamSchema(shard))}.clients 
+    sql`INSERT INTO ${sql.ident(schema)}.clients 
     as current ("clientGroupID", "clientID", "lastMutationID")
         VALUES (${clientGroupID}, ${clientID}, ${1})
     ON CONFLICT ("clientGroupID", "clientID")

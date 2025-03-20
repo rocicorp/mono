@@ -108,11 +108,17 @@ fastify.get<{
     );
 });
 
-fastify.post('/api/push', async function (request, reply) {
+fastify.post<{
+  Querystring: {
+    schema: string;
+    appID: string;
+  };
+}>('/api/push', async function (request, reply) {
   const response = await pushHandler(
     {
       authorization: request.headers.authorization,
     },
+    request.query,
     request.body as ReadonlyJSONObject,
   );
   reply.send(response);

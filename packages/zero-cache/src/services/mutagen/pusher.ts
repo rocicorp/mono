@@ -5,10 +5,14 @@ import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import type {PushBody} from '../../../../zero-protocol/src/push.ts';
 import type {Service} from '../service.ts';
 import type {MutationError} from './mutagen.ts';
+import {type ZeroConfig} from '../../config/zero-config.ts';
+import {upstreamSchema} from '../../types/shards.ts';
 
 export interface Pusher {
   enqueuePush(push: PushBody, jwt: string | undefined): void;
 }
+
+type Config = Pick<ZeroConfig, 'app' | 'shard'>;
 
 /**
  * Receives push messages from zero-client and forwards
@@ -30,13 +34,14 @@ export class PusherService implements Service {
   #stopped: Promise<void> | undefined;
 
   constructor(
+    config: Config,
     lc: LogContext,
     clientGroupID: string,
     pushUrl: string,
     apiKey: string | undefined,
   ) {
     this.#queue = new Queue();
-    this.#pusher = new PushWorker(lc, pushUrl, apiKey, this.#queue);
+    this.#pusher = new PushWorker(config, lc, pushUrl, apiKey, this.#queue);
     this.id = clientGroupID;
   }
 
@@ -70,8 +75,10 @@ class PushWorker {
   readonly #apiKey: string | undefined;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
+  readonly #config: Config;
 
   constructor(
+    config: Config,
     lc: LogContext,
     pushURL: string,
     apiKey: string | undefined,
@@ -81,6 +88,7 @@ class PushWorker {
     this.#apiKey = apiKey;
     this.#queue = queue;
     this.#lc = lc.withContext('component', 'pusher');
+    this.#config = config;
   }
 
   async run() {
@@ -110,7 +118,16 @@ class PushWorker {
     }
 
     try {
-      const response = await fetch(this.#pushURL, {
+      const params = new URLSearchParams();
+      params.append(
+        'schema',
+        upstreamSchema({
+          appID: this.#config.app.id,
+          shardNum: this.#config.shard.num,
+        }),
+      );
+      params.append('appID', this.#config.app.id);
+      const response = await fetch(`${this.#pushURL}?${params.toString()}`, {
         method: 'POST',
         headers,
         body: JSON.stringify(entry.push),
