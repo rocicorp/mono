@@ -101,6 +101,7 @@ import {
   appendPath,
   toWSString,
 } from './http-string.ts';
+import type {Inspector} from './inspector/types.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
@@ -281,6 +282,7 @@ export class Zero<
   readonly #lc: LogContext;
   readonly #logOptions: LogOptions;
   readonly #enableAnalytics: boolean;
+  readonly #schema: S;
   readonly #clientSchema: ClientSchema;
 
   readonly #pokeHandler: PokeHandler;
@@ -500,6 +502,7 @@ export class Zero<
 
     this.storageKey = storageKey ?? '';
 
+    this.#schema = schema;
     const {clientSchema, hash} = clientSchemaFrom(schema);
     this.#clientSchema = clientSchema;
 
@@ -1813,6 +1816,22 @@ export class Zero<
     }
 
     return rv as MakeEntityQueriesFromSchema<S>;
+  }
+
+  /**
+   * `inspect` returns an object that can be used to inspect the state of the
+   * queries a Zero instance uses. It is intended for debugging purposes.
+   */
+  async inspect(): Promise<Inspector> {
+    // We use esbuild dropLabels to strip this code when we build the code for the bundle size dashboard.
+    // https://esbuild.github.io/api/#ignore-annotations
+    // /packages/zero/tool/build.ts
+
+    // eslint-disable-next-line no-unused-labels
+    BUNDLE_SIZE: {
+      const m = await import('./inspector/inspector.ts');
+      return m.newInspector(this.#rep, this.#schema);
+    }
   }
 }
 
