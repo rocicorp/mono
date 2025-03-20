@@ -54,7 +54,6 @@ export async function subscribe(
     stream.readable(),
     stream.writable(),
   ]);
-  lc.debug?.(`started replication stream at ${slot} from ${lsnString}`);
 
   const typeParsers = await getTypeParsers(lc, db);
   const parser = new PgoutputParser(typeParsers);
