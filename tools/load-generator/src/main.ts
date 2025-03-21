@@ -31,7 +31,7 @@ async function run() {
     'ZERO_',
   );
   const db = postgres(upstream.db, {
-    max: Math.max(1, Math.min(qps / 10, maxConnections)),
+    max: Math.max(1, Math.min(maxConnections, qps / 10)),
   });
 
   const assignments = [`${id(perturb.key)} = ${id(perturb.key)}`];
