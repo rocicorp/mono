@@ -10,6 +10,7 @@
     "src/zero-cache-dev.ts",
     "src/deploy-permissions.ts",
     "src/change-protocol/*",
-    "src/pg.ts"
+    "src/pg.ts",
+    "src/ast-to-zql.ts"
   ]
 }
