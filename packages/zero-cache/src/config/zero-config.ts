@@ -457,6 +457,15 @@ export const zeroOptions = {
     desc: ['Passed by multi/main.ts to tag the LogContext of zero-caches'],
     hidden: true,
   },
+
+  maxRowCount: {
+    type: v.number().optional(),
+    desc: [
+      'The target number of rows to keep in the client side cache.',
+      'If unset, zero-cache will use the default value.',
+    ],
+    default: 20_000,
+  },
 };
 
 export type ZeroConfig = Config<typeof zeroOptions>;

@@ -129,6 +129,8 @@ export default function runWorker(
       sub,
       drainCoordinator,
       config.log.slowHydrateThreshold,
+      undefined,
+      config.maxRowCount,
     );
   };
 
