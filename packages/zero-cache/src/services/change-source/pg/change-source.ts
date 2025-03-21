@@ -1,7 +1,4 @@
-import {
-  PG_ADMIN_SHUTDOWN,
-  PG_OBJECT_IN_USE,
-} from '@drdgvhbh/postgres-error-codes';
+import {PG_ADMIN_SHUTDOWN} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
@@ -13,7 +10,6 @@ import {
   intersection,
   symmetricDifferences,
 } from '../../../../../shared/src/set-utils.ts';
-import {sleep} from '../../../../../shared/src/sleep.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {mapPostgresToLiteColumn} from '../../../db/pg-to-lite.ts';
@@ -195,30 +191,9 @@ class PostgresChangeSource implements ChangeSource {
 
     try {
       await this.#stopExistingReplicationSlotSubscriber(db, slot);
-
       const config = await getInternalShardConfig(db, this.#shard);
       this.#lc.info?.(`starting replication stream@${slot}`);
-
-      for (let i = 0; i < MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE; i++) {
-        try {
-          return await this.#startStream(db, slot, clientWatermark, config);
-        } catch (e) {
-          if (
-            // error: replication slot "zero_slot_change_source_test_id" is active for PID 268
-            e instanceof postgres.PostgresError &&
-            e.code === PG_OBJECT_IN_USE
-          ) {
-            // The freeing up of the replication slot is not transactional;
-            // sometimes it takes time for Postgres to consider the slot
-            // inactive.
-            this.#lc.warn?.(`attempt ${i + 1}: ${String(e)}`, e);
-            await sleep(5);
-          } else {
-            throw e;
-          }
-        }
-      }
-      throw new Error('exceeded max attempts to start the Postgres stream');
+      return await this.#startStream(db, slot, clientWatermark, config);
     } finally {
       await db.end();
     }
