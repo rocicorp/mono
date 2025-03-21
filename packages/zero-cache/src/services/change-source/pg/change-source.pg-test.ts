@@ -1,6 +1,6 @@
 import {PG_OBJECT_IN_USE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
-import {DatabaseError} from 'pg-protocol';
+import {PostgresError} from 'postgres';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {TestLogSink} from '../../../../../shared/src/logging-test-utils.ts';
@@ -145,7 +145,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
         streams.push(stream);
         return stream;
       } catch (e) {
-        if (e instanceof DatabaseError && e.code === PG_OBJECT_IN_USE) {
+        if (e instanceof PostgresError && e.code === PG_OBJECT_IN_USE) {
           // Sometimes Postgres still considers the replication slot active
           // from the previous test, e.g.
           // error: replication slot "zero_change_source_test_id" is active for PID 388
@@ -322,14 +322,13 @@ describe('change-source/pg', {timeout: 30000}, () => {
       changes.cancel();
 
       // Verify that the ACK was stored with the replication slot.
-      // Postgres stores 1 + the LSN of the confirmed ACK.
       const results = await upstream<{confirmed: string}[]>`
     SELECT confirmed_flush_lsn as confirmed FROM pg_replication_slots
         WHERE slot_name = ${replicationSlot({
           appID: APP_ID,
           shardNum: SHARD_NUM,
         })}`;
-      const expected = versionFromLexi(commit1[2].watermark) + 1n;
+      const expected = versionFromLexi(commit1[2].watermark);
       expect(results).toEqual([
         {confirmed: fromLexiVersion(versionToLexi(expected))},
       ]);
