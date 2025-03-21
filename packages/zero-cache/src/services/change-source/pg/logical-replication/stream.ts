@@ -1,14 +1,18 @@
+import {PG_OBJECT_IN_USE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {defu} from 'defu';
 import postgres, {type Options, type PostgresType} from 'postgres';
 import {assert} from '../../../../../../shared/src/asserts.ts';
 import {mapValues} from '../../../../../../shared/src/objects.ts';
+import {sleep} from '../../../../../../shared/src/sleep.ts';
 import {type PostgresDB} from '../../../../types/pg.ts';
 import {pipe, type Sink, type Source} from '../../../../types/streams.ts';
 import {Subscription} from '../../../../types/subscription.ts';
 import {fromBigInt} from '../lsn.ts';
 import {PgoutputParser} from './pgoutput-parser.ts';
 import type {Message} from './pgoutput.types.ts';
+
+const DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE = 5;
 
 export type StreamMessage = [lsn: bigint, Message | {tag: 'keepalive'}];
 
@@ -18,6 +22,7 @@ export async function subscribe(
   slot: string,
   publications: string[],
   lsn: bigint,
+  retriesIfReplicationSlotActive = DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE,
   applicationName = 'zero-replicator',
 ): Promise<{messages: Source<StreamMessage>; acks: Sink<bigint>}> {
   const session = postgres(
@@ -40,25 +45,22 @@ export async function subscribe(
     ),
   );
 
-  const lsnString = fromBigInt(lsn);
-  const stream = session
-    .unsafe(
-      `START_REPLICATION SLOT "${slot}" LOGICAL ${lsnString} (
-        proto_version '1', 
-        publication_names '${publications}',
-        messages 'true'
-      )`,
-    )
-    .execute();
-  const [readable, writable] = await Promise.all([
-    stream.readable(),
-    stream.writable(),
-  ]);
+  const [readable, writable] = await startReplicationStream(
+    lc,
+    session,
+    slot,
+    publications,
+    lsn,
+    retriesIfReplicationSlotActive + 1,
+  );
 
   const typeParsers = await getTypeParsers(lc, db);
   const parser = new PgoutputParser(typeParsers);
   const messages = Subscription.create<StreamMessage>({
-    cleanup: () => readable.destroyed || readable.destroy(),
+    cleanup: () => {
+      readable.destroyed || readable.destroy();
+      return session.end();
+    },
   });
 
   pipe(readable, messages, buffer => parseStreamMessage(lc, buffer, parser));
@@ -67,6 +69,47 @@ export async function subscribe(
     messages,
     acks: {push: (lsn: bigint) => writable.write(makeAck(lsn))},
   };
+}
+
+async function startReplicationStream(
+  lc: LogContext,
+  session: postgres.Sql,
+  slot: string,
+  publications: string[],
+  lsn: bigint,
+  maxAttempts: number,
+) {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const stream = session
+        .unsafe(
+          `START_REPLICATION SLOT "${slot}" LOGICAL ${fromBigInt(lsn)} (
+        proto_version '1', 
+        publication_names '${publications}',
+        messages 'true'
+      )`,
+        )
+        .execute();
+      return await Promise.all([stream.readable(), stream.writable()]);
+    } catch (e) {
+      if (
+        // error: replication slot "zero_slot_change_source_test_id" is active for PID 268
+        e instanceof postgres.PostgresError &&
+        e.code === PG_OBJECT_IN_USE
+      ) {
+        // The freeing up of the replication slot is not transactional;
+        // sometimes it takes time for Postgres to consider the slot
+        // inactive.
+        lc.warn?.(`attempt ${i + 1}: ${String(e)}`, e);
+        await sleep(10);
+      } else {
+        throw e;
+      }
+    }
+  }
+  throw new Error(
+    `exceeded max attempts (${maxAttempts}) to start the Postgres stream`,
+  );
 }
 
 function parseStreamMessage(
