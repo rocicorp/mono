@@ -135,6 +135,7 @@ import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
+import {MutationTracker} from './mutation-tracker.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -290,6 +291,7 @@ export class Zero<
   readonly #ivmMain: IVMSourceBranch;
   readonly #clientToServer: NameMapper;
   readonly #deleteClientsManager: DeleteClientsManager;
+  readonly #mutationTracker: MutationTracker;
 
   /**
    * The queries we sent when inside the sec-protocol header when establishing a connection.
@@ -465,6 +467,7 @@ export class Zero<
     }
 
     const lc = new LogContext(logOptions.logLevel, {}, logOptions.logSink);
+    this.#mutationTracker = new MutationTracker();
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
         options.mutators,
@@ -474,6 +477,7 @@ export class Zero<
           assertUnique(key);
           replicacheMutators[key] = makeReplicacheMutator(
             lc,
+            this.#mutationTracker,
             mutatorOrMutators,
             schema,
             slowMaterializeThreshold,
@@ -489,6 +493,7 @@ export class Zero<
             assertUnique(key);
             replicacheMutators[key] = makeReplicacheMutator(
               lc,
+              this.#mutationTracker,
               mutator as CustomMutatorImpl<S>,
               schema,
               slowMaterializeThreshold,
@@ -555,6 +560,7 @@ export class Zero<
     this.#server = server;
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
+    this.#mutationTracker.clientID = rep.clientID;
 
     const onUpdateNeededCallback =
       onUpdateNeeded ??
@@ -903,9 +909,7 @@ export class Zero<
         );
 
       case 'push-response':
-        // Ignored for now. Will be sent to the `mutation-tracker`
-        // in order to resolve mutation promises.
-        break;
+        return this.#mutationTracker.processPushResponse(downMessage[1]);
 
       default:
         msgType satisfies never;

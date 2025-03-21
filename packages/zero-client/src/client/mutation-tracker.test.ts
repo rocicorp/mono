@@ -1,12 +1,13 @@
-import {describe, it, expect} from 'vitest';
+import {describe, test, expect} from 'vitest';
 import {MutationTracker} from './mutation-tracker.ts';
 import type {PushResponse} from '../../../zero-protocol/src/push.ts';
 
 describe('MutationTracker', () => {
   const CLIENT_ID = 'test-client-1';
 
-  it('tracks a mutation and resolves on success', async () => {
-    const tracker = new MutationTracker(CLIENT_ID);
+  test('tracks a mutation and resolves on success', async () => {
+    const tracker = new MutationTracker();
+    tracker.clientID = CLIENT_ID;
     const mutationPromise = tracker.trackMutation(1);
 
     const response: PushResponse = {
@@ -23,8 +24,9 @@ describe('MutationTracker', () => {
     expect(result).toEqual({});
   });
 
-  it('tracks a mutation and rejects on error', async () => {
-    const tracker = new MutationTracker(CLIENT_ID);
+  test('tracks a mutation and rejects on error', async () => {
+    const tracker = new MutationTracker();
+    tracker.clientID = CLIENT_ID;
     const mutationPromise = tracker.trackMutation(1);
 
     const response: PushResponse = {
@@ -46,8 +48,9 @@ describe('MutationTracker', () => {
     });
   });
 
-  it('handles push errors', async () => {
-    const tracker = new MutationTracker(CLIENT_ID);
+  test('handles push errors', async () => {
+    const tracker = new MutationTracker();
+    tracker.clientID = CLIENT_ID;
     const mutationPromise = tracker.trackMutation(1);
 
     const response: PushResponse = {
@@ -62,8 +65,9 @@ describe('MutationTracker', () => {
     });
   });
 
-  it('rejects mutation when explicitly rejected', async () => {
-    const tracker = new MutationTracker(CLIENT_ID);
+  test('rejects mutation when explicitly rejected', async () => {
+    const tracker = new MutationTracker();
+    tracker.clientID = CLIENT_ID;
     const mutationPromise = tracker.trackMutation(1);
 
     tracker.rejectMutation(1, new Error('Failed to send'));
@@ -71,8 +75,9 @@ describe('MutationTracker', () => {
     await expect(mutationPromise).rejects.toThrow('Failed to send');
   });
 
-  it('rejects mutations from other clients', () => {
-    const tracker = new MutationTracker(CLIENT_ID);
+  test('rejects mutations from other clients', () => {
+    const tracker = new MutationTracker();
+    tracker.clientID = CLIENT_ID;
     void tracker.trackMutation(1);
 
     const response: PushResponse = {
@@ -96,8 +101,9 @@ describe('MutationTracker', () => {
     );
   });
 
-  it('handles multiple concurrent mutations', async () => {
-    const tracker = new MutationTracker(CLIENT_ID);
+  test('handles multiple concurrent mutations', async () => {
+    const tracker = new MutationTracker();
+    tracker.clientID = CLIENT_ID;
     const mutation1 = tracker.trackMutation(1);
     const mutation2 = tracker.trackMutation(2);
 
