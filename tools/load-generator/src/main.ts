@@ -19,16 +19,20 @@ const options = {
     ints: v.array(v.string()).optional(),
     jsonbs: v.array(v.string()).optional(),
   },
+
+  maxConnections: v.number().default(40),
 };
 
 async function run() {
   const lc = new LogContext('debug', {}, consoleLogSink);
-  const {upstream, perturb, qps} = parseOptions(
+  const {upstream, perturb, qps, maxConnections} = parseOptions(
     options,
     process.argv.slice(2),
     'ZERO_',
   );
-  const db = postgres(upstream.db, {max: Math.max(1, qps / 10)});
+  const db = postgres(upstream.db, {
+    max: Math.max(1, Math.min(qps / 10, maxConnections)),
+  });
 
   const assignments = [`${id(perturb.key)} = ${id(perturb.key)}`];
   perturb.bools?.forEach(col =>
