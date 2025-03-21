@@ -125,6 +125,10 @@ class PushWorker {
     this.#clients = new Map();
   }
 
+  /**
+   * Returns a new downstream stream if the clientID,wsID pair has not been seen before.
+   * If a clientID already exists with a different wsID, that client's downstream is cancelled.
+   */
   maybeInitConnection(clientID: string, wsID: string) {
     const existing = this.#clients.get(clientID);
     if (existing && existing[0] === wsID) {
@@ -162,6 +166,16 @@ class PushWorker {
     }
   }
 
+  /**
+   * The pusher can end up combining many push requests, from the client group, into a single request
+   * to the API server.
+   *
+   * In that case, many different clients will have their mutations present in the
+   * PushResponse.
+   *
+   * Each client is on a different websocket connection though, so we need to fan out the response
+   * to all the clients that were part of the push.
+   */
   #fanOutResponses(response: PushResponse) {
     if ('error' in response) {
       const groupedMutationIDs = groupBy(
