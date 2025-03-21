@@ -30,7 +30,6 @@ export class MutationTracker {
     assert(!this.#outstandingMutations.has(id));
     const mutationResolver = resolver<MutationResult>();
     this.#outstandingMutations.set(id, mutationResolver);
-    console.log('tracking, size:', this.#outstandingMutations.size);
     return mutationResolver.promise;
   }
 
