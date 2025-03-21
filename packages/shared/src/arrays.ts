@@ -24,9 +24,9 @@ export function areEqual<T>(arr1: readonly T[], arr2: readonly T[]): boolean {
   return arr1.length === arr2.length && arr1.every((e, i) => e === arr2[i]);
 }
 
-export function zip<T>(a1: readonly T[], a2: readonly T[]): [T, T][] {
+export function zip<T1, T2>(a1: readonly T1[], a2: readonly T2[]): [T1, T2][] {
   assert(a1.length === a2.length);
-  const result: [T, T][] = [];
+  const result: [T1, T2][] = [];
   for (let i = 0; i < a1.length; i++) {
     result.push([a1[i], a2[i]]);
   }
