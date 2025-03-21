@@ -25,6 +25,8 @@ import {ZeroContext} from './context.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
+import type {MutationResult} from '../../../zero-protocol/src/push.ts';
+import type {MutationTracker} from './mutation-tracker.ts';
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
@@ -116,17 +118,33 @@ export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
   readonly token: string | undefined;
 }
 
-// TODO: wire into `PushResponseTracker` so we can give out promises for each mutation
-// when it is `initial`
+type MaybeWithServerResult<T> = {
+  server?: Promise<T>;
+};
+
+type PromiseWithServerResult<T, S> = Promise<T> & MaybeWithServerResult<S>;
+
 export function makeReplicacheMutator<S extends Schema>(
   lc: LogContext,
+  mutationTracker: MutationTracker,
   mutator: CustomMutatorImpl<S>,
   schema: S,
   slowMaterializeThreshold: number,
 ) {
-  return (repTx: WriteTransaction, args: ReadonlyJSONValue): Promise<void> => {
+  return (
+    repTx: WriteTransaction,
+    args: ReadonlyJSONValue,
+  ): PromiseWithServerResult<void, MutationResult> => {
     const tx = new TransactionImpl(lc, repTx, schema, slowMaterializeThreshold);
-    return mutator(tx, args);
+    const clientPromise = mutator(tx, args);
+
+    if (repTx.reason === 'initial') {
+      const serverPromise = mutationTracker.trackMutation(repTx.mutationID);
+      (clientPromise as PromiseWithServerResult<void, MutationResult>).server =
+        serverPromise;
+    }
+
+    return clientPromise;
   };
 }
 

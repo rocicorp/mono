@@ -187,6 +187,7 @@ export type MutationError = v.Infer<typeof mutationErrorSchema>;
 export type PushError = v.Infer<typeof pushErrorSchema>;
 export type PushOk = v.Infer<typeof pushOkSchema>;
 export type MutationID = v.Infer<typeof mutationIDSchema>;
+export type MutationResult = v.Infer<typeof mutationResultSchema>;
 
 export function mapCRUD(
   arg: CRUDMutationArg,

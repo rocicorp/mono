@@ -16,10 +16,13 @@ type MutationResult = MutationOk | MutationError | PushError;
  */
 export class MutationTracker {
   readonly #outstandingMutations: Map<number, Resolver<MutationResult>>;
-  readonly #clientID: string;
+  #clientID: string | undefined;
 
-  constructor(clientID: string) {
+  constructor() {
     this.#outstandingMutations = new Map();
+  }
+
+  set clientID(clientID: string) {
     this.#clientID = clientID;
   }
 
@@ -27,6 +30,7 @@ export class MutationTracker {
     assert(!this.#outstandingMutations.has(id));
     const mutationResolver = resolver<MutationResult>();
     this.#outstandingMutations.set(id, mutationResolver);
+    console.log('tracking, size:', this.#outstandingMutations.size);
     return mutationResolver.promise;
   }
 
