@@ -4,6 +4,7 @@ import {
   TransactionImpl,
   type CustomMutatorDefs,
   type MakeCustomMutatorInterfaces,
+  type PromiseWithServerResult,
 } from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
@@ -13,6 +14,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import type {WriteTransaction} from './replicache-types.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {must} from '../../../shared/src/must.ts';
+import type {MutationResult} from '../../../zero-protocol/src/push.ts';
 
 type Schema = typeof schema;
 
@@ -50,18 +52,25 @@ test('argument types are preserved on the generated mutator interface', () => {
   } satisfies CustomMutatorDefs<Schema>;
 
   type MutatorsInterface = MakeCustomMutatorInterfaces<Schema, typeof mutators>;
+
   expectTypeOf<MutatorsInterface>().toEqualTypeOf<{
     readonly issue: {
-      readonly setTitle: (args: {id: string; title: string}) => Promise<void>;
+      readonly setTitle: (args: {
+        id: string;
+        title: string;
+      }) => PromiseWithServerResult<void, MutationResult>;
       readonly setProps: (args: {
         id: string;
         title: string;
         status: 'closed' | 'open';
         assignee: string;
-      }) => Promise<void>;
+      }) => PromiseWithServerResult<void, MutationResult>;
     };
     readonly nonTableNamespace: {
-      readonly doThing: (args: {arg1: string; arg2: number}) => Promise<void>;
+      readonly doThing: (_a: {
+        arg1: string;
+        arg2: number;
+      }) => PromiseWithServerResult<void, MutationResult>;
     };
   }>();
 });
