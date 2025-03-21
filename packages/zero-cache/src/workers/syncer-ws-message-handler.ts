@@ -99,11 +99,14 @@ export class SyncerWsMessageHandler implements MessageHandler {
             }
 
             if (this.#pusher) {
-              this.#pusher.enqueuePush(msg[1], this.#token);
               // We do not call mutagen since if a pusher is set
               // the precludes crud mutators.
               // We'll be removing crud mutators when we release custom mutators.
-              return {type: 'ok'} satisfies HandlerResult;
+              return this.#pusher.enqueuePush(
+                this.#syncContext.clientID,
+                msg[1],
+                this.#token,
+              );
             }
 
             // Hold a connection-level lock while processing mutations so that:
