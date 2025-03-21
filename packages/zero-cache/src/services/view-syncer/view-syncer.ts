@@ -533,7 +533,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const {clientID, wsID} = ctx;
     const [cmd, body] = msg;
 
-    if (newClient !== undefined || !this.#clients.has(clientID)) {
+    if (newClient || !this.#clients.has(clientID)) {
       this.#lastConnectTime = Date.now();
     }
 
