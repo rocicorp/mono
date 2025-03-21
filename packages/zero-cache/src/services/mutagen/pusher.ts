@@ -18,6 +18,7 @@ import {groupBy} from '../../../../shared/src/arrays.ts';
 export interface Pusher {
   enqueuePush(
     clientID: string,
+    wsID: string,
     push: PushBody,
     jwt: string | undefined,
   ): HandlerResult;
@@ -58,17 +59,19 @@ export class PusherService implements Service, Pusher {
 
   enqueuePush(
     clientID: string,
+    wsID: string,
     push: PushBody,
     jwt: string | undefined,
   ): HandlerResult {
     const downstream: Subscription<Downstream> | undefined =
-      this.#pusher.maybeInitClient(clientID);
+      this.#pusher.maybeInitConnection(clientID, wsID);
 
     this.#queue.enqueue({push, jwt});
 
     if (downstream) {
       return {
         type: 'stream',
+        source: 'pusher',
         stream: downstream,
       };
     }
@@ -105,7 +108,7 @@ class PushWorker {
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
   readonly #config: Config;
-  readonly #clients: Map<string, Subscription<Downstream>>;
+  readonly #clients: Map<string, [wsID: string, Subscription<Downstream>]>;
 
   constructor(
     config: Config,
@@ -122,17 +125,25 @@ class PushWorker {
     this.#clients = new Map();
   }
 
-  maybeInitClient(clientID: string) {
-    if (this.#clients.has(clientID)) {
-      return;
+  maybeInitConnection(clientID: string, wsID: string) {
+    const existing = this.#clients.get(clientID);
+    if (existing && existing[0] === wsID) {
+      // already initialized for this socket
+      return undefined;
     }
+
+    // client is back on a new connection
+    if (existing) {
+      existing[1].cancel();
+    }
+
     const downstream = Subscription.create<Downstream>({
       cleanup: () => {
         this.#clients.delete(clientID);
       },
     });
-    this.#clients.set(clientID, downstream);
-    return undefined;
+    this.#clients.set(clientID, [wsID, downstream]);
+    return downstream;
   }
 
   async run() {
@@ -158,9 +169,9 @@ class PushWorker {
         m => m.clientID,
       );
       for (const [clientID, mutationIDs] of groupedMutationIDs) {
-        const downstream = this.#clients.get(clientID);
-        if (downstream) {
-          downstream.push([
+        const client = this.#clients.get(clientID);
+        if (client) {
+          client[1].push([
             'push-response',
             {
               ...response,
@@ -172,9 +183,9 @@ class PushWorker {
     } else {
       const groupedMutations = groupBy(response.mutations, m => m.id.clientID);
       for (const [clientID, mutations] of groupedMutations) {
-        const downstream = this.#clients.get(clientID);
-        if (downstream) {
-          downstream.push(['push-response', {mutations}]);
+        const client = this.#clients.get(clientID);
+        if (client) {
+          client[1].push(['push-response', {mutations}]);
         }
       }
     }
@@ -218,7 +229,8 @@ class PushWorker {
         };
       }
 
-      return v.parse(await response.json(), pushResponseSchema);
+      const json = await response.json();
+      return v.parse(json, pushResponseSchema);
     } catch (e) {
       // We do not kill the pusher on error.
       // If the user's API server is down, the mutations will never be acknowledged

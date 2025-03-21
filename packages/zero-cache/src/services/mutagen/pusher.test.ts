@@ -19,7 +19,8 @@ const config = {
   },
 };
 
-const clientID = 'test';
+const clientID = 'test-cid';
+const wsID = 'test-wsid';
 describe('combine pushes', () => {
   test('empty array', () => {
     const [pushes, terminate] = combinePushes([]);
@@ -158,7 +159,7 @@ describe('pusher service', () => {
     );
     void pusher.run();
 
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
 
     await pusher.stop();
 
@@ -187,7 +188,7 @@ describe('pusher service', () => {
     );
     void pusher.run();
 
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
 
     await pusher.stop();
 
@@ -214,7 +215,7 @@ describe('pusher service', () => {
     );
 
     void pusher.run();
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
     // release control of the loop so the push can be sent
     await Promise.resolve();
 
@@ -223,11 +224,11 @@ describe('pusher service', () => {
     expect(JSON.parse(fetch.mock.calls[0][1].body).mutations).toHaveLength(1);
 
     // We have not resolved the API server yet so these should stack up
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
     await Promise.resolve();
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
     await Promise.resolve();
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
     await Promise.resolve();
 
     // no new pushes sent yet since we are still waiting on the user's API server
@@ -261,7 +262,7 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result = pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    const result = pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
     expect(result.type).toBe('stream');
   });
 
@@ -275,25 +276,29 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
-    const result = pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
+    const result = pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
     expect(result.type).toBe('ok');
   });
 
   test('streams successful push response to correct client', async () => {
     const fetch = (global.fetch = vi.fn());
-    const successResponse: PushResponse = {
+    const successResponse1: PushResponse = {
       mutations: [
         {
           id: {clientID: 'client1', id: 1},
-          result: {timestamp: 123, cookie: 'abc'},
+          result: {},
         },
       ],
     };
-    fetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(successResponse),
-    });
+    const successResponse2: PushResponse = {
+      mutations: [
+        {
+          id: {clientID: 'client2', id: 1},
+          result: {},
+        },
+      ],
+    };
 
     const pusher = new PusherService(
       config,
@@ -304,41 +309,85 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result1 = pusher.enqueuePush('client1', makePush(1), 'jwt');
-    const result2 = pusher.enqueuePush('client2', makePush(1), 'jwt');
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(successResponse1),
+    });
+    const result1 = pusher.enqueuePush(
+      'client1',
+      wsID,
+      makePush(1, 'client1'),
+      'jwt',
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(successResponse2),
+    });
+    const result2 = pusher.enqueuePush(
+      'client2',
+      wsID,
+      makePush(2, 'client2'),
+      'jwt',
+    );
 
     expect(result1.type).toBe('stream');
     expect(result2.type).toBe('stream');
 
-    if (result1.type === 'stream') {
-      const messages: unknown[] = [];
-      result1.stream.subscribe(msg => messages.push(msg));
+    if (result1.type === 'stream' && result2.type === 'stream') {
+      const s1Messages: unknown[] = [];
+      const s2Messages: unknown[] = [];
+      for await (const response of result1.stream) {
+        s1Messages.push(response);
+        break;
+      }
+      for await (const response of result2.stream) {
+        s2Messages.push(response);
+        break;
+      }
 
-      // Wait for push to be processed
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      expect(messages).toEqual([
+      expect(s1Messages).toMatchInlineSnapshot(`
         [
-          'push-response',
-          {
-            mutations: successResponse.mutations,
-          },
-        ],
-      ]);
+          [
+            "push-response",
+            {
+              "mutations": [
+                {
+                  "id": {
+                    "clientID": "client1",
+                    "id": 1,
+                  },
+                  "result": {},
+                },
+              ],
+            },
+          ],
+        ]
+      `);
+      expect(s2Messages).toMatchInlineSnapshot(`
+        [
+          [
+            "push-response",
+            {
+              "mutations": [
+                {
+                  "id": {
+                    "clientID": "client2",
+                    "id": 1,
+                  },
+                  "result": {},
+                },
+              ],
+            },
+          ],
+        ]
+      `);
     }
   });
 
   test('streams error response to affected clients', async () => {
     const fetch = (global.fetch = vi.fn());
-    const errorResponse: PushResponse = {
-      error: 'http',
-      status: 500,
-      details: 'Internal Server Error',
-      mutationIDs: [
-        {clientID: 'client1', id: 1},
-        {clientID: 'client2', id: 1},
-      ],
-    };
     fetch.mockResolvedValue({
       ok: false,
       status: 500,
@@ -354,8 +403,18 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result1 = pusher.enqueuePush('client1', makePush(1), 'jwt');
-    const result2 = pusher.enqueuePush('client2', makePush(1), 'jwt');
+    const result1 = pusher.enqueuePush(
+      'client1',
+      wsID,
+      makePush(1, 'client1'),
+      'jwt',
+    );
+    const result2 = pusher.enqueuePush(
+      'client2',
+      wsID,
+      makePush(1, 'client2'),
+      'jwt',
+    );
 
     expect(result1.type).toBe('stream');
     expect(result2.type).toBe('stream');
@@ -363,11 +422,17 @@ describe('pusher streaming', () => {
     if (result1.type === 'stream' && result2.type === 'stream') {
       const messages1: unknown[] = [];
       const messages2: unknown[] = [];
-      result1.stream.subscribe(msg => messages1.push(msg));
-      result2.stream.subscribe(msg => messages2.push(msg));
-
       // Wait for push to be processed
       await new Promise(resolve => setTimeout(resolve, 0));
+
+      for await (const msg of result1.stream) {
+        messages1.push(msg);
+        break;
+      }
+      for await (const msg of result2.stream) {
+        messages2.push(msg);
+        break;
+      }
 
       expect(messages1).toEqual([
         [
@@ -388,7 +453,7 @@ describe('pusher streaming', () => {
             error: 'http',
             status: 500,
             details: 'Internal Server Error',
-            mutationIDs: [{clientID: 'client2', id: 1}],
+            mutationIDs: [{clientID: 'client2', id: 2}],
           },
         ],
       ]);
@@ -408,15 +473,20 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result = pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    const result = pusher.enqueuePush(
+      clientID,
+      wsID,
+      makePush(1, clientID),
+      'jwt',
+    );
     expect(result.type).toBe('stream');
 
     if (result.type === 'stream') {
       const messages: unknown[] = [];
-      result.stream.subscribe(msg => messages.push(msg));
-
-      // Wait for push to be processed
-      await new Promise(resolve => setTimeout(resolve, 0));
+      for await (const msg of result.stream) {
+        messages.push(msg);
+        break;
+      }
 
       expect(messages).toEqual([
         [
@@ -441,25 +511,75 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result1 = pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    const result1 = pusher.enqueuePush(
+      clientID,
+      wsID,
+      makePush(1, clientID),
+      'jwt',
+    );
     expect(result1.type).toBe('stream');
 
     if (result1.type === 'stream') {
-      result1.stream.cleanup();
+      result1.stream.cancel();
 
       // After cleanup, should get a new stream
-      const result2 = pusher.enqueuePush(clientID, makePush(1), 'jwt');
+      const result2 = pusher.enqueuePush(
+        clientID,
+        wsID,
+        makePush(1, clientID),
+        'jwt',
+      );
       expect(result2.type).toBe('stream');
+    }
+  });
+
+  test('new websocket for same client creates new downstream', async () => {
+    const pusher = new PusherService(
+      config,
+      lc,
+      'cgid',
+      'http://example.com',
+      'api-key',
+    );
+    void pusher.run();
+
+    const result1 = pusher.enqueuePush(
+      clientID,
+      wsID,
+      makePush(1, clientID),
+      'jwt',
+    );
+    expect(result1.type).toBe('stream');
+    const result2 = pusher.enqueuePush(
+      clientID,
+      'new-ws-id',
+      makePush(1, clientID),
+      'jwt',
+    );
+    expect(result2.type).toBe('stream');
+    if (result1.type === 'stream') {
+      // should not be iterable anymore as it is closed
+      const iterator = result1.stream[Symbol.asyncIterator]();
+      await expect(iterator.next()).resolves.toEqual({
+        done: true,
+        value: undefined,
+      });
     }
   });
 });
 
 let timestamp = 0;
 let id = 0;
-function makePush(numMutations: number): PushBody {
+
+beforeEach(() => {
+  timestamp = 0;
+  id = 0;
+});
+
+function makePush(numMutations: number, clientID?: string): PushBody {
   return {
     clientGroupID: 'cgid',
-    mutations: Array.from({length: numMutations}, makeMutation),
+    mutations: Array.from({length: numMutations}, () => makeMutation(clientID)),
     pushVersion: 1,
     requestID: 'rid',
     schemaVersion: 1,
@@ -467,11 +587,11 @@ function makePush(numMutations: number): PushBody {
   };
 }
 
-function makeMutation(): Mutation {
+function makeMutation(clientID?: string): Mutation {
   return {
     type: 'custom',
     args: [],
-    clientID: 'cid',
+    clientID: clientID ?? 'cid',
     id: ++id,
     name: 'n',
     timestamp: ++timestamp,
