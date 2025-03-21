@@ -532,6 +532,11 @@ test('zero-cache --help', () => {
                                                                 to reduce the amount of heap memory used during initial sync (e.g. for tables                     
                                                                 with large rows).                                                                                 
                                                                                                                                                                   
+     --max-row-count number                                     optional                                                                                          
+       ZERO_MAX_ROW_COUNT env                                                                                                                                     
+                                                                The target number of rows to keep in the client side cache.                                       
+                                                                If unset, zero-cache will use the default value.                                                  
+                                                                                                                                                                  
      --server-version string                                    optional                                                                                          
        ZERO_SERVER_VERSION env                                                                                                                                    
                                                                 The version string outputted to logs when the server starts up.                                   
