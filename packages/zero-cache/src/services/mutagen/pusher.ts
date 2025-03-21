@@ -1,15 +1,27 @@
 import type {LogContext} from '@rocicorp/logger';
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
-import type {PushBody} from '../../../../zero-protocol/src/push.ts';
+import * as v from '../../../../shared/src/valita.ts';
+import {
+  pushResponseSchema,
+  type PushBody,
+  type PushResponse,
+} from '../../../../zero-protocol/src/push.ts';
 import type {Service} from '../service.ts';
-import type {MutationError} from './mutagen.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
 import {upstreamSchema} from '../../types/shards.ts';
+import type {HandlerResult} from '../../workers/connection.ts';
+import type {Downstream} from '../../../../zero-protocol/src/down.ts';
+import {Subscription} from '../../types/subscription.ts';
+import {groupBy} from '../../../../shared/src/arrays.ts';
 
 export interface Pusher {
-  enqueuePush(push: PushBody, jwt: string | undefined): void;
+  enqueuePush(
+    clientID: string,
+    wsID: string,
+    push: PushBody,
+    jwt: string | undefined,
+  ): HandlerResult;
 }
 
 type Config = Pick<ZeroConfig, 'app' | 'shard'>;
@@ -27,7 +39,7 @@ type Config = Pick<ZeroConfig, 'app' | 'shard'>;
  * - Mutations for a given client are always sent in-order
  * - Mutations for different clients in the same group may be interleaved
  */
-export class PusherService implements Service {
+export class PusherService implements Service, Pusher {
   readonly id: string;
   readonly #pusher: PushWorker;
   readonly #queue: Queue<PusherEntryOrStop>;
@@ -45,8 +57,28 @@ export class PusherService implements Service {
     this.id = clientGroupID;
   }
 
-  enqueuePush(push: PushBody, jwt: string | undefined) {
+  enqueuePush(
+    clientID: string,
+    wsID: string,
+    push: PushBody,
+    jwt: string | undefined,
+  ): HandlerResult {
+    const downstream: Subscription<Downstream> | undefined =
+      this.#pusher.maybeInitConnection(clientID, wsID);
+
     this.#queue.enqueue({push, jwt});
+
+    if (downstream) {
+      return {
+        type: 'stream',
+        source: 'pusher',
+        stream: downstream,
+      };
+    }
+
+    return {
+      type: 'ok',
+    };
   }
 
   run(): Promise<void> {
@@ -76,6 +108,7 @@ class PushWorker {
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
   readonly #config: Config;
+  readonly #clients: Map<string, [wsID: string, Subscription<Downstream>]>;
 
   constructor(
     config: Config,
@@ -89,6 +122,32 @@ class PushWorker {
     this.#queue = queue;
     this.#lc = lc.withContext('component', 'pusher');
     this.#config = config;
+    this.#clients = new Map();
+  }
+
+  /**
+   * Returns a new downstream stream if the clientID,wsID pair has not been seen before.
+   * If a clientID already exists with a different wsID, that client's downstream is cancelled.
+   */
+  maybeInitConnection(clientID: string, wsID: string) {
+    const existing = this.#clients.get(clientID);
+    if (existing && existing[0] === wsID) {
+      // already initialized for this socket
+      return undefined;
+    }
+
+    // client is back on a new connection
+    if (existing) {
+      existing[1].cancel();
+    }
+
+    const downstream = Subscription.create<Downstream>({
+      cleanup: () => {
+        this.#clients.delete(clientID);
+      },
+    });
+    this.#clients.set(clientID, [wsID, downstream]);
+    return downstream;
   }
 
   async run() {
@@ -97,7 +156,8 @@ class PushWorker {
       const rest = this.#queue.drain();
       const [pushes, terminate] = combinePushes([task, ...rest]);
       for (const push of pushes) {
-        await this.#processPush(push);
+        const response = await this.#processPush(push);
+        this.#fanOutResponses(response);
       }
 
       if (terminate) {
@@ -106,7 +166,46 @@ class PushWorker {
     }
   }
 
-  async #processPush(entry: PusherEntry): Promise<MutationError | undefined> {
+  /**
+   * The pusher can end up combining many push requests, from the client group, into a single request
+   * to the API server.
+   *
+   * In that case, many different clients will have their mutations present in the
+   * PushResponse.
+   *
+   * Each client is on a different websocket connection though, so we need to fan out the response
+   * to all the clients that were part of the push.
+   */
+  #fanOutResponses(response: PushResponse) {
+    if ('error' in response) {
+      const groupedMutationIDs = groupBy(
+        response.mutationIDs ?? [],
+        m => m.clientID,
+      );
+      for (const [clientID, mutationIDs] of groupedMutationIDs) {
+        const client = this.#clients.get(clientID);
+        if (client) {
+          client[1].push([
+            'push-response',
+            {
+              ...response,
+              mutationIDs,
+            },
+          ]);
+        }
+      }
+    } else {
+      const groupedMutations = groupBy(response.mutations, m => m.id.clientID);
+      for (const [clientID, mutations] of groupedMutations) {
+        const client = this.#clients.get(clientID);
+        if (client) {
+          client[1].push(['push-response', {mutations}]);
+        }
+      }
+    }
+  }
+
+  async #processPush(entry: PusherEntry): Promise<PushResponse> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -132,25 +231,34 @@ class PushWorker {
         headers,
         body: JSON.stringify(entry.push),
       });
-      // TODO: handle more varied response types from the user's API server
       if (!response.ok) {
-        return [
-          ErrorKind.MutationFailed,
-          `API server failed to process mutation: ${response.status} ${response.statusText}`,
-        ];
+        return {
+          error: 'http',
+          status: response.status,
+          details: await response.text(),
+          mutationIDs: entry.push.mutations.map(m => ({
+            id: m.id,
+            clientID: m.clientID,
+          })),
+        };
       }
+
+      const json = await response.json();
+      return v.parse(json, pushResponseSchema);
     } catch (e) {
       // We do not kill the pusher on error.
       // If the user's API server is down, the mutations will never be acknowledged
       // and the client will eventually retry.
       this.#lc.error?.('failed to push', e);
-      return [
-        ErrorKind.MutationFailed,
-        e instanceof Error ? e.message : 'unknown error',
-      ];
+      return {
+        error: 'zero-pusher',
+        details: String(e),
+        mutationIDs: entry.push.mutations.map(m => ({
+          id: m.id,
+          clientID: m.clientID,
+        })),
+      };
     }
-
-    return undefined;
   }
 }
 

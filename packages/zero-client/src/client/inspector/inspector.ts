@@ -1,3 +1,4 @@
+import {astToZQL} from '../../../../ast-to-zql/src/ast-to-zql.ts';
 import type {BTreeRead} from '../../../../replicache/src/btree/read.ts';
 import {type Read} from '../../../../replicache/src/dag/store.ts';
 import {readFromHash} from '../../../../replicache/src/db/read.ts';
@@ -22,7 +23,6 @@ import {astSchema, type AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../../../zql/src/ivm/view.ts';
-import {astToZQL} from '../../../../zql/src/query/ast-to-zql.ts';
 import {
   desiredQueriesPrefixForClient,
   ENTITIES_KEY_PREFIX,

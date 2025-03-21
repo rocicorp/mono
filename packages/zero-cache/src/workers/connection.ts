@@ -35,6 +35,7 @@ export type HandlerResult =
     }
   | {
       type: 'stream';
+      source: 'viewSyncer' | 'pusher';
       stream: Source<Downstream>;
     };
 
@@ -58,7 +59,8 @@ export class Connection {
   readonly #onClose: () => void;
   readonly #messageHandler: MessageHandler;
 
-  #outboundStream: Source<Downstream> | undefined;
+  #viewSyncerOutboundStream: Source<Downstream> | undefined;
+  #pusherOutboundStream: Source<Downstream> | undefined;
   #closed = false;
 
   constructor(
@@ -125,8 +127,10 @@ export class Connection {
     this.#ws.removeEventListener('message', this.#handleMessage);
     this.#ws.removeEventListener('close', this.#handleClose);
     this.#ws.removeEventListener('error', this.#handleError);
-    this.#outboundStream?.cancel();
-    this.#outboundStream = undefined;
+    this.#viewSyncerOutboundStream?.cancel();
+    this.#viewSyncerOutboundStream = undefined;
+    this.#pusherOutboundStream?.cancel();
+    this.#pusherOutboundStream = undefined;
     this.#onClose();
     if (this.#ws.readyState !== this.#ws.CLOSED) {
       this.#ws.close();
@@ -182,11 +186,22 @@ export class Connection {
       case 'ok':
         break;
       case 'stream': {
-        assert(
-          this.#outboundStream === undefined,
-          'Outbound stream already set for this connection!',
-        );
-        this.#outboundStream = result.stream;
+        switch (result.source) {
+          case 'viewSyncer':
+            assert(
+              this.#viewSyncerOutboundStream === undefined,
+              'Outbound stream already set for this connection!',
+            );
+            this.#viewSyncerOutboundStream = result.stream;
+            break;
+          case 'pusher':
+            assert(
+              this.#pusherOutboundStream === undefined,
+              'Outbound stream already set for this connection!',
+            );
+            this.#pusherOutboundStream = result.stream;
+            break;
+        }
         void this.#proxyOutbound(result.stream);
         break;
       }

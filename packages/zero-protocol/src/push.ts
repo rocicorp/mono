@@ -96,7 +96,6 @@ export const pushBodySchema = v.object({
 });
 
 export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);
-
 const mutationIDSchema = v.object({
   id: v.number(),
   clientID: v.string(),
@@ -104,14 +103,22 @@ const mutationIDSchema = v.object({
 
 const appErrorSchema = v.object({
   error: v.literal('app'),
-  details: v.string(),
+  // the user can add any additional fields in their API server
 });
 const zeroErrorSchema = v.object({
   error: v.literal('ooo-mutation'),
 });
+const tokenErrorSchema = v.object({
+  error: v.literal('token'),
+  // the user can add any additional fields in their API server
+});
 
 const mutationOkSchema = v.object({});
-const mutationErrorSchema = v.union(appErrorSchema, zeroErrorSchema);
+const mutationErrorSchema = v.union(
+  appErrorSchema,
+  zeroErrorSchema,
+  tokenErrorSchema,
+);
 const mutationResultSchema = v.union(mutationOkSchema, mutationErrorSchema);
 const mutationResponseSchema = v.object({
   id: mutationIDSchema,
@@ -136,13 +143,30 @@ const unsupportedSchemaVersionSchema = v.object({
   // were not processed by the server.
   mutationIDs: v.array(mutationIDSchema).optional(),
 });
+const httpErrorSchema = v.object({
+  error: v.literal('http'),
+  status: v.number(),
+  details: v.string(),
+  mutationIDs: v.array(mutationIDSchema).optional(),
+});
+const zeroPusherErrorSchema = v.object({
+  error: v.literal('zero-pusher'),
+  details: v.string(),
+  mutationIDs: v.array(mutationIDSchema).optional(),
+});
 
 const pushErrorSchema = v.union(
   unsupportedPushVersionSchema,
   unsupportedSchemaVersionSchema,
+  httpErrorSchema,
+  zeroPusherErrorSchema,
 );
 
 export const pushResponseSchema = v.union(pushOkSchema, pushErrorSchema);
+export const pushResponseMessageSchema = v.tuple([
+  v.literal('push-response'),
+  pushResponseSchema,
+]);
 
 export type InsertOp = v.Infer<typeof insertOpSchema>;
 export type UpsertOp = v.Infer<typeof upsertOpSchema>;

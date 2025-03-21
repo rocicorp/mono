@@ -1,17 +1,16 @@
 /* eslint-disable no-console */
+import * as m from '@rocicorp/logger';
 import {readFile} from 'node:fs/promises';
-import path from 'node:path';
 import process from 'node:process';
 import {createInterface} from 'node:readline';
 import {format, resolveConfig} from 'prettier';
-import {astToZQL} from '../../packages/zql/src/query/ast-to-zql.ts';
-import * as v from '../../packages/shared/src/valita.ts';
-import {parseOptions} from '../../packages/shared/src/options.ts';
-import type {Schema} from '../../packages/zero-schema/src/builder/schema-builder.ts';
-import {createSilentLogContext} from '../../packages/shared/src/logging-test-utils.ts';
-import {loadSchemaAndPermissions} from '../../packages/zero-cache/src/scripts/permissions.ts';
-import {serverToClient} from '../../packages/zero-schema/src/name-mapper.ts';
-import {mapAST} from '../../packages/zero-protocol/src/ast.ts';
+import {parseOptions} from '../../shared/src/options.ts';
+import * as v from '../../shared/src/valita.ts';
+import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
+import {mapAST} from '../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import {serverToClient} from '../../zero-schema/src/name-mapper.ts';
+import {astToZQL} from './ast-to-zql.ts';
 
 const options = {
   schema: {
@@ -23,7 +22,7 @@ const options = {
 };
 
 const config = parseOptions(options, process.argv.slice(2));
-const lc = createSilentLogContext();
+const lc = new m.LogContext('debug'); //new m.ConsoleLogger('error');
 
 let schema: Schema | undefined;
 if (config.schema) {
@@ -77,16 +76,10 @@ async function main(): Promise<void> {
       const filePath = process.argv[2];
       input = await readFile(filePath, 'utf-8');
     } else {
-      const execName = path.basename(process.argv[1]);
       console.error('Error: No input provided.');
       console.error('Usage:');
-      const runtime = process.versions.bun
-        ? 'bun'
-        : process.versions.deno
-          ? 'deno'
-          : 'node';
-      console.error(`  cat ast.json | ${runtime} ${execName}`);
-      console.error(`  ${runtime} ${execName} ast.json`);
+      console.error(`  cat ast.json | npx ast-to-zql`);
+      console.error(`  npx ast-to-zql ast.json`);
       process.exit(1);
     }
 
