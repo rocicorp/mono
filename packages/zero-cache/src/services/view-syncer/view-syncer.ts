@@ -124,8 +124,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #keepaliveMs: number;
   readonly #slowHydrateThreshold: number;
 
+  // The ViewSyncerService is only started in response to a connection,
+  // so #lastConnectTime is always initialized to now(). This is necessary
+  // to handle race conditions in which, e.g. the replica is ready and the
+  // CVR is accessed before the first connection sends a request.
+  //
   // Note: It is fine to update this variable outside of the lock.
-  #lastConnectTime = 0;
+  #lastConnectTime = Date.now();
   // Note: It is okay to add/remove clients without acquiring the lock.
   readonly #clients = new Map<string, ClientHandler>();
 
@@ -389,7 +394,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     initConnectionMessage: InitConnectionMessage,
   ): Source<Downstream> {
     return startSpan(tracer, 'vs.initConnection', () => {
-      this.#lastConnectTime = Date.now();
       const {clientID, wsID, baseCookie, schemaVersion, tokenData} = ctx;
       this.#authData = pickToken(this.#authData, tokenData?.decoded);
 
@@ -529,6 +533,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const {clientID, wsID} = ctx;
     const [cmd, body] = msg;
 
+    if (newClient !== undefined || !this.#clients.has(clientID)) {
+      this.#lastConnectTime = Date.now();
+    }
+
     return startAsyncSpan(
       tracer,
       `vs.#runInLockForClient(${cmd})`,
@@ -551,6 +559,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             if (newClient) {
               assert(newClient === client);
               checkClientAndCVRVersions(client.version(), cvr.version);
+            } else if (!this.#clients.has(clientID)) {
+              lc.warn?.(`Processing ${cmd} before initConnection was received`);
             }
 
             lc.debug?.(cmd, body);

@@ -47,6 +47,7 @@ import {testDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import {cvrSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {DataChange} from '../change-source/protocol/current/data.ts';
@@ -641,6 +642,14 @@ describe('view-syncer/service', () => {
     await testDBs.drop(cvrDB);
     replicaDbFile.delete();
   });
+
+  async function getCVROwner() {
+    const [{owner}] = await cvrDB<{owner: string}[]>`
+    SELECT owner FROM ${cvrDB(cvrSchema(SHARD))}.instances
+       WHERE "clientGroupID" = ${serviceID};
+  `;
+    return owner;
+  }
 
   test('adds desired queries from initConnectionMessage', async () => {
     const client = connect(SYNC_CONTEXT, [
@@ -3638,6 +3647,67 @@ describe('view-syncer/service', () => {
       kind: ErrorKind.ClientNotFound,
       message: 'Client not found',
     } satisfies ErrorBody);
+  });
+
+  test('initial CVR ownership takeover', async () => {
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDB,
+      SHARD,
+      'some-other-task-id',
+      serviceID,
+      ON_FAILURE,
+    );
+    const otherTaskOwnershipTime = Date.now() - 600_000;
+    await new CVRQueryDrivenUpdater(
+      cvrStore,
+      await cvrStore.load(lc, otherTaskOwnershipTime),
+      '07',
+      REPLICA_VERSION, // CVR is at a newer replica version.
+    ).flush(lc, otherTaskOwnershipTime, Date.now());
+
+    expect(await getCVROwner()).toBe('some-other-task-id');
+
+    // Signal that the replica is ready before any connection
+    // message is received.
+    stateChanges.push({state: 'version-ready'});
+
+    // Wait for the fire-and-forget takeover to happen.
+    await sleep(1000);
+    expect(await getCVROwner()).toBe(TASK_ID);
+  });
+
+  test('deleteClients before init connection initiates takeover', async () => {
+    // First simulate a takeover that has happened since the view-syncer
+    // was started.
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDB,
+      SHARD,
+      'some-other-task-id',
+      serviceID,
+      ON_FAILURE,
+    );
+    const otherTaskOwnershipTime = Date.now();
+    await new CVRQueryDrivenUpdater(
+      cvrStore,
+      await cvrStore.load(lc, otherTaskOwnershipTime),
+      '07',
+      REPLICA_VERSION, // CVR is at a newer replica version.
+    ).flush(lc, otherTaskOwnershipTime, Date.now());
+
+    expect(await getCVROwner()).toBe('some-other-task-id');
+
+    // deleteClients should be considered a new connection and
+    // take over the CVR.
+    await vs.deleteClients(SYNC_CONTEXT, [
+      'deleteClients',
+      {clientIDs: ['bar', 'no-such-client']},
+    ]);
+
+    // Wait for the fire-and-forget takeover to happen.
+    await sleep(1000);
+    expect(await getCVROwner()).toBe(TASK_ID);
   });
 
   test('sends invalid base cookie if client is ahead of CVR', async () => {
