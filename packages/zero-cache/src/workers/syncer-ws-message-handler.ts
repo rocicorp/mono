@@ -104,6 +104,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
               // We'll be removing crud mutators when we release custom mutators.
               return this.#pusher.enqueuePush(
                 this.#syncContext.clientID,
+                this.#syncContext.wsID,
                 msg[1],
                 this.#token,
               );
@@ -152,6 +153,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
         );
         return {
           type: 'stream',
+          source: 'viewSyncer',
           stream,
         };
       }

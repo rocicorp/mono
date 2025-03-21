@@ -902,6 +902,11 @@ export class Zero<
           downMessage[1],
         );
 
+      case 'push-response':
+        // Ignored for now. Will be sent to the `mutation-tracker`
+        // in order to resolve mutation promises.
+        break;
+
       default:
         msgType satisfies never;
         rejectInvalidMessage();

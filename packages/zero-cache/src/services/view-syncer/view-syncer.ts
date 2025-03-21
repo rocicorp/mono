@@ -417,6 +417,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         schemaVersion,
         downstream,
       );
+      // TODO: is it possible that there is a race here?
+      // That the client:
+      // 1. creates two websocket connections
+      // 2. closes the first one
+      // 3. due to network delay, the server receives the `initConnection` for the second connection first
+      // 4. then the server receives `initConnection` for the first connection, tearing down the second one here
+      //    (.get(clientID).close())
+      // 5. The server then receives the `closeConnection` for the first connection, closing all connections
+      //    it has to the client.
       this.#clients.get(clientID)?.close(`replaced by wsID: ${wsID}`);
       this.#clients.set(clientID, newClient);
 
