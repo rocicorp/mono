@@ -53,6 +53,10 @@ export class MutationTracker {
     }
   }
 
+  get size() {
+    return this.#outstandingMutations.size;
+  }
+
   #processPushError(error: PushError): void {
     const mids = error.mutationIDs;
 
