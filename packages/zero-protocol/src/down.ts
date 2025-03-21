@@ -9,6 +9,7 @@ import {
 } from './poke.ts';
 import {pongMessageSchema} from './pong.ts';
 import {pullResponseMessageSchema} from './pull.ts';
+import {pushResponseMessageSchema} from './push.ts';
 import {warmMessageSchema} from './warm.ts';
 
 export const downstreamSchema = v.union(
@@ -21,6 +22,7 @@ export const downstreamSchema = v.union(
   pokeEndMessageSchema,
   pullResponseMessageSchema,
   deleteClientsMessageSchema,
+  pushResponseMessageSchema,
 );
 
 export type Downstream = v.Infer<typeof downstreamSchema>;

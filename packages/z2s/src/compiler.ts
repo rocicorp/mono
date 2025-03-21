@@ -1,3 +1,4 @@
+import {zip} from '../../shared/src/arrays.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import type {
@@ -396,13 +397,4 @@ export class Compiler {
     const mapped = this.#nameMapper.tableName(table);
     return sql.ident(mapped);
   }
-}
-
-function zip<T>(a1: readonly T[], a2: readonly T[]): [T, T][] {
-  assert(a1.length === a2.length);
-  const result: [T, T][] = [];
-  for (let i = 0; i < a1.length; i++) {
-    result.push([a1[i], a2[i]]);
-  }
-  return result;
 }
