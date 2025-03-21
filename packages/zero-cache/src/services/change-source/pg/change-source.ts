@@ -161,8 +161,6 @@ async function checkAndUpdateUpstream(
   }
 }
 
-const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 5;
-
 /**
  * Postgres implementation of a {@link ChangeSource} backed by a logical
  * replication stream.

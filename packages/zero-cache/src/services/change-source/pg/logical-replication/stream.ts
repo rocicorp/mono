@@ -59,7 +59,7 @@ export async function subscribe(
   const messages = Subscription.create<StreamMessage>({
     cleanup: () => {
       readable.destroyed || readable.destroy();
-      session.end();
+      return session.end();
     },
   });
 
