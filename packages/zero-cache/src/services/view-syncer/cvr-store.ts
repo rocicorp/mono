@@ -241,7 +241,7 @@ export class CVRStore {
 
       if (owner !== this.#taskID) {
         if ((grantedAt ?? 0) > lastConnectTime) {
-          throw new OwnershipError(owner, grantedAt);
+          throw new OwnershipError(owner, grantedAt, lastConnectTime);
         } else {
           // Fire-and-forget an ownership change to signal the current owner.
           // Note that the query is structured such that it only succeeds in the
@@ -642,7 +642,7 @@ export class CVRStore {
             grantedAt: null,
           };
     if (owner !== this.#taskID && (grantedAt ?? 0) > lastConnectTime) {
-      throw new OwnershipError(owner, grantedAt);
+      throw new OwnershipError(owner, grantedAt, lastConnectTime);
     }
     if (version !== expected) {
       throw new ConcurrentModificationException(expected, version);
@@ -819,13 +819,18 @@ export class ConcurrentModificationException extends ErrorWithLevel {
 export class OwnershipError extends ErrorForClient {
   readonly name = 'OwnershipError';
 
-  constructor(owner: string | null, grantedAt: number | null) {
+  constructor(
+    owner: string | null,
+    grantedAt: number | null,
+    lastConnectTime: number,
+  ) {
     super(
       {
         kind: ErrorKind.Rehome,
         message:
           `CVR ownership was transferred to ${owner} at ` +
-          `${new Date(grantedAt ?? 0).toISOString()}`,
+          `${new Date(grantedAt ?? 0).toISOString()} ` +
+          `(last connect time: ${new Date(lastConnectTime).toISOString()})`,
         maxBackoffMs: 0,
       },
       'info',
