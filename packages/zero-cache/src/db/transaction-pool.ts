@@ -199,11 +199,12 @@ export class TransactionPool {
                 ...result.stmts.map(stmt =>
                   stmt
                     .execute()
-                    .then(() =>
-                      lc.debug?.(
-                        `Executed statement (${Date.now() - start} ms)`,
-                        (stmt as unknown as Stmt).strings,
-                      ),
+                    .then(
+                      () =>
+                        lc.debug?.(
+                          `Executed statement (${Date.now() - start} ms)`,
+                          (stmt as unknown as Stmt).strings,
+                        ),
                     )
                     .catch(e => this.fail(e)),
                 ),

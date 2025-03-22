@@ -14,6 +14,12 @@ import type {Message} from './pgoutput.types.ts';
 
 const DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE = 5;
 
+// Postgres will send keepalives every 30 seconds before timing out
+// a wal_sender. It is possible that these keepalives are not received
+// if there is back-pressure in the replication stream. To keep the
+// connection alive anyway, explicitly send keepalives if none have been sent.
+const MANUAL_KEEPALIVE_TIMEOUT = 32_000;
+
 export type StreamMessage = [lsn: bigint, Message | {tag: 'keepalive'}];
 
 export async function subscribe(
@@ -54,11 +60,24 @@ export async function subscribe(
     retriesIfReplicationSlotActive + 1,
   );
 
+  let lastAckTime = Date.now();
+  function sendAck(lsn: bigint) {
+    writable.write(makeAck(lsn));
+    lastAckTime = Date.now();
+  }
+  const ackTimer = setInterval(() => {
+    if (Date.now() - lastAckTime > MANUAL_KEEPALIVE_TIMEOUT) {
+      lc.warn?.(`sending postgres keepalive (replication stream backed up?)`);
+      sendAck(0n);
+    }
+  }, MANUAL_KEEPALIVE_TIMEOUT / 5);
+
   const typeParsers = await getTypeParsers(lc, db);
   const parser = new PgoutputParser(typeParsers);
   const messages = Subscription.create<StreamMessage>({
     cleanup: () => {
       readable.destroyed || readable.destroy();
+      clearInterval(ackTimer);
       return session.end();
     },
   });
@@ -67,7 +86,7 @@ export async function subscribe(
 
   return {
     messages,
-    acks: {push: (lsn: bigint) => writable.write(makeAck(lsn))},
+    acks: {push: sendAck},
   };
 }
 
@@ -126,8 +145,8 @@ function parseStreamMessage(
   return buffer[0] === 0x77 // XLogData
     ? [lsn, parser.parse(buffer.subarray(25))]
     : buffer.readInt8(17) // Primary keepalive message: shouldRespond
-      ? [lsn, {tag: 'keepalive'}]
-      : null;
+    ? [lsn, {tag: 'keepalive'}]
+    : null;
 }
 
 // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-STANDBY-STATUS-UPDATE
