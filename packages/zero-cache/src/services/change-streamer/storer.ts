@@ -8,7 +8,7 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
-import type {JSONValue} from '../../types/bigint-json.ts';
+import {type JSONValue} from '../../types/bigint-json.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
@@ -32,6 +32,7 @@ type SubscriberAndMode = {
 
 type QueueEntry =
   | ['change', WatermarkedChange]
+  | ['ready', callback: () => void]
   | ['subscriber', SubscriberAndMode]
   | StatusMessage
   | 'stop';
@@ -127,7 +128,14 @@ export class Storer implements Service {
     await db`UPDATE ${this.#cdc('replicationState')} SET ${db({owner})}`;
   }
 
-  async getLastWatermark(): Promise<string> {
+  async getLastWatermarkToStartStream(): Promise<string> {
+    // Before starting or restarting a stream from the change source,
+    // wait for all queued changes to be processed so that we pick up
+    // from the right spot.
+    const {promise: ready, resolve} = resolver();
+    this.#queue.enqueue(['ready', resolve]);
+    await ready;
+
     const [{lastWatermark}] = await this.#db<{lastWatermark: string}[]>`
       SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`;
     return lastWatermark;
@@ -193,18 +201,24 @@ export class Storer implements Service {
       this.#maybeReleaseBackPressure();
 
       const [msgType] = msg;
-      if (msgType === 'subscriber') {
-        const subscriber = msg[1];
-        if (tx) {
-          catchupQueue.push(subscriber); // Wait for the current tx to complete.
-        } else {
-          await this.#startCatchup([subscriber]); // Catch up immediately.
+      switch (msgType) {
+        case 'ready': {
+          const signalReady = msg[1];
+          signalReady();
+          continue;
         }
-        continue;
-      }
-      if (msgType === 'status') {
-        this.#onConsumed(msg);
-        continue;
+        case 'subscriber': {
+          const subscriber = msg[1];
+          if (tx) {
+            catchupQueue.push(subscriber); // Wait for the current tx to complete.
+          } else {
+            await this.#startCatchup([subscriber]); // Catch up immediately.
+          }
+          continue;
+        }
+        case 'status':
+          this.#onConsumed(msg);
+          continue;
       }
       // msgType === 'change'
       const [watermark, downstream] = msg[1];
