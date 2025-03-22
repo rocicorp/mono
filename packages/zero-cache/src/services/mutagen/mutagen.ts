@@ -45,6 +45,7 @@ export interface Mutagen {
     mutation: Mutation,
     authData: JWTPayload | undefined,
     schemaVersion: number | undefined,
+    customMutatorsEnabled: boolean,
   ): Promise<MutationError | undefined>;
 }
 
@@ -92,6 +93,7 @@ export class MutagenService implements Mutagen, Service {
     mutation: Mutation,
     authData: JWTPayload | undefined,
     schemaVersion: number | undefined,
+    customMutatorsEnabled = false,
   ): Promise<MutationError | undefined> {
     if (this.#limiter?.canDo() === false) {
       return Promise.resolve([
@@ -108,6 +110,8 @@ export class MutagenService implements Mutagen, Service {
       mutation,
       this.#writeAuthorizer,
       schemaVersion,
+      undefined,
+      customMutatorsEnabled,
     );
   }
 
@@ -133,6 +137,7 @@ export async function processMutation(
   writeAuthorizer: WriteAuthorizer,
   schemaVersion: number | undefined,
   onTxStart?: () => void | Promise<void>, // for testing
+  customMutatorsEnabled = false,
 ): Promise<MutationError | undefined> {
   assert(
     mutation.type === MutationType.CRUD,
@@ -215,6 +220,18 @@ export async function processMutation(
           lc.debug?.(e.message);
           return undefined;
         }
+        if (
+          e instanceof ErrorForClient &&
+          !errorMode &&
+          e.errorBody.kind === ErrorKind.InvalidPush &&
+          customMutatorsEnabled &&
+          i < 2
+        ) {
+          // We're temporarily supporting custom mutators AND crud mutators at the same time.
+          // This can create a lot of OOO mutation errors since we do not know when the API server
+          // has applied a custom mutation before moving on to process CRUD mutations.
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
         if (e instanceof ErrorForClient || errorMode) {
           lc.error?.('Process mutation error', e);
           throw e;
@@ -231,7 +248,6 @@ export async function processMutation(
           break;
         }
         lc.error?.('Got error running mutation, re-running in error mode', e);
-        ``;
         errorMode = true;
         i--;
       }
