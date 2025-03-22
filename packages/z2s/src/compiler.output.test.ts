@@ -7,6 +7,7 @@ import {
   number,
   string,
   table,
+  timestamp,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 
@@ -30,6 +31,7 @@ const issue = table('issue')
     description: string(),
     closed: boolean(),
     ownerId: string().optional(),
+    created: timestamp(),
   })
   .primaryKey('id');
 
@@ -770,7 +772,7 @@ test('related thru junction edge', () => {
     {
       "text": "SELECT (
             SELECT COALESCE(array_agg(row_to_json("inner_labels")) , ARRAY[]::json[]) FROM (SELECT "table_1"."id","table_1"."name" FROM "issue_label" as "issueLabel" JOIN "label" as "table_1" ON "issueLabel"."label_id" = "table_1"."id" WHERE ("issue"."id" = "issueLabel"."issue_id")    ) "inner_labels"
-          ) as "labels","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId" FROM "issue"",
+          ) as "labels","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId",EXTRACT(EPOCH FROM "created"::timestamp AT TIME ZONE 'UTC'::TIMESTAMPTZ) * 1000 as "created" FROM "issue"",
       "values": [],
     }
   `);
@@ -800,7 +802,7 @@ test('related w/o junction edge', () => {
     {
       "text": "SELECT (
           SELECT COALESCE(array_agg(row_to_json("inner_owner")) , ARRAY[]::json[]) FROM (SELECT "user"."id","user"."name","user"."age" FROM "user"  WHERE ("issue"."ownerId" = "user"."id")  ) "inner_owner"
-        ) as "owner","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId" FROM "issue"",
+        ) as "owner","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId",EXTRACT(EPOCH FROM "created"::timestamp AT TIME ZONE 'UTC'::TIMESTAMPTZ) * 1000 as "created" FROM "issue"",
       "values": [],
     }
   `);

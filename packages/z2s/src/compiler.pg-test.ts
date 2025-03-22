@@ -49,6 +49,7 @@ beforeAll(async () => {
       description: `Description for issue ${i + 1}`,
       closed: i % 2 === 0,
       ownerId: i === 0 ? null : `user${i}`,
+      createdAt: Date.now() - i * 86400000,
     })),
     user: Array.from({length: 3}, (_, i) => ({
       id: `user${i + 1}`,
@@ -218,7 +219,10 @@ function noBigint(row: Record<string, unknown>) {
 describe('compiling ZQL to SQL', () => {
   test('basic where clause', async () => {
     const query = issueQuery.where('title', '=', 'issue 1');
-    const sqlQuery = formatPg(compile(ast(query), schema.tables));
+    const c = compile(ast(query), schema.tables);
+    console.log('compile', c);
+    const sqlQuery = formatPg(c);
+    console.log('sqlQuery', sqlQuery);
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],

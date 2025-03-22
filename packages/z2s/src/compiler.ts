@@ -14,7 +14,10 @@ import {
   type SimpleCondition,
 } from '../../zero-protocol/src/ast.ts';
 import {clientToServer, NameMapper} from '../../zero-schema/src/name-mapper.ts';
-import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
+import type {
+  TableSchema,
+  ValueType,
+} from '../../zero-schema/src/table-schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {sql} from './sql.ts';
 import type {SQLQuery} from '@databases/sql';
@@ -54,11 +57,9 @@ export class Compiler {
     correlation: SQLQuery | undefined,
   ) {
     const selectionSet = this.related(ast.related ?? [], format, ast.table);
-    const table = this.#tables[ast.table];
-    for (const column of Object.keys(table.columns)) {
-      selectionSet.push(
-        sql`${sql.ident(ast.table)}.${this.#mapColumn(ast.table, column)}`,
-      );
+    const tableSchema = this.#tables[ast.table];
+    for (const [column, columnSchema] of Object.entries(tableSchema.columns)) {
+      selectionSet.push(this.#selectCol(ast.table, column, columnSchema.type));
     }
     return sql`SELECT ${sql.join(selectionSet, ',')} FROM ${this.#mapTable(
       ast.table,
@@ -396,5 +397,15 @@ export class Compiler {
   #mapTableNoAlias(table: string) {
     const mapped = this.#nameMapper.tableName(table);
     return sql.ident(mapped);
+  }
+
+  #selectCol(table: string, column: string, type: ValueType) {
+    if (type === 'date' || type === 'timestamp') {
+      return sql`EXTRACT(EPOCH FROM ${this.#mapColumnNoAlias(
+        table,
+        column,
+      )}::timestamp AT TIME ZONE 'UTC') * 1000 as ${sql.ident(column)}`;
+    }
+    return sql`${sql.ident(table)}.${this.#mapColumn(table, column)}`;
   }
 }

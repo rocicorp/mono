@@ -596,8 +596,8 @@ function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
     filter.op === 'ILIKE'
       ? 'LIKE'
       : filter.op === 'NOT ILIKE'
-        ? 'NOT LIKE'
-        : filter.op,
+      ? 'NOT LIKE'
+      : filter.op,
   )} ${valuePositionToSQL(filter.right)}`;
 }
 
@@ -621,10 +621,10 @@ function getJsType(value: unknown): ValueType {
   return typeof value === 'string'
     ? 'string'
     : typeof value === 'number'
-      ? 'number'
-      : typeof value === 'boolean'
-        ? 'boolean'
-        : 'json';
+    ? 'number'
+    : typeof value === 'boolean'
+    ? 'boolean'
+    : 'json';
 }
 
 /**
@@ -765,6 +765,8 @@ function toSQLiteType(v: unknown, type: ValueType): unknown {
       return v === null ? null : v ? 1 : 0;
     case 'number':
     case 'string':
+    case 'timestamp':
+    case 'date':
     case 'null':
       return v;
     case 'json':
@@ -784,6 +786,10 @@ export function toSQLiteTypeName(type: ValueType) {
       return 'NULL';
     case 'json':
       return 'TEXT';
+    case 'date':
+      return 'REAL';
+    case 'timestamp':
+      return 'REAL';
   }
 }
 
@@ -815,6 +821,8 @@ function fromSQLiteType(valueType: ValueType, v: Value): Value {
       return !!v;
     case 'number':
     case 'string':
+    case 'date':
+    case 'timestamp':
     case 'null':
       if (typeof v === 'bigint') {
         if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
