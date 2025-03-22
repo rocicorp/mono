@@ -102,8 +102,9 @@ export class ProcessManager {
     }
     this.#all.add(proc);
 
-    proc.on('error', err =>
-      this.#lc.error?.(`error from ${name} ${proc.pid}`, err),
+    proc.on(
+      'error',
+      err => this.#lc.error?.(`error from ${name} ${proc.pid}`, err),
     );
     proc.on('close', (code, signal) =>
       this.#onExit(code, signal, null, type, name, proc),
