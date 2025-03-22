@@ -6,6 +6,7 @@ import {
   number,
   string,
   table,
+  timestamp,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 import type {Row} from '../query.ts';
 
@@ -17,6 +18,7 @@ const issue = table('issue')
     description: string(),
     closed: boolean(),
     ownerId: string().from('owner_id').optional(),
+    createdAt: timestamp(),
   })
   .primaryKey('id');
 
@@ -177,7 +179,8 @@ CREATE TABLE IF NOT EXISTS "issues" (
   "title" TEXT NOT NULL,
   "description" TEXT NOT NULL,
   "closed" BOOLEAN NOT NULL,
-  "owner_id" TEXT
+  "owner_id" TEXT,
+  "createdAt" TIMESTAMP NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "users" (

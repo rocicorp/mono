@@ -50,7 +50,7 @@ import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../../../zqlite/src/test/source-factory.ts';
-import {compile} from '../../compiler.ts';
+import {compile, extractZqlResult} from '../../compiler.ts';
 import {formatPg} from '../../sql.ts';
 import '../comparePg.ts';
 import {writeChinook} from './get-deps.ts';
@@ -404,9 +404,6 @@ async function checkRemove(
 
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
-  const sqlQuery = formatPg(
-    compile(ast(zqliteQuery), schema.tables, zqliteQuery.format),
-  );
 
   let numOps = 0;
   const removedRows: [string, Row][] = [];
@@ -464,10 +461,7 @@ async function checkRemove(
       row,
     });
 
-    const pgResult = await sql.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
-    );
+    const pgResult = await runZqlAsSql(pg, zqliteQuery);
     // TODO: empty single relationships return `undefined` from ZQL and `null` from PG
     expect(
       mapResultToClientNames(
@@ -500,9 +494,6 @@ async function checkAddBack(
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
   const mapper = clientToServer(schema.tables);
-  const sqlQuery = formatPg(
-    compile(ast(zqliteQuery), schema.tables, zqliteQuery.format),
-  );
 
   for (const [table, row] of rowsToAdd) {
     const mappedRow = mapRow(row, table, clientToServerMapper);
@@ -519,10 +510,7 @@ async function checkAddBack(
       row,
     });
 
-    const pgResult = await pg.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
-    );
+    const pgResult = await runZqlAsSql(pg, zqliteQuery);
     expect(
       mapResultToClientNames(
         zqliteMaterialized.data,
@@ -551,9 +539,6 @@ async function checkEditToRandom(
 
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
-  const sqlQuery = formatPg(
-    compile(ast(zqliteQuery), schema.tables, zqliteQuery.format),
-  );
 
   let numOps = 0;
   const editedRows: [string, [original: Row, edited: Row]][] = [];
@@ -615,10 +600,7 @@ async function checkEditToRandom(
       row: editedRow,
     });
 
-    const pgResult = await sql.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
-    );
+    const pgResult = await runZqlAsSql(pg, zqliteQuery);
     // TODO: relationships return `undefined` from ZQL and `null` from PG
     expect(
       mapResultToClientNames(
@@ -672,9 +654,6 @@ async function checkEditToMatch(
 ) {
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
-  const sqlQuery = formatPg(
-    compile(ast(zqliteQuery), schema.tables, zqliteQuery.format),
-  );
 
   for (const [table, [original, edited]] of rowsToEdit) {
     const tableSchema = schema.tables[table as keyof Schema['tables']];
@@ -705,10 +684,7 @@ async function checkEditToMatch(
       row: original,
     });
 
-    const pgResult = await pg.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
-    );
+    const pgResult = await runZqlAsSql(pg, zqliteQuery);
     expect(
       mapResultToClientNames(
         zqliteMaterialized.data,
@@ -780,12 +756,14 @@ function gatherRows(q: AnyQuery): Map<string, Map<string, Row>> {
   return rows;
 }
 
-function runZqlAsSql(
+async function runZqlAsSql(
   pg: PostgresDB,
   query: Query<Schema, keyof Schema['tables']>,
 ) {
   const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
-  return pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]);
+  return extractZqlResult(
+    await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
+  );
 }
 
 function ast(q: Query<Schema, keyof Schema['tables']>) {

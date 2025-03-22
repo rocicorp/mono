@@ -43,6 +43,22 @@ export function json<T extends ReadonlyJSONValue = ReadonlyJSONValue>() {
   });
 }
 
+export function date<T extends ReadonlyJSONValue = ReadonlyJSONValue>() {
+  return new ColumnBuilder({
+    type: 'date',
+    optional: false,
+    customType: null as unknown as T,
+  });
+}
+
+export function timestamp<T extends ReadonlyJSONValue = ReadonlyJSONValue>() {
+  return new ColumnBuilder({
+    type: 'timestamp',
+    optional: false,
+    customType: null as unknown as T,
+  });
+}
+
 export function enumeration<T extends string>() {
   return new ColumnBuilder({
     type: 'string',

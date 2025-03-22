@@ -34,8 +34,8 @@ beforeAll(async () => {
   sqlite = new Database(lc, ':memory:');
 
   await pg.unsafe(/*sql*/ `
-    INSERT INTO "issues" ("id", "title", "description", "closed", "owner_id") VALUES (
-      'issue1', 'Test Issue 1', 'Description for issue 1', false, 'user1'
+    INSERT INTO "issues" ("id", "title", "description", "closed", "owner_id", "createdAt") VALUES (
+      'issue1', 'Test Issue 1', 'Description for issue 1', false, 'user1', TIMESTAMP '2001-02-16 20:38:40'
     );
 
     INSERT INTO "users" ("id", "name") VALUES (
@@ -89,25 +89,26 @@ test('discord report https://discord.com/channels/830183651022471199/13475501749
 
   expect(mapResultToClientNames(view.data, schema, 'issue'))
     .toMatchInlineSnapshot(`
-    [
-      {
-        "closed": false,
-        "comments": [
-          {
-            "authorId": "user1",
-            "createdAt": 0,
-            "id": "comment1",
-            "issueId": "issue1",
-            "text": "Comment 1",
-          },
-        ],
-        "description": "Description for issue 1",
-        "id": "issue1",
-        "ownerId": "user1",
-        "title": "Test Issue 1",
-      },
-    ]
-  `);
+      [
+        {
+          "closed": false,
+          "comments": [
+            {
+              "authorId": "user1",
+              "createdAt": 0,
+              "id": "comment1",
+              "issueId": "issue1",
+              "text": "Comment 1",
+            },
+          ],
+          "createdAt": 982355920000,
+          "description": "Description for issue 1",
+          "id": "issue1",
+          "ownerId": "user1",
+          "title": "Test Issue 1",
+        },
+      ]
+    `);
 
   queryDelegate.getSource('issues')?.push({
     type: 'edit',

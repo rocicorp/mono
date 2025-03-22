@@ -55,6 +55,8 @@ type TypeNameToTypeMap = {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   json: any;
+  timestamp: number;
+  date: number;
 };
 
 export type ColumnTypeName<T extends SchemaValue | ValueType> =
@@ -70,16 +72,16 @@ export type SchemaValueToTSType<T extends SchemaValue | ValueType> =
   T extends ValueType
     ? TypeNameToTypeMap[T]
     : T extends {
-          optional: true;
-        }
-      ?
-          | (T extends SchemaValueWithCustomType<infer V>
-              ? V
-              : TypeNameToTypeMap[ColumnTypeName<T>])
-          | null
-      : T extends SchemaValueWithCustomType<infer V>
-        ? V
-        : TypeNameToTypeMap[ColumnTypeName<T>];
+        optional: true;
+      }
+    ?
+        | (T extends SchemaValueWithCustomType<infer V>
+            ? V
+            : TypeNameToTypeMap[ColumnTypeName<T>])
+        | null
+    : T extends SchemaValueWithCustomType<infer V>
+    ? V
+    : TypeNameToTypeMap[ColumnTypeName<T>];
 
 type Connection = {
   readonly sourceField: readonly string[];
@@ -98,10 +100,10 @@ export type Relationship =
 export type LastInTuple<T extends Relationship> = T extends readonly [infer L]
   ? L
   : T extends readonly [unknown, infer L]
-    ? L
-    : T extends readonly [unknown, unknown, infer L]
-      ? L
-      : never;
+  ? L
+  : T extends readonly [unknown, unknown, infer L]
+  ? L
+  : never;
 
 export type AtLeastOne<T> = readonly [T, ...T[]];
 
@@ -139,11 +141,10 @@ export type IsOpaque<T> = T extends {
   ? true
   : false;
 
-export type ExpandRecursiveSkipOpaque<T> =
-  IsOpaque<T> extends true
-    ? T
-    : T extends object
-      ? T extends infer O
-        ? {[K in keyof O]: ExpandRecursiveSkipOpaque<O[K]>}
-        : never
-      : T;
+export type ExpandRecursiveSkipOpaque<T> = IsOpaque<T> extends true
+  ? T
+  : T extends object
+  ? T extends infer O
+    ? {[K in keyof O]: ExpandRecursiveSkipOpaque<O[K]>}
+    : never
+  : T;
