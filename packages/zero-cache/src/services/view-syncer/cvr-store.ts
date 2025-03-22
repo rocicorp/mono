@@ -334,9 +334,10 @@ export class CVRStore {
    *       {@link putRowRecord()} with `refCounts: null` in order to properly
    *       produce the appropriate delete patch when catching up old clients.
    *
-   * This `delRowRecord()` method, on the other hand, is only used when a
-   * row record is being *replaced* by another RowRecord, which currently
-   * only happens when the columns of the row key change.
+   * This `delRowRecord()` method, on the other hand, is only used:
+   * - when a row record is being *replaced* by another RowRecord, which currently
+   *   only happens when the columns of the row key change
+   * - for "canceling" the put of a row that was not in the CVR in the first place.
    */
   delRowRecord(id: RowID): void {
     this.#pendingRowRecordUpdates.set(id, null);

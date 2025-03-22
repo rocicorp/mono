@@ -683,14 +683,21 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           ? existing.patchVersion
           : this.#assertNewVersion();
       const rowVersion = version ?? existing?.rowVersion;
-      assert(rowVersion, `Cannot delete a row that is not in the CVR`);
-
-      this._cvrStore.putRowRecord({
-        id,
-        rowVersion,
-        patchVersion,
-        refCounts: merged,
-      });
+      if (rowVersion) {
+        this._cvrStore.putRowRecord({
+          id,
+          rowVersion,
+          patchVersion,
+          refCounts: merged,
+        });
+      } else {
+        // This means that a row that was not in the CVR was added during
+        // this update, and then subsequently removed. Since there's no
+        // corresponding row in the CVR itself, cancel the previous put.
+        // Note that we still send a 'del' patch to the client in order to
+        // cancel the previous 'put' patch.
+        this._cvrStore.delRowRecord(id);
+      }
 
       if (merged === null) {
         // All refCounts have gone to zero, if row was previously synced
