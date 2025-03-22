@@ -52,14 +52,14 @@ export function cmpVersions(
   return a === null && b === null
     ? 0
     : a === null
-    ? -1
-    : b === null
-    ? 1
-    : a.stateVersion < b.stateVersion
-    ? -1
-    : a.stateVersion > b.stateVersion
-    ? 1
-    : (a.minorVersion ?? 0) - (b.minorVersion ?? 0);
+      ? -1
+      : b === null
+        ? 1
+        : a.stateVersion < b.stateVersion
+          ? -1
+          : a.stateVersion > b.stateVersion
+            ? 1
+            : (a.minorVersion ?? 0) - (b.minorVersion ?? 0);
 }
 
 export function versionToCookie(v: CVRVersion): string {

@@ -145,8 +145,8 @@ function parseStreamMessage(
   return buffer[0] === 0x77 // XLogData
     ? [lsn, parser.parse(buffer.subarray(25))]
     : buffer.readInt8(17) // Primary keepalive message: shouldRespond
-    ? [lsn, {tag: 'keepalive'}]
-    : null;
+      ? [lsn, {tag: 'keepalive'}]
+      : null;
 }
 
 // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-STANDBY-STATUS-UPDATE
