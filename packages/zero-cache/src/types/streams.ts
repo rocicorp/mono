@@ -1,6 +1,12 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {pipeline, Readable, Writable, type DuplexOptions} from 'node:stream';
+import {
+  pipeline,
+  Readable,
+  Transform,
+  Writable,
+  type DuplexOptions,
+} from 'node:stream';
 import {
   createWebSocketStream,
   type CloseEvent,
@@ -88,29 +94,29 @@ export function stream<In extends JSONValue, Out extends JSONValue>(
   });
 
   // Outgoing transform.
-  async function sendOut() {
-    for await (const msg of outstream) {
-      // Upstream backpressure is signaled by the tcp socket buffer.
-      if (!duplex.write(BigIntJSON.stringify(msg))) {
-        const {promise: canWriteMore, resolve: drained} = resolver();
+  function streamOut() {
+    // Mainly used for verifying that back-pressure kicks in tests.
+    duplex.on('drain', () => lc.debug?.(`drained messages to ${endpoint}`));
 
-        const start = Date.now();
-        duplex.once('drain', drained);
-        await canWriteMore;
-        lc.debug?.(
-          `drained messages to ${endpoint} in ${Date.now() - start} ms`,
-        );
-      }
-    }
+    pipeline(
+      Readable.from(outstream),
+      new Transform({
+        objectMode: true,
+        transform: (msg, _encoding, callback) =>
+          callback(null, BigIntJSON.stringify(msg)),
+      }),
+      duplex,
+      err => (err ? outstream.fail(err) : outstream.cancel()),
+    );
   }
 
   if (ws.readyState === ws.CONNECTING) {
     ws.on('open', () => {
       lc.info?.(`connected to ${endpoint}`);
-      void sendOut();
+      streamOut();
     });
   } else {
-    void sendOut();
+    streamOut();
   }
 
   // Incoming transform.
@@ -162,7 +168,7 @@ export function pipe<T>(
         callback();
       },
     }),
-    () => sink.cancel(),
+    err => (err ? sink.fail(err) : sink.cancel()),
   );
 }
 
