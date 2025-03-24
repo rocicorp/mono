@@ -69,15 +69,6 @@ export async function runSchemaMigrations(
     randInt(0, Number.MAX_SAFE_INTEGER).toString(36),
   );
   const db = new Database(log, dbPath);
-  db.unsafeMode(true); // Enables journal_mode = OFF
-  db.pragma('locking_mode = EXCLUSIVE');
-  db.pragma('foreign_keys = OFF');
-  db.pragma('journal_mode = OFF');
-  db.pragma('synchronous = OFF');
-  // Unfortunately, AUTO_VACUUM is not compatible with BEGIN CONCURRENT,
-  // so it is not an option for the replica file.
-  // https://sqlite.org/forum/forumpost/25f183416a
-  // db.pragma('auto_vacuum = INCREMENTAL');
 
   try {
     const versionMigrations = sorted(incrementalMigrationMap);
@@ -112,6 +103,16 @@ export async function runSchemaMigrations(
     });
 
     if (versions.dataVersion < codeVersion) {
+      db.unsafeMode(true); // Enables journal_mode = OFF
+      db.pragma('locking_mode = EXCLUSIVE');
+      db.pragma('foreign_keys = OFF');
+      db.pragma('journal_mode = OFF');
+      db.pragma('synchronous = OFF');
+      // Unfortunately, AUTO_VACUUM is not compatible with BEGIN CONCURRENT,
+      // so it is not an option for the replica file.
+      // https://sqlite.org/forum/forumpost/25f183416a
+      // db.pragma('auto_vacuum = INCREMENTAL');
+
       const migrations =
         versions.dataVersion === 0
           ? // For the empty database v0, only run the setup migration.
