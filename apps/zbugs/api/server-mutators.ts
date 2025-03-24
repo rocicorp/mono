@@ -32,7 +32,7 @@ export function createServerMutators(publicJwk: string) {
           created: Date.now(),
           modified: Date.now(),
         });
-        void notify(tx, v, {kind: 'create-issue', issueID: id});
+        await notify(tx, v, {kind: 'create-issue', issueID: id});
       },
 
       async update(tx, update: UpdateValue<typeof schema.tables.issue>) {

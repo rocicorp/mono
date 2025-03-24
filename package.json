@@ -15,10 +15,12 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "turbo run lint",
     "format": "turbo run format",
     "check-format": "turbo run check-format",
     "check-types": "turbo run check-types",
+    "check-types:watch": "turbo watch check-types",
     "build-ci": "npm install && turbo run build",
     "start-zero-cache": "cd packages/zero-cache && npm run start"
   },
