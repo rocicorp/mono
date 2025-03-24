@@ -2,10 +2,9 @@ import {schema} from './schema.ts';
 import {must} from '../../../packages/shared/src/must.ts';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import type {UpdateValue, Transaction, CustomMutatorDefs} from '@rocicorp/zero';
-import type {JWK} from 'jose';
 import {Validators} from './validators.ts';
 
-type AddEmojiArgs = {
+export type AddEmojiArgs = {
   id: string;
   unicode: string;
   annotation: string;
@@ -14,26 +13,22 @@ type AddEmojiArgs = {
   created: number;
 };
 
-type CreateIssueArgs = {
+export type CreateIssueArgs = {
   id: string;
   title: string;
-  description?: string;
+  description?: string | undefined;
   created: number;
   modified: number;
 };
 
-type AddCommentArgs = {
+export type AddCommentArgs = {
   id: string;
   issueID: string;
   body: string;
   created: number;
 };
 
-export function createMutators(publicJwk: string) {
-  // This `?? {}` is a workaround as the Vite build system ends up invoking
-  // `createMutators` via `configureServer` in `vite.config.ts`.
-  // On github CI we do not have access to the publicJwk, so we default to an empty object.
-  const v = new Validators(JSON.parse(publicJwk ?? '{}') as JWK);
+export function createMutators(v: Validators) {
   return {
     issue: {
       async create(
@@ -41,12 +36,6 @@ export function createMutators(publicJwk: string) {
         {id, title, description, created, modified}: CreateIssueArgs,
       ) {
         const creatorID = must((await v.verifyToken(tx)).sub);
-
-        // See the "A Puzzle" heading in https://github.com/rocicorp/mono/pull/4035
-        if (tx.location === 'server') {
-          created = modified = Date.now();
-        }
-
         await tx.mutate.issue.insert({
           id,
           title,
@@ -64,10 +53,7 @@ export function createMutators(publicJwk: string) {
         change: UpdateValue<typeof schema.tables.issue> & {modified: number},
       ) {
         await v.assertIsCreatorOrAdmin(tx, tx.query.issue, change.id);
-        await tx.mutate.issue.update({
-          ...change,
-          modified: tx.location === 'server' ? Date.now() : change.modified,
-        });
+        await tx.mutate.issue.update(change);
       },
 
       async delete(tx, id: string) {
@@ -77,30 +63,15 @@ export function createMutators(publicJwk: string) {
 
       async addLabel(
         tx,
-        {
-          issueID,
-          labelID,
-        }: {
-          issueID: string;
-          labelID: string;
-        },
+        {issueID, labelID}: {issueID: string; labelID: string},
       ) {
         await v.assertIsCreatorOrAdmin(tx, tx.query.issue, issueID);
-        await tx.mutate.issueLabel.insert({
-          issueID,
-          labelID,
-        });
+        await tx.mutate.issueLabel.insert({issueID, labelID});
       },
 
       async removeLabel(
         tx,
-        {
-          issueID,
-          labelID,
-        }: {
-          issueID: string;
-          labelID: string;
-        },
+        {issueID, labelID}: {issueID: string; labelID: string},
       ) {
         await v.assertIsCreatorOrAdmin(tx, tx.query.issue, issueID);
         await tx.mutate.issueLabel.delete({issueID, labelID});
@@ -124,34 +95,15 @@ export function createMutators(publicJwk: string) {
 
     comment: {
       async add(tx, {id, issueID, body, created}: AddCommentArgs) {
-        if (tx.location === 'server') {
-          created = Date.now();
-        }
-
         const jwt = await v.verifyToken(tx);
         const creatorID = must(jwt.sub);
 
         await v.assertUserCanSeeIssue(tx, jwt, issueID);
 
-        await tx.mutate.comment.insert({
-          id,
-          issueID,
-          creatorID,
-          body,
-          created,
-        });
+        await tx.mutate.comment.insert({id, issueID, creatorID, body, created});
       },
 
-      async edit(
-        tx,
-        {
-          id,
-          body,
-        }: {
-          id: string;
-          body: string;
-        },
-      ) {
+      async edit(tx, {id, body}: {id: string; body: string}) {
         await v.assertIsCreatorOrAdmin(tx, tx.query.comment, id);
         await tx.mutate.comment.update({id, body});
       },
@@ -175,11 +127,7 @@ export function createMutators(publicJwk: string) {
           issueID,
           labelID,
           labelName,
-        }: {
-          labelID: string;
-          issueID: string;
-          labelName: string;
-        },
+        }: {labelID: string; issueID: string; labelName: string},
       ) {
         const jwt = await v.verifyToken(tx);
         assert(v.isAdmin(jwt), 'Only admins can create labels');
@@ -208,10 +156,6 @@ export function createMutators(publicJwk: string) {
     subjectType: 'issue' | 'comment',
     {id, unicode, annotation, subjectID, creatorID, created}: AddEmojiArgs,
   ) {
-    if (tx.location === 'server') {
-      created = Date.now();
-    }
-
     const jwt = await v.verifyToken(tx);
     creatorID = must(jwt.sub);
 
