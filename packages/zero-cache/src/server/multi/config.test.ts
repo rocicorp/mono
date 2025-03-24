@@ -532,9 +532,14 @@ test('zero-cache --help', () => {
                                                                 to reduce the amount of heap memory used during initial sync (e.g. for tables                     
                                                                 with large rows).                                                                                 
                                                                                                                                                                   
-     --max-row-count number                                     optional                                                                                          
-       ZERO_MAX_ROW_COUNT env                                                                                                                                     
-                                                                The target number of rows to keep in the client side cache.                                       
+     --target-client-row-count number                           optional                                                                                          
+       ZERO_TARGET_CLIENT_ROW_COUNT env                                                                                                                           
+                                                                The target number of rows to keep per client in the client side cache.                            
+                                                                This limit is a soft limit. Active queries are allowed to                                         
+                                                                use more rows than this limit, but if the cache grows to                                          
+                                                                this size, zero-cache will evict inactive queries from the cache                                  
+                                                                to reach this limit.                                                                              
+                                                                                                                                                                  
                                                                 If unset, zero-cache will use the default value.                                                  
                                                                                                                                                                   
      --server-version string                                    optional                                                                                          
