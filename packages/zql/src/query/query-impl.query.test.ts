@@ -4,14 +4,10 @@ import {deepClone} from '../../../shared/src/deep-clone.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
-import {
-  createSchema,
-  type Schema,
-} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {number, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
-import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.ts';
-import type {AdvancedQuery} from './query-internal.ts';
+import {newQuery, type QueryDelegate} from './query-impl.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
 
@@ -561,7 +557,7 @@ describe('joins and filters', () => {
     addData(queryDelegate);
 
     const q1 = newQuery(queryDelegate, schema, 'issue').one();
-    expect((q1 as unknown as QueryImpl<Schema, string>).format).toEqual({
+    expect(q1.format).toEqual({
       singular: true,
       relationships: {},
     });
@@ -569,7 +565,7 @@ describe('joins and filters', () => {
     const q2 = newQuery(queryDelegate, schema, 'issue')
       .one()
       .related('comments', q => q.one());
-    expect((q2 as unknown as QueryImpl<never, never>).format).toEqual({
+    expect(q2.format).toEqual({
       singular: true,
       relationships: {
         comments: {
@@ -582,7 +578,7 @@ describe('joins and filters', () => {
     const q3 = newQuery(queryDelegate, schema, 'issue').related('comments', q =>
       q.one(),
     );
-    expect((q3 as unknown as QueryImpl<never, never>).format).toEqual({
+    expect(q3.format).toEqual({
       singular: false,
       relationships: {
         comments: {
@@ -600,7 +596,7 @@ describe('joins and filters', () => {
       .where('closed', false)
       .limit(100)
       .orderBy('title', 'desc');
-    expect((q4 as unknown as QueryImpl<never, never>).format).toEqual({
+    expect(q4.format).toEqual({
       singular: true,
       relationships: {
         comments: {
@@ -836,9 +832,7 @@ test('view creation is wrapped in context.batchViewUpdates call', () => {
   const queryDelegate = new TestQueryDelegate();
 
   const issueQuery = newQuery(queryDelegate, schema, 'issue');
-  const view = (
-    issueQuery as AdvancedQuery<typeof schema, 'issue'>
-  ).materialize(viewFactory);
+  const view = issueQuery.materialize(viewFactory);
   expect(viewFactoryCalls).toEqual(1);
   expect(view).toBe(testView);
 });
