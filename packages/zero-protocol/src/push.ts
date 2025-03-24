@@ -103,14 +103,20 @@ const mutationIDSchema = v.object({
 
 const appErrorSchema = v.object({
   error: v.literal('app'),
-  // the user can add any additional fields in their API server
+  // The user can return any additional data here
+  details: jsonSchema.optional(),
 });
 const zeroErrorSchema = v.object({
   error: v.literal('ooo-mutation'),
+  details: jsonSchema.optional(),
 });
 
-const mutationOkSchema = v.object({});
+const mutationOkSchema = v.object({
+  // The user can return any additional data here
+  data: jsonSchema.optional(),
+});
 const mutationErrorSchema = v.union(appErrorSchema, zeroErrorSchema);
+
 const mutationResultSchema = v.union(mutationOkSchema, mutationErrorSchema);
 const mutationResponseSchema = v.object({
   id: mutationIDSchema,
