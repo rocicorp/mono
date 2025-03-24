@@ -41,13 +41,13 @@ export async function verifyToken(
   token: string,
   verifyOptions: JWTClaimVerificationOptions,
 ): Promise<JWTPayload> {
-  const numOptionsSet = [config.jwk, config.secret, config.jwksUrl].reduce(
-    (l, r) => l + (r !== undefined ? 1 : 0),
-    0,
+  const optionsSet = (['jwk', 'secret', 'jwksUrl'] as const).filter(
+    key => config[key] !== undefined,
   );
   assert(
-    numOptionsSet === 1,
-    'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens',
+    optionsSet.length === 1,
+    'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
+      JSON.stringify(optionsSet),
   );
 
   if (config.jwk !== undefined) {
