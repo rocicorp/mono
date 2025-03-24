@@ -14,6 +14,8 @@ import type {HandlerResult} from '../../workers/connection.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {groupBy} from '../../../../shared/src/arrays.ts';
+import {ErrorForClient} from '../../types/error-for-client.ts';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 
 export interface Pusher {
   enqueuePush(
@@ -184,7 +186,23 @@ class PushWorker {
       );
       for (const [clientID, mutationIDs] of groupedMutationIDs) {
         const client = this.#clients.get(clientID);
-        if (client) {
+        if (!client) {
+          continue;
+        }
+
+        // We do not resolve mutations on the client if the push fails
+        // as those mutations will be retried.
+        if (
+          response.error === 'unsupported-push-version' ||
+          response.error === 'unsupported-schema-version'
+        ) {
+          client[1].fail(
+            new ErrorForClient({
+              kind: ErrorKind.InvalidPush,
+              message: response.error,
+            }),
+          );
+        } else {
           client[1].push([
             'push-response',
             {
@@ -198,8 +216,39 @@ class PushWorker {
       const groupedMutations = groupBy(response.mutations, m => m.id.clientID);
       for (const [clientID, mutations] of groupedMutations) {
         const client = this.#clients.get(clientID);
-        if (client) {
-          client[1].push(['push-response', {mutations}]);
+        if (!client) {
+          continue;
+        }
+
+        let failure: ErrorForClient | undefined;
+        let i = 0;
+        for (; i < mutations.length; i++) {
+          const m = mutations[i];
+          if ('error' in m.result && m.result.error === 'ooo-mutation') {
+            failure = new ErrorForClient({
+              kind: ErrorKind.InvalidPush,
+              message: 'mutation was out of order',
+            });
+            break;
+          }
+        }
+
+        if (failure && i < mutations.length - 1) {
+          this.#lc.error?.(
+            'push-response contains mutations after a mutation which should fatal the connection',
+          );
+        }
+
+        // We do not resolve the mutation on the client if it
+        // fails for a reason that will cause it to be retried.
+        const successes = failure ? mutations.slice(0, i) : mutations;
+
+        if (successes.length > 0) {
+          client[1].push(['push-response', {mutations: successes}]);
+        }
+
+        if (failure) {
+          client[1].fail(failure);
         }
       }
     }
