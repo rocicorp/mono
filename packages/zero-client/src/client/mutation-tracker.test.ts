@@ -13,7 +13,7 @@ describe('MutationTracker', () => {
   test('tracks a mutation and resolves on success', async () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
-    const mutationPromise = tracker.trackMutation(1);
+    const mutationPromise = tracker.trackMutation(1, []);
 
     const response: PushResponse = {
       mutations: [
@@ -32,7 +32,7 @@ describe('MutationTracker', () => {
   test('tracks a mutation and rejects on error', async () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
-    const mutationPromise = tracker.trackMutation(1);
+    const mutationPromise = tracker.trackMutation(1, []);
 
     const response: PushResponse = {
       mutations: [
@@ -56,7 +56,7 @@ describe('MutationTracker', () => {
   test('handles push errors', async () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
-    const mutationPromise = tracker.trackMutation(1);
+    const mutationPromise = tracker.trackMutation(1, []);
 
     const response: PushResponse = {
       error: 'unsupported-push-version',
@@ -70,20 +70,10 @@ describe('MutationTracker', () => {
     });
   });
 
-  test('rejects mutation when explicitly rejected', async () => {
-    const tracker = new MutationTracker();
-    tracker.clientID = CLIENT_ID;
-    const mutationPromise = tracker.trackMutation(1);
-
-    tracker.rejectMutation(1, new Error('Failed to send'));
-
-    await expect(mutationPromise).rejects.toThrow('Failed to send');
-  });
-
   test('rejects mutations from other clients', () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
-    void tracker.trackMutation(1);
+    void tracker.trackMutation(1, []);
 
     const response: PushResponse = {
       mutations: [
@@ -109,8 +99,8 @@ describe('MutationTracker', () => {
   test('handles multiple concurrent mutations', async () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
-    const mutation1 = tracker.trackMutation(1);
-    const mutation2 = tracker.trackMutation(2);
+    const mutation1 = tracker.trackMutation(1, []);
+    const mutation2 = tracker.trackMutation(2, []);
 
     const r1 = {};
     const r2 = {};
@@ -137,8 +127,8 @@ describe('MutationTracker', () => {
   test('mutation tracker size goes down each time a mutation is resolved or rejected', () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
-    void tracker.trackMutation(1);
-    tracker.trackMutation(2).catch(() => {
+    void tracker.trackMutation(1, []);
+    tracker.trackMutation(2, []).catch(() => {
       // expected
     });
 

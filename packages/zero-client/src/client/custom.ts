@@ -27,6 +27,8 @@ import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import type {MutationResult} from '../../../zero-protocol/src/push.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {emptyFunction} from '../../../shared/src/sentinels.ts';
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
@@ -84,6 +86,7 @@ export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
     lc: LogContext,
     repTx: WriteTransaction,
     schema: S,
+    readQueries: AST[],
     slowMaterializeThreshold: number,
   ) {
     const castedRepTx = repTx as WriteTransactionImpl;
@@ -103,6 +106,7 @@ export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
     this.query = makeSchemaQuery(
       lc,
       schema,
+      readQueries,
       txData.ivmSources as IVMSourceBranch,
       slowMaterializeThreshold,
     );
@@ -131,12 +135,22 @@ export function makeReplicacheMutator<S extends Schema>(
   ): Promise<{
     server?: Promise<MutationResult>;
   }> => {
-    const tx = new TransactionImpl(lc, repTx, schema, slowMaterializeThreshold);
+    const readQueries: AST[] = [];
+    const tx = new TransactionImpl(
+      lc,
+      repTx,
+      schema,
+      readQueries,
+      slowMaterializeThreshold,
+    );
 
     await mutator(tx, args);
 
     if (repTx.reason === 'initial') {
-      const serverPromise = mutationTracker.trackMutation(repTx.mutationID);
+      const serverPromise = mutationTracker.trackMutation(
+        repTx.mutationID,
+        readQueries,
+      );
 
       return {
         server: serverPromise,
@@ -172,13 +186,17 @@ function makeSchemaCRUD<S extends Schema>(
 function makeSchemaQuery<S extends Schema>(
   lc: LogContext,
   schema: S,
+  readQueries: AST[],
   ivmBranch: IVMSourceBranch,
   slowMaterializeThreshold: number,
 ) {
   const context = new ZeroContext(
     lc,
     ivmBranch,
-    () => () => {},
+    (ast: AST) => {
+      readQueries.push(ast);
+      return emptyFunction;
+    },
     () => {},
     applyViewUpdates => applyViewUpdates(),
     slowMaterializeThreshold,
