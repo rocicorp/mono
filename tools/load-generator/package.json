@@ -13,7 +13,7 @@
   "dependencies": {
     "@rocicorp/logger": "^5.3.0",
     "dotenv": "^16.4.5",
-    "nanoid": "^5.1.5",
+    "nanoid": "^5.1.2",
     "pg-format": "npm:pg-format-fix@^1.0.5",
     "postgres": "^3.4.4"
   },
