@@ -50,6 +50,10 @@ export interface MessageHandler {
 // backed up because a command is taking a long time to process, the pings
 // will be stuck in the queue (i.e. back-pressured), in which case pongs will
 // be manually sent to notify the client of server liveness.
+//
+// This is equivalent to what is done for Postgres keepalives on the
+// replication stream (which can similarly be back-pressured):
+// https://github.com/rocicorp/mono/blob/f98cb369a2dbb15650328859c732db358f187ef0/packages/zero-cache/src/services/change-source/pg/logical-replication/stream.ts#L21
 const DOWNSTREAM_MSG_INTERVAL_MS = 6_000;
 
 /**
