@@ -193,12 +193,12 @@ try {
         {cwd: basePath('packages', 'zero')},
       );
     } catch (e) {
-      const wait = (i + 1) * 20;
-      console.error(
-        `Error building docker image, retrying in ${wait} seconds...`,
-      );
-      await new Promise(resolve => setTimeout(resolve, 10000));
-      continue;
+      if (i < 3) {
+        console.error(`Error building docker image, retrying in 10 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 10_000));
+        continue;
+      }
+      throw e;
     }
     break;
   }
