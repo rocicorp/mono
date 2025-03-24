@@ -250,6 +250,7 @@ describe('rebasing custom mutators', () => {
         },
       } as unknown as WriteTransaction,
       schema,
+      [],
       10,
     ) as unknown as Transaction<Schema>;
 
@@ -406,6 +407,102 @@ describe('rebasing custom mutators', () => {
         },
       ],
     });
+
+    sinon.restore();
+    await z.close();
+
+    await expect(close.server).rejects.toEqual({error: 'app'});
+  });
+
+  test('reads in a mutation are registered', async () => {
+    sinon.replace(
+      globalThis,
+      'WebSocket',
+      MockSocket as unknown as typeof WebSocket,
+    );
+    sinon.stub(globalThis, 'fetch').returns(Promise.resolve(new Response()));
+
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issue: {
+          create: async (
+            tx,
+            _args: InsertValue<typeof schema.tables.issue>,
+          ) => {
+            await tx.query.issue.run();
+          },
+
+          close: async (tx, _args: object) => {
+            await tx.query.issue.limit(1).run();
+          },
+        },
+      } as const satisfies CustomMutatorDefs<Schema>,
+    });
+
+    const mockSocket = await z.socket;
+    let onUpstreamCall = 0;
+    mockSocket.onUpstream = msg => {
+      if (onUpstreamCall === 0) {
+        // check that the mutator's query was registered with the server
+        expect(msg).toMatchInlineSnapshot(
+          `"["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"12hwg3ihkijhm","ast":{"table":"issues","orderBy":[["id","asc"]]},"ttl":0}]}]"`,
+        );
+      } else if (onUpstreamCall === 1) {
+        // after the mutation was applied by the server, the query was removed
+        expect(msg).toMatchInlineSnapshot(
+          `"["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"12hwg3ihkijhm"}]}]"`,
+        );
+      } else if (onUpstreamCall === 2) {
+        expect(msg).toMatchInlineSnapshot(
+          `"["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1vsd9vcx6ynd4","ast":{"table":"issues","limit":1,"orderBy":[["id","asc"]]},"ttl":0}]}]"`,
+        );
+      } else if (onUpstreamCall === 3) {
+        expect(msg).toMatchInlineSnapshot(
+          `"["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1vsd9vcx6ynd4"}]}]"`,
+        );
+      }
+
+      onUpstreamCall++;
+    };
+
+    await z.triggerConnected();
+    await z.waitForConnectionState(ConnectionState.Connected);
+
+    await z.mutate.issue.create({
+      id: '1',
+      title: 'foo',
+      closed: false,
+      description: '',
+      ownerId: '',
+    });
+    expect(onUpstreamCall).toEqual(1);
+
+    await z.triggerPushResponse({
+      mutations: [
+        {
+          id: {clientID: z.clientID, id: 1},
+          result: {},
+        },
+      ],
+    });
+    expect(onUpstreamCall).toEqual(2);
+
+    // check the error case
+    const close = await z.mutate.issue.close({});
+    expect(onUpstreamCall).toEqual(3);
+
+    await z.triggerPushResponse({
+      mutations: [
+        {
+          id: {clientID: z.clientID, id: 2},
+          result: {
+            error: 'app',
+          },
+        },
+      ],
+    });
+    expect(onUpstreamCall).toEqual(4);
 
     sinon.restore();
     await z.close();

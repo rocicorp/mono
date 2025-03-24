@@ -9,39 +9,59 @@ import type {
   PushResponse,
 } from '../../../zero-protocol/src/push.ts';
 import {assert} from '../../../shared/src/asserts.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {QueryManager} from './query-manager.ts';
+import {must} from '../../../shared/src/must.ts';
 
 /**
  * Tracks what pushes are in-flight and resolves promises when they're acked.
  */
 export class MutationTracker {
-  readonly #outstandingMutations: Map<number, Resolver<MutationResult>>;
+  readonly #outstandingMutations: Map<
+    number,
+    {
+      removeQueries: () => void;
+      resolver: Resolver<MutationResult>;
+    }
+  >;
+  #queryManager: QueryManager | undefined;
   #clientID: string | undefined;
 
   constructor() {
     this.#outstandingMutations = new Map();
   }
 
+  setQueryManager(queryManager: QueryManager) {
+    this.#queryManager = queryManager;
+  }
+
   set clientID(clientID: string) {
     this.#clientID = clientID;
   }
 
-  trackMutation(id: number): Promise<MutationResult> {
+  trackMutation(
+    id: number,
+    // We also register the queries used by the mutation with the server
+    // so the mutator does not lose the data it requires when rebasing.
+    readQueries: readonly AST[],
+  ): Promise<MutationResult> {
     assert(!this.#outstandingMutations.has(id));
     const mutationResolver = resolver<MutationResult>();
-    this.#outstandingMutations.set(id, mutationResolver);
-    return mutationResolver.promise;
-  }
 
-  /**
-   * Called if the mutation is never able to be sent to the server
-   * and abandoned before persisted.
-   * In that case, we have no `pushResponse` to process.
-   */
-  rejectMutation(id: number, e: Error) {
-    const resolver = this.#outstandingMutations.get(id);
-    assert(resolver);
-    resolver.reject(e);
-    this.#outstandingMutations.delete(id);
+    const cleanupCallbacks: (() => void)[] = [];
+    for (const query of readQueries) {
+      cleanupCallbacks.push(
+        must(
+          this.#queryManager,
+          'query manager was not set on the mutation-tracker',
+        ).add(query, 0),
+      );
+    }
+    this.#outstandingMutations.set(id, {
+      removeQueries: () => cleanupCallbacks.forEach(cb => cb()),
+      resolver: mutationResolver,
+    });
+    return mutationResolver.promise;
   }
 
   processPushResponse(response: PushResponse): void {
@@ -87,9 +107,10 @@ export class MutationTracker {
       mid.clientID === this.#clientID,
       'received mutation for the wrong client',
     );
-    const resolver = this.#outstandingMutations.get(mid.id);
-    assert(resolver);
-    resolver.reject(error);
+    const entry = this.#outstandingMutations.get(mid.id);
+    assert(entry);
+    entry.removeQueries();
+    entry.resolver.reject(error);
     this.#outstandingMutations.delete(mid.id);
   }
 
@@ -98,9 +119,10 @@ export class MutationTracker {
       mid.clientID === this.#clientID,
       'received mutation for the wrong client',
     );
-    const resolver = this.#outstandingMutations.get(mid.id);
-    assert(resolver);
-    resolver.resolve(result);
+    const entry = this.#outstandingMutations.get(mid.id);
+    assert(entry);
+    entry.removeQueries();
+    entry.resolver.resolve(result);
     this.#outstandingMutations.delete(mid.id);
   }
 }

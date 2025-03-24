@@ -623,6 +623,7 @@ export class Zero<
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
     );
+    this.#mutationTracker.setQueryManager(this.#queryManager);
     this.#clientToServer = clientToServer(schema.tables);
 
     this.#deleteClientsManager = new DeleteClientsManager(
