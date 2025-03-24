@@ -1,21 +1,21 @@
 import type {LogContext} from '@rocicorp/logger';
+import {groupBy} from '../../../../shared/src/arrays.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import * as v from '../../../../shared/src/valita.ts';
+import type {Downstream} from '../../../../zero-protocol/src/down.ts';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import {
   pushResponseSchema,
   type PushBody,
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
-import type {Service} from '../service.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
-import {upstreamSchema} from '../../types/shards.ts';
-import type {HandlerResult} from '../../workers/connection.ts';
-import type {Downstream} from '../../../../zero-protocol/src/down.ts';
-import {Subscription} from '../../types/subscription.ts';
-import {groupBy} from '../../../../shared/src/arrays.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import {upstreamSchema} from '../../types/shards.ts';
+import {Subscription, type Result} from '../../types/subscription.ts';
+import type {HandlerResult} from '../../workers/connection.ts';
+import type {Service} from '../service.ts';
 
 export interface Pusher {
   enqueuePush(
@@ -159,7 +159,7 @@ class PushWorker {
       const [pushes, terminate] = combinePushes([task, ...rest]);
       for (const push of pushes) {
         const response = await this.#processPush(push);
-        this.#fanOutResponses(response);
+        await this.#fanOutResponses(response);
       }
 
       if (terminate) {
@@ -178,7 +178,8 @@ class PushWorker {
    * Each client is on a different websocket connection though, so we need to fan out the response
    * to all the clients that were part of the push.
    */
-  #fanOutResponses(response: PushResponse) {
+  async #fanOutResponses(response: PushResponse) {
+    const pushed: Promise<Result>[] = [];
     if ('error' in response) {
       const groupedMutationIDs = groupBy(
         response.mutationIDs ?? [],
@@ -203,13 +204,15 @@ class PushWorker {
             }),
           );
         } else {
-          client[1].push([
-            'push-response',
-            {
-              ...response,
-              mutationIDs,
-            },
-          ]);
+          pushed.push(
+            client[1].push([
+              'push-response',
+              {
+                ...response,
+                mutationIDs,
+              },
+            ]).result,
+          );
         }
       }
     } else {
@@ -244,7 +247,9 @@ class PushWorker {
         const successes = failure ? mutations.slice(0, i) : mutations;
 
         if (successes.length > 0) {
-          client[1].push(['push-response', {mutations: successes}]);
+          pushed.push(
+            client[1].push(['push-response', {mutations: successes}]).result,
+          );
         }
 
         if (failure) {
@@ -252,6 +257,9 @@ class PushWorker {
         }
       }
     }
+    // Wait for results to get sent downstream go avoid queueing up
+    // an arbitrary amount of responses in memory.
+    await Promise.allSettled(pushed);
   }
 
   async #processPush(entry: PusherEntry): Promise<PushResponse> {
