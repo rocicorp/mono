@@ -257,7 +257,7 @@ class PushWorker {
         }
       }
     }
-    // Wait for results to get sent downstream go avoid queueing up
+    // Wait for results to be sent downstream to avoid queueing up
     // an arbitrary amount of responses in memory.
     await Promise.allSettled(pushed);
   }
