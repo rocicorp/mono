@@ -36,6 +36,10 @@ import {
   getInternalReplicacheImplForTesting,
   onSetConnectionStateSymbol,
 } from './zero.ts';
+import type {
+  PushResponse,
+  PushResponseMessage,
+} from '../../../zero-protocol/src/push.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type ErrorKind = Enum<typeof ErrorKind>;
@@ -203,6 +207,11 @@ export class TestZero<
 
   triggerPullResponse(pullResponseBody: PullResponseBody): Promise<void> {
     const msg: PullResponseMessage = ['pull', pullResponseBody];
+    return this.triggerMessage(msg);
+  }
+
+  triggerPushResponse(pushResponseBody: PushResponse): Promise<void> {
+    const msg: PushResponseMessage = ['push-response', pushResponseBody];
     return this.triggerMessage(msg);
   }
 

@@ -1,12 +1,12 @@
+import * as sinon from 'sinon';
 import {beforeEach, describe, expect, expectTypeOf, test} from 'vitest';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {
   TransactionImpl,
   type CustomMutatorDefs,
   type MakeCustomMutatorInterfaces,
-  type PromiseWithServerResult,
 } from './custom.ts';
-import {zeroForTest} from './test-utils.ts';
+import {MockSocket, zeroForTest} from './test-utils.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {createDb} from './test/create-db.ts';
@@ -15,6 +15,7 @@ import type {WriteTransaction} from './replicache-types.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {MutationResult} from '../../../zero-protocol/src/push.ts';
+import * as ConnectionState from './connection-state-enum.ts';
 
 type Schema = typeof schema;
 
@@ -58,19 +59,19 @@ test('argument types are preserved on the generated mutator interface', () => {
       readonly setTitle: (args: {
         id: string;
         title: string;
-      }) => PromiseWithServerResult<void, MutationResult>;
+      }) => Promise<{server?: Promise<MutationResult>}>;
       readonly setProps: (args: {
         id: string;
         title: string;
         status: 'closed' | 'open';
         assignee: string;
-      }) => PromiseWithServerResult<void, MutationResult>;
+      }) => Promise<{server?: Promise<MutationResult>}>;
     };
     readonly nonTableNamespace: {
       readonly doThing: (_a: {
         arg1: string;
         arg2: number;
-      }) => PromiseWithServerResult<void, MutationResult>;
+      }) => Promise<{server?: Promise<MutationResult>}>;
     };
   }>();
 });
@@ -343,5 +344,72 @@ describe('rebasing custom mutators', () => {
     });
 
     expect(mutationRun).toEqual(true);
+  });
+
+  test('waiting for server results', async () => {
+    sinon.replace(
+      globalThis,
+      'WebSocket',
+      MockSocket as unknown as typeof WebSocket,
+    );
+    sinon.stub(globalThis, 'fetch').returns(Promise.resolve(new Response()));
+
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issue: {
+          create: async (
+            _tx,
+            _args: InsertValue<typeof schema.tables.issue>,
+          ) => {},
+
+          close: async (_tx, _args: object) => {},
+        },
+      } as const satisfies CustomMutatorDefs<Schema>,
+    });
+
+    await z.triggerConnected();
+    await z.waitForConnectionState(ConnectionState.Connected);
+
+    const create = await z.mutate.issue.create({
+      id: '1',
+      title: 'foo',
+      closed: false,
+      description: '',
+      ownerId: '',
+    });
+
+    await z.triggerPushResponse({
+      mutations: [
+        {
+          id: {clientID: z.clientID, id: 1},
+          result: {
+            data: {
+              shortID: '1',
+            },
+          },
+        },
+      ],
+    });
+
+    expect(await create.server).toEqual({data: {shortID: '1'}});
+
+    const close = await z.mutate.issue.close({});
+
+    await z.triggerPushResponse({
+      mutations: [
+        {
+          id: {clientID: z.clientID, id: 2},
+          result: {
+            error: 'app',
+          },
+        },
+      ],
+    });
+
+    sinon.restore();
+    await z.close();
+
+    await expect(close.server).rejects.toEqual({error: 'app'});
   });
 });

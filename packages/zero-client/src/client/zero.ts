@@ -16,6 +16,7 @@ import type {PullRequest} from '../../../replicache/src/sync/pull.ts';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import type {
   MutatorDefs,
+  MutatorReturn,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from '../../../replicache/src/types.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
@@ -477,7 +478,9 @@ export class Zero<
             mutatorOrMutators,
             schema,
             slowMaterializeThreshold,
-          );
+            // Replicache expects mutators to only be able to return JSON
+            // but Zero wraps the return with: `{server?: Promise<MutationResult>, client?: T}`
+          ) as () => MutatorReturn;
           continue;
         }
         if (typeof mutatorOrMutators === 'object') {
@@ -493,7 +496,7 @@ export class Zero<
               mutator as CustomMutatorImpl<S>,
               schema,
               slowMaterializeThreshold,
-            );
+            ) as () => MutatorReturn;
           }
           continue;
         }

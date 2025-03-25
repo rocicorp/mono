@@ -62,7 +62,7 @@ export type MakeCustomMutatorInterfaces<
     tx: Transaction<S>,
     ...args: infer Args
   ) => Promise<void>
-    ? (...args: Args) => PromiseWithServerResult<void, MutationResult>
+    ? (...args: Args) => Promise<{server?: Promise<MutationResult>}>
     : {
         readonly [P in keyof MD[NamespaceOrName]]: MakeCustomMutatorInterface<
           S,
@@ -76,7 +76,7 @@ export type MakeCustomMutatorInterface<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   F,
 > = F extends (tx: ClientTransaction<S>, ...args: infer Args) => Promise<void>
-  ? (...args: Args) => PromiseWithServerResult<void, MutationResult>
+  ? (...args: Args) => Promise<{server?: Promise<MutationResult>}>
   : never;
 
 export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
@@ -118,14 +118,6 @@ export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
   readonly token: string | undefined;
 }
 
-type MaybeWithServerResult<T> = {
-  server?: Promise<T>;
-};
-
-export type PromiseMaybeWithServerResult<T, S> = Promise<T> &
-  MaybeWithServerResult<S>;
-export type PromiseWithServerResult<T, S> = Promise<T> & {server: Promise<S>};
-
 export function makeReplicacheMutator<S extends Schema>(
   lc: LogContext,
   mutationTracker: MutationTracker,
@@ -133,22 +125,25 @@ export function makeReplicacheMutator<S extends Schema>(
   schema: S,
   slowMaterializeThreshold: number,
 ) {
-  return (
+  return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,
-  ): PromiseMaybeWithServerResult<void, MutationResult> => {
+  ): Promise<{
+    server?: Promise<MutationResult>;
+  }> => {
     const tx = new TransactionImpl(lc, repTx, schema, slowMaterializeThreshold);
-    const clientPromise = mutator(tx, args);
+
+    await mutator(tx, args);
 
     if (repTx.reason === 'initial') {
       const serverPromise = mutationTracker.trackMutation(repTx.mutationID);
 
-      (
-        clientPromise as PromiseMaybeWithServerResult<void, MutationResult>
-      ).server = serverPromise;
+      return {
+        server: serverPromise,
+      };
     }
 
-    return clientPromise;
+    return {};
   };
 }
 

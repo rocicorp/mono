@@ -179,6 +179,7 @@ export type Mutation = v.Infer<typeof mutationSchema>;
 export type PushBody = v.Infer<typeof pushBodySchema>;
 export type PushMessage = v.Infer<typeof pushMessageSchema>;
 export type PushResponse = v.Infer<typeof pushResponseSchema>;
+export type PushResponseMessage = v.Infer<typeof pushResponseMessageSchema>;
 export type MutationResponse = v.Infer<typeof mutationResponseSchema>;
 export type MutationOk = v.Infer<typeof mutationOkSchema>;
 export type MutationError = v.Infer<typeof mutationErrorSchema>;
