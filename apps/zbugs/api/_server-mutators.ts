@@ -8,7 +8,7 @@ import {type CustomMutatorDefs, type UpdateValue} from '@rocicorp/zero';
 import {schema} from '../shared/schema.ts';
 import type {JWK} from 'jose';
 import {Validators} from '../shared/validators.ts';
-import {notify} from './notify.ts';
+import {notify} from './_notify.ts';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 
 export function createServerMutators(publicJwk: string) {

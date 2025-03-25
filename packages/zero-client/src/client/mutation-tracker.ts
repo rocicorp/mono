@@ -3,13 +3,12 @@ import type {
   MutationError,
   MutationID,
   MutationOk,
+  MutationResult,
   PushError,
   PushOk,
   PushResponse,
 } from '../../../zero-protocol/src/push.ts';
 import {assert} from '../../../shared/src/asserts.ts';
-
-type MutationResult = MutationOk | MutationError | PushError;
 
 /**
  * Tracks what pushes are in-flight and resolves promises when they're acked.

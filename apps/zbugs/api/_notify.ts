@@ -3,7 +3,7 @@ import {type Validators} from '../shared/validators.ts';
 import {must} from '../../../packages/shared/src/must.ts';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import {type Transaction, type UpdateValue} from '@rocicorp/zero';
-import {postToDiscord} from './discord.ts';
+import {postToDiscord} from './_discord.ts';
 import {schema} from '../shared/schema.ts';
 
 type CreateIssueNotification = {

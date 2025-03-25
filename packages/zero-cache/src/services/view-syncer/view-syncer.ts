@@ -39,6 +39,7 @@ import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.t
 import type {ActivityBasedService} from '../service.ts';
 import {
   ClientHandler,
+  startPoke,
   type PatchToVersion,
   type PokeHandler,
   type RowPatch,
@@ -498,13 +499,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // (Clients that are behind the cvr.version need to be caught up in
       //  #syncQueryPipelineSet(), as row data may be needed for catchup)
       const newCVR = this.#cvr;
-      const pokers = this.#getClients(cvr.version).map(c =>
-        c.startPoke(newCVR.version),
-      );
+      const pokers = startPoke(this.#getClients(cvr.version), newCVR.version);
       for (const patch of patches) {
-        pokers.forEach(poker => poker.addPatch(patch));
+        await pokers.addPatch(patch);
       }
-      pokers.forEach(poker => poker.end(newCVR.version));
+      await pokers.end(newCVR.version);
     }
 
     if (this.#pipelinesSynced) {
@@ -665,9 +664,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Send 'deleteClients' to the clients.
       if (deletedClientIDs.length || deletedClientGroupIDs.length) {
         const clients = this.#getClients();
-        for (const client of clients) {
-          client.sendDeleteClients(lc, deletedClientIDs, deletedClientGroupIDs);
-        }
+        await Promise.allSettled(
+          clients.map(client =>
+            client.sendDeleteClients(
+              lc,
+              deletedClientIDs,
+              deletedClientGroupIDs,
+            ),
+          ),
+        );
       }
 
       this.#scheduleExpireEviction(lc, cvr);
@@ -911,11 +916,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         removeQueries,
       );
       const clients = this.#getClients();
-      const pokers = clients.map(c =>
-        c.startPoke(newVersion, this.#pipelines.currentSchemaVersions()),
+      const pokers = startPoke(
+        clients,
+        newVersion,
+        this.#pipelines.currentSchemaVersions(),
       );
       for (const patch of queryPatches) {
-        pokers.forEach(poker => poker.addPatch(patch));
+        await pokers.addPatch(patch);
       }
 
       // Removing queries is easy. The pipelines are dropped, and the CVR
@@ -957,7 +964,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       for (const patch of await updater.deleteUnreferencedRows(lc)) {
-        pokers.forEach(poker => poker.addPatch(patch));
+        await pokers.addPatch(patch);
       }
 
       // Commit the changes and update the CVR snapshot.
@@ -974,7 +981,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       // Signal clients to commit.
-      pokers.forEach(poker => poker.end(finalVersion));
+      await pokers.end(finalVersion);
 
       const wallTime = Date.now() - start;
       lc.info?.(
@@ -1007,17 +1014,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     cvr: CVRSnapshot,
     current?: CVRVersion,
     excludeQueryHashes: string[] = [],
-    usePokers?: PokeHandler[],
+    usePokers?: PokeHandler,
   ) {
     return startAsyncSpan(tracer, 'vs.#catchupClients', async span => {
       current ??= cvr.version;
       const clients = this.#getClients();
       const pokers =
         usePokers ??
-        clients.map(c =>
-          c.startPoke(cvr.version, this.#pipelines.currentSchemaVersions()),
+        startPoke(
+          clients,
+          cvr.version,
+          this.#pipelines.currentSchemaVersions(),
         );
-      span.setAttribute('numPokers', pokers.length);
       span.setAttribute('numClients', clients.length);
 
       const catchupFrom = clients
@@ -1062,7 +1070,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             patch = {type: 'row', op: 'put', id, contents};
           }
           const patchToVersion = {patch, toVersion};
-          pokers.forEach(poker => poker.addPatch(patchToVersion));
+          await pokers.addPatch(patchToVersion);
           rowPatchCount++;
         }
       }
@@ -1073,11 +1081,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       // Then await the config patches which were fetched in parallel.
       for (const patch of await configPatches) {
-        pokers.forEach(poker => poker.addPatch(patch));
+        await pokers.addPatch(patch);
       }
 
       if (!usePokers) {
-        pokers.forEach(poker => poker.end(cvr.version));
+        await pokers.end(cvr.version);
       }
     });
   }
@@ -1087,7 +1095,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     changes: Iterable<RowChange>,
     updater: CVRQueryDrivenUpdater,
-    pokers: PokeHandler[],
+    pokers: PokeHandler,
     hashToIDs: Map<string, string[]>,
   ) {
     return startAsyncSpan(tracer, 'vs.#processChanges', async () => {
@@ -1106,9 +1114,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             `processing ${rows.size} (of ${total}) rows (${elapsed} ms)`,
           );
           const patches = await updater.received(lc, rows);
-          patches.forEach(patch =>
-            pokers.forEach(poker => poker.addPatch(patch)),
-          );
+
+          for (const patch of patches) {
+            await pokers.addPatch(patch);
+          }
           rows.clear();
         });
 
@@ -1211,13 +1220,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Only poke clients that are at the cvr.version. New clients that
       // are behind need to first be caught up when their initConnection
       // message is processed (and #syncQueryPipelines is called).
-      const pokers = this.#getClients(cvr.version).map(c =>
-        c.startPoke(
-          updater.updatedVersion(),
-          this.#pipelines.currentSchemaVersions(),
-        ),
+      const pokers = startPoke(
+        this.#getClients(cvr.version),
+        updater.updatedVersion(),
+        this.#pipelines.currentSchemaVersions(),
       );
-
       lc.debug?.(`applying ${numChanges} to advance to ${version}`);
       const hashToIDs = createHashToIDs(cvr);
 
@@ -1225,7 +1232,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         await this.#processChanges(lc, changes, updater, pokers, hashToIDs);
       } catch (e) {
         if (e instanceof ResetPipelinesSignal) {
-          pokers.forEach(poker => poker.cancel());
+          await pokers.cancel();
           return e;
         }
         throw e;
@@ -1236,7 +1243,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const finalVersion = this.#cvr.version;
 
       // Signal clients to commit.
-      pokers.forEach(poker => poker.end(finalVersion));
+      await pokers.end(finalVersion);
 
       await this.#evictInactiveQueries(lc, this.#cvr);
 
