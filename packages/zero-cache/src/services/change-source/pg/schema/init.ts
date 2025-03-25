@@ -10,7 +10,7 @@ import type {PostgresDB} from '../../../../types/pg.ts';
 import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import {decommissionShard} from '../decommission.ts';
-import {dropShard, setupTablesAndReplication} from './shard.ts';
+import {dropShard, setupTablesAndReplication, setupTriggers} from './shard.ts';
 
 /**
  * Initializes a shard for initial sync.
@@ -93,6 +93,15 @@ async function runShardMigrations(
         lc.info?.(
           `Recorded replicaVersion ${replicaVersion} in upstream shardConfig`,
         );
+      },
+    },
+
+    // Updates the DDL event trigger protocol to v2, and adds support for
+    // ALTER SCHEMA x RENAME TO y
+    7: {
+      migrateSchema: async (lc, tx) => {
+        await setupTriggers(lc, tx, shard);
+        lc.info?.(`Upgraded to v2 event triggers`);
       },
     },
   };

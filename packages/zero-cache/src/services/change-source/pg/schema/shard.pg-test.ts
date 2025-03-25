@@ -75,6 +75,7 @@ describe('change-source/pg', () => {
       'zro_drop_table_0',
       'zro_drop_index_0',
       'zro_alter_publication_0',
+      'zro_alter_schema_0',
     ]);
   });
 

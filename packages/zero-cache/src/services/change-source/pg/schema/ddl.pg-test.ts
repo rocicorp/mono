@@ -312,8 +312,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'CREATE TABLE',
-          table: {schema: 'pub', name: 'bar'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           tables: inserted(DDL_START.schema.tables, 0, {
             oid: expect.any(Number),
@@ -397,8 +397,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'CREATE INDEX',
-          index: {schema: 'pub', name: 'foo_name_index'},
-        },
+          index: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           tables: DDL_START.schema.tables,
           indexes: inserted(DDL_START.schema.indexes, 3, {
@@ -425,8 +425,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          table: {schema: 'pub', name: 'food'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
@@ -505,8 +505,8 @@ describe('change-source/tables/ddl', () => {
         },
         event: {
           tag: 'ALTER TABLE',
-          table: {schema: 'pub', name: 'foo'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         type: 'ddlUpdate',
         version: 1,
         schema: {
@@ -575,8 +575,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          table: {schema: 'pub', name: 'foo'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           indexes: DDL_START.schema.indexes,
           tables: replaced(DDL_START.schema.tables, 1, 1, {
@@ -637,8 +637,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          table: {schema: 'pub', name: 'foo'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           indexes: DDL_START.schema.indexes,
           tables: replaced(DDL_START.schema.tables, 1, 1, {
@@ -691,8 +691,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          table: {schema: 'pub', name: 'foo'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
@@ -764,8 +764,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          table: {schema: 'pub', name: 'foo'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
@@ -1064,6 +1064,191 @@ describe('change-source/tables/ddl', () => {
               publications: {
                 ['zero_all']: {rowFilter: null}, // Now part of zero_all
               },
+            },
+          ],
+        },
+      },
+    ],
+    [
+      'alter schema',
+      `ALTER SCHEMA pub RENAME TO bup`,
+      {
+        context: {
+          query: 'ALTER SCHEMA pub RENAME TO bup',
+        },
+        type: 'ddlUpdate',
+        version: 1,
+        event: {tag: 'ALTER SCHEMA'},
+        schema: {
+          tables: [
+            {
+              oid: expect.any(Number),
+              schema: 'bup',
+              name: 'boo',
+              columns: {
+                description: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: false,
+                  pos: 3,
+                },
+                id: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: true,
+                  pos: 1,
+                },
+                name: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: false,
+                  pos: 2,
+                },
+              },
+              primaryKey: ['id'],
+              publications: {
+                ['zero_all']: {rowFilter: null},
+                ['zero_sum']: {rowFilter: null},
+              },
+            },
+            {
+              oid: expect.any(Number),
+              schema: 'bup',
+              name: 'foo',
+              columns: {
+                description: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: false,
+                  pos: 3,
+                },
+                id: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: true,
+                  pos: 1,
+                },
+                name: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: false,
+                  pos: 2,
+                },
+              },
+              primaryKey: ['id'],
+              publications: {
+                ['zero_all']: {rowFilter: null},
+                ['zero_sum']: {rowFilter: null},
+              },
+            },
+            {
+              oid: expect.any(Number),
+              schema: 'bup',
+              name: 'yoo',
+              columns: {
+                description: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: false,
+                  pos: 3,
+                },
+                id: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: true,
+                  pos: 1,
+                },
+                name: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: false,
+                  pos: 2,
+                },
+              },
+              primaryKey: ['id'],
+              publications: {['zero_all']: {rowFilter: null}},
+            },
+          ],
+          indexes: [
+            {
+              name: 'boo_name_key',
+              schema: 'bup',
+              tableName: 'boo',
+              columns: {name: 'ASC'},
+              unique: true,
+            },
+            {
+              name: 'boo_pkey',
+              schema: 'bup',
+              tableName: 'boo',
+              columns: {id: 'ASC'},
+              unique: true,
+            },
+            {
+              name: 'foo_custom_index',
+              schema: 'bup',
+              tableName: 'foo',
+              columns: {
+                description: 'ASC',
+                name: 'ASC',
+              },
+              unique: false,
+            },
+            {
+              name: 'foo_name_key',
+              schema: 'bup',
+              tableName: 'foo',
+              columns: {name: 'ASC'},
+              unique: true,
+            },
+            {
+              name: 'foo_pkey',
+              schema: 'bup',
+              tableName: 'foo',
+              columns: {id: 'ASC'},
+              unique: true,
+            },
+            {
+              name: 'yoo_custom_index',
+              schema: 'bup',
+              tableName: 'yoo',
+              columns: {
+                description: 'ASC',
+                name: 'ASC',
+              },
+              unique: false,
+            },
+            {
+              name: 'yoo_name_key',
+              schema: 'bup',
+              tableName: 'yoo',
+              columns: {name: 'ASC'},
+              unique: true,
+            },
+            {
+              name: 'yoo_pkey',
+              schema: 'bup',
+              tableName: 'yoo',
+              columns: {id: 'ASC'},
+              unique: true,
             },
           ],
         },
