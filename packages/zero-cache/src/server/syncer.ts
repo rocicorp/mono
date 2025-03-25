@@ -130,7 +130,7 @@ export default function runWorker(
       drainCoordinator,
       config.log.slowHydrateThreshold,
       undefined,
-      config.maxRowCount,
+      config.targetClientRowCount,
     );
   };
 
