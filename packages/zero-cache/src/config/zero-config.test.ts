@@ -292,12 +292,10 @@ test('zero-cache --help', () => {
      --target-client-row-count number                           optional                                                                                          
        ZERO_TARGET_CLIENT_ROW_COUNT env                                                                                                                           
                                                                 The target number of rows to keep per client in the client side cache.                            
-                                                                This limit is a soft limit. Active queries are allowed to                                         
-                                                                use more rows than this limit, but if the cache grows to                                          
-                                                                this size, zero-cache will evict inactive queries from the cache                                  
-                                                                to reach this limit.                                                                              
-                                                                                                                                                                  
-                                                                If unset, zero-cache will use the default value.                                                  
+                                                                This limit is a soft limit. When the number of rows in the cache exceeds                          
+                                                                this limit, zero-cache will evict inactive queries in order of ttl-based expiration.              
+                                                                Active queries, on the other hand, are never evicted and are allowed to use more                  
+                                                                rows than the limit.                                                                              
                                                                                                                                                                   
     "
   `);
