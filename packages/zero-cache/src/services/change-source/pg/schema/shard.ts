@@ -255,14 +255,6 @@ export async function setupTablesAndReplication(
   const pubs = await getPublicationInfo(tx, allPublications);
   await replicaIdentitiesForTablesWithoutPrimaryKeys(pubs)?.apply(lc, tx);
 
-  await setupTriggers(lc, tx, shard);
-}
-
-export async function setupTriggers(
-  lc: LogContext,
-  tx: PostgresTransaction,
-  shard: ShardConfig,
-) {
   try {
     await tx.savepoint(sub => sub.unsafe(triggerSetup(shard)));
   } catch (e) {
