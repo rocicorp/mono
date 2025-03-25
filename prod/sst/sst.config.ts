@@ -1,7 +1,7 @@
 /* eslint-disable */
 /// <reference path="./.sst/platform/config.d.ts" />
 // Load .env file
-require('dotenv').config();
+require('@dotenvx/dotenvx').config();
 
 import {createDefu} from 'defu';
 import {join} from 'node:path';
