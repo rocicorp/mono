@@ -1,19 +1,21 @@
 import type {LogContext} from '@rocicorp/logger';
+import {groupBy} from '../../../../shared/src/arrays.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import * as v from '../../../../shared/src/valita.ts';
+import type {Downstream} from '../../../../zero-protocol/src/down.ts';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import {
   pushResponseSchema,
   type PushBody,
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
-import type {Service} from '../service.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
+import {ErrorForClient} from '../../types/error-for-client.ts';
 import {upstreamSchema} from '../../types/shards.ts';
+import {Subscription, type Result} from '../../types/subscription.ts';
 import type {HandlerResult} from '../../workers/connection.ts';
-import type {Downstream} from '../../../../zero-protocol/src/down.ts';
-import {Subscription} from '../../types/subscription.ts';
-import {groupBy} from '../../../../shared/src/arrays.ts';
+import type {Service} from '../service.ts';
 
 export interface Pusher {
   enqueuePush(
@@ -157,7 +159,7 @@ class PushWorker {
       const [pushes, terminate] = combinePushes([task, ...rest]);
       for (const push of pushes) {
         const response = await this.#processPush(push);
-        this.#fanOutResponses(response);
+        await this.#fanOutResponses(response);
       }
 
       if (terminate) {
@@ -176,7 +178,8 @@ class PushWorker {
    * Each client is on a different websocket connection though, so we need to fan out the response
    * to all the clients that were part of the push.
    */
-  #fanOutResponses(response: PushResponse) {
+  async #fanOutResponses(response: PushResponse) {
+    const pushed: Promise<Result>[] = [];
     if ('error' in response) {
       const groupedMutationIDs = groupBy(
         response.mutationIDs ?? [],
@@ -184,25 +187,79 @@ class PushWorker {
       );
       for (const [clientID, mutationIDs] of groupedMutationIDs) {
         const client = this.#clients.get(clientID);
-        if (client) {
-          client[1].push([
-            'push-response',
-            {
-              ...response,
-              mutationIDs,
-            },
-          ]);
+        if (!client) {
+          continue;
+        }
+
+        // We do not resolve mutations on the client if the push fails
+        // as those mutations will be retried.
+        if (
+          response.error === 'unsupported-push-version' ||
+          response.error === 'unsupported-schema-version'
+        ) {
+          client[1].fail(
+            new ErrorForClient({
+              kind: ErrorKind.InvalidPush,
+              message: response.error,
+            }),
+          );
+        } else {
+          pushed.push(
+            client[1].push([
+              'push-response',
+              {
+                ...response,
+                mutationIDs,
+              },
+            ]).result,
+          );
         }
       }
     } else {
       const groupedMutations = groupBy(response.mutations, m => m.id.clientID);
       for (const [clientID, mutations] of groupedMutations) {
         const client = this.#clients.get(clientID);
-        if (client) {
-          client[1].push(['push-response', {mutations}]);
+        if (!client) {
+          continue;
+        }
+
+        let failure: ErrorForClient | undefined;
+        let i = 0;
+        for (; i < mutations.length; i++) {
+          const m = mutations[i];
+          if ('error' in m.result && m.result.error === 'ooo-mutation') {
+            failure = new ErrorForClient({
+              kind: ErrorKind.InvalidPush,
+              message: 'mutation was out of order',
+            });
+            break;
+          }
+        }
+
+        if (failure && i < mutations.length - 1) {
+          this.#lc.error?.(
+            'push-response contains mutations after a mutation which should fatal the connection',
+          );
+        }
+
+        // We do not resolve the mutation on the client if it
+        // fails for a reason that will cause it to be retried.
+        const successes = failure ? mutations.slice(0, i) : mutations;
+
+        if (successes.length > 0) {
+          pushed.push(
+            client[1].push(['push-response', {mutations: successes}]).result,
+          );
+        }
+
+        if (failure) {
+          client[1].fail(failure);
         }
       }
     }
+    // Wait for results to be sent downstream to avoid queueing up
+    // an arbitrary amount of responses in memory.
+    await Promise.allSettled(pushed);
   }
 
   async #processPush(entry: PusherEntry): Promise<PushResponse> {

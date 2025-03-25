@@ -566,6 +566,112 @@ describe('pusher streaming', () => {
       });
     }
   });
+
+  test('fails the stream on ooo mutations', async () => {
+    const fetch = (global.fetch = vi.fn());
+    const oooResponse: PushResponse = {
+      mutations: [
+        {
+          id: {clientID, id: 3},
+          result: {},
+        },
+        {
+          id: {clientID, id: 1},
+          result: {error: 'ooo-mutation'},
+        },
+      ],
+    };
+
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(oooResponse),
+    });
+
+    const pusher = new PusherService(
+      config,
+      lc,
+      'cgid',
+      'http://example.com',
+      'api-key',
+    );
+    void pusher.run();
+
+    const result = pusher.enqueuePush(
+      clientID,
+      wsID,
+      makePush(2, clientID),
+      'jwt',
+    );
+    expect(result.type).toBe('stream');
+
+    if (result.type === 'stream') {
+      const messages: unknown[] = [];
+      for await (const msg of result.stream) {
+        messages.push(msg);
+        break;
+      }
+
+      expect(messages).toMatchInlineSnapshot(`
+        [
+          [
+            "push-response",
+            {
+              "mutations": [
+                {
+                  "id": {
+                    "clientID": "test-cid",
+                    "id": 3,
+                  },
+                  "result": {},
+                },
+              ],
+            },
+          ],
+        ]
+      `);
+
+      // The stream should fail with InvalidPush error
+      await expect(
+        result.stream[Symbol.asyncIterator]().next(),
+      ).rejects.toThrow('mutation was out of order');
+    }
+  });
+
+  test('fails the stream on unsupported schema version or push version', async () => {
+    const fetch = (global.fetch = vi.fn());
+    const errorResponse: PushResponse = {
+      error: 'unsupported-schema-version',
+      mutationIDs: [{clientID, id: 1}],
+    };
+
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(errorResponse),
+    });
+
+    const pusher = new PusherService(
+      config,
+      lc,
+      'cgid',
+      'http://example.com',
+      'api-key',
+    );
+    void pusher.run();
+
+    const result = pusher.enqueuePush(
+      clientID,
+      wsID,
+      makePush(1, clientID),
+      'jwt',
+    );
+    expect(result.type).toBe('stream');
+
+    if (result.type === 'stream') {
+      await expect(
+        result.stream[Symbol.asyncIterator]().next(),
+      ).rejects.toThrow('unsupported-schema-version');
+    }
+  });
 });
 
 let timestamp = 0;

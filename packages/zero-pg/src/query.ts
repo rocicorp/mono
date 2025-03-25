@@ -5,7 +5,7 @@ import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import type {DBTransaction, SchemaQuery} from '../../zql/src/mutate/custom.ts';
-import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
+import {AbstractQuery, defaultFormat} from '../../zql/src/query/query-impl.ts';
 import type {HumanReadable, PullRow, Query} from '../../zql/src/query/query.ts';
 import type {TTL} from '../../zql/src/query/ttl.ts';
 import type {TypedView} from '../../zql/src/query/typed-view.ts';
@@ -31,7 +31,13 @@ export function makeSchemaQuery<S extends Schema>(
         return target[prop];
       }
 
-      const q = new Z2SQuery(schema, prop, this.#dbTransaction);
+      const q = new Z2SQuery(
+        schema,
+        prop,
+        this.#dbTransaction,
+        {table: prop},
+        defaultFormat,
+      );
       target[prop] = q;
       return q;
     }
@@ -59,8 +65,8 @@ export class Z2SQuery<
     schema: TSchema,
     tableName: TTable,
     dbTransaction: DBTransaction<unknown>,
-    ast: AST = {table: tableName},
-    format?: Format | undefined,
+    ast: AST,
+    format: Format,
   ) {
     super(schema, tableName, ast, format);
     this.#dbTransaction = dbTransaction;
@@ -77,7 +83,7 @@ export class Z2SQuery<
     schema: TSchema,
     tableName: TTable,
     ast: AST,
-    format: Format | undefined,
+    format: Format,
   ): Z2SQuery<TSchema, TTable, TReturn> {
     return new Z2SQuery(schema, tableName, this.#dbTransaction, ast, format);
   }

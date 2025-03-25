@@ -112,11 +112,8 @@ import {
   type Series,
   getLastConnectErrorValue,
 } from './metrics.ts';
-import type {
-  UpdateNeededReason,
-  ZeroAdvancedOptions,
-  ZeroOptions,
-} from './options.ts';
+import {MutationTracker} from './mutation-tracker.ts';
+import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import * as PingResult from './ping-result-enum.ts';
 import {QueryManager} from './query-manager.ts';
 import {
@@ -135,7 +132,6 @@ import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
-import {MutationTracker} from './mutation-tracker.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -415,7 +411,7 @@ export class Zero<
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
       slowMaterializeThreshold = 5_000,
-    } = options as ZeroAdvancedOptions<S>;
+    } = options as ZeroOptions<S>;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
     }
@@ -425,7 +421,7 @@ export class Zero<
       false /*options.enableAnalytics,*/, // Reenable analytics
     );
 
-    let {kvStore = 'idb'} = options as ZeroAdvancedOptions<S>;
+    let {kvStore = 'idb'} = options as ZeroOptions<S>;
     if (kvStore === 'idb') {
       if (!getBrowserGlobal('indexedDB')) {
         // eslint-disable-next-line no-console
@@ -898,10 +894,6 @@ export class Zero<
 
       case 'pull':
         return this.#handlePullResponse(lc, downMessage);
-
-      case 'warm':
-        // we ignore warming messages
-        break;
 
       case 'deleteClients':
         return this.#deleteClientsManager.clientsDeletedOnServer(

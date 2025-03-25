@@ -1,12 +1,12 @@
 import {expect, test} from 'vitest';
+import type {Query} from '../../../../zql/src/query/query.ts';
 import {
   StaticQuery,
   staticQuery,
 } from '../../../../zql/src/query/static-query.ts';
-import {schema} from './schema.ts';
-import type {Query} from '../../../../zql/src/query/query.ts';
 import {compile} from '../../compiler.ts';
 import {formatPg} from '../../sql.ts';
+import {schema} from './schema.ts';
 type Schema = typeof schema;
 
 test('limited junction edge', () => {
@@ -20,13 +20,9 @@ test('limited junction edge', () => {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-explicit-any
 function getSQL(q: Query<any, any, any>) {
-  return formatPg(compile(ast(q), schema.tables, format(q))).text;
+  return formatPg(compile(ast(q), schema.tables, q.format)).text;
 }
 
 function ast(q: Query<Schema, keyof Schema['tables']>) {
   return (q as StaticQuery<Schema, keyof Schema['tables']>).ast;
-}
-
-function format(q: Query<Schema, keyof Schema['tables']>) {
-  return (q as StaticQuery<Schema, keyof Schema['tables']>).format;
 }

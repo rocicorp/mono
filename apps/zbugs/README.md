@@ -36,15 +36,6 @@ ZERO_UPSTREAM_DB = "postgresql://user:password@127.0.0.1:6434/postgres"
 # Where to send custom mutations
 ZERO_PUSH_URL = "http://localhost:5173/api/push"
 
-# A separate Postgres database we use to store CVRs. CVRs (client view records)
-# keep track of which clients have which data. This is how we know what diff to
-# send on reconnect. It can be same database as above, but it makes most sense
-# for it to be a separate "database" in the same postgres "cluster".
-ZERO_CVR_DB = "postgresql://user:password@127.0.0.1:6435/postgres"
-
-# Yet another Postgres database which we used to store a replication log.
-ZERO_CHANGE_DB = "postgresql://user:password@127.0.0.1:6435/postgres"
-
 # Place to store the SQLite data zero-cache maintains. This can be lost, but if
 # it is, zero-cache will have to re-replicate next time it starts up.
 ZERO_REPLICA_FILE = "/tmp/zbugs-sync-replica.db"
@@ -79,6 +70,10 @@ PRIVATE_JWK = ""
 VITE_PUBLIC_SERVER="http://localhost:4848"
 # See comment on `ZERO_AUTH_JWK`
 VITE_PUBLIC_JWK=''
+
+# Discord webhook to send notifications to. Not required. Notifications won't
+# be sent if absent.
+DISCORD_WEBHOOK_URL=''
 ```
 
 Then start the server:

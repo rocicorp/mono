@@ -1,3 +1,4 @@
+import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
@@ -10,7 +11,12 @@ import type {
 import type {JSONObject} from '../../types/bigint-json.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import {Subscription} from '../../types/subscription.ts';
-import {ClientHandler, ensureSafeJSON, type Patch} from './client-handler.ts';
+import {
+  ClientHandler,
+  ensureSafeJSON,
+  startPoke,
+  type Patch,
+} from './client-handler.ts';
 
 const APP_ID = 'zapp';
 const SHARD_NUM = 6;
@@ -19,17 +25,43 @@ const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 describe('view-syncer/client-handler', () => {
   const lc = createSilentLogContext();
 
-  test('no-op and canceled pokes', () => {
+  function createSubscription() {
+    const received: Downstream[] = [];
+    const unconsumed: Downstream[] = [];
+    const subscription = Subscription.create<Downstream>({
+      cleanup: msgs => unconsumed.push(...msgs),
+    });
+    let err: Error | undefined;
+    const {promise: loopDone, resolve: onDone} = resolver();
+    void (async function () {
+      try {
+        for await (const msg of subscription) {
+          received.push(msg);
+        }
+      } catch (e) {
+        err = e instanceof Error ? e : new Error(String(e));
+      } finally {
+        onDone();
+      }
+    })();
+
+    return {
+      subscription,
+      close: async () => {
+        subscription.cancel();
+        await loopDone;
+        return {received: [...received, ...unconsumed], err};
+      },
+    };
+  }
+
+  test('no-op and canceled pokes', async () => {
     const poke1Version = {stateVersion: '123'};
     const poke2Version = {stateVersion: '125'};
     const poke3Version = {stateVersion: '127'};
     const poke4Version = {stateVersion: '129'};
 
-    const received: Downstream[] = [];
-    // Subscriptions that dump unconsumed pokes to `received`
-    const subscription = Subscription.create<Downstream>({
-      cleanup: msgs => received.push(...msgs),
-    });
+    const {subscription, close} = createSubscription();
 
     const schemaVersion = 1;
     const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
@@ -46,21 +78,21 @@ describe('view-syncer/client-handler', () => {
 
     // One poke advances from 121 => 123.
     let poker = handler.startPoke(poke1Version, schemaVersions);
-    poker.end(poke1Version);
+    await poker.end(poke1Version);
 
     // The second poke starts the advancement to 125 but then reverts to 123.
     poker = handler.startPoke(poke2Version, schemaVersions);
-    poker.end(poke1Version);
+    await poker.end(poke1Version);
 
     // The third poke gets canceled.
     poker = handler.startPoke(poke3Version, schemaVersions);
-    poker.cancel();
+    await poker.cancel();
 
     // The fourth poke advances to 129.
     poker = handler.startPoke(poke4Version, schemaVersions);
-    poker.end(poke4Version);
+    await poker.end(poke4Version);
 
-    subscription.cancel(); // Drains any pushed messages to received.
+    const {received} = await close();
 
     // Only the first and last pokes should have been received.
     expect(received).toEqual([
@@ -103,17 +135,15 @@ describe('view-syncer/client-handler', () => {
     ]);
   });
 
-  test('poke handler for multiple clients', () => {
+  test('poke handler for multiple clients', async () => {
     const poke1Version = {stateVersion: '121'};
     const poke2Version = {stateVersion: '123'};
 
-    const received: Downstream[][] = [[], [], []];
-    // Subscriptions that dump unconsumed pokes to `received`
-    const subscriptions = received.map(bucket =>
-      Subscription.create<Downstream>({
-        cleanup: msgs => bucket.push(...msgs),
-      }),
-    );
+    const subscriptions = [
+      createSubscription(),
+      createSubscription(),
+      createSubscription(),
+    ];
 
     const schemaVersion = 1;
     const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
@@ -127,7 +157,7 @@ describe('view-syncer/client-handler', () => {
         SHARD,
         '121',
         schemaVersion,
-        subscriptions[0],
+        subscriptions[0].subscription,
       ),
       // Client 2 is a bit behind.
       new ClientHandler(
@@ -138,7 +168,7 @@ describe('view-syncer/client-handler', () => {
         SHARD,
         '120:01',
         schemaVersion,
-        subscriptions[1],
+        subscriptions[1].subscription,
       ),
       // Client 3 is more behind.
       new ClientHandler(
@@ -149,133 +179,124 @@ describe('view-syncer/client-handler', () => {
         SHARD,
         '11z',
         schemaVersion,
-        subscriptions[2],
+        subscriptions[2].subscription,
       ),
     ];
 
-    let pokers = handlers.map(client =>
-      client.startPoke(poke1Version, schemaVersions),
-    );
-    for (const poker of pokers) {
-      poker.addPatch({
-        toVersion: {stateVersion: '11z', minorVersion: 1},
-        patch: {
-          type: 'query',
-          op: 'put',
-          id: 'foohash',
+    let pokers = startPoke(handlers, poke1Version, schemaVersions);
+    await pokers.addPatch({
+      toVersion: {stateVersion: '11z', minorVersion: 1},
+      patch: {
+        type: 'query',
+        op: 'put',
+        id: 'foohash',
+        clientID: 'foo',
+        ast: {table: 'issues'},
+      },
+    });
+    await pokers.addPatch({
+      toVersion: {stateVersion: '120'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {
+          schema: '',
+          table: 'zapp_6.clients',
+          rowKey: {clientID: 'bar'},
+        },
+        contents: {
+          clientGroupID: 'g1',
+          clientID: 'bar',
+          lastMutationID: 321n,
+          userID: 'ignored',
+        },
+      },
+    });
+    await pokers.addPatch({
+      toVersion: {stateVersion: '120', minorVersion: 2},
+      patch: {type: 'query', op: 'del', id: 'barhash', clientID: 'foo'},
+    });
+    await pokers.addPatch({
+      toVersion: {stateVersion: '121'},
+      patch: {
+        type: 'query',
+        op: 'put',
+        id: 'bazhash',
+        ast: {table: 'labels'},
+      },
+    });
+
+    await pokers.addPatch({
+      toVersion: {stateVersion: '120', minorVersion: 2},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {schema: 'public', table: 'issues', rowKey: {id: 'bar'}},
+        contents: {id: 'bar', name: 'hello', num: 123},
+      },
+    });
+    await pokers.addPatch({
+      toVersion: {stateVersion: '120'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {
+          schema: '',
+          table: 'zapp_6.clients',
+          rowKey: {clientID: 'foo'},
+        },
+        contents: {
+          clientGroupID: 'g1',
           clientID: 'foo',
-          ast: {table: 'issues'},
+          lastMutationID: 123n,
         },
-      });
-      poker.addPatch({
-        toVersion: {stateVersion: '120'},
-        patch: {
-          type: 'row',
-          op: 'put',
-          id: {
-            schema: '',
-            table: 'zapp_6.clients',
-            rowKey: {clientID: 'bar'},
-          },
-          contents: {
-            clientGroupID: 'g1',
-            clientID: 'bar',
-            lastMutationID: 321n,
-            userID: 'ignored',
-          },
+      },
+    });
+    await pokers.addPatch({
+      toVersion: {stateVersion: '11z', minorVersion: 1},
+      patch: {
+        type: 'row',
+        op: 'del',
+        id: {schema: 'public', table: 'issues', rowKey: {id: 'foo'}},
+      },
+    });
+    await pokers.addPatch({
+      toVersion: {stateVersion: '121'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
+        contents: {id: 'boo', name: 'world', num: 123456},
+      },
+    });
+    await pokers.addPatch({
+      toVersion: {stateVersion: '121'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {
+          schema: '',
+          table: 'zapp_6.clients',
+          rowKey: {clientID: 'foo'},
         },
-      });
-      poker.addPatch({
-        toVersion: {stateVersion: '120', minorVersion: 2},
-        patch: {type: 'query', op: 'del', id: 'barhash', clientID: 'foo'},
-      });
-      poker.addPatch({
-        toVersion: {stateVersion: '121'},
-        patch: {
-          type: 'query',
-          op: 'put',
-          id: 'bazhash',
-          ast: {table: 'labels'},
+        contents: {
+          clientGroupID: 'g1',
+          clientID: 'foo',
+          lastMutationID: 124n,
         },
-      });
+      },
+    });
 
-      poker.addPatch({
-        toVersion: {stateVersion: '120', minorVersion: 2},
-        patch: {
-          type: 'row',
-          op: 'put',
-          id: {schema: 'public', table: 'issues', rowKey: {id: 'bar'}},
-          contents: {id: 'bar', name: 'hello', num: 123},
-        },
-      });
-      poker.addPatch({
-        toVersion: {stateVersion: '120'},
-        patch: {
-          type: 'row',
-          op: 'put',
-          id: {
-            schema: '',
-            table: 'zapp_6.clients',
-            rowKey: {clientID: 'foo'},
-          },
-          contents: {
-            clientGroupID: 'g1',
-            clientID: 'foo',
-            lastMutationID: 123n,
-          },
-        },
-      });
-      poker.addPatch({
-        toVersion: {stateVersion: '11z', minorVersion: 1},
-        patch: {
-          type: 'row',
-          op: 'del',
-          id: {schema: 'public', table: 'issues', rowKey: {id: 'foo'}},
-        },
-      });
-      poker.addPatch({
-        toVersion: {stateVersion: '121'},
-        patch: {
-          type: 'row',
-          op: 'put',
-          id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
-          contents: {id: 'boo', name: 'world', num: 123456},
-        },
-      });
-      poker.addPatch({
-        toVersion: {stateVersion: '121'},
-        patch: {
-          type: 'row',
-          op: 'put',
-          id: {
-            schema: '',
-            table: 'zapp_6.clients',
-            rowKey: {clientID: 'foo'},
-          },
-          contents: {
-            clientGroupID: 'g1',
-            clientID: 'foo',
-            lastMutationID: 124n,
-          },
-        },
-      });
-
-      poker.end(poke1Version);
-    }
+    await pokers.end(poke1Version);
 
     // Now send another (empty) poke with everyone at the same baseCookie.
-    pokers = handlers.map(client =>
-      client.startPoke(poke2Version, schemaVersions),
-    );
-    for (const poker of pokers) {
-      poker.end(poke2Version);
-    }
+    pokers = startPoke(handlers, poke2Version, schemaVersions);
+    await pokers.end(poke2Version);
 
-    // Cancel the subscriptions to collect the unconsumed messages.
-    subscriptions.forEach(sub => sub.cancel());
+    const results = await Promise.all(subscriptions.map(sub => sub.close()));
 
     // Client 1 was already caught up. Only gets the second poke.
-    expect(received[0]).toEqual([
+    expect(results[0].received).toEqual([
       [
         'pokeStart',
         {pokeID: '123', baseCookie: '121', schemaVersions},
@@ -284,7 +305,7 @@ describe('view-syncer/client-handler', () => {
     ]);
 
     // Client 2 is a bit behind.
-    expect(received[1]).toEqual([
+    expect(results[1].received).toEqual([
       [
         'pokeStart',
         {pokeID: '121', baseCookie: '120:01', schemaVersions},
@@ -325,7 +346,7 @@ describe('view-syncer/client-handler', () => {
     ]);
 
     // Client 3 is more behind.
-    expect(received[2]).toEqual([
+    expect(results[2].received).toEqual([
       [
         'pokeStart',
         {pokeID: '121', baseCookie: '11z', schemaVersions},
@@ -373,7 +394,7 @@ describe('view-syncer/client-handler', () => {
     ]);
   });
 
-  test('schemaVersion unsupported', () => {
+  test('schemaVersion unsupported', async () => {
     const received: Downstream[] = [];
     let e: Error | undefined = undefined;
     const subscription = Subscription.create<Downstream>({
@@ -401,7 +422,7 @@ describe('view-syncer/client-handler', () => {
       {stateVersion: '121'},
       schemaVersions,
     );
-    poker.end({stateVersion: '121'});
+    await poker.end({stateVersion: '121'});
 
     subscription.cancel();
 
@@ -439,12 +460,7 @@ describe('view-syncer/client-handler', () => {
         },
       },
     ] satisfies Patch[]) {
-      let terminated = false;
-      const downstream = Subscription.create<Downstream>({
-        cleanup: () => {
-          terminated = true;
-        },
-      });
+      const {subscription, close} = createSubscription();
 
       const schemaVersion = 1;
       const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
@@ -456,23 +472,15 @@ describe('view-syncer/client-handler', () => {
         SHARD,
         '121',
         schemaVersion,
-        downstream,
+        subscription,
       );
       const poker = handler.startPoke({stateVersion: '123'}, schemaVersions);
 
-      expect(terminated).toBe(false);
-      poker.addPatch({toVersion: {stateVersion: '123'}, patch});
-      expect(terminated).toBe(true);
-
-      let err;
-      try {
-        for await (const _ of downstream) {
-          // Should not be reached.
-        }
-      } catch (e) {
-        err = e;
-      }
-      expect(err).not.toBeUndefined();
+      await poker.addPatch({toVersion: {stateVersion: '123'}, patch});
+      const {err} = await close();
+      expect(String(err)).toMatch(
+        /Error: Value of "\w+" exceeds safe Number range \(\d+\)/,
+      );
     }
   });
 

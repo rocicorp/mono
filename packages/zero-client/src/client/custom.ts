@@ -142,6 +142,7 @@ export function makeReplicacheMutator<S extends Schema>(
 
     if (repTx.reason === 'initial') {
       const serverPromise = mutationTracker.trackMutation(repTx.mutationID);
+
       (
         clientPromise as PromiseMaybeWithServerResult<void, MutationResult>
       ).server = serverPromise;
