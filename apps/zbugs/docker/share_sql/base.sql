@@ -18,6 +18,11 @@ CREATE TABLE "user" (
     "githubID" INTEGER NOT NULL
 );
 
+CREATE TABLE "userInternal" (
+    "id" VARCHAR PRIMARY KEY,
+    "email" VARCHAR
+);
+
 CREATE UNIQUE INDEX user_login_idx ON "user" (login);
 CREATE UNIQUE INDEX user_githubid_idx ON "user" ("githubID");
 
