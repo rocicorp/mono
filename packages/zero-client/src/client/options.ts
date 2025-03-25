@@ -157,12 +157,7 @@ export interface ZeroOptions<
    * Default value: 5_000.
    */
   slowMaterializeThreshold?: number | undefined;
-}
 
-export interface ZeroAdvancedOptions<
-  S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined = undefined,
-> extends ZeroOptions<S, MD> {
   /**
    * UI rendering libraries will often provide a utility for batching multiple
    * state updates into a single render. Some examples are React's
@@ -194,9 +189,19 @@ export interface ZeroAdvancedOptions<
    * or view, to continue syncing.
    *
    * Defaults is 0.
+   *
+   * @deprecated Use ttl instead
    */
   maxRecentQueries?: number | undefined;
 }
+
+/**
+ * @deprecated Use {@link ZeroOptions} instead.
+ */
+export interface ZeroAdvancedOptions<
+  S extends Schema,
+  MD extends CustomMutatorDefs<S> | undefined = undefined,
+> extends ZeroOptions<S, MD> {}
 
 export type UpdateNeededReason =
   // There is a new client group due to a another tab loading new code which

@@ -30,7 +30,6 @@ import {
   ExpressionBuilder,
   type ExpressionFactory,
 } from './expression.ts';
-import type {AdvancedQuery} from './query-internal.ts';
 import {
   type GetFilterType,
   type HumanReadable,
@@ -53,7 +52,7 @@ export function newQuery<
   schema: TSchema,
   table: TTable,
 ): Query<TSchema, TTable> {
-  return new QueryImpl(delegate, schema, table);
+  return new QueryImpl(delegate, schema, table, {table}, defaultFormat);
 }
 
 function newQueryWithDetails<
@@ -65,7 +64,7 @@ function newQueryWithDetails<
   schema: TSchema,
   tableName: TTable,
   ast: AST,
-  format: Format | undefined,
+  format: Format,
 ): QueryImpl<TSchema, TTable, TReturn> {
   return new QueryImpl(delegate, schema, tableName, ast, format);
 }
@@ -98,32 +97,25 @@ export function staticParam(
 
 export const SUBQ_PREFIX = 'zsubq_';
 
+export const defaultFormat = {singular: false, relationships: {}} as const;
+
 export abstract class AbstractQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
-> implements AdvancedQuery<TSchema, TTable, TReturn>
+> implements Query<TSchema, TTable, TReturn>
 {
   readonly #schema: TSchema;
   readonly #tableName: TTable;
   readonly #ast: AST;
-  readonly #format: Format;
+  readonly format: Format;
   #hash: string = '';
 
-  constructor(
-    schema: TSchema,
-    tableName: TTable,
-    ast: AST = {table: tableName},
-    format?: Format | undefined,
-  ) {
+  constructor(schema: TSchema, tableName: TTable, ast: AST, format: Format) {
     this.#schema = schema;
     this.#tableName = tableName;
     this.#ast = ast;
-    this.#format = format ?? {singular: false, relationships: {}};
-  }
-
-  get format(): Format {
-    return this.#format;
+    this.format = format;
   }
 
   // Not part of Query or QueryInternal interface
@@ -160,7 +152,7 @@ export abstract class AbstractQuery<
         limit: 1,
       },
       {
-        ...this.#format,
+        ...this.format,
         singular: true,
       },
     );
@@ -233,10 +225,10 @@ export abstract class AbstractQuery<
           ],
         },
         {
-          ...this.#format,
+          ...this.format,
           relationships: {
-            ...this.#format.relationships,
-            [relationship]: sq.#format,
+            ...this.format.relationships,
+            [relationship]: sq.format,
           },
         },
       );
@@ -306,10 +298,10 @@ export abstract class AbstractQuery<
           ],
         },
         {
-          ...this.#format,
+          ...this.format,
           relationships: {
-            ...this.#format.relationships,
-            [relationship]: sq.#format,
+            ...this.format.relationships,
+            [relationship]: sq.format,
           },
         },
       );
@@ -349,7 +341,7 @@ export abstract class AbstractQuery<
         ...this.#ast,
         where: dnf(cond),
       },
-      this.#format,
+      this.format,
     );
   }
 
@@ -367,7 +359,7 @@ export abstract class AbstractQuery<
           exclusive: !opts?.inclusive,
         },
       },
-      this.#format,
+      this.format,
     );
   }
 
@@ -386,7 +378,7 @@ export abstract class AbstractQuery<
         ...this.#ast,
         limit,
       },
-      this.#format,
+      this.format,
     );
   }
 
@@ -401,7 +393,7 @@ export abstract class AbstractQuery<
         ...this.#ast,
         orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
       },
-      this.#format,
+      this.format,
     );
   }
 
@@ -564,8 +556,8 @@ export class QueryImpl<
     delegate: QueryDelegate,
     schema: TSchema,
     tableName: TTable,
-    ast?: AST,
-    format?: Format | undefined,
+    ast: AST,
+    format: Format,
   ) {
     super(schema, tableName, ast, format);
     this.#delegate = delegate;
@@ -581,7 +573,7 @@ export class QueryImpl<
     schema: TSchema,
     tableName: TTable,
     ast: AST,
-    format: Format | undefined,
+    format: Format,
   ): QueryImpl<TSchema, TTable, TReturn> {
     return newQueryWithDetails(this.#delegate, schema, tableName, ast, format);
   }
@@ -620,7 +612,7 @@ export class QueryImpl<
 
     const view = this.#delegate.batchViewUpdates(() =>
       (factory ?? arrayViewFactory)(
-        this as Query<TSchema, TTable, TReturn>,
+        this,
         input,
         this.format,
         onDestroy,

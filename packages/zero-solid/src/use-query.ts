@@ -1,11 +1,12 @@
 import {createMemo, onCleanup, type Accessor} from 'solid-js';
 import {RefCount} from '../../shared/src/ref-count.ts';
-import type {
-  AdvancedQuery,
-  HumanReadable,
-  Query,
-} from '../../zero/src/advanced.ts';
-import {DEFAULT_TTL, type Schema, type TTL} from '../../zero/src/zero.ts';
+import {
+  DEFAULT_TTL,
+  type HumanReadable,
+  type Query,
+  type Schema,
+  type TTL,
+} from '../../zero/src/zero.ts';
 import {
   solidViewFactory,
   type QueryResultDetails,
@@ -31,7 +32,7 @@ export function useQuery<
 ): QueryResult<TReturn> {
   // Wrap in in createMemo to ensure a new view is created if the querySignal changes.
   const view = createMemo(() => {
-    const query = querySignal() as AdvancedQuery<TSchema, TTable, TReturn>;
+    const query = querySignal();
     const ttl = normalize(options)?.ttl ?? DEFAULT_TTL;
     const view = getView(query, ttl);
 
@@ -55,7 +56,7 @@ function getView<
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
-  query: AdvancedQuery<TSchema, TTable, TReturn>,
+  query: Query<TSchema, TTable, TReturn>,
   ttl: TTL,
 ): SolidView<HumanReadable<TReturn>> {
   // TODO(arv): Use the hash of the query instead of the query object itself... but

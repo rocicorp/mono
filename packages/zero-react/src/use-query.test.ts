@@ -1,13 +1,10 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {AdvancedQuery} from '../../zql/src/query/query-internal.ts';
+import type {Query} from '../../zql/src/query/query.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
 import {getAllViewsSizeForTesting, ViewStore} from './use-query.tsx';
 
-function newMockQuery(
-  query: string,
-  singular = false,
-): AdvancedQuery<Schema, string> {
+function newMockQuery(query: string, singular = false): Query<Schema, string> {
   const view = newView();
   return {
     hash() {
@@ -15,8 +12,8 @@ function newMockQuery(
     },
     materialize: vi.fn().mockImplementation(() => view),
     format: {singular},
-    updateTTL: vi.fn<AdvancedQuery<Schema, string>['updateTTL']>(),
-  } as unknown as AdvancedQuery<Schema, string>;
+    updateTTL: vi.fn<Query<Schema, string>['updateTTL']>(),
+  } as unknown as Query<Schema, string>;
 }
 
 function newView() {

@@ -6,6 +6,7 @@ import type {
   SchemaValueToTSType,
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
+import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
@@ -108,6 +109,10 @@ export interface Query<
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
 > {
+  readonly format: Format;
+  hash(): string;
+  updateTTL(ttl: TTL): void;
+
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
   ): Query<
@@ -188,6 +193,10 @@ export interface Query<
   one(): Query<TSchema, TTable, TReturn | undefined>;
 
   materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
+  materialize<T>(
+    factory: ViewFactory<TSchema, TTable, TReturn, T>,
+    ttl?: TTL,
+  ): T;
 
   run(): Promise<HumanReadable<TReturn>>;
 

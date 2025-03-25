@@ -3,7 +3,6 @@ import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {AdvancedQuery} from '../../zql/src/query/query-internal.ts';
 import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
@@ -43,10 +42,9 @@ export function useQuery<
   } else if (options) {
     ({enabled = true, ttl = DEFAULT_TTL} = options);
   }
-  const advancedQuery = query as AdvancedQuery<TSchema, TTable, TReturn>;
 
   const z = useZero();
-  const view = viewStore.getView(z.clientID, advancedQuery, enabled, ttl);
+  const view = viewStore.getView(z.clientID, query, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
     view.subscribeReactInternals,
@@ -178,7 +176,7 @@ export class ViewStore {
     TReturn,
   >(
     clientID: string,
-    query: AdvancedQuery<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn>,
     enabled: boolean,
     ttl: TTL,
   ): {
@@ -255,13 +253,13 @@ class ViewWrapper<
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
   readonly #onMaterialized;
-  readonly #query: AdvancedQuery<TSchema, TTable, TReturn>;
+  readonly #query: Query<TSchema, TTable, TReturn>;
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
   #ttl: TTL;
 
   constructor(
-    query: AdvancedQuery<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn>,
     ttl: TTL,
     onMaterialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
     onDematerialized: () => void,

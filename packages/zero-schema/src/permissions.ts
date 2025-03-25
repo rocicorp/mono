@@ -6,7 +6,7 @@ import {
   type Parameter,
 } from '../../zero-protocol/src/ast.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
-import {staticParam} from '../../zql/src/query/query-impl.ts';
+import {defaultFormat, staticParam} from '../../zql/src/query/query-impl.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {StaticQuery} from '../../zql/src/query/static-query.ts';
 import type {Schema} from './builder/schema-builder.ts';
@@ -92,6 +92,8 @@ export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
     expressionBuilders[name] = new StaticQuery(
       schema,
       name,
+      {table: name},
+      defaultFormat,
     ).expressionBuilder();
   }
 
