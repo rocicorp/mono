@@ -25,10 +25,11 @@ export function loadPermissions(
     `SELECT permissions, hash FROM "${appID}.permissions"`,
   );
   if (permissions === null) {
+    const appIDFlag = appID === 'zero' ? '' : ` --app-id=${appID}`;
     lc.warn?.(
       `\n\n\n` +
         `No upstream permissions deployed.\n` +
-        `Run 'npx zero-deploy-permissions' to enforce permissions.` +
+        `Run 'npx zero-deploy-permissions${appIDFlag}' to enforce permissions.` +
         `\n\n\n`,
     );
     return {permissions, hash: null};
