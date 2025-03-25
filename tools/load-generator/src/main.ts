@@ -1,6 +1,6 @@
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import 'dotenv/config';
 import {nanoid} from 'nanoid/non-secure';
+import '@dotenvx/dotenvx/config';
 import {ident as id, literal} from 'pg-format';
 import postgres from 'postgres';
 import {parseOptions} from '../../../packages/shared/src/options.ts';

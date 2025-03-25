@@ -1,6 +1,6 @@
 /* eslint-disable no-console */
 import chalk from 'chalk';
-import 'dotenv/config';
+import '@dotenvx/dotenvx/config';
 
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';

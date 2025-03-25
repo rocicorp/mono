@@ -4,7 +4,7 @@
 import {resolver} from '@rocicorp/resolver';
 import chalk from 'chalk';
 import {watch} from 'chokidar';
-import 'dotenv/config';
+import '@dotenvx/dotenvx/config';
 import {spawn, type ChildProcess} from 'node:child_process';
 import {parseOptionsAdvanced} from '../../shared/src/options.ts';
 import {
@@ -13,7 +13,7 @@ import {
 } from '../../zero-cache/src/config/zero-config.ts';
 import {deployPermissionsOptions} from '../../zero-cache/src/scripts/permissions.ts';
 
-const deployPermissionsScript = 'zero-deploy-permissions';
+const deployPermissionsScript = 'zero-deploy-permissions -p shared/schema.ts';
 const zeroCacheScript = 'zero-cache';
 
 function killProcess(childProcess: ChildProcess | undefined) {

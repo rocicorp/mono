@@ -24,6 +24,7 @@
     "analyze": "analyze -c vite.config.ts"
   },
   "dependencies": {
+    "@dotenvx/dotenvx": "^1.39.0",
     "@fastify/cookie": "^10.0.0",
     "@fastify/oauth2": "^8.0.0",
     "@floating-ui/react": "^0.26.28",
@@ -33,7 +34,6 @@
     "@schickling/fps-meter": "^0.1.2",
     "@tanstack/react-virtual": "^3.10.9",
     "classnames": "^2.5.1",
-    "dotenv": "^16.4.5",
     "emoji-picker-element": "^1.22.8",
     "emoji-picker-element-data": "^1.6.1",
     "fastify": "^5.0.0",

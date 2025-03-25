@@ -1,4 +1,4 @@
-import 'dotenv/config'; // Imports ENV variables from .env
+import '@dotenvx/dotenvx/config'; // Imports ENV variables from .env
 import {assert} from '../../../../shared/src/asserts.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';
