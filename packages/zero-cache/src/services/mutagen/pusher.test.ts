@@ -630,10 +630,11 @@ describe('pusher streaming', () => {
         ]
       `);
 
-      // The stream should fail with InvalidPush error
-      await expect(
-        result.stream[Symbol.asyncIterator]().next(),
-      ).rejects.toThrow('mutation was out of order');
+      // The stream should be completed after the OOO mutation
+      expect(await result.stream[Symbol.asyncIterator]().next()).toEqual({
+        done: true,
+        value: undefined,
+      });
     }
   });
 

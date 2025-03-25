@@ -179,7 +179,8 @@ class PushWorker {
    * to all the clients that were part of the push.
    */
   async #fanOutResponses(response: PushResponse) {
-    const pushed: Promise<Result>[] = [];
+    const responses: Promise<Result>[] = [];
+    const connectionTerminations: (() => void)[] = [];
     if ('error' in response) {
       const groupedMutationIDs = groupBy(
         response.mutationIDs ?? [],
@@ -204,7 +205,7 @@ class PushWorker {
             }),
           );
         } else {
-          pushed.push(
+          responses.push(
             client[1].push([
               'push-response',
               {
@@ -247,19 +248,22 @@ class PushWorker {
         const successes = failure ? mutations.slice(0, i) : mutations;
 
         if (successes.length > 0) {
-          pushed.push(
+          responses.push(
             client[1].push(['push-response', {mutations: successes}]).result,
           );
         }
 
         if (failure) {
-          client[1].fail(failure);
+          connectionTerminations.push(() => client[1].fail(failure));
         }
       }
     }
-    // Wait for results to be sent downstream to avoid queueing up
-    // an arbitrary amount of responses in memory.
-    await Promise.allSettled(pushed);
+
+    try {
+      await Promise.allSettled(responses);
+    } finally {
+      connectionTerminations.forEach(cb => cb());
+    }
   }
 
   async #processPush(entry: PusherEntry): Promise<PushResponse> {

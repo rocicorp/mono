@@ -13,6 +13,16 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {QueryManager} from './query-manager.ts';
 import {must} from '../../../shared/src/must.ts';
 
+const transientPushErrorTypes: PushError['error'][] = [
+  'zero-pusher',
+  'http',
+
+  // These should never actually be received as they cause the websocket
+  // connection to be closed.
+  'unsupported-push-version',
+  'unsupported-schema-version',
+];
+
 /**
  * Tracks what pushes are in-flight and resolves promises when they're acked.
  */
@@ -77,6 +87,12 @@ export class MutationTracker {
   }
 
   #processPushError(error: PushError): void {
+    // Mutations suffering from transient errors are not removed from the
+    // outstanding mutations list. The client will retry.
+    if (transientPushErrorTypes.includes(error.error)) {
+      return;
+    }
+
     const mids = error.mutationIDs;
 
     // TODO: remove this check once the server always sends mutationIDs

@@ -53,7 +53,7 @@ describe('MutationTracker', () => {
     });
   });
 
-  test('handles push errors', async () => {
+  test('does not resolve mutators for transient errors', async () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
     const mutationPromise = tracker.trackMutation(1, []);
@@ -64,10 +64,13 @@ describe('MutationTracker', () => {
     };
 
     tracker.processPushResponse(response);
-    await expect(mutationPromise).rejects.toEqual({
-      error: 'unsupported-push-version',
-      mutationIDs: [{clientID: CLIENT_ID, id: 1}],
+    let called = false;
+    void mutationPromise.finally(() => {
+      called = true;
     });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(tracker.size).toBe(1);
+    expect(called).toBe(false);
   });
 
   test('rejects mutations from other clients', () => {
