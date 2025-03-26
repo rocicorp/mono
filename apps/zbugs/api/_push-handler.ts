@@ -48,7 +48,6 @@ export async function handlePush(
 ) {
   // TODO: pass a queue of callbacks into createServerMutators
   const mutators = createServerMutators(authData);
-  // TODO: Remove createPushHandler
   // TODO: Fix the stupid underscore in all these files
   // TODO: Make it possible to share the processor across calls
   const processor = new PushProcessor(
