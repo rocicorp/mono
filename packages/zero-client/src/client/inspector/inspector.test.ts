@@ -1,24 +1,18 @@
 import {beforeEach, expect, test, vi} from 'vitest';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {
+  InspectDownMessage,
+  InspectQueriesDown,
+} from '../../../../zero-protocol/src/inspect-down.ts';
 import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import {MockSocket, zeroForTest} from '../test-utils.ts';
-
-const rafMock = vi.fn<typeof requestAnimationFrame>();
-
-async function nextRaf() {
-  expect(rafMock).toHaveBeenCalled();
-  const f = rafMock.mock.calls[0][0];
-  rafMock.mock.calls.shift();
-  f(1);
-  await Promise.resolve(1);
-}
+import type {Query} from './types.ts';
 
 beforeEach(() => {
   vi.spyOn(globalThis, 'WebSocket').mockImplementation(
     () => new MockSocket('ws://localhost:1234') as unknown as WebSocket,
   );
-  vi.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(rafMock);
   return () => {
     vi.restoreAllMocks();
   };
@@ -67,109 +61,115 @@ test('basics 2 clients', async () => {
   await z2.close();
 });
 
-test('queries', async () => {
+test('client queries', async () => {
   const userID = nanoid();
-  const z1 = zeroForTest({userID, schema, kvStore: 'idb'});
-  const z2 = zeroForTest({userID, schema, kvStore: 'idb'});
-  await z1.triggerConnected();
-  await z2.triggerConnected();
+  const z = zeroForTest({userID, schema, kvStore: 'idb'});
+  await z.triggerConnected();
 
-  await z1.triggerPoke(null, '1', {
-    desiredQueriesPatches: {
-      [z1.clientID]: [
-        {
-          op: 'put',
-          hash: 'hash1',
-          ast: {
-            table: 'issues',
-          },
-          ttl: 1000,
-        },
-      ],
-    },
-  });
-
-  await z2.triggerPoke(null, '1', {
-    desiredQueriesPatches: {
-      [z2.clientID]: [
-        {
-          op: 'put',
-          hash: 'hash2',
-          ast: {
-            table: 'users',
-          },
-          ttl: 2000,
-        },
-      ],
-    },
-  });
-
-  await nextRaf();
-  await nextRaf();
-
-  const inspector = await z1.inspect();
+  const inspector = await z.inspect();
   expect(await inspector.clients()).toEqual([
     {
       clientGroup: {
-        id: await z1.clientGroupID,
+        id: await z.clientGroupID,
       },
-      id: z1.clientID,
-    },
-    {
-      clientGroup: {
-        id: await z2.clientGroupID,
-      },
-      id: z2.clientID,
-    },
-  ]);
-  expect(await inspector.clientsWithQueries()).toEqual([
-    {
-      clientGroup: {
-        id: await z1.clientGroupID,
-      },
-      id: z1.clientID,
-    },
-  ]);
-  expect(await inspector.client.queries()).toEqual([
-    {
-      ast: {
-        table: 'issue',
-      },
-      got: false,
-      id: 'hash1',
+      id: z.clientID,
     },
   ]);
 
-  await z1.triggerPoke('1', '2', {
-    gotQueriesPatch: [
-      {
-        hash: 'hash1',
-        op: 'put',
-        ast: {
-          table: 'issues',
+  await z.socket;
+
+  const t = async (
+    response: InspectQueriesDown['value'],
+    expected: Query[],
+  ) => {
+    // The RPC uses our nanoid which uses Math.random
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    (await z.socket).messages.length = 0;
+    const p = inspector.client.queries();
+    expect((await z.socket).messages.map(s => JSON.parse(s))).toEqual([
+      [
+        'inspect',
+        {
+          op: 'queries',
+          clientID: z.clientID,
+          id: '000000000000000000000',
         },
-        ttl: 2000,
+      ],
+    ]);
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'queries',
+        id: '000000000000000000000',
+        value: response,
+      },
+    ] satisfies InspectDownMessage);
+    expect(await p).toEqual(expected);
+  };
+
+  await t([], []);
+  await t(
+    [
+      {
+        clientID: z.clientID,
+        queryID: '1',
+        ast: {table: 'issue'},
+        deleted: false,
+        got: true,
+        inactivatedAt: null,
+        rowCount: 10,
+        ttl: 60_000,
       },
     ],
-  });
-
-  await nextRaf();
-
-  expect(await inspector.client.queries()).toEqual([
-    {
-      ast: {
-        table: 'issue',
+    [
+      {
+        clientID: z.clientID,
+        ast: {table: 'issue'},
+        deleted: false,
+        got: true,
+        id: '1',
+        inactivatedAt: null,
+        rowCount: 10,
+        sql: 'SELECT "issue"."id","issue"."title","issue"."description","issue"."closed","issue"."owner_id" as "ownerId" FROM "issues" as "issue"',
+        ttl: '1m',
+        zql: 'issue',
       },
-      got: true,
-      id: 'hash1',
-    },
-  ]);
+    ],
+  );
+  const d = Date.UTC(2025, 2, 25, 14, 52, 10);
+  await t(
+    [
+      {
+        clientID: z.clientID,
+        queryID: '1',
+        ast: {table: 'issue'},
+        deleted: false,
+        got: true,
+        inactivatedAt: d,
+        rowCount: 10,
+        ttl: 60_000,
+      },
+    ],
+    [
+      {
+        clientID: z.clientID,
+        ast: {table: 'issue'},
+        deleted: false,
+        got: true,
+        id: '1',
+        inactivatedAt: new Date(d),
+        rowCount: 10,
+        sql: 'SELECT "issue"."id","issue"."title","issue"."description","issue"."closed","issue"."owner_id" as "ownerId" FROM "issues" as "issue"',
+        ttl: '1m',
+        zql: 'issue',
+      },
+    ],
+  );
 
-  await z1.close();
-  await z2.close();
+  await z.close();
 });
 
-test('sql getter', async () => {
+test('clientGroup queries', async () => {
   const ast: AST = {
     table: 'issue',
     where: {
@@ -196,91 +196,49 @@ test('sql getter', async () => {
     schema: undefined,
     start: undefined,
   };
-  const z1 = zeroForTest({schema});
-  await z1.triggerConnected();
-  await z1.triggerPoke(null, '1', {
-    desiredQueriesPatches: {
-      [z1.clientID]: [
+  const z = zeroForTest({schema});
+  await z.triggerConnected();
+
+  vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+  const inspector = await z.inspect();
+  const socket = await z.socket;
+  const p = inspector.clientGroup.queries();
+  expect(socket.messages).toMatchInlineSnapshot(`
+    [
+      "["inspect",{"op":"queries","id":"000000000000000000000"}]",
+    ]
+  `);
+  await z.triggerMessage([
+    'inspect',
+    {
+      op: 'queries',
+      id: '000000000000000000000',
+      value: [
         {
-          op: 'put',
-          hash: 'hash1',
-          ast: {
-            ...ast,
-            table: 'issues',
-          },
-          ttl: 1000,
+          clientID: z.clientID,
+          queryID: '1',
+          ast,
+          deleted: false,
+          got: true,
+          inactivatedAt: null,
+          rowCount: 10,
+          ttl: 60_000,
         },
       ],
     },
-  });
-
-  await nextRaf();
-
-  const inspector = await z1.inspect();
-  const queries = await inspector.client.queries();
-  expect(queries).toEqual([
+  ] satisfies InspectDownMessage);
+  expect(await p).toEqual([
     {
       ast,
-      got: false,
-      id: 'hash1',
+      clientID: z.clientID,
+      deleted: false,
+      got: true,
+      id: '1',
+      inactivatedAt: null,
+      rowCount: 10,
+      sql: 'SELECT "issue"."id","issue"."title","issue"."description","issue"."closed","issue"."owner_id" as "ownerId" FROM "issues" as "issue" WHERE ("id" = $1 OR "id" != $2)',
+      ttl: '1m',
+      zql: "issue.where(({cmp, or}) => or(cmp('id', '1'), cmp('id', '!=', '2')))",
     },
   ]);
-  expect(queries[0].sql).toMatchInlineSnapshot(
-    `"SELECT "issue"."id","issue"."title","issue"."description","issue"."closed","issue"."owner_id" as "ownerId" FROM "issues" as "issue" WHERE ("id" = $1 OR "id" != $2)"`,
-  );
-});
-
-test('zql getter', async () => {
-  const ast: AST = {
-    table: 'issue',
-    where: {
-      type: 'or',
-      conditions: [
-        {
-          type: 'simple',
-          op: '=',
-          left: {type: 'column', name: 'id'},
-          right: {type: 'literal', value: '1'},
-        },
-        {
-          type: 'simple',
-          op: '!=',
-          left: {type: 'column', name: 'id'},
-          right: {type: 'literal', value: '2'},
-        },
-      ],
-    },
-  };
-  const z1 = zeroForTest({schema});
-  await z1.triggerConnected();
-  await z1.triggerPoke(null, '1', {
-    desiredQueriesPatches: {
-      [z1.clientID]: [
-        {
-          op: 'put',
-          hash: 'hash1',
-          ast: {
-            ...ast,
-            table: 'issues',
-          },
-          ttl: 1000,
-        },
-      ],
-    },
-  });
-
-  await nextRaf();
-
-  const inspector = await z1.inspect();
-  const queries = await inspector.client.queries();
-  expect(queries).toEqual([
-    {
-      ast,
-      got: false,
-      id: 'hash1',
-    },
-  ]);
-  expect(queries[0].zql).toBe(
-    "issue.where(({cmp, or}) => or(cmp('id', '1'), cmp('id', '!=', '2')))",
-  );
 });

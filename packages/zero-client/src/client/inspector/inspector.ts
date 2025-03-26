@@ -3,10 +3,7 @@ import type {BTreeRead} from '../../../../replicache/src/btree/read.ts';
 import {type Read} from '../../../../replicache/src/dag/store.ts';
 import {readFromHash} from '../../../../replicache/src/db/read.ts';
 import * as FormatVersion from '../../../../replicache/src/format-version-enum.ts';
-import {
-  getClientGroup,
-  getClientGroups,
-} from '../../../../replicache/src/persist/client-groups.ts';
+import {getClientGroup} from '../../../../replicache/src/persist/client-groups.ts';
 import {
   getClient,
   getClients,
@@ -19,15 +16,23 @@ import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import * as valita from '../../../../shared/src/valita.ts';
 import {compile} from '../../../../z2s/src/compiler.ts';
 import {formatPg} from '../../../../z2s/src/sql.ts';
-import {astSchema, type AST} from '../../../../zero-protocol/src/ast.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
+import {
+  inspectQueriesDownSchema,
+  type InspectDownBody,
+  type InspectQueryRow,
+} from '../../../../zero-protocol/src/inspect-down.ts';
+import type {
+  InspectQueriesUpBody,
+  InspectUpBody,
+  InspectUpMessage,
+} from '../../../../zero-protocol/src/inspect-up.ts';
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../../../zql/src/ivm/view.ts';
-import {
-  desiredQueriesPrefixForClient,
-  ENTITIES_KEY_PREFIX,
-  toGotQueriesKey,
-} from '../keys.ts';
+import {normalizeTTL, type TTL} from '../../../../zql/src/query/ttl.ts';
+import {nanoid} from '../../util/nanoid.ts';
+import {ENTITIES_KEY_PREFIX} from '../keys.ts';
 import type {MutatorDefs} from '../replicache-types.ts';
 import type {
   ClientGroup as ClientGroupInterface,
@@ -38,12 +43,15 @@ import type {
 
 type Rep = ReplicacheImpl<MutatorDefs>;
 
+type GetWebSocket = () => WebSocket | undefined;
+
 export async function newInspector(
   rep: Rep,
   schema: Schema,
+  socket: GetWebSocket,
 ): Promise<InspectorInterface> {
   const clientGroupID = await rep.clientGroupID;
-  return new Inspector(rep, schema, rep.clientID, clientGroupID);
+  return new Inspector(rep, schema, rep.clientID, clientGroupID, socket);
 }
 
 class Inspector implements InspectorInterface {
@@ -51,40 +59,64 @@ class Inspector implements InspectorInterface {
   readonly client: Client;
   readonly clientGroup: ClientGroup;
   readonly #schema: Schema;
+  readonly socket: GetWebSocket;
 
   constructor(
     rep: ReplicacheImpl,
     schema: Schema,
     clientID: string,
     clientGroupID: string,
+    socket: GetWebSocket,
   ) {
     this.#rep = rep;
     this.#schema = schema;
-    this.client = new Client(rep, schema, clientID, clientGroupID);
+    this.client = new Client(rep, schema, socket, clientID, clientGroupID);
     this.clientGroup = this.client.clientGroup;
+    this.socket = socket;
   }
 
   clients(): Promise<ClientInterface[]> {
     return withDagRead(this.#rep, dagRead =>
-      clients(this.#rep, this.#schema, dagRead),
+      clients(this.#rep, this.socket, this.#schema, dagRead),
     );
   }
 
   clientsWithQueries(): Promise<ClientInterface[]> {
     return withDagRead(this.#rep, dagRead =>
-      clientsWithQueries(this.#rep, this.#schema, dagRead),
+      clientsWithQueries(this.#rep, this.socket, this.#schema, dagRead),
     );
   }
+}
 
-  clientGroups(): Promise<ClientGroup[]> {
-    return withDagRead(this.#rep, async dagRead => {
-      const clientGroups = await getClientGroups(dagRead);
-      return [...clientGroups.keys()].map(
-        clientGroupID =>
-          new ClientGroup(this.#rep, this.#schema, clientGroupID),
-      );
-    });
-  }
+function rpc<T extends InspectDownBody>(
+  socket: WebSocket | undefined,
+  arg: Omit<InspectUpBody, 'id'>,
+  downSchema: valita.Type<T>,
+): Promise<T['value']> {
+  assert(socket, 'WebSocket not available');
+  return new Promise((resolve, reject) => {
+    const id = nanoid();
+    const f = (ev: MessageEvent) => {
+      const msg = JSON.parse(ev.data);
+      if (msg[0] === 'inspect') {
+        const body = msg[1];
+        if (body.id !== id) {
+          return;
+        }
+        const res = valita.test(body, downSchema);
+        if (res.ok) {
+          resolve(res.value.value);
+        } else {
+          reject(res.error);
+        }
+        socket.removeEventListener('message', f);
+      }
+    };
+    socket.addEventListener('message', f);
+    socket.send(
+      JSON.stringify(['inspect', {...arg, id}] satisfies InspectUpMessage),
+    );
+  });
 }
 
 class Client implements ClientInterface {
@@ -92,36 +124,29 @@ class Client implements ClientInterface {
   readonly id: string;
   readonly clientGroup: ClientGroup;
   readonly #schema: Schema;
+  readonly #socket: GetWebSocket;
 
-  constructor(rep: Rep, schema: Schema, id: string, clientGroupID: string) {
+  constructor(
+    rep: Rep,
+    schema: Schema,
+    socket: GetWebSocket,
+    id: string,
+    clientGroupID: string,
+  ) {
     this.#rep = rep;
     this.#schema = schema;
+    this.#socket = socket;
     this.id = id;
-    this.clientGroup = new ClientGroup(rep, schema, clientGroupID);
+    this.clientGroup = new ClientGroup(rep, socket, schema, clientGroupID);
   }
 
-  queries(): Promise<QueryInterface[]> {
-    return withDagRead(this.#rep, async dagRead => {
-      const prefix = desiredQueriesPrefixForClient(this.id);
-      const tree = await getBTree(dagRead, this.id);
-      const qs: QueryInterface[] = [];
-      for await (const [key, value] of tree.scan(prefix)) {
-        if (!key.startsWith(prefix)) {
-          break;
-        }
-
-        const hash = key.substring(prefix.length);
-        const got = await tree.has(toGotQueriesKey(hash));
-        const q = new Query(
-          hash,
-          valita.parse(value, astSchema),
-          got,
-          this.#schema,
-        );
-        qs.push(q);
-      }
-      return qs;
-    });
+  async queries(): Promise<QueryInterface[]> {
+    const rows: InspectQueryRow[] = await rpc(
+      this.#socket(),
+      {op: 'queries', clientID: this.id} as InspectQueriesUpBody,
+      inspectQueriesDownSchema,
+    );
+    return rows.map(row => new Query(row, this.#schema));
   }
 
   map(): Promise<Map<string, ReadonlyJSONValue>> {
@@ -155,9 +180,11 @@ class ClientGroup implements ClientGroupInterface {
   readonly #rep: Rep;
   readonly id: string;
   readonly #schema: Schema;
+  readonly #socket: GetWebSocket;
 
-  constructor(rep: Rep, schema: Schema, id: string) {
+  constructor(rep: Rep, socket: GetWebSocket, schema: Schema, id: string) {
     this.#rep = rep;
+    this.#socket = socket;
     this.#schema = schema;
     this.id = id;
   }
@@ -166,6 +193,7 @@ class ClientGroup implements ClientGroupInterface {
     return withDagRead(this.#rep, dagRead =>
       clients(
         this.#rep,
+        this.#socket,
         this.#schema,
         dagRead,
         ([_, v]) => v.clientGroupID === this.id,
@@ -177,6 +205,7 @@ class ClientGroup implements ClientGroupInterface {
     return withDagRead(this.#rep, dagRead =>
       clientsWithQueries(
         this.#rep,
+        this.#socket,
         this.#schema,
         dagRead,
         ([_, v]) => v.clientGroupID === this.id,
@@ -184,23 +213,13 @@ class ClientGroup implements ClientGroupInterface {
     );
   }
 
-  queries(): Promise<QueryInterface[]> {
-    return withDagRead(this.#rep, async dagRead => {
-      const cs = await clients(
-        this.#rep,
-        this.#schema,
-        dagRead,
-        ([_, v]) => v.clientGroupID === this.id,
-      );
-      const qs: Map<string, QueryInterface> = new Map();
-      await Promise.all(
-        cs.map(async client => {
-          const clientQueries = await client.queries();
-          clientQueries.forEach(q => qs.set(q.id, q));
-        }),
-      );
-      return [...qs.values()];
-    });
+  async queries(): Promise<QueryInterface[]> {
+    const rows: InspectQueryRow[] = await rpc(
+      this.#socket(),
+      {op: 'queries'},
+      inspectQueriesDownSchema,
+    );
+    return rows.map(row => new Query(row, this.#schema));
   }
 }
 
@@ -233,6 +252,7 @@ type MapEntry<T extends ReadonlyMap<any, any>> =
 
 async function clients(
   rep: Rep,
+  socket: GetWebSocket,
   schema: Schema,
   dagRead: Read,
   predicate: (entry: MapEntry<ClientMap>) => boolean = () => true,
@@ -242,17 +262,18 @@ async function clients(
     .filter(predicate)
     .map(
       ([clientID, {clientGroupID}]) =>
-        new Client(rep, schema, clientID, clientGroupID),
+        new Client(rep, schema, socket, clientID, clientGroupID),
     );
 }
 
 async function clientsWithQueries(
   rep: Rep,
+  socket: GetWebSocket,
   schema: Schema,
   dagRead: Read,
   predicate: (entry: MapEntry<ClientMap>) => boolean = () => true,
 ): Promise<ClientInterface[]> {
-  const allClients = await clients(rep, schema, dagRead, predicate);
+  const allClients = await clients(rep, socket, schema, dagRead, predicate);
   const clientsWithQueries: ClientInterface[] = [];
   await Promise.all(
     allClients.map(async client => {
@@ -266,28 +287,37 @@ async function clientsWithQueries(
 }
 
 class Query implements QueryInterface {
-  readonly id: string;
   readonly ast: AST;
   readonly got: boolean;
-  #schema: Schema;
+  readonly ttl: TTL;
+  readonly inactivatedAt: Date | null;
+  readonly rowCount: number;
+  readonly deleted: boolean;
+  readonly id: string;
+  readonly sql: string;
+  readonly zql: string;
+  readonly clientID: string;
 
-  constructor(id: string, ast: AST, got: boolean, schema: Schema) {
-    this.id = id;
-    this.ast = ast;
-    this.got = got;
-    this.#schema = schema;
-  }
+  constructor(row: InspectQueryRow, schema: Schema) {
+    // Use own properties to make this more useful in dev tools. For example, in
+    // Chrome dev tools, if you do console.table(queries) you'll see the
+    // properties in the table, if these were getters you would not see them in the table.
+    this.clientID = row.clientID;
+    this.id = row.queryID;
+    this.inactivatedAt =
+      row.inactivatedAt === null ? null : new Date(row.inactivatedAt);
+    this.ttl = normalizeTTL(row.ttl);
+    this.ast = row.ast;
+    this.got = row.got;
+    this.rowCount = row.rowCount;
+    this.deleted = row.deleted;
 
-  get sql(): string {
     const format: Format = {
       singular: false,
       relationships: {},
     };
-    const sqlQuery = formatPg(compile(this.ast, this.#schema.tables, format));
-    return sqlQuery.text;
-  }
-
-  get zql(): string {
-    return this.ast.table + astToZQL(this.ast);
+    const sqlQuery = formatPg(compile(this.ast, schema.tables, format));
+    this.sql = sqlQuery.text;
+    this.zql = this.ast.table + astToZQL(this.ast);
   }
 }

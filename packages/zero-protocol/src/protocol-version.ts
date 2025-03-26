@@ -17,7 +17,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- Version 6 makes `pokeStart.cookie` optional. (0.16)
 // -- Version 7 introduces the initConnection.clientSchema field. (0.17)
 // -- Version 8 drops support for Version 5 (0.18).
-export const PROTOCOL_VERSION = 10;
+// -- Version 11 adds inspect queries. (0.21)
+export const PROTOCOL_VERSION = 11;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

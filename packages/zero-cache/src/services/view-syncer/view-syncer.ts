@@ -25,6 +25,10 @@ import type {
 import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import type {
+  InspectUpBody,
+  InspectUpMessage,
+} from '../../../../zero-protocol/src/inspect-up.ts';
 import type {Upstream} from '../../../../zero-protocol/src/up.ts';
 import {transformAndHashQuery} from '../../auth/read-authorizer.ts';
 import {stringify} from '../../types/bigint-json.ts';
@@ -98,6 +102,7 @@ export interface ViewSyncer {
 
   deleteClients(ctx: SyncContext, msg: DeleteClientsMessage): Promise<void>;
   closeConnection(ctx: SyncContext, msg: CloseConnectionMessage): Promise<void>;
+  inspect(context: SyncContext, msg: InspectUpMessage): Promise<void>;
 }
 
 const DEFAULT_KEEPALIVE_MS = 5_000;
@@ -1332,6 +1337,27 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
     });
   }
+
+  inspect(context: SyncContext, msg: InspectUpMessage): Promise<void> {
+    return this.#runInLockForClient(context, msg, this.#handleInspect);
+  }
+
+  // eslint-disable-next-line require-await
+  #handleInspect = async (
+    lc: LogContext,
+    clientID: string,
+    _cmd: 'inspect',
+    body: InspectUpBody,
+    _cvr: CVRSnapshot,
+  ): Promise<void> => {
+    const client = must(this.#clients.get(clientID));
+    body.op satisfies 'queries';
+    client.sendInspectResponse(lc, {
+      op: 'queries',
+      id: body.id,
+      value: await this.#cvrStore.inspectQueries(lc, body.clientID),
+    });
+  };
 
   stop(): Promise<void> {
     this.#lc.info?.('stopping view syncer');

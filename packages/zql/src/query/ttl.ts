@@ -50,7 +50,7 @@ export function compareTTL(a: TTL, b: TTL): number {
   return ap - bp;
 }
 
-export function normalizeTTL(ttl: TTL): string | number {
+export function normalizeTTL(ttl: TTL): TTL {
   if (typeof ttl === 'string') {
     return ttl;
   }
@@ -74,5 +74,5 @@ export function normalizeTTL(ttl: TTL): string | number {
     }
   }
 
-  return shortest.length < lengthOfNumber ? shortest : ttl;
+  return (shortest.length < lengthOfNumber ? shortest : ttl) as TTL;
 }

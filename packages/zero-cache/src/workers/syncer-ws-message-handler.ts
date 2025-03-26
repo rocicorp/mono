@@ -75,7 +75,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
     const viewSyncer = this.#viewSyncer;
     switch (msgType) {
       case 'ping':
-        lc.error?.('Pull is not supported by Zero');
+        lc.error?.('Ping is not supported at this layer by Zero');
         break;
       case 'pull':
         lc.error?.('Pull is not supported by Zero');
@@ -171,6 +171,12 @@ export class SyncerWsMessageHandler implements MessageHandler {
       case 'closeConnection':
         await startAsyncSpan(tracer, 'connection.closeConnection', () =>
           viewSyncer.closeConnection(this.#syncContext, msg),
+        );
+        break;
+
+      case 'inspect':
+        await startAsyncSpan(tracer, 'connection.inspect', () =>
+          viewSyncer.inspect(this.#syncContext, msg),
         );
         break;
 
