@@ -43,7 +43,7 @@ export function json<T extends ReadonlyJSONValue = ReadonlyJSONValue>() {
   });
 }
 
-export function date<T extends ReadonlyJSONValue = ReadonlyJSONValue>() {
+export function date<T extends number = number>() {
   return new ColumnBuilder({
     type: 'date',
     optional: false,
@@ -51,7 +51,7 @@ export function date<T extends ReadonlyJSONValue = ReadonlyJSONValue>() {
   });
 }
 
-export function timestamp<T extends ReadonlyJSONValue = ReadonlyJSONValue>() {
+export function timestamp<T extends number = number>() {
   return new ColumnBuilder({
     type: 'timestamp',
     optional: false,
@@ -72,6 +72,9 @@ export const column = {
   number,
   boolean,
   json,
+  date,
+  timestamp,
+  enumeration,
 };
 
 export class TableBuilder<TShape extends TableSchema> {
