@@ -18,7 +18,6 @@ interface ServerTransaction<S extends Schema, TWrappedTransaction>
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
-  readonly token: string | undefined;
 }
 
 export type CustomMutatorDefs<S extends Schema, TDBTransaction> = {
@@ -58,7 +57,7 @@ export function createPushHandler<
   mutators,
 }: Options<S, TDBTransaction, MD>): PushHandler {
   const processor = new PushProcessor(schema, dbConnectionProvider, mutators);
-  return (headers, params, body) => processor.process(headers, params, body);
+  return (params, body) => processor.process(params, body);
 }
 
 export class TransactionImpl<S extends Schema, TWrappedTransaction>
@@ -67,7 +66,6 @@ export class TransactionImpl<S extends Schema, TWrappedTransaction>
   readonly location = 'server';
   readonly reason = 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
-  readonly token: string | undefined;
   readonly clientID: string;
   readonly mutationID: number;
   readonly mutate: SchemaCRUD<S>;
@@ -75,14 +73,12 @@ export class TransactionImpl<S extends Schema, TWrappedTransaction>
 
   constructor(
     dbTransaction: DBTransaction<TWrappedTransaction>,
-    token: string | undefined,
     clientID: string,
     mutationID: number,
     mutate: SchemaCRUD<S>,
     query: SchemaQuery<S>,
   ) {
     this.dbTransaction = dbTransaction;
-    this.token = token;
     this.clientID = clientID;
     this.mutationID = mutationID;
     this.mutate = mutate;
