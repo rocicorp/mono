@@ -1,5 +1,12 @@
-import * as sinon from 'sinon';
-import {beforeEach, describe, expect, expectTypeOf, test} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  expectTypeOf,
+  test,
+  vi,
+} from 'vitest';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {
   TransactionImpl,
@@ -346,15 +353,19 @@ describe('rebasing custom mutators', () => {
 
     expect(mutationRun).toEqual(true);
   });
+});
+
+describe('server results and keeping read queries', () => {
+  beforeEach(() => {
+    vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
+    vi.stubGlobal('fetch', () => Promise.resolve(new Response()));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
 
   test('waiting for server results', async () => {
-    sinon.replace(
-      globalThis,
-      'WebSocket',
-      MockSocket as unknown as typeof WebSocket,
-    );
-    sinon.stub(globalThis, 'fetch').returns(Promise.resolve(new Response()));
-
     const z = zeroForTest({
       schema,
       mutators: {
@@ -408,20 +419,12 @@ describe('rebasing custom mutators', () => {
       ],
     });
 
-    sinon.restore();
     await z.close();
 
     await expect(close.server).rejects.toEqual({error: 'app'});
   });
 
   test('reads in a mutation are registered', async () => {
-    sinon.replace(
-      globalThis,
-      'WebSocket',
-      MockSocket as unknown as typeof WebSocket,
-    );
-    sinon.stub(globalThis, 'fetch').returns(Promise.resolve(new Response()));
-
     const z = zeroForTest({
       schema,
       mutators: {
@@ -504,7 +507,6 @@ describe('rebasing custom mutators', () => {
     });
     expect(onUpstreamCall).toEqual(4);
 
-    sinon.restore();
     await z.close();
 
     await expect(close.server).rejects.toEqual({error: 'app'});
