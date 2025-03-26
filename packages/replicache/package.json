@@ -21,7 +21,7 @@
     "check-types": "tsc && tsc --project tool/tsconfig.json",
     "check-types:watch": "tsc --watch",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "build": "rm -rf out && tsc -p tsconfig.build.json && tsc-alias -p tsconfig.build.json && npx tsx tool/build.ts",
+    "build": "rm -rf out && tsc -p tsconfig.build.json && npx tsx tool/build.ts",
     "build-bundle-sizes": "rm -rf out && npx tsx tool/build.ts --bundle-sizes",
     "prepack": "npm run lint && npm run test && npm run build && mv README.md README-org.md && mv README-external.md README.md",
     "postpack": "mv README.md README-external.md && mv README-org.md README.md",
@@ -47,7 +47,6 @@
     "playwright": "^1.51.0",
     "shared": "0.0.0",
     "sinon": "^13.0.1",
-    "tsc-alias": "^1.8.10",
     "typescript": "~5.8.2",
     "vitest": "3.0.8"
   },
