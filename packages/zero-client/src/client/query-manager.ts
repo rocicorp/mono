@@ -18,6 +18,7 @@ import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {GotCallback} from '../../../zql/src/query/query-impl.ts';
 import {compareTTL, parseTTL, type TTL} from '../../../zql/src/query/ttl.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
+import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
 
 type QueryHash = string;
@@ -42,8 +43,11 @@ export class QueryManager {
   readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
   readonly #gotQueries: Set<string> = new Set();
+  readonly #mutationTracker: MutationTracker;
+  #pendingRemovals: Array<() => void> = [];
 
   constructor(
+    mutationTracker: MutationTracker,
     clientID: ClientID,
     tables: Record<string, TableSchema>,
     send: (change: ChangeDesiredQueriesMessage) => void,
@@ -54,6 +58,19 @@ export class QueryManager {
     this.#clientToServer = clientToServer(tables);
     this.#recentQueriesMaxSize = recentQueriesMaxSize;
     this.#send = send;
+    this.#mutationTracker = mutationTracker;
+
+    this.#mutationTracker.onAllMutationsConfirmed(() => {
+      if (this.#pendingRemovals.length === 0) {
+        return;
+      }
+      const pendingRemovals = this.#pendingRemovals;
+      this.#pendingRemovals = [];
+      for (const removal of pendingRemovals) {
+        removal();
+      }
+    });
+
     experimentalWatch(
       diff => {
         for (const diffOp of diff) {
@@ -181,6 +198,16 @@ export class QueryManager {
         return;
       }
       removed = true;
+
+      // We cannot remove queries while mutations are pending
+      // as that could take data out of scope that is needed in a rebase
+      if (this.#mutationTracker.size > 0) {
+        this.#pendingRemovals.push(() =>
+          this.#remove(entry, astHash, gotCallback),
+        );
+        return;
+      }
+
       this.#remove(entry, astHash, gotCallback);
     };
   }

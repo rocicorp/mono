@@ -618,13 +618,13 @@ export class Zero<
     this.mutateBatch = mutateBatch;
 
     this.#queryManager = new QueryManager(
+      this.#mutationTracker,
       rep.clientID,
       schema.tables,
       msg => this.#sendChangeDesiredQueries(msg),
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
     );
-    this.#mutationTracker.setQueryManager(this.#queryManager);
     this.#clientToServer = clientToServer(schema.tables);
 
     this.#deleteClientsManager = new DeleteClientsManager(

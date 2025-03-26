@@ -13,7 +13,7 @@ describe('MutationTracker', () => {
   test('tracks a mutation and resolves on success', async () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
-    const mutationPromise = tracker.trackMutation(1, []);
+    const mutationPromise = tracker.trackMutation(1);
 
     const response: PushResponse = {
       mutations: [
@@ -32,7 +32,7 @@ describe('MutationTracker', () => {
   test('tracks a mutation and rejects on error', async () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
-    const mutationPromise = tracker.trackMutation(1, []);
+    const mutationPromise = tracker.trackMutation(1);
 
     const response: PushResponse = {
       mutations: [
@@ -56,7 +56,7 @@ describe('MutationTracker', () => {
   test('does not resolve mutators for transient errors', async () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
-    const mutationPromise = tracker.trackMutation(1, []);
+    const mutationPromise = tracker.trackMutation(1);
 
     const response: PushResponse = {
       error: 'unsupported-push-version',
@@ -76,7 +76,7 @@ describe('MutationTracker', () => {
   test('rejects mutations from other clients', () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
-    void tracker.trackMutation(1, []);
+    void tracker.trackMutation(1);
 
     const response: PushResponse = {
       mutations: [
@@ -102,8 +102,8 @@ describe('MutationTracker', () => {
   test('handles multiple concurrent mutations', async () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
-    const mutation1 = tracker.trackMutation(1, []);
-    const mutation2 = tracker.trackMutation(2, []);
+    const mutation1 = tracker.trackMutation(1);
+    const mutation2 = tracker.trackMutation(2);
 
     const r1 = {};
     const r2 = {};
@@ -130,8 +130,8 @@ describe('MutationTracker', () => {
   test('mutation tracker size goes down each time a mutation is resolved or rejected', () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
-    void tracker.trackMutation(1, []);
-    tracker.trackMutation(2, []).catch(() => {
+    void tracker.trackMutation(1);
+    tracker.trackMutation(2).catch(() => {
       // expected
     });
 
@@ -181,10 +181,10 @@ describe('MutationTracker', () => {
     const tracker = new MutationTracker();
     tracker.clientID = CLIENT_ID;
 
-    const mutation1 = tracker.trackMutation(1, []);
-    const mutation2 = tracker.trackMutation(2, []);
-    const mutation3 = tracker.trackMutation(3, []);
-    const mutation4 = tracker.trackMutation(4, []);
+    const mutation1 = tracker.trackMutation(1);
+    const mutation2 = tracker.trackMutation(2);
+    const mutation3 = tracker.trackMutation(3);
+    const mutation4 = tracker.trackMutation(4);
 
     expect(tracker.size).toBe(4);
 
@@ -197,5 +197,88 @@ describe('MutationTracker', () => {
 
     expect(tracker.size).toBe(0);
     await mutation4;
+  });
+
+  test('notified whenever the outstanding mutation count goes to 0', () => {
+    const tracker = new MutationTracker();
+    tracker.clientID = CLIENT_ID;
+
+    let callCount = 0;
+    tracker.onAllMutationsConfirmed(() => {
+      callCount++;
+    });
+
+    void tracker.trackMutation(1);
+    tracker.processPushResponse({
+      mutations: [
+        {
+          id: {clientID: CLIENT_ID, id: 1},
+          result: {},
+        },
+      ],
+    });
+
+    expect(callCount).toBe(1);
+
+    try {
+      tracker.processPushResponse({
+        mutations: [
+          {
+            id: {clientID: CLIENT_ID, id: 1},
+            result: {},
+          },
+        ],
+      });
+    } catch (e) {
+      // expected
+    }
+
+    expect(callCount).toBe(1);
+
+    void tracker.trackMutation(2);
+    void tracker.trackMutation(3);
+    void tracker.trackMutation(4).catch(() => {});
+
+    tracker.processPushResponse({
+      mutations: [
+        {
+          id: {clientID: CLIENT_ID, id: 2},
+          result: {},
+        },
+      ],
+    });
+
+    expect(callCount).toBe(1);
+
+    tracker.processPushResponse({
+      mutations: [
+        {
+          id: {clientID: CLIENT_ID, id: 3},
+          result: {},
+        },
+      ],
+    });
+    tracker.processPushResponse({
+      mutations: [
+        {
+          id: {clientID: CLIENT_ID, id: 4},
+          result: {error: 'app'},
+        },
+      ],
+    });
+
+    expect(callCount).toBe(2);
+
+    void tracker.trackMutation(5);
+    void tracker.trackMutation(6);
+    void tracker.trackMutation(7);
+
+    tracker.onConnected(6);
+
+    expect(callCount).toBe(2);
+
+    tracker.onConnected(7);
+
+    expect(callCount).toBe(3);
   });
 });
