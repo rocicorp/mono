@@ -3,7 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import * as sinon from 'sinon';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {setDeletedClients} from '../../../replicache/src/deleted-clients.ts';
-import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
+import {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {
   ClientGroupID,
   ClientID,
@@ -3528,4 +3528,40 @@ describe('Should call close on pagehide', () => {
     expect(zeroClose).not.toHaveBeenCalled();
     expect(socketClose).not.toHaveBeenCalled();
   });
+});
+
+test('push is called on initial connect and reconnect', async () => {
+  const pushSpy = vi.spyOn(ReplicacheImpl.prototype, 'push');
+  const z = zeroForTest({
+    logLevel: 'debug',
+    schema: createSchema({
+      tables: [
+        table('foo')
+          .columns({
+            id: string(),
+            val: string(),
+          })
+          .primaryKey('id'),
+      ],
+    }),
+  });
+
+  {
+    // Connect and check that we sent a push
+    await z.waitForConnectionState(ConnectionState.Connecting);
+    expect(z.online).false;
+    await z.triggerConnected();
+    await z.waitForConnectionState(ConnectionState.Connected);
+    await clock.tickAsync(0);
+    expect(z.online).true;
+    expect(pushSpy).toBeCalledTimes(1);
+
+    // disconnect and reconnect and check that we sent a push
+    await z.triggerClose();
+    await z.waitForConnectionState(ConnectionState.Disconnected);
+    await z.triggerConnected();
+    await z.waitForConnectionState(ConnectionState.Connected);
+    await clock.tickAsync(0);
+    expect(pushSpy).toBeCalledTimes(2);
+  }
 });
