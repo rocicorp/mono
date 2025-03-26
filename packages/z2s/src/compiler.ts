@@ -1,3 +1,4 @@
+import type {SQLQuery} from '@databases/sql';
 import {zip} from '../../shared/src/arrays.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
@@ -17,7 +18,6 @@ import {clientToServer, NameMapper} from '../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {sql} from './sql.ts';
-import type {SQLQuery} from '@databases/sql';
 
 type Tables = Record<string, TableSchema>;
 
@@ -28,7 +28,11 @@ type Tables = Record<string, TableSchema>;
  * - IN is changed to ANY to allow binding array literals
  * - subqueries are aggregated using PG's `array_agg` and `row_to_json` functions
  */
-export function compile(ast: AST, tables: Tables, format?: Format | undefined) {
+export function compile(
+  ast: AST,
+  tables: Tables,
+  format?: Format | undefined,
+): SQLQuery {
   const compiler = new Compiler(tables);
   return compiler.compile(ast, format);
 }
@@ -42,7 +46,7 @@ export class Compiler {
     this.#nameMapper = clientToServer(tables);
   }
 
-  compile(ast: AST, format?: Format | undefined) {
+  compile(ast: AST, format?: Format | undefined): SQLQuery {
     return this.select(ast, format, undefined);
   }
 
@@ -52,7 +56,7 @@ export class Compiler {
     format: Format | undefined,
     // If a select is being used as a subquery, this is the correlation to the parent query
     correlation: SQLQuery | undefined,
-  ) {
+  ): SQLQuery {
     const selectionSet = this.related(ast.related ?? [], format, ast.table);
     const table = this.#tables[ast.table];
     for (const column of Object.keys(table.columns)) {
@@ -112,7 +116,7 @@ export class Compiler {
     relationship: CorrelatedSubquery,
     format: Format | undefined,
     parentTable: string,
-  ) {
+  ): SQLQuery {
     if (relationship.hidden) {
       const [join, lastAlias, lastLimit, lastTable] =
         this.makeJunctionJoin(relationship);
@@ -354,7 +358,7 @@ export class Compiler {
     childTable: string,
     childTableAlias: string,
     childColumns: readonly string[],
-  ) {
+  ): SQLQuery {
     return sql.join(
       zip(parentColumns, childColumns).map(
         ([parentColumn, childColumn]) =>
