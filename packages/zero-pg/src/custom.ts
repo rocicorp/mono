@@ -5,13 +5,10 @@ import type {
   SchemaQuery,
   TableCRUD,
   TransactionBase,
-  ConnectionProvider,
   DBTransaction,
   Transaction,
 } from '../../zql/src/mutate/custom.ts';
-import {PushProcessor, type PushHandler} from './web.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
-import type {ShardID} from '../../zero-cache/src/types/shards.ts';
 
 interface ServerTransaction<S extends Schema, TWrappedTransaction>
   extends TransactionBase<S> {
@@ -35,30 +32,6 @@ export type CustomMutatorImpl<S extends Schema, TDBTransaction, TArgs = any> = (
   tx: Transaction<S, TDBTransaction>,
   args: TArgs,
 ) => Promise<void>;
-
-type Options<
-  S extends Schema,
-  TDBTransaction,
-  MD extends CustomMutatorDefs<S, TDBTransaction>,
-> = {
-  schema: S;
-  dbConnectionProvider: ConnectionProvider<TDBTransaction>;
-  mutators: MD;
-  shardID?: ShardID;
-};
-
-export function createPushHandler<
-  S extends Schema,
-  TDBTransaction,
-  MD extends CustomMutatorDefs<S, TDBTransaction>,
->({
-  schema,
-  dbConnectionProvider,
-  mutators,
-}: Options<S, TDBTransaction, MD>): PushHandler {
-  const processor = new PushProcessor(schema, dbConnectionProvider, mutators);
-  return (params, body) => processor.process(params, body);
-}
 
 export class TransactionImpl<S extends Schema, TWrappedTransaction>
   implements ServerTransaction<S, TWrappedTransaction>
