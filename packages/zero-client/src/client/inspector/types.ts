@@ -1,6 +1,7 @@
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {TTL} from '../../../../zql/src/query/ttl.ts';
 
 export interface GetInspector {
   inspect(): Promise<Inspector>;
@@ -11,7 +12,6 @@ export interface Inspector {
   readonly clientGroup: ClientGroup;
   clients(): Promise<Client[]>;
   clientsWithQueries(): Promise<Client[]>;
-  clientGroups(): Promise<ClientGroup[]>;
 }
 
 export interface Client {
@@ -30,9 +30,14 @@ export interface ClientGroup {
 }
 
 export interface Query {
-  readonly id: string;
   readonly ast: AST;
+  readonly clientID: string;
+  readonly deleted: boolean;
   readonly got: boolean;
+  readonly id: string;
+  readonly inactivatedAt: Date | null;
+  readonly rowCount: number;
   readonly sql: string;
+  readonly ttl: TTL;
   readonly zql: string;
 }

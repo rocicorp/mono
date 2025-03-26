@@ -902,6 +902,10 @@ export class Zero<
       case 'push-response':
         return this.#mutationTracker.processPushResponse(downMessage[1]);
 
+      case 'inspect':
+        // ignore at this layer.
+        break;
+
       default:
         msgType satisfies never;
         rejectInvalidMessage();
@@ -1830,7 +1834,7 @@ export class Zero<
     // eslint-disable-next-line no-unused-labels
     BUNDLE_SIZE: {
       const m = await import('./inspector/inspector.ts');
-      return m.newInspector(this.#rep, this.#schema);
+      return m.newInspector(this.#rep, this.#schema, () => this.#socket);
     }
   }
 }

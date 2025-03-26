@@ -16,6 +16,7 @@ import * as v from '../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../zero-protocol/src/ast.ts';
 import {clientSchemaSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import type {InspectQueryRow} from '../../../../zero-protocol/src/inspect-down.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
@@ -781,6 +782,47 @@ export class CVRStore {
   /** Resolves when all pending updates are flushed. */
   flushed(lc: LogContext): Promise<void> {
     return this.#rowCache.flushed(lc);
+  }
+
+  async inspectQueries(
+    lc: LogContext,
+    clientID?: string,
+  ): Promise<InspectQueryRow[]> {
+    const db = this.#db;
+    const clientGroupID = this.#id;
+
+    const reader = new TransactionPool(lc, Mode.READONLY).run(db);
+    try {
+      return await reader.processReadTask(
+        tx => tx<InspectQueryRow[]>`
+  SELECT
+    d."clientID",
+    d."queryHash" AS "queryID",
+    COALESCE((EXTRACT(EPOCH FROM d."ttl") * 1000)::double precision, -1) AS "ttl",
+    (EXTRACT(EPOCH FROM d."inactivatedAt") * 1000)::double precision AS "inactivatedAt",
+    COUNT(r.*)::INT AS "rowCount",
+    q."clientAST" AS "ast",
+    (q."patchVersion" IS NOT NULL) AS "got",
+    COALESCE(d."deleted", FALSE) AS "deleted"
+  FROM ${this.#cvr('desires')} d
+  LEFT JOIN ${this.#cvr('rows')} r
+    ON r."clientGroupID" = d."clientGroupID"
+   AND r."refCounts" ? d."queryHash"
+  LEFT JOIN ${this.#cvr('queries')} q
+    ON q."clientGroupID" = d."clientGroupID"
+   AND q."queryHash" = d."queryHash"
+  WHERE d."clientGroupID" = ${clientGroupID}
+    ${clientID ? tx`AND d."clientID" = ${clientID}` : tx``}
+    AND NOT (
+      d."deleted" IS NOT DISTINCT FROM true AND
+      (d."inactivatedAt" IS NOT NULL AND d."ttl" IS NOT NULL AND d."inactivatedAt" + d."ttl" <= now())
+    )
+  GROUP BY d."clientID", d."queryHash", d."ttl", d."inactivatedAt", q."patchVersion", q."clientAST", d."deleted"
+  ORDER BY d."clientID", d."queryHash"`,
+      );
+    } finally {
+      reader.setDone();
+    }
   }
 }
 

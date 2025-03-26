@@ -11,6 +11,7 @@ import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {rowSchema} from '../../../../zero-protocol/src/data.ts';
 import type {DeleteClientsBody} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
+import type {InspectDownBody} from '../../../../zero-protocol/src/inspect-down.ts';
 import type {
   PokePartBody,
   PokeStartBody,
@@ -296,6 +297,11 @@ export class ClientHandler {
     }
     lc.debug?.('sending deleteClients', deleteClientsBody);
     await this.#push(['deleteClients', deleteClientsBody]);
+  }
+
+  sendInspectResponse(lc: LogContext, response: InspectDownBody): void {
+    lc.debug?.('sending inspect response', response);
+    this.#downstream.push(['inspect', response]);
   }
 
   #updateLMIDs(lmids: Record<string, number>, patch: RowPatch) {
