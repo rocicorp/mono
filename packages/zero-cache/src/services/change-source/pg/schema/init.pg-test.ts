@@ -164,10 +164,7 @@ describe('change-streamer/pg/schema/init', () => {
           {
             appID: APP_ID,
             shardNum: SHARD_NUM,
-            publications: c.requestedPublications ?? [
-              `_${APP_ID}_metadata_23`,
-              `_${APP_ID}_public_23`,
-            ],
+            publications: c.requestedPublications ?? [],
           },
           '123',
         );

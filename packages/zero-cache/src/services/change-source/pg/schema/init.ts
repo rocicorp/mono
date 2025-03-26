@@ -100,7 +100,10 @@ async function runShardMigrations(
     // ALTER SCHEMA x RENAME TO y
     7: {
       migrateSchema: async (lc, tx) => {
-        await setupTriggers(lc, tx, shard);
+        const [{publications}] = await tx<{publications: string[]}[]>`
+          SELECT publications FROM ${tx(upstreamSchema(shard))}."shardConfig"
+        `;
+        await setupTriggers(lc, tx, {...shard, publications});
         lc.info?.(`Upgraded to v2 event triggers`);
       },
     },

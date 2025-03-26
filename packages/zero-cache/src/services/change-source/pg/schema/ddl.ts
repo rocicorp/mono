@@ -1,4 +1,5 @@
 import {literal as lit} from 'pg-format';
+import {assert} from '../../../../../../shared/src/asserts.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
@@ -280,6 +281,9 @@ export const TAGS = [
 ] as const;
 
 export function createEventTriggerStatements(shard: ShardConfig) {
+  // Better to assert here than get a cryptic syntax error from Postgres.
+  assert(shard.publications.length, `shard publications must be non-empty`);
+
   // Unlike functions, which are namespaced in shard-specific schemas,
   // EVENT TRIGGER names are in the global namespace and thus must include
   // the appID and shardNum.
