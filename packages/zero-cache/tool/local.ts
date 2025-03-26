@@ -13,7 +13,7 @@
  */
 
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import 'dotenv/config';
+import '@dotenvx/dotenvx/config';
 import postgres from 'postgres';
 import {subscribe} from '../src/services/change-source/pg/logical-replication/stream.ts';
 import {stringify} from '../src/types/bigint-json.ts';

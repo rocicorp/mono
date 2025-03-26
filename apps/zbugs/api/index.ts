@@ -2,7 +2,7 @@
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
-import 'dotenv/config';
+import '@dotenvx/dotenvx/config';
 import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
 import {SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
