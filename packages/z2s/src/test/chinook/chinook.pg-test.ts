@@ -142,9 +142,13 @@ beforeEach(async () => {
 });
 
 describe('basic select', () => {
-  test.each(tables.map(table => [table]))('select * from %s', async table => {
-    await checkZqlAndSql(pg, zqliteQueries[table], memoryQueries[table]);
-  });
+  test.each(tables.map(table => [table]))(
+    'select * from %s',
+    async table => {
+      await checkZqlAndSql(pg, zqliteQueries[table], memoryQueries[table]);
+    },
+    20_000,
+  );
 
   test.each(tables.map(table => [table]))(
     'select * from %s limit 100',

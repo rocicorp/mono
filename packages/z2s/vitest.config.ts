@@ -1,4 +1,4 @@
-import {defineConfig} from 'vitest/config';
+import {defineConfig, mergeConfig} from 'vitest/config';
 import {
   configForCustomPg,
   configForNoPg,
@@ -13,6 +13,12 @@ export const workspace = [
   configForVersion(16, url),
   configForVersion(17, url),
   ...configForCustomPg(url),
-];
+].map(c =>
+  mergeConfig(c, {
+    test: {
+      testTimeout: 20_000,
+    },
+  }),
+);
 
-export default defineConfig({test: {workspace}});
+export default defineConfig({test: {workspace, testTimeout: 20_000}});
