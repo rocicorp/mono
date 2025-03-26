@@ -257,7 +257,6 @@ describe('rebasing custom mutators', () => {
         },
       } as unknown as WriteTransaction,
       schema,
-      [],
       10,
     ) as unknown as Transaction<Schema>;
 
@@ -363,7 +362,6 @@ describe('server results and keeping read queries', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    vi.useRealTimers();
   });
 
   test('waiting for server results', async () => {
@@ -425,8 +423,11 @@ describe('server results and keeping read queries', () => {
     await expect(close.server).rejects.toEqual({error: 'app'});
   });
 
-  test('reads in a mutation are registered', async () => {
-    vi.setSystemTime(new Date('2023-01-01'));
+  test('changeDesiredQueries:remove is not sent while there are pending mutations', async () => {
+    function filter(messages: string[]) {
+      return messages.filter(m => m.includes('changeDesiredQueries'));
+    }
+
     const z = zeroForTest({
       schema,
       mutators: {
@@ -446,11 +447,9 @@ describe('server results and keeping read queries', () => {
     });
 
     const mockSocket = await z.socket;
-    let onUpstreamCall = 0;
     const messages: string[] = [];
     mockSocket.onUpstream = msg => {
       messages.push(msg);
-      onUpstreamCall++;
     };
 
     await z.triggerConnected();
@@ -463,7 +462,20 @@ describe('server results and keeping read queries', () => {
       description: '',
       ownerId: '',
     });
-    expect(onUpstreamCall).toEqual(1);
+
+    const q = z.query.issue.limit(1).materialize();
+    q.destroy();
+
+    // tick a time to be sure everything is collected
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // query is not removed, only put.
+    expect(filter(messages)).toMatchInlineSnapshot(`
+      [
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1vsd9vcx6ynd4","ast":{"table":"issues","limit":1,"orderBy":[["id","asc"]]},"ttl":0}]}]",
+      ]
+    `);
+    messages.length = 0;
 
     await z.triggerPushResponse({
       mutations: [
@@ -473,11 +485,28 @@ describe('server results and keeping read queries', () => {
         },
       ],
     });
-    expect(onUpstreamCall).toEqual(2);
+
+    // mutation is no longer outstanding, query is removed.
+    expect(filter(messages)).toMatchInlineSnapshot(`
+      [
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1vsd9vcx6ynd4"}]}]",
+      ]
+    `);
+    messages.length = 0;
 
     // check the error case
+    const q2 = z.query.issue.materialize();
     const close = await z.mutate.issue.close({});
-    expect(onUpstreamCall).toEqual(4);
+    q2.destroy();
+    // tick a time to be sure everything is collected
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(filter(messages)).toMatchInlineSnapshot(`
+      [
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"12hwg3ihkijhm","ast":{"table":"issues","orderBy":[["id","asc"]]},"ttl":0}]}]",
+      ]
+    `);
+    messages.length = 0;
 
     await z.triggerPushResponse({
       mutations: [
@@ -489,20 +518,15 @@ describe('server results and keeping read queries', () => {
         },
       ],
     });
-    expect(onUpstreamCall).toEqual(5);
+
+    expect(messages).toMatchInlineSnapshot(`
+      [
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"12hwg3ihkijhm"}]}]",
+      ]
+    `);
+    messages.length = 0;
 
     await z.close();
-
     await expect(close.server).rejects.toEqual({error: 'app'});
-
-    expect(messages.filter(m => m.includes('"changeDesiredQueries"')))
-      .toMatchInlineSnapshot(`
-        [
-          "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"12hwg3ihkijhm","ast":{"table":"issues","orderBy":[["id","asc"]]},"ttl":0}]}]",
-          "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"12hwg3ihkijhm"}]}]",
-          "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1vsd9vcx6ynd4","ast":{"table":"issues","limit":1,"orderBy":[["id","asc"]]},"ttl":0}]}]",
-          "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1vsd9vcx6ynd4"}]}]",
-        ]
-      `);
   });
 });
