@@ -13,7 +13,7 @@ import {
 } from '../../zero-cache/src/config/zero-config.ts';
 import {deployPermissionsOptions} from '../../zero-cache/src/scripts/permissions.ts';
 
-const deployPermissionsScript = 'zero-deploy-permissions -p shared/schema.ts';
+const deployPermissionsScript = 'zero-deploy-permissions';
 const zeroCacheScript = 'zero-cache';
 
 function killProcess(childProcess: ChildProcess | undefined) {
