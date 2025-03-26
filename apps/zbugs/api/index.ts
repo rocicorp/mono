@@ -69,19 +69,34 @@ fastify.get<{
   });
 
   let userId = nanoid();
-  const existingUserId =
-    await sql`SELECT id FROM "user" WHERE "githubID" = ${userDetails.data.id}`;
-  if (existingUserId.length > 0) {
-    userId = existingUserId[0].id;
+  const existingUser =
+    await sql`SELECT "user".id, "userInternal".email FROM "user" LEFT JOIN "userInternal" ON "user".id = "userInternal".id WHERE "githubID" = ${userDetails.data.id}`;
+  if (existingUser.length > 0) {
+    userId = existingUser[0].id;
+
+    // update email on login if it has changed
+    if (existingUser[0].email !== userDetails.data.email) {
+      await sql`INSERT INTO "userInternal" ("id", "email") VALUES (${userId}, ${userDetails.data.email}) ON CONFLICT ("id") DO UPDATE SET "email" = ${userDetails.data.email}`;
+    }
   } else {
-    await sql`INSERT INTO "user"
-    ("id", "login", "name", "avatar", "githubID") VALUES (
-      ${userId},
-      ${userDetails.data.login},
-      ${userDetails.data.name},
-      ${userDetails.data.avatar_url},
-      ${userDetails.data.id}
-    )`;
+    await sql.begin(async sql => {
+      const stmts = [
+        sql`INSERT INTO "user"
+        ("id", "login", "name", "avatar", "githubID") VALUES (
+          ${userId},
+          ${userDetails.data.login},
+          ${userDetails.data.name},
+          ${userDetails.data.avatar_url},
+          ${userDetails.data.id}
+        )`,
+      ];
+      if (userDetails.data.email) {
+        stmts.push(
+          sql`INSERT INTO "userInternal" ("id", "email") VALUES (${userId}, ${userDetails.data.email})`,
+        );
+      }
+      await Promise.all(stmts);
+    });
   }
 
   const userRows = await sql`SELECT * FROM "user" WHERE "id" = ${userId}`;
