@@ -119,10 +119,7 @@ fastify.post<{
 }>('/api/push', async function (request, reply) {
   let {authorization} = request.headers;
   if (authorization !== undefined) {
-    assert(
-      authorization.toLowerCase().startsWith('bearer '),
-      'Authorization header must start with `Bearer `. This is a bug in the Zero Pusher service.',
-    );
+    assert(authorization.toLowerCase().startsWith('bearer '));
     authorization = authorization.substring('Bearer '.length);
   }
 

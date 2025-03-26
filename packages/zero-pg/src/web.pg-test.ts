@@ -62,7 +62,7 @@ describe('out of order mutation', () => {
       () => new Connection(pg),
       mutators,
     );
-    const result = await processor.process({}, params, makePush(15));
+    const result = await processor.process(params, makePush(15));
 
     expect(result).toEqual({
       mutations: [
@@ -93,7 +93,7 @@ describe('out of order mutation', () => {
       mutators,
     );
 
-    expect(await processor.process({}, params, makePush(1))).toEqual({
+    expect(await processor.process(params, makePush(1))).toEqual({
       mutations: [
         {
           id: {
@@ -105,7 +105,7 @@ describe('out of order mutation', () => {
       ],
     });
 
-    expect(await processor.process({}, params, makePush(3))).toEqual({
+    expect(await processor.process(params, makePush(3))).toEqual({
       mutations: [
         {
           id: {
@@ -135,7 +135,7 @@ test('first mutation', async () => {
     mutators,
   );
 
-  expect(await processor.process({}, params, makePush(1))).toEqual({
+  expect(await processor.process(params, makePush(1))).toEqual({
     mutations: [
       {
         id: {
@@ -161,11 +161,11 @@ test('previously seen mutation', async () => {
     mutators,
   );
 
-  await processor.process({}, params, makePush(1));
-  await processor.process({}, params, makePush(2));
-  await processor.process({}, params, makePush(3));
+  await processor.process(params, makePush(1));
+  await processor.process(params, makePush(2));
+  await processor.process(params, makePush(3));
 
-  expect(await processor.process({}, params, makePush(2))).toEqual({
+  expect(await processor.process(params, makePush(2))).toEqual({
     mutations: [
       {
         id: {
@@ -191,10 +191,9 @@ test('lmid still moves forward if the mutator implementation throws', async () =
     mutators,
   );
 
-  await processor.process({}, params, makePush(1));
-  await processor.process({}, params, makePush(2));
+  await processor.process(params, makePush(1));
+  await processor.process(params, makePush(2));
   const result = await processor.process(
-    {},
     params,
     makePush(3, customMutatorKey('foo', 'baz')),
   );
@@ -213,59 +212,6 @@ test('lmid still moves forward if the mutator implementation throws', async () =
     ],
   });
   await checkClientsTable(pg, 3);
-});
-
-test('token with and without `Bearer` prefix', async () => {
-  const processor = new PushProcessor(
-    {
-      tables: {},
-      relationships: {},
-      version: 1,
-    },
-    () => new Connection(pg),
-    mutators,
-  );
-
-  let result = await processor.process(
-    {authorization: 'no-bearer'},
-    params,
-    makePush(1),
-  );
-
-  expect(result).toMatchInlineSnapshot(`
-    {
-      "mutations": [
-        {
-          "id": {
-            "clientID": "cid",
-            "id": 1,
-          },
-          "result": {
-            "details": "Authorization header must start with \`Bearer \`. This is a bug in the Zero Pusher service.",
-            "error": "app",
-          },
-        },
-      ],
-    }
-  `);
-  result = await processor.process(
-    {authorization: 'Bearer sdfsdf'},
-    params,
-    makePush(1),
-  );
-  expect(result).toMatchInlineSnapshot(`
-              {
-                "mutations": [
-                  {
-                    "id": {
-                      "clientID": "cid",
-                      "id": 1,
-                    },
-                    "result": {},
-                  },
-                ],
-              }
-            `);
 });
 
 async function checkClientsTable(
