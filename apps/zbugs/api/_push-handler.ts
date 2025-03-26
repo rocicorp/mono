@@ -1,13 +1,16 @@
 import {
-  createPushHandler,
+  PushProcessor,
   type DBConnection,
   type DBTransaction,
-  type PushHandler,
+  type Params,
+  type Headers,
   type Row,
 } from '@rocicorp/zero/pg';
 import postgres, {type JSONValue} from 'postgres';
 import {schema} from '../shared/schema.ts';
 import {createServerMutators} from './_server-mutators.ts';
+import type {ReadonlyJSONObject} from '@rocicorp/zero';
+import type {AuthData} from '../shared/auth.ts';
 
 class Connection implements DBConnection<postgres.TransactionSql> {
   readonly #pg: postgres.Sql;
@@ -39,8 +42,22 @@ class Transaction implements DBTransaction<postgres.TransactionSql> {
 
 const mutatorSql = postgres(process.env.ZERO_UPSTREAM_DB as string);
 
-export const pushHandler: PushHandler = createPushHandler({
-  dbConnectionProvider: () => new Connection(mutatorSql),
-  mutators: createServerMutators(process.env.VITE_PUBLIC_JWK as string),
-  schema,
-});
+export async function handlePush(
+  authData: AuthData | undefined,
+  headers: Headers,
+  params: Params,
+  body: ReadonlyJSONObject,
+) {
+  // TODO: pass a queue of callbacks into createServerMutators
+  const mutators = createServerMutators(authData);
+  // TODO: Remove headers
+  // TODO: Remove createPushHandler
+  // TODO: Fix the stupid underscore in all these files
+  // TODO: Make it possible to share the processor across calls
+  const processor = new PushProcessor(
+    schema,
+    () => new Connection(mutatorSql),
+    mutators,
+  );
+  return await processor.process(headers, params, body);
+}

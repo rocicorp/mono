@@ -6,17 +6,16 @@ import {
 } from '../shared/mutators.ts';
 import {type CustomMutatorDefs, type UpdateValue} from '@rocicorp/zero';
 import {schema} from '../shared/schema.ts';
-import type {JWK} from 'jose';
-import {Validators} from '../shared/validators.ts';
 import {notify} from './_notify.ts';
 import {assert} from '../../../packages/shared/src/asserts.ts';
+import {type AuthData} from '../shared/auth.ts';
 
-export function createServerMutators(publicJwk: string) {
+export function createServerMutators(authData: AuthData | undefined) {
   // This `?? {}` is a workaround as the Vite build system ends up invoking
   // `createMutators` via `configureServer` in `vite.config.ts`.
   // On github CI we do not have access to the publicJwk, so we default to an empty object.
-  const v = new Validators(JSON.parse(publicJwk ?? '{}') as JWK);
-  const mutators = createMutators(v);
+  // const v = new Validators(JSON.parse(publicJwk ?? '{}') as JWK);
+  const mutators = createMutators(authData);
 
   return {
     ...mutators,
@@ -32,7 +31,7 @@ export function createServerMutators(publicJwk: string) {
           created: Date.now(),
           modified: Date.now(),
         });
-        await notify(tx, v, {kind: 'create-issue', issueID: id});
+        await notify(tx, authData, {kind: 'create-issue', issueID: id});
       },
 
       async update(tx, update: UpdateValue<typeof schema.tables.issue>) {
@@ -40,7 +39,7 @@ export function createServerMutators(publicJwk: string) {
           ...update,
           modified: Date.now(),
         });
-        await notify(tx, v, {
+        await notify(tx, authData, {
           kind: 'update-issue',
           issueID: update.id,
           update,
@@ -52,7 +51,7 @@ export function createServerMutators(publicJwk: string) {
         {issueID, labelID}: {issueID: string; labelID: string},
       ) {
         await mutators.issue.addLabel(tx, {issueID, labelID});
-        await notify(tx, v, {
+        await notify(tx, authData, {
           kind: 'update-issue',
           issueID,
           update: {id: issueID},
@@ -64,7 +63,7 @@ export function createServerMutators(publicJwk: string) {
         {issueID, labelID}: {issueID: string; labelID: string},
       ) {
         await mutators.issue.removeLabel(tx, {issueID, labelID});
-        await notify(tx, v, {
+        await notify(tx, authData, {
           kind: 'update-issue',
           issueID,
           update: {id: issueID},
@@ -80,7 +79,7 @@ export function createServerMutators(publicJwk: string) {
           ...args,
           created: Date.now(),
         });
-        await notify(tx, v, {
+        await notify(tx, authData, {
           kind: 'add-emoji-to-issue',
           issueID: args.subjectID,
           emoji: args.unicode,
@@ -98,7 +97,7 @@ export function createServerMutators(publicJwk: string) {
           .one()
           .run();
         assert(comment);
-        await notify(tx, v, {
+        await notify(tx, authData, {
           kind: 'add-emoji-to-comment',
           issueID: comment.issueID,
           commentID: args.subjectID,
@@ -117,7 +116,7 @@ export function createServerMutators(publicJwk: string) {
           body,
           created: Date.now(),
         });
-        await notify(tx, v, {
+        await notify(tx, authData, {
           kind: 'add-comment',
           issueID,
           commentID: id,
@@ -131,7 +130,7 @@ export function createServerMutators(publicJwk: string) {
         const comment = await tx.query.comment.where('id', id).one().run();
         assert(comment);
 
-        await notify(tx, v, {
+        await notify(tx, authData, {
           kind: 'edit-comment',
           issueID: comment.issueID,
           commentID: id,

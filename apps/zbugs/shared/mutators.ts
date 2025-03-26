@@ -1,15 +1,20 @@
 import {schema} from './schema.ts';
-import {must} from '../../../packages/shared/src/must.ts';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import type {UpdateValue, Transaction, CustomMutatorDefs} from '@rocicorp/zero';
-import {Validators} from './validators.ts';
+import {
+  assertIsCreatorOrAdmin,
+  assertUserCanSeeIssue,
+  assertUserCanSeeComment,
+  isAdmin,
+  type AuthData,
+  assertIsLoggedIn,
+} from './auth.ts';
 
 export type AddEmojiArgs = {
   id: string;
   unicode: string;
   annotation: string;
   subjectID: string;
-  creatorID: string;
   created: number;
 };
 
@@ -28,14 +33,15 @@ export type AddCommentArgs = {
   created: number;
 };
 
-export function createMutators(v: Validators) {
+export function createMutators(authData: AuthData | undefined) {
   return {
     issue: {
       async create(
         tx,
         {id, title, description, created, modified}: CreateIssueArgs,
       ) {
-        const creatorID = must((await v.verifyToken(tx)).sub);
+        assertIsLoggedIn(authData);
+        const creatorID = authData.sub;
         await tx.mutate.issue.insert({
           id,
           title,
@@ -52,12 +58,12 @@ export function createMutators(v: Validators) {
         tx,
         change: UpdateValue<typeof schema.tables.issue> & {modified: number},
       ) {
-        await v.assertIsCreatorOrAdmin(tx, tx.query.issue, change.id);
+        await assertIsCreatorOrAdmin(authData, tx.query.issue, change.id);
         await tx.mutate.issue.update(change);
       },
 
       async delete(tx, id: string) {
-        await v.assertIsCreatorOrAdmin(tx, tx.query.issue, id);
+        await assertIsCreatorOrAdmin(authData, tx.query.issue, id);
         await tx.mutate.issue.delete({id});
       },
 
@@ -65,7 +71,7 @@ export function createMutators(v: Validators) {
         tx,
         {issueID, labelID}: {issueID: string; labelID: string},
       ) {
-        await v.assertIsCreatorOrAdmin(tx, tx.query.issue, issueID);
+        await assertIsCreatorOrAdmin(authData, tx.query.issue, issueID);
         await tx.mutate.issueLabel.insert({issueID, labelID});
       },
 
@@ -73,7 +79,7 @@ export function createMutators(v: Validators) {
         tx,
         {issueID, labelID}: {issueID: string; labelID: string},
       ) {
-        await v.assertIsCreatorOrAdmin(tx, tx.query.issue, issueID);
+        await assertIsCreatorOrAdmin(authData, tx.query.issue, issueID);
         await tx.mutate.issueLabel.delete({issueID, labelID});
       },
     },
@@ -88,36 +94,35 @@ export function createMutators(v: Validators) {
       },
 
       async remove(tx, id: string) {
-        await v.assertIsCreatorOrAdmin(tx, tx.query.emoji, id);
+        await assertIsCreatorOrAdmin(authData, tx.query.emoji, id);
         await tx.mutate.emoji.delete({id});
       },
     },
 
     comment: {
       async add(tx, {id, issueID, body, created}: AddCommentArgs) {
-        const jwt = await v.verifyToken(tx);
-        const creatorID = must(jwt.sub);
+        assertIsLoggedIn(authData);
+        const creatorID = authData.sub;
 
-        await v.assertUserCanSeeIssue(tx, jwt, issueID);
+        await assertUserCanSeeIssue(tx, authData, issueID);
 
         await tx.mutate.comment.insert({id, issueID, creatorID, body, created});
       },
 
       async edit(tx, {id, body}: {id: string; body: string}) {
-        await v.assertIsCreatorOrAdmin(tx, tx.query.comment, id);
+        await assertIsCreatorOrAdmin(authData, tx.query.comment, id);
         await tx.mutate.comment.update({id, body});
       },
 
       async remove(tx, id: string) {
-        await v.assertIsCreatorOrAdmin(tx, tx.query.comment, id);
+        await assertIsCreatorOrAdmin(authData, tx.query.comment, id);
         await tx.mutate.comment.delete({id});
       },
     },
 
     label: {
       async create(tx, {id, name}: {id: string; name: string}) {
-        const jwt = await v.verifyToken(tx);
-        assert(v.isAdmin(jwt), 'Only admins can create labels');
+        assert(isAdmin(authData), 'Only admins can create labels');
         await tx.mutate.label.insert({id, name});
       },
 
@@ -129,8 +134,7 @@ export function createMutators(v: Validators) {
           labelName,
         }: {labelID: string; issueID: string; labelName: string},
       ) {
-        const jwt = await v.verifyToken(tx);
-        assert(v.isAdmin(jwt), 'Only admins can create labels');
+        assert(isAdmin(authData), 'Only admins can create labels');
         await tx.mutate.label.insert({id: labelID, name: labelName});
         await tx.mutate.issueLabel.insert({issueID, labelID});
       },
@@ -138,14 +142,16 @@ export function createMutators(v: Validators) {
 
     viewState: {
       async set(tx, {issueID, viewed}: {issueID: string; viewed: number}) {
-        const userID = must((await v.verifyToken(tx)).sub);
+        assertIsLoggedIn(authData);
+        const userID = authData.sub;
         await tx.mutate.viewState.upsert({issueID, userID, viewed});
       },
     },
 
     userPref: {
       async set(tx, {key, value}: {key: string; value: string}) {
-        const userID = must((await v.verifyToken(tx)).sub);
+        assertIsLoggedIn(authData);
+        const userID = authData.sub;
         await tx.mutate.userPref.upsert({key, value, userID});
       },
     },
@@ -154,15 +160,15 @@ export function createMutators(v: Validators) {
   async function addEmoji(
     tx: Transaction<typeof schema, unknown>,
     subjectType: 'issue' | 'comment',
-    {id, unicode, annotation, subjectID, creatorID, created}: AddEmojiArgs,
+    {id, unicode, annotation, subjectID, created}: AddEmojiArgs,
   ) {
-    const jwt = await v.verifyToken(tx);
-    creatorID = must(jwt.sub);
+    assertIsLoggedIn(authData);
+    const creatorID = authData.sub;
 
     if (subjectType === 'issue') {
-      v.assertUserCanSeeIssue(tx, jwt, subjectID);
+      assertUserCanSeeIssue(tx, authData, subjectID);
     } else {
-      v.assertUserCanSeeComment(tx, jwt, subjectID);
+      assertUserCanSeeComment(tx, authData, subjectID);
     }
 
     await tx.mutate.emoji.insert({
