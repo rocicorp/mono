@@ -363,6 +363,7 @@ describe('server results and keeping read queries', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   test('waiting for server results', async () => {
@@ -425,6 +426,7 @@ describe('server results and keeping read queries', () => {
   });
 
   test('reads in a mutation are registered', async () => {
+    vi.setSystemTime(new Date('2023-01-01'));
     const z = zeroForTest({
       schema,
       mutators: {
@@ -445,27 +447,9 @@ describe('server results and keeping read queries', () => {
 
     const mockSocket = await z.socket;
     let onUpstreamCall = 0;
+    const messages: string[] = [];
     mockSocket.onUpstream = msg => {
-      if (onUpstreamCall === 0) {
-        // check that the mutator's query was registered with the server
-        expect(msg).toMatchInlineSnapshot(
-          `"["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"12hwg3ihkijhm","ast":{"table":"issues","orderBy":[["id","asc"]]},"ttl":0}]}]"`,
-        );
-      } else if (onUpstreamCall === 1) {
-        // after the mutation was applied by the server, the query was removed
-        expect(msg).toMatchInlineSnapshot(
-          `"["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"12hwg3ihkijhm"}]}]"`,
-        );
-      } else if (onUpstreamCall === 2) {
-        expect(msg).toMatchInlineSnapshot(
-          `"["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1vsd9vcx6ynd4","ast":{"table":"issues","limit":1,"orderBy":[["id","asc"]]},"ttl":0}]}]"`,
-        );
-      } else if (onUpstreamCall === 3) {
-        expect(msg).toMatchInlineSnapshot(
-          `"["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1vsd9vcx6ynd4"}]}]"`,
-        );
-      }
-
+      messages.push(msg);
       onUpstreamCall++;
     };
 
@@ -493,7 +477,7 @@ describe('server results and keeping read queries', () => {
 
     // check the error case
     const close = await z.mutate.issue.close({});
-    expect(onUpstreamCall).toEqual(3);
+    expect(onUpstreamCall).toEqual(4);
 
     await z.triggerPushResponse({
       mutations: [
@@ -505,10 +489,20 @@ describe('server results and keeping read queries', () => {
         },
       ],
     });
-    expect(onUpstreamCall).toEqual(4);
+    expect(onUpstreamCall).toEqual(5);
 
     await z.close();
 
     await expect(close.server).rejects.toEqual({error: 'app'});
+
+    expect(messages.filter(m => m.includes('"changeDesiredQueries"')))
+      .toMatchInlineSnapshot(`
+        [
+          "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"12hwg3ihkijhm","ast":{"table":"issues","orderBy":[["id","asc"]]},"ttl":0}]}]",
+          "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"12hwg3ihkijhm"}]}]",
+          "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1vsd9vcx6ynd4","ast":{"table":"issues","limit":1,"orderBy":[["id","asc"]]},"ttl":0}]}]",
+          "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1vsd9vcx6ynd4"}]}]",
+        ]
+      `);
   });
 });

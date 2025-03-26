@@ -541,6 +541,7 @@ export class Zero<
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
       enableMutationRecovery: false,
+      enablePullAndPushInOpen: false, // Zero calls push in its connection management code
       onClientsDeleted: (clientIDs, clientGroupIDs) =>
         this.#deleteClientsManager.onClientsDeleted(clientIDs, clientGroupIDs),
       zero: new ZeroRep(
@@ -1191,6 +1192,8 @@ export class Zero<
       l.debug?.('Waiting for connection to be acknowledged');
       await this.#connectResolver.promise;
       this.#mutationTracker.onConnected(this.#lastMutationIDReceived);
+      // push any outstanding mutations on reconnect.
+      this.#rep.push().catch(() => {});
     } finally {
       clearTimeout(timeoutID);
       this.#closeAbortController.signal.removeEventListener(
