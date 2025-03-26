@@ -1190,6 +1190,7 @@ export class Zero<
     try {
       l.debug?.('Waiting for connection to be acknowledged');
       await this.#connectResolver.promise;
+      this.#mutationTracker.onConnected(this.#lastMutationIDReceived);
     } finally {
       clearTimeout(timeoutID);
       this.#closeAbortController.signal.removeEventListener(
