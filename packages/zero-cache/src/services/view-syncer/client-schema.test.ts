@@ -22,6 +22,7 @@ describe('client schemas', () => {
         a int,
         b bool,
         c json,
+        d timestamp,
         notSyncedToClient custom_pg_type,
         _0_version TEXT
       );

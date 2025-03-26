@@ -99,6 +99,7 @@ test('row type', () => {
         readonly description: string;
         readonly closed: boolean;
         readonly ownerId: string | null;
+        readonly createdAt: number;
         readonly labels: readonly {
           readonly id: string;
           readonly name: string;

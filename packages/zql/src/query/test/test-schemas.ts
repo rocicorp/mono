@@ -3,7 +3,6 @@ import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.t
 import {
   boolean,
   json,
-  number,
   string,
   table,
   timestamp,
@@ -42,7 +41,7 @@ const comment = table('comment')
     authorId: string(),
     issueId: string().from('issue_id'),
     text: string(),
-    createdAt: number(),
+    createdAt: timestamp(),
   })
   .primaryKey('id');
 
