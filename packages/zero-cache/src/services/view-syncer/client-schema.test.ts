@@ -221,7 +221,7 @@ describe('client schemas', () => {
         fullTables,
       ),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"foo\\".\\"a\\" column's upstream type \\"number\\" does not match the client type \\"string\\"\\nThe \\"foo\\".\\"b\\" column's upstream type \\"boolean\\" does not match the client type \\"number\\""}]`,
+      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"foo\\".\\"a\\" column's upstream type \\"number\\" does not match the client type \\"string\\"\\nThe \\"foo\\".\\"b\\" column's upstream type \\"boolean\\" does not match the client type \\"number\\"\\nThe \\"foo\\".\\"d\\" column's upstream type \\"timestamp\\" does not match the client type \\"number\\"\\nThe \\"foo\\".\\"e\\" column's upstream type \\"timestamp\\" does not match the client type \\"number\\"\\nThe \\"foo\\".\\"f\\" column's upstream type \\"timestamp\\" does not match the client type \\"number\\""}]`,
     );
   });
 
