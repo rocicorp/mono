@@ -176,4 +176,26 @@ describe('MutationTracker', () => {
     await mutator(tx as unknown as WriteTransaction, {});
     expect(mt.size).toBe(0);
   });
+
+  test('tracked mutations are resolved on reconnect', async () => {
+    const tracker = new MutationTracker();
+    tracker.clientID = CLIENT_ID;
+
+    const mutation1 = tracker.trackMutation(1, []);
+    const mutation2 = tracker.trackMutation(2, []);
+    const mutation3 = tracker.trackMutation(3, []);
+    const mutation4 = tracker.trackMutation(4, []);
+
+    expect(tracker.size).toBe(4);
+
+    tracker.onConnected(3);
+    await Promise.all([mutation1, mutation2, mutation3]);
+
+    expect(tracker.size).toBe(1);
+
+    tracker.onConnected(20);
+
+    expect(tracker.size).toBe(0);
+    await mutation4;
+  });
 });

@@ -12,6 +12,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {QueryManager} from './query-manager.ts';
 import {must} from '../../../shared/src/must.ts';
+import {emptyObject} from '../../../shared/src/sentinels.ts';
 
 const transientPushErrorTypes: PushError['error'][] = [
   'zero-pusher',
@@ -79,6 +80,41 @@ export class MutationTracker {
       this.#processPushError(response);
     } else {
       this.#processPushOk(response);
+    }
+  }
+
+  /**
+   * When we reconnect to zero-cache, we resolve all outstanding mutations
+   * whose ID is less than or equal to the lastMutationID.
+   *
+   * The reason is that any responses the API server sent
+   * to those mutations have been lost.
+   *
+   * An example case: the API server responds while the connection
+   * is down. Those responses are dropped.
+   *
+   * Mutations whose LMID is > the lastMutationID are not resolved
+   * since they will be retried by the client, giving us another chance
+   * at getting a response.
+   *
+   * The only way to ensure that all API server responses are
+   * received would be to have the API server write them
+   * to the DB while writing the LMID.
+   *
+   * This would have the downside of not being able to provide responses to a
+   * mutation with data gathered after the transaction.
+   */
+  onConnected(lastMutationID: number) {
+    for (const [id, entry] of this.#outstandingMutations) {
+      if (id <= lastMutationID) {
+        entry.removeQueries();
+        entry.resolver.resolve(emptyObject);
+        this.#outstandingMutations.delete(id);
+      } else {
+        // the map is in insertion order which is in mutation ID order
+        // so it is safe to break.
+        break;
+      }
     }
   }
 
