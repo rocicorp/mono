@@ -39,14 +39,14 @@ export function jsonPackArg<T extends ValueType>(
   value: 'number' extends T
     ? number
     : 'string' extends T
-    ? string
-    : 'boolean' extends T
-    ? boolean
-    : 'null' extends T
-    ? null
-    : 'json' extends T
-    ? ReadonlyJSONValue
-    : never,
+      ? string
+      : 'boolean' extends T
+        ? boolean
+        : 'null' extends T
+          ? null
+          : 'json' extends T
+            ? ReadonlyJSONValue
+            : never,
 ): JsonPackArg {
   return {[jsonPack]: true, type, value};
 }
