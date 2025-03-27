@@ -8,7 +8,11 @@ import type {
   DBTransaction,
   Transaction,
 } from '../../zql/src/mutate/custom.ts';
-import {formatPgJson, jsonPackArgUnsafe, sql} from '../../z2s/src/sql.ts';
+import {
+  formatPgInternalConvert,
+  sqlConvertArgUnsafe,
+  sql,
+} from '../../z2s/src/sql.ts';
 import {must} from '../../shared/src/must.ts';
 
 interface ServerTransaction<S extends Schema, TWrappedTransaction>
@@ -110,7 +114,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
   return {
     async insert(this: WithHiddenTx, value) {
       const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
-      const stmt = formatPgJson(
+      const stmt = formatPgInternalConvert(
         sql`INSERT INTO ${sql.ident(serverName(schema))} (${sql.join(
           targetedColumns.map(([, serverName]) => sql.ident(serverName)),
           ',',
@@ -128,7 +132,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
         schema.primaryKey,
         schema,
       );
-      const stmt = formatPgJson(
+      const stmt = formatPgInternalConvert(
         sql`INSERT INTO ${sql.ident(serverName(schema))} (${sql.join(
           targetedColumns.map(([, serverName]) => sql.ident(serverName)),
           ',',
@@ -153,7 +157,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
     },
     async update(this: WithHiddenTx, value) {
       const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
-      const stmt = formatPgJson(
+      const stmt = formatPgInternalConvert(
         sql`UPDATE ${sql.ident(serverName(schema))} SET ${sql.join(
           targetedColumns.map(
             ([origName, serverName]) =>
@@ -166,7 +170,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       await tx.query(stmt.text, stmt.values);
     },
     async delete(this: WithHiddenTx, value) {
-      const stmt = formatPgJson(
+      const stmt = formatPgInternalConvert(
         sql`DELETE FROM ${sql.ident(
           serverName(schema),
         )} WHERE ${primaryKeyClause(schema, value)}`,
@@ -203,5 +207,5 @@ function origAndServerNamesFor(
 }
 
 function sqlValue(schema: TableSchema, column: string, value: unknown) {
-  return jsonPackArgUnsafe(must(schema.columns[column].type), value);
+  return sqlConvertArgUnsafe(must(schema.columns[column].type), value);
 }

@@ -2,11 +2,21 @@ import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   date,
+  json,
   number,
   string,
   table,
   timestamp,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+
+const jsonCols = {
+  str: json<string>(),
+  num: json<number>(),
+  bool: json<boolean>(),
+  nil: json<null>(),
+  obj: json<{foo: string}>(),
+  arr: json<string[]>(),
+} as const;
 
 export const schema = createSchema({
   tables: [
@@ -43,6 +53,13 @@ export const schema = createSchema({
         d: date(),
       })
       .primaryKey('ts'),
+    table('jsonCases')
+      .columns({
+        ...jsonCols,
+        str: string(),
+      })
+      .primaryKey('str'),
+    table('jsonbCases').columns(jsonCols).primaryKey('str'),
   ],
   relationships: [],
 });
@@ -75,6 +92,26 @@ CREATE TABLE "dateTypes" (
   "tswotz" TIMESTAMP WITHOUT TIME ZONE,
   "d" DATE,
   PRIMARY KEY ("ts")
+);
+
+CREATE TABLE "jsonbCases" (
+  "str" JSONB,
+  "num" JSONB,
+  "bool" JSONB,
+  "nil" JSONB,
+  "obj" JSONB,
+  "arr" JSONB,
+  PRIMARY KEY ("str")
+);
+
+CREATE TABLE "jsonCases" (
+  "str" TEXT,
+  "num" JSON,
+  "bool" JSON,
+  "nil" JSON,
+  "obj" JSON,
+  "arr" JSON,
+  PRIMARY KEY ("str")
 );
 `;
 
