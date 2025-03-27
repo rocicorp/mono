@@ -117,11 +117,13 @@ fastify.post<{
     appID: string;
   };
 }>('/api/push', async function (request, reply) {
+  console.log('entered api push');
   let {authorization} = request.headers;
   if (authorization !== undefined) {
     assert(authorization.toLowerCase().startsWith('bearer '));
     authorization = authorization.substring('Bearer '.length);
   }
+  console.log('got token', authorization);
 
   const jwk = process.env.VITE_PUBLIC_JWK;
   const authData: AuthData | undefined =
