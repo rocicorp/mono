@@ -305,7 +305,12 @@ class PushWorker {
       }
 
       const json = await response.json();
-      return v.parse(json, pushResponseSchema);
+      try {
+        return v.parse(json, pushResponseSchema);
+      } catch (e) {
+        this.#lc.error?.('failed to parse push response', JSON.stringify(json));
+        throw e;
+      }
     } catch (e) {
       // We do not kill the pusher on error.
       // If the user's API server is down, the mutations will never be acknowledged
