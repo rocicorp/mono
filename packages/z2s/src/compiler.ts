@@ -1,7 +1,7 @@
 import type {SQLQuery} from '@databases/sql';
 import {zip} from '../../shared/src/arrays.ts';
 import {assert} from '../../shared/src/asserts.ts';
-import type {JSONValue} from '../../shared/src/json.ts';
+import {type JSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
 import type {
   CorrelatedSubqueryCondition,
@@ -22,13 +22,68 @@ import type {
 } from '../../zero-schema/src/table-schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {sql} from './sql.ts';
+import {
+  type JSONValue as BigIntJSONValue,
+  parse as parseBigIntJson,
+} from '../../zero-cache/src/types/bigint-json.ts';
+import {hasOwn} from '../../shared/src/has-own.ts';
 
 type Tables = Record<string, TableSchema>;
 
 const ZQL_RESULT_KEY = 'zql_result';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractZqlResult(pgResult: any): JSONValue {
-  return JSON.parse(pgResult[0][ZQL_RESULT_KEY]);
+  const bigIntJson: BigIntJSONValue = parseBigIntJson(
+    pgResult[0][ZQL_RESULT_KEY],
+  );
+  assertJSONValue(bigIntJson);
+  return bigIntJson;
+}
+
+function assertJSONValue(v: BigIntJSONValue): asserts v is JSONValue {
+  const path = findPathToBigInt(v);
+  if (path) {
+    throw new Error(`Value exceeds safe Number range. ${path}`);
+  }
+}
+
+function findPathToBigInt(v: BigIntJSONValue): string | undefined {
+  const typeOfV = typeof v;
+  switch (typeOfV) {
+    case 'bigint':
+      return ` = ${v}`;
+    case 'object': {
+      if (v === null) {
+        return;
+      }
+      if (Array.isArray(v)) {
+        for (let i = 0; i < v.length; i++) {
+          const path = findPathToBigInt(v[i]);
+          if (path) {
+            return `[${i}]${path}`;
+          }
+        }
+        return undefined;
+      }
+
+      const o = v as Record<string, BigIntJSONValue>;
+      for (const k in o) {
+        if (hasOwn(o, k)) {
+          const path = findPathToBigInt(o[k]);
+          if (path) {
+            return `['${k}']${path}`;
+          }
+        }
+      }
+      return undefined;
+    }
+    case 'number':
+      return undefined;
+    case 'boolean':
+      return undefined;
+    default:
+      return undefined;
+  }
 }
 
 /**

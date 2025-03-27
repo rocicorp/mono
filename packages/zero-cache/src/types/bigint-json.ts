@@ -24,7 +24,6 @@ export type JSONValue =
   | number
   | bigint
   | boolean
-  | Date // serialized as `string`
   | readonly JSONValue[]
   | JSONObject;
 
