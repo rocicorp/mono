@@ -3,7 +3,7 @@ import {defineConfig, type ViteDevServer} from 'vite';
 import svgr from 'vite-plugin-svgr';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import {makeDefine} from '../../packages/shared/src/build.ts';
-import {fastify} from './server/index.ts';
+import {fastify} from './api/index.ts';
 
 async function configureServer(server: ViteDevServer) {
   await fastify.ready();
