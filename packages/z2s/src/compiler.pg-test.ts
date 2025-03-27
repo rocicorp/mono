@@ -20,7 +20,7 @@ import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
-import {compile} from './compiler.ts';
+import {compile, extractZqlResult} from './compiler.ts';
 import {formatPg} from './sql.ts';
 import './test/comparePg.ts';
 
@@ -48,6 +48,7 @@ beforeAll(async () => {
       description: `Description for issue ${i + 1}`,
       closed: i % 2 === 0,
       ownerId: i === 0 ? null : `user${i}`,
+      createdAt: Date.now() - i * 86400000,
     })),
     user: Array.from({length: 3}, (_, i) => ({
       id: `user${i + 1}`,
@@ -213,10 +214,10 @@ function noBigint(row: Record<string, unknown>) {
 describe('compiling ZQL to SQL', () => {
   test('basic where clause', async () => {
     const query = issueQuery.where('title', '=', 'issue 1');
-    const sqlQuery = formatPg(compile(ast(query), schema.tables));
-    const pgResult = await pg.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
+    const c = compile(ast(query), schema.tables);
+    const sqlQuery = formatPg(c);
+    const pgResult = extractZqlResult(
+      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
     );
     expect(mapResultToClientNames(await query.run(), schema, 'issue')).toEqual(
       pgResult,
@@ -228,13 +229,12 @@ describe('compiling ZQL to SQL', () => {
       .where('closed', '=', false)
       .where('ownerId', 'IS NOT', null);
     const sqlQuery = formatPg(compile(ast(query), schema.tables));
-    const pgResult = await pg.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
+    const pgResult = extractZqlResult(
+      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
     );
-    expect(mapResultToClientNames(await query.run(), schema, 'issue')).toEqual(
-      pgResult,
-    );
+    expect(
+      mapResultToClientNames(await query.run(), schema, 'issue'),
+    ).toEqualPg(pgResult);
   });
 
   test('whereExists with related table', async () => {
@@ -242,33 +242,30 @@ describe('compiling ZQL to SQL', () => {
       q.where('name', '=', 'bug'),
     );
     const sqlQuery = formatPg(compile(ast(query), schema.tables));
-    const pgResult = await pg.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
+    const pgResult = extractZqlResult(
+      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
     );
-    expect(mapResultToClientNames(await query.run(), schema, 'issue')).toEqual(
-      pgResult,
-    );
+    expect(
+      mapResultToClientNames(await query.run(), schema, 'issue'),
+    ).toEqualPg(pgResult);
   });
 
   test('order by and limit', async () => {
     const query = issueQuery.orderBy('title', 'desc').limit(5);
     const sqlQuery = formatPg(compile(ast(query), schema.tables));
-    const pgResult = await pg.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
+    const pgResult = extractZqlResult(
+      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
     );
-    expect(mapResultToClientNames(await query.run(), schema, 'issue')).toEqual(
-      pgResult,
-    );
+    expect(
+      mapResultToClientNames(await query.run(), schema, 'issue'),
+    ).toEqualPg(pgResult);
   });
 
   test('1 to 1 foreign key relationship', async () => {
     const query = issueQuery.related('owner');
     const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
-    const pgResult = await pg.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
+    const pgResult = extractZqlResult(
+      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
     );
     expect(
       mapResultToClientNames(await query.run(), schema, 'issue'),
@@ -278,9 +275,8 @@ describe('compiling ZQL to SQL', () => {
   test('1 to many foreign key relationship', async () => {
     const query = issueQuery.related('comments');
     const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
-    const pgResult = await pg.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
+    const pgResult = extractZqlResult(
+      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
     );
     expect(
       mapResultToClientNames(await query.run(), schema, 'issue'),
@@ -290,9 +286,8 @@ describe('compiling ZQL to SQL', () => {
   test('junction relationship', async () => {
     const query = issueQuery.related('labels');
     const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
-    const pgResult = await pg.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
+    const pgResult = extractZqlResult(
+      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
     );
     expect(
       mapResultToClientNames(await query.run(), schema, 'issue'),
@@ -306,13 +301,12 @@ describe('compiling ZQL to SQL', () => {
         q.where('createdAt', '>', 1000).related('author'),
       );
     const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
-    const pgResult = await pg.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
+    const pgResult = extractZqlResult(
+      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
     );
-    expect(mapResultToClientNames(await query.run(), schema, 'issue')).toEqual(
-      pgResult,
-    );
+    expect(
+      mapResultToClientNames(await query.run(), schema, 'issue'),
+    ).toEqualPg(pgResult);
   });
 
   test('complex query combining multiple features', async () => {
@@ -325,12 +319,11 @@ describe('compiling ZQL to SQL', () => {
       )
       .orderBy('title', 'asc');
     const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
-    const pgResult = await pg.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
+    const pgResult = extractZqlResult(
+      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
     );
-    expect(mapResultToClientNames(await query.run(), schema, 'issue')).toEqual(
-      pgResult,
-    );
+    expect(
+      mapResultToClientNames(await query.run(), schema, 'issue'),
+    ).toEqualPg(pgResult);
   });
 });

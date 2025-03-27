@@ -66,6 +66,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'description 1',
       closed: false,
       ownerId: '0001',
+      createdAt: 1,
     },
   });
   issueSource.push({
@@ -76,6 +77,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'description 2',
       closed: false,
       ownerId: '0002',
+      createdAt: 2,
     },
   });
   issueSource.push({
@@ -86,6 +88,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'description 3',
       closed: false,
       ownerId: null,
+      createdAt: 3,
     },
   });
   commentSource.push({
@@ -212,6 +215,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     });
 
@@ -230,6 +234,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     ]);
   });
@@ -245,6 +250,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     });
 
@@ -263,6 +269,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     ]);
 
@@ -274,6 +281,7 @@ describe('bare select', () => {
         description: 'description2',
         closed: false,
         ownerId: '0002',
+        createdAt: 20,
       },
     });
     queryDelegate.commit();
@@ -285,6 +293,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
       {
         id: '0002',
@@ -292,6 +301,7 @@ describe('bare select', () => {
         description: 'description2',
         closed: false,
         ownerId: '0002',
+        createdAt: 20,
       },
     ]);
   });
@@ -316,6 +326,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     });
     queryDelegate.commit();
@@ -327,6 +338,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     ]);
 
@@ -348,6 +360,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     ]);
   });
@@ -397,6 +410,7 @@ describe('joins and filters', () => {
         description: 'description 1',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     });
     queryDelegate.commit();
@@ -413,6 +427,7 @@ describe('joins and filters', () => {
         description: 'description 1',
         closed: true,
         ownerId: '0001',
+        createdAt: 10,
       },
     });
 
@@ -464,6 +479,7 @@ describe('joins and filters', () => {
               "text": "comment 2",
             },
           ],
+          "createdAt": 1,
           "description": "description 1",
           "id": "0001",
           "labels": [
@@ -486,6 +502,7 @@ describe('joins and filters', () => {
         {
           "closed": false,
           "comments": [],
+          "createdAt": 2,
           "description": "description 2",
           "id": "0002",
           "labels": [],
@@ -508,6 +525,7 @@ describe('joins and filters', () => {
         {
           "closed": false,
           "comments": [],
+          "createdAt": 3,
           "description": "description 3",
           "id": "0003",
           "labels": [],
@@ -525,6 +543,7 @@ describe('joins and filters', () => {
         description: 'description 1',
         closed: false,
         ownerId: '0001',
+        createdAt: 1,
       },
     });
     queryDelegate.getSource('issue').push({
@@ -535,6 +554,7 @@ describe('joins and filters', () => {
         description: 'description 2',
         closed: false,
         ownerId: '0002',
+        createdAt: 2,
       },
     });
     queryDelegate.getSource('issue').push({
@@ -545,6 +565,7 @@ describe('joins and filters', () => {
         description: 'description 3',
         closed: false,
         ownerId: null,
+        createdAt: 3,
       },
     });
     queryDelegate.commit();
@@ -671,6 +692,7 @@ describe('joins and filters', () => {
               Symbol(rc): 1,
             },
           ],
+          "createdAt": 1,
           "description": "description 1",
           "id": "0001",
           "owner": {
@@ -752,6 +774,7 @@ test('run', async () => {
             Symbol(rc): 1,
           },
         ],
+        "createdAt": 1,
         "description": "description 1",
         "id": "0001",
         "labels": [
@@ -777,6 +800,7 @@ test('run', async () => {
       {
         "closed": false,
         "comments": [],
+        "createdAt": 2,
         "description": "description 2",
         "id": "0002",
         "labels": [],
@@ -801,6 +825,7 @@ test('run', async () => {
       {
         "closed": false,
         "comments": [],
+        "createdAt": 3,
         "description": "description 3",
         "id": "0003",
         "labels": [],
@@ -885,6 +910,7 @@ test('complex expression', async () => {
     [
       {
         "closed": false,
+        "createdAt": 1,
         "description": "description 1",
         "id": "0001",
         "ownerId": "0001",
@@ -893,6 +919,7 @@ test('complex expression', async () => {
       },
       {
         "closed": false,
+        "createdAt": 2,
         "description": "description 2",
         "id": "0002",
         "ownerId": "0002",
@@ -915,6 +942,7 @@ test('complex expression', async () => {
     [
       {
         "closed": false,
+        "createdAt": 1,
         "description": "description 1",
         "id": "0001",
         "ownerId": "0001",
@@ -937,6 +965,7 @@ test('null compare', async () => {
     [
       {
         "closed": false,
+        "createdAt": 3,
         "description": "description 3",
         "id": "0003",
         "ownerId": null,
@@ -954,6 +983,7 @@ test('null compare', async () => {
     [
       {
         "closed": false,
+        "createdAt": 1,
         "description": "description 1",
         "id": "0001",
         "ownerId": "0001",
@@ -962,6 +992,7 @@ test('null compare', async () => {
       },
       {
         "closed": false,
+        "createdAt": 2,
         "description": "description 2",
         "id": "0002",
         "ownerId": "0002",
@@ -990,6 +1021,7 @@ test('literal filter', async () => {
     [
       {
         "closed": false,
+        "createdAt": 1,
         "description": "description 1",
         "id": "0001",
         "ownerId": "0001",
@@ -998,6 +1030,7 @@ test('literal filter', async () => {
       },
       {
         "closed": false,
+        "createdAt": 2,
         "description": "description 2",
         "id": "0002",
         "ownerId": "0002",
@@ -1006,6 +1039,7 @@ test('literal filter', async () => {
       },
       {
         "closed": false,
+        "createdAt": 3,
         "description": "description 3",
         "id": "0003",
         "ownerId": null,
@@ -1167,6 +1201,7 @@ test('where exists', () => {
       description: 'description 1',
       closed: false,
       ownerId: '0001',
+      createdAt: 10,
     },
   });
   issueSource.push({
@@ -1177,6 +1212,7 @@ test('where exists', () => {
       description: 'description 2',
       closed: true,
       ownerId: '0002',
+      createdAt: 20,
     },
   });
   labelSource.push({
@@ -1207,6 +1243,7 @@ test('where exists', () => {
     [
       {
         "closed": true,
+        "createdAt": 20,
         "description": "description 2",
         "id": "0002",
         "labels": [
@@ -1247,6 +1284,7 @@ test('duplicative where exists', () => {
       description: 'description 1',
       closed: false,
       ownerId: '0001',
+      createdAt: 10,
     },
   });
   issueSource.push({
@@ -1257,6 +1295,7 @@ test('duplicative where exists', () => {
       description: 'description 2',
       closed: true,
       ownerId: '0002',
+      createdAt: 20,
     },
   });
   labelSource.push({
@@ -1288,6 +1327,7 @@ test('duplicative where exists', () => {
     [
       {
         "closed": true,
+        "createdAt": 20,
         "description": "description 2",
         "id": "0002",
         "labels": [
@@ -1333,6 +1373,7 @@ test('where exists before where, see https://bugs.rocicorp.dev/issue/3417', () =
       description: 'description 1',
       closed: false,
       ownerId: '0001',
+      createdAt: 10,
     },
   });
 

@@ -22,6 +22,9 @@ describe('client schemas', () => {
         a int,
         b bool,
         c json,
+        d timestamp,
+        e timestamptz,
+        f date,
         notSyncedToClient custom_pg_type,
         _0_version TEXT
       );
@@ -102,6 +105,31 @@ describe('client schemas', () => {
               id: {type: 'string'},
               a: {type: 'number'},
               b: {type: 'boolean'},
+            },
+          },
+        },
+      },
+    ],
+    [
+      {
+        tables: {
+          bar: {
+            columns: {
+              e: {type: 'boolean'},
+              id: {type: 'string'},
+              f: {type: 'json'},
+              d: {type: 'number'},
+            },
+          },
+          foo: {
+            columns: {
+              c: {type: 'json'},
+              id: {type: 'string'},
+              a: {type: 'number'},
+              b: {type: 'boolean'},
+              d: {type: 'timestamp'},
+              e: {type: 'timestamp'},
+              f: {type: 'date'},
             },
           },
         },
@@ -207,6 +235,9 @@ describe('client schemas', () => {
                 id: {type: 'string'},
                 a: {type: 'string'},
                 b: {type: 'number'},
+                d: {type: 'number'},
+                e: {type: 'number'},
+                f: {type: 'number'},
               },
             },
           },

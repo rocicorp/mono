@@ -1,5 +1,4 @@
-import {first} from '../../shared/src/iterables.ts';
-import {compile} from '../../z2s/src/compiler.ts';
+import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
 import {formatPg} from '../../z2s/src/sql.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
@@ -93,20 +92,10 @@ export class Z2SQuery<
       this.#query ??
       formatPg(compile(this._completeAst(), this.#schema.tables, this.format));
     this.#query = sqlQuery;
-    const result = await this.#dbTransaction.query(
-      sqlQuery.text,
-      sqlQuery.values,
+    const result = extractZqlResult(
+      await this.#dbTransaction.query(sqlQuery.text, sqlQuery.values),
     );
-
-    if (this.format.singular) {
-      return first(result) as HumanReadable<TReturn>;
-    }
-
-    if (Array.isArray(result)) {
-      return result as HumanReadable<TReturn>;
-    }
-
-    return [...result] as HumanReadable<TReturn>;
+    return result as HumanReadable<TReturn>;
   }
 
   preload(): {

@@ -24,12 +24,19 @@ describe('makeSchemaQuery', () => {
       const result = await query.basic.run();
       expect(result).toEqual([{id: '1', a: 2, b: 'foo', c: true}]);
 
-      // TODO: z2s needs to be schema-aware so it can re-map names
-      // const result2 = await query.names.run();
-      // expect(result2).toEqual([{id: '2', a: 3, b: 'bar', c: false}]);
+      const result2 = await query.names.run();
+      expect(result2).toEqual([{id: '2', a: 3, b: 'bar', c: false}]);
 
       const result3 = await query.compoundPk.run();
       expect(result3).toEqual([{a: 'a', b: 1, c: 'c'}]);
+    });
+  });
+
+  test('select singular', async () => {
+    await pg.begin(async tx => {
+      const query = queryProvider(new Transaction(tx));
+      const result = await query.basic.one().run();
+      expect(result).toEqual({id: '1', a: 2, b: 'foo', c: true});
     });
   });
 });
