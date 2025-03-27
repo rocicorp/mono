@@ -134,7 +134,7 @@ fastify.post<{
         )
       : undefined;
 
-  const response = handlePush(
+  const response = await handlePush(
     authData,
     request.headers,
     request.query,
