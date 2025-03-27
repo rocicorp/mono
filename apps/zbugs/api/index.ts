@@ -7,7 +7,7 @@ import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
 import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
-import {handlePush} from './_push-handler.ts';
+import {handlePush} from '../server/push-handler.ts';
 import type {ReadonlyJSONObject} from '@rocicorp/zero';
 import {must} from '../../../packages/shared/src/must.ts';
 import assert from 'assert';

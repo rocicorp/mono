@@ -1,10 +1,10 @@
 import {type Schema} from '../shared/schema.ts';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import {type Transaction, type UpdateValue} from '@rocicorp/zero';
-import {postToDiscord} from './_discord.ts';
+import {postToDiscord} from './discord.ts';
 import {schema} from '../shared/schema.ts';
 import {assertIsLoggedIn, type AuthData} from '../shared/auth.ts';
-import type {PostCommitTask} from './_server-mutators.ts';
+import type {PostCommitTask} from './server-mutators.ts';
 
 type CreateIssueNotification = {
   kind: 'create-issue';
