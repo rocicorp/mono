@@ -136,6 +136,7 @@ fastify.post<{
 
   const response = handlePush(
     authData,
+    request.headers,
     request.query,
     request.body as ReadonlyJSONObject,
   );

@@ -24,14 +24,20 @@ import {
   type DBTransaction,
 } from '../../zql/src/mutate/custom.ts';
 import {makeSchemaQuery} from './query.ts';
+import {assert} from '../../shared/src/asserts.ts';
 import {formatPg} from '../../z2s/src/sql.ts';
 import {sql} from '../../z2s/src/sql.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
 
 export type PushHandler = (
+  headers: Headers,
   params: Params,
   body: ReadonlyJSONObject,
 ) => Promise<PushResponse>;
+
+export type Headers = {
+  authorization?: string | undefined;
+};
 
 export type Params = {
   schema: string;
@@ -62,6 +68,7 @@ export class PushProcessor<
   }
 
   async process(
+    headers: Headers,
     params: Params,
     body: ReadonlyJSONObject,
   ): Promise<PushResponse> {
@@ -76,7 +83,13 @@ export class PushProcessor<
 
     const responses: MutationResponse[] = [];
     for (const m of req.mutations) {
-      const res = await this.#processMutation(connection, params, req, m);
+      const res = await this.#processMutation(
+        connection,
+        headers,
+        params,
+        req,
+        m,
+      );
       responses.push(res);
       if ('error' in res.result) {
         break;
@@ -90,6 +103,7 @@ export class PushProcessor<
 
   async #processMutation(
     dbConnection: DBConnection<TDBTransaction>,
+    headers: Headers,
     params: Params,
     req: PushBody,
     m: Mutation,
@@ -97,6 +111,7 @@ export class PushProcessor<
     try {
       return await this.#processMutationImpl(
         dbConnection,
+        headers,
         params,
         req,
         m,
@@ -129,6 +144,7 @@ export class PushProcessor<
 
       const ret = await this.#processMutationImpl(
         dbConnection,
+        headers,
         params,
         req,
         m,
@@ -152,6 +168,7 @@ export class PushProcessor<
 
   #processMutationImpl(
     dbConnection: DBConnection<TDBTransaction>,
+    headers: Headers,
     params: Params,
     req: PushBody,
     m: Mutation,
@@ -173,7 +190,7 @@ export class PushProcessor<
       );
 
       if (!errorMode) {
-        await this.#dispatchMutation(dbTx, m);
+        await this.#dispatchMutation(dbTx, headers, m);
       }
 
       return {
@@ -188,10 +205,20 @@ export class PushProcessor<
 
   #dispatchMutation(
     dbTx: DBTransaction<TDBTransaction>,
+    headers: Headers,
     m: Mutation,
   ): Promise<void> {
+    let {authorization} = headers;
+    if (authorization !== undefined) {
+      assert(
+        authorization.toLowerCase().startsWith('bearer '),
+        'Authorization header must start with `Bearer `. This is a bug in the Zero Pusher service.',
+      );
+      authorization = authorization.substring('Bearer '.length);
+    }
     const zeroTx = new TransactionImpl(
       dbTx,
+      authorization,
       m.clientID,
       m.id,
       this.#mutate(dbTx),
