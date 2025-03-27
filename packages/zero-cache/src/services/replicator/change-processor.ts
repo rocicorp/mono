@@ -145,7 +145,15 @@ export class ChangeProcessor {
     commitVersion: string,
     jsonFormat: JSONFormat,
   ): TransactionProcessor {
-    let start = Date.now();
+    const start = Date.now();
+
+    // litestream can technically hold the lock for an arbitrary amount of time
+    // when checkpointing a large commit. Crashing on the busy-timeout in this
+    // scenario will either produce a corrupt backup or otherwise prevent
+    // replication from proceeding.
+    //
+    // Instead, retry the lock acquisition indefinitely. If this masks
+    // an unknown deadlock situation, manual intervention will be necessary.
     for (let i = 0; ; i++) {
       try {
         return new TransactionProcessor(
@@ -157,21 +165,14 @@ export class ChangeProcessor {
           jsonFormat,
         );
       } catch (e) {
-        // The db occasionally errors with a 'database is locked' error when
-        // being concurrently processed by `litestream replicate`, even with
-        // a long busy_timeout. Retry once to see if any deadlock situation
-        // was resolved when aborting the first attempt.
-        if (e instanceof SqliteError) {
-          lc.error?.(
-            `${e.code} after ${Date.now() - start} ms (attempt ${i + 1})`,
+        if (e instanceof SqliteError && e.code === 'SQLITE_BUSY') {
+          lc.warn?.(
+            `SQLITE_BUSY for ${Date.now() - start} ms (attempt ${i + 1}). ` +
+              `This is only expected if litestream is performing a large ` +
+              `checkpoint.`,
             e,
           );
-
-          if (i === 0) {
-            // retry once
-            start = Date.now();
-            continue;
-          }
+          continue;
         }
         throw e;
       }
