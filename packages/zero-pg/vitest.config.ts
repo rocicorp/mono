@@ -1,2 +1,8 @@
-import config from '../zero-cache/vitest.config.ts';
-export default config;
+import {defineConfig} from 'vitest/config';
+import {configForCustomPg} from '../zero-cache/vitest.config.ts';
+
+export default defineConfig({
+  test: {
+    workspace: ['vitest.config.*.ts', ...configForCustomPg(import.meta.url)],
+  },
+});
