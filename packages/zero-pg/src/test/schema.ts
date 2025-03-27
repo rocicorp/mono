@@ -1,9 +1,11 @@
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
+  date,
   number,
   string,
   table,
+  timestamp,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 
 export const schema = createSchema({
@@ -32,6 +34,15 @@ export const schema = createSchema({
         c: string().optional(),
       })
       .primaryKey('a', 'b'),
+    table('dateTypes')
+      .columns({
+        ts: timestamp(),
+        tstz: timestamp(),
+        tswtz: timestamp(),
+        tswotz: timestamp(),
+        d: date(),
+      })
+      .primaryKey('ts'),
   ],
   relationships: [],
 });
@@ -55,10 +66,26 @@ CREATE TABLE "compoundPk" (
   b INTEGER,
   c TEXT,
   PRIMARY KEY (a, b)
-);`;
+);
+
+CREATE TABLE "dateTypes" (
+  "ts" TIMESTAMP,
+  "tstz" TIMESTAMPTZ,
+  "tswtz" TIMESTAMP WITH TIME ZONE,
+  "tswotz" TIMESTAMP WITHOUT TIME ZONE,
+  "d" DATE,
+  PRIMARY KEY ("ts")
+);
+`;
 
 export const seedDataSql = `
 INSERT INTO basic (id, a, b, c) VALUES ('1', 2, 'foo', true);
 INSERT INTO divergent_names (divergent_id, divergent_a, divergent_b, divergent_c) VALUES ('2', 3, 'bar', false);
 INSERT INTO "compoundPk" (a, b, c) VALUES ('a', 1, 'c');
+INSERT INTO "dateTypes" (ts, tstz, tswtz, tswotz) VALUES (
+  '2021-01-01 00:00:01',
+  '2022-02-02 00:00:02',
+  '2023-03-03 00:00:03',
+  '2024-04-04 00:00:04'
+);
 `;

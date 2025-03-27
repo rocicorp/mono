@@ -41,7 +41,7 @@ export type RelationshipsSchema = {
   readonly [name: string]: Relationship;
 };
 
-type TypeNameToTypeMap = {
+export type TypeNameToTypeMap = {
   string: string;
   number: number;
   boolean: boolean;

@@ -8,7 +8,8 @@ import type {
   DBTransaction,
   Transaction,
 } from '../../zql/src/mutate/custom.ts';
-import {formatPg, sql} from '../../z2s/src/sql.ts';
+import {formatPgJson, jsonPackArgUnsafe, sql} from '../../z2s/src/sql.ts';
+import {must} from '../../shared/src/must.ts';
 
 interface ServerTransaction<S extends Schema, TWrappedTransaction>
   extends TransactionBase<S> {
@@ -109,12 +110,12 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
   return {
     async insert(this: WithHiddenTx, value) {
       const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
-      const stmt = formatPg(
+      const stmt = formatPgJson(
         sql`INSERT INTO ${sql.ident(serverName(schema))} (${sql.join(
           targetedColumns.map(([, serverName]) => sql.ident(serverName)),
           ',',
         )}) VALUES (${sql.join(
-          Object.values(value).map(v => sql.value(v)),
+          Object.entries(value).map(([col, v]) => sqlValue(schema, col, v)),
           ', ',
         )})`,
       );
@@ -127,12 +128,12 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
         schema.primaryKey,
         schema,
       );
-      const stmt = formatPg(
+      const stmt = formatPgJson(
         sql`INSERT INTO ${sql.ident(serverName(schema))} (${sql.join(
           targetedColumns.map(([, serverName]) => sql.ident(serverName)),
           ',',
         )}) VALUES (${sql.join(
-          Object.values(value).map(v => sql.value(v)),
+          Object.entries(value).map(([col, val]) => sqlValue(schema, col, val)),
           ', ',
         )}) ON CONFLICT (${sql.join(
           primaryKeyColumns.map(([, serverName]) => sql.ident(serverName)),
@@ -142,7 +143,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
             ([col, val]) =>
               sql`${sql.ident(
                 schema.columns[col].serverName ?? col,
-              )} = ${sql.value(val)}`,
+              )} = ${sqlValue(schema, col, val)}`,
           ),
           ', ',
         )}`,
@@ -152,11 +153,11 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
     },
     async update(this: WithHiddenTx, value) {
       const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
-      const stmt = formatPg(
+      const stmt = formatPgJson(
         sql`UPDATE ${sql.ident(serverName(schema))} SET ${sql.join(
           targetedColumns.map(
             ([origName, serverName]) =>
-              sql`${sql.ident(serverName)} = ${sql.value(value[origName])}`,
+              sql`${sql.ident(serverName)} = ${sqlValue(schema, origName, value[origName])}`,
           ),
           ', ',
         )} WHERE ${primaryKeyClause(schema, value)}`,
@@ -165,7 +166,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       await tx.query(stmt.text, stmt.values);
     },
     async delete(this: WithHiddenTx, value) {
-      const stmt = formatPg(
+      const stmt = formatPgJson(
         sql`DELETE FROM ${sql.ident(
           serverName(schema),
         )} WHERE ${primaryKeyClause(schema, value)}`,
@@ -185,7 +186,7 @@ function primaryKeyClause(schema: TableSchema, row: Record<string, unknown>) {
   return sql`${sql.join(
     primaryKey.map(
       ([origName, serverName]) =>
-        sql`${sql.ident(serverName)} = ${sql.value(row[origName])}`,
+        sql`${sql.ident(serverName)} = ${sqlValue(schema, origName, row[origName])}`,
     ),
     ' AND ',
   )}`;
@@ -199,4 +200,8 @@ function origAndServerNamesFor(
     const col = schema.columns[name];
     return [name, col.serverName ?? name] as const;
   });
+}
+
+function sqlValue(schema: TableSchema, column: string, value: unknown) {
+  return jsonPackArgUnsafe(must(schema.columns[column].type), value);
 }
