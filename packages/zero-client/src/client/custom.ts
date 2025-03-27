@@ -25,6 +25,9 @@ import {ZeroContext} from './context.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
+import type {MutationResult} from '../../../zero-protocol/src/push.ts';
+import type {MutationTracker} from './mutation-tracker.ts';
+import {emptyFunction} from '../../../shared/src/sentinels.ts';
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
@@ -60,7 +63,7 @@ export type MakeCustomMutatorInterfaces<
     tx: Transaction<S>,
     ...args: infer Args
   ) => Promise<void>
-    ? (...args: Args) => Promise<void>
+    ? (...args: Args) => Promise<{server?: Promise<MutationResult>}>
     : {
         readonly [P in keyof MD[NamespaceOrName]]: MakeCustomMutatorInterface<
           S,
@@ -73,8 +76,8 @@ export type MakeCustomMutatorInterface<
   S extends Schema,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   F,
-> = F extends (tx: Transaction<S>, ...args: infer Args) => Promise<void>
-  ? (...args: Args) => Promise<void>
+> = F extends (tx: ClientTransaction<S>, ...args: infer Args) => Promise<void>
+  ? (...args: Args) => Promise<{server?: Promise<MutationResult>}>
   : never;
 
 export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
@@ -118,13 +121,30 @@ export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
 
 export function makeReplicacheMutator<S extends Schema>(
   lc: LogContext,
+  mutationTracker: MutationTracker,
   mutator: CustomMutatorImpl<S>,
   schema: S,
   slowMaterializeThreshold: number,
 ) {
-  return (repTx: WriteTransaction, args: ReadonlyJSONValue): Promise<void> => {
+  return async (
+    repTx: WriteTransaction,
+    args: ReadonlyJSONValue,
+  ): Promise<{
+    server?: Promise<MutationResult>;
+  }> => {
     const tx = new TransactionImpl(lc, repTx, schema, slowMaterializeThreshold);
-    return mutator(tx, args);
+
+    await mutator(tx, args);
+
+    if (repTx.reason === 'initial') {
+      const serverPromise = mutationTracker.trackMutation(repTx.mutationID);
+
+      return {
+        server: serverPromise,
+      };
+    }
+
+    return {};
   };
 }
 
@@ -159,7 +179,7 @@ function makeSchemaQuery<S extends Schema>(
   const context = new ZeroContext(
     lc,
     ivmBranch,
-    () => () => {},
+    () => emptyFunction,
     () => {},
     applyViewUpdates => applyViewUpdates(),
     slowMaterializeThreshold,

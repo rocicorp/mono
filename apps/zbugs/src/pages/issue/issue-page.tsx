@@ -20,9 +20,15 @@ import {toast, ToastContainer} from 'react-toastify';
 import {assert} from 'shared/src/asserts.js';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
+import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.ts';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
-import type {CommentRow, IssueRow, Schema, UserRow} from '../../../schema.ts';
+import type {
+  CommentRow,
+  IssueRow,
+  Schema,
+  UserRow,
+} from '../../../shared/schema.ts';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import {commentQuery} from '../../comment-query.ts';
@@ -51,12 +57,13 @@ import {
 } from '../../limits.ts';
 import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
+import {CACHE_AWHILE} from '../../query-cache-policy.ts';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.ts';
 import {preload} from '../../zero-setup.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {CACHE_AWHILE} from '../../query-cache-policy.ts';
+import type {Mutators} from '../../../shared/mutators.ts';
 
 const emojiToastShowDuration = 3_000;
 
@@ -158,9 +165,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     ) {
       // only set to viewed if the user has looked at it for > 1 second
       const handle = setTimeout(() => {
-        z.mutate.viewState.upsert({
+        z.mutate.viewState.set({
           issueID: displayed.id,
-          userID: z.userID,
           viewed: Date.now(),
         });
       }, 1000);
@@ -184,7 +190,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     if (!editing) {
       return;
     }
-    z.mutate.issue.update({id: editing.id, ...edits});
+    z.mutate.issue.update({id: editing.id, ...edits, modified: Date.now()});
     setEditing(null);
     setEdits({});
   };
@@ -357,7 +363,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const remove = () => {
     // TODO: Implement undo - https://github.com/rocicorp/undo
-    z.mutate.issue.delete({id: displayed.id});
+    z.mutate.issue.delete(displayed.id);
     navigate(listContext?.href ?? links.home());
   };
 
@@ -500,7 +506,11 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               ]}
               selectedValue={displayed.open}
               onChange={value =>
-                z.mutate.issue.update({id: displayed.id, open: value})
+                z.mutate.issue.update({
+                  id: displayed.id,
+                  open: value,
+                  modified: Date.now(),
+                })
               }
             />
           </div>
@@ -517,6 +527,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                 z.mutate.issue.update({
                   id: displayed.id,
                   assigneeID: user?.id ?? null,
+                  modified: Date.now(),
                 });
               }}
             />
@@ -545,6 +556,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                   z.mutate.issue.update({
                     id: displayed.id,
                     visibility: value,
+                    modified: Date.now(),
                   })
                 }
               />
@@ -575,22 +587,23 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               <LabelPicker
                 selected={labelSet}
                 onAssociateLabel={labelID =>
-                  z.mutate.issueLabel.insert({
+                  z.mutate.issue.addLabel({
                     issueID: displayed.id,
                     labelID,
                   })
                 }
                 onDisassociateLabel={labelID =>
-                  z.mutate.issueLabel.delete({
+                  z.mutate.issue.removeLabel({
                     issueID: displayed.id,
                     labelID,
                   })
                 }
                 onCreateNewLabel={labelName => {
                   const labelID = nanoid();
-                  z.mutateBatch(tx => {
-                    tx.label.insert({id: labelID, name: labelName});
-                    tx.issueLabel.insert({issueID: displayed.id, labelID});
+                  z.mutate.label.createAndAddToIssue({
+                    labelID,
+                    labelName,
+                    issueID: displayed.id,
                   });
                 }}
               />
@@ -899,7 +912,7 @@ function noop() {
 }
 
 function buildListQuery(
-  z: Zero<Schema>,
+  z: Zero<Schema, Mutators>,
   listContext: ListContext | undefined,
   issue: Row<Schema['tables']['issue']> | undefined,
   dir: 'next' | 'prev',
@@ -1038,7 +1051,7 @@ function useShowToastForNewComment(
     }
 
     for (const commentID of newCommentIDs) {
-      const index = comments.findLastIndex(c => c.id === commentID);
+      const index = findLastIndex(comments, c => c.id === commentID);
       if (index === -1) {
         continue;
       }

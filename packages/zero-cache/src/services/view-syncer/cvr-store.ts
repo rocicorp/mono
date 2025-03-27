@@ -16,6 +16,7 @@ import * as v from '../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../zero-protocol/src/ast.ts';
 import {clientSchemaSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import type {InspectQueryRow} from '../../../../zero-protocol/src/inspect-down.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
@@ -241,7 +242,7 @@ export class CVRStore {
 
       if (owner !== this.#taskID) {
         if ((grantedAt ?? 0) > lastConnectTime) {
-          throw new OwnershipError(owner, grantedAt);
+          throw new OwnershipError(owner, grantedAt, lastConnectTime);
         } else {
           // Fire-and-forget an ownership change to signal the current owner.
           // Note that the query is structured such that it only succeeds in the
@@ -334,9 +335,10 @@ export class CVRStore {
    *       {@link putRowRecord()} with `refCounts: null` in order to properly
    *       produce the appropriate delete patch when catching up old clients.
    *
-   * This `delRowRecord()` method, on the other hand, is only used when a
-   * row record is being *replaced* by another RowRecord, which currently
-   * only happens when the columns of the row key change.
+   * This `delRowRecord()` method, on the other hand, is only used:
+   * - when a row record is being *replaced* by another RowRecord, which currently
+   *   only happens when the columns of the row key change
+   * - for "canceling" the put of a row that was not in the CVR in the first place.
    */
   delRowRecord(id: RowID): void {
     this.#pendingRowRecordUpdates.set(id, null);
@@ -642,7 +644,7 @@ export class CVRStore {
             grantedAt: null,
           };
     if (owner !== this.#taskID && (grantedAt ?? 0) > lastConnectTime) {
-      throw new OwnershipError(owner, grantedAt);
+      throw new OwnershipError(owner, grantedAt, lastConnectTime);
     }
     if (version !== expected) {
       throw new ConcurrentModificationException(expected, version);
@@ -781,6 +783,47 @@ export class CVRStore {
   flushed(lc: LogContext): Promise<void> {
     return this.#rowCache.flushed(lc);
   }
+
+  async inspectQueries(
+    lc: LogContext,
+    clientID?: string,
+  ): Promise<InspectQueryRow[]> {
+    const db = this.#db;
+    const clientGroupID = this.#id;
+
+    const reader = new TransactionPool(lc, Mode.READONLY).run(db);
+    try {
+      return await reader.processReadTask(
+        tx => tx<InspectQueryRow[]>`
+  SELECT
+    d."clientID",
+    d."queryHash" AS "queryID",
+    COALESCE((EXTRACT(EPOCH FROM d."ttl") * 1000)::double precision, -1) AS "ttl",
+    (EXTRACT(EPOCH FROM d."inactivatedAt") * 1000)::double precision AS "inactivatedAt",
+    COUNT(r.*)::INT AS "rowCount",
+    q."clientAST" AS "ast",
+    (q."patchVersion" IS NOT NULL) AS "got",
+    COALESCE(d."deleted", FALSE) AS "deleted"
+  FROM ${this.#cvr('desires')} d
+  LEFT JOIN ${this.#cvr('rows')} r
+    ON r."clientGroupID" = d."clientGroupID"
+   AND r."refCounts" ? d."queryHash"
+  LEFT JOIN ${this.#cvr('queries')} q
+    ON q."clientGroupID" = d."clientGroupID"
+   AND q."queryHash" = d."queryHash"
+  WHERE d."clientGroupID" = ${clientGroupID}
+    ${clientID ? tx`AND d."clientID" = ${clientID}` : tx``}
+    AND NOT (
+      d."deleted" IS NOT DISTINCT FROM true AND
+      (d."inactivatedAt" IS NOT NULL AND d."ttl" IS NOT NULL AND d."inactivatedAt" + d."ttl" <= now())
+    )
+  GROUP BY d."clientID", d."queryHash", d."ttl", d."inactivatedAt", q."patchVersion", q."clientAST", d."deleted"
+  ORDER BY d."clientID", d."queryHash"`,
+      );
+    } finally {
+      reader.setDone();
+    }
+  }
 }
 
 /**
@@ -819,13 +862,18 @@ export class ConcurrentModificationException extends ErrorWithLevel {
 export class OwnershipError extends ErrorForClient {
   readonly name = 'OwnershipError';
 
-  constructor(owner: string | null, grantedAt: number | null) {
+  constructor(
+    owner: string | null,
+    grantedAt: number | null,
+    lastConnectTime: number,
+  ) {
     super(
       {
         kind: ErrorKind.Rehome,
         message:
           `CVR ownership was transferred to ${owner} at ` +
-          `${new Date(grantedAt ?? 0).toISOString()}`,
+          `${new Date(grantedAt ?? 0).toISOString()} ` +
+          `(last connect time: ${new Date(lastConnectTime).toISOString()})`,
         maxBackoffMs: 0,
       },
       'info',

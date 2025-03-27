@@ -810,4 +810,152 @@ describe('view-syncer/cvr-store', () => {
       }
     `);
   });
+
+  test('inspectQueries', async () => {
+    // Setup two clients with two desired queries each
+    await db.unsafe(`
+      -- Insert client1 and client2
+      INSERT INTO "roze_1/cvr".clients ("clientGroupID", "clientID", "patchVersion", deleted)
+        VALUES('${CVR_ID}', 'client1', '01', false);
+      INSERT INTO "roze_1/cvr".clients ("clientGroupID", "clientID", "patchVersion", deleted)
+        VALUES('${CVR_ID}', 'client2', '01', false);
+      
+      -- Insert query 'bar' (users table with AST)
+      INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", "patchVersion", "transformationHash", "transformationVersion")
+        VALUES('${CVR_ID}', 'bar', '{"table":"users"}', '02', 'bar-transformed', '01');
+      
+      -- Insert query 'baz' (tasks table with AST)
+      INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", "patchVersion", "transformationHash", "transformationVersion")
+        VALUES('${CVR_ID}', 'baz', '{"table":"tasks"}', '03', 'baz-transformed', '01');
+      
+      -- Client1 desires foo and bar
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion")
+        VALUES('${CVR_ID}', 'client1', 'foo', '01');
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion")
+        VALUES('${CVR_ID}', 'client1', 'bar', '02');
+      
+      -- Client2 desires baz with TTL and bar with inactivatedAt
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "ttl")
+        VALUES('${CVR_ID}', 'client2', 'baz', '03', INTERVAL '7200 milliseconds');
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAt")
+        VALUES('${CVR_ID}', 'client2', 'bar', '02', '2024-10-15');
+    `);
+
+    // Test inspectQueries with no clientID (should return all queries)
+    const allQueries = await store.inspectQueries(lc);
+    expect(allQueries).toMatchInlineSnapshot(`
+      Result [
+        {
+          "ast": {
+            "table": "users",
+          },
+          "clientID": "client1",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": null,
+          "queryID": "bar",
+          "rowCount": 6,
+          "ttl": -1,
+        },
+        {
+          "ast": {
+            "table": "issues",
+          },
+          "clientID": "client1",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": null,
+          "queryID": "foo",
+          "rowCount": 6,
+          "ttl": -1,
+        },
+        {
+          "ast": {
+            "table": "users",
+          },
+          "clientID": "client2",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": 1728950400000,
+          "queryID": "bar",
+          "rowCount": 6,
+          "ttl": -1,
+        },
+        {
+          "ast": {
+            "table": "tasks",
+          },
+          "clientID": "client2",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": null,
+          "queryID": "baz",
+          "rowCount": 0,
+          "ttl": 7200,
+        },
+      ]
+    `);
+
+    // Test inspectQueries for client1
+    const client1Queries = await store.inspectQueries(lc, 'client1');
+    expect(client1Queries).toMatchInlineSnapshot(`
+      Result [
+        {
+          "ast": {
+            "table": "users",
+          },
+          "clientID": "client1",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": null,
+          "queryID": "bar",
+          "rowCount": 6,
+          "ttl": -1,
+        },
+        {
+          "ast": {
+            "table": "issues",
+          },
+          "clientID": "client1",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": null,
+          "queryID": "foo",
+          "rowCount": 6,
+          "ttl": -1,
+        },
+      ]
+    `);
+
+    // Test inspectQueries for client2
+    const client2Queries = await store.inspectQueries(lc, 'client2');
+    expect(client2Queries).toMatchInlineSnapshot(`
+      Result [
+        {
+          "ast": {
+            "table": "users",
+          },
+          "clientID": "client2",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": 1728950400000,
+          "queryID": "bar",
+          "rowCount": 6,
+          "ttl": -1,
+        },
+        {
+          "ast": {
+            "table": "tasks",
+          },
+          "clientID": "client2",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": null,
+          "queryID": "baz",
+          "rowCount": 0,
+          "ttl": 7200,
+        },
+      ]
+    `);
+  });
 });

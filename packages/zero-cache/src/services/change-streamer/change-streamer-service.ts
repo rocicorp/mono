@@ -327,7 +327,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     while (this.#state.shouldRun()) {
       let err: unknown;
       try {
-        const startAfter = await this.#storer.getLastWatermark();
+        const startAfter = await this.#storer.getLastWatermarkToStartStream();
         const stream = await this.#source.startStream(startAfter);
         this.#stream = stream;
         this.#state.resetBackoff();
@@ -367,6 +367,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
           if (type === 'commit') {
             watermark = null;
+            // After each transaction, allow storer to exert back pressure.
+            await this.#storer.readyForMore();
           }
         }
       } catch (e) {

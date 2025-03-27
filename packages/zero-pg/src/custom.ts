@@ -1,4 +1,3 @@
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
 import type {
@@ -6,19 +5,16 @@ import type {
   SchemaQuery,
   TableCRUD,
   TransactionBase,
-  ConnectionProvider,
   DBTransaction,
+  Transaction,
 } from '../../zql/src/mutate/custom.ts';
-import {PushProcessor, type PushHandler} from './web.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
-import type {ShardID} from '../../zero-cache/src/types/shards.ts';
 
-export interface Transaction<S extends Schema, TWrappedTransaction>
+interface ServerTransaction<S extends Schema, TWrappedTransaction>
   extends TransactionBase<S> {
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
-  readonly token: string | undefined;
 }
 
 export type CustomMutatorDefs<S extends Schema, TDBTransaction> = {
@@ -31,51 +27,18 @@ export type CustomMutatorDefs<S extends Schema, TDBTransaction> = {
   };
 };
 
-export type CustomMutatorImpl<S extends Schema, TDBTransaction> = (
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type CustomMutatorImpl<S extends Schema, TDBTransaction, TArgs = any> = (
   tx: Transaction<S, TDBTransaction>,
-  args: ReadonlyJSONValue,
+  args: TArgs,
 ) => Promise<void>;
 
-type Options<
-  S extends Schema,
-  TDBTransaction,
-  MD extends CustomMutatorDefs<S, TDBTransaction>,
-> = {
-  schema: S;
-  dbConnectionProvider: ConnectionProvider<TDBTransaction>;
-  mutators: MD;
-  shardID?: ShardID;
-};
-
-export function createPushHandler<
-  S extends Schema,
-  TDBTransaction,
-  MD extends CustomMutatorDefs<S, TDBTransaction>,
->({
-  schema,
-  dbConnectionProvider,
-  mutators,
-  shardID,
-}: Options<S, TDBTransaction, MD>): PushHandler {
-  const processor = new PushProcessor(
-    shardID ?? {
-      appID: 'zero',
-      shardNum: 0,
-    },
-    schema,
-    dbConnectionProvider,
-    mutators,
-  );
-  return (headers, body) => processor.process(headers, body);
-}
-
 export class TransactionImpl<S extends Schema, TWrappedTransaction>
-  implements Transaction<S, TWrappedTransaction>
+  implements ServerTransaction<S, TWrappedTransaction>
 {
   readonly location = 'server';
   readonly reason = 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
-  readonly token: string | undefined;
   readonly clientID: string;
   readonly mutationID: number;
   readonly mutate: SchemaCRUD<S>;
@@ -83,14 +46,12 @@ export class TransactionImpl<S extends Schema, TWrappedTransaction>
 
   constructor(
     dbTransaction: DBTransaction<TWrappedTransaction>,
-    token: string | undefined,
     clientID: string,
     mutationID: number,
     mutate: SchemaCRUD<S>,
     query: SchemaQuery<S>,
   ) {
     this.dbTransaction = dbTransaction;
-    this.token = token;
     this.clientID = clientID;
     this.mutationID = mutationID;
     this.mutate = mutate;

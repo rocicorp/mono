@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
+import {pipeline, Readable, Writable} from 'node:stream';
 import type {CloseEvent, Data, ErrorEvent} from 'ws';
-import WebSocket from 'ws';
+import WebSocket, {createWebSocketStream} from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import {
@@ -11,7 +12,6 @@ import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import {type ErrorBody} from '../../../zero-protocol/src/error.ts';
-import type {PongMessage} from '../../../zero-protocol/src/pong.ts';
 import {
   MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
   PROTOCOL_VERSION,
@@ -35,12 +35,26 @@ export type HandlerResult =
     }
   | {
       type: 'stream';
+      source: 'viewSyncer' | 'pusher';
       stream: Source<Downstream>;
     };
 
 export interface MessageHandler {
   handleMessage(msg: Upstream): Promise<HandlerResult>;
 }
+
+// Ensures that a downstream message is sent at least every interval, sending a
+// 'pong' if necessary. This is set to be slightly longer than the client-side
+// PING_INTERVAL of 5 seconds, so that in the common case, 'pong's are sent in
+// response to client-initiated 'ping's. However, if the inbound stream is
+// backed up because a command is taking a long time to process, the pings
+// will be stuck in the queue (i.e. back-pressured), in which case pongs will
+// be manually sent to notify the client of server liveness.
+//
+// This is equivalent to what is done for Postgres keepalives on the
+// replication stream (which can similarly be back-pressured):
+// https://github.com/rocicorp/mono/blob/f98cb369a2dbb15650328859c732db358f187ef0/packages/zero-cache/src/services/change-source/pg/logical-replication/stream.ts#L21
+const DOWNSTREAM_MSG_INTERVAL_MS = 6_000;
 
 /**
  * Represents a connection between the client and server.
@@ -57,8 +71,10 @@ export class Connection {
   readonly #lc: LogContext;
   readonly #onClose: () => void;
   readonly #messageHandler: MessageHandler;
+  readonly #downstreamMsgTimer: NodeJS.Timeout | undefined;
 
-  #outboundStream: Source<Downstream> | undefined;
+  #viewSyncerOutboundStream: Source<Downstream> | undefined;
+  #pusherOutboundStream: Source<Downstream> | undefined;
   #closed = false;
 
   constructor(
@@ -82,9 +98,14 @@ export class Connection {
       .withContext('wsID', wsID);
     this.#onClose = onClose;
 
-    this.#ws.addEventListener('message', this.#handleMessage);
     this.#ws.addEventListener('close', this.#handleClose);
     this.#ws.addEventListener('error', this.#handleError);
+
+    this.#proxyInbound();
+    this.#downstreamMsgTimer = setInterval(
+      this.#maybeSendPong,
+      DOWNSTREAM_MSG_INTERVAL_MS / 2,
+    );
   }
 
   /**
@@ -112,7 +133,7 @@ export class Connection {
         'connected',
         {wsid: this.#wsID, timestamp: Date.now()},
       ];
-      send(this.#ws, connectedMessage);
+      this.send(connectedMessage, 'ignore-backpressure');
     }
   }
 
@@ -122,15 +143,17 @@ export class Connection {
     }
     this.#closed = true;
     this.#lc.info?.(`closing connection: ${reason}`, ...args);
-    this.#ws.removeEventListener('message', this.#handleMessage);
     this.#ws.removeEventListener('close', this.#handleClose);
     this.#ws.removeEventListener('error', this.#handleError);
-    this.#outboundStream?.cancel();
-    this.#outboundStream = undefined;
+    this.#viewSyncerOutboundStream?.cancel();
+    this.#viewSyncerOutboundStream = undefined;
+    this.#pusherOutboundStream?.cancel();
+    this.#pusherOutboundStream = undefined;
     this.#onClose();
     if (this.#ws.readyState !== this.#ws.CLOSED) {
       this.#ws.close();
     }
+    clearTimeout(this.#downstreamMsgTimer);
 
     // spin down services if we have
     // no more client connections for the client group?
@@ -163,7 +186,7 @@ export class Connection {
     try {
       const msgType = msg[0];
       if (msgType === 'ping') {
-        this.send(['pong', {}] satisfies PongMessage);
+        this.send(['pong', {}], 'ignore-backpressure');
         return;
       }
 
@@ -182,12 +205,23 @@ export class Connection {
       case 'ok':
         break;
       case 'stream': {
-        assert(
-          this.#outboundStream === undefined,
-          'Outbound stream already set for this connection!',
-        );
-        this.#outboundStream = result.stream;
-        void this.#proxyOutbound(result.stream);
+        switch (result.source) {
+          case 'viewSyncer':
+            assert(
+              this.#viewSyncerOutboundStream === undefined,
+              'Outbound stream already set for this connection!',
+            );
+            this.#viewSyncerOutboundStream = result.stream;
+            break;
+          case 'pusher':
+            assert(
+              this.#pusherOutboundStream === undefined,
+              'Outbound stream already set for this connection!',
+            );
+            this.#pusherOutboundStream = result.stream;
+            break;
+        }
+        this.#proxyOutbound(result.stream);
         break;
       }
       case 'transient': {
@@ -223,15 +257,39 @@ export class Connection {
     this.#lc.error?.('WebSocket error event', e.message, e.error);
   };
 
-  async #proxyOutbound(outboundStream: Source<Downstream>) {
-    try {
-      for await (const outMsg of outboundStream) {
-        this.send(outMsg);
-      }
-      this.close('downstream closed by ViewSyncer');
-    } catch (e) {
-      this.#closeWithThrown(e);
-    }
+  #proxyInbound() {
+    pipeline(
+      createWebSocketStream(this.#ws),
+      new Writable({
+        write: (data, _encoding, callback) => {
+          this.#handleMessage({data}).then(() => callback(), callback);
+        },
+      }),
+      // The done callback is not used, as #handleClose and #handleError,
+      // configured on the underlying WebSocket, provide more complete
+      // information.
+      () => {},
+    );
+  }
+
+  #proxyOutbound(outboundStream: Source<Downstream>) {
+    // Note: createWebSocketStream() is avoided here in order to control
+    //       exception handling with #closeWithThrown(). If the Writable
+    //       from createWebSocketStream() were instead used, exceptions
+    //       from the outboundStream result in the Writable closing the
+    //       the websocket before the error message can be sent.
+    pipeline(
+      Readable.from(outboundStream),
+      new Writable({
+        objectMode: true,
+        write: (downstream: Downstream, _encoding, callback) =>
+          this.send(downstream, callback),
+      }),
+      e =>
+        e
+          ? this.#closeWithThrown(e)
+          : this.close(`downstream closed by ViewSyncer`),
+    );
   }
 
   #closeWithThrown(e: unknown) {
@@ -248,8 +306,21 @@ export class Connection {
     this.close(`client error: ${errorBody.kind}`, errorBody);
   }
 
-  send(data: Downstream) {
-    send(this.#ws, data);
+  #lastDownstreamMsgTime = Date.now();
+
+  #maybeSendPong = () => {
+    if (Date.now() - this.#lastDownstreamMsgTime > DOWNSTREAM_MSG_INTERVAL_MS) {
+      this.#lc.debug?.('manually sending pong');
+      this.send(['pong', {}], 'ignore-backpressure');
+    }
+  };
+
+  send(
+    data: Downstream,
+    callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+  ) {
+    this.#lastDownstreamMsgTime = Date.now();
+    return send(this.#lc, this.#ws, data, callback);
   }
 
   sendError(errorBody: ErrorBody, thrown?: unknown) {
@@ -257,8 +328,22 @@ export class Connection {
   }
 }
 
-export function send(ws: WebSocket, data: Downstream) {
-  ws.send(JSON.stringify(data));
+function send(
+  lc: LogContext,
+  ws: WebSocket,
+  data: Downstream,
+  callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+) {
+  if (ws.readyState === ws.OPEN) {
+    ws.send(
+      JSON.stringify(data),
+      callback === 'ignore-backpressure' ? undefined : callback,
+    );
+  } else {
+    lc.debug?.(`Dropping outbound message on ws (state: ${ws.readyState})`, {
+      dropped: data,
+    });
+  }
 }
 
 export function sendError(
@@ -270,5 +355,5 @@ export function sendError(
   lc = lc.withContext('errorKind', errorBody.kind);
   const logLevel = thrown ? getLogLevel(thrown) : 'info';
   lc[logLevel]?.('Sending error on WebSocket', errorBody, thrown ?? '');
-  send(ws, ['error', errorBody]);
+  send(lc, ws, ['error', errorBody], 'ignore-backpressure');
 }

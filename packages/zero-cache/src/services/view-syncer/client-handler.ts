@@ -4,12 +4,14 @@ import {
   assertJSONValue,
   type JSONObject as SafeJSONObject,
 } from '../../../../shared/src/json.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Writable} from '../../../../shared/src/writable.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {rowSchema} from '../../../../zero-protocol/src/data.ts';
 import type {DeleteClientsBody} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
+import type {InspectDownBody} from '../../../../zero-protocol/src/inspect-down.ts';
 import type {
   PokePartBody,
   PokeStartBody,
@@ -60,16 +62,42 @@ export type PatchToVersion = {
 };
 
 export interface PokeHandler {
-  addPatch(patch: PatchToVersion): void;
-  cancel(): void;
-  end(finalVersion: CVRVersion): void;
+  addPatch(patch: PatchToVersion): Promise<void>;
+  cancel(): Promise<void>;
+  end(finalVersion: CVRVersion): Promise<void>;
 }
 
 const NOOP: PokeHandler = {
-  addPatch: () => {},
-  cancel: () => {},
-  end: () => {},
+  addPatch: () => promiseVoid,
+  cancel: () => promiseVoid,
+  end: () => promiseVoid,
 };
+
+/** Wraps PokeHandlers for multiple clients in a single PokeHandler. */
+export function startPoke(
+  clients: ClientHandler[],
+  tentativeVersion: CVRVersion,
+  schemaVersions?: SchemaVersions, // absent for config-only pokes
+): PokeHandler {
+  const pokers = clients.map(c =>
+    c.startPoke(tentativeVersion, schemaVersions),
+  );
+
+  // Promise.allSettled() ensures that a failed (e.g. disconnected) client
+  // does not prevent other clients from receiving the pokes. However, the
+  // rate (per client group) will be limited by the slowest connection.
+  return {
+    addPatch: async patch => {
+      await Promise.allSettled(pokers.map(poker => poker.addPatch(patch)));
+    },
+    cancel: async () => {
+      await Promise.allSettled(pokers.map(poker => poker.cancel()));
+    },
+    end: async finalVersion => {
+      await Promise.allSettled(pokers.map(poker => poker.end(finalVersion)));
+    },
+  };
+}
 
 // Semi-arbitrary threshold at which poke body parts are flushed.
 // When row size is being computed, that should be used as a threshold instead.
@@ -110,6 +138,11 @@ export class ClientHandler {
 
   version(): NullableCVRVersion {
     return this.#baseVersion;
+  }
+
+  async #push(msg: Downstream): Promise<void> {
+    const {result} = this.#downstream.push(msg);
+    await result;
   }
 
   fail(e: unknown) {
@@ -161,27 +194,27 @@ export class ClientHandler {
     let pokeStarted = false;
     let body: PokePartBody | undefined;
     let partCount = 0;
-    const ensureBody = () => {
+    const ensureBody = async () => {
       if (!pokeStarted) {
-        this.#downstream.push(['pokeStart', pokeStart]);
+        await this.#push(['pokeStart', pokeStart]);
         pokeStarted = true;
       }
       return (body ??= {pokeID});
     };
-    const flushBody = () => {
+    const flushBody = async () => {
       if (body) {
-        this.#downstream.push(['pokePart', body]);
+        await this.#push(['pokePart', body]);
         body = undefined;
         partCount = 0;
       }
     };
 
-    const addPatch = (patchToVersion: PatchToVersion) => {
+    const addPatch = async (patchToVersion: PatchToVersion) => {
       const {patch, toVersion} = patchToVersion;
       if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
         return;
       }
-      const body = ensureBody();
+      const body = await ensureBody();
 
       const {type, op} = patch;
       switch (type) {
@@ -209,35 +242,32 @@ export class ClientHandler {
       }
 
       if (++partCount >= PART_COUNT_FLUSH_THRESHOLD) {
-        flushBody();
+        await flushBody();
       }
     };
 
     return {
-      addPatch: (patchToVersion: PatchToVersion) => {
+      addPatch: async (patchToVersion: PatchToVersion) => {
         try {
-          addPatch(patchToVersion);
+          await addPatch(patchToVersion);
         } catch (e) {
           this.#downstream.fail(e instanceof Error ? e : new Error(String(e)));
         }
       },
 
-      cancel: () => {
+      cancel: async () => {
         if (pokeStarted) {
-          this.#downstream.push([
-            'pokeEnd',
-            {pokeID, cookie: '', cancel: true},
-          ]);
+          await this.#push(['pokeEnd', {pokeID, cookie: '', cancel: true}]);
         }
       },
 
-      end: (finalVersion: CVRVersion) => {
+      end: async (finalVersion: CVRVersion) => {
         const cookie = versionToCookie(finalVersion);
         if (!pokeStarted) {
           if (cmpVersions(this.#baseVersion, finalVersion) === 0) {
             return; // Nothing changed and nothing was sent.
           }
-          this.#downstream.push(['pokeStart', pokeStart]);
+          await this.#push(['pokeStart', pokeStart]);
         } else if (cmpVersions(this.#baseVersion, finalVersion) >= 0) {
           // Sanity check: If the poke was started, the finalVersion
           // must be > #baseVersion.
@@ -246,18 +276,18 @@ export class ClientHandler {
               `not greater than baseVersion ${this.#baseVersion}`,
           );
         }
-        flushBody();
-        this.#downstream.push(['pokeEnd', {pokeID, cookie}]);
+        await flushBody();
+        await this.#push(['pokeEnd', {pokeID, cookie}]);
         this.#baseVersion = finalVersion;
       },
     };
   }
 
-  sendDeleteClients(
+  async sendDeleteClients(
     lc: LogContext,
     deletedClientIDs: string[],
     deletedClientGroupIDs: string[],
-  ): void {
+  ) {
     const deleteClientsBody: Writable<DeleteClientsBody> = {};
     if (deletedClientIDs.length > 0) {
       deleteClientsBody.clientIDs = deletedClientIDs;
@@ -266,7 +296,12 @@ export class ClientHandler {
       deleteClientsBody.clientGroupIDs = deletedClientGroupIDs;
     }
     lc.debug?.('sending deleteClients', deleteClientsBody);
-    this.#downstream.push(['deleteClients', deleteClientsBody]);
+    await this.#push(['deleteClients', deleteClientsBody]);
+  }
+
+  sendInspectResponse(lc: LogContext, response: InspectDownBody): void {
+    lc.debug?.('sending inspect response', response);
+    this.#downstream.push(['inspect', response]);
   }
 
   #updateLMIDs(lmids: Record<string, number>, patch: RowPatch) {

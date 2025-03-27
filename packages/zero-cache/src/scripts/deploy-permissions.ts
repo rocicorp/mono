@@ -1,5 +1,5 @@
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import 'dotenv/config';
+import '@dotenvx/dotenvx/config';
 import {writeFile} from 'node:fs/promises';
 import {ident as id, literal} from 'pg-format';
 import {parseOptions} from '../../../shared/src/options.ts';
@@ -20,7 +20,10 @@ import {
 import {liteTableName} from '../types/names.ts';
 import {pgClient, type PostgresDB} from '../types/pg.ts';
 import {appSchema, getShardID, upstreamSchema} from '../types/shards.ts';
-import {deployPermissionsOptions, loadPermissions} from './permissions.ts';
+import {
+  deployPermissionsOptions,
+  loadSchemaAndPermissions,
+} from './permissions.ts';
 
 const config = parseOptions(
   deployPermissionsOptions,
@@ -53,16 +56,21 @@ async function validatePermissions(
   }
 
   // Get the publications for the shard
-  const [{publications: shardPublications}] = await db<
-    {publications: string[]}[]
-  >`
+  const config = await db<{publications: string[]}[]>`
     SELECT publications FROM ${db(schema + '.' + SHARD_CONFIG_TABLE)}
   `;
-
+  if (config.length === 0) {
+    lc.warn?.(
+      `zero-cache has not yet initialized the upstream database.\n` +
+        `Deploying ${app} permissions without validating against published tables/columns.`,
+    );
+    return;
+  }
   lc.info?.(
     `Validating permissions against tables and columns published for "${app}".`,
   );
 
+  const [{publications: shardPublications}] = config;
   const {tables, publications} = await getPublicationInfo(
     db,
     shardPublications,
@@ -129,7 +137,7 @@ async function deployPermissions(
 
       const {appID} = shard;
       lc.info?.(
-        `Deploying "${appID}" permissions to upstream@${db.options.host}`,
+        `Deploying permissions for --app-id "${appID}" to upstream@${db.options.host}`,
       );
       const [{hash: beforeHash}] = await tx<{hash: string}[]>`
         SELECT hash from ${tx(app)}.permissions`;
@@ -163,7 +171,7 @@ async function writePermissionsFile(
   lc.info?.(`Wrote ${format} permissions to ${config.output.file}`);
 }
 
-const permissions = await loadPermissions(lc, config.schema.path);
+const {permissions} = await loadSchemaAndPermissions(lc, config.schema.path);
 if (config.output.file) {
   await writePermissionsFile(
     permissions,

@@ -36,6 +36,10 @@ import {
   getInternalReplicacheImplForTesting,
   onSetConnectionStateSymbol,
 } from './zero.ts';
+import type {
+  PushResponse,
+  PushResponseMessage,
+} from '../../../zero-protocol/src/push.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type ErrorKind = Enum<typeof ErrorKind>;
@@ -76,6 +80,8 @@ export class TestZero<
   const S extends Schema,
   MD extends CustomMutatorDefs<S> | undefined = undefined,
 > extends Zero<S, MD> {
+  pokeIDCounter = 0;
+
   #connectionStateResolvers: Set<{
     state: ConnectionState;
     resolve: (state: ConnectionState) => void;
@@ -179,8 +185,33 @@ export class TestZero<
     return this.triggerMessage(msg);
   }
 
+  async triggerPoke(
+    cookieStart: string | null,
+    cookieEnd: string,
+    pokePart: Omit<PokePartBody, 'pokeID'>,
+  ): Promise<void> {
+    const id = `${this.pokeIDCounter++}`;
+    await this.triggerPokeStart({
+      pokeID: id,
+      baseCookie: cookieStart,
+    });
+    await this.triggerPokePart({
+      ...pokePart,
+      pokeID: id,
+    });
+    await this.triggerPokeEnd({
+      pokeID: id,
+      cookie: cookieEnd,
+    });
+  }
+
   triggerPullResponse(pullResponseBody: PullResponseBody): Promise<void> {
     const msg: PullResponseMessage = ['pull', pullResponseBody];
+    return this.triggerMessage(msg);
+  }
+
+  triggerPushResponse(pushResponseBody: PushResponse): Promise<void> {
+    const msg: PushResponseMessage = ['push-response', pushResponseBody];
     return this.triggerMessage(msg);
   }
 
@@ -275,6 +306,7 @@ export async function waitForUpstreamMessage(
     }
   }
 }
+
 export function storageMock(storage: Record<string, string>): Storage {
   return {
     setItem: (key, value) => {

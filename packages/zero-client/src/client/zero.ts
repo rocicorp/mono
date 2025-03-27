@@ -16,6 +16,7 @@ import type {PullRequest} from '../../../replicache/src/sync/pull.ts';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import type {
   MutatorDefs,
+  MutatorReturn,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from '../../../replicache/src/types.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
@@ -101,6 +102,7 @@ import {
   appendPath,
   toWSString,
 } from './http-string.ts';
+import type {Inspector} from './inspector/types.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
@@ -111,11 +113,8 @@ import {
   type Series,
   getLastConnectErrorValue,
 } from './metrics.ts';
-import type {
-  UpdateNeededReason,
-  ZeroAdvancedOptions,
-  ZeroOptions,
-} from './options.ts';
+import {MutationTracker} from './mutation-tracker.ts';
+import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import * as PingResult from './ping-result-enum.ts';
 import {QueryManager} from './query-manager.ts';
 import {
@@ -281,6 +280,7 @@ export class Zero<
   readonly #lc: LogContext;
   readonly #logOptions: LogOptions;
   readonly #enableAnalytics: boolean;
+  readonly #schema: S;
   readonly #clientSchema: ClientSchema;
 
   readonly #pokeHandler: PokeHandler;
@@ -288,6 +288,7 @@ export class Zero<
   readonly #ivmMain: IVMSourceBranch;
   readonly #clientToServer: NameMapper;
   readonly #deleteClientsManager: DeleteClientsManager;
+  readonly #mutationTracker: MutationTracker;
 
   /**
    * The queries we sent when inside the sec-protocol header when establishing a connection.
@@ -411,7 +412,7 @@ export class Zero<
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
       slowMaterializeThreshold = 5_000,
-    } = options as ZeroAdvancedOptions<S>;
+    } = options as ZeroOptions<S>;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
     }
@@ -421,7 +422,7 @@ export class Zero<
       false /*options.enableAnalytics,*/, // Reenable analytics
     );
 
-    let {kvStore = 'idb'} = options as ZeroAdvancedOptions<S>;
+    let {kvStore = 'idb'} = options as ZeroOptions<S>;
     if (kvStore === 'idb') {
       if (!getBrowserGlobal('indexedDB')) {
         // eslint-disable-next-line no-console
@@ -463,6 +464,7 @@ export class Zero<
     }
 
     const lc = new LogContext(logOptions.logLevel, {}, logOptions.logSink);
+    this.#mutationTracker = new MutationTracker();
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
         options.mutators,
@@ -472,10 +474,13 @@ export class Zero<
           assertUnique(key);
           replicacheMutators[key] = makeReplicacheMutator(
             lc,
+            this.#mutationTracker,
             mutatorOrMutators,
             schema,
             slowMaterializeThreshold,
-          );
+            // Replicache expects mutators to only be able to return JSON
+            // but Zero wraps the return with: `{server?: Promise<MutationResult>, client?: T}`
+          ) as () => MutatorReturn;
           continue;
         }
         if (typeof mutatorOrMutators === 'object') {
@@ -487,10 +492,11 @@ export class Zero<
             assertUnique(key);
             replicacheMutators[key] = makeReplicacheMutator(
               lc,
+              this.#mutationTracker,
               mutator as CustomMutatorImpl<S>,
               schema,
               slowMaterializeThreshold,
-            );
+            ) as () => MutatorReturn;
           }
           continue;
         }
@@ -500,6 +506,7 @@ export class Zero<
 
     this.storageKey = storageKey ?? '';
 
+    this.#schema = schema;
     const {clientSchema, hash} = clientSchemaFrom(schema);
     this.#clientSchema = clientSchema;
 
@@ -534,6 +541,7 @@ export class Zero<
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
       enableMutationRecovery: false,
+      enablePullAndPushInOpen: false, // Zero calls push in its connection management code
       onClientsDeleted: (clientIDs, clientGroupIDs) =>
         this.#deleteClientsManager.onClientsDeleted(clientIDs, clientGroupIDs),
       zero: new ZeroRep(
@@ -552,6 +560,7 @@ export class Zero<
     this.#server = server;
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
+    this.#mutationTracker.clientID = rep.clientID;
 
     const onUpdateNeededCallback =
       onUpdateNeeded ??
@@ -580,14 +589,9 @@ export class Zero<
     this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
+    const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
 
-    // custom mutators are incompatible with CRUD mutators.
-    // CRUD mutators are to be removed in a future release.
     if (options.mutators) {
-      mutate = {};
-      mutateBatch = undefined;
-
       for (const [namespaceOrKey, mutatorsOrMutator] of Object.entries(
         options.mutators,
       )) {
@@ -614,6 +618,7 @@ export class Zero<
     this.mutateBatch = mutateBatch;
 
     this.#queryManager = new QueryManager(
+      this.#mutationTracker,
       rep.clientID,
       schema.tables,
       msg => this.#sendChangeDesiredQueries(msg),
@@ -752,7 +757,7 @@ export class Zero<
    * ```
    */
   readonly mutate: MD extends CustomMutatorDefs<S>
-    ? MakeCustomMutatorInterfaces<S, MD>
+    ? DBMutator<S> & MakeCustomMutatorInterfaces<S, MD>
     : DBMutator<S>;
 
   /**
@@ -890,14 +895,17 @@ export class Zero<
       case 'pull':
         return this.#handlePullResponse(lc, downMessage);
 
-      case 'warm':
-        // we ignore warming messages
-        break;
-
       case 'deleteClients':
         return this.#deleteClientsManager.clientsDeletedOnServer(
           downMessage[1],
         );
+
+      case 'push-response':
+        return this.#mutationTracker.processPushResponse(downMessage[1]);
+
+      case 'inspect':
+        // ignore at this layer.
+        break;
 
       default:
         msgType satisfies never;
@@ -1175,11 +1183,17 @@ export class Zero<
     this.#socket = ws;
     this.#socketResolver.resolve(ws);
 
-    getBrowserGlobal('window')?.addEventListener('pagehide', this.#onPageHide);
+    getBrowserGlobal('window')?.addEventListener?.(
+      'pagehide',
+      this.#onPageHide,
+    );
 
     try {
       l.debug?.('Waiting for connection to be acknowledged');
       await this.#connectResolver.promise;
+      this.#mutationTracker.onConnected(this.#lastMutationIDReceived);
+      // push any outstanding mutations on reconnect.
+      this.#rep.push().catch(() => {});
     } finally {
       clearTimeout(timeoutID);
       this.#closeAbortController.signal.removeEventListener(
@@ -1264,7 +1278,7 @@ export class Zero<
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
     this.#pokeHandler.handleDisconnect();
 
-    getBrowserGlobal('window')?.removeEventListener(
+    getBrowserGlobal('window')?.removeEventListener?.(
       'pagehide',
       this.#onPageHide,
     );
@@ -1810,6 +1824,22 @@ export class Zero<
     }
 
     return rv as MakeEntityQueriesFromSchema<S>;
+  }
+
+  /**
+   * `inspect` returns an object that can be used to inspect the state of the
+   * queries a Zero instance uses. It is intended for debugging purposes.
+   */
+  async inspect(): Promise<Inspector> {
+    // We use esbuild dropLabels to strip this code when we build the code for the bundle size dashboard.
+    // https://esbuild.github.io/api/#ignore-annotations
+    // /packages/zero/tool/build.ts
+
+    // eslint-disable-next-line no-unused-labels
+    BUNDLE_SIZE: {
+      const m = await import('./inspector/inspector.ts');
+      return m.newInspector(this.#rep, this.#schema, () => this.#socket);
+    }
   }
 }
 

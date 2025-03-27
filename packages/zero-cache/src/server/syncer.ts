@@ -15,6 +15,7 @@ import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
+import {warmupConnections} from '../db/warmup.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
@@ -90,12 +91,8 @@ export default function runWorker(
   });
 
   const dbWarmup = Promise.allSettled([
-    ...Array.from({length: cvr.maxConnsPerWorker}, () =>
-      cvrDB`SELECT 1`.simple().execute(),
-    ),
-    ...Array.from({length: upstream.maxConnsPerWorker}, () =>
-      upstreamDB`SELECT 1`.simple().execute(),
-    ),
+    warmupConnections(lc, cvrDB, 'cvr'),
+    warmupConnections(lc, upstreamDB, 'upstream'),
   ]);
 
   const tmpDir = config.storageDBTmpDir ?? tmpdir();
@@ -132,6 +129,8 @@ export default function runWorker(
       sub,
       drainCoordinator,
       config.log.slowHydrateThreshold,
+      undefined,
+      config.targetClientRowCount,
     );
   };
 
@@ -149,6 +148,7 @@ export default function runWorker(
       ? undefined
       : (id: string) =>
           new PusherService(
+            config,
             lc.withContext('clientGroupID', id),
             id,
             must(config.push.url),

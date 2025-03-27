@@ -28,7 +28,6 @@ export interface TransactionBase<S extends Schema> {
 
   readonly mutate: SchemaCRUD<S>;
   readonly query: SchemaQuery<S>;
-  readonly token: string | undefined;
 }
 
 export type Transaction<S extends Schema, TWrappedTransaction = unknown> =

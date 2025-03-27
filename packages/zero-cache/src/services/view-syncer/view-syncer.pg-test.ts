@@ -47,6 +47,7 @@ import {testDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import {cvrSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {DataChange} from '../change-source/protocol/current/data.ts';
@@ -641,6 +642,14 @@ describe('view-syncer/service', () => {
     await testDBs.drop(cvrDB);
     replicaDbFile.delete();
   });
+
+  async function getCVROwner() {
+    const [{owner}] = await cvrDB<{owner: string}[]>`
+    SELECT owner FROM ${cvrDB(cvrSchema(SHARD))}.instances
+       WHERE "clientGroupID" = ${serviceID};
+  `;
+    return owner;
+  }
 
   test('adds desired queries from initConnectionMessage', async () => {
     const client = connect(SYNC_CONTEXT, [
@@ -3640,6 +3649,67 @@ describe('view-syncer/service', () => {
     } satisfies ErrorBody);
   });
 
+  test('initial CVR ownership takeover', async () => {
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDB,
+      SHARD,
+      'some-other-task-id',
+      serviceID,
+      ON_FAILURE,
+    );
+    const otherTaskOwnershipTime = Date.now() - 600_000;
+    await new CVRQueryDrivenUpdater(
+      cvrStore,
+      await cvrStore.load(lc, otherTaskOwnershipTime),
+      '07',
+      REPLICA_VERSION, // CVR is at a newer replica version.
+    ).flush(lc, otherTaskOwnershipTime, Date.now());
+
+    expect(await getCVROwner()).toBe('some-other-task-id');
+
+    // Signal that the replica is ready before any connection
+    // message is received.
+    stateChanges.push({state: 'version-ready'});
+
+    // Wait for the fire-and-forget takeover to happen.
+    await sleep(1000);
+    expect(await getCVROwner()).toBe(TASK_ID);
+  });
+
+  test('deleteClients before init connection initiates takeover', async () => {
+    // First simulate a takeover that has happened since the view-syncer
+    // was started.
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDB,
+      SHARD,
+      'some-other-task-id',
+      serviceID,
+      ON_FAILURE,
+    );
+    const otherTaskOwnershipTime = Date.now();
+    await new CVRQueryDrivenUpdater(
+      cvrStore,
+      await cvrStore.load(lc, otherTaskOwnershipTime),
+      '07',
+      REPLICA_VERSION, // CVR is at a newer replica version.
+    ).flush(lc, otherTaskOwnershipTime, Date.now());
+
+    expect(await getCVROwner()).toBe('some-other-task-id');
+
+    // deleteClients should be considered a new connection and
+    // take over the CVR.
+    await vs.deleteClients(SYNC_CONTEXT, [
+      'deleteClients',
+      {clientIDs: ['bar', 'no-such-client']},
+    ]);
+
+    // Wait for the fire-and-forget takeover to happen.
+    await sleep(1000);
+    expect(await getCVROwner()).toBe(TASK_ID);
+  });
+
   test('sends invalid base cookie if client is ahead of CVR', async () => {
     const cvrStore = new CVRStore(
       lc,
@@ -4812,6 +4882,234 @@ describe('view-syncer/service', () => {
       `);
 
       await expectNoPokes(client);
+    });
+
+    test('expire time is too far in the future', async () => {
+      // The timer is limited to 1h... This test sets the expire to 2.5h in the future... so the timer should
+      // be fired at 1h, 2h and once again at 2.5h
+
+      const ttl = 2.5 * 60 * 60 * 1000;
+      vi.setSystemTime(Date.now());
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
+      ]);
+
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
+        [
+          {
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "ast": {
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "issues",
+                    "where": {
+                      "left": {
+                        "name": "id",
+                        "type": "column",
+                      },
+                      "op": "IN",
+                      "right": {
+                        "type": "literal",
+                        "value": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                        ],
+                      },
+                      "type": "simple",
+                    },
+                  },
+                  "hash": "query-hash1",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "00:01",
+          },
+        ]
+      `);
+
+      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
+        [
+          {
+            "gotQueriesPatch": [
+              {
+                "ast": {
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
+                  "table": "issues",
+                  "where": {
+                    "left": {
+                      "name": "id",
+                      "type": "column",
+                    },
+                    "op": "IN",
+                    "right": {
+                      "type": "literal",
+                      "value": [
+                        "1",
+                        "2",
+                        "3",
+                        "4",
+                      ],
+                    },
+                    "type": "simple",
+                  },
+                },
+                "hash": "query-hash1",
+                "op": "put",
+              },
+            ],
+            "lastMutationIDChanges": {
+              "foo": 42,
+            },
+            "pokeID": "01",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "json": null,
+                  "owner": "100",
+                  "parent": null,
+                  "title": "parent issue foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": -9007199254740991,
+                  "id": "2",
+                  "json": null,
+                  "owner": "101",
+                  "parent": null,
+                  "title": "parent issue bar",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 123,
+                  "id": "3",
+                  "json": null,
+                  "owner": "102",
+                  "parent": "1",
+                  "title": "foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 100,
+                  "id": "4",
+                  "json": null,
+                  "owner": "101",
+                  "parent": "2",
+                  "title": "bar",
+                },
+              },
+            ],
+          },
+        ]
+      `);
+
+      // Mark query-hash1 as inactive
+      await vs.changeDesiredQueries(SYNC_CONTEXT, [
+        'changeDesiredQueries',
+        {
+          desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
+        },
+      ]);
+
+      // Make sure we do not get a delete of the gotQueriesPatch
+      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
+        [
+          {
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "hash": "query-hash1",
+                  "op": "del",
+                },
+              ],
+            },
+            "pokeID": "01:01",
+          },
+        ]
+      `);
+
+      await expectNoPokes(client);
+
+      callNextSetTimeout(60 * 60 * 1000);
+
+      await expectNoPokes(client);
+
+      callNextSetTimeout(60 * 60 * 1000);
+
+      await expectNoPokes(client);
+
+      callNextSetTimeout(30 * 60 * 1000);
+
+      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
+        [
+          {
+            "gotQueriesPatch": [
+              {
+                "hash": "query-hash1",
+                "op": "del",
+              },
+            ],
+            "pokeID": "01:02",
+            "rowsPatch": [
+              {
+                "id": {
+                  "id": "1",
+                },
+                "op": "del",
+                "tableName": "issues",
+              },
+              {
+                "id": {
+                  "id": "2",
+                },
+                "op": "del",
+                "tableName": "issues",
+              },
+              {
+                "id": {
+                  "id": "3",
+                },
+                "op": "del",
+                "tableName": "issues",
+              },
+              {
+                "id": {
+                  "id": "4",
+                },
+                "op": "del",
+                "tableName": "issues",
+              },
+            ],
+          },
+        ]
+      `);
     });
   });
 

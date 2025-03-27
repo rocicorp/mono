@@ -37,9 +37,15 @@ export function checkClientSchema(
         .sort()
         .map(t => `"${t}"`)
         .join(',');
+      const schemaTip =
+        missing.includes('.') && !syncedTables.includes('.')
+          ? ` Note that zero does not sync tables from non-public schemas ` +
+            `by default. Make sure you have defined a custom ` +
+            `ZERO_APP_PUBLICATION to sync tables from non-public schemas.`
+          : '';
       errors.push(
         `The "${missing}" table does not exist or is not ` +
-          `one of the replicated tables: ${syncedTables}.`,
+          `one of the replicated tables: ${syncedTables}.${schemaTip}`,
       );
     }
   }

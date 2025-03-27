@@ -1,29 +1,28 @@
-import './test/nullish.ts';
-import {beforeAll} from 'vitest';
+import {beforeAll, describe, expect, test} from 'vitest';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import type {JSONValue} from '../../shared/src/json.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {compile} from './compiler.ts';
-import {createTableSQL, schema} from '../../zql/src/query/test/test-schemas.ts';
-import {Database} from '../../zqlite/src/db.ts';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {type Query} from '../../zql/src/query/query.ts';
+import {type Row} from '../../zero-protocol/src/data.ts';
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import {
   completedAstSymbol,
   newQuery,
   QueryImpl,
 } from '../../zql/src/query/query-impl.ts';
+import {type Query} from '../../zql/src/query/query.ts';
+import {createTableSQL, schema} from '../../zql/src/query/test/test-schemas.ts';
+import {Database} from '../../zqlite/src/db.ts';
+import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
 import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
-import {describe, expect, test} from 'vitest';
+import {compile} from './compiler.ts';
 import {formatPg} from './sql.ts';
-import type {JSONValue} from '../../shared/src/json.ts';
-import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
-import {type Row} from '../../zero-protocol/src/data.ts';
-import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
-import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import './test/comparePg.ts';
 
 const lc = createSilentLogContext();
 
@@ -201,10 +200,6 @@ function ast(q: Query<Schema, keyof Schema['tables']>) {
   return (q as QueryImpl<Schema, keyof Schema['tables']>)[completedAstSymbol];
 }
 
-function format(q: Query<Schema, keyof Schema['tables']>) {
-  return (q as QueryImpl<Schema, keyof Schema['tables']>).format;
-}
-
 function noBigint(row: Record<string, unknown>) {
   if ('createdAt' in row) {
     return {
@@ -270,44 +265,38 @@ describe('compiling ZQL to SQL', () => {
 
   test('1 to 1 foreign key relationship', async () => {
     const query = issueQuery.related('owner');
-    const sqlQuery = formatPg(
-      compile(ast(query), schema.tables, format(query)),
-    );
+    const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
     expect(
       mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualNullish(pgResult);
+    ).toEqualPg(pgResult);
   });
 
   test('1 to many foreign key relationship', async () => {
     const query = issueQuery.related('comments');
-    const sqlQuery = formatPg(
-      compile(ast(query), schema.tables, format(query)),
-    );
+    const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
     expect(
       mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualNullish(pgResult);
+    ).toEqualPg(pgResult);
   });
 
   test('junction relationship', async () => {
     const query = issueQuery.related('labels');
-    const sqlQuery = formatPg(
-      compile(ast(query), schema.tables, format(query)),
-    );
+    const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
     expect(
       mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualNullish(pgResult);
+    ).toEqualPg(pgResult);
   });
 
   test('nested related with where clauses', async () => {
@@ -316,9 +305,7 @@ describe('compiling ZQL to SQL', () => {
       .related('comments', q =>
         q.where('createdAt', '>', 1000).related('author'),
       );
-    const sqlQuery = formatPg(
-      compile(ast(query), schema.tables, format(query)),
-    );
+    const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
@@ -337,9 +324,7 @@ describe('compiling ZQL to SQL', () => {
         q.orderBy('createdAt', 'desc').limit(3).related('author'),
       )
       .orderBy('title', 'asc');
-    const sqlQuery = formatPg(
-      compile(ast(query), schema.tables, format(query)),
-    );
+    const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
     const pgResult = await pg.unsafe(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],

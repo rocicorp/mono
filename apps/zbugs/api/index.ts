@@ -2,14 +2,16 @@
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
-import 'dotenv/config';
+import '@dotenvx/dotenvx/config';
 import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
-import {SignJWT, type JWK} from 'jose';
+import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
-import {pushHandler} from './push.ts';
+import {handlePush} from './_push-handler.ts';
 import type {ReadonlyJSONObject} from '@rocicorp/zero';
 import {must} from '../../../packages/shared/src/must.ts';
+import assert from 'assert';
+import {authDataSchema, type AuthData} from '../shared/auth.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -86,11 +88,12 @@ fastify.get<{
 
   const userRows = await sql`SELECT * FROM "user" WHERE "id" = ${userId}`;
 
-  const jwtPayload = {
+  const jwtPayload: AuthData = {
     sub: userId,
     iat: Math.floor(Date.now() / 1000),
     role: userRows[0].role,
     name: userDetails.data.login,
+    exp: 0, // setExpirationTime below sets it
   };
 
   const jwt = await new SignJWT(jwtPayload)
@@ -108,11 +111,29 @@ fastify.get<{
     );
 });
 
-fastify.post('/api/push', async function (request, reply) {
-  const response = await pushHandler(
-    {
-      authorization: request.headers.authorization,
-    },
+fastify.post<{
+  Querystring: {
+    schema: string;
+    appID: string;
+  };
+}>('/api/push', async function (request, reply) {
+  let {authorization} = request.headers;
+  if (authorization !== undefined) {
+    assert(authorization.toLowerCase().startsWith('bearer '));
+    authorization = authorization.substring('Bearer '.length);
+  }
+
+  const jwk = process.env.VITE_PUBLIC_JWK;
+  const authData: AuthData | undefined =
+    jwk && authorization
+      ? authDataSchema.parse(
+          (await jwtVerify(authorization, JSON.parse(jwk))).payload,
+        )
+      : undefined;
+
+  const response = handlePush(
+    authData,
+    request.query,
     request.body as ReadonlyJSONObject,
   );
   reply.send(response);

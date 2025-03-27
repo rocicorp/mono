@@ -6,6 +6,7 @@ import type {
   SchemaValueToTSType,
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
+import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
@@ -43,11 +44,11 @@ export type GetFilterType<
     // https://github.com/rocicorp/mono/pull/3576#discussion_r1925792608
     SchemaValueToTSType<TSchema['columns'][TColumn]> | null
   : TOperator extends 'IN' | 'NOT IN'
-  ? // We don't want to compare to null in where clauses because it causes
-    // confusing results:
-    // https://zero.rocicorp.dev/docs/reading-data#comparing-to-null
-    readonly Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>[]
-  : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>;
+    ? // We don't want to compare to null in where clauses because it causes
+      // confusing results:
+      // https://zero.rocicorp.dev/docs/reading-data#comparing-to-null
+      readonly Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>[]
+    : Exclude<SchemaValueToTSType<TSchema['columns'][TColumn]>, null>;
 
 export type AvailableRelationships<
   TTable extends string,
@@ -100,14 +101,18 @@ export type Row<T extends TableSchema | Query<ZeroSchema, string, any>> =
         >;
       }
     : T extends Query<ZeroSchema, string, infer TReturn>
-    ? TReturn
-    : never;
+      ? TReturn
+      : never;
 
 export interface Query<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
 > {
+  readonly format: Format;
+  hash(): string;
+  updateTTL(ttl: TTL): void;
+
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
   ): Query<
@@ -188,6 +193,10 @@ export interface Query<
   one(): Query<TSchema, TTable, TReturn | undefined>;
 
   materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
+  materialize<T>(
+    factory: ViewFactory<TSchema, TTable, TReturn, T>,
+    ttl?: TTL,
+  ): T;
 
   run(): Promise<HumanReadable<TReturn>>;
 

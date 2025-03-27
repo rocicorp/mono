@@ -19,7 +19,6 @@ import {
 } from '../../../zero-schema/src/table-schema.ts';
 import type {ExpressionFactory} from './expression.ts';
 import {staticParam} from './query-impl.ts';
-import type {AdvancedQuery} from './query-internal.ts';
 import {type Query, type Row} from './query.ts';
 
 const mockQuery = {
@@ -757,7 +756,7 @@ function takeSchema(x: TableSchema) {
 }
 
 test('custom materialize factory', () => {
-  const query = mockQuery as unknown as AdvancedQuery<Schema, 'test'>;
+  const query = mockQuery as unknown as Query<Schema, 'test'>;
   const x = query.materialize();
   expectTypeOf(x.data).toMatchTypeOf<
     ReadonlyArray<{s: string; b: boolean; n: number}>
@@ -784,7 +783,7 @@ test('Make sure that QueryInternal does not expose the ast', () => {
   // @ts-expect-error - ast is not part of the public API
   query.ast;
 
-  const internalQuery = mockQuery as unknown as AdvancedQuery<Schema, 'test'>;
+  const internalQuery = mockQuery as unknown as Query<Schema, 'test'>;
   // @ts-expect-error - ast is not part of the public API
   internalQuery.ast;
 });

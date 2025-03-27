@@ -2,6 +2,7 @@ import * as v from '../../shared/src/valita.ts';
 import {connectedMessageSchema} from './connect.ts';
 import {deleteClientsMessageSchema} from './delete-clients.ts';
 import {errorMessageSchema} from './error.ts';
+import {inspectDownMessageSchema} from './inspect-down.ts';
 import {
   pokeEndMessageSchema,
   pokePartMessageSchema,
@@ -9,11 +10,10 @@ import {
 } from './poke.ts';
 import {pongMessageSchema} from './pong.ts';
 import {pullResponseMessageSchema} from './pull.ts';
-import {warmMessageSchema} from './warm.ts';
+import {pushResponseMessageSchema} from './push.ts';
 
 export const downstreamSchema = v.union(
   connectedMessageSchema,
-  warmMessageSchema,
   errorMessageSchema,
   pongMessageSchema,
   pokeStartMessageSchema,
@@ -21,6 +21,8 @@ export const downstreamSchema = v.union(
   pokeEndMessageSchema,
   pullResponseMessageSchema,
   deleteClientsMessageSchema,
+  pushResponseMessageSchema,
+  inspectDownMessageSchema,
 );
 
 export type Downstream = v.Infer<typeof downstreamSchema>;

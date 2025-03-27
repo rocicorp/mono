@@ -59,11 +59,13 @@ async function run() {
   let i = 0;
   async function trackAndDisplay() {
     const stats = await pidusage(pids);
+    // Note: The pid may have crashed so `stats[pid]` should
+    //       be accessed with the `?.` operator.
     const line = pids
       .map(
         pid =>
-          `${stats[pid].cpu.toFixed(1)}%\t\t` +
-          `${Math.floor(stats[pid].memory / MB)}MB`,
+          `${(stats[pid]?.cpu ?? 0).toFixed(1)}%\t\t` +
+          `${Math.floor((stats[pid]?.memory ?? 0) / MB)}MB`,
       )
       .join('\t\t');
     process.stdout.write(`${CLEAR_LINE}${line}`);
@@ -72,7 +74,9 @@ async function run() {
       void file?.write(
         [
           new Date().toISOString(),
-          ...pids.map(pid => [stats[pid].cpu, stats[pid].memory]).flat(),
+          ...pids
+            .map(pid => [stats[pid]?.cpu ?? 0, stats[pid]?.memory ?? 0])
+            .flat(),
         ]
           .map(n => String(n))
           .join('\t') + '\n',

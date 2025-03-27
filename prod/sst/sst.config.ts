@@ -1,14 +1,14 @@
 /* eslint-disable */
 /// <reference path="./.sst/platform/config.d.ts" />
 // Load .env file
-require("dotenv").config();
+require('@dotenvx/dotenvx').config();
 
-import { createDefu } from "defu";
-import { join } from "node:path";
+import {createDefu} from 'defu';
+import {join} from 'node:path';
 
 const defu = createDefu((obj, key, value) => {
   // Don't merge functions, just use the last one
-  if (typeof obj[key] === "function" || typeof value === "function") {
+  if (typeof obj[key] === 'function' || typeof value === 'function') {
     obj[key] = value;
     return true;
   }
@@ -18,11 +18,11 @@ const defu = createDefu((obj, key, value) => {
 export default $config({
   app(input) {
     return {
-      name: process.env.APP_NAME || "zero",
-      removal: input?.stage === "production" ? "retain" : "remove",
-      home: "aws",
-      region: process.env.AWS_REGION || "us-east-1",
-      providers: { command: "1.0.2" },
+      name: process.env.APP_NAME || 'zero',
+      removal: input?.stage === 'production' ? 'retain' : 'remove',
+      home: 'aws',
+      region: process.env.AWS_REGION || 'us-east-1',
+      providers: {command: '1.0.2'},
     };
   },
   async run() {
@@ -33,7 +33,7 @@ export default $config({
     // VPC Configuration
     const vpc = new sst.aws.Vpc(`vpc`, {
       az: 2,
-      nat: "ec2", // Needed for deploying Lambdas
+      nat: 'ec2', // Needed for deploying Lambdas
     });
     // ECS Cluster
     const cluster = new sst.aws.Cluster(`cluster`, {
@@ -42,45 +42,46 @@ export default $config({
         cluster: {
           settings: [
             {
-              name: "containerInsights",
-              value: "enhanced",
+              name: 'containerInsights',
+              value: 'enhanced',
             },
           ],
         },
       },
     });
 
-    const IS_EBS_STAGE = $app.stage.endsWith("-ebs");
+    const IS_EBS_STAGE = $app.stage.endsWith('-ebs');
 
     // Common environment variables
     const commonEnv = {
       AWS_REGION: process.env.AWS_REGION!,
       ZERO_UPSTREAM_DB: process.env.ZERO_UPSTREAM_DB!,
+      ZERO_PUSH_URL: process.env.ZERO_PUSH_URL!,
       ZERO_CVR_DB: process.env.ZERO_CVR_DB!,
       ZERO_CHANGE_DB: process.env.ZERO_CHANGE_DB!,
       ZERO_AUTH_JWK: process.env.ZERO_AUTH_JWK!,
       AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID!,
       AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
-      ZERO_LOG_FORMAT: "json",
+      ZERO_LOG_FORMAT: 'json',
       ZERO_REPLICA_FILE: IS_EBS_STAGE
-        ? "/data/sync-replica.db"
-        : "sync-replica.db",
-      ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250304-00`,
+        ? '/data/sync-replica.db'
+        : 'sync-replica.db',
+      ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250319-00`,
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
-      ZERO_APP_ID: process.env.ZERO_APP_ID || "zero",
+      ZERO_APP_ID: process.env.ZERO_APP_ID || 'zero',
     };
 
     const ecsVolumeRole = IS_EBS_STAGE
       ? new aws.iam.Role(`${$app.name}-${$app.stage}-ECSVolumeRole`, {
           assumeRolePolicy: JSON.stringify({
-            Version: "2012-10-17",
+            Version: '2012-10-17',
             Statement: [
               {
-                Effect: "Allow",
+                Effect: 'Allow',
                 Principal: {
-                  Service: ["ecs-tasks.amazonaws.com", "ecs.amazonaws.com"],
+                  Service: ['ecs-tasks.amazonaws.com', 'ecs.amazonaws.com'],
                 },
-                Action: "sts:AssumeRole",
+                Action: 'sts:AssumeRole',
               },
             ],
           }),
@@ -93,7 +94,7 @@ export default $config({
         {
           role: ecsVolumeRole.name,
           policyArn:
-            "arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRolePolicyForVolumes",
+            'arn:aws:iam::aws:policy/service-role/AmazonECSInfrastructureRolePolicyForVolumes',
         },
       );
     }
@@ -110,8 +111,8 @@ export default $config({
       target: {
         healthCheck: {
           enabled: true,
-          path: "/keepalive",
-          protocol: "HTTP",
+          path: '/keepalive',
+          protocol: 'HTTP',
           interval: 5,
           healthyThreshold: 2,
           timeout: 3,
@@ -126,13 +127,13 @@ export default $config({
       : {
           service: {
             volumeConfiguration: {
-              name: "replication-data",
+              name: 'replication-data',
               managedEbsVolume: {
                 roleArn: ecsVolumeRole?.arn,
-                volumeType: "io2",
+                volumeType: 'io2',
                 sizeInGb: 20,
                 iops: 3000,
-                fileSystemType: "ext4",
+                fileSystemType: 'ext4',
               },
             },
           },
@@ -141,8 +142,8 @@ export default $config({
             value = value.apply((containerDefinitions: any) => {
               containerDefinitions[0].mountPoints = [
                 {
-                  sourceVolume: "replication-data",
-                  containerPath: "/data",
+                  sourceVolume: 'replication-data',
+                  containerPath: '/data',
                 },
               ];
               return containerDefinitions;
@@ -150,7 +151,7 @@ export default $config({
             args.containerDefinitions = $jsonStringify(value);
             args.volumes = [
               {
-                name: "replication-data",
+                name: 'replication-data',
                 configureAtLaunch: true,
               },
             ];
@@ -159,29 +160,29 @@ export default $config({
 
     // Replication Manager Service
     const replicationManager = cluster.addService(`replication-manager`, {
-      cpu: "2 vCPU",
-      memory: "8 GB",
+      cpu: '2 vCPU',
+      memory: '8 GB',
       image: commonEnv.ZERO_IMAGE_URL,
       health: {
-        command: ["CMD-SHELL", "curl -f http://localhost:4849/ || exit 1"],
-        interval: "5 seconds",
+        command: ['CMD-SHELL', 'curl -f http://localhost:4849/ || exit 1'],
+        interval: '5 seconds',
         retries: 3,
-        startPeriod: "300 seconds",
+        startPeriod: '300 seconds',
       },
       environment: {
         ...commonEnv,
-        ZERO_CHANGE_MAX_CONNS: "3",
-        ZERO_NUM_SYNC_WORKERS: "0",
+        ZERO_CHANGE_MAX_CONNS: '3',
+        ZERO_NUM_SYNC_WORKERS: '0',
       },
       logging: {
-        retention: "1 month",
+        retention: '1 month',
       },
       loadBalancer: {
         public: false,
         ports: [
           {
-            listen: "80/http",
-            forward: "4849/http",
+            listen: '80/http',
+            forward: '4849/http',
           },
         ],
       },
@@ -189,23 +190,23 @@ export default $config({
     });
     // View Syncer Service
     const viewSyncer = cluster.addService(`view-syncer`, {
-      cpu: "8 vCPU",
-      memory: "16 GB",
+      cpu: '8 vCPU',
+      memory: '16 GB',
       image: commonEnv.ZERO_IMAGE_URL,
       health: {
-        command: ["CMD-SHELL", "curl -f http://localhost:4848/ || exit 1"],
-        interval: "5 seconds",
+        command: ['CMD-SHELL', 'curl -f http://localhost:4848/ || exit 1'],
+        interval: '5 seconds',
         retries: 3,
-        startPeriod: "300 seconds",
+        startPeriod: '300 seconds',
       },
       environment: {
         ...commonEnv,
         ZERO_CHANGE_STREAMER_URI: replicationManager.url,
-        ZERO_UPSTREAM_MAX_CONNS: "15",
-        ZERO_CVR_MAX_CONNS: "160",
+        ZERO_UPSTREAM_MAX_CONNS: '15',
+        ZERO_CVR_MAX_CONNS: '160',
       },
       logging: {
-        retention: "1 month",
+        retention: '1 month',
       },
       loadBalancer: {
         public: true,
@@ -219,20 +220,20 @@ export default $config({
               },
               ports: [
                 {
-                  listen: "80/http",
-                  forward: "4848/http",
+                  listen: '80/http',
+                  forward: '4848/http',
                 },
                 {
-                  listen: "443/https",
-                  forward: "4848/http",
+                  listen: '443/https',
+                  forward: '4848/http',
                 },
               ],
             }
           : {
               ports: [
                 {
-                  listen: "80/http",
-                  forward: "4848/http",
+                  listen: '80/http',
+                  forward: '4848/http',
                 },
               ],
             }),
@@ -241,10 +242,10 @@ export default $config({
         target: {
           stickiness: {
             enabled: true,
-            type: "lb_cookie",
+            type: 'lb_cookie',
             cookieDuration: 120,
           },
-          loadBalancingAlgorithmType: "least_outstanding_requests",
+          loadBalancingAlgorithmType: 'least_outstanding_requests',
         },
         autoScalingTarget: {
           minCapacity: 1,
@@ -257,50 +258,50 @@ export default $config({
       wait: false,
     });
 
-    if ($app.stage === "sandbox") {
+    if ($app.stage === 'sandbox') {
       // In sandbox, deploy permissions in a Lambda.
       const permissionsDeployer = new sst.aws.Function(
-        "zero-permissions-deployer",
+        'zero-permissions-deployer',
         {
-          handler: "../functions/src/permissions.deploy",
+          handler: '../functions/src/permissions.deploy',
           vpc,
           environment: {
-            ["ZERO_UPSTREAM_DB"]: process.env.ZERO_UPSTREAM_DB,
-            ["ZERO_APP_ID"]: process.env.ZERO_APP_ID,
+            ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
+            ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
           },
           copyFiles: [
-            { from: "../../apps/zbugs/schema.ts", to: "./schema.ts" },
+            {from: '../../apps/zbugs/shared/schema.ts', to: './schema.ts'},
           ],
-          nodejs: { install: ["@rocicorp/zero"] },
+          nodejs: {install: ['@rocicorp/zero']},
         },
       );
 
       new aws.lambda.Invocation(
-        "invoke-zero-permissions-deployer",
+        'invoke-zero-permissions-deployer',
         {
           // Invoke the Lambda on every deploy.
           input: Date.now().toString(),
           functionName: permissionsDeployer.name,
         },
-        { dependsOn: viewSyncer },
+        {dependsOn: viewSyncer},
       );
     } else {
       // In prod, deploy permissions via a local Command, to exercise both approaches.
       new command.local.Command(
-        "zero-deploy-permissions",
+        'zero-deploy-permissions',
         {
           // Pulumi operates with cwd at the package root.
-          dir: join(process.cwd(), "../../packages/zero/"),
-          create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/schema.ts`,
+          dir: join(process.cwd(), '../../packages/zero/'),
+          create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/shared/schema.ts`,
           environment: {
-            ["ZERO_UPSTREAM_DB"]: process.env.ZERO_UPSTREAM_DB,
-            ["ZERO_APP_ID"]: process.env.ZERO_APP_ID,
+            ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
+            ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
           },
           // Run the Command on every deploy.
           triggers: [Date.now()],
         },
         // after the view-syncer is deployed.
-        { dependsOn: viewSyncer },
+        {dependsOn: viewSyncer},
       );
     }
   },

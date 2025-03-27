@@ -1,13 +1,9 @@
-import pg from 'pg';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../test/db.ts';
+import {INT4, JSONB, TEXT} from '../types/pg-types.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import type {RowKey} from '../types/row-key.ts';
 import {lookupRowsWithKeys} from './queries.ts';
-
-const {
-  types: {builtins},
-} = pg;
 
 describe('db/queries', () => {
   let db: PostgresDB;
@@ -47,7 +43,7 @@ describe('db/queries', () => {
       db,
       'public',
       'foo',
-      {id: {typeOid: builtins.INT4}, str: {typeOid: builtins.TEXT}},
+      {id: {typeOid: INT4}, str: {typeOid: TEXT}},
       rowKeys,
     );
     expect(results).toEqual([
@@ -84,7 +80,7 @@ describe('db/queries', () => {
       db,
       'public',
       'foo',
-      {id: {typeOid: builtins.INT4}, key: {typeOid: builtins.JSONB}},
+      {id: {typeOid: INT4}, key: {typeOid: JSONB}},
       rowKeys,
     );
     expect(results).toEqual([

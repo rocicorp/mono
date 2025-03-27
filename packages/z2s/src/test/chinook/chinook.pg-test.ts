@@ -11,13 +11,31 @@
  * so that the test can be reproduced.
  */
 
-import '../nullish.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
-import {testDBs} from '../../../../zero-cache/src/test/db.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
-import type {PostgresDB} from '../../../../zero-cache/src/types/pg.ts';
+import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
+import {wrapIterable} from '../../../../shared/src/iterables.ts';
+import type {
+  JSONValue,
+  ReadonlyJSONValue,
+} from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {writeChinook} from './get-deps.ts';
+import {must} from '../../../../shared/src/must.ts';
+import type {Writable} from '../../../../shared/src/writable.ts';
+import {testDBs} from '../../../../zero-cache/src/test/db.ts';
+import type {PostgresDB} from '../../../../zero-cache/src/types/pg.ts';
+import type {Row} from '../../../../zero-protocol/src/data.ts';
+import {
+  clientToServer,
+  NameMapper,
+} from '../../../../zero-schema/src/name-mapper.ts';
+import type {TableSchema} from '../../../../zero-schema/src/table-schema.ts';
+import type {Change} from '../../../../zql/src/ivm/change.ts';
+import type {Node} from '../../../../zql/src/ivm/data.ts';
+import {MemorySource} from '../../../../zql/src/ivm/memory-source.ts';
+import type {Input} from '../../../../zql/src/ivm/operator.ts';
+import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
+import type {Format} from '../../../../zql/src/ivm/view.ts';
+import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import {
   astForTestingSymbol,
   completedAstSymbol,
@@ -25,39 +43,24 @@ import {
   QueryImpl,
   type QueryDelegate,
 } from '../../../../zql/src/query/query-impl.ts';
+import type {Operator, Query} from '../../../../zql/src/query/query.ts';
+import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../../zql/src/query/test/query-delegate.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
 import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../../../zqlite/src/test/source-factory.ts';
-import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
-import {schema} from './schema.ts';
-import type {Operator, Query} from '../../../../zql/src/query/query.ts';
-import {formatPg} from '../../sql.ts';
 import {compile} from '../../compiler.ts';
-import type {
-  JSONValue,
-  ReadonlyJSONValue,
-} from '../../../../shared/src/json.ts';
-import {MemorySource} from '../../../../zql/src/ivm/memory-source.ts';
-import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../../zql/src/query/test/query-delegate.ts';
-import type {AdvancedQuery} from '../../../../zql/src/query/query-internal.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
-import type {Input} from '../../../../zql/src/ivm/operator.ts';
-import type {Format} from '../../../../zql/src/ivm/view.ts';
-import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
-import type {Change} from '../../../../zql/src/ivm/change.ts';
-import {must} from '../../../../shared/src/must.ts';
-import type {Node} from '../../../../zql/src/ivm/data.ts';
-import {wrapIterable} from '../../../../shared/src/iterables.ts';
-import type {TableSchema} from '../../../../zero-schema/src/table-schema.ts';
-import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
+import {formatPg} from '../../sql.ts';
+import '../comparePg.ts';
+import {writeChinook} from './get-deps.ts';
+import {schema} from './schema.ts';
 
 let pg: PostgresDB;
 let sqlite: Database;
 let zqliteQueryDelegate: QueryDelegate;
 let memoryQueryDelegate: QueryDelegate;
 type AnyQuery = Query<any, any, any>;
-type AnyAdvancedQuery = AdvancedQuery<any, any, any>;
 
 type Schema = typeof schema;
 type Queries = {
@@ -66,11 +69,11 @@ type Queries = {
   customer: Query<Schema, 'customer'>;
   employee: Query<Schema, 'employee'>;
   genre: Query<Schema, 'genre'>;
-  media_type: Query<Schema, 'media_type'>;
+  mediaType: Query<Schema, 'mediaType'>;
   playlist: Query<Schema, 'playlist'>;
-  playlist_track: Query<Schema, 'playlist_track'>;
+  playlistTrack: Query<Schema, 'playlistTrack'>;
   invoice: Query<Schema, 'invoice'>;
-  invoice_line: Query<Schema, 'invoice_line'>;
+  invoiceLine: Query<Schema, 'invoiceLine'>;
   track: Query<Schema, 'track'>;
 };
 const zqliteQueries: Queries = {
@@ -79,11 +82,11 @@ const zqliteQueries: Queries = {
   customer: null,
   employee: null,
   genre: null,
-  media_type: null,
+  mediaType: null,
   playlist: null,
-  playlist_track: null,
+  playlistTrack: null,
   invoice: null,
-  invoice_line: null,
+  invoiceLine: null,
   track: null,
 } as any;
 const memoryQueries: Queries = {...zqliteQueries} as any;
@@ -122,7 +125,11 @@ beforeEach(async () => {
 
   await Promise.all(
     tables.map(async table => {
-      const rows = await zqliteQueries[table].run();
+      const rows = mapResultToClientNames<Row[], typeof schema>(
+        await zqliteQueries[table].run(),
+        schema,
+        table,
+      );
       data.set(table, rows);
       for (const row of rows) {
         memorySources[table].push({
@@ -293,7 +300,7 @@ describe('or', () => {
       const {randomRow} = randomRowAndColumn('invoice');
       const q = ({or, cmp, exists}: ExpressionBuilder<Schema, 'invoice'>) =>
         or(
-          cmp('customer_id', '=', randomRow.customer_id as number),
+          cmp('customerId', '=', randomRow.customerId as number),
           exists('lines'),
         );
       await checkZqlAndSql(
@@ -330,14 +337,8 @@ async function checkZqlAndSql(
       schema,
       ast.table as keyof Schema['tables'],
     ),
-  ).toEqual(pgResult);
-  expect(
-    mapResultToClientNames(
-      zqlMemResult,
-      schema,
-      ast.table as keyof Schema['tables'],
-    ),
-  ).toEqual(pgResult);
+  ).toEqualPg(pgResult);
+  expect(zqlMemResult).toEqualPg(pgResult);
 
   // now check pushes
   if (shouldCheckPush) {
@@ -351,7 +352,7 @@ async function checkPush(
   memoryQuery: Query<Schema, keyof Schema['tables']>,
   mustEditRows?: [table: string, row: Row][],
 ) {
-  const queryRows = gatherRows(memoryQuery as unknown as AnyAdvancedQuery);
+  const queryRows = gatherRows(memoryQuery);
 
   function copyRows() {
     return new Map(
@@ -404,7 +405,7 @@ async function checkRemove(
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
   const sqlQuery = formatPg(
-    compile(ast(zqliteQuery), schema.tables, format(zqliteQuery)),
+    compile(ast(zqliteQuery), schema.tables, zqliteQuery.format),
   );
 
   let numOps = 0;
@@ -440,13 +441,23 @@ async function checkRemove(
     seen.add(pullPrimaryKey(table, row));
     removedRows.push([table, row]);
     const {primaryKey} = schema.tables[table as keyof Schema['tables']];
-    await sql`DELETE FROM ${sql(table)} WHERE ${primaryKey
-      .map(col => sql`${sql(col)} = ${row[col] ?? null}`)
+    const mappedRow = mapRow(row, table, clientToServerMapper);
+    await sql`DELETE FROM ${sql(
+      clientToServerMapper.tableName(table),
+    )} WHERE ${primaryKey
+      .map(
+        col =>
+          sql`${sql(clientToServerMapper.columnName(table, col))} = ${
+            row[col] ?? null
+          }`,
+      )
       .reduce((l, r) => sql`${l} AND ${r}`)}`;
 
-    must(zqliteQueryDelegate.getSource(table)).push({
+    must(
+      zqliteQueryDelegate.getSource(clientToServerMapper.tableName(table)),
+    ).push({
       type: 'remove',
-      row,
+      row: mappedRow,
     });
     must(memoryQueryDelegate.getSource(table)).push({
       type: 'remove',
@@ -458,8 +469,15 @@ async function checkRemove(
       sqlQuery.values as JSONValue[],
     );
     // TODO: empty single relationships return `undefined` from ZQL and `null` from PG
-    expect(zqliteMaterialized.data).toEqualNullish(pgResult);
-    expect(zqlMaterialized.data).toEqualNullish(pgResult);
+    expect(
+      mapResultToClientNames(
+        zqliteMaterialized.data,
+        schema,
+        (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol]
+          .table as keyof Schema['tables'],
+      ),
+    ).toEqualPg(pgResult);
+    expect(zqlMaterialized.data).toEqualPg(pgResult);
   }
 
   zqliteMaterialized.destroy();
@@ -481,16 +499,20 @@ async function checkAddBack(
 ) {
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
+  const mapper = clientToServer(schema.tables);
   const sqlQuery = formatPg(
-    compile(ast(zqliteQuery), schema.tables, format(zqliteQuery)),
+    compile(ast(zqliteQuery), schema.tables, zqliteQuery.format),
   );
 
   for (const [table, row] of rowsToAdd) {
-    await sql`INSERT INTO ${sql(table)} ${sql(row)}`;
+    const mappedRow = mapRow(row, table, clientToServerMapper);
+    await sql`INSERT INTO ${sql(mapper.tableName(table))} ${sql(mappedRow)}`;
 
-    must(zqliteQueryDelegate.getSource(table)).push({
+    must(
+      zqliteQueryDelegate.getSource(clientToServerMapper.tableName(table)),
+    ).push({
       type: 'add',
-      row,
+      row: mappedRow,
     });
     must(memoryQueryDelegate.getSource(table)).push({
       type: 'add',
@@ -501,8 +523,15 @@ async function checkAddBack(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(zqliteMaterialized.data).toEqualNullish(pgResult);
-    expect(zqlMaterialized.data).toEqualNullish(pgResult);
+    expect(
+      mapResultToClientNames(
+        zqliteMaterialized.data,
+        schema,
+        (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol]
+          .table as keyof Schema['tables'],
+      ),
+    ).toEqualPg(pgResult);
+    expect(zqlMaterialized.data).toEqualPg(pgResult);
   }
 
   zqlMaterialized.destroy();
@@ -523,7 +552,7 @@ async function checkEditToRandom(
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
   const sqlQuery = formatPg(
-    compile(ast(zqliteQuery), schema.tables, format(zqliteQuery)),
+    compile(ast(zqliteQuery), schema.tables, zqliteQuery.format),
   );
 
   let numOps = 0;
@@ -559,15 +588,26 @@ async function checkEditToRandom(
     const {primaryKey} = tableSchema;
     const editedRow = assignRandomValues(tableSchema, row);
     editedRows.push([table, [row, editedRow]]);
+    const mappedRow = mapRow(row, table, clientToServerMapper);
+    const mappedEditedRow = mapRow(editedRow, table, clientToServerMapper);
 
-    await sql`UPDATE ${sql(table)} SET ${sql(editedRow)} WHERE ${primaryKey
-      .map(col => sql`${sql(col)} = ${row[col] ?? null}`)
+    await sql`UPDATE ${sql(clientToServerMapper.tableName(table))} SET ${sql(
+      mappedEditedRow,
+    )} WHERE ${primaryKey
+      .map(
+        col =>
+          sql`${sql(clientToServerMapper.columnName(table, col))} = ${
+            row[col] ?? null
+          }`,
+      )
       .reduce((l, r) => sql`${l} AND ${r}`)}`;
 
-    must(zqliteQueryDelegate.getSource(table)).push({
+    must(
+      zqliteQueryDelegate.getSource(clientToServerMapper.tableName(table)),
+    ).push({
       type: 'edit',
-      oldRow: row,
-      row: editedRow,
+      oldRow: mappedRow,
+      row: mappedEditedRow,
     });
     must(memoryQueryDelegate.getSource(table)).push({
       type: 'edit',
@@ -580,8 +620,15 @@ async function checkEditToRandom(
       sqlQuery.values as JSONValue[],
     );
     // TODO: relationships return `undefined` from ZQL and `null` from PG
-    expect(zqliteMaterialized.data).toEqualNullish(pgResult);
-    expect(zqlMaterialized.data).toEqualNullish(pgResult);
+    expect(
+      mapResultToClientNames(
+        zqliteMaterialized.data,
+        schema,
+        (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol]
+          .table as keyof Schema['tables'],
+      ),
+    ).toEqualPg(pgResult);
+    expect(zqlMaterialized.data).toEqualPg(pgResult);
   }
 
   zqliteMaterialized.destroy();
@@ -626,20 +673,31 @@ async function checkEditToMatch(
   const zqliteMaterialized = zqliteQuery.materialize();
   const zqlMaterialized = memoryQuery.materialize();
   const sqlQuery = formatPg(
-    compile(ast(zqliteQuery), schema.tables, format(zqliteQuery)),
+    compile(ast(zqliteQuery), schema.tables, zqliteQuery.format),
   );
 
   for (const [table, [original, edited]] of rowsToEdit) {
     const tableSchema = schema.tables[table as keyof Schema['tables']];
     const {primaryKey} = tableSchema;
-    await sql`UPDATE ${sql(table)} SET ${sql(original)} WHERE ${primaryKey
-      .map(col => sql`${sql(col)} = ${original[col] ?? null}`)
+    const mappedOriginal = mapRow(original, table, clientToServerMapper);
+    const mappedEdited = mapRow(edited, table, clientToServerMapper);
+    await sql`UPDATE ${sql(clientToServerMapper.tableName(table))} SET ${sql(
+      mappedOriginal,
+    )} WHERE ${primaryKey
+      .map(
+        col =>
+          sql`${sql(clientToServerMapper.columnName(table, col))} = ${
+            original[col] ?? null
+          }`,
+      )
       .reduce((l, r) => sql`${l} AND ${r}`)}`;
 
-    must(zqliteQueryDelegate.getSource(table)).push({
+    must(
+      zqliteQueryDelegate.getSource(clientToServerMapper.tableName(table)),
+    ).push({
       type: 'edit',
-      oldRow: edited,
-      row: original,
+      oldRow: mappedEdited,
+      row: mappedOriginal,
     });
     must(memoryQueryDelegate.getSource(table)).push({
       type: 'edit',
@@ -651,15 +709,23 @@ async function checkEditToMatch(
       sqlQuery.text,
       sqlQuery.values as JSONValue[],
     );
-    expect(zqliteMaterialized.data).toEqualNullish(pgResult);
-    expect(zqlMaterialized.data).toEqualNullish(pgResult);
+    expect(
+      mapResultToClientNames(
+        zqliteMaterialized.data,
+        schema,
+        (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol]
+          .table as keyof Schema['tables'],
+      ),
+    ).toEqualPg(pgResult);
+    expect(zqlMaterialized.data).toEqualPg(pgResult);
   }
 
   zqlMaterialized.destroy();
   zqliteMaterialized.destroy();
 }
 
-function gatherRows(q: AnyAdvancedQuery): Map<string, Map<string, Row>> {
+const clientToServerMapper = clientToServer(schema.tables);
+function gatherRows(q: AnyQuery): Map<string, Map<string, Row>> {
   const rows = new Map<string, Map<string, Row>>();
 
   const view = q.materialize(
@@ -718,7 +784,7 @@ function runZqlAsSql(
   pg: PostgresDB,
   query: Query<Schema, keyof Schema['tables']>,
 ) {
-  const sqlQuery = formatPg(compile(ast(query), schema.tables, format(query)));
+  const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
   return pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]);
 }
 
@@ -726,6 +792,10 @@ function ast(q: Query<Schema, keyof Schema['tables']>) {
   return (q as QueryImpl<Schema, keyof Schema['tables']>)[completedAstSymbol];
 }
 
-function format(q: Query<Schema, keyof Schema['tables']>) {
-  return (q as QueryImpl<Schema, keyof Schema['tables']>).format;
+function mapRow(row: Row, table: string, mapper: NameMapper): Row {
+  const newRow: Writable<Row> = {};
+  for (const [column, value] of Object.entries(row)) {
+    newRow[mapper.columnName(table, column)] = value;
+  }
+  return newRow;
 }

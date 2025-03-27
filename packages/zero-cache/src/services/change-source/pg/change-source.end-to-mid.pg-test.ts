@@ -653,6 +653,62 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
     ],
     [
+      'rename schema',
+      'ALTER SCHEMA my RENAME TO your;',
+      [{tag: 'drop-index'}, {tag: 'rename-table'}, {tag: 'create-index'}],
+      {['your.bar']: []},
+      [
+        {
+          columns: {
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+            id: {
+              characterMaximumLength: null,
+              dataType: 'int8|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            handle: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            foo: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 4,
+            },
+            boo: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 5,
+            },
+          },
+          name: 'your.bar',
+        },
+      ],
+      [
+        {
+          columns: {handle: 'ASC'},
+          name: 'your.bar_pkey',
+          tableName: 'your.bar',
+          unique: true,
+        },
+      ],
+    ],
+    [
       'add unpublished column',
       'ALTER TABLE foo ADD "newInt" INT4;',
       [], // no DDL event published
@@ -1264,11 +1320,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     ) => {
       await upstream.unsafe(stmts);
       const transaction = await nextTransaction();
-      expect(transaction.length).toBe(changes.length);
-
-      transaction.forEach((change, i) => {
-        expect(change).toMatchObject(changes[i]);
-      });
+      expect(transaction).toMatchObject(changes);
 
       expectMatchingObjectsInTables(replica, expectedData, 'bigint');
 

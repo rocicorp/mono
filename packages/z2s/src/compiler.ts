@@ -1,3 +1,5 @@
+import type {SQLQuery} from '@databases/sql';
+import {zip} from '../../shared/src/arrays.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import type {
@@ -16,7 +18,6 @@ import {clientToServer, NameMapper} from '../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {sql} from './sql.ts';
-import type {SQLQuery} from '@databases/sql';
 
 type Tables = Record<string, TableSchema>;
 
@@ -27,7 +28,11 @@ type Tables = Record<string, TableSchema>;
  * - IN is changed to ANY to allow binding array literals
  * - subqueries are aggregated using PG's `array_agg` and `row_to_json` functions
  */
-export function compile(ast: AST, tables: Tables, format?: Format | undefined) {
+export function compile(
+  ast: AST,
+  tables: Tables,
+  format?: Format | undefined,
+): SQLQuery {
   const compiler = new Compiler(tables);
   return compiler.compile(ast, format);
 }
@@ -41,19 +46,23 @@ export class Compiler {
     this.#nameMapper = clientToServer(tables);
   }
 
-  compile(ast: AST, format?: Format | undefined) {
+  compile(ast: AST, format?: Format | undefined): SQLQuery {
     return this.select(ast, format, undefined);
   }
 
   select(
     ast: AST,
+    // Is this a singular or plural query?
     format: Format | undefined,
+    // If a select is being used as a subquery, this is the correlation to the parent query
     correlation: SQLQuery | undefined,
-  ) {
+  ): SQLQuery {
     const selectionSet = this.related(ast.related ?? [], format, ast.table);
     const table = this.#tables[ast.table];
     for (const column of Object.keys(table.columns)) {
-      selectionSet.push(this.#mapColumn(ast.table, column));
+      selectionSet.push(
+        sql`${sql.ident(ast.table)}.${this.#mapColumn(ast.table, column)}`,
+      );
     }
     return sql`SELECT ${sql.join(selectionSet, ',')} FROM ${this.#mapTable(
       ast.table,
@@ -61,20 +70,22 @@ export class Compiler {
       correlation
         ? sql`${ast.where ? sql`AND` : sql`WHERE`} (${correlation})`
         : sql``
-    } ${this.orderBy(ast.orderBy)} ${
+    } ${this.orderBy(ast.orderBy, ast.table)} ${
       format?.singular ? this.limit(1) : this.limit(ast.limit)
     }`;
   }
 
-  orderBy(orderBy: Ordering | undefined): SQLQuery {
+  orderBy(orderBy: Ordering | undefined, table: string): SQLQuery {
     if (!orderBy) {
       return sql``;
     }
     return sql`ORDER BY ${sql.join(
       orderBy.map(([col, dir]) =>
         dir === 'asc'
-          ? sql`${sql.ident(col)} ASC`
-          : sql`${sql.ident(col)} DESC`,
+          ? // Oh postgres. The table must be referred to be client name but the column by server name.
+            // E.g., `SELECT server_col as client_col FROM server_table as client_table ORDER BY client_Table.server_col`
+            sql`${sql.ident(table)}.${this.#mapColumnNoAlias(table, col)} ASC`
+          : sql`${sql.ident(table)}.${this.#mapColumnNoAlias(table, col)} DESC`,
       ),
       ', ',
     )}`;
@@ -105,17 +116,29 @@ export class Compiler {
     relationship: CorrelatedSubquery,
     format: Format | undefined,
     parentTable: string,
-  ) {
+  ): SQLQuery {
     if (relationship.hidden) {
-      const [join, lastAlias, lastLimit] = this.makeJunctionJoin(relationship);
+      const [join, lastAlias, lastLimit, lastTable] =
+        this.makeJunctionJoin(relationship);
+      const lastClientColumns = Object.keys(this.#tables[lastTable].columns);
+      /**
+       * This aggregates the relationship subquery into an array of objects.
+       * This looks roughly like:
+       *
+       * SELECT COALESCE(array_agg(row_to_json("inner_table")) , ARRAY[]::json[]) FROM
+       *  (SELECT inner.col as client_col, inner.col2 as client_col2 FROM table) inner_table;
+       */
       return sql`(
         SELECT ${
           format?.singular ? sql`` : sql`COALESCE(array_agg`
         }(row_to_json(${sql.ident(`inner_${relationship.subquery.alias}`)})) ${
           format?.singular ? sql`` : sql`, ARRAY[]::json[])`
-        } FROM (SELECT ${sql.ident(
-          lastAlias,
-        )}.* FROM ${join} WHERE (${this.correlate(
+        } FROM (SELECT ${sql.join(
+          lastClientColumns.map(
+            c => sql`${sql.ident(lastAlias)}.${this.#mapColumn(lastTable, c)}`,
+          ),
+          ',',
+        )} FROM ${join} WHERE (${this.correlate(
           parentTable,
           parentTable,
           relationship.correlation.parentField,
@@ -129,7 +152,10 @@ export class Compiler {
                 relationship.subquery.table,
               )}`
             : sql``
-        } ${this.orderBy(relationship.subquery.orderBy)} ${
+        } ${this.orderBy(
+          relationship.subquery.orderBy,
+          relationship.subquery.table,
+        )} ${
           format?.singular ? this.limit(1) : this.limit(lastLimit)
         } ) ${sql.ident(`inner_${relationship.subquery.alias}`)}
       ) as ${sql.ident(relationship.subquery.alias)}`;
@@ -175,9 +201,14 @@ export class Compiler {
 
   makeJunctionJoin(
     relationship: CorrelatedSubquery,
-  ): [join: SQLQuery, lastAlis: string, lastLimit: number | undefined] {
+  ): [
+    join: SQLQuery,
+    lastAlis: string,
+    lastLimit: number | undefined,
+    lastTable: string,
+  ] {
     const participatingTables = this.pullTablesForJunction(relationship);
-    const ret: SQLQuery[] = [];
+    const joins: SQLQuery[] = [];
 
     function alias(index: number) {
       if (index === 0) {
@@ -187,28 +218,29 @@ export class Compiler {
     }
 
     for (const [table, _correlation] of participatingTables) {
-      if (ret.length === 0) {
-        ret.push(this.#mapTable(table));
+      if (joins.length === 0) {
+        joins.push(this.#mapTable(table));
         continue;
       }
-      ret.push(
+      joins.push(
         sql` JOIN ${this.#mapTableNoAlias(table)} as ${sql.ident(
-          alias(ret.length),
+          alias(joins.length),
         )} ON ${this.correlate(
-          participatingTables[ret.length - 1][0],
-          alias(ret.length - 1),
-          participatingTables[ret.length][1].parentField,
-          participatingTables[ret.length][0],
-          alias(ret.length),
-          participatingTables[ret.length][1].childField,
+          participatingTables[joins.length - 1][0],
+          alias(joins.length - 1),
+          participatingTables[joins.length][1].parentField,
+          participatingTables[joins.length][0],
+          alias(joins.length),
+          participatingTables[joins.length][1].childField,
         )}`,
       );
     }
 
     return [
-      sql.join(ret, ''),
-      alias(ret.length - 1),
+      sql.join(joins, ''),
+      alias(joins.length - 1),
       participatingTables[participatingTables.length - 1][2],
+      participatingTables[participatingTables.length - 1][0],
     ] as const;
   }
 
@@ -316,13 +348,17 @@ export class Compiler {
   }
 
   correlate(
+    // The table being correlated could be aliased to some other name
+    // in the case of a junction. Hence we pass `xTableAlias`. The original
+    // name of the table is required so we can look up the server names of the columns
+    // to be used in the correlation.
     parentTable: string,
     parentTableAlias: string,
     parentColumns: readonly string[],
     childTable: string,
     childTableAlias: string,
     childColumns: readonly string[],
-  ) {
+  ): SQLQuery {
     return sql.join(
       zip(parentColumns, childColumns).map(
         ([parentColumn, childColumn]) =>
@@ -365,13 +401,4 @@ export class Compiler {
     const mapped = this.#nameMapper.tableName(table);
     return sql.ident(mapped);
   }
-}
-
-function zip<T>(a1: readonly T[], a2: readonly T[]): [T, T][] {
-  assert(a1.length === a2.length);
-  const result: [T, T][] = [];
-  for (let i = 0; i < a1.length; i++) {
-    result.push([a1[i], a2[i]]);
-  }
-  return result;
 }

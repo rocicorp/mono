@@ -37,6 +37,8 @@ export const appOptions = {
       '',
       'Due to constraints on replication slot names, an App ID may only consist of',
       'lower-case letters, numbers, and the underscore character.',
+      '',
+      'Note that this option is used by both {bold zero-cache} and {bold zero-deploy-permissions}.',
     ],
   },
 
@@ -454,6 +456,18 @@ export const zeroOptions = {
     type: v.string().optional(),
     desc: ['Passed by multi/main.ts to tag the LogContext of zero-caches'],
     hidden: true,
+  },
+
+  targetClientRowCount: {
+    type: v.number().optional(),
+    desc: [
+      'The target number of rows to keep per client in the client side cache.',
+      'This limit is a soft limit. When the number of rows in the cache exceeds',
+      'this limit, zero-cache will evict inactive queries in order of ttl-based expiration.',
+      'Active queries, on the other hand, are never evicted and are allowed to use more',
+      'rows than the limit.',
+    ],
+    default: 20_000,
   },
 };
 

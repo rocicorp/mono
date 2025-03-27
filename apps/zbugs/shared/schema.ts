@@ -3,6 +3,7 @@ import {
   boolean,
   createSchema,
   definePermissions,
+  enumeration,
   NOBODY_CAN,
   number,
   relationships,
@@ -11,6 +12,7 @@ import {
   type ExpressionBuilder,
   type Row,
 } from '@rocicorp/zero';
+import type {AuthData} from './auth.ts';
 import type {Condition} from 'zero-protocol/src/ast.js';
 
 // Table definitions
@@ -20,7 +22,7 @@ const user = table('user')
     login: string(),
     name: string().optional(),
     avatar: string(),
-    role: string(),
+    role: enumeration<'user' | 'crew'>(),
   })
   .primaryKey('id');
 
@@ -182,13 +184,6 @@ const emojiRelationships = relationships(emoji, ({one}) => ({
     destSchema: comment,
   }),
 }));
-
-/** The contents of the zbugs JWT */
-type AuthData = {
-  // The logged in userID.
-  sub: string;
-  role: 'crew' | 'user';
-};
 
 export const schema = createSchema({
   tables: [user, issue, comment, label, issueLabel, viewState, emoji, userPref],

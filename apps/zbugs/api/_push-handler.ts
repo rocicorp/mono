@@ -1,12 +1,15 @@
 import {
-  createPushHandler,
+  PushProcessor,
   type DBConnection,
   type DBTransaction,
-  type PushHandler,
+  type Params,
   type Row,
 } from '@rocicorp/zero/pg';
 import postgres, {type JSONValue} from 'postgres';
-import {schema} from '../schema.ts';
+import {schema} from '../shared/schema.ts';
+import {createServerMutators, type PostCommitTask} from './_server-mutators.ts';
+import type {ReadonlyJSONObject} from '@rocicorp/zero';
+import type {AuthData} from '../shared/auth.ts';
 
 class Connection implements DBConnection<postgres.TransactionSql> {
   readonly #pg: postgres.Sql;
@@ -38,8 +41,19 @@ class Transaction implements DBTransaction<postgres.TransactionSql> {
 
 const mutatorSql = postgres(process.env.ZERO_UPSTREAM_DB as string);
 
-export const pushHandler: PushHandler = createPushHandler({
-  dbConnectionProvider: () => new Connection(mutatorSql),
-  mutators: {},
-  schema,
-});
+export async function handlePush(
+  authData: AuthData | undefined,
+  params: Params,
+  body: ReadonlyJSONObject,
+) {
+  const postCommitTasks: PostCommitTask[] = [];
+  const mutators = createServerMutators(authData, postCommitTasks);
+  const processor = new PushProcessor(
+    schema,
+    () => new Connection(mutatorSql),
+    mutators,
+  );
+  const response = await processor.process(params, body);
+  await Promise.all(postCommitTasks.map(task => task()));
+  return response;
+}

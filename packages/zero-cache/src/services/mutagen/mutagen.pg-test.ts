@@ -1,7 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../../shared/src/logging-test-utils.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
@@ -385,6 +388,64 @@ describe('processMutation', {timeout: 15000}, () => {
         },
       ],
     });
+  });
+
+  test('mutation id too far in the future, while custom mutators are enabled, retries twice', async () => {
+    await db`
+      INSERT INTO ${db(
+        `${APP_ID}_${SHARD_NUM}`,
+      )}.clients ("clientGroupID", "clientID", "lastMutationID") 
+        VALUES ('abc', '123', 1)`;
+    const testLogSink = new TestLogSink();
+    const lc = new LogContext('debug', undefined, testLogSink);
+
+    await expect(
+      processMutation(
+        lc,
+        undefined,
+        db,
+        SHARD,
+        'abc',
+        {
+          type: MutationType.CRUD,
+          id: 3,
+          clientID: '123',
+          name: '_zero_crud',
+          args: [
+            {
+              ops: [
+                {
+                  op: 'insert',
+                  tableName: 'idonly',
+                  primaryKey: ['id'],
+                  value: {id: '1'},
+                },
+              ],
+            },
+          ],
+          timestamp: Date.now(),
+        },
+        mockWriteAuthorizer,
+        TEST_SCHEMA_VERSION,
+        undefined,
+        true,
+      ),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: {"kind":"InvalidPush","message":"Push contains unexpected mutation id 3 for client 123. Expected mutation id 2."}]`,
+    );
+
+    // check that we hit our retry logic for unexpected mutation id when CRUD and Custom are enabled.
+    expect(
+      testLogSink.messages
+        .map(m => m[2][0])
+        .filter(m => typeof m === 'string')
+        .filter(m => m.includes('Both CRUD and Custom mutators')),
+    ).toMatchInlineSnapshot(`
+      [
+        "Both CRUD and Custom mutators are being used at once. This is supported for now but IS NOT RECOMMENDED. Migrate completely to custom mutators.",
+        "Both CRUD and Custom mutators are being used at once. This is supported for now but IS NOT RECOMMENDED. Migrate completely to custom mutators.",
+      ]
+    `);
   });
 
   test('schema version below supported range throws', async () => {

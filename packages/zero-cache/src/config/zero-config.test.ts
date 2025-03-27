@@ -133,6 +133,8 @@ test('zero-cache --help', () => {
                                                                 Due to constraints on replication slot names, an App ID may only consist of                       
                                                                 lower-case letters, numbers, and the underscore character.                                        
                                                                                                                                                                   
+                                                                Note that this option is used by both zero-cache and zero-deploy-permissions.                     
+                                                                                                                                                                  
      --app-publications string[]                                default: []                                                                                       
        ZERO_APP_PUBLICATIONS env                                                                                                                                  
                                                                 Postgres PUBLICATIONs that define the tables and columns to                                       
@@ -286,6 +288,14 @@ test('zero-cache --help', () => {
                                                                 initial sync. This can be increased to speed up initial sync, or decreased                        
                                                                 to reduce the amount of heap memory used during initial sync (e.g. for tables                     
                                                                 with large rows).                                                                                 
+                                                                                                                                                                  
+     --target-client-row-count number                           optional                                                                                          
+       ZERO_TARGET_CLIENT_ROW_COUNT env                                                                                                                           
+                                                                The target number of rows to keep per client in the client side cache.                            
+                                                                This limit is a soft limit. When the number of rows in the cache exceeds                          
+                                                                this limit, zero-cache will evict inactive queries in order of ttl-based expiration.              
+                                                                Active queries, on the other hand, are never evicted and are allowed to use more                  
+                                                                rows than the limit.                                                                              
                                                                                                                                                                   
     "
   `);

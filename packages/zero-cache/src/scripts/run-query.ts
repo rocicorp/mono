@@ -1,12 +1,16 @@
 /* eslint-disable no-console */
 import chalk from 'chalk';
-import 'dotenv/config';
+import '@dotenvx/dotenvx/config';
 
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {parseOptions} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {
+  mapAST,
+  type AST,
+  type CompoundKey,
+} from '../../../zero-protocol/src/ast.ts';
 import {buildPipeline} from '../../../zql/src/builder/builder.ts';
 import {Catch} from '../../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
@@ -21,22 +25,28 @@ import {
   runtimeDebugStats,
 } from '../../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
-import {getSchema} from '../auth/load-permissions.ts';
 import {ZERO_ENV_VAR_PREFIX, zeroOptions} from '../config/zero-config.ts';
+import {loadSchemaAndPermissions} from './permissions.ts';
+import {
+  clientToServer,
+  serverToClient,
+} from '../../../zero-schema/src/name-mapper.ts';
 
 const options = {
   replicaFile: zeroOptions.replica.file,
-  debug: {
-    ast: {
-      type: v.string().optional(),
-      desc: ['AST for the query to be transformed or timed.'],
-    },
-    query: {
-      type: v.string().optional(),
-      desc: [
-        `Query to be timed in the form of: z.query.table.where(...).related(...).etc`,
-      ],
-    },
+  ast: {
+    type: v.string().optional(),
+    desc: ['AST for the query to be transformed or timed.'],
+  },
+  query: {
+    type: v.string().optional(),
+    desc: [
+      `Query to be timed in the form of: z.query.table.where(...).related(...).etc`,
+    ],
+  },
+  schema: {
+    type: v.string().default('./schema.ts'),
+    desc: ['Path to the schema file.'],
   },
 };
 
@@ -51,14 +61,17 @@ runtimeDebugFlags.trackRowsVended = true;
 const lc = createSilentLogContext();
 
 const db = new Database(lc, config.replicaFile);
-const schema = getSchema(lc, db);
+const {schema} = await loadSchemaAndPermissions(lc, config.schema);
 const sources = new Map<string, TableSource>();
+const clientToServerMapper = clientToServer(schema.tables);
+const serverToClientMapper = serverToClient(schema.tables);
 const host: QueryDelegate = {
   mapAst(ast: AST): AST {
-    return ast;
+    return mapAST(ast, clientToServerMapper);
   },
-  getSource: (name: string) => {
-    let source = sources.get(name);
+  getSource: (serverTableName: string) => {
+    const clientTableName = serverToClientMapper.tableName(serverTableName);
+    let source = sources.get(serverTableName);
     if (source) {
       return source;
     }
@@ -67,12 +80,21 @@ const host: QueryDelegate = {
       testLogConfig,
       '',
       db,
-      name,
-      schema.tables[name].columns,
-      schema.tables[name].primaryKey,
+      serverTableName,
+      Object.fromEntries(
+        Object.entries(schema.tables[clientTableName].columns).map(
+          ([colName, column]) => [
+            clientToServerMapper.columnName(clientTableName, colName),
+            column,
+          ],
+        ),
+      ),
+      schema.tables[clientTableName].primaryKey.map(col =>
+        clientToServerMapper.columnName(clientTableName, col),
+      ) as unknown as CompoundKey,
     );
 
-    sources.set(name, source);
+    sources.set(serverTableName, source);
     return source;
   },
 
@@ -99,10 +121,10 @@ const host: QueryDelegate = {
 let start: number;
 let end: number;
 const suppressError: Record<string, unknown> = {};
-if (config.debug.ast) {
-  [start, end] = runAst(JSON.parse(config.debug.ast) as AST);
-} else if (config.debug.query) {
-  [start, end] = runQuery(config.debug.query);
+if (config.ast) {
+  [start, end] = runAst(JSON.parse(config.ast) as AST);
+} else if (config.query) {
+  [start, end] = runQuery(config.query);
 } else {
   throw new Error('No query or AST provided');
 }
@@ -132,6 +154,7 @@ function runQuery(queryString: string): [number, number] {
   suppressError.z = z;
 
   eval(`q = ${queryString};`);
+
   const start = performance.now();
   q.run();
   const end = performance.now();

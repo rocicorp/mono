@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
-    "@rocicorp/prettier-config": "^0.2.0",
+    "@rocicorp/prettier-config": "^0.3.0",
     "@types/sinon": "^10.0.11",
     "datadog": "0.0.0",
     "esbuild": "^0.25.0",
@@ -30,8 +30,7 @@
     "replicache": "15.2.1",
     "shared": "0.0.0",
     "sinon": "^13.0.1",
-    "tsc-alias": "^1.8.10",
-    "typescript": "~5.7.3",
+    "typescript": "~5.8.2",
     "zero-protocol": "0.0.0"
   },
   "eslintConfig": {

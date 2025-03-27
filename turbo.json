@@ -10,6 +10,7 @@
         "../zero-advanced/src/**/*.ts",
         "../zero-cache/src/**/*.ts",
         "../zero-client/src/**/*.ts",
+        "../zero-pg/src/**/*.ts",
         "../zero-react/src/**/*.ts",
         "../zero-schema/src/**/*.ts",
         "../zero-solid/src/**/*.ts"
@@ -36,9 +37,13 @@
       "outputs": [],
       "inputs": [
         "$TURBO_DEFAULT$",
+        "../zero-advanced/src/**/*.ts",
+        "../zero-cache/src/**/*.ts",
         "../zero-client/src/**/*.ts",
+        "../zero-pg/src/**/*.ts",
         "../zero-react/src/**/*.ts",
-        "../zero-cache/src/**/*.ts"
+        "../zero-schema/src/**/*.ts",
+        "../zero-solid/src/**/*.ts"
       ]
     }
   }

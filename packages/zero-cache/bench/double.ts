@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '@dotenvx/dotenvx/config';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {Database} from '../../zqlite/src/db.ts';
 

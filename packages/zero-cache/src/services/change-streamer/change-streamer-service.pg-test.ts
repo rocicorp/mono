@@ -20,7 +20,7 @@ import {expectTables, testDBs} from '../../test/db.ts';
 import {stringify} from '../../types/bigint-json.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
-import {Subscription} from '../../types/subscription.ts';
+import {Subscription, type Result} from '../../types/subscription.ts';
 import {type ChangeStreamMessage} from '../change-source/protocol/current/downstream.ts';
 import type {StatusMessage} from '../change-source/protocol/current/status.ts';
 import {
@@ -737,6 +737,73 @@ describe('change-streamer/service', () => {
     changes.fail(new Error('doh'));
 
     expect(await hasRetried).toBe(true);
+  });
+
+  test('retries at right watermark', async () => {
+    const {promise: hasRetried, resolve: retried} = resolver<true>();
+    const source = {
+      startStream: vi
+        .fn()
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            initialWatermark: '01',
+            changes,
+            acks: () => {},
+          }),
+        )
+        .mockImplementation(() => {
+          retried(true);
+          return resolver().promise;
+        }),
+    };
+    const streamer = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      changeDB,
+      source,
+      replicaConfig,
+      true,
+    );
+    void streamer.run();
+
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      id: 'myid',
+      mode: 'serving',
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
+    // Stream down a big (1MB) transaction, which should take time to commit.
+    const NEW_WATERMARK = '0g';
+    const bigString = 'a'.repeat(1024);
+    changes.push(['begin', {tag: 'begin'}, {commitWatermark: NEW_WATERMARK}]);
+    let lastInsertProcessed: Promise<Result> | undefined;
+    for (let i = 0; i < 1024; i++) {
+      lastInsertProcessed = changes.push([
+        'data',
+        {
+          tag: 'insert',
+          new: {id: i, val: bigString},
+          relation: {schema: 'public', name: 'foo', keyColumns: ['id']},
+        },
+      ]).result;
+    }
+    changes.push(['commit', {tag: 'commit'}, {watermark: NEW_WATERMARK}]);
+
+    // Wait for the last 'data' message to have been processed, which
+    // means the commit was dequeued.
+    await lastInsertProcessed;
+    // Simulate closing the connection.
+    changes.cancel();
+
+    // Verify that the next stream starts at the NEW_WATERMARK, indicating
+    // that the change-streamer waited for the last (big) commit before
+    // determining the next watermark to start from.
+    expect(await hasRetried).toBe(true);
+    expect(source.startStream.mock.calls[1][0]).toBe(NEW_WATERMARK);
   });
 
   test('ownership takeover before tx begins', async () => {

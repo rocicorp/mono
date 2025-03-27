@@ -111,6 +111,27 @@ describe('client schemas', () => {
     checkClientSchema(SHARD_ID, clientSchema, tableSpecs, fullTables);
   });
 
+  test('missing tables with non-public schema', () => {
+    expect(() =>
+      checkClientSchema(
+        SHARD_ID,
+        {
+          tables: {
+            ['yyy.zzz']: {
+              columns: {
+                id: {type: 'string'},
+              },
+            },
+          },
+        },
+        tableSpecs,
+        fullTables,
+      ),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"yyy.zzz\\" table does not exist or is not one of the replicated tables: \\"bar\\",\\"foo\\". Note that zero does not sync tables from non-public schemas by default. Make sure you have defined a custom ZERO_APP_PUBLICATION to sync tables from non-public schemas."}]`,
+    );
+  });
+
   test('missing tables, missing columns', () => {
     expect(() =>
       checkClientSchema(

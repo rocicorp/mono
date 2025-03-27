@@ -1,6 +1,6 @@
 import {PG_SERIALIZATION_FAILURE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
+import {resolver, type Resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
@@ -8,7 +8,7 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
-import type {JSONValue} from '../../types/bigint-json.ts';
+import {type JSONValue} from '../../types/bigint-json.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
@@ -32,6 +32,7 @@ type SubscriberAndMode = {
 
 type QueueEntry =
   | ['change', WatermarkedChange]
+  | ['ready', callback: () => void]
   | ['subscriber', SubscriberAndMode]
   | StatusMessage
   | 'stop';
@@ -42,6 +43,20 @@ type PendingTransaction = {
   pos: number;
   startingReplicationState: Promise<ReplicationState>;
 };
+
+// Technically, any threshold is fine because the point of back pressure
+// is to adjust the rate of incoming messages, and the size of the pending
+// work queue does not affect that mechanism.
+//
+// However, it is theoretically possible to exceed the available memory if
+// the size of changes is very large. This threshold can be improved by
+// roughly measuring the size of the enqueued contents and setting the
+// threshold based on available memory.
+//
+// TODO: switch to a message size-based thresholding when migrating over
+// to stringified JSON messages, which will bound the computation involved
+// in measuring the size of row messages.
+const QUEUE_SIZE_BACK_PRESSURE_THRESHOLD = 100_000;
 
 /**
  * Handles the storage of changes and the catchup of subscribers
@@ -113,7 +128,14 @@ export class Storer implements Service {
     await db`UPDATE ${this.#cdc('replicationState')} SET ${db({owner})}`;
   }
 
-  async getLastWatermark(): Promise<string> {
+  async getLastWatermarkToStartStream(): Promise<string> {
+    // Before starting or restarting a stream from the change source,
+    // wait for all queued changes to be processed so that we pick up
+    // from the right spot.
+    const {promise: ready, resolve} = resolver();
+    this.#queue.enqueue(['ready', resolve]);
+    await ready;
+
     const [{lastWatermark}] = await this.#db<{lastWatermark: string}[]>`
       SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`;
     return lastWatermark;
@@ -141,25 +163,62 @@ export class Storer implements Service {
     this.#queue.enqueue(['subscriber', {subscriber, mode}]);
   }
 
+  #readyForMore: Resolver<void> | null = null;
+
+  readyForMore(): Promise<void> | undefined {
+    if (
+      this.#readyForMore === null &&
+      this.#queue.size() > QUEUE_SIZE_BACK_PRESSURE_THRESHOLD
+    ) {
+      this.#lc.warn?.(
+        `applying back pressure with ${this.#queue.size()} queued changes`,
+      );
+      this.#readyForMore = resolver();
+    }
+    return this.#readyForMore?.promise;
+  }
+
+  #maybeReleaseBackPressure() {
+    if (
+      this.#readyForMore !== null &&
+      // Wait for at least 10% of the threshold to free up.
+      this.#queue.size() < QUEUE_SIZE_BACK_PRESSURE_THRESHOLD * 0.9
+    ) {
+      this.#lc.info?.(
+        `releasing back pressure with ${this.#queue.size()} queued changes`,
+      );
+      this.#readyForMore.resolve();
+      this.#readyForMore = null;
+    }
+  }
+
   async run() {
     let tx: PendingTransaction | null = null;
     let msg: QueueEntry | false;
 
     const catchupQueue: SubscriberAndMode[] = [];
     while ((msg = await this.#queue.dequeue()) !== 'stop') {
+      this.#maybeReleaseBackPressure();
+
       const [msgType] = msg;
-      if (msgType === 'subscriber') {
-        const subscriber = msg[1];
-        if (tx) {
-          catchupQueue.push(subscriber); // Wait for the current tx to complete.
-        } else {
-          await this.#startCatchup([subscriber]); // Catch up immediately.
+      switch (msgType) {
+        case 'ready': {
+          const signalReady = msg[1];
+          signalReady();
+          continue;
         }
-        continue;
-      }
-      if (msgType === 'status') {
-        this.#onConsumed(msg);
-        continue;
+        case 'subscriber': {
+          const subscriber = msg[1];
+          if (tx) {
+            catchupQueue.push(subscriber); // Wait for the current tx to complete.
+          } else {
+            await this.#startCatchup([subscriber]); // Catch up immediately.
+          }
+          continue;
+        }
+        case 'status':
+          this.#onConsumed(msg);
+          continue;
       }
       // msgType === 'change'
       const [watermark, downstream] = msg[1];

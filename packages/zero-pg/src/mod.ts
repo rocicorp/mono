@@ -1,4 +1,3 @@
-export {createPushHandler} from './custom.ts';
 export type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 export type {
   Transaction,
@@ -8,4 +7,4 @@ export type {
   ConnectionProvider,
   Row,
 } from '../../zql/src/mutate/custom.ts';
-export type {PushHandler} from './web.ts';
+export {type PushHandler, type Params, PushProcessor} from './web.ts';

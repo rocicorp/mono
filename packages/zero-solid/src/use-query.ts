@@ -1,10 +1,12 @@
 import {createMemo, onCleanup, type Accessor} from 'solid-js';
-import type {
-  AdvancedQuery,
-  HumanReadable,
-  Query,
-} from '../../zero/src/advanced.ts';
-import {DEFAULT_TTL, type Schema, type TTL} from '../../zero/src/zero.ts';
+import {RefCount} from '../../shared/src/ref-count.ts';
+import {
+  DEFAULT_TTL,
+  type HumanReadable,
+  type Query,
+  type Schema,
+  type TTL,
+} from '../../zero/src/zero.ts';
 import {
   solidViewFactory,
   type QueryResultDetails,
@@ -30,27 +32,31 @@ export function useQuery<
 ): QueryResult<TReturn> {
   // Wrap in in createMemo to ensure a new view is created if the querySignal changes.
   const view = createMemo(() => {
-    const query = querySignal() as AdvancedQuery<TSchema, TTable, TReturn>;
+    const query = querySignal();
     const ttl = normalize(options)?.ttl ?? DEFAULT_TTL;
     const view = getView(query, ttl);
 
-    onCleanup(() => {
-      view.destroy();
-    });
+    // Use queueMicrotask to allow cleanup/create in the current microtask to
+    // reuse the view.
+    onCleanup(() => queueMicrotask(() => releaseView(query, view)));
     return view;
   });
 
   return [() => view().data, () => view().resultDetails];
 }
 
-const views = new WeakMap<object, SolidView<HumanReadable<unknown>>>();
+type UnknownSolidView = SolidView<HumanReadable<unknown>>;
+
+const views = new WeakMap<WeakKey, UnknownSolidView>();
+
+const viewRefCount = new RefCount<UnknownSolidView>();
 
 function getView<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
-  query: AdvancedQuery<TSchema, TTable, TReturn>,
+  query: Query<TSchema, TTable, TReturn>,
   ttl: TTL,
 ): SolidView<HumanReadable<TReturn>> {
   // TODO(arv): Use the hash of the query instead of the query object itself... but
@@ -62,7 +68,15 @@ function getView<
   } else {
     query.updateTTL(ttl);
   }
+  viewRefCount.inc(view);
   return view as SolidView<HumanReadable<TReturn>>;
+}
+
+function releaseView(query: WeakKey, view: UnknownSolidView) {
+  if (viewRefCount.dec(view)) {
+    views.delete(query);
+    view.destroy();
+  }
 }
 
 function normalize<T>(

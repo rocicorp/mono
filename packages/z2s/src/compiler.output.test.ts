@@ -87,7 +87,7 @@ test('limit', () => {
 
 test('orderBy', () => {
   const compiler = new Compiler(schema.tables);
-  expect(formatPg(compiler.orderBy([]))).toMatchInlineSnapshot(`
+  expect(formatPg(compiler.orderBy([], 'user'))).toMatchInlineSnapshot(`
     {
       "text": "ORDER BY",
       "values": [],
@@ -95,32 +95,38 @@ test('orderBy', () => {
   `);
   expect(
     formatPg(
-      compiler.orderBy([
-        ['name', 'asc'],
-        ['age', 'desc'],
-      ]),
+      compiler.orderBy(
+        [
+          ['name', 'asc'],
+          ['age', 'desc'],
+        ],
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "ORDER BY "name" ASC, "age" DESC",
+      "text": "ORDER BY "user"."name" ASC, "user"."age" DESC",
       "values": [],
     }
   `);
   expect(
     formatPg(
-      compiler.orderBy([
-        ['name', 'asc'],
-        ['age', 'desc'],
-        ['id', 'asc'],
-      ]),
+      compiler.orderBy(
+        [
+          ['name', 'asc'],
+          ['age', 'desc'],
+          ['id', 'asc'],
+        ],
+        'user',
+      ),
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "ORDER BY "name" ASC, "age" DESC, "id" ASC",
+      "text": "ORDER BY "user"."name" ASC, "user"."age" DESC, "user"."id" ASC",
       "values": [],
     }
   `);
-  expect(formatPg(compiler.orderBy(undefined))).toMatchInlineSnapshot(`
+  expect(formatPg(compiler.orderBy(undefined, 'user'))).toMatchInlineSnapshot(`
     {
       "text": "",
       "values": [],
@@ -763,8 +769,8 @@ test('related thru junction edge', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT (
-            SELECT COALESCE(array_agg(row_to_json("inner_labels")) , ARRAY[]::json[]) FROM (SELECT "table_1".* FROM "issue_label" as "issueLabel" JOIN "label" as "table_1" ON "issueLabel"."label_id" = "table_1"."id" WHERE ("issue"."id" = "issueLabel"."issue_id")    ) "inner_labels"
-          ) as "labels","id","title","description","closed","ownerId" FROM "issue"",
+            SELECT COALESCE(array_agg(row_to_json("inner_labels")) , ARRAY[]::json[]) FROM (SELECT "table_1"."id","table_1"."name" FROM "issue_label" as "issueLabel" JOIN "label" as "table_1" ON "issueLabel"."label_id" = "table_1"."id" WHERE ("issue"."id" = "issueLabel"."issue_id")    ) "inner_labels"
+          ) as "labels","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId" FROM "issue"",
       "values": [],
     }
   `);
@@ -793,8 +799,8 @@ test('related w/o junction edge', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT (
-          SELECT COALESCE(array_agg(row_to_json("inner_owner")) , ARRAY[]::json[]) FROM (SELECT "id","name","age" FROM "user"  WHERE ("issue"."ownerId" = "user"."id")  ) "inner_owner"
-        ) as "owner","id","title","description","closed","ownerId" FROM "issue"",
+          SELECT COALESCE(array_agg(row_to_json("inner_owner")) , ARRAY[]::json[]) FROM (SELECT "user"."id","user"."name","user"."age" FROM "user"  WHERE ("issue"."ownerId" = "user"."id")  ) "inner_owner"
+        ) as "owner","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId" FROM "issue"",
       "values": [],
     }
   `);

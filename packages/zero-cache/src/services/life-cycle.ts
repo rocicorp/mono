@@ -43,7 +43,7 @@ export class ProcessManager {
   #runningState = new RunningState('process-manager');
   #drainStart = 0;
 
-  constructor(lc: LogContext, proc: EventEmitter = process) {
+  constructor(lc: LogContext, proc: EventEmitter) {
     this.#lc = lc.withContext('component', 'process-manager');
 
     // Propagate `SIGTERM` and `SIGINT` to all user-facing workers,
@@ -102,26 +102,36 @@ export class ProcessManager {
     }
     this.#all.add(proc);
 
-    proc.on(
-      'error',
-      err => this.#lc.error?.(`error from ${name} ${proc.pid}`, err),
+    proc.on('error', err =>
+      this.#lc.error?.(`error from ${name} ${proc.pid}`, err),
     );
     proc.on('close', (code, signal) =>
       this.#onExit(code, signal, null, type, name, proc),
     );
   }
 
+  readonly #initializing = new Map<number, string>();
+  #nextID = 0;
+
   addWorker(worker: Worker, type: WorkerType, name: string): Worker {
     this.addSubprocess(worker, type, name);
 
+    const id = ++this.#nextID;
+    this.#initializing.set(id, name);
     const {promise, resolve} = resolver();
     this.#ready.push(promise);
+
     worker.onceMessageType('ready', () => {
       this.#lc.debug?.(`${name} ready (${Date.now() - this.#start} ms)`);
+      this.#initializing.delete(id);
       resolve();
     });
 
     return worker;
+  }
+
+  initializing(): string[] {
+    return [...this.#initializing.values()];
   }
 
   async allWorkersReady() {

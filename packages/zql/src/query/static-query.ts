@@ -2,7 +2,7 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../ivm/view.ts';
 import {ExpressionBuilder} from './expression.ts';
-import {AbstractQuery} from './query-impl.ts';
+import {AbstractQuery, defaultFormat} from './query-impl.ts';
 import type {HumanReadable, PullRow, Query} from './query.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
@@ -11,7 +11,12 @@ export function staticQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 >(schema: TSchema, tableName: TTable): Query<TSchema, TTable> {
-  return new StaticQuery<TSchema, TTable>(schema, tableName);
+  return new StaticQuery<TSchema, TTable>(
+    schema,
+    tableName,
+    {table: tableName},
+    defaultFormat,
+  );
 }
 
 /**
@@ -37,7 +42,7 @@ export class StaticQuery<
     schema: TSchema,
     tableName: TTable,
     ast: AST,
-    format: Format | undefined,
+    format: Format,
   ): StaticQuery<TSchema, TTable, TReturn> {
     return new StaticQuery(schema, tableName, ast, format);
   }

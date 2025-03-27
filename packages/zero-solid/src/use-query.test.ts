@@ -1,6 +1,6 @@
 import {renderHook, testEffect} from '@solidjs/testing-library';
-import {createEffect, createSignal} from 'solid-js';
-import {expect, test, vi} from 'vitest';
+import {createEffect, createRoot, createSignal} from 'solid-js';
+import {expect, test, vi, type MockInstance} from 'vitest';
 import {must} from '../../shared/src/must.ts';
 import {
   createSchema,
@@ -10,6 +10,7 @@ import {
   type TTL,
 } from '../../zero/src/zero.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import type {SourceInput} from '../../zql/src/ivm/source.ts';
 import {refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
@@ -166,4 +167,39 @@ test('useQuery deps change testEffect', () => {
       return run + 1;
     }),
   );
+});
+
+test('useQuery shared view should only be destroyed once', async () => {
+  const {ms, tableQuery} = setupTestEnvironment();
+  const query = tableQuery.where('a', 1);
+  const connectSpy = vi.spyOn(ms, 'connect');
+  let destroySpy!: MockInstance<SourceInput['destroy']>;
+
+  for (let i = 0; i < 2; i++) {
+    createRoot(dispose => {
+      const [rows1] = useQuery(() => query);
+      const [rows2] = useQuery(() => query);
+
+      expect(connectSpy).toHaveBeenCalledTimes(1);
+
+      expect(rows1()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
+      expect(rows2()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
+
+      expect(connectSpy).toHaveBeenCalledTimes(1);
+      // connect returns a SourceInput
+      const sourceInput = connectSpy.mock.results[0].value;
+      destroySpy = vi.spyOn(sourceInput, 'destroy');
+
+      dispose();
+    });
+
+    // We destroy the view on the next tick to prevent tearing it down and
+    // recreating it when a dependency changes.
+    await 1;
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+
+    connectSpy.mockClear();
+    destroySpy.mockReset();
+  }
 });
