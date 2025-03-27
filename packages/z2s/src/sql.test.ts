@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {formatPg, formatPgJson, jsonPackArg, sql} from './sql.ts';
+import {formatPg, formatPgInternalConvert, sqlConvertArg, sql} from './sql.ts';
 
 test('identical values result in a single placeholder', () => {
   const userId = 1;
@@ -36,16 +36,14 @@ test('identical values result in a single placeholder', () => {
 describe('json arg packing', () => {
   test('single arg', () => {
     expect(
-      formatPgJson(
-        sql`SELECT * FROM "user" WHERE "id" = ${jsonPackArg('number', 1)} `,
+      formatPgInternalConvert(
+        sql`SELECT * FROM "user" WHERE "id" = ${sqlConvertArg('number', 1)} `,
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "user" WHERE "id" = ($1::json->>0)::numeric",
+        "text": "SELECT * FROM "user" WHERE "id" = $1::text::numeric",
         "values": [
-          [
-            1,
-          ],
+          "1",
         ],
       }
     `);
@@ -54,16 +52,14 @@ describe('json arg packing', () => {
   // identical values should only be encoded once
   test('many equivalent args', () => {
     expect(
-      formatPgJson(
-        sql`SELECT * FROM "user" WHERE "id" = ${jsonPackArg('number', 1)} OR "other_id" = ${jsonPackArg('number', 1)}`,
+      formatPgInternalConvert(
+        sql`SELECT * FROM "user" WHERE "id" = ${sqlConvertArg('number', 1)} OR "other_id" = ${sqlConvertArg('number', 1)}`,
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "user" WHERE "id" = ($1::json->>0)::numeric OR "other_id" = ($1::json->>0)::numeric",
+        "text": "SELECT * FROM "user" WHERE "id" = $1::text::numeric OR "other_id" = $1::text::numeric",
         "values": [
-          [
-            1,
-          ],
+          "1",
         ],
       }
     `);
@@ -71,19 +67,17 @@ describe('json arg packing', () => {
 
   test('all types', () => {
     expect(
-      formatPgJson(
-        sql`SELECT * FROM "foo" WHERE "a" = ${jsonPackArg('json', {})} OR "b" = ${jsonPackArg('number', 1)} OR "c" = ${jsonPackArg('string', 'str')} OR "d" = ${jsonPackArg('boolean', true)}`,
+      formatPgInternalConvert(
+        sql`SELECT * FROM "foo" WHERE "a" = ${sqlConvertArg('json', {})} OR "b" = ${sqlConvertArg('number', 1)} OR "c" = ${sqlConvertArg('string', 'str')} OR "d" = ${sqlConvertArg('boolean', true)}`,
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "foo" WHERE "a" = $1::json->0 OR "b" = ($1::json->>1)::numeric OR "c" = $1::json->>2 OR "d" = ($1::json->>3)::boolean",
+        "text": "SELECT * FROM "foo" WHERE "a" = $1::text::jsonb OR "b" = $2::text::numeric OR "c" = $3::text OR "d" = $4::text::boolean",
         "values": [
-          [
-            {},
-            1,
-            "str",
-            true,
-          ],
+          "{}",
+          "1",
+          "str",
+          "true",
         ],
       }
     `);
@@ -92,21 +86,19 @@ describe('json arg packing', () => {
   test('mapped and joined', () => {
     const values = [1, 2, 3];
     expect(
-      formatPgJson(
+      formatPgInternalConvert(
         sql`SELECT * FROM "foo" WHERE "a" ${sql.join(
-          values.map(v => jsonPackArg('number', v)),
+          values.map(v => sqlConvertArg('number', v)),
           ' AND ',
         )} `,
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "foo" WHERE "a" ($1::json->>0)::numeric AND ($1::json->>1)::numeric AND ($1::json->>2)::numeric",
+        "text": "SELECT * FROM "foo" WHERE "a" $1::text::numeric AND $2::text::numeric AND $3::text::numeric",
         "values": [
-          [
-            1,
-            2,
-            3,
-          ],
+          "1",
+          "2",
+          "3",
         ],
       }
     `);
