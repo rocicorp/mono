@@ -1,4 +1,3 @@
-export {createPushHandler} from './custom.ts';
 export type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 export type {
   Transaction,
