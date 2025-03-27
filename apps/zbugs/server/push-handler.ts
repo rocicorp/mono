@@ -7,7 +7,7 @@ import {
 } from '@rocicorp/zero/pg';
 import postgres, {type JSONValue} from 'postgres';
 import {schema} from '../shared/schema.ts';
-import {createServerMutators, type PostCommitTask} from './_server-mutators.ts';
+import {createServerMutators, type PostCommitTask} from './server-mutators.ts';
 import type {ReadonlyJSONObject} from '@rocicorp/zero';
 import type {AuthData} from '../shared/auth.ts';
 

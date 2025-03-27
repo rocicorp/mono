@@ -6,7 +6,7 @@ import {
 } from '../shared/mutators.ts';
 import {type CustomMutatorDefs, type UpdateValue} from '@rocicorp/zero';
 import {schema} from '../shared/schema.ts';
-import {notify} from './_notify.ts';
+import {notify} from './notify.ts';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import {type AuthData} from '../shared/auth.ts';
 
