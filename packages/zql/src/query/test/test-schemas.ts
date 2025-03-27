@@ -193,7 +193,7 @@ CREATE TABLE IF NOT EXISTS "comments" (
   "authorId" TEXT NOT NULL,
   "issue_id" TEXT NOT NULL,
   "text" TEXT NOT NULL,
-  "createdAt" BIGINT NOT NULL
+  "createdAt" TIMESTAMP NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "issueLabel" (

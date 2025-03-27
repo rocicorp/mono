@@ -43,7 +43,7 @@ beforeAll(async () => {
     );
 
     INSERT INTO "comments" ("id", "authorId", "issue_id", text, "createdAt") VALUES (
-      'comment1', 'user1', 'issue1', 'Comment 1', 0
+      'comment1', 'user1', 'issue1', 'Comment 1', TIMESTAMP '2002-03-16 20:38:40'
     );
   `);
 
@@ -95,7 +95,7 @@ test('discord report https://discord.com/channels/830183651022471199/13475501749
           "comments": [
             {
               "authorId": "user1",
-              "createdAt": 0,
+              "createdAt": 1016311120000,
               "id": "comment1",
               "issueId": "issue1",
               "text": "Comment 1",

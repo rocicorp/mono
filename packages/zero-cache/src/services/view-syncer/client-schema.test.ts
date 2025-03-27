@@ -110,6 +110,31 @@ describe('client schemas', () => {
         },
       },
     ],
+    [
+      {
+        tables: {
+          bar: {
+            columns: {
+              e: {type: 'boolean'},
+              id: {type: 'string'},
+              f: {type: 'json'},
+              d: {type: 'number'},
+            },
+          },
+          foo: {
+            columns: {
+              c: {type: 'json'},
+              id: {type: 'string'},
+              a: {type: 'number'},
+              b: {type: 'boolean'},
+              d: {type: 'timestamp'},
+              e: {type: 'timestamp'},
+              f: {type: 'date'},
+            },
+          },
+        },
+      },
+    ],
   ] as [ClientSchema][])('subset okay: %o', clientSchema => {
     checkClientSchema(SHARD_ID, clientSchema, tableSpecs, fullTables);
   });
@@ -221,7 +246,7 @@ describe('client schemas', () => {
         fullTables,
       ),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"foo\\".\\"a\\" column's upstream type \\"number\\" does not match the client type \\"string\\"\\nThe \\"foo\\".\\"b\\" column's upstream type \\"boolean\\" does not match the client type \\"number\\"\\nThe \\"foo\\".\\"d\\" column's upstream type \\"timestamp\\" does not match the client type \\"number\\"\\nThe \\"foo\\".\\"e\\" column's upstream type \\"timestamp\\" does not match the client type \\"number\\"\\nThe \\"foo\\".\\"f\\" column's upstream type \\"timestamp\\" does not match the client type \\"number\\""}]`,
+      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"foo\\".\\"a\\" column's upstream type \\"number\\" does not match the client type \\"string\\"\\nThe \\"foo\\".\\"b\\" column's upstream type \\"boolean\\" does not match the client type \\"number\\""}]`,
     );
   });
 

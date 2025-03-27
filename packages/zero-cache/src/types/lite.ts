@@ -221,13 +221,14 @@ export function dataTypeToZqlValueType(
     case 'float8':
       return 'number';
 
+    // Timestamps are represented as epoch milliseconds (at microsecond resolution using floating point),
+    // and DATEs are represented as epoch milliseconds of UTC midnight of the date.
     case 'date':
+      return 'date';
     case 'timestamp':
     case 'timestamptz':
     case 'timestamp with time zone':
     case 'timestamp without time zone':
-      // Timestamps are represented as epoch milliseconds (at microsecond resolution using floating point),
-      // and DATEs are represented as epoch milliseconds of UTC midnight of the date.
       return 'timestamp';
 
     case 'bpchar':
