@@ -46,7 +46,6 @@ export async function handlePush(
   params: Params,
   body: ReadonlyJSONObject,
 ) {
-  console.log('invoking processor', authData?.sub);
   const postCommitTasks: PostCommitTask[] = [];
   const mutators = createServerMutators(authData, postCommitTasks);
   const processor = new PushProcessor(
@@ -55,7 +54,6 @@ export async function handlePush(
     mutators,
   );
   const response = await processor.process(params, body);
-  console.log('done with processor', authData?.sub);
   await Promise.all(postCommitTasks.map(task => task()));
   return response;
 }
