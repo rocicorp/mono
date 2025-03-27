@@ -54,6 +54,8 @@ export async function handlePush(
     mutators,
   );
   const response = await processor.process(params, body);
+  console.info('waiting for ' + postCommitTasks.length + ' post commit tasks');
   await Promise.all(postCommitTasks.map(task => task()));
+  console.info('done waiting for post commit tasks');
   return response;
 }
