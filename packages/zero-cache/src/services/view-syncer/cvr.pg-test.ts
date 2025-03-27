@@ -5816,7 +5816,3 @@ describe('view-syncer/cvr', () => {
     }
   });
 });
-
-test('fail', () => {
-  expect(1).toBe(2);
-});
