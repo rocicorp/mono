@@ -4,15 +4,51 @@ import {
   escapePostgresIdentifier,
   escapeSQLiteIdentifier,
 } from '@databases/escape-identifier';
+import type {ValueType} from '../../zero-protocol/src/client-schema.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 
 export function formatPg(sql: SQLQuery) {
   const format = new ReusingFormat(escapePostgresIdentifier);
   return sql.format((items: readonly SQLItem[]) => formatFn(items, format));
 }
 
+export function formatPgJson(sql: SQLQuery) {
+  const format = new JsonPackedFormat(escapePostgresIdentifier);
+  return sql.format((items: readonly SQLItem[]) =>
+    formatFn(items, format, true),
+  );
+}
+
 export function formatSqlite(sql: SQLQuery) {
   const format = new ReusingFormat(escapeSQLiteIdentifier);
   return sql.format((items: readonly SQLItem[]) => formatFn(items, format));
+}
+
+export const jsonPack = Symbol('fromJson');
+type JsonPackArg = {
+  [jsonPack]: true;
+  type: ValueType;
+  value: unknown;
+};
+function isJsonPack(value: unknown): value is JsonPackArg {
+  return value !== null && typeof value === 'object' && jsonPack in value;
+}
+export function jsonPackArg<T extends ValueType>(
+  type: T,
+  value: 'number' extends T
+    ? number
+    : 'string' extends T
+      ? string
+      : 'boolean' extends T
+        ? boolean
+        : 'null' extends T
+          ? null
+          : 'json' extends T
+            ? ReadonlyJSONValue
+            : never,
+): JsonPackArg {
+  return {[jsonPack]: true, type, value};
 }
 
 class ReusingFormat implements FormatConfig {
@@ -35,12 +71,53 @@ class ReusingFormat implements FormatConfig {
   };
 }
 
+class JsonPackedFormat implements FormatConfig {
+  readonly #seen: Map<unknown, number> = new Map();
+  readonly escapeIdentifier: (str: string) => string;
+
+  constructor(escapeIdentifier: (str: string) => string) {
+    this.escapeIdentifier = escapeIdentifier;
+  }
+
+  formatValue = (value: unknown) => {
+    assert(isJsonPack(value), 'JsonPackedFormat can only take JsonPackArgs.');
+    const key = value.value;
+    if (this.#seen.has(key)) {
+      return {
+        placeholder: this.#createPlaceholder(this.#seen.get(key)!, value),
+        value: PREVIOUSLY_SEEN_VALUE,
+      };
+    }
+    this.#seen.set(key, this.#seen.size + 1);
+    return {
+      placeholder: this.#createPlaceholder(this.#seen.size, value),
+      value: value.value,
+    };
+  };
+
+  #createPlaceholder(index: number, value: JsonPackArg) {
+    switch (value.type) {
+      case 'json':
+        return `$1->${index - 1}`;
+      case 'boolean':
+        return `($1->>${index - 1})::boolean`;
+      case 'number':
+        return `($1->>${index - 1})::numeric`;
+      case 'string':
+        return `$1->>${index - 1}`;
+      case 'null':
+        throw new Error('unsupported type');
+    }
+  }
+}
+
 export const sql = baseSql.default;
 
 const PREVIOUSLY_SEEN_VALUE = Symbol('PREVIOUSLY_SEEN_VALUE');
 function formatFn(
   items: readonly SQLItem[],
   {escapeIdentifier, formatValue}: FormatConfig,
+  jsonPack: boolean = false,
 ): {
   text: string;
   values: unknown[];
@@ -98,5 +175,8 @@ function formatFn(
       text = lines.map(line => line.substr(min)).join('\n');
     }
   }
-  return {text: text.trim(), values};
+  return {
+    text: text.trim(),
+    values: jsonPack ? [JSON.stringify(values)] : values,
+  };
 }
