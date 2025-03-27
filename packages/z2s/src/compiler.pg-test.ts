@@ -4,7 +4,7 @@ import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
-import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {type Row} from '../../zero-protocol/src/data.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import {
@@ -37,10 +37,9 @@ let issueQuery: Query<Schema, 'issue'>;
  * These test will likely be deprecated.
  */
 beforeAll(async () => {
-  pg = await testDBs.create('compiler');
+  pg = await testDBs.create('compiler', undefined, false);
   await pg.unsafe(createTableSQL);
   sqlite = new Database(lc, ':memory:');
-
   const testData = {
     issue: Array.from({length: 3}, (_, i) => ({
       id: `issue${i + 1}`,
@@ -48,7 +47,7 @@ beforeAll(async () => {
       description: `Description for issue ${i + 1}`,
       closed: i % 2 === 0,
       ownerId: i === 0 ? null : `user${i}`,
-      createdAt: Date.now() - i * 86400000,
+      createdAt: new Date(Date.now() - i * 86400000).getTime(),
     })),
     user: Array.from({length: 3}, (_, i) => ({
       id: `user${i + 1}`,
@@ -67,7 +66,7 @@ beforeAll(async () => {
       authorId: `user${(i % 3) + 1}`,
       issueId: `issue${(i % 3) + 1}`,
       text: `Comment ${i + 1} text`,
-      createdAt: Date.now() - i * 86400000,
+      createdAt: new Date(Date.now() - i * 86400000).getTime(),
     })),
     issueLabel: Array.from({length: 4}, (_, i) => ({
       issueId: `issue${(i % 3) + 1}`,
@@ -120,21 +119,25 @@ beforeAll(async () => {
     labelPgRows,
     revisionPgRows,
   ] = await Promise.all([
-    pg`SELECT * FROM "issues"`,
+    pg`SELECT "id", "title", "description", "closed", "owner_id", "createdAt" AT TIME ZONE 'UTC' as "createdAt" FROM "issues"`,
     pg`SELECT * FROM "users"`,
-    pg`SELECT * FROM "comments"`,
+    pg`SELECT "id", "authorId", "issue_id", "text", "createdAt" AT TIME ZONE 'UTC' as "createdAt" FROM "comments"`,
     pg`SELECT * FROM "issueLabel"`,
     pg`SELECT * FROM "label"`,
     pg`SELECT * FROM "revision"`,
   ]);
-  expect(mapResultToClientNames(issuePgRows, schema, 'issue')).toEqual(
-    testData.issue,
-  );
+  expect(
+    mapResultToClientNames(issuePgRows.map(createdAtToMillis), schema, 'issue'),
+  ).toEqual(testData.issue);
   expect(mapResultToClientNames(userPgRows, schema, 'user')).toEqual(
     testData.user,
   );
   expect(
-    mapResultToClientNames(commentPgRows.map(noBigint), schema, 'comment'),
+    mapResultToClientNames(
+      commentPgRows.map(createdAtToMillis),
+      schema,
+      'comment',
+    ),
   ).toEqual(testData.comment);
   expect(issueLabelPgRows).toEqual(testData.issueLabel);
   expect(labelPgRows).toEqual(testData.label);
@@ -201,11 +204,11 @@ function ast(q: Query<Schema, keyof Schema['tables']>) {
   return (q as QueryImpl<Schema, keyof Schema['tables']>)[completedAstSymbol];
 }
 
-function noBigint(row: Record<string, unknown>) {
+function createdAtToMillis(row: Record<string, unknown>) {
   if ('createdAt' in row) {
     return {
       ...row,
-      createdAt: Number(row.createdAt as bigint),
+      createdAt: (row.createdAt as Date).getTime(),
     };
   }
   return row;

@@ -31,7 +31,11 @@ class TestDBs {
   });
   readonly #dbs: Record<string, postgres.Sql> = {};
 
-  async create(database: string, onNotice?: OnNoticeFn): Promise<PostgresDB> {
+  async create(
+    database: string,
+    onNotice?: OnNoticeFn,
+    useTypeConfig = true,
+  ): Promise<PostgresDB> {
     const exists = this.#dbs[database];
     if (exists !== undefined) {
       console.warn('dropping database', database);
@@ -53,7 +57,7 @@ class TestDBs {
         onNotice?.(n);
         defaultOnNotice(n);
       },
-      ...postgresTypeConfig(),
+      ...(useTypeConfig ? postgresTypeConfig() : {}),
     });
     this.#dbs[database] = db;
     return db;

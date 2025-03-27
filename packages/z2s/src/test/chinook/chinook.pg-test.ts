@@ -110,7 +110,7 @@ function makeMemorySources() {
 const data: Map<string, Row[]> = new Map();
 
 beforeEach(async () => {
-  pg = await testDBs.create('chinook');
+  pg = await testDBs.create('chinook', undefined, false);
   sqlite = new Database(lc, ':memory:');
   const memorySources = makeMemorySources();
   await writeChinook(pg, sqlite);
