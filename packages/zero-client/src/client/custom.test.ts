@@ -283,6 +283,7 @@ describe('rebasing custom mutators', () => {
           "relationships": {},
           "row": {
             "closed": false,
+            "createdAt": 1743018138477,
             "description": "",
             "id": "1",
             "ownerId": "",
