@@ -51,7 +51,7 @@ function findPathToBigInt(v: BigIntJSONValue): string | undefined {
   const typeOfV = typeof v;
   switch (typeOfV) {
     case 'bigint':
-      return `->${v}`;
+      return ` = ${v}`;
     case 'object': {
       if (v === null) {
         return;

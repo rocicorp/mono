@@ -227,7 +227,7 @@ describe('compiling ZQL to SQL', () => {
       sqlQuery.values as JSONValue[],
     );
     expect(() => extractZqlResult(result)).toThrowErrorMatchingInlineSnapshot(
-      `[Error: Value exceeds safe Number range. [2]['comments'][1]['hash']->9007199254740992]`,
+      `[Error: Value exceeds safe Number range. [2]['comments'][1]['hash'] = 9007199254740992]`,
     );
   });
 });
