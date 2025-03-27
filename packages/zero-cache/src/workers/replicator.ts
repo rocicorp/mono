@@ -86,14 +86,10 @@ async function connect(
   lc.info?.(`setting ${file} to ${walMode} mode`);
   replica.pragma(`journal_mode = ${walMode}`);
 
-  // Set a busy timeout at litestream's recommended 5 seconds:
-  // (https://litestream.io/tips/#busy-timeout).
-  //
-  // In the view-syncer (for which there is no litestream replicate
-  // process), this is still useful for handling the `PRAGMA optimize`
-  // call the sync workers, which results in occasional `ANALYZE` calls
-  // that may contend with each other and with the replicator for the lock.
-  replica.pragma('busy_timeout = 5000');
+  // The duration of the loop in which the replicator attempts
+  // to begin a transaction while litestream is performing a
+  // checkpoint.
+  replica.pragma('busy_timeout = 30000');
 
   replica.pragma('optimize = 0x10002');
   lc.info?.(`optimized ${file}`);
