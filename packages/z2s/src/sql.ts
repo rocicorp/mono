@@ -5,7 +5,7 @@ import {
   escapeSQLiteIdentifier,
 } from '@databases/escape-identifier';
 import type {ValueType} from '../../zero-protocol/src/client-schema.ts';
-import {assert} from '../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 
 export function formatPg(sql: SQLQuery) {
@@ -39,14 +39,14 @@ export function jsonPackArg<T extends ValueType>(
   value: 'number' extends T
     ? number
     : 'string' extends T
-      ? string
-      : 'boolean' extends T
-        ? boolean
-        : 'null' extends T
-          ? null
-          : 'json' extends T
-            ? ReadonlyJSONValue
-            : never,
+    ? string
+    : 'boolean' extends T
+    ? boolean
+    : 'null' extends T
+    ? null
+    : 'json' extends T
+    ? ReadonlyJSONValue
+    : never,
 ): JsonPackArg {
   return {[jsonPack]: true, type, value};
 }
@@ -105,8 +105,13 @@ class JsonPackedFormat implements FormatConfig {
         return `($1->>${index - 1})::numeric`;
       case 'string':
         return `$1->>${index - 1}`;
+      case 'date':
+      case 'timestamp':
+        throw new Error('unsupported type');
       case 'null':
         throw new Error('unsupported type');
+      default:
+        unreachable(value.type);
     }
   }
 }
