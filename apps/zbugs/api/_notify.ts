@@ -1,9 +1,10 @@
 import {type Schema} from '../shared/schema.ts';
+import {type Validators} from '../shared/validators.ts';
+import {must} from '../../../packages/shared/src/must.ts';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import {type Transaction, type UpdateValue} from '@rocicorp/zero';
 import {postToDiscord} from './_discord.ts';
 import {schema} from '../shared/schema.ts';
-import {assertIsLoggedIn, type AuthData} from '../shared/auth.ts';
 
 type CreateIssueNotification = {
   kind: 'create-issue';
@@ -48,11 +49,9 @@ type NotificationArgs = {issueID: string} & (
 
 export async function notify(
   tx: Transaction<Schema>,
-  authData: AuthData | undefined,
+  v: Validators,
   args: NotificationArgs,
 ) {
-  assertIsLoggedIn(authData);
-
   const {issueID, kind} = args;
   const issue = await tx.query.issue.where('id', issueID).one().run();
   assert(issue);
@@ -62,7 +61,7 @@ export async function notify(
     return;
   }
 
-  const modifierUserID = authData.sub;
+  const modifierUserID = must((await v.verifyToken(tx)).sub);
   const modifierUser = await tx.query.user
     .where('id', modifierUserID)
     .one()

@@ -35,11 +35,11 @@ export type PushHandler = (
   body: ReadonlyJSONObject,
 ) => Promise<PushResponse>;
 
-export type Headers = {
+type Headers = {
   authorization?: string | undefined;
 };
 
-export type Params = {
+type Params = {
   schema: string;
   appID: string;
 };

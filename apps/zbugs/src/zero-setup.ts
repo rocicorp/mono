@@ -5,11 +5,15 @@ import {Atom} from './atom.ts';
 import {clearJwt, getJwt, getRawJwt} from './jwt.ts';
 import {mark} from './perf-log.ts';
 import {CACHE_FOREVER} from './query-cache-policy.ts';
-import type {AuthData} from '../shared/auth.ts';
+import {Validators} from '../shared/validators.ts';
 
 export type LoginState = {
   encoded: string;
-  decoded: AuthData;
+  decoded: {
+    sub: string;
+    name: string;
+    role: 'crew' | 'user';
+  };
 };
 
 const zeroAtom = new Atom<Zero<Schema, Mutators>>();
@@ -28,12 +32,14 @@ authAtom.value =
 authAtom.onChange(auth => {
   zeroAtom.value?.close();
   mark('creating new zero');
-  const authData = auth?.decoded;
+  console.log('auth', auth);
   const z = new Zero({
     logLevel: 'info',
     server: import.meta.env.VITE_PUBLIC_SERVER,
-    userID: authData?.sub ?? 'anon',
-    mutators: createMutators(authData),
+    userID: auth?.decoded?.sub ?? 'anon',
+    mutators: createMutators(
+      new Validators(JSON.parse(import.meta.env.VITE_PUBLIC_JWK)),
+    ),
     auth: (error?: 'invalid-token') => {
       if (error === 'invalid-token') {
         clearJwt();
