@@ -103,6 +103,7 @@ test('supports mutators without a namespace', async () => {
     closed: false,
     ownerId: '',
     description: '',
+    createdAt: 1743018138477,
   });
 
   const issues = await z.query.issue.run();
@@ -169,6 +170,7 @@ test('custom mutators write to the local store', async () => {
     closed: false,
     ownerId: '',
     description: '',
+    createdAt: 1743018138477,
   });
 
   let issues = await z.query.issue.run();
@@ -188,6 +190,7 @@ test('custom mutators write to the local store', async () => {
     closed: false,
     ownerId: '',
     description: '',
+    createdAt: 1743018138477,
   });
   issues = await z.query.issue.run();
   expect(issues.length).toEqual(2);
@@ -225,6 +228,7 @@ test('custom mutators can query the local store during an optimistic mutation', 
         closed: false,
         description: '',
         ownerId: '',
+        createdAt: 1743018138477,
       });
     }),
   );
@@ -266,6 +270,7 @@ describe('rebasing custom mutators', () => {
       id: '1',
       ownerId: '',
       title: 'foo',
+      createdAt: 1743018138477,
     });
 
     expect([
@@ -278,6 +283,7 @@ describe('rebasing custom mutators', () => {
           "relationships": {},
           "row": {
             "closed": false,
+            "createdAt": 1743018138477,
             "description": "",
             "id": "1",
             "ownerId": "",
@@ -316,6 +322,7 @@ describe('rebasing custom mutators', () => {
       title: 'foo',
       description: '',
       closed: false,
+      createdAt: 1743018138477,
     });
 
     const issue = must(await z.query.issue.where('id', '1').one().run());
@@ -348,6 +355,7 @@ describe('rebasing custom mutators', () => {
       closed: false,
       description: '',
       ownerId: '',
+      createdAt: 1743018138477,
     });
 
     expect(mutationRun).toEqual(true);
@@ -388,6 +396,7 @@ describe('server results and keeping read queries', () => {
       closed: false,
       description: '',
       ownerId: '',
+      createdAt: 1743018138477,
     });
 
     await z.triggerPushResponse({
@@ -461,6 +470,7 @@ describe('server results and keeping read queries', () => {
       closed: false,
       description: '',
       ownerId: '',
+      createdAt: 1743018138477,
     });
 
     const q = z.query.issue.limit(1).materialize();

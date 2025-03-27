@@ -3,9 +3,9 @@ import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.t
 import {
   boolean,
   json,
-  number,
   string,
   table,
+  timestamp,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 import type {Row} from '../query.ts';
 
@@ -17,6 +17,7 @@ const issue = table('issue')
     description: string(),
     closed: boolean(),
     ownerId: string().from('owner_id').optional(),
+    createdAt: timestamp(),
   })
   .primaryKey('id');
 
@@ -40,7 +41,7 @@ const comment = table('comment')
     authorId: string(),
     issueId: string().from('issue_id'),
     text: string(),
-    createdAt: number(),
+    createdAt: timestamp(),
   })
   .primaryKey('id');
 
@@ -177,7 +178,8 @@ CREATE TABLE IF NOT EXISTS "issues" (
   "title" TEXT NOT NULL,
   "description" TEXT NOT NULL,
   "closed" BOOLEAN NOT NULL,
-  "owner_id" TEXT
+  "owner_id" TEXT,
+  "createdAt" TIMESTAMP NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "users" (
@@ -191,7 +193,7 @@ CREATE TABLE IF NOT EXISTS "comments" (
   "authorId" TEXT NOT NULL,
   "issue_id" TEXT NOT NULL,
   "text" TEXT NOT NULL,
-  "createdAt" BIGINT NOT NULL
+  "createdAt" TIMESTAMP NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "issueLabel" (
