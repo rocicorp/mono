@@ -1,7 +1,6 @@
 import type {SQLQuery} from '@databases/sql';
 import {zip} from '../../shared/src/arrays.ts';
 import {assert} from '../../shared/src/asserts.ts';
-import type {JSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
 import type {
   CorrelatedSubqueryCondition,
@@ -16,20 +15,11 @@ import {
   type SimpleCondition,
 } from '../../zero-protocol/src/ast.ts';
 import {clientToServer, NameMapper} from '../../zero-schema/src/name-mapper.ts';
-import type {
-  TableSchema,
-  ValueType,
-} from '../../zero-schema/src/table-schema.ts';
+import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {sql} from './sql.ts';
 
 type Tables = Record<string, TableSchema>;
-
-const ZQL_RESULT_KEY = 'zql_result';
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function extractZqlResult(pgResult: any): JSONValue {
-  return JSON.parse(pgResult[0][ZQL_RESULT_KEY]);
-}
 
 /**
  * Compiles to the Postgres dialect of SQL
@@ -57,14 +47,7 @@ export class Compiler {
   }
 
   compile(ast: AST, format?: Format | undefined): SQLQuery {
-    return sql`SELECT ${this.#toJSON(
-      `root`,
-      format?.singular,
-    )}::TEXT as ${sql.ident(ZQL_RESULT_KEY)} FROM (${this.select(
-      ast,
-      format,
-      undefined,
-    )})${sql.ident(`root`)}`;
+    return this.select(ast, format, undefined);
   }
 
   select(
@@ -75,9 +58,11 @@ export class Compiler {
     correlation: SQLQuery | undefined,
   ): SQLQuery {
     const selectionSet = this.related(ast.related ?? [], format, ast.table);
-    const tableSchema = this.#tables[ast.table];
-    for (const [column, columnSchema] of Object.entries(tableSchema.columns)) {
-      selectionSet.push(this.#selectCol(ast.table, column, columnSchema.type));
+    const table = this.#tables[ast.table];
+    for (const column of Object.keys(table.columns)) {
+      selectionSet.push(
+        sql`${sql.ident(ast.table)}.${this.#mapColumn(ast.table, column)}`,
+      );
     }
     return sql`SELECT ${sql.join(selectionSet, ',')} FROM ${this.#mapTable(
       ast.table,
@@ -140,14 +125,15 @@ export class Compiler {
        * This aggregates the relationship subquery into an array of objects.
        * This looks roughly like:
        *
-       * SELECT COALESCE(json_agg(row_to_json("inner_owner")) , '[]'::json) FROM
-       * (SELECT mytable.col as client_col, mytable.col2 as client_col2 FROM mytable) inner_mytable
+       * SELECT COALESCE(array_agg(row_to_json("inner_table")) , ARRAY[]::json[]) FROM
+       *  (SELECT inner.col as client_col, inner.col2 as client_col2 FROM table) inner_table;
        */
       return sql`(
-        SELECT ${this.#toJSON(
-          `inner_${relationship.subquery.alias}`,
-          format?.singular,
-        )} FROM (SELECT ${sql.join(
+        SELECT ${
+          format?.singular ? sql`` : sql`COALESCE(array_agg`
+        }(row_to_json(${sql.ident(`inner_${relationship.subquery.alias}`)})) ${
+          format?.singular ? sql`` : sql`, ARRAY[]::json[])`
+        } FROM (SELECT ${sql.join(
           lastClientColumns.map(
             c => sql`${sql.ident(lastAlias)}.${this.#mapColumn(lastTable, c)}`,
           ),
@@ -176,9 +162,9 @@ export class Compiler {
     }
     return sql`(
       SELECT ${
-        format?.singular ? sql`` : sql`COALESCE(json_agg`
+        format?.singular ? sql`` : sql`COALESCE(array_agg`
       }(row_to_json(${sql.ident(`inner_${relationship.subquery.alias}`)})) ${
-        format?.singular ? sql`` : sql`, '[]'::json)`
+        format?.singular ? sql`` : sql`, ARRAY[]::json[])`
       } FROM (${this.select(
         relationship.subquery,
         format,
@@ -414,25 +400,5 @@ export class Compiler {
   #mapTableNoAlias(table: string) {
     const mapped = this.#nameMapper.tableName(table);
     return sql.ident(mapped);
-  }
-
-  #selectCol(table: string, column: string, type: ValueType) {
-    if (type === 'date' || type === 'timestamp') {
-      return sql`EXTRACT(EPOCH FROM ${sql.ident(
-        table,
-      )}.${this.#mapColumnNoAlias(
-        table,
-        column,
-      )}::timestamp AT TIME ZONE 'UTC') * 1000 as ${sql.ident(column)}`;
-    }
-    return sql`${sql.ident(table)}.${this.#mapColumn(table, column)}`;
-  }
-
-  #toJSON(table: string, singular = false): SQLQuery {
-    return sql`${
-      singular ? sql`` : sql`COALESCE(json_agg`
-    }(row_to_json(${sql.ident(table)})) ${
-      singular ? sql`` : sql`, '[]'::json)`
-    }`;
   }
 }

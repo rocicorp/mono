@@ -765,8 +765,6 @@ function toSQLiteType(v: unknown, type: ValueType): unknown {
       return v === null ? null : v ? 1 : 0;
     case 'number':
     case 'string':
-    case 'timestamp':
-    case 'date':
     case 'null':
       return v;
     case 'json':
@@ -786,10 +784,6 @@ export function toSQLiteTypeName(type: ValueType) {
       return 'NULL';
     case 'json':
       return 'TEXT';
-    case 'date':
-      return 'REAL';
-    case 'timestamp':
-      return 'REAL';
   }
 }
 
@@ -821,8 +815,6 @@ function fromSQLiteType(valueType: ValueType, v: Value): Value {
       return !!v;
     case 'number':
     case 'string':
-    case 'date':
-    case 'timestamp':
     case 'null':
       if (typeof v === 'bigint') {
         if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
