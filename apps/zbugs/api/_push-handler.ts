@@ -7,7 +7,7 @@ import {
 } from '@rocicorp/zero/pg';
 import postgres, {type JSONValue} from 'postgres';
 import {schema} from '../shared/schema.ts';
-import {createServerMutators} from './_server-mutators.ts';
+import {createServerMutators, type PostCommitTask} from './_server-mutators.ts';
 import type {ReadonlyJSONObject} from '@rocicorp/zero';
 import type {AuthData} from '../shared/auth.ts';
 
@@ -46,14 +46,14 @@ export async function handlePush(
   params: Params,
   body: ReadonlyJSONObject,
 ) {
-  // TODO: pass a queue of callbacks into createServerMutators
-  const mutators = createServerMutators(authData);
-  // TODO: Fix the stupid underscore in all these files
-  // TODO: Make it possible to share the processor across calls
+  const postCommitTasks: PostCommitTask[] = [];
+  const mutators = createServerMutators(authData, postCommitTasks);
   const processor = new PushProcessor(
     schema,
     () => new Connection(mutatorSql),
     mutators,
   );
-  return await processor.process(params, body);
+  const response = await processor.process(params, body);
+  await Promise.all(postCommitTasks.map(task => task()));
+  return response;
 }
