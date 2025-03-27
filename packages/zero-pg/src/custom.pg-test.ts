@@ -19,13 +19,23 @@ describe('makeSchemaCRUD', () => {
     crudProvider = makeSchemaCRUD(schema);
   });
 
+  const timeRow = {
+    ts: new Date('2025-05-05T00:00:00Z').getTime(),
+    tstz: new Date('2025-06-06T00:00:00Z').getTime(),
+    tswtz: new Date('2025-07-07T00:00:00Z').getTime(),
+    tswotz: new Date('2025-08-08T00:00:01Z').getTime(),
+    d: new Date('2025-09-09T00:00:00Z').getTime(),
+  };
+
   test('insert', async () => {
     await pg.begin(async tx => {
       const crud = crudProvider(new Transaction(tx));
+
       await Promise.all([
         crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
+        crud.dateTypes.insert(timeRow),
       ]);
 
       await Promise.all([
@@ -39,6 +49,7 @@ describe('makeSchemaCRUD', () => {
           },
         ]),
         checkDb(tx, 'compoundPk', [{a: 'a', b: 1, c: 'c'}]),
+        checkDb(tx, 'dateTypes', [timeRow]),
       ]);
     });
   });
@@ -59,6 +70,7 @@ describe('makeSchemaCRUD', () => {
         crud.basic.upsert({id: '1', a: 2, b: 'foo', c: true}),
         crud.names.upsert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.upsert({a: 'a', b: 1, c: 'c'}),
+        crud.dateTypes.upsert(timeRow),
       ]);
 
       await Promise.all([
@@ -72,6 +84,7 @@ describe('makeSchemaCRUD', () => {
           },
         ]),
         checkDb(tx, 'compoundPk', [{a: 'a', b: 1, c: 'c'}]),
+        checkDb(tx, 'dateTypes', [timeRow]),
       ]);
 
       // upsert all the existing rows to change non-primary key values
@@ -79,6 +92,10 @@ describe('makeSchemaCRUD', () => {
         crud.basic.upsert({id: '1', a: 3, b: 'baz', c: false}),
         crud.names.upsert({id: '2', a: 4, b: 'qux', c: true}),
         crud.compoundPk.upsert({a: 'a', b: 1, c: 'd'}),
+        crud.dateTypes.upsert({
+          ...timeRow,
+          tstz: new Date('2026-05-05T00:00:01Z').getTime(),
+        }),
       ]);
 
       await Promise.all([
@@ -92,6 +109,12 @@ describe('makeSchemaCRUD', () => {
           },
         ]),
         checkDb(tx, 'compoundPk', [{a: 'a', b: 1, c: 'd'}]),
+        checkDb(tx, 'dateTypes', [
+          {
+            ...timeRow,
+            tstz: new Date('2026-05-05T00:00:01Z').getTime(),
+          },
+        ]),
       ]);
     });
   });
@@ -103,12 +126,17 @@ describe('makeSchemaCRUD', () => {
         crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
+        crud.dateTypes.insert(timeRow),
       ]);
 
       await Promise.all([
         crud.basic.update({id: '1', a: 3, b: 'baz'}),
         crud.names.update({id: '2', a: 4, b: 'qux'}),
         crud.compoundPk.update({a: 'a', b: 1, c: 'd'}),
+        crud.dateTypes.update({
+          ...timeRow,
+          tstz: new Date('2027-05-05T00:00:01Z').getTime(),
+        }),
       ]);
 
       await Promise.all([
@@ -122,6 +150,12 @@ describe('makeSchemaCRUD', () => {
           },
         ]),
         checkDb(tx, 'compoundPk', [{a: 'a', b: 1, c: 'd'}]),
+        checkDb(tx, 'dateTypes', [
+          {
+            ...timeRow,
+            tstz: new Date('2027-05-05T00:00:01Z').getTime(),
+          },
+        ]),
       ]);
     });
   });
@@ -133,18 +167,21 @@ describe('makeSchemaCRUD', () => {
         crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
+        crud.dateTypes.insert(timeRow),
       ]);
 
       await Promise.all([
         crud.basic.delete({id: '1'}),
         crud.names.delete({id: '2'}),
         crud.compoundPk.delete({a: 'a', b: 1}),
+        crud.dateTypes.delete({ts: timeRow.ts}),
       ]);
 
       await Promise.all([
         checkDb(tx, 'basic', []),
         checkDb(tx, 'divergent_names', []),
         checkDb(tx, 'compoundPk', []),
+        checkDb(tx, 'dateTypes', []),
       ]);
     });
   });

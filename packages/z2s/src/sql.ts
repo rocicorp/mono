@@ -6,7 +6,7 @@ import {
 } from '@databases/escape-identifier';
 import type {ValueType} from '../../zero-protocol/src/client-schema.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import type {TypeNameToTypeMap} from '../../zero-schema/src/table-schema.ts';
 
 export function formatPg(sql: SQLQuery) {
   const format = new ReusingFormat(escapePostgresIdentifier);
@@ -25,7 +25,7 @@ export function formatSqlite(sql: SQLQuery) {
   return sql.format((items: readonly SQLItem[]) => formatFn(items, format));
 }
 
-export const jsonPack = Symbol('fromJson');
+const jsonPack = Symbol('fromJson');
 type JsonPackArg = {
   [jsonPack]: true;
   type: ValueType;
@@ -34,21 +34,16 @@ type JsonPackArg = {
 function isJsonPack(value: unknown): value is JsonPackArg {
   return value !== null && typeof value === 'object' && jsonPack in value;
 }
+
 export function jsonPackArg<T extends ValueType>(
   type: T,
-  value: 'number' extends T
-    ? number
-    : 'string' extends T
-      ? string
-      : 'boolean' extends T
-        ? boolean
-        : 'null' extends T
-          ? null
-          : 'json' extends T
-            ? ReadonlyJSONValue
-            : never,
-): JsonPackArg {
-  return {[jsonPack]: true, type, value};
+  value: TypeNameToTypeMap[T],
+): SQLQuery {
+  return sql.value({[jsonPack]: true, type, value});
+}
+
+export function jsonPackArgUnsafe(type: ValueType, value: unknown): SQLQuery {
+  return sql.value({[jsonPack]: true, type, value});
 }
 
 class ReusingFormat implements FormatConfig {
@@ -98,16 +93,16 @@ class JsonPackedFormat implements FormatConfig {
   #createPlaceholder(index: number, value: JsonPackArg) {
     switch (value.type) {
       case 'json':
-        return `$1->${index - 1}`;
+        return `$1::json->${index - 1}`;
       case 'boolean':
-        return `($1->>${index - 1})::boolean`;
+        return `($1::json->>${index - 1})::boolean`;
       case 'number':
-        return `($1->>${index - 1})::numeric`;
+        return `($1::json->>${index - 1})::numeric`;
       case 'string':
-        return `$1->>${index - 1}`;
+        return `$1::json->>${index - 1}`;
       case 'date':
       case 'timestamp':
-        throw new Error('unsupported type');
+        return `to_timestamp(($1::json->>${index - 1})::bigint / 1000) AT TIME ZONE 'UTC'`;
       case 'null':
         throw new Error('unsupported type');
       default:
@@ -182,6 +177,6 @@ function formatFn(
   }
   return {
     text: text.trim(),
-    values: jsonPack ? [JSON.stringify(values)] : values,
+    values: jsonPack ? [values] : values,
   };
 }

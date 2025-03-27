@@ -41,9 +41,11 @@ describe('json arg packing', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "user" WHERE "id" = ($1->>0)::numeric",
+        "text": "SELECT * FROM "user" WHERE "id" = ($1::json->>0)::numeric",
         "values": [
-          "[1]",
+          [
+            1,
+          ],
         ],
       }
     `);
@@ -57,9 +59,11 @@ describe('json arg packing', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "user" WHERE "id" = ($1->>0)::numeric OR "other_id" = ($1->>0)::numeric",
+        "text": "SELECT * FROM "user" WHERE "id" = ($1::json->>0)::numeric OR "other_id" = ($1::json->>0)::numeric",
         "values": [
-          "[1]",
+          [
+            1,
+          ],
         ],
       }
     `);
@@ -72,9 +76,37 @@ describe('json arg packing', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "foo" WHERE "a" = $1->0 OR "b" = ($1->>1)::numeric OR "c" = $1->>2 OR "d" = ($1->>3)::boolean",
+        "text": "SELECT * FROM "foo" WHERE "a" = $1::json->0 OR "b" = ($1::json->>1)::numeric OR "c" = $1::json->>2 OR "d" = ($1::json->>3)::boolean",
         "values": [
-          "[{},1,"str",true]",
+          [
+            {},
+            1,
+            "str",
+            true,
+          ],
+        ],
+      }
+    `);
+  });
+
+  test('mapped and joined', () => {
+    const values = [1, 2, 3];
+    expect(
+      formatPgJson(
+        sql`SELECT * FROM "foo" WHERE "a" ${sql.join(
+          values.map(v => jsonPackArg('number', v)),
+          ' AND ',
+        )} `,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "SELECT * FROM "foo" WHERE "a" ($1::json->>0)::numeric AND ($1::json->>1)::numeric AND ($1::json->>2)::numeric",
+        "values": [
+          [
+            1,
+            2,
+            3,
+          ],
         ],
       }
     `);
