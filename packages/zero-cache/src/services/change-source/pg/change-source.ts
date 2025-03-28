@@ -75,7 +75,7 @@ import {
   internalPublicationPrefix,
   legacyReplicationSlot,
   replicaIdentitiesForTablesWithoutPrimaryKeys,
-  replicationSlotPrefix,
+  replicationSlotExpression,
   type InternalShardConfig,
   type Replica,
 } from './schema/shard.ts';
@@ -281,15 +281,13 @@ class PostgresChangeSource implements ChangeSource {
     db: PostgresDB,
     slotToKeep: string,
   ): Promise<{cleanup: Promise<void>}> {
-    const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
-    const slotPrefix = replicationSlotPrefix(this.#shard);
+    const slotExpression = replicationSlotExpression(this.#shard);
     const legacySlotName = legacyReplicationSlot(this.#shard);
 
     const result = await db<{slot: string; pid: string | null}[]>`
     SELECT slot_name as slot, pg_terminate_backend(active_pid), active_pid as pid
       FROM pg_replication_slots 
-      WHERE slot_name = ${legacySlotName} OR
-            slot_name LIKE ${slotPrefix + '%'}`;
+      WHERE slot_name LIKE ${slotExpression} OR slot_name = ${legacySlotName}`;
     if (result.length === 0) {
       // Note: This should not happen as it is checked at initialization time,
       //       but it is technically possible for the replication slot to be
@@ -299,6 +297,7 @@ class PostgresChangeSource implements ChangeSource {
       );
     }
     // Clean up the replicas table.
+    const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
     await db`DELETE FROM ${db(replicasTable)} WHERE slot != ${slotToKeep}`;
 
     const pids = result.filter(({pid}) => pid !== null).map(({pid}) => pid);

@@ -24,11 +24,13 @@ export async function decommissionShard(
       if (slots[0].pid !== null) {
         lc.info?.(`signaled subscriber ${slots[0].pid} to shut down`);
       }
+      // Escape underscores for the LIKE expression.
+      const slotExpression = `${appID}_${shardID}_%`.replaceAll('_', '\\_');
       const dropped = await tx<{slotName: string}[]>`
         SELECT pg_drop_replication_slot(slot_name), slot_name as "slotName"
           FROM pg_replication_slots 
           WHERE slot_name = ${shard} 
-             OR slot_name LIKE ${shard + '_%'}`;
+             OR slot_name LIKE ${slotExpression}`;
       lc.debug?.(
         `Dropped replication slot(s) ${dropped.map(({slotName}) => slotName)}`,
       );

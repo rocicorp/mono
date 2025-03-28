@@ -31,6 +31,16 @@ export function replicationSlotPrefix(shard: ShardID) {
   return `${appID}_${shardNum}_`;
 }
 
+/**
+ * An expression used to match replication slots in the shard
+ * in a Postgres `LIKE` operator.
+ */
+export function replicationSlotExpression(shard: ShardID) {
+  // Underscores have a special meaning in LIKE values
+  // so they have to be escaped.
+  return `${replicationSlotPrefix(shard)}%`.replaceAll('_', '\\_');
+}
+
 export function newReplicationSlot(shard: ShardID) {
   return replicationSlotPrefix(shard) + Date.now();
 }

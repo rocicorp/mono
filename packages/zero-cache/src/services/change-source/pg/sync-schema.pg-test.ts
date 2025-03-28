@@ -13,7 +13,7 @@ import {
   initDB as initLiteDB,
 } from '../../../test/lite.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
-import {replicationSlotPrefix} from './schema/shard.ts';
+import {replicationSlotExpression} from './schema/shard.ts';
 import {initSyncSchema} from './sync-schema.ts';
 
 const APP_ID = 'zeroz';
@@ -149,7 +149,7 @@ describe('change-streamer/pg/sync-schema', () => {
 
         // Slot should still exist.
         const slots = await upstream`SELECT slot_name FROM pg_replication_slots 
-          WHERE slot_name LIKE ${replicationSlotPrefix(shard) + '_%'}`.values();
+          WHERE slot_name LIKE ${replicationSlotExpression(shard)}`.values();
         expect(slots).toHaveLength(1);
       },
       10000,
