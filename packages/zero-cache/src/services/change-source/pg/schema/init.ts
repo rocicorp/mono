@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../../../shared/src/asserts.ts';
+import * as v from '../../../../../../shared/src/valita.ts';
 import {
   getVersionHistory,
   runSchemaMigrations,
@@ -10,19 +11,33 @@ import type {PostgresDB} from '../../../../types/pg.ts';
 import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import {decommissionShard} from '../decommission.ts';
-import {dropShard, setupTablesAndReplication, setupTriggers} from './shard.ts';
+import {publishedSchema} from './published.ts';
+import {setupTablesAndReplication, setupTriggers} from './shard.ts';
 
 /**
  * Initializes a shard for initial sync.
  * This will drop any existing shard setup.
  */
-export async function initShardSchema(
+export async function ensureShardSchema(
   lc: LogContext,
   db: PostgresDB,
   shard: ShardConfig,
 ): Promise<void> {
-  await db.unsafe(dropShard(shard.appID, shard.shardNum));
-  return runShardMigrations(lc, db, shard);
+  const initialSetup: Migration = {
+    migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, shard),
+    minSafeVersion: 1,
+  };
+  await runSchemaMigrations(
+    lc,
+    `upstream-shard-${shard.appID}`,
+    upstreamSchema(shard),
+    db,
+    initialSetup,
+    // The incremental migration of any existing replicas will be replaced by
+    // the incoming replica being synced, so the replicaVersion here is
+    // unnecessary.
+    getIncrementalMigrations(shard, 'obsolete'),
+  );
 }
 
 /**
@@ -34,32 +49,35 @@ export async function updateShardSchema(
   shard: ShardConfig,
   replicaVersion: string,
 ): Promise<void> {
-  const {appID, shardNum} = shard;
-  const versionHistory = await getVersionHistory(db, upstreamSchema(shard));
-  if (versionHistory === null) {
-    throw new AutoResetSignal(
-      `upstream shard ${appID}_${shardNum} is not initialized`,
-    );
-  }
-  await runShardMigrations(lc, db, shard, replicaVersion);
+  await runSchemaMigrations(
+    lc,
+    `upstream-shard-${shard.appID}`,
+    upstreamSchema(shard),
+    db,
+    {
+      // If the expected existing shard is absent, throw an
+      // AutoResetSignal to backtrack and initial sync.
+      migrateSchema: () => {
+        throw new AutoResetSignal(
+          `upstream shard ${upstreamSchema(shard)} is not initialized`,
+        );
+      },
+    },
+    getIncrementalMigrations(shard, replicaVersion),
+  );
 
   // The decommission check is run in updateShardSchema so that it happens
   // after initial sync, and not when the shard schema is initially set up.
   await decommissionLegacyShard(lc, db, shard);
 }
 
-async function runShardMigrations(
-  lc: LogContext,
-  db: PostgresDB,
+function getIncrementalMigrations(
   shard: ShardConfig,
   replicaVersion?: string,
-): Promise<void> {
-  const setupMigration: Migration = {
-    migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, shard),
-    minSafeVersion: 1,
-  };
+): IncrementalMigrationMap {
+  const shardConfigTable = `${upstreamSchema(shard)}.shardConfig`;
 
-  const schemaVersionMigrationMap: IncrementalMigrationMap = {
+  return {
     4: {
       migrateSchema: () => {
         throw new AutoResetSignal('resetting to upgrade shard schema');
@@ -84,11 +102,9 @@ async function runShardMigrations(
         );
         await Promise.all([
           tx`
-          ALTER TABLE ${tx(upstreamSchema(shard))}."shardConfig" 
-            ADD "replicaVersion" TEXT`,
+          ALTER TABLE ${tx(shardConfigTable)} ADD "replicaVersion" TEXT`,
           tx`
-          UPDATE ${tx(upstreamSchema(shard))}."shardConfig" 
-            SET ${tx({replicaVersion})}`,
+          UPDATE ${tx(shardConfigTable)} SET ${tx({replicaVersion})}`,
         ]);
         lc.info?.(
           `Recorded replicaVersion ${replicaVersion} in upstream shardConfig`,
@@ -101,22 +117,54 @@ async function runShardMigrations(
     7: {
       migrateSchema: async (lc, tx) => {
         const [{publications}] = await tx<{publications: string[]}[]>`
-          SELECT publications FROM ${tx(upstreamSchema(shard))}."shardConfig"
-        `;
+          SELECT publications FROM ${tx(shardConfigTable)}`;
         await setupTriggers(lc, tx, {...shard, publications});
         lc.info?.(`Upgraded to v2 event triggers`);
       },
     },
-  };
 
-  await runSchemaMigrations(
-    lc,
-    `upstream-shard-${shard.appID}`,
-    upstreamSchema(shard),
-    db,
-    setupMigration,
-    schemaVersionMigrationMap,
-  );
+    // Adds support for non-disruptive resyncs, which tracks multiple
+    // replicas with different slot names.
+    8: {
+      migrateSchema: async (lc, tx) => {
+        const {appID, shardNum} = shard;
+
+        const legacyShardConfigSchema = v.object({
+          replicaVersion: v.string().nullable(),
+          initialSchema: publishedSchema.nullable(),
+        });
+        const result = await tx`
+          SELECT "replicaVersion", "initialSchema" FROM ${tx(shardConfigTable)}`;
+        assert(result.length === 1);
+        const {replicaVersion, initialSchema} = v.parse(
+          result[0],
+          legacyShardConfigSchema,
+          'passthrough',
+        );
+
+        await Promise.all([
+          tx`
+          CREATE TABLE ${tx(upstreamSchema(shard))}.replicas (
+            "slot"          TEXT PRIMARY KEY,
+            "version"       TEXT NOT NULL,
+            "initialSchema" JSON NOT NULL
+          );
+          `,
+          tx`
+          INSERT INTO ${tx(upstreamSchema(shard))}.replicas ${tx({
+            slot: `${appID}_${shardNum}`, // legacy slot name
+            version: replicaVersion,
+            initialSchema,
+          })}
+          `,
+          tx`
+          ALTER TABLE ${tx(shardConfigTable)} DROP "replicaVersion", DROP "initialSchema"
+          `,
+        ]);
+        lc.info?.(`Upgraded schema to support non-disruptive resyncs`);
+      },
+    },
+  };
 }
 
 export async function decommissionLegacyShard(

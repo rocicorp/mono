@@ -7,7 +7,7 @@ import * as v from '../../../../../../shared/src/valita.ts';
 import {Default} from '../../../../db/postgres-replica-identity-enum.ts';
 import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.ts';
 import type {AppID, ShardConfig, ShardID} from '../../../../types/shards.ts';
-import {appSchema, upstreamSchema} from '../../../../types/shards.ts';
+import {appSchema, check, upstreamSchema} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
 import {createEventTriggerStatements} from './ddl.ts';
 import {
@@ -20,6 +20,15 @@ import {validate} from './validation.ts';
 
 export function internalPublicationPrefix({appID}: AppID) {
   return `_${appID}_`;
+}
+
+export function replicationSlotPrefix(shard: ShardID) {
+  const {appID, shardNum} = check(shard);
+  return `${appID}_${shardNum}_`;
+}
+
+export function newReplicationSlot(shard: ShardID) {
+  return replicationSlotPrefix(shard) + Date.now();
 }
 
 function defaultPublicationName(appID: string, shardID: string | number) {
@@ -114,21 +123,24 @@ export function shardSetup(
   CREATE TABLE ${shard}."${SHARD_CONFIG_TABLE}" (
     "publications"  TEXT[] NOT NULL,
     "ddlDetection"  BOOL NOT NULL,
-    "replicaVersion" TEXT,
-    "initialSchema" JSON,
 
     -- Ensure that there is only a single row in the table.
     "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
   );
 
-  INSERT INTO ${shard}."${SHARD_CONFIG_TABLE}" 
-    ("lock", "publications", "ddlDetection", "replicaVersion", "initialSchema")
-    VALUES (true, 
+  INSERT INTO ${shard}."${SHARD_CONFIG_TABLE}" (
+      "publications",
+      "ddlDetection" 
+    ) VALUES (
       ARRAY[${literal(pubs)}], 
-      false,  -- set in SAVEPOINT with triggerSetup() statements
-      null,   -- set in initial-sync at consistent_point LSN.
-      null    -- set in initial-sync at consistent_ponit LSN.
+      false  -- set in SAVEPOINT with triggerSetup() statements
     );
+
+  CREATE TABLE ${shard}.replicas (
+    "slot"          TEXT PRIMARY KEY,
+    "version"       TEXT NOT NULL,
+    "initialSchema" JSON NOT NULL
+  );
   `;
 }
 
@@ -146,11 +158,17 @@ export function dropShard(appID: string, shardID: string | number): string {
   `;
 }
 
+const replicaSchema = v.object({
+  slot: v.string(),
+  version: v.string(),
+  initialSchema: publishedSchema,
+});
+
+export type Replica = v.Infer<typeof replicaSchema>;
+
 const internalShardConfigSchema = v.object({
   publications: v.array(v.string()),
   ddlDetection: v.boolean(),
-  replicaVersion: v.string().nullable(),
-  initialSchema: publishedSchema.nullable(),
 });
 
 export type InternalShardConfig = v.Infer<typeof internalShardConfigSchema>;
@@ -167,18 +185,33 @@ function triggerSetup(shard: ShardConfig): string {
 }
 
 // Called in initial-sync to store the exact schema that was initially synced.
-export async function setInitialSchema(
+export async function addReplica(
   db: PostgresDB,
   shard: ShardID,
+  slot: string,
   replicaVersion: string,
   {tables, indexes}: PublishedSchema,
 ) {
   const schema = upstreamSchema(shard);
   const synced: PublishedSchema = {tables, indexes};
   await db`
-  UPDATE ${db(schema)}."shardConfig" 
-     SET "replicaVersion" = ${replicaVersion},
-          "initialSchema" = ${synced}`;
+    INSERT INTO ${db(schema)}.replicas ("slot", "version", "initialSchema")
+      VALUES (${slot}, ${replicaVersion}, ${synced})`;
+}
+
+export async function getReplicaAtVersion(
+  db: PostgresDB,
+  shard: ShardID,
+  replicaVersion: string,
+): Promise<Replica | null> {
+  const result = await db`
+    SELECT * FROM ${db(upstreamSchema(shard))}.replicas 
+      WHERE version = ${replicaVersion};
+  `;
+  if (result.length === 0) {
+    return null;
+  }
+  return v.parse(result[0], replicaSchema, 'passthrough');
 }
 
 export async function getInternalShardConfig(
@@ -186,7 +219,7 @@ export async function getInternalShardConfig(
   shard: ShardID,
 ): Promise<InternalShardConfig> {
   const result = await db`
-    SELECT "publications", "ddlDetection", "replicaVersion", "initialSchema"
+    SELECT "publications", "ddlDetection"
       FROM ${db(upstreamSchema(shard))}."shardConfig";
   `;
   assert(result.length === 1);

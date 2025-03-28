@@ -1,4 +1,4 @@
-import type {LogContext} from '@rocicorp/logger';
+import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
@@ -62,7 +62,7 @@ describe('decommission', () => {
     ]);
     expect(
       await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'zeroout%'`.values(),
-    ).toEqual([['zeroout_13']]);
+    ).toMatchObject([[expect.stringMatching('zeroout_13_')]]);
     expect(
       await upstream`SELECT nspname FROM pg_namespace WHERE nspname LIKE 'zeroout%'`.values(),
     ).toEqual([['zeroout_13'], ['zeroout']]);

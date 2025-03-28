@@ -23,7 +23,7 @@ import {
 } from '../../../types/lite.ts';
 import {liteTableName} from '../../../types/names.ts';
 import {pgClient, type PostgresDB} from '../../../types/pg.ts';
-import type {ShardConfig, ShardID} from '../../../types/shards.ts';
+import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
 import {initChangeLog} from '../../replicator/schema/change-log.ts';
@@ -32,11 +32,12 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../../replicator/schema/replication-state.ts';
 import {toLexiVersion} from './lsn.ts';
-import {initShardSchema} from './schema/init.ts';
+import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo, type PublicationInfo} from './schema/published.ts';
 import {
+  addReplica,
   getInternalShardConfig,
-  setInitialSchema,
+  newReplicationSlot,
   validatePublications,
 } from './schema/shard.ts';
 
@@ -44,10 +45,6 @@ export type InitialSyncOptions = {
   tableCopyWorkers: number;
   rowBatchSize: number;
 };
-
-export function replicationSlot({appID, shardNum}: ShardID): string {
-  return `${appID}_${shardNum}`;
-}
 
 export async function initialSync(
   lc: LogContext,
@@ -73,19 +70,9 @@ export async function initialSync(
     ['fetch_types']: false, // Necessary for the streaming protocol
     connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
   });
+  const slotName = newReplicationSlot(shard);
   try {
     await checkUpstreamConfig(upstreamDB);
-
-    // Kill the active_pid on the existing slot before altering publications,
-    // as deleting a publication associated with an existing subscriber causes
-    // weirdness; the active_pid becomes null and thus unable to be terminated.
-    const slotName = replicationSlot(shard);
-    const slots = await upstreamDB<{pid: string | null}[]>`
-    SELECT pg_terminate_backend(active_pid), active_pid as pid
-      FROM pg_replication_slots WHERE slot_name = ${slotName}`;
-    if (slots.length > 0 && slots[0].pid !== null) {
-      lc.info?.(`signaled subscriber ${slots[0].pid} to shut down`);
-    }
 
     const {publications} = await ensurePublishedTables(lc, upstreamDB, shard);
     lc.info?.(`Upstream is setup with publications [${publications}]`);
@@ -96,12 +83,7 @@ export async function initialSync(
     let slot: ReplicationSlot;
     for (let first = true; ; first = false) {
       try {
-        slot = await createReplicationSlot(
-          lc,
-          replicationSession,
-          slotName,
-          slots.length > 0,
-        );
+        slot = await createReplicationSlot(lc, replicationSession, slotName);
         break;
       } catch (e) {
         if (
@@ -160,7 +142,7 @@ export async function initialSync(
       await copiers.done();
     }
 
-    await setInitialSchema(upstreamDB, shard, initialVersion, published);
+    await addReplica(upstreamDB, shard, slotName, initialVersion, published);
 
     initReplicationState(tx, publications, initialVersion);
     initChangeLog(tx);
@@ -169,6 +151,16 @@ export async function initialSync(
         Date.now() - start
       } ms)`,
     );
+  } catch (e) {
+    // If initial-sync did not succeed, make a best effort to drop the
+    // orphaned replication slot to avoid running out of slots in
+    // pathological cases that result in repeated failures.
+    lc.warn?.(`dropping replication slot ${slotName}`, e);
+    await upstreamDB`
+      SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
+        WHERE slot_name = ${slotName};
+    `;
+    throw e;
   } finally {
     await replicationSession.end();
     await upstreamDB.end();
@@ -204,7 +196,7 @@ async function ensurePublishedTables(
   const {database, host} = upstreamDB.options;
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
 
-  await initShardSchema(lc, upstreamDB, shard);
+  await ensureShardSchema(lc, upstreamDB, shard);
 
   return getInternalShardConfig(upstreamDB, shard);
 }
@@ -226,20 +218,7 @@ async function createReplicationSlot(
   lc: LogContext,
   session: postgres.Sql,
   slotName: string,
-  dropExisting: boolean,
 ): Promise<ReplicationSlot> {
-  // Because a snapshot created by CREATE_REPLICATION_SLOT only lasts for the lifetime
-  // of the replication session, if there is an existing slot, it must be deleted so that
-  // the slot (and corresponding snapshot) can be created anew.
-  //
-  // This means that in order for initial data sync to succeed, it must fully complete
-  // within the lifetime of a replication session. Note that this is same requirement
-  // (and behavior) for Postgres-to-Postgres initial sync:
-  // https://github.com/postgres/postgres/blob/5304fec4d8a141abe6f8f6f2a6862822ec1f3598/src/backend/replication/logical/tablesync.c#L1358
-  if (dropExisting) {
-    lc.info?.(`Dropping existing replication slot ${slotName}`);
-    await session.unsafe(`DROP_REPLICATION_SLOT "${slotName}" WAIT`);
-  }
   const slot = (
     await session.unsafe<ReplicationSlot[]>(
       `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput`,

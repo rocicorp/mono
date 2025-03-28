@@ -1,15 +1,19 @@
-import {PG_ADMIN_SHUTDOWN} from '@drdgvhbh/postgres-error-codes';
+import {
+  PG_ADMIN_SHUTDOWN,
+  PG_OBJECT_IN_USE,
+} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
-import {assert} from '../../../../../shared/src/asserts.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
+import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {
   equals,
   intersection,
   symmetricDifferences,
 } from '../../../../../shared/src/set-utils.ts';
+import {sleep} from '../../../../../shared/src/sleep.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {mapPostgresToLiteColumn} from '../../../db/pg-to-lite.ts';
@@ -28,7 +32,11 @@ import {
   type LexiVersion,
 } from '../../../types/lexi-version.ts';
 import {pgClient, type PostgresDB} from '../../../types/pg.ts';
-import type {ShardConfig, ShardID} from '../../../types/shards.ts';
+import {
+  upstreamSchema,
+  type ShardConfig,
+  type ShardID,
+} from '../../../types/shards.ts';
 import type {Sink} from '../../../types/streams.ts';
 import {Subscription, type PendingResult} from '../../../types/subscription.ts';
 import type {
@@ -50,7 +58,7 @@ import type {
   ChangeStreamMessage,
   Data,
 } from '../protocol/current/downstream.ts';
-import {replicationSlot, type InitialSyncOptions} from './initial-sync.ts';
+import {type InitialSyncOptions} from './initial-sync.ts';
 import type {
   Message,
   MessageMessage,
@@ -63,9 +71,11 @@ import {updateShardSchema} from './schema/init.ts';
 import {getPublicationInfo, type PublishedSchema} from './schema/published.ts';
 import {
   getInternalShardConfig,
+  getReplicaAtVersion,
   internalPublicationPrefix,
   replicaIdentitiesForTablesWithoutPrimaryKeys,
   type InternalShardConfig,
+  type Replica,
 } from './schema/shard.ts';
 import {validate} from './schema/validation.ts';
 import {initSyncSchema} from './sync-schema.ts';
@@ -112,24 +122,24 @@ export async function initializePostgresChangeSource(
   // initial sync if not.
   const db = pgClient(lc, upstreamURI);
   try {
-    await checkAndUpdateUpstream(
+    const upstreamReplica = await checkAndUpdateUpstream(
       lc,
       db,
       shard,
       subscriptionState.replicaVersion,
     );
+
+    const changeSource = new PostgresChangeSource(
+      lc,
+      upstreamURI,
+      shard,
+      upstreamReplica,
+    );
+
+    return {subscriptionState, changeSource};
   } finally {
     await db.end();
   }
-
-  const changeSource = new PostgresChangeSource(
-    lc,
-    upstreamURI,
-    shard,
-    subscriptionState.replicaVersion,
-  );
-
-  return {subscriptionState, changeSource};
 }
 
 async function checkAndUpdateUpstream(
@@ -138,7 +148,16 @@ async function checkAndUpdateUpstream(
   shard: ShardConfig,
   replicaVersion: string,
 ) {
-  const slot = replicationSlot(shard);
+  // Perform any shard schema updates
+  await updateShardSchema(lc, db, shard, replicaVersion);
+
+  const upstreamReplica = await getReplicaAtVersion(db, shard, replicaVersion);
+  if (!upstreamReplica) {
+    throw new AutoResetSignal(
+      `No replication slot for replica at version ${replicaVersion}`,
+    );
+  }
+  const {slot} = upstreamReplica;
   const result = await db<{restartLSN: LSN | null}[]>`
   SELECT restart_lsn as "restartLSN" FROM pg_replication_slots WHERE slot_name = ${slot}`;
   if (result.length === 0) {
@@ -150,15 +169,7 @@ async function checkAndUpdateUpstream(
       `replication slot ${slot} has been invalidated for exceeding the max_slot_wal_keep_size`,
     );
   }
-  // Perform any shard schema updates
-  await updateShardSchema(lc, db, shard, replicaVersion);
-
-  const expected = await getInternalShardConfig(db, shard);
-  if (expected.replicaVersion !== replicaVersion) {
-    throw new AutoResetSignal(
-      `local replicaVersion ${replicaVersion} does not match upstream replicaVersion ${expected.replicaVersion}`,
-    );
-  }
+  return upstreamReplica;
 }
 
 /**
@@ -169,31 +180,35 @@ class PostgresChangeSource implements ChangeSource {
   readonly #lc: LogContext;
   readonly #upstreamUri: string;
   readonly #shard: ShardID;
-  readonly #replicaVersion: string;
+  readonly #replica: Replica;
 
   constructor(
     lc: LogContext,
     upstreamUri: string,
     shard: ShardID,
-    replicaVersion: string,
+    replica: Replica,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
     this.#upstreamUri = upstreamUri;
     this.#shard = shard;
-    this.#replicaVersion = replicaVersion;
+    this.#replica = replica;
   }
 
   async startStream(clientWatermark: string): Promise<ChangeStream> {
     const db = pgClient(this.#lc, this.#upstreamUri);
-    const slot = replicationSlot(this.#shard);
+    const {slot} = this.#replica;
 
+    let cleanup = promiseVoid;
     try {
-      await this.#stopExistingReplicationSlotSubscriber(db, slot);
+      ({cleanup} = await this.#stopExistingReplicationSlotSubscribers(
+        db,
+        slot,
+      ));
       const config = await getInternalShardConfig(db, this.#shard);
       this.#lc.info?.(`starting replication stream@${slot}`);
       return await this.#startStream(db, slot, clientWatermark, config);
     } finally {
-      await db.end();
+      void cleanup.then(() => db.end());
     }
   }
 
@@ -221,6 +236,7 @@ class PostgresChangeSource implements ChangeSource {
       this.#lc,
       this.#shard,
       shardConfig,
+      this.#replica.initialSchema,
       this.#upstreamUri,
     );
 
@@ -244,7 +260,7 @@ class PostgresChangeSource implements ChangeSource {
 
     this.#lc.info?.(
       `started replication stream@${slot} from ${clientWatermark} (replicaVersion: ${
-        this.#replicaVersion
+        this.#replica.version
       })`,
     );
 
@@ -254,25 +270,73 @@ class PostgresChangeSource implements ChangeSource {
     };
   }
 
-  async #stopExistingReplicationSlotSubscriber(
+  /**
+   * Stops all replication slots associated with this shard, and returns
+   * a `cleanup` task that drops any slot other than the specified
+   * `slotToKeep`.
+   */
+  async #stopExistingReplicationSlotSubscribers(
     db: PostgresDB,
-    slot: string,
-  ): Promise<void> {
-    const result = await db<{pid: string | null}[]>`
-    SELECT pg_terminate_backend(active_pid), active_pid as pid
-      FROM pg_replication_slots WHERE slot_name = ${slot}`;
+    slotToKeep: string,
+  ): Promise<{cleanup: Promise<void>}> {
+    const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
+
+    const result = await db<{slot: string; pid: string | null}[]>`
+    SELECT slot, pg_terminate_backend(active_pid), active_pid as pid
+      FROM pg_replication_slots 
+      JOIN ${db(replicasTable)} ON slot_name = slot`;
     if (result.length === 0) {
       // Note: This should not happen as it is checked at initialization time,
       //       but it is technically possible for the replication slot to be
       //       dropped (e.g. manually).
       throw new AbortError(
-        `replication slot ${slot} is missing. Delete the replica and resync.`,
+        `replication slot ${slotToKeep} is missing. Delete the replica and resync.`,
       );
     }
-    const {pid} = result[0];
-    if (pid) {
-      this.#lc.info?.(`signaled subscriber ${pid} to shut down`);
+    // Clean up the replicas table.
+    await db`DELETE FROM ${db(replicasTable)} WHERE slot != ${slotToKeep}`;
+
+    const pids = result.filter(({pid}) => pid !== null).map(({pid}) => pid);
+    if (pids.length) {
+      this.#lc.info?.(`signaled subscriber ${pids} to shut down`);
     }
+    const otherSlots = result
+      .filter(({slot}) => slot !== slotToKeep)
+      .map(({slot}) => slot);
+    return {
+      cleanup: otherSlots.length
+        ? this.#dropReplicationSlots(db, otherSlots)
+        : promiseVoid,
+    };
+  }
+
+  async #dropReplicationSlots(db: PostgresDB, slots: string[]) {
+    this.#lc.info?.(`dropping other replication slot(s) ${slots}`);
+    for (let i = 0; i < 5; i++) {
+      try {
+        await db`
+          SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
+            WHERE slot_name IN ${db(slots)}
+        `;
+        this.#lc.info?.(`successfully dropped ${slots}`);
+        return;
+      } catch (e) {
+        // error: replication slot "zero_slot_change_source_test_id" is active for PID 268
+        if (
+          e instanceof postgres.PostgresError &&
+          e.code === PG_OBJECT_IN_USE
+        ) {
+          // The freeing up of the replication slot is not transactional;
+          // sometimes it takes time for Postgres to consider the slot
+          // inactive.
+          this.#lc.debug?.(`attempt ${i + 1}: ${String(e)}`, e);
+        } else {
+          this.#lc.warn?.(`error dropping ${slots}`, e);
+        }
+        await sleep(1000);
+      }
+    }
+    this.#lc.warn?.(`maximum attempts exceeded dropping ${slots}`);
   }
 }
 
@@ -330,6 +394,7 @@ class ChangeMaker {
   readonly #lc: LogContext;
   readonly #shardPrefix: string;
   readonly #shardConfig: InternalShardConfig;
+  readonly #initialSchema: PublishedSchema;
   readonly #upstream: ShortLivedClient;
 
   #replicaIdentityTimer: NodeJS.Timeout | undefined;
@@ -339,12 +404,14 @@ class ChangeMaker {
     lc: LogContext,
     {appID, shardNum}: ShardID,
     shardConfig: InternalShardConfig,
+    initialSchema: PublishedSchema,
     upstreamURI: string,
   ) {
     this.#lc = lc;
     // Note: This matches the prefix used in pg_logical_emit_message() in pg/schema/ddl.ts.
     this.#shardPrefix = `${appID}/${shardNum}`;
     this.#shardConfig = shardConfig;
+    this.#initialSchema = initialSchema;
     this.#upstream = new ShortLivedClient(
       lc,
       upstreamURI,
@@ -646,23 +713,24 @@ class ChangeMaker {
    * However, they serve the purpose determining if schemas have changed.
    */
   async #handleRelation(rel: MessageRelation): Promise<ChangeStreamData[]> {
-    const {publications, ddlDetection, initialSchema} = this.#shardConfig;
+    const {publications, ddlDetection} = this.#shardConfig;
     if (ddlDetection) {
       return [];
     }
-    assert(initialSchema); // Written in initial-sync
     const currentSchema = await getPublicationInfo(
       this.#upstream.db,
       publications,
     );
-    if (schemasDifferent(initialSchema, currentSchema, this.#lc)) {
+    if (schemasDifferent(this.#initialSchema, currentSchema, this.#lc)) {
       throw new UnsupportedSchemaChangeError();
     }
     // Even if the currentSchema is equal to the initialSchema, the
     // MessageRelation itself must be checked to detect transient
     // schema changes within the transaction (e.g. adding and dropping
     // a table, or renaming a column and then renaming it back).
-    const orel = initialSchema.tables.find(t => t.oid === rel.relationOid);
+    const orel = this.#initialSchema.tables.find(
+      t => t.oid === rel.relationOid,
+    );
     if (!orel) {
       // Can happen if a table is created and then dropped in the same transaction.
       this.#lc.info?.(`relation not in initialSchema: ${stringify(rel)}`);

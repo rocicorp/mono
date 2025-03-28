@@ -5,7 +5,11 @@ import {Index} from '../../../../db/postgres-replica-identity-enum.ts';
 import {expectTables, initDB, testDBs} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import {getPublicationInfo} from './published.ts';
-import {setupTablesAndReplication, validatePublications} from './shard.ts';
+import {
+  addReplica,
+  setupTablesAndReplication,
+  validatePublications,
+} from './shard.ts';
 
 const APP_ID = 'zro';
 
@@ -33,13 +37,20 @@ describe('change-source/pg', () => {
   }
 
   test('default publication, schema version setup', async () => {
-    await db.begin(tx =>
-      setupTablesAndReplication(lc, tx, {
+    await db.begin(async tx => {
+      await setupTablesAndReplication(lc, tx, {
         appID: APP_ID,
         shardNum: 0,
         publications: [],
-      }),
-    );
+      });
+      await addReplica(
+        tx,
+        {appID: APP_ID, shardNum: 0},
+        'zro_0_1234',
+        '0wdfj02',
+        {tables: [], indexes: []},
+      );
+    });
 
     expect(await publications()).toEqual([
       [`_zro_metadata_0`, 'zro', 'schemaVersions', null],
@@ -58,8 +69,13 @@ describe('change-source/pg', () => {
           lock: true,
           publications: ['_zro_metadata_0', '_zro_public_0'],
           ddlDetection: true,
-          initialSchema: null,
-          replicaVersion: null,
+        },
+      ],
+      ['zro_0.replicas']: [
+        {
+          slot: 'zro_0_1234',
+          version: '0wdfj02',
+          initialSchema: {tables: [], indexes: []},
         },
       ],
       ['zro_0.clients']: [],
@@ -111,10 +127,9 @@ describe('change-source/pg', () => {
           lock: true,
           publications: ['_zro_metadata_0', '_zro_public_0'],
           ddlDetection: true,
-          initialSchema: null,
-          replicaVersion: null,
         },
       ],
+      ['zro_0.replicas']: [],
       ['zro_0.clients']: [],
       ['join_table']: [{id1: 'foo', id2: 'bar'}],
     });
@@ -153,10 +168,9 @@ describe('change-source/pg', () => {
           lock: true,
           publications: [`_1_metadata_0`, `_1_public_0`],
           ddlDetection: true,
-          initialSchema: null,
-          replicaVersion: null,
         },
       ],
+      ['1_0.replicas']: [],
       [`1_0.clients`]: [],
     });
   });
@@ -198,18 +212,15 @@ describe('change-source/pg', () => {
           lock: true,
           publications: ['_zro_metadata_0', '_zro_public_0'],
           ddlDetection: true,
-          initialSchema: null,
-          replicaVersion: null,
         },
       ],
+      ['zro_0.replicas']: [],
       ['zro_0.clients']: [],
       ['zro_1.shardConfig']: [
         {
           lock: true,
           publications: ['_zro_metadata_1', '_zro_public_1'],
           ddlDetection: true,
-          initialSchema: null,
-          replicaVersion: null,
         },
       ],
       ['zro_1.clients']: [],
@@ -291,10 +302,9 @@ describe('change-source/pg', () => {
           lock: true,
           publications: ['_zro_metadata_2', 'zero_bar', 'zero_foo'],
           ddlDetection: true,
-          initialSchema: null,
-          replicaVersion: null,
         },
       ],
+      ['zro_2.replicas']: [],
       ['zro_2.clients']: [],
     });
   });
@@ -333,10 +343,9 @@ describe('change-source/pg', () => {
           lock: true,
           publications: ['_supaneon_metadata_0', 'zero_foo'],
           ddlDetection: false, // degraded mode
-          initialSchema: null,
-          replicaVersion: null,
         },
       ],
+      ['supaneon_0.replicas']: [],
       ['supaneon_0.clients']: [],
     });
 

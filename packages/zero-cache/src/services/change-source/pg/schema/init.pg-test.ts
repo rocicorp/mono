@@ -7,15 +7,16 @@ import {
 } from '../../../../db/migration.ts';
 import {expectTablesToMatch, initDB, testDBs} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
-import {initShardSchema, updateShardSchema} from './init.ts';
+import {ensureShardSchema, updateShardSchema} from './init.ts';
+import {addReplica} from './shard.ts';
 
 const APP_ID = 'zappz';
 const SHARD_NUM = 23;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 7,
-  schemaVersion: 7,
+  dataVersion: 8,
+  schemaVersion: 8,
   minSafeVersion: 1,
   lock: 'v',
 } as const;
@@ -37,6 +38,7 @@ describe('change-streamer/pg/schema/init', () => {
     name: string;
     upstreamSetup?: string;
     existingVersionHistory?: VersionHistory;
+    newReplica?: [slot: string, replicaVersion: string];
     requestedPublications?: string[];
     upstreamPreState?: Record<string, object[]>;
     upstreamPostState?: Record<string, object[]>;
@@ -45,13 +47,20 @@ describe('change-streamer/pg/schema/init', () => {
   const cases: Case[] = [
     {
       name: 'initial db',
+      newReplica: [`${APP_ID}_${SHARD_NUM}_1234`, '2dhf29ef'],
       upstreamPostState: {
         [`${APP_ID}_${SHARD_NUM}.shardConfig`]: [
           {
             lock: true,
             publications: [`_${APP_ID}_metadata_23`, `_${APP_ID}_public_23`],
             ddlDetection: true,
-            initialSchema: null,
+          },
+        ],
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: [
+          {
+            slot: `${APP_ID}_${SHARD_NUM}_1234`,
+            version: '2dhf29ef',
+            initialSchema: {tables: [], indexes: []},
           },
         ],
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
@@ -67,6 +76,7 @@ describe('change-streamer/pg/schema/init', () => {
         CREATE TABLE foo(id TEXT PRIMARY KEY);
         CREATE PUBLICATION ${APP_ID}_foo FOR TABLE foo;
       `,
+      newReplica: [`${APP_ID}_${SHARD_NUM}_5678`, 's8dfh2d'],
       requestedPublications: [`${APP_ID}_foo`],
       upstreamPostState: {
         [`${APP_ID}_${SHARD_NUM}.shardConfig`]: [
@@ -74,7 +84,13 @@ describe('change-streamer/pg/schema/init', () => {
             lock: true,
             publications: [`_${APP_ID}_metadata_23`, `${APP_ID}_foo`],
             ddlDetection: true,
-            initialSchema: null,
+          },
+        ],
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: [
+          {
+            slot: `${APP_ID}_${SHARD_NUM}_5678`,
+            version: 's8dfh2d',
+            initialSchema: {tables: [], indexes: []},
           },
         ],
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
@@ -99,9 +115,9 @@ describe('change-streamer/pg/schema/init', () => {
             lock: true,
             publications: [`_${APP_ID}_metadata_23`, `_${APP_ID}_public_23`],
             ddlDetection: true,
-            initialSchema: null,
           },
         ],
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: [],
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
         [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
         [`${APP_ID}.schemaVersions`]: [
@@ -127,7 +143,7 @@ describe('change-streamer/pg/schema/init', () => {
           VALUES (true, 
             ARRAY['_${APP_ID}_metadata_23', '_${APP_ID}_public_23'], 
             true,
-            null
+            '{"tables":[],"indexes":[]}'
           );
   `,
       existingVersionHistory: {
@@ -141,8 +157,13 @@ describe('change-streamer/pg/schema/init', () => {
             lock: true,
             publications: [`_${APP_ID}_metadata_23`, `_${APP_ID}_public_23`],
             ddlDetection: true,
-            initialSchema: null,
-            replicaVersion: '123',
+          },
+        ],
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: [
+          {
+            slot: `${APP_ID}_${SHARD_NUM}`,
+            version: '123',
+            initialSchema: {tables: [], indexes: []},
           },
         ],
       },
@@ -169,11 +190,20 @@ describe('change-streamer/pg/schema/init', () => {
           '123',
         );
       } else {
-        await initShardSchema(lc, upstream, {
+        await ensureShardSchema(lc, upstream, {
           appID: APP_ID,
           shardNum: SHARD_NUM,
           publications: c.requestedPublications ?? [],
         });
+        if (c.newReplica) {
+          await addReplica(
+            upstream,
+            {appID: APP_ID, shardNum: SHARD_NUM},
+            c.newReplica[0],
+            c.newReplica[1],
+            {tables: [], indexes: []},
+          );
+        }
       }
 
       await expectTablesToMatch(upstream, c.upstreamPostState);

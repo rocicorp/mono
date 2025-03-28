@@ -1,7 +1,7 @@
 import {PG_OBJECT_IN_USE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {PostgresError} from 'postgres';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, test} from 'vitest';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {TestLogSink} from '../../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
@@ -29,7 +29,6 @@ import type {
   Commit,
 } from '../protocol/current/downstream.ts';
 import {initializePostgresChangeSource} from './change-source.ts';
-import {replicationSlot} from './initial-sync.ts';
 import {fromLexiVersion} from './lsn.ts';
 import {dropEventTriggerStatements} from './schema/ddl.ts';
 
@@ -41,6 +40,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
   let lc: LogContext;
   let upstream: PostgresDB;
   let upstreamURI: string;
+  let replicationSlot: string;
   let replicaDbFile: DbFile;
   let source: ChangeSource;
   let streams: ChangeStream[];
@@ -88,34 +88,41 @@ describe('change-source/pg', {timeout: 30000}, () => {
     CREATE PUBLICATION zero_zero FOR TABLES IN SCHEMA my;
     `);
 
-    source = (
-      await initializePostgresChangeSource(
-        lc,
-        upstreamURI,
-        {
-          appID: APP_ID,
-          publications: ['zero_foo', 'zero_zero'],
-          shardNum: SHARD_NUM,
-        },
-        replicaDbFile.path,
-        {tableCopyWorkers: 5, rowBatchSize: 10000},
-      )
-    ).changeSource;
-  }, 30000);
+    ({changeSource: source} = await initializePostgresChangeSource(
+      lc,
+      upstreamURI,
+      {
+        appID: APP_ID,
+        publications: ['zero_foo', 'zero_zero'],
+        shardNum: SHARD_NUM,
+      },
+      replicaDbFile.path,
+      {tableCopyWorkers: 5, rowBatchSize: 10000},
+    ));
 
-  afterEach(async () => {
-    streams.forEach(s => s.changes.cancel());
-    await testDBs.drop(upstream);
-    replicaDbFile.delete();
-  });
+    const [{slot}] = await upstream<{slot: string}[]>`
+      SELECT slot FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)};
+    `;
+    replicationSlot = slot;
+
+    return async () => {
+      streams.forEach(s => s.changes.cancel());
+      await testDBs.drop(upstream);
+      replicaDbFile.delete();
+    };
+  }, 30000);
 
   function drainToQueue(
     sub: Source<ChangeStreamMessage>,
   ): Queue<ChangeStreamMessage> {
     const queue = new Queue<ChangeStreamMessage>();
     void (async () => {
-      for await (const msg of sub) {
-        queue.enqueue(msg);
+      try {
+        for await (const msg of sub) {
+          queue.enqueue(msg);
+        }
+      } catch (e) {
+        queue.enqueueRejection(e);
       }
     })();
     return queue;
@@ -136,11 +143,11 @@ describe('change-source/pg', {timeout: 30000}, () => {
 
   const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 10;
 
-  async function startStream(watermark: string) {
+  async function startStream(watermark: string, src = source) {
     let err;
     for (let i = 0; i < MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE; i++) {
       try {
-        const stream = await source.startStream(watermark);
+        const stream = await src.startStream(watermark);
         // cleanup in afterEach() ensures that replication slots are released
         streams.push(stream);
         return stream;
@@ -324,10 +331,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
       // Verify that the ACK was stored with the replication slot.
       const results = await upstream<{confirmed: string}[]>`
     SELECT confirmed_flush_lsn as confirmed FROM pg_replication_slots
-        WHERE slot_name = ${replicationSlot({
-          appID: APP_ID,
-          shardNum: SHARD_NUM,
-        })}`;
+        WHERE slot_name = ${replicationSlot}`;
       const expected = versionFromLexi(commit1[2].watermark);
       expect(results).toEqual([
         {confirmed: fromLexiVersion(versionToLexi(expected))},
@@ -797,7 +801,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
 
     const results = await upstream<{pid: number}[]>`
       SELECT active_pid as pid from pg_replication_slots WHERE
-        slot_name = ${replicationSlot({appID: APP_ID, shardNum: SHARD_NUM})}`;
+        slot_name = ${replicationSlot}`;
     const {pid} = results[0];
 
     await upstream`SELECT pg_terminate_backend(${pid})`;
@@ -830,6 +834,93 @@ describe('change-source/pg', {timeout: 30000}, () => {
 
     expect(err).toBeInstanceOf(AbortError);
     changes2.cancel();
+  });
+
+  test('non-disruptive resync', async () => {
+    const {changes: changes1} = await startStream('00');
+
+    // Force another initial sync with an empty replica.
+    const anotherReplicaFile = new DbFile('change_source_pg_test_replica2');
+    const {changeSource: source2} = await initializePostgresChangeSource(
+      lc,
+      upstreamURI,
+      {
+        appID: APP_ID,
+        publications: ['zero_foo', 'zero_zero'],
+        shardNum: SHARD_NUM,
+      },
+      anotherReplicaFile.path,
+      {tableCopyWorkers: 5, rowBatchSize: 10000},
+    );
+
+    // Initial sync should have created a second replication slot.
+    const slots1 = await upstream<{slot: string}[]>`
+      SELECT slot_name as slot FROM pg_replication_slots
+    `.values();
+    expect(slots1).toHaveLength(2);
+
+    const replicas1 = await upstream.unsafe(`
+      SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas
+    `);
+    expect(replicas1).toHaveLength(2);
+
+    // The original stream should still be active and receiving changes.
+    const downstream1 = drainToQueue(changes1);
+    await upstream`INSERT INTO foo(id, int) VALUES('hello', 0)`;
+    expect(await downstream1.dequeue()).toMatchObject([
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+    expect(await downstream1.dequeue()).toMatchObject([
+      'data',
+      {tag: 'insert'},
+    ]);
+    expect(await downstream1.dequeue()).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+
+    // Starting a subscription on the new slot should kill the old
+    // subscription.
+    const {changes: changes2} = await startStream('00', source2);
+
+    await expect(() => downstream1.dequeue()).rejects.toThrow(AbortError);
+
+    // The new stream should get the same changes since it was synced
+    // before they occurred.
+    const downstream2 = drainToQueue(changes2);
+    expect(await downstream2.dequeue()).toMatchObject([
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+    expect(await downstream2.dequeue()).toMatchObject([
+      'data',
+      {tag: 'insert'},
+    ]);
+    expect(await downstream2.dequeue()).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+
+    changes2.cancel();
+
+    // Verify that only one slot remains
+    const slots2 = await upstream<{slot: string}[]>`
+      SELECT slot_name as slot FROM pg_replication_slots
+    `.values();
+    expect(slots2).toEqual(slots1.slice(1));
+
+    // Verify that the replica rows have also been cleaned up.
+    const replicas2 = await upstream.unsafe(`
+      SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas
+    `);
+    expect(replicas2).toEqual(replicas1.slice(1));
+
+    anotherReplicaFile.delete();
   });
 
   test('error on wrong publications', async () => {

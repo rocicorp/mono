@@ -1,4 +1,4 @@
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {listIndexes, listTables} from '../../../db/lite-tables.ts';
@@ -16,13 +16,9 @@ import {
 } from '../../../test/lite.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../replicator/schema/replication-state.ts';
-import {
-  initialSync,
-  INSERT_BATCH_SIZE,
-  replicationSlot,
-} from './initial-sync.ts';
+import {initialSync, INSERT_BATCH_SIZE} from './initial-sync.ts';
 import {fromLexiVersion} from './lsn.ts';
-import {initShardSchema} from './schema/init.ts';
+import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo} from './schema/published.ts';
 import {UnsupportedTableSchemaError} from './schema/validation.ts';
 
@@ -246,66 +242,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
   const cases: Case[] = [
     {
       name: 'empty DB',
-      published: {
-        [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
-        [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
-        [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
-      },
-      replicatedSchema: {
-        [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
-        [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
-        [`${APP_ID}.schemaVersions`]: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
-      },
-      replicatedIndexes: [
-        {
-          columns: {lock: 'ASC'},
-          name: 'permissions_pkey',
-          schema: APP_ID,
-          tableName: 'permissions',
-          unique: true,
-        },
-        {
-          columns: {lock: 'ASC'},
-          name: 'schemaVersions_pkey',
-          schema: APP_ID,
-          tableName: 'schemaVersions',
-          unique: true,
-        },
-        {
-          columns: {
-            clientGroupID: 'ASC',
-            clientID: 'ASC',
-          },
-          name: 'clients_pkey',
-          schema: `${APP_ID}_${SHARD_NUM}`,
-          tableName: 'clients',
-          unique: true,
-        },
-      ],
-      replicatedData: {
-        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
-        [`${APP_ID}.schemaVersions`]: [
-          {
-            lock: 1n,
-            minSupportedVersion: 1n,
-            maxSupportedVersion: 1n,
-            ['_0_version']: WATERMARK_REGEX,
-          },
-        ],
-      },
-      resultingPublications: [
-        `_${APP_ID}_metadata_${SHARD_NUM}`,
-        `_${APP_ID}_public_${SHARD_NUM}`,
-      ],
-    },
-    {
-      name: 'replication slot already exists',
-      setupUpstreamQuery: `
-        SELECT * FROM pg_create_logical_replication_slot('${replicationSlot({
-          appID: APP_ID,
-          shardNum: SHARD_NUM,
-        })}', 'pgoutput');
-      `,
       published: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
@@ -1553,108 +1489,119 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
   ];
 
   let upstream: PostgresDB;
-  let replica: Database;
 
   beforeEach(async () => {
     upstream = await testDBs.create('initial_sync_upstream');
-    replica = new Database(createSilentLogContext(), ':memory:');
-  });
-
-  afterEach(async () => {
-    await testDBs.drop(upstream);
+    return async () => {
+      await testDBs.drop(upstream);
+    };
   });
 
   for (const c of cases) {
-    test(`startInitialDataSynchronization: ${c.name}`, async () => {
+    test(c.name, async () => {
       await initDB(upstream, c.setupUpstreamQuery, c.upstream);
-      initLiteDB(replica, c.setupReplicaQuery);
 
       const lc = createSilentLogContext();
-      await initialSync(
-        lc,
-        {
-          appID: APP_ID,
-          shardNum: SHARD_NUM,
-          publications: c.requestedPublications ?? [],
-        },
-        replica,
-        getConnectionURI(upstream),
-        {tableCopyWorkers: 5, rowBatchSize: 10000},
-      );
 
-      const result = await upstream.unsafe(
-        `SELECT * FROM "${APP_ID}_${SHARD_NUM}"."shardConfig"`,
-      );
-      const tableSpecs = Object.entries(c.published)
-        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-        .map(([_, spec]) => spec);
-      expect(result[0]).toMatchObject({
-        publications: c.resultingPublications,
-        ddlDetection: true,
-        // Importantly, the initialSchema column is populated during initial sync.
-        initialSchema: {
-          tables: tableSpecs,
-          indexes: c.replicatedIndexes,
-        },
-        replicaVersion: WATERMARK_REGEX,
-      });
+      // Run each test twice to confirm that a takeover initial sync works.
+      for (let i = 0; i < 2; i++) {
+        const replica = new Database(lc, ':memory:');
+        initLiteDB(replica, c.setupReplicaQuery);
 
-      const {publications, tables} = await getPublicationInfo(
-        upstream,
-        c.resultingPublications,
-      );
-      expect(
-        Object.fromEntries(
-          tables.map(table => [`${table.schema}.${table.name}`, table]),
-        ),
-      ).toMatchObject(c.published);
-      expect(new Set(publications.map(p => p.pubname))).toEqual(
-        new Set(c.resultingPublications),
-      );
-
-      const synced = listTables(replica);
-      expect(
-        Object.fromEntries(synced.map(table => [table.name, table])),
-      ).toMatchObject(c.replicatedSchema);
-      const {pubs} = replica
-        .prepare(`SELECT publications as pubs FROM "_zero.replicationConfig"`)
-        .get<{pubs: string}>();
-      expect(new Set(JSON.parse(pubs))).toEqual(
-        new Set(c.resultingPublications),
-      );
-
-      const syncedIndices = listIndexes(replica);
-      expect(syncedIndices).toEqual(
-        c.replicatedIndexes.map(idx => mapPostgresToLiteIndex(idx)),
-      );
-
-      expectMatchingObjectsInTables(replica, c.replicatedData, 'bigint');
-
-      const replicaState = replica
-        .prepare('SELECT * FROM "_zero.replicationState"')
-        .get<{stateVersion: string}>();
-      expect(replicaState).toMatchObject({stateVersion: WATERMARK_REGEX});
-      expectTables(replica, {['_zero.changeLog']: []});
-
-      // Check replica state against the upstream slot.
-      const slots = await upstream`
-        SELECT slot_name as "slotName", confirmed_flush_lsn as lsn 
-          FROM pg_replication_slots WHERE slot_name = ${replicationSlot({
+        await initialSync(
+          lc,
+          {
             appID: APP_ID,
             shardNum: SHARD_NUM,
-          })}`;
-      expect(slots[0]).toEqual({
-        slotName: replicationSlot({appID: APP_ID, shardNum: SHARD_NUM}),
-        lsn: fromLexiVersion(replicaState.stateVersion),
-      });
+            publications: c.requestedPublications ?? [],
+          },
+          replica,
+          getConnectionURI(upstream),
+          {tableCopyWorkers: 5, rowBatchSize: 10000},
+        );
+
+        const config = await upstream.unsafe(
+          `SELECT * FROM "${APP_ID}_${SHARD_NUM}"."shardConfig"`,
+        );
+        expect(config[0]).toMatchObject({
+          publications: c.resultingPublications,
+          ddlDetection: true,
+        });
+        const replicas = await upstream.unsafe(
+          `SELECT * FROM "${APP_ID}_${SHARD_NUM}"."replicas"`,
+        );
+        expect(replicas).toHaveLength(i + 1);
+        const tableSpecs = Object.entries(c.published)
+          .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+          .map(([_, spec]) => spec);
+        for (const r of replicas) {
+          expect(r).toMatchObject({
+            slot: expect.stringMatching(`${APP_ID}_${SHARD_NUM}_\\d+`),
+            // Importantly, the initialSchema column is populated during initial sync.
+            initialSchema: {
+              tables: tableSpecs,
+              indexes: c.replicatedIndexes,
+            },
+            version: WATERMARK_REGEX,
+          });
+        }
+
+        const {publications, tables} = await getPublicationInfo(
+          upstream,
+          c.resultingPublications,
+        );
+        expect(
+          Object.fromEntries(
+            tables.map(table => [`${table.schema}.${table.name}`, table]),
+          ),
+        ).toMatchObject(c.published);
+        expect(new Set(publications.map(p => p.pubname))).toEqual(
+          new Set(c.resultingPublications),
+        );
+
+        const synced = listTables(replica);
+        expect(
+          Object.fromEntries(synced.map(table => [table.name, table])),
+        ).toMatchObject(c.replicatedSchema);
+        const {pubs} = replica
+          .prepare(`SELECT publications as pubs FROM "_zero.replicationConfig"`)
+          .get<{pubs: string}>();
+        expect(new Set(JSON.parse(pubs))).toEqual(
+          new Set(c.resultingPublications),
+        );
+
+        const syncedIndices = listIndexes(replica);
+        expect(syncedIndices).toEqual(
+          c.replicatedIndexes.map(idx => mapPostgresToLiteIndex(idx)),
+        );
+
+        expectMatchingObjectsInTables(replica, c.replicatedData, 'bigint');
+
+        const replicaState = replica
+          .prepare('SELECT * FROM "_zero.replicationState"')
+          .get<{stateVersion: string}>();
+        expect(replicaState).toMatchObject({stateVersion: WATERMARK_REGEX});
+        expectTables(replica, {['_zero.changeLog']: []});
+
+        // Check replica state against the upstream slot.
+        const r = replicas[i];
+        const slots = await upstream`
+        SELECT slot_name as "slotName", confirmed_flush_lsn as lsn 
+          FROM pg_replication_slots WHERE slot_name = ${r.slot}`;
+        expect(slots[0]).toEqual({
+          slotName: r.slot,
+          lsn: fromLexiVersion(replicaState.stateVersion),
+        });
+      }
     });
   }
 
   test('resume initial sync with invalid table', async () => {
     const lc = createSilentLogContext();
+    const replica = new Database(lc, ':memory:');
     const shardConfig = {appID: APP_ID, shardNum: SHARD_NUM, publications: []};
 
-    await initShardSchema(lc, upstream, shardConfig);
+    await ensureShardSchema(lc, upstream, shardConfig);
 
     // Shard should be setup to publish all "public" tables.
     // Now add an invalid table that becomes part of that publication.
@@ -1680,6 +1627,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     'punctuation!',
   ])('invalid app ID: %s', async appID => {
     const lc = createSilentLogContext();
+    const replica = new Database(lc, ':memory:');
     let result;
     try {
       await initialSync(
