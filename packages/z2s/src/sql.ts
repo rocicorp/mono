@@ -6,18 +6,16 @@ import {
 } from '@databases/escape-identifier';
 import type {ValueType} from '../../zero-protocol/src/client-schema.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import type {TypeNameToTypeMap} from '../../zero-schema/src/table-schema.ts';
 
 export function formatPg(sql: SQLQuery) {
   const format = new ReusingFormat(escapePostgresIdentifier);
   return sql.format((items: readonly SQLItem[]) => formatFn(items, format));
 }
 
-export function formatPgJson(sql: SQLQuery) {
-  const format = new JsonPackedFormat(escapePostgresIdentifier);
-  return sql.format((items: readonly SQLItem[]) =>
-    formatFn(items, format, true),
-  );
+export function formatPgInternalConvert(sql: SQLQuery) {
+  const format = new SQLConvertFormat(escapePostgresIdentifier);
+  return sql.format((items: readonly SQLItem[]) => formatFn(items, format));
 }
 
 export function formatSqlite(sql: SQLQuery) {
@@ -25,30 +23,25 @@ export function formatSqlite(sql: SQLQuery) {
   return sql.format((items: readonly SQLItem[]) => formatFn(items, format));
 }
 
-export const jsonPack = Symbol('fromJson');
-type JsonPackArg = {
-  [jsonPack]: true;
+const sqlConvert = Symbol('fromJson');
+type SqlConvertArg = {
+  [sqlConvert]: true;
   type: ValueType;
   value: unknown;
 };
-function isJsonPack(value: unknown): value is JsonPackArg {
-  return value !== null && typeof value === 'object' && jsonPack in value;
+function isSqlConvert(value: unknown): value is SqlConvertArg {
+  return value !== null && typeof value === 'object' && sqlConvert in value;
 }
-export function jsonPackArg<T extends ValueType>(
+
+export function sqlConvertArg<T extends ValueType>(
   type: T,
-  value: 'number' extends T
-    ? number
-    : 'string' extends T
-      ? string
-      : 'boolean' extends T
-        ? boolean
-        : 'null' extends T
-          ? null
-          : 'json' extends T
-            ? ReadonlyJSONValue
-            : never,
-): JsonPackArg {
-  return {[jsonPack]: true, type, value};
+  value: TypeNameToTypeMap[T],
+): SQLQuery {
+  return sql.value({[sqlConvert]: true, type, value});
+}
+
+export function sqlConvertArgUnsafe(type: ValueType, value: unknown): SQLQuery {
+  return sql.value({[sqlConvert]: true, type, value});
 }
 
 class ReusingFormat implements FormatConfig {
@@ -71,7 +64,26 @@ class ReusingFormat implements FormatConfig {
   };
 }
 
-class JsonPackedFormat implements FormatConfig {
+function stringify(type: ValueType, x: unknown): string {
+  switch (type) {
+    case 'json':
+      return JSON.stringify(x);
+    case 'boolean':
+      return x ? 'true' : 'false';
+    case 'number':
+    case 'date':
+    case 'timestamp':
+      return (x as number).toString();
+    case 'string':
+      return x as string;
+    case 'null':
+      return 'null';
+    default:
+      unreachable(type);
+  }
+}
+
+class SQLConvertFormat implements FormatConfig {
   readonly #seen: Map<unknown, number> = new Map();
   readonly escapeIdentifier: (str: string) => string;
 
@@ -80,7 +92,7 @@ class JsonPackedFormat implements FormatConfig {
   }
 
   formatValue = (value: unknown) => {
-    assert(isJsonPack(value), 'JsonPackedFormat can only take JsonPackArgs.');
+    assert(isSqlConvert(value), 'JsonPackedFormat can only take JsonPackArgs.');
     const key = value.value;
     if (this.#seen.has(key)) {
       return {
@@ -91,23 +103,31 @@ class JsonPackedFormat implements FormatConfig {
     this.#seen.set(key, this.#seen.size + 1);
     return {
       placeholder: this.#createPlaceholder(this.#seen.size, value),
-      value: value.value,
+      value: stringify(value.type, value.value),
     };
   };
 
-  #createPlaceholder(index: number, value: JsonPackArg) {
+  #createPlaceholder(index: number, value: SqlConvertArg) {
+    // Ok, so what is with all the `::text` casts
+    // before the final cast?
+    // This is to force the statement to describe its arguments
+    // as being text. Without the text cast the args are described as
+    // being bool/json/numeric/whatever and the bindings try to coerce
+    // the inputs to those types.
     switch (value.type) {
       case 'json':
-        return `$1->${index - 1}`;
+        // We use JSONB since that can be used as a primary key type
+        // whereas JSON cannot. So JSONB covers more cases.
+        return `$${index}::text::jsonb`;
       case 'boolean':
-        return `($1->>${index - 1})::boolean`;
+        return `$${index}::text::boolean`;
       case 'number':
-        return `($1->>${index - 1})::numeric`;
+        return `$${index}::text::numeric`;
       case 'string':
-        return `$1->>${index - 1}`;
+        return `$${index}::text`;
       case 'date':
       case 'timestamp':
-        throw new Error('unsupported type');
+        return `to_timestamp($${index}::text::bigint / 1000) AT TIME ZONE 'UTC'`;
       case 'null':
         throw new Error('unsupported type');
       default:
@@ -122,7 +142,6 @@ const PREVIOUSLY_SEEN_VALUE = Symbol('PREVIOUSLY_SEEN_VALUE');
 function formatFn(
   items: readonly SQLItem[],
   {escapeIdentifier, formatValue}: FormatConfig,
-  jsonPack: boolean = false,
 ): {
   text: string;
   values: unknown[];
@@ -182,6 +201,6 @@ function formatFn(
   }
   return {
     text: text.trim(),
-    values: jsonPack ? [JSON.stringify(values)] : values,
+    values,
   };
 }
