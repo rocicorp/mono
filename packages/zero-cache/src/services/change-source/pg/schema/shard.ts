@@ -22,6 +22,10 @@ export function internalPublicationPrefix({appID}: AppID) {
   return `_${appID}_`;
 }
 
+export function legacyReplicationSlot({appID, shardNum}: ShardID) {
+  return `${appID}_${shardNum}`;
+}
+
 export function replicationSlotPrefix(shard: ShardID) {
   const {appID, shardNum} = check(shard);
   return `${appID}_${shardNum}_`;

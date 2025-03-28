@@ -73,7 +73,9 @@ import {
   getInternalShardConfig,
   getReplicaAtVersion,
   internalPublicationPrefix,
+  legacyReplicationSlot,
   replicaIdentitiesForTablesWithoutPrimaryKeys,
+  replicationSlotPrefix,
   type InternalShardConfig,
   type Replica,
 } from './schema/shard.ts';
@@ -280,11 +282,14 @@ class PostgresChangeSource implements ChangeSource {
     slotToKeep: string,
   ): Promise<{cleanup: Promise<void>}> {
     const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
+    const slotPrefix = replicationSlotPrefix(this.#shard);
+    const legacySlotName = legacyReplicationSlot(this.#shard);
 
     const result = await db<{slot: string; pid: string | null}[]>`
-    SELECT slot, pg_terminate_backend(active_pid), active_pid as pid
+    SELECT slot_name as slot, pg_terminate_backend(active_pid), active_pid as pid
       FROM pg_replication_slots 
-      JOIN ${db(replicasTable)} ON slot_name = slot`;
+      WHERE slot_name = ${legacySlotName} OR
+            slot_name LIKE ${slotPrefix + '%'}`;
     if (result.length === 0) {
       // Note: This should not happen as it is checked at initialization time,
       //       but it is technically possible for the replication slot to be

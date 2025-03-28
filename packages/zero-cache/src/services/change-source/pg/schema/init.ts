@@ -12,7 +12,11 @@ import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import {decommissionShard} from '../decommission.ts';
 import {publishedSchema} from './published.ts';
-import {setupTablesAndReplication, setupTriggers} from './shard.ts';
+import {
+  legacyReplicationSlot,
+  setupTablesAndReplication,
+  setupTriggers,
+} from './shard.ts';
 
 /**
  * Initializes a shard for initial sync.
@@ -127,8 +131,6 @@ function getIncrementalMigrations(
     // replicas with different slot names.
     8: {
       migrateSchema: async (lc, tx) => {
-        const {appID, shardNum} = shard;
-
         const legacyShardConfigSchema = v.object({
           replicaVersion: v.string().nullable(),
           initialSchema: publishedSchema.nullable(),
@@ -152,7 +154,7 @@ function getIncrementalMigrations(
           `,
           tx`
           INSERT INTO ${tx(upstreamSchema(shard))}.replicas ${tx({
-            slot: `${appID}_${shardNum}`, // legacy slot name
+            slot: legacyReplicationSlot(shard),
             version: replicaVersion,
             initialSchema,
           })}
