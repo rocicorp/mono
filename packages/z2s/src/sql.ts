@@ -143,7 +143,7 @@ class SQLConvertFormat implements FormatConfig {
           return `$${index}::text`;
         case 'date':
         case 'timestamp':
-          return `to_timestamp($${index}::text::${sqlType} / 1000) AT TIME ZONE 'UTC'`;
+          return `to_timestamp($${index}::text::${sqlType} / 1000.0) AT TIME ZONE 'UTC'`;
         case 'null':
           return 'NULL';
         default:
@@ -165,7 +165,7 @@ class SQLConvertFormat implements FormatConfig {
       case 'date':
       case 'timestamp':
         return `ARRAY(
-          SELECT to_timestamp(value::bigint / 1000)
+          SELECT to_timestamp(value::bigint / 1000.0)
           FROM jsonb_array_elements_text($${index}::text::jsonb)
         )::timestamp[]`;
       case 'null':
