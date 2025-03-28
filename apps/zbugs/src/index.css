@@ -1311,6 +1311,10 @@ textarea.autoResize {
     flex: unset;
   }
 
+  .hide-on-small {
+    display: none;
+  }
+
   .list-view-filter-container > .set-filter-container {
     flex-basis: 100%;
     margin-bottom: 1rem;
