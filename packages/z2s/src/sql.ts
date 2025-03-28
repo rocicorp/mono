@@ -44,8 +44,12 @@ export function sqlConvertArg<T extends ValueType, P extends boolean = false>(
   return sql.value({[sqlConvert]: true, type, value, plural});
 }
 
-export function sqlConvertArgUnsafe(type: ValueType, value: unknown): SQLQuery {
-  return sql.value({[sqlConvert]: true, type, value});
+export function sqlConvertArgUnsafe(
+  type: ValueType,
+  value: unknown,
+  plural?: boolean,
+): SQLQuery {
+  return sqlConvertArg(type, value as never, plural);
 }
 
 class ReusingFormat implements FormatConfig {
@@ -141,7 +145,7 @@ class SQLConvertFormat implements FormatConfig {
         case 'timestamp':
           return `to_timestamp($${index}::text::${sqlType} / 1000) AT TIME ZONE 'UTC'`;
         case 'null':
-          throw new Error('unsupported null');
+          return 'NULL';
         default:
           unreachable(value.type);
       }
