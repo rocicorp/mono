@@ -47,7 +47,7 @@ export const ALLOWED_APP_ID_CHARACTERS = /^[a-z0-9_]+$/;
 export const INVALID_APP_ID_MESSAGE =
   'The App ID may only consist of lower-case letters, numbers, and the underscore character';
 
-function check(shard: ShardID): {appID: string; shardNum: number} {
+export function check(shard: ShardID): {appID: string; shardNum: number} {
   const {appID, shardNum} = shard;
   if (!ALLOWED_APP_ID_CHARACTERS.test(appID)) {
     throw new Error(INVALID_APP_ID_MESSAGE);
