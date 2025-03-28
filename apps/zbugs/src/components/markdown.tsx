@@ -146,6 +146,19 @@ export const Markdown = memo(({children}: {children: string}) => {
         // Ensure no additional processing for <img> elements
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         img: ({node: _node, ...props}) => <img {...props} />,
+        li: ({children, ...props}) => {
+          const isTask = props.className?.includes('task-list-item');
+          if (isTask) {
+            const [first, ...rest] = React.Children.toArray(children);
+            return (
+              <li className="task-list-item">
+                <div className="task-line">{first}</div>
+                {rest.length > 0 && <div className="task-children">{rest}</div>}
+              </li>
+            );
+          }
+          return <li {...props}>{children}</li>;
+        },
       }}
     >
       {children}
