@@ -1,4 +1,4 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {
   initReplicacheTesting,
   replicacheForTesting,
@@ -31,7 +31,7 @@ describe('onUpdateNeeded', () => {
       {useUniqueName: false},
     );
 
-    await tickAFewTimes();
+    await tickAFewTimes(vi);
 
     expect(onUpdateNeededReason).to.deep.equal({
       type: 'NewClientGroup',

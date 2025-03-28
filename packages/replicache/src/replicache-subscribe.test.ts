@@ -1,5 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
-import * as sinon from 'sinon';
+import {describe, expect, test, vi} from 'vitest';
 import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {TestLogSink} from '../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../shared/src/sleep.ts';
@@ -8,7 +8,6 @@ import type {IndexDefinitions} from './index-defs.ts';
 import type {PatchOperation} from './patch-operation.ts';
 import type {ScanOptions} from './scan-options.ts';
 import {
-  clock,
   disableAllBackgroundProcesses,
   initReplicacheTesting,
   makePullResponseV1,
@@ -22,7 +21,6 @@ import type {ReadTransaction, WriteTransaction} from './transactions.ts';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
-import {describe, expect, test} from 'vitest';
 
 initReplicacheTesting();
 
@@ -109,7 +107,7 @@ describe('subscribe', () => {
       indexes,
     });
 
-    const onErrorFake = sinon.fake();
+    const onErrorFake = vi.fn();
 
     let queryCallCount = 0;
     let onDataCallCount = 0;
@@ -132,9 +130,9 @@ describe('subscribe', () => {
 
     expect(queryCallCount).to.equal(0);
     expect(onDataCallCount).to.equal(0);
-    expect(onErrorFake.callCount).to.equal(0);
+    expect(onErrorFake).not.toHaveBeenCalled();
 
-    await tickUntil(() => queryCallCount > 0);
+    await tickUntil(vi, () => queryCallCount > 0);
 
     return {
       log,
@@ -158,7 +156,7 @@ describe('subscribe', () => {
         {indexName: 'i1'},
       );
 
-    await tickUntil(() => queryCallCount() > 0);
+    await tickUntil(vi, () => queryCallCount() > 0);
 
     await rep.mutate.addData({
       a1: {id: 'a-1', x: 1},
@@ -184,14 +182,14 @@ describe('subscribe', () => {
     ]);
     expect(queryCallCount()).to.equal(2); // One for initial subscribe and one for the add.
     expect(onDataCallCount()).to.equal(2);
-    expect(onErrorFake.callCount).to.equal(0);
+    expect(onErrorFake).not.toHaveBeenCalled();
 
     log.length = 0;
     await rep.mutate.addData({a3: {id: 'a-3', x: 3}});
 
     expect(queryCallCount()).to.equal(3);
     expect(onDataCallCount()).to.equal(3);
-    expect(onErrorFake.callCount).to.equal(0);
+    expect(onErrorFake).not.toHaveBeenCalled();
     expect(log).to.deep.equal([
       [
         ['a-1', 'a1'],
@@ -228,8 +226,8 @@ describe('subscribe', () => {
       b: {id: 'bx'},
     });
 
-    expect(onErrorFake.callCount).to.equal(1);
-    expect(onErrorFake.getCall(0).args[0])
+    expect(onErrorFake).toHaveBeenCalledOnce();
+    expect(onErrorFake.mock.calls[0][0])
       .to.be.instanceOf(Error)
       .with.property('message', 'Unknown index name: i1');
 
@@ -454,7 +452,7 @@ test('subscribe with isEmpty and prefix', async () => {
   expect(queryCallCount).to.equal(0);
   expect(onDataCallCount).to.equal(0);
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   expect(log).to.deep.equal([true]);
   expect(queryCallCount).to.equal(1);
@@ -696,7 +694,7 @@ test('subscribe pull and index update', async () => {
     );
 
     rep.pullIgnorePromise();
-    await tickUntil(() => log.length >= opt.expectedLog.length);
+    await tickUntil(vi, () => log.length >= opt.expectedLog.length);
     expect(queryCallCount).to.equal(expectedQueryCallCount);
     expect(log).to.deep.equal(opt.expectedLog);
   }
@@ -834,16 +832,20 @@ test('subscription coalescing', async () => {
     },
   );
 
-  const store = sinon.spy(rep.memdag);
+  const store = rep.memdag;
+  const readSpy = vi.spyOn(store, 'read');
+  const writeSpy = vi.spyOn(store, 'write');
+  const closeSpy = vi.spyOn(store, 'close');
+
   const resetCounters = () => {
-    store.read.resetHistory();
-    store.write.resetHistory();
-    store.close.resetHistory();
+    readSpy.mockClear();
+    writeSpy.mockClear();
+    closeSpy.mockClear();
   };
 
-  expect(store.read.callCount).to.equal(0);
-  expect(store.write.callCount).to.equal(0);
-  expect(store.close.callCount).to.equal(0);
+  expect(readSpy).not.toHaveBeenCalled();
+  expect(writeSpy).not.toHaveBeenCalled();
+  expect(closeSpy).not.toHaveBeenCalled();
   resetCounters();
 
   const resolverA = resolver<void>();
@@ -874,9 +876,9 @@ test('subscription coalescing', async () => {
 
   expect(log).to.deep.equal(['a', 'b', 'c']);
 
-  expect(store.read.callCount).to.equal(1);
-  expect(store.write.callCount).to.equal(0);
-  expect(store.close.callCount).to.equal(0);
+  expect(readSpy).toHaveBeenCalledTimes(1);
+  expect(writeSpy).toHaveBeenCalledTimes(0);
+  expect(closeSpy).toHaveBeenCalledTimes(0);
   resetCounters();
 
   ca();
@@ -894,23 +896,22 @@ test('subscription coalescing', async () => {
     },
   });
 
-  expect(store.read.callCount).to.equal(0);
-  expect(store.write.callCount).to.equal(0);
-  expect(store.close.callCount).to.equal(0);
+  expect(readSpy).toHaveBeenCalledTimes(0);
+  expect(writeSpy).toHaveBeenCalledTimes(0);
+  expect(closeSpy).toHaveBeenCalledTimes(0);
   resetCounters();
 
   await rep.mutate.addData({a: 1});
 
-  expect(store.read.callCount).to.equal(1);
-  expect(store.write.callCount).to.equal(1);
-  expect(store.close.callCount).to.equal(0);
+  expect(readSpy).toHaveBeenCalledTimes(1);
+  expect(writeSpy).toHaveBeenCalledTimes(1);
+  expect(closeSpy).toHaveBeenCalledTimes(0);
   resetCounters();
 
   expect(log).to.deep.equal(['d', 'e']);
 });
 
 test('subscribe perf test regression', async () => {
-  clock.restore();
   const count = 100;
   const maxCount = 1000;
   const minCount = 10;
@@ -927,6 +928,7 @@ test('subscribe perf test regression', async () => {
       },
     },
   });
+  vi.useRealTimers();
 
   await rep.mutate.init();
   const data = Array.from({length: count}).fill(0);
@@ -1013,7 +1015,7 @@ test('subscription with error in body', async () => {
     },
   );
 
-  await tickUntil(() => bodyCallCounter === 1);
+  await tickUntil(vi, () => bodyCallCounter === 1);
 
   await rep.mutate.addData({a: 1});
   expect(bodyCallCounter).to.equal(2);
@@ -1050,7 +1052,7 @@ test('Errors in subscriptions are logged if no onError', async () => {
       },
     );
 
-    await tickUntil(() => called);
+    await tickUntil(vi, () => called);
     if (onError) {
       expect(testLogSink.messages.length).toBe(0);
     } else {
@@ -1067,11 +1069,11 @@ test('Errors in subscriptions are logged if no onError', async () => {
 
   await t();
 
-  const f = sinon.fake();
+  const f = vi.fn();
   const err = new Error('b');
   await t(f, err);
-  expect(f.callCount).toBe(1);
-  expect(f.calledWith(err)).toBe(true);
+  expect(f).toHaveBeenCalledOnce();
+  expect(f).toHaveBeenCalledWith(err);
 });
 
 test('subscribe using a function', async () => {

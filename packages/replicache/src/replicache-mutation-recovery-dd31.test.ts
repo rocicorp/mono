@@ -1,5 +1,4 @@
-import sinon from 'sinon';
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {assert} from '../../shared/src/asserts.ts';
 import type {Enum} from '../../shared/src/enum.ts';
 import {type JSONObject, assertJSONObject} from '../../shared/src/json.ts';
@@ -29,7 +28,6 @@ import {
   assertPushRequestV1,
 } from './sync/push.ts';
 import {
-  clock,
   disableAllBackgroundProcesses,
   initReplicacheTesting,
   replicacheForTesting,
@@ -60,7 +58,7 @@ describe('DD31', () => {
     formatVersion: FormatVersion;
     expectClientGroupDisabled?: boolean;
   }) {
-    sinon.stub(console, 'error');
+    vi.spyOn(console, 'error');
 
     const client1ID = 'client1';
     const client2ID = 'client2';
@@ -102,7 +100,7 @@ describe('DD31', () => {
     );
     const profileID = await rep.profileID;
 
-    await tickAFewTimes();
+    await tickAFewTimes(vi);
 
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
@@ -428,7 +426,7 @@ describe('DD31', () => {
     );
     const profileID = await rep.profileID;
 
-    await tickAFewTimes();
+    await tickAFewTimes(vi);
 
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
@@ -521,7 +519,7 @@ describe('DD31', () => {
       },
     );
 
-    await tickAFewTimes();
+    await tickAFewTimes(vi);
 
     const testPerdag = await createPerdag({
       replicacheName: replicacheNameOfClientWPendingMutations,
@@ -589,7 +587,7 @@ describe('DD31', () => {
     });
     const profileID = await rep.profileID;
 
-    await tickAFewTimes();
+    await tickAFewTimes(vi);
 
     const testPerdagForClients1Thru3 = await createPerdag({
       replicacheName: rep.name,
@@ -851,7 +849,7 @@ describe('DD31', () => {
     });
     const profileID = await rep.profileID;
 
-    await tickAFewTimes();
+    await tickAFewTimes(vi);
 
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
@@ -1050,7 +1048,7 @@ describe('DD31', () => {
     });
     const profileID = await rep.profileID;
 
-    await tickAFewTimes();
+    await tickAFewTimes(vi);
 
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
@@ -1139,17 +1137,30 @@ describe('DD31', () => {
       },
     );
 
-    const lazyDagWithWriteStub = sinon.stub(LazyStore.prototype, 'write');
+    const {write} = LazyStore.prototype;
+    vi.spyOn(LazyStore.prototype, 'write')
+      .mockImplementationOnce(function (this: LazyStore) {
+        return write.call(this);
+      })
+      .mockImplementationOnce(() => {
+        throw testErrorMsg;
+      })
+      .mockImplementation(function (this: LazyStore) {
+        return write.call(this);
+      });
     const testErrorMsg = 'Test dag.LazyStore.withWrite error';
-    lazyDagWithWriteStub.onSecondCall().throws(testErrorMsg);
-    lazyDagWithWriteStub.callThrough();
 
-    const consoleErrorStub = sinon.stub(console, 'error');
+    const consoleErrorStub = vi.spyOn(console, 'error');
 
     await rep.recoverMutations();
 
-    expect(consoleErrorStub.callCount).to.equal(1);
-    expect(consoleErrorStub.firstCall.args.join(' ')).to.contain(testErrorMsg);
+    expect(consoleErrorStub).toHaveBeenCalledTimes(1);
+    // expect(consoleErrorStub.mock.calls[0].join(' ')).to.contain(testErrorMsg);
+    expect(consoleErrorStub.mock.calls[0]).toEqual([
+      expect.any(String),
+      expect.any(String),
+      'Test dag.LazyStore.withWrite error',
+    ]);
 
     const pushCalls = fetchMock.calls(pushURL);
     expect(pushCalls.length).to.equal(2);
@@ -1240,7 +1251,7 @@ describe('DD31', () => {
     });
     const profileID = await rep.profileID;
 
-    await tickAFewTimes();
+    await tickAFewTimes(vi);
 
     const testPerdagForClient1 = await createPerdag({
       replicacheName: rep.name,
@@ -1319,17 +1330,30 @@ describe('DD31', () => {
       },
     );
 
-    const dagStoreWithReadStub = sinon.stub(StoreImpl.prototype, 'read');
     const testErrorMsg = 'Test dag.StoreImpl.read error';
-    dagStoreWithReadStub.onSecondCall().throws(testErrorMsg);
-    dagStoreWithReadStub.callThrough();
+    const {read} = StoreImpl.prototype;
+    vi.spyOn(StoreImpl.prototype, 'read')
+      .mockImplementationOnce(function (this: StoreImpl) {
+        return read.call(this);
+      })
+      .mockImplementationOnce(() => {
+        throw testErrorMsg;
+      })
+      .mockImplementation(function (this: StoreImpl) {
+        return read.call(this);
+      });
 
-    const consoleErrorStub = sinon.stub(console, 'error');
+    const consoleErrorStub = vi.spyOn(console, 'error');
 
     await rep.recoverMutations();
 
-    expect(consoleErrorStub.callCount).to.equal(1);
-    expect(consoleErrorStub.firstCall.args.join(' ')).to.contain(testErrorMsg);
+    expect(consoleErrorStub).toHaveBeenCalledTimes(1);
+    // expect(consoleErrorStub.firstCall.args.join(' ')).to.contain(testErrorMsg);
+    expect(consoleErrorStub.mock.calls[0]).toEqual([
+      expect.any(String),
+      expect.any(String),
+      'Test dag.StoreImpl.read error',
+    ]);
 
     const pushCalls = fetchMock.calls(pushURL);
     expect(pushCalls.length).to.equal(1);
@@ -1412,7 +1436,7 @@ describe('DD31', () => {
     });
     const profileID = await rep.profileID;
 
-    await tickAFewTimes();
+    await tickAFewTimes(vi);
 
     const testPerdag = await createPerdag({
       replicacheName: rep.name,
@@ -1473,11 +1497,14 @@ describe('DD31', () => {
     );
 
     // At the end of recovering client1 close the recovering Replicache instance
-    const lazyDagWithWriteStub = sinon.stub(LazyStore.prototype, 'close');
-    lazyDagWithWriteStub.onFirstCall().callsFake(async () => {
-      await rep.close();
-    });
-    lazyDagWithWriteStub.callThrough();
+    const {close} = LazyStore.prototype;
+    vi.spyOn(LazyStore.prototype, 'close')
+      .mockImplementationOnce(async () => {
+        await rep.close();
+      })
+      .mockImplementation(function (this: LazyStore) {
+        return close.call(this);
+      });
 
     await rep.recoverMutations();
 
@@ -1496,9 +1523,9 @@ describe('DD31', () => {
 
   test('mutation recovery is invoked at startup', async () => {
     const rep = await replicacheForTesting('mutation-recovery-startup-dd31');
-    expect(rep.recoverMutationsFake.callCount).to.equal(1);
-    expect(rep.recoverMutationsFake.callCount).to.equal(1);
-    expect(await rep.recoverMutationsFake.firstCall.returnValue).to.equal(true);
+    expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
+    expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
+    expect(await rep.recoverMutationsFake.mock.results[0].value).to.equal(true);
   });
 
   test('mutation recovery returns early without running if push is disabled', async () => {
@@ -1512,8 +1539,8 @@ describe('DD31', () => {
         useDefaultURLs: false,
       },
     );
-    expect(rep.recoverMutationsFake.callCount).to.equal(1);
-    expect(await rep.recoverMutationsFake.firstCall.returnValue).to.equal(
+    expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
+    expect(await rep.recoverMutationsFake.mock.results[0].value).to.equal(
       false,
     );
     expect(await rep.recoverMutations()).to.equal(false);
@@ -1527,8 +1554,8 @@ describe('DD31', () => {
       },
       disableAllBackgroundProcesses,
     );
-    expect(rep.recoverMutationsFake.callCount).to.equal(1);
-    expect(await rep.recoverMutationsFake.firstCall.returnValue).to.equal(
+    expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
+    expect(await rep.recoverMutationsFake.mock.results[0].value).to.equal(
       false,
     );
     expect(await rep.recoverMutations()).to.equal(false);
@@ -1539,7 +1566,7 @@ describe('DD31', () => {
     const rep = await replicacheForTesting('mutation-recovery-online', {
       pullURL,
     });
-    expect(rep.recoverMutationsFake.callCount).to.equal(1);
+    expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
     expect(rep.online).to.equal(true);
 
     fetchMock.post(pullURL, () => ({
@@ -1548,9 +1575,9 @@ describe('DD31', () => {
 
     rep.pullIgnorePromise();
 
-    await tickAFewTimes();
+    await tickAFewTimes(vi);
     expect(rep.online).to.equal(false);
-    expect(rep.recoverMutationsFake.callCount).to.equal(1);
+    expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
 
     const {clientID} = rep;
     fetchMock.reset();
@@ -1561,20 +1588,20 @@ describe('DD31', () => {
     });
 
     rep.pullIgnorePromise();
-    expect(rep.recoverMutationsFake.callCount).to.equal(1);
+    expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
     while (!rep.online) {
-      await tickAFewTimes();
+      await tickAFewTimes(vi);
     }
-    expect(rep.recoverMutationsFake.callCount).to.equal(2);
+    expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(2);
   });
 
   test('mutation recovery is invoked on 5 minute interval', async () => {
     const rep = await replicacheForTesting('mutation-recovery-startup-dd31-4');
-    expect(rep.recoverMutationsFake.callCount).to.equal(1);
-    await clock.tickAsync(5 * 60 * 1000);
-    expect(rep.recoverMutationsFake.callCount).to.equal(2);
-    await clock.tickAsync(5 * 60 * 1000);
-    expect(rep.recoverMutationsFake.callCount).to.equal(3);
+    expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(3);
   });
 
   async function testPushDisabled(

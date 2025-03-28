@@ -1,15 +1,10 @@
-import {type SinonFakeTimers, useFakeTimers} from 'sinon';
-import {afterEach, beforeEach, expect, test} from 'vitest';
+import {beforeEach, expect, test, vi} from 'vitest';
 import {AbortError} from './abort-error.ts';
 import {sleep, sleepWithAbort} from './sleep.ts';
 
-let clock: SinonFakeTimers;
 beforeEach(() => {
-  clock = useFakeTimers(0);
-});
-
-afterEach(() => {
-  clock.restore();
+  vi.useFakeTimers({now: 0});
+  return () => vi.useRealTimers();
 });
 
 test('sleep', async () => {
@@ -18,15 +13,15 @@ test('sleep', async () => {
     await sleep(100);
     callCount++;
   })();
-  await clock.tickAsync(99);
+  await vi.advanceTimersByTimeAsync(99);
   expect(Date.now()).toEqual(99);
   expect(callCount).toEqual(0);
 
-  await clock.tickAsync(1);
+  await vi.advanceTimersByTimeAsync(1);
   expect(callCount).toEqual(1);
   expect(Date.now()).toEqual(100);
 
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   expect(callCount).toEqual(1);
   expect(Date.now()).toEqual(200);
 
@@ -49,10 +44,10 @@ test('sleep abort', async () => {
 
   expect(e).toBeInstanceOf(AbortError);
 
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   expect(Date.now()).toEqual(100);
 
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   expect(Date.now()).toEqual(200);
 });
 
@@ -68,18 +63,18 @@ test('sleepWithAbort', async () => {
     abortedResolved = true;
   });
 
-  await clock.tickAsync(50);
+  await vi.advanceTimersByTimeAsync(50);
   controller.abort();
   expect(okResolved).toEqual(false);
   expect(abortedResolved).toEqual(false);
   expect(Date.now()).toEqual(50);
 
-  await clock.tickAsync(0);
+  await vi.advanceTimersByTimeAsync(0);
   expect(okResolved).toEqual(false);
   expect(abortedResolved).toEqual(true);
   expect(Date.now()).toEqual(50);
 
-  await clock.tickAsync(50);
+  await vi.advanceTimersByTimeAsync(50);
   expect(okResolved).toEqual(false);
 });
 
