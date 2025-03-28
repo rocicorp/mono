@@ -51,10 +51,10 @@ import {
   newQueryDelegate,
 } from '../../../../zqlite/src/test/source-factory.ts';
 import {compile, extractZqlResult} from '../../compiler.ts';
-import {formatPg} from '../../sql.ts';
 import '../comparePg.ts';
 import {writeChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
+import {formatPgInternalConvert} from '../../sql.ts';
 
 let pg: PostgresDB;
 let sqlite: Database;
@@ -764,7 +764,9 @@ async function runZqlAsSql(
   pg: PostgresDB,
   query: Query<Schema, keyof Schema['tables']>,
 ) {
-  const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
+  const sqlQuery = formatPgInternalConvert(
+    compile(ast(query), schema.tables, query.format),
+  );
   return extractZqlResult(
     await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
   );

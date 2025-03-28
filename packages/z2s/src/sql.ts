@@ -44,8 +44,12 @@ export function sqlConvertArg<T extends ValueType, P extends boolean = false>(
   return sql.value({[sqlConvert]: true, type, value, plural});
 }
 
-export function sqlConvertArgUnsafe(type: ValueType, value: unknown): SQLQuery {
-  return sql.value({[sqlConvert]: true, type, value});
+export function sqlConvertArgUnsafe(
+  type: ValueType,
+  value: unknown,
+  plural?: boolean,
+): SQLQuery {
+  return sqlConvertArg(type, value as never, plural);
 }
 
 class ReusingFormat implements FormatConfig {
@@ -139,9 +143,9 @@ class SQLConvertFormat implements FormatConfig {
           return `$${index}::text`;
         case 'date':
         case 'timestamp':
-          return `to_timestamp($${index}::text::${sqlType} / 1000) AT TIME ZONE 'UTC'`;
+          return `to_timestamp($${index}::text::${sqlType} / 1000.0) AT TIME ZONE 'UTC'`;
         case 'null':
-          throw new Error('unsupported null');
+          return 'NULL';
         default:
           unreachable(value.type);
       }
@@ -161,7 +165,7 @@ class SQLConvertFormat implements FormatConfig {
       case 'date':
       case 'timestamp':
         return `ARRAY(
-          SELECT to_timestamp(value::bigint / 1000)
+          SELECT to_timestamp(value::bigint / 1000.0)
           FROM jsonb_array_elements_text($${index}::text::jsonb)
         )::timestamp[]`;
       case 'null':
