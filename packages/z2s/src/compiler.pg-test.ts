@@ -215,8 +215,8 @@ beforeAll(async () => {
   await nodePostgres.connect();
 });
 
-afterAll(() => {
-  nodePostgres.end();
+afterAll(async () => {
+  await nodePostgres.end();
 });
 
 function ast(q: Query<Schema, keyof Schema['tables']>) {

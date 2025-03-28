@@ -170,8 +170,8 @@ beforeAll(async () => {
   await nodePostgres.connect();
 });
 
-afterAll(() => {
-  nodePostgres.end();
+afterAll(async () => {
+  await nodePostgres.end();
 });
 
 function mapHash(commentRow: Record<string, unknown>) {
