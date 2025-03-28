@@ -1,4 +1,4 @@
-import {beforeAll, describe, expect, test} from 'vitest';
+import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
@@ -29,10 +29,14 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
+import {Client} from 'pg';
 
 const lc = createSilentLogContext();
 
+const DB_NAME = 'compiler-bigint';
+
 let pg: PostgresDB;
+let nodePostgres: Client;
 let sqlite: Database;
 
 export const createTableSQL = /*sql*/ `
@@ -80,7 +84,7 @@ type Schema = typeof schema;
 let issueQuery: Query<Schema, 'issue'>;
 
 beforeAll(async () => {
-  pg = await testDBs.create('compiler', undefined, false);
+  pg = await testDBs.create(DB_NAME, undefined, false);
   await pg.unsafe(createTableSQL);
   sqlite = new Database(lc, ':memory:');
   const testData = {
@@ -154,6 +158,20 @@ beforeAll(async () => {
       .map(row => fromSQLiteTypes(schema.tables.comment.columns, row))
       .map(mapHash),
   ).toEqual(testData.comment);
+
+  const {host, port, user, pass} = pg.options;
+  nodePostgres = new Client({
+    user,
+    host: host[0],
+    port: port[0],
+    password: pass ?? undefined,
+    database: DB_NAME,
+  });
+  await nodePostgres.connect();
+});
+
+afterAll(() => {
+  nodePostgres.end();
 });
 
 function mapHash(commentRow: Record<string, unknown>) {
@@ -171,63 +189,79 @@ function ast(q: Query<Schema, keyof Schema['tables']>) {
 }
 
 describe('compiling ZQL to SQL', () => {
-  test('All bigints in safe Number range', async () => {
-    const query = issueQuery.related('comments').limit(2);
-    const c = compile(ast(query), schema.tables);
-    const sqlQuery = formatPg(c);
-    const pgResult = extractZqlResult(
-      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
-    );
-    expect(
-      mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualPg(pgResult);
-    expect(pgResult).toMatchInlineSnapshot(`
-      [
-        {
-          "comments": [
-            {
-              "hash": 9007199254740987,
-              "id": "comment1",
-              "issueId": "issue1",
-            },
-            {
-              "hash": 9007199254740988,
-              "id": "comment2",
-              "issueId": "issue1",
-            },
-          ],
-          "id": "issue1",
-          "title": "Test Issue 1",
-        },
-        {
-          "comments": [
-            {
-              "hash": 9007199254740989,
-              "id": "comment3",
-              "issueId": "issue2",
-            },
-            {
-              "hash": 9007199254740990,
-              "id": "comment4",
-              "issueId": "issue2",
-            },
-          ],
-          "id": "issue2",
-          "title": "Test Issue 2",
-        },
-      ]
-    `);
-  });
-  test('bigint exceeds safe range', async () => {
-    const query = issueQuery.related('comments');
-    const c = compile(ast(query), schema.tables);
-    const sqlQuery = formatPg(c);
-    const result = await pg.unsafe(
-      sqlQuery.text,
-      sqlQuery.values as JSONValue[],
-    );
-    expect(() => extractZqlResult(result)).toThrowErrorMatchingInlineSnapshot(
-      `[Error: Value exceeds safe Number range. [2]['comments'][1]['hash'] = 9007199254740992]`,
+  describe('postgres.js', () => {
+    t((query: string, args: unknown[]) =>
+      pg.unsafe(query, args as JSONValue[]),
     );
   });
+  describe('node-postgres', () => {
+    t(
+      async (query: string, args: unknown[]) =>
+        (await nodePostgres.query(query, args as JSONValue[])).rows,
+    );
+  });
+  function t(runPgQuery: (query: string, args: unknown[]) => Promise<unknown>) {
+    test('All bigints in safe Number range', async () => {
+      const query = issueQuery.related('comments').limit(2);
+      const c = compile(ast(query), schema.tables);
+      const sqlQuery = formatPg(c);
+      const pgResult = extractZqlResult(
+        await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
+      );
+      const zqlResult = mapResultToClientNames(
+        await query.run(),
+        schema,
+        'issue',
+      );
+      expect(zqlResult).toEqualPg(pgResult);
+      expect(zqlResult).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [
+              {
+                "hash": 9007199254740987,
+                "id": "comment1",
+                "issueId": "issue1",
+              },
+              {
+                "hash": 9007199254740988,
+                "id": "comment2",
+                "issueId": "issue1",
+              },
+            ],
+            "id": "issue1",
+            "title": "Test Issue 1",
+          },
+          {
+            "comments": [
+              {
+                "hash": 9007199254740989,
+                "id": "comment3",
+                "issueId": "issue2",
+              },
+              {
+                "hash": 9007199254740990,
+                "id": "comment4",
+                "issueId": "issue2",
+              },
+            ],
+            "id": "issue2",
+            "title": "Test Issue 2",
+          },
+        ]
+      `);
+    });
+    test('bigint exceeds safe range', async () => {
+      const query = issueQuery.related('comments');
+      const c = compile(ast(query), schema.tables);
+      const sqlQuery = formatPg(c);
+      const result = await runPgQuery(
+        sqlQuery.text,
+        sqlQuery.values as JSONValue[],
+      );
+      expect(() => extractZqlResult(result)).toThrowErrorMatchingInlineSnapshot(
+        `[Error: Value exceeds safe Number range. [2]['comments'][1]['hash'] = 9007199254740992]`,
+      );
+    });
+  }
 });

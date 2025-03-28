@@ -1,4 +1,4 @@
-import {beforeAll, describe, expect, test} from 'vitest';
+import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
@@ -22,11 +22,16 @@ import {
 } from '../../zqlite/src/test/source-factory.ts';
 import {compile, extractZqlResult} from './compiler.ts';
 import {formatPg} from './sql.ts';
+import {Client} from 'pg';
 import './test/comparePg.ts';
 
 const lc = createSilentLogContext();
 
+const BASE_TIMESTAMP = 1743127752952;
+const DB_NAME = 'compiler';
+
 let pg: PostgresDB;
+let nodePostgres: Client;
 let sqlite: Database;
 type Schema = typeof schema;
 
@@ -37,7 +42,7 @@ let issueQuery: Query<Schema, 'issue'>;
  * These test will likely be deprecated.
  */
 beforeAll(async () => {
-  pg = await testDBs.create('compiler', undefined, false);
+  pg = await testDBs.create(DB_NAME, undefined, false);
   await pg.unsafe(createTableSQL);
   sqlite = new Database(lc, ':memory:');
   const testData = {
@@ -47,7 +52,7 @@ beforeAll(async () => {
       description: `Description for issue ${i + 1}`,
       closed: i % 2 === 0,
       ownerId: i === 0 ? null : `user${i}`,
-      createdAt: new Date(Date.now() - i * 86400000).getTime(),
+      createdAt: new Date(BASE_TIMESTAMP - i * 86400000).getTime(),
     })),
     user: Array.from({length: 3}, (_, i) => ({
       id: `user${i + 1}`,
@@ -61,12 +66,12 @@ beforeAll(async () => {
               altContacts: [`alt${i + 1}@example.com`],
             },
     })),
-    comment: Array.from({length: 4}, (_, i) => ({
+    comment: Array.from({length: 6}, (_, i) => ({
       id: `comment${i + 1}`,
       authorId: `user${(i % 3) + 1}`,
       issueId: `issue${(i % 3) + 1}`,
       text: `Comment ${i + 1} text`,
-      createdAt: new Date(Date.now() - i * 86400000).getTime(),
+      createdAt: new Date(BASE_TIMESTAMP - i * 86400000).getTime(),
     })),
     issueLabel: Array.from({length: 4}, (_, i) => ({
       issueId: `issue${(i % 3) + 1}`,
@@ -198,6 +203,20 @@ beforeAll(async () => {
     labelLiteRows.map(row => fromSQLiteTypes(schema.tables.label.columns, row)),
   ).toEqual(testData.label);
   expect(revisionLiteRows).toEqual(testData.revision);
+
+  const {host, port, user, pass} = pg.options;
+  nodePostgres = new Client({
+    user,
+    host: host[0],
+    port: port[0],
+    password: pass ?? undefined,
+    database: DB_NAME,
+  });
+  await nodePostgres.connect();
+});
+
+afterAll(() => {
+  nodePostgres.end();
 });
 
 function ast(q: Query<Schema, keyof Schema['tables']>) {
@@ -215,118 +234,483 @@ function createdAtToMillis(row: Record<string, unknown>) {
 }
 
 describe('compiling ZQL to SQL', () => {
-  test('basic where clause', async () => {
-    const query = issueQuery.where('title', '=', 'issue 1');
-    const c = compile(ast(query), schema.tables);
-    const sqlQuery = formatPg(c);
-    const pgResult = extractZqlResult(
-      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
-    );
-    expect(mapResultToClientNames(await query.run(), schema, 'issue')).toEqual(
-      pgResult,
+  describe('postgres.js', () => {
+    t((query: string, args: unknown[]) =>
+      pg.unsafe(query, args as JSONValue[]),
     );
   });
-
-  test('multiple where clauses', async () => {
-    const query = issueQuery
-      .where('closed', '=', false)
-      .where('ownerId', 'IS NOT', null);
-    const sqlQuery = formatPg(compile(ast(query), schema.tables));
-    const pgResult = extractZqlResult(
-      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
+  describe('node-postgres', () => {
+    t(
+      async (query: string, args: unknown[]) =>
+        (await nodePostgres.query(query, args as JSONValue[])).rows,
     );
-    expect(
-      mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualPg(pgResult);
   });
-
-  test('whereExists with related table', async () => {
-    const query = issueQuery.whereExists('labels', q =>
-      q.where('name', '=', 'bug'),
-    );
-    const sqlQuery = formatPg(compile(ast(query), schema.tables));
-    const pgResult = extractZqlResult(
-      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
-    );
-    expect(
-      mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualPg(pgResult);
-  });
-
-  test('order by and limit', async () => {
-    const query = issueQuery.orderBy('title', 'desc').limit(5);
-    const sqlQuery = formatPg(compile(ast(query), schema.tables));
-    const pgResult = extractZqlResult(
-      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
-    );
-    expect(
-      mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualPg(pgResult);
-  });
-
-  test('1 to 1 foreign key relationship', async () => {
-    const query = issueQuery.related('owner');
-    const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
-    const pgResult = extractZqlResult(
-      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
-    );
-    expect(
-      mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualPg(pgResult);
-  });
-
-  test('1 to many foreign key relationship', async () => {
-    const query = issueQuery.related('comments');
-    const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
-    const pgResult = extractZqlResult(
-      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
-    );
-    expect(
-      mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualPg(pgResult);
-  });
-
-  test('junction relationship', async () => {
-    const query = issueQuery.related('labels');
-    const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
-    const pgResult = extractZqlResult(
-      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
-    );
-    expect(
-      mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualPg(pgResult);
-  });
-
-  test('nested related with where clauses', async () => {
-    const query = issueQuery
-      .where('closed', '=', false)
-      .related('comments', q =>
-        q.where('createdAt', '>', 1000).related('author'),
+  function t(runPgQuery: (query: string, args: unknown[]) => Promise<unknown>) {
+    test('basic where clause', async () => {
+      const query = issueQuery.where('title', '=', 'Test Issue 1');
+      const c = compile(ast(query), schema.tables);
+      const sqlQuery = formatPg(c);
+      const pgResult = extractZqlResult(
+        await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
-    const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
-    const pgResult = extractZqlResult(
-      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
-    );
-    expect(
-      mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualPg(pgResult);
-  });
+      const zqlResult = mapResultToClientNames(
+        await query.run(),
+        schema,
+        'issue',
+      );
+      expect(zqlResult).toEqualPg(pgResult);
+      expect(zqlResult).toMatchInlineSnapshot(`
+        [
+          {
+            "closed": true,
+            "createdAt": 1743127752952,
+            "description": "Description for issue 1",
+            "id": "issue1",
+            "ownerId": null,
+            "title": "Test Issue 1",
+          },
+        ]
+      `);
+    });
 
-  test('complex query combining multiple features', async () => {
-    const query = issueQuery
-      .where('closed', '=', false)
-      .whereExists('labels', q => q.where('name', 'IN', ['Label 1', 'Label 2']))
-      .related('owner')
-      .related('comments', q =>
-        q.orderBy('createdAt', 'desc').limit(3).related('author'),
-      )
-      .orderBy('title', 'asc');
-    const sqlQuery = formatPg(compile(ast(query), schema.tables, query.format));
-    const pgResult = extractZqlResult(
-      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
-    );
-    expect(
-      mapResultToClientNames(await query.run(), schema, 'issue'),
-    ).toEqualPg(pgResult);
-  });
+    test('multiple where clauses', async () => {
+      const query = issueQuery
+        .where('closed', '=', false)
+        .where('ownerId', 'IS NOT', null);
+      const sqlQuery = formatPg(compile(ast(query), schema.tables));
+      const pgResult = extractZqlResult(
+        await runPgQuery(sqlQuery.text, sqlQuery.values),
+      );
+      const zqlResult = mapResultToClientNames(
+        await query.run(),
+        schema,
+        'issue',
+      );
+      expect(zqlResult).toEqualPg(pgResult);
+      expect(zqlResult).toMatchInlineSnapshot(`
+      [
+        {
+          "closed": false,
+          "createdAt": 1743041352952,
+          "description": "Description for issue 2",
+          "id": "issue2",
+          "ownerId": "user1",
+          "title": "Test Issue 2",
+        },
+      ]
+    `);
+    });
+
+    test('whereExists with related table', async () => {
+      const query = issueQuery.whereExists('labels', q =>
+        q.where('name', '=', 'bug'),
+      );
+      const sqlQuery = formatPg(compile(ast(query), schema.tables));
+      const pgResult = extractZqlResult(
+        await runPgQuery(sqlQuery.text, sqlQuery.values),
+      );
+      const zqlResult = mapResultToClientNames(
+        await query.run(),
+        schema,
+        'issue',
+      );
+      expect(zqlResult).toEqualPg(pgResult);
+      expect(zqlResult).toMatchInlineSnapshot(`[]`);
+    });
+
+    test('order by and limit', async () => {
+      const query = issueQuery.orderBy('title', 'desc').limit(5);
+      const sqlQuery = formatPg(compile(ast(query), schema.tables));
+      const pgResult = extractZqlResult(
+        await runPgQuery(sqlQuery.text, sqlQuery.values),
+      );
+      const zqlResult = mapResultToClientNames(
+        await query.run(),
+        schema,
+        'issue',
+      );
+      expect(zqlResult).toEqualPg(pgResult);
+      expect(zqlResult).toMatchInlineSnapshot(`
+        [
+          {
+            "closed": true,
+            "createdAt": 1742954952952,
+            "description": "Description for issue 3",
+            "id": "issue3",
+            "ownerId": "user2",
+            "title": "Test Issue 3",
+          },
+          {
+            "closed": false,
+            "createdAt": 1743041352952,
+            "description": "Description for issue 2",
+            "id": "issue2",
+            "ownerId": "user1",
+            "title": "Test Issue 2",
+          },
+          {
+            "closed": true,
+            "createdAt": 1743127752952,
+            "description": "Description for issue 1",
+            "id": "issue1",
+            "ownerId": null,
+            "title": "Test Issue 1",
+          },
+        ]
+      `);
+    });
+
+    test('1 to 1 foreign key relationship', async () => {
+      const query = issueQuery.related('owner');
+      const sqlQuery = formatPg(
+        compile(ast(query), schema.tables, query.format),
+      );
+      const pgResult = extractZqlResult(
+        await runPgQuery(sqlQuery.text, sqlQuery.values),
+      );
+      const zqlResult = mapResultToClientNames(
+        await query.run(),
+        schema,
+        'issue',
+      );
+      expect(zqlResult).toEqualPg(pgResult);
+      expect(zqlResult).toMatchInlineSnapshot(`
+        [
+          {
+            "closed": true,
+            "createdAt": 1743127752952,
+            "description": "Description for issue 1",
+            "id": "issue1",
+            "owner": undefined,
+            "ownerId": null,
+            "title": "Test Issue 1",
+          },
+          {
+            "closed": false,
+            "createdAt": 1743041352952,
+            "description": "Description for issue 2",
+            "id": "issue2",
+            "owner": {
+              "id": "user1",
+              "metadata": null,
+              "name": "User 1",
+            },
+            "ownerId": "user1",
+            "title": "Test Issue 2",
+          },
+          {
+            "closed": true,
+            "createdAt": 1742954952952,
+            "description": "Description for issue 3",
+            "id": "issue3",
+            "owner": {
+              "id": "user2",
+              "metadata": {
+                "altContacts": [
+                  "alt2@example.com",
+                ],
+                "email": "user2@example.com",
+                "registrar": "google",
+              },
+              "name": "User 2",
+            },
+            "ownerId": "user2",
+            "title": "Test Issue 3",
+          },
+        ]
+      `);
+    });
+
+    test('1 to many foreign key relationship', async () => {
+      const query = issueQuery.related('comments');
+      const sqlQuery = formatPg(
+        compile(ast(query), schema.tables, query.format),
+      );
+      const pgResult = extractZqlResult(
+        await runPgQuery(sqlQuery.text, sqlQuery.values),
+      );
+      const zqlResult = mapResultToClientNames(
+        await query.run(),
+        schema,
+        'issue',
+      );
+      expect(zqlResult).toEqualPg(pgResult);
+      expect(zqlResult).toMatchInlineSnapshot(`
+              [
+                {
+                  "closed": true,
+                  "comments": [
+                    {
+                      "authorId": "user1",
+                      "createdAt": 1743127752952,
+                      "id": "comment1",
+                      "issueId": "issue1",
+                      "text": "Comment 1 text",
+                    },
+                    {
+                      "authorId": "user1",
+                      "createdAt": 1742868552952,
+                      "id": "comment4",
+                      "issueId": "issue1",
+                      "text": "Comment 4 text",
+                    },
+                  ],
+                  "createdAt": 1743127752952,
+                  "description": "Description for issue 1",
+                  "id": "issue1",
+                  "ownerId": null,
+                  "title": "Test Issue 1",
+                },
+                {
+                  "closed": false,
+                  "comments": [
+                    {
+                      "authorId": "user2",
+                      "createdAt": 1743041352952,
+                      "id": "comment2",
+                      "issueId": "issue2",
+                      "text": "Comment 2 text",
+                    },
+                    {
+                      "authorId": "user2",
+                      "createdAt": 1742782152952,
+                      "id": "comment5",
+                      "issueId": "issue2",
+                      "text": "Comment 5 text",
+                    },
+                  ],
+                  "createdAt": 1743041352952,
+                  "description": "Description for issue 2",
+                  "id": "issue2",
+                  "ownerId": "user1",
+                  "title": "Test Issue 2",
+                },
+                {
+                  "closed": true,
+                  "comments": [
+                    {
+                      "authorId": "user3",
+                      "createdAt": 1742954952952,
+                      "id": "comment3",
+                      "issueId": "issue3",
+                      "text": "Comment 3 text",
+                    },
+                    {
+                      "authorId": "user3",
+                      "createdAt": 1742695752952,
+                      "id": "comment6",
+                      "issueId": "issue3",
+                      "text": "Comment 6 text",
+                    },
+                  ],
+                  "createdAt": 1742954952952,
+                  "description": "Description for issue 3",
+                  "id": "issue3",
+                  "ownerId": "user2",
+                  "title": "Test Issue 3",
+                },
+              ]
+            `);
+    });
+
+    test('junction relationship', async () => {
+      const query = issueQuery.related('labels');
+      const sqlQuery = formatPg(
+        compile(ast(query), schema.tables, query.format),
+      );
+      const pgResult = extractZqlResult(
+        await runPgQuery(sqlQuery.text, sqlQuery.values),
+      );
+      const zqlResult = mapResultToClientNames(
+        await query.run(),
+        schema,
+        'issue',
+      );
+      expect(zqlResult).toEqualPg(pgResult);
+      expect(zqlResult).toMatchInlineSnapshot(`
+                        [
+                          {
+                            "closed": true,
+                            "createdAt": 1743127752952,
+                            "description": "Description for issue 1",
+                            "id": "issue1",
+                            "labels": [
+                              {
+                                "id": "label1",
+                                "name": "Label 1",
+                              },
+                              {
+                                "id": "label2",
+                                "name": "Label 2",
+                              },
+                            ],
+                            "ownerId": null,
+                            "title": "Test Issue 1",
+                          },
+                          {
+                            "closed": false,
+                            "createdAt": 1743041352952,
+                            "description": "Description for issue 2",
+                            "id": "issue2",
+                            "labels": [
+                              {
+                                "id": "label2",
+                                "name": "Label 2",
+                              },
+                            ],
+                            "ownerId": "user1",
+                            "title": "Test Issue 2",
+                          },
+                          {
+                            "closed": true,
+                            "createdAt": 1742954952952,
+                            "description": "Description for issue 3",
+                            "id": "issue3",
+                            "labels": [
+                              {
+                                "id": "label1",
+                                "name": "Label 1",
+                              },
+                            ],
+                            "ownerId": "user2",
+                            "title": "Test Issue 3",
+                          },
+                        ]
+                      `);
+    });
+
+    test('nested related with where clauses', async () => {
+      // TODO Change to filter comments on createdAt once
+      // timestamp params are supported.
+      const query = issueQuery
+        .where('closed', '=', false)
+        .related('comments', q =>
+          q.where('text', 'ILIKE', '%2%').related('author'),
+        );
+      const sqlQuery = formatPg(
+        compile(ast(query), schema.tables, query.format),
+      );
+      const pgResult = extractZqlResult(
+        await runPgQuery(sqlQuery.text, sqlQuery.values),
+      );
+      const zqlResult = mapResultToClientNames(
+        await query.run(),
+        schema,
+        'issue',
+      );
+      expect(zqlResult).toEqualPg(pgResult);
+      expect(zqlResult).toMatchInlineSnapshot(`
+        [
+          {
+            "closed": false,
+            "comments": [
+              {
+                "author": {
+                  "id": "user2",
+                  "metadata": {
+                    "altContacts": [
+                      "alt2@example.com",
+                    ],
+                    "email": "user2@example.com",
+                    "registrar": "google",
+                  },
+                  "name": "User 2",
+                },
+                "authorId": "user2",
+                "createdAt": 1743041352952,
+                "id": "comment2",
+                "issueId": "issue2",
+                "text": "Comment 2 text",
+              },
+            ],
+            "createdAt": 1743041352952,
+            "description": "Description for issue 2",
+            "id": "issue2",
+            "ownerId": "user1",
+            "title": "Test Issue 2",
+          },
+        ]
+      `);
+    });
+
+    test('complex query combining multiple features', async () => {
+      const query = issueQuery
+        .where('closed', '=', false)
+        .whereExists('labels', q =>
+          q.where('name', 'IN', ['Label 1', 'Label 2']),
+        )
+        .related('owner')
+        .related('comments', q =>
+          q.orderBy('createdAt', 'desc').limit(3).related('author'),
+        )
+        .orderBy('title', 'asc');
+      const sqlQuery = formatPg(
+        compile(ast(query), schema.tables, query.format),
+      );
+      const pgResult = extractZqlResult(
+        await runPgQuery(sqlQuery.text, sqlQuery.values),
+      );
+      const zqlResult = mapResultToClientNames(
+        await query.run(),
+        schema,
+        'issue',
+      );
+      expect(zqlResult).toEqualPg(pgResult);
+      expect(zqlResult).toMatchInlineSnapshot(`
+        [
+          {
+            "closed": false,
+            "comments": [
+              {
+                "author": {
+                  "id": "user2",
+                  "metadata": {
+                    "altContacts": [
+                      "alt2@example.com",
+                    ],
+                    "email": "user2@example.com",
+                    "registrar": "google",
+                  },
+                  "name": "User 2",
+                },
+                "authorId": "user2",
+                "createdAt": 1743041352952,
+                "id": "comment2",
+                "issueId": "issue2",
+                "text": "Comment 2 text",
+              },
+              {
+                "author": {
+                  "id": "user2",
+                  "metadata": {
+                    "altContacts": [
+                      "alt2@example.com",
+                    ],
+                    "email": "user2@example.com",
+                    "registrar": "google",
+                  },
+                  "name": "User 2",
+                },
+                "authorId": "user2",
+                "createdAt": 1742782152952,
+                "id": "comment5",
+                "issueId": "issue2",
+                "text": "Comment 5 text",
+              },
+            ],
+            "createdAt": 1743041352952,
+            "description": "Description for issue 2",
+            "id": "issue2",
+            "owner": {
+              "id": "user1",
+              "metadata": null,
+              "name": "User 1",
+            },
+            "ownerId": "user1",
+            "title": "Test Issue 2",
+          },
+        ]
+      `);
+    });
+  }
 });
