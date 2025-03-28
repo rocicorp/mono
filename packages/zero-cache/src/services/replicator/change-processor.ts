@@ -544,8 +544,18 @@ class TransactionProcessor {
     let oldName = msg.old.name;
     const newName = msg.new.name;
 
-    const oldSpec = mapPostgresToLiteColumn(table, msg.old);
-    const newSpec = mapPostgresToLiteColumn(table, msg.new);
+    // update-column can ignore defaults because it does not change the values
+    // in existing rows.
+    //
+    // https://www.postgresql.org/docs/current/sql-altertable.html#SQL-ALTERTABLE-DESC-SET-DROP-DEFAULT
+    //
+    // "The new default value will only apply in subsequent INSERT or UPDATE
+    //  commands; it does not cause rows already in the table to change."
+    //
+    // This allows support for _changing_ column defaults to any expression,
+    // since it does not affect what the replica needs to do.
+    const oldSpec = mapPostgresToLiteColumn(table, msg.old, 'ignore-default');
+    const newSpec = mapPostgresToLiteColumn(table, msg.new, 'ignore-default');
 
     // The only updates that are relevant are the column name and the data type.
     if (oldName === newName && oldSpec.dataType === newSpec.dataType) {
