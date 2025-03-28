@@ -1,5 +1,5 @@
 import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
-import {formatPg} from '../../z2s/src/sql.ts';
+import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
@@ -90,7 +90,9 @@ export class Z2SQuery<
   async run(): Promise<HumanReadable<TReturn>> {
     const sqlQuery =
       this.#query ??
-      formatPg(compile(this._completeAst(), this.#schema.tables, this.format));
+      formatPgInternalConvert(
+        compile(this._completeAst(), this.#schema.tables, this.format),
+      );
     this.#query = sqlQuery;
     const result = extractZqlResult(
       await this.#dbTransaction.query(sqlQuery.text, sqlQuery.values),
