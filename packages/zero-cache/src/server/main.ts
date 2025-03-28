@@ -95,7 +95,21 @@ export default async function runWorker(
     // For the replication-manager (i.e. authoritative replica), only attempt
     // a restore once, allowing the backup to be absent.
     // For view-syncers, attempt a restore for up to 10 times over 30 seconds.
-    await restoreReplica(lc, config, runChangeStreamer ? 1 : 10, 3000);
+    try {
+      await restoreReplica(lc, config, runChangeStreamer ? 1 : 10, 3000);
+    } catch (e) {
+      if (runChangeStreamer) {
+        // If the restore failed, e.g. due to a corrupt backup, the
+        // replication-manager recovers by re-syncing.
+        lc.error?.('error restoring backup. resyncing the replica.');
+      } else {
+        // View-syncers, on the other hand, have no option other than to retry
+        // until a valid backup has been published. This is achieved by
+        // shutting down and letting the container runner retry with its
+        // configured policy.
+        throw e;
+      }
+    }
   }
 
   const {promise: changeStreamerReady, resolve} = resolver();
