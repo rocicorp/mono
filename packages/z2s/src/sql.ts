@@ -28,7 +28,10 @@ type SqlConvertArg = {
   [sqlConvert]: true;
   type: ValueType;
   value: unknown;
-  plural: boolean;
+  plural?: boolean | undefined;
+
+  // collation is passed down given we need to apply it to each element of a plural argument
+  collation?: 'ucs_basic' | undefined;
 };
 function isSqlConvert(value: unknown): value is SqlConvertArg {
   return value !== null && typeof value === 'object' && sqlConvert in value;
@@ -40,16 +43,24 @@ export function sqlConvertArg<T extends ValueType, P extends boolean = false>(
   // plural is an explicit argument so we do not get confused by a singular JSON array vs
   // an array of JSON.
   plural?: P,
+  collation?: 'ucs_basic',
 ): SQLQuery {
-  return sql.value({[sqlConvert]: true, type, value, plural});
+  return sql.value({
+    [sqlConvert]: true,
+    type,
+    value,
+    plural,
+    collation,
+  } satisfies SqlConvertArg);
 }
 
 export function sqlConvertArgUnsafe(
   type: ValueType,
   value: unknown,
   plural?: boolean,
+  collation?: 'ucs_basic',
 ): SQLQuery {
-  return sqlConvertArg(type, value as never, plural);
+  return sqlConvertArg(type, value as never, plural, collation);
 }
 
 class ReusingFormat implements FormatConfig {
@@ -128,6 +139,7 @@ class SQLConvertFormat implements FormatConfig {
     // the inputs to those types.
 
     const sqlType = pgType(value.type);
+    const collate = value.collation ? ` COLLATE "${value.collation}"` : '';
 
     if (!value.plural) {
       switch (value.type) {
@@ -140,7 +152,7 @@ class SQLConvertFormat implements FormatConfig {
         case 'number':
           return `$${index}::text::${sqlType}`;
         case 'string':
-          return `$${index}::text`;
+          return `$${index}::text ${collate}`;
         case 'date':
         case 'timestamp':
           return `to_timestamp($${index}::text::${sqlType} / 1000.0) AT TIME ZONE 'UTC'`;
@@ -160,7 +172,7 @@ class SQLConvertFormat implements FormatConfig {
         )`;
       case 'string':
         return `ARRAY(
-            SELECT value FROM jsonb_array_elements_text($${index}::text::jsonb)
+            SELECT value ${collate} FROM jsonb_array_elements_text($${index}::text::jsonb)
           )`;
       case 'date':
       case 'timestamp':
