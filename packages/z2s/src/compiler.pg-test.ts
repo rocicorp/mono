@@ -2,11 +2,8 @@ import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
-import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {type Row} from '../../zero-protocol/src/data.ts';
-import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import {
   completedAstSymbol,
   newQuery,
@@ -24,6 +21,7 @@ import {compile, extractZqlResult} from './compiler.ts';
 import {formatPgInternalConvert} from './sql.ts';
 import {Client} from 'pg';
 import './test/comparePg.ts';
+import {fillPgAndSync} from './test/setup.ts';
 
 const lc = createSilentLogContext();
 
@@ -42,9 +40,6 @@ let issueQuery: Query<Schema, 'issue'>;
  * These test will likely be deprecated.
  */
 beforeAll(async () => {
-  pg = await testDBs.create(DB_NAME, undefined, false);
-  await pg.unsafe(createTableSQL);
-  sqlite = new Database(lc, ':memory:');
   const testData = {
     issue: Array.from({length: 3}, (_, i) => ({
       id: `issue${i + 1}`,
@@ -89,30 +84,11 @@ beforeAll(async () => {
     })),
   };
 
-  const mapper = clientToServer(schema.tables);
-  for (const [table, rows] of Object.entries(testData)) {
-    const columns = Object.keys(rows[0]);
-    const forPg = rows.map(row =>
-      columns.reduce(
-        (acc, c) => ({
-          ...acc,
-          [mapper.columnName(table, c)]: row[c as keyof typeof row],
-        }),
-        {} as Record<string, unknown>,
-      ),
-    );
-    await pg`INSERT INTO ${pg(mapper.tableName(table))} ${pg(forPg)}`;
-  }
-  await initialSync(
-    lc,
-    {appID: 'compiler_pg_test', shardNum: 0, publications: []},
-    sqlite,
-    getConnectionURI(pg),
-    {tableCopyWorkers: 1, rowBatchSize: 10000},
-  );
+  const setup = await fillPgAndSync(schema, createTableSQL, testData, DB_NAME);
+  pg = setup.pg;
+  sqlite = setup.sqlite;
 
   const queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
-
   issueQuery = newQuery(queryDelegate, schema, 'issue');
 
   // Check that PG, SQLite, and test data are in sync

@@ -31,6 +31,8 @@ import {hasOwn} from '../../shared/src/has-own.ts';
 type Tables = Record<string, TableSchema>;
 
 const ZQL_RESULT_KEY = 'zql_result';
+const COLLATION = 'ucs_basic';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractZqlResult(pgResult: any): JSONValue {
   const bigIntJson: BigIntJSONValue = parseBigIntJson(
@@ -154,11 +156,19 @@ export class Compiler {
         dir === 'asc'
           ? // Oh postgres. The table must be referred to be client name but the column by server name.
             // E.g., `SELECT server_col as client_col FROM server_table as client_table ORDER BY client_Table.server_col`
-            sql`${sql.ident(table)}.${this.#mapColumnNoAlias(table, col)} ASC`
-          : sql`${sql.ident(table)}.${this.#mapColumnNoAlias(table, col)} DESC`,
+            sql`${sql.ident(table)}.${this.#mapColumnNoAlias(table, col)} ${this.#maybeCollate(table, col)} ASC`
+          : sql`${sql.ident(table)}.${this.#mapColumnNoAlias(table, col)} ${this.#maybeCollate(table, col)} DESC`,
       ),
       ', ',
     )}`;
+  }
+
+  #maybeCollate(table: string, column: string) {
+    const columnSchema = this.#tables[table].columns[column];
+    if (columnSchema.type === 'string') {
+      return sql`COLLATE ${sql.ident(COLLATION)}`;
+    }
+    return sql``;
   }
 
   limit(limit: number | undefined): SQLQuery {
@@ -348,12 +358,12 @@ export class Compiler {
       case 'LIKE':
       case 'NOT ILIKE':
       case 'NOT LIKE':
-        return sql`${this.valuePosition(
+        return sql`${this.valueComparison(
           condition.left,
           table,
           this.#extractType(table, condition.left, condition.right),
           false,
-        )} ${sql.__dangerous__rawValue(condition.op)} ${this.valuePosition(
+        )} ${sql.__dangerous__rawValue(condition.op)} ${this.valueComparison(
           condition.right,
           table,
           this.#extractType(table, condition.right, condition.left),
@@ -369,18 +379,18 @@ export class Compiler {
   }
 
   distinctFrom(condition: SimpleCondition, table: string): SQLQuery {
-    return sql`${this.valuePosition(condition.left, table, this.#extractType(table, condition.left, condition.right), false)} ${
+    return sql`${this.valueComparison(condition.left, table, this.#extractType(table, condition.left, condition.right), false)} ${
       condition.op === 'IS' ? sql`IS NOT DISTINCT FROM` : sql`IS DISTINCT FROM`
-    } ${this.valuePosition(condition.right, table, this.#extractType(table, condition.right, condition.left), false)}`;
+    } ${this.valueComparison(condition.right, table, this.#extractType(table, condition.right, condition.left), false)}`;
   }
 
   any(condition: SimpleCondition, table: string): SQLQuery {
-    return sql`${this.valuePosition(condition.left, table, this.#extractType(table, condition.left, condition.right), false)} ${
+    return sql`${this.valueComparison(condition.left, table, this.#extractType(table, condition.left, condition.right), false)} ${
       condition.op === 'IN' ? sql`= ANY` : sql`!= ANY`
-    } (${this.valuePosition(condition.right, table, this.#extractType(table, condition.right, condition.left), true)})`;
+    } (${this.valueComparison(condition.right, table, this.#extractType(table, condition.right, condition.left), true)})`;
   }
 
-  valuePosition(
+  valueComparison(
     value: ValuePosition,
     table: string,
     valueType: ValueType,
@@ -390,7 +400,12 @@ export class Compiler {
       case 'column':
         return this.#mapColumnNoAlias(table, value.name);
       case 'literal':
-        return sqlConvertArgUnsafe(valueType, value.value, plural);
+        return sqlConvertArgUnsafe(
+          valueType,
+          value.value,
+          plural,
+          valueType === 'string' ? COLLATION : undefined,
+        );
       case 'static':
         throw new Error(
           'Static parameters must be bound to a value before compiling to SQL',

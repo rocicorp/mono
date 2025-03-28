@@ -109,7 +109,7 @@ test('orderBy', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "ORDER BY "user"."name" ASC, "user"."age" DESC",
+      "text": "ORDER BY "user"."name" COLLATE "ucs_basic" ASC, "user"."age"  DESC",
       "values": [],
     }
   `);
@@ -126,7 +126,7 @@ test('orderBy', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "ORDER BY "user"."name" ASC, "user"."age" DESC, "user"."id" ASC",
+      "text": "ORDER BY "user"."name" COLLATE "ucs_basic" ASC, "user"."age"  DESC, "user"."id" COLLATE "ucs_basic" ASC",
       "values": [],
     }
   `);
@@ -156,7 +156,7 @@ test('any', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": ""name" = ANY (ARRAY(
-                SELECT value FROM jsonb_array_elements_text($1::text::jsonb)
+                SELECT value  COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
               ))",
       "values": [
         "[1,2,3]",
@@ -179,7 +179,7 @@ test('any', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": ""name" != ANY (ARRAY(
-                SELECT value FROM jsonb_array_elements_text($1::text::jsonb)
+                SELECT value  COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
               ))",
       "values": [
         "[1,2,3]",
@@ -192,7 +192,7 @@ test('valuePosition', () => {
   const compiler = new Compiler(schema.tables);
   expect(
     formatPgInternalConvert(
-      compiler.valuePosition(
+      compiler.valueComparison(
         {type: 'column', name: 'name'},
         'user',
         'string',
@@ -207,7 +207,7 @@ test('valuePosition', () => {
   `);
   expect(
     formatPgInternalConvert(
-      compiler.valuePosition(
+      compiler.valueComparison(
         {type: 'literal', value: 'hello'},
         'user',
         'string',
@@ -216,7 +216,7 @@ test('valuePosition', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "$1::text",
+      "text": "$1::text  COLLATE "ucs_basic"",
       "values": [
         "hello",
       ],
@@ -224,7 +224,7 @@ test('valuePosition', () => {
   `);
   expect(() =>
     formatPgInternalConvert(
-      compiler.valuePosition(
+      compiler.valueComparison(
         {
           type: 'static',
           anchor: 'authData',
@@ -256,7 +256,7 @@ test('distinctFrom', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" IS NOT DISTINCT FROM $1::text",
+      "text": ""name" IS NOT DISTINCT FROM $1::text  COLLATE "ucs_basic"",
       "values": [
         null,
       ],
@@ -277,7 +277,7 @@ test('distinctFrom', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" IS DISTINCT FROM $1::text",
+      "text": ""name" IS DISTINCT FROM $1::text  COLLATE "ucs_basic"",
       "values": [
         null,
       ],
@@ -371,7 +371,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" = $1::text",
+      "text": ""name" = $1::text  COLLATE "ucs_basic"",
       "values": [
         "test",
       ],
@@ -392,7 +392,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" != $1::text",
+      "text": ""name" != $1::text  COLLATE "ucs_basic"",
       "values": [
         "test",
       ],
@@ -497,7 +497,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" LIKE $1::text",
+      "text": ""name" LIKE $1::text  COLLATE "ucs_basic"",
       "values": [
         "%test%",
       ],
@@ -518,7 +518,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" NOT LIKE $1::text",
+      "text": ""name" NOT LIKE $1::text  COLLATE "ucs_basic"",
       "values": [
         "%test%",
       ],
@@ -539,7 +539,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" ILIKE $1::text",
+      "text": ""name" ILIKE $1::text  COLLATE "ucs_basic"",
       "values": [
         "%test%",
       ],
@@ -560,7 +560,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" NOT ILIKE $1::text",
+      "text": ""name" NOT ILIKE $1::text  COLLATE "ucs_basic"",
       "values": [
         "%test%",
       ],
@@ -582,7 +582,7 @@ test('simple', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": ""id" = ANY (ARRAY(
-                SELECT value FROM jsonb_array_elements_text($1::text::jsonb)
+                SELECT value  COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
               ))",
       "values": [
         "[1,2,3]",
@@ -605,7 +605,7 @@ test('simple', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": ""id" != ANY (ARRAY(
-                SELECT value FROM jsonb_array_elements_text($1::text::jsonb)
+                SELECT value  COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
               ))",
       "values": [
         "[1,2,3]",
@@ -627,7 +627,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" IS NOT DISTINCT FROM $1::text",
+      "text": ""name" IS NOT DISTINCT FROM $1::text  COLLATE "ucs_basic"",
       "values": [
         null,
       ],
@@ -648,7 +648,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" IS DISTINCT FROM $1::text",
+      "text": ""name" IS DISTINCT FROM $1::text  COLLATE "ucs_basic"",
       "values": [
         null,
       ],
