@@ -1,6 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import sinon from 'sinon';
-import {afterEach, expect, test} from 'vitest';
+import {beforeEach, expect, test, vi} from 'vitest';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import {
   DID_NOT_CONNECT_VALUE,
@@ -13,8 +12,12 @@ import {
   State,
 } from './metrics.ts';
 
-afterEach(() => {
-  sinon.restore();
+beforeEach(() => {
+  vi.useFakeTimers({now: 0});
+  return () => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  };
 });
 
 test('Gauge', () => {
@@ -53,10 +56,10 @@ test('Gauge', () => {
   ];
 
   const g = new Gauge('mygauge');
-  const clock = sinon.useFakeTimers();
+  vi.useFakeTimers();
 
   for (const c of cases) {
-    clock.setSystemTime(c.time);
+    vi.setSystemTime(c.time);
     if (c.value !== undefined) {
       g.set(c.value);
     } else if (g.get() !== undefined) {
@@ -109,7 +112,7 @@ test('State', () => {
     },
   ];
 
-  const clock = sinon.useFakeTimers();
+  const clock = vi.useFakeTimers();
 
   for (const c of cases) {
     clock.setSystemTime(c.time);
@@ -135,9 +138,9 @@ test('State', () => {
 });
 
 test('MetricManager v1 connect metrics', async () => {
-  const clock = sinon.useFakeTimers();
+  vi.useFakeTimers();
 
-  const reporter = sinon.mock().returns(Promise.resolve());
+  const reporter = vi.fn().mockReturnValue(Promise.resolve());
   const mm = new MetricManager({
     reportIntervalMs: REPORT_INTERVAL_MS,
     host: 'test-host',
@@ -263,11 +266,11 @@ test('MetricManager v1 connect metrics', async () => {
       mm.tags.push(...c.extraTags);
     }
 
-    await clock.tickAsync(REPORT_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(REPORT_INTERVAL_MS);
     intervalTickCount++;
 
-    expect(reporter.callCount).equals(1);
-    expect(reporter.getCalls()[0].args[0]).to.deep.equal([
+    expect(reporter).toBeCalledTimes(1);
+    expect(reporter.mock.calls[0][0]).to.deep.equal([
       ...c.expected,
       {
         host: 'test-host',
@@ -279,14 +282,14 @@ test('MetricManager v1 connect metrics', async () => {
 
     mm.tags.length = 1;
 
-    reporter.resetHistory();
+    reporter.mockClear();
   }
 });
 
 test('MetricManager v2 connect metrics', async () => {
-  const clock = sinon.useFakeTimers();
+  vi.useFakeTimers();
 
-  const reporter = sinon.mock().returns(Promise.resolve());
+  const reporter = vi.fn().mockReturnValue(Promise.resolve());
   const mm = new MetricManager({
     reportIntervalMs: REPORT_INTERVAL_MS,
     host: 'test-host',
@@ -524,11 +527,11 @@ test('MetricManager v2 connect metrics', async () => {
       mm.tags.push(...c.extraTags);
     }
 
-    await clock.tickAsync(REPORT_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(REPORT_INTERVAL_MS);
     intervalTickCount++;
 
-    expect(reporter.callCount, c.name).equals(1);
-    expect(reporter.getCalls()[0].args[0], c.name).to.deep.equal([
+    expect(reporter, c.name).toBeCalledTimes(1);
+    expect(reporter.mock.calls[0][0], c.name).to.deep.equal([
       {
         host: 'test-host',
         metric: 'time_to_connect_ms',
@@ -545,14 +548,14 @@ test('MetricManager v2 connect metrics', async () => {
 
     mm.tags.length = 1;
 
-    reporter.resetHistory();
+    reporter.mockClear();
   }
 });
 
 test('MetricManager.stop', async () => {
-  const clock = sinon.useFakeTimers();
+  vi.useFakeTimers();
 
-  const reporter = sinon.mock().returns(Promise.resolve());
+  const reporter = vi.fn().mockReturnValue(Promise.resolve());
   const mm = new MetricManager({
     reportIntervalMs: REPORT_INTERVAL_MS,
     host: 'test-host',
@@ -565,9 +568,9 @@ test('MetricManager.stop', async () => {
   mm.lastConnectError.set('bonk');
   mm.setConnected(100, 100);
 
-  await clock.tickAsync(REPORT_INTERVAL_MS);
-  expect(reporter.callCount).equals(1);
-  expect(reporter.getCalls()[0].args[0]).to.deep.equal([
+  await vi.advanceTimersByTimeAsync(REPORT_INTERVAL_MS);
+  expect(reporter).toBeCalledTimes(1);
+  expect(reporter.mock.calls[0][0]).to.deep.equal([
     {
       metric: 'time_to_connect_ms',
       points: [[REPORT_INTERVAL_MS / 1000, [100]]],
@@ -594,9 +597,9 @@ test('MetricManager.stop', async () => {
     },
   ]);
 
-  reporter.resetHistory();
+  reporter.mockClear();
   mm.stop();
 
-  await clock.tickAsync(REPORT_INTERVAL_MS * 2);
-  expect(reporter.notCalled);
+  await vi.advanceTimersByTimeAsync(REPORT_INTERVAL_MS * 2);
+  expect(reporter).not.toBeCalled();
 });

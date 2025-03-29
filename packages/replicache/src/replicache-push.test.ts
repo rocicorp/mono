@@ -1,5 +1,4 @@
-import * as sinon from 'sinon';
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import type {VersionNotSupportedResponse} from './error-responses.ts';
 import type {Pusher} from './pusher.ts';
 import {
@@ -56,7 +55,7 @@ test('push', async () => {
       {id: 2, error: 'deleteTodo: todo not found'},
     ],
   });
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   const {mutations} = await fetchMock.lastCall().request.json();
   const {clientID} = rep;
   expect(mutations).to.deep.equal([
@@ -91,7 +90,7 @@ test('push', async () => {
   fetchMock.postOnce(pushURL, {
     mutationInfos: [{id: 3, error: 'mutation has already been processed'}],
   });
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   {
     const {mutations} = await fetchMock.lastCall().request.json();
     expect(mutations).to.deep.equal([
@@ -134,7 +133,7 @@ test('push', async () => {
   fetchMock.postOnce(pushURL, {
     mutationInfos: [],
   });
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   {
     const {mutations} = await fetchMock.lastCall().request.json();
     expect(mutations).to.deep.equal([
@@ -206,36 +205,36 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
 
   const {createTodo} = rep.mutate;
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   fetchMock.reset();
   fetchMock.postAny({});
 
   await createTodo({id: 'id1'});
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   expect(fetchMock.calls()).to.have.length(0);
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   fetchMock.reset();
   fetchMock.postAny({});
 
   rep.pushURL = 'https://diff.com/push';
 
   await createTodo({id: 'id2'});
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   expect(fetchMock.calls()).to.have.length(1);
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   fetchMock.reset();
   fetchMock.postAny({});
 
   rep.pushURL = '';
 
   await createTodo({id: 'id3'});
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   expect(fetchMock.calls()).to.have.length(0);
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   fetchMock.reset();
   fetchMock.postAny({});
   let pusherCallCount = 0;
@@ -252,12 +251,12 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
   };
 
   await createTodo({id: 'id4'});
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   expect(fetchMock.calls()).to.have.length(0);
   expect(pusherCallCount).to.equal(1);
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   fetchMock.reset();
   fetchMock.postAny({});
   pusherCallCount = 0;
@@ -265,7 +264,7 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
   rep.pusher = getDefaultPusher(rep);
 
   await createTodo({id: 'id5'});
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   expect(fetchMock.calls()).to.have.length(0);
   expect(pusherCallCount).to.equal(0);
@@ -286,7 +285,7 @@ test('Version not supported on server', async () => {
       disableAllBackgroundProcesses,
     );
 
-    const onUpdateNeededStub = (rep.onUpdateNeeded = sinon.stub());
+    const onUpdateNeededStub = (rep.onUpdateNeeded = vi.fn());
 
     // eslint-disable-next-line require-await
     const pusher: Pusher = async () => ({
@@ -302,8 +301,8 @@ test('Version not supported on server', async () => {
     await rep.mutate.noop();
     await rep.push({now: true});
 
-    expect(onUpdateNeededStub.callCount).to.equal(1);
-    expect(onUpdateNeededStub.lastCall.args).deep.equal([reason]);
+    expect(onUpdateNeededStub).toHaveBeenCalledTimes(1);
+    expect(onUpdateNeededStub.mock.lastCall).deep.equal([reason]);
   };
 
   await t({error: 'VersionNotSupported'}, {type: 'VersionNotSupported'});
@@ -318,7 +317,7 @@ test('Version not supported on server', async () => {
 });
 
 test('ClientStateNotFound on server', async () => {
-  const onClientStateNotFound = sinon.stub();
+  const onClientStateNotFound = vi.fn();
   const rep = await replicacheForTesting(
     'client-state-not-found-push',
     {
@@ -330,7 +329,7 @@ test('ClientStateNotFound on server', async () => {
     disableAllBackgroundProcesses,
   );
 
-  const onUpdateNeededStub = (rep.onUpdateNeeded = sinon.stub());
+  const onUpdateNeededStub = (rep.onUpdateNeeded = vi.fn());
 
   // eslint-disable-next-line require-await
   const pusher: Pusher = async () => ({
@@ -346,7 +345,7 @@ test('ClientStateNotFound on server', async () => {
   await rep.mutate.noop();
   await rep.push({now: true});
 
-  expect(onUpdateNeededStub.callCount).equal(0);
-  expect(onClientStateNotFound.callCount).equal(1);
+  expect(onUpdateNeededStub).toHaveBeenCalledTimes(0);
+  expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
   expect(rep.isClientGroupDisabled).true;
 });

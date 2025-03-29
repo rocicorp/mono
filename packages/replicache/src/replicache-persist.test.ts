@@ -1,8 +1,6 @@
-import * as sinon from 'sinon';
-import {afterEach, describe, expect, test} from 'vitest';
+import {afterEach, describe, expect, test, vi} from 'vitest';
 import {
   addData,
-  clock,
   disableAllBackgroundProcesses,
   expectLogContext,
   initReplicacheTesting,
@@ -43,6 +41,7 @@ initReplicacheTesting();
 let perdag: Store | undefined;
 afterEach(async () => {
   await perdag?.close();
+  vi.restoreAllMocks();
 });
 
 async function deleteClientGroupForTesting<
@@ -106,7 +105,7 @@ test('basic persist & load', async () => {
         `Persist did not complete in ${maxWaitAttempts * waitMs} ms`,
       );
     }
-    await tickAFewTimes(waitMs);
+    await tickAFewTimes(vi, waitMs);
     assertClientV6(clientBeforePull);
     assertNotUndefined(clientGroupBeforePull);
     const clientGroup: ClientGroup | undefined = await withRead(perdag, read =>
@@ -145,7 +144,7 @@ test('basic persist & load', async () => {
 
 describe('onClientStateNotFound', () => {
   test('Called in persist if collected', async () => {
-    const consoleErrorStub = sinon.stub(console, 'error');
+    const consoleErrorStub = vi.spyOn(console, 'error');
 
     const rep = await replicacheForTesting('called-in-persist', {
       mutators: {addData},
@@ -157,12 +156,12 @@ describe('onClientStateNotFound', () => {
     const {clientID} = rep;
     await deleteClientForTesting(clientID, rep.perdag);
 
-    const onClientStateNotFound = sinon.fake();
+    const onClientStateNotFound = vi.fn();
     rep.onClientStateNotFound = onClientStateNotFound;
     await rep.persist();
 
-    expect(onClientStateNotFound.callCount).to.equal(1);
-    expect(onClientStateNotFound.lastCall.args).to.deep.equal([]);
+    expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+    expect(onClientStateNotFound.mock.lastCall).to.deep.equal([]);
     expectLogContext(
       consoleErrorStub,
       0,
@@ -172,7 +171,7 @@ describe('onClientStateNotFound', () => {
   });
 
   test('Called in query if collected', async () => {
-    const consoleErrorStub = sinon.stub(console, 'error');
+    const consoleErrorStub = vi.spyOn(console, 'error');
 
     const name = 'called-in-query';
     const mutators = {
@@ -192,8 +191,9 @@ describe('onClientStateNotFound', () => {
     await deleteClientForTesting(clientID, rep.perdag);
 
     // Need a real timeout here.
-    clock.restore();
+    vi.useRealTimers();
     await sleep(10);
+    vi.useFakeTimers();
 
     await rep.close();
 
@@ -219,7 +219,7 @@ describe('onClientStateNotFound', () => {
     // Cannot simply gcClientGroups because the client group has pending mutations.
     await deleteClientGroupForTesting(rep2);
 
-    const onClientStateNotFound = sinon.fake();
+    const onClientStateNotFound = vi.fn();
     rep2.onClientStateNotFound = onClientStateNotFound;
 
     let e: unknown;
@@ -237,11 +237,11 @@ describe('onClientStateNotFound', () => {
       rep2,
       `Client state not found on client, clientID: ${clientID2}`,
     );
-    expect(onClientStateNotFound.lastCall.args).to.deep.equal([]);
+    expect(onClientStateNotFound.mock.lastCall).to.deep.equal([]);
   });
 
   test('Called in mutate if collected', async () => {
-    const consoleErrorStub = sinon.stub(console, 'error');
+    const consoleErrorStub = vi.spyOn(console, 'error');
     const name = 'called-in-mutate';
     const mutators = {
       addData,
@@ -285,7 +285,7 @@ describe('onClientStateNotFound', () => {
     // Cannot simply gcClientGroups because the client group has pending mutations.
     await deleteClientGroupForTesting(rep2);
 
-    const onClientStateNotFound = sinon.fake();
+    const onClientStateNotFound = vi.fn();
     rep2.onClientStateNotFound = onClientStateNotFound;
 
     let e: unknown;
@@ -303,7 +303,7 @@ describe('onClientStateNotFound', () => {
       rep2,
       `Client state not found on client, clientID: ${clientID2}`,
     );
-    expect(onClientStateNotFound.lastCall.args).to.deep.equal([]);
+    expect(onClientStateNotFound.mock.lastCall).to.deep.equal([]);
   });
 });
 
@@ -321,7 +321,7 @@ test('Persist throws if idb dropped', async () => {
 
   await dropIDBStoreWithMemFallback(rep.idbName);
 
-  const onClientStateNotFound = sinon.fake();
+  const onClientStateNotFound = vi.fn();
   rep.onClientStateNotFound = onClientStateNotFound;
   let err;
   try {

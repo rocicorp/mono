@@ -1,7 +1,13 @@
 import {resolver} from '@rocicorp/resolver';
-import * as sinon from 'sinon';
-import {type SinonFakeTimers, useFakeTimers} from 'sinon';
-import {afterEach, beforeEach, expect} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  expect,
+  vi,
+  type Mock,
+  type MockInstance,
+  type VitestUtils,
+} from 'vitest';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
 import {randomUint64} from '../../shared/src/random-uint64.ts';
@@ -39,7 +45,7 @@ export class ReplicacheTest<
   MD extends MutatorDefs = {},
 > extends Replicache<MD> {
   readonly #impl: ReplicacheImpl<MD>;
-  recoverMutationsFake: sinon.SinonSpy<[r: Promise<boolean>], Promise<boolean>>;
+  recoverMutationsFake: Mock<(r: Promise<boolean>) => Promise<boolean>>;
 
   constructor(
     options: ReplicacheOptions<MD>,
@@ -54,7 +60,7 @@ export class ReplicacheTest<
     super(options);
     restoreMakeImplForTest();
     this.#impl = must<ReplicacheImpl<MD>>(impl);
-    this.recoverMutationsFake = this.onRecoverMutations = sinon.fake(r => r);
+    this.recoverMutationsFake = this.onRecoverMutations = vi.fn(r => r);
   }
 
   pullIgnorePromise(opts?: Parameters<Replicache['pull']>[0]): void {
@@ -212,25 +218,23 @@ export async function replicacheForTesting<
   await rep.clientGroupID;
   fetchMock.post(pullURL, makePullResponseV1(clientID, undefined, [], null));
   fetchMock.post(pushURL, 'ok');
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   return rep;
 }
-
-export let clock: SinonFakeTimers;
 
 export function initReplicacheTesting(): void {
   fetchMock.config.overwriteRoutes = true;
 
   beforeEach(() => {
-    clock = useFakeTimers(0);
+    vi.useFakeTimers({now: 0});
     setupIDBDatabasesStoreForTest();
   });
 
   afterEach(async () => {
     restoreMakeImplForTest();
-    clock.restore();
+    vi.useRealTimers();
     fetchMock.restore();
-    sinon.restore();
+    vi.restoreAllMocks();
     await closeAllReps();
     await closeAllCloseables();
     await deleteAllDatabases();
@@ -238,15 +242,19 @@ export function initReplicacheTesting(): void {
   });
 }
 
-export async function tickAFewTimes(n = 10, time = 10) {
+export async function tickAFewTimes(vi: VitestUtils, n = 10, time = 10) {
   for (let i = 0; i < n; i++) {
-    await clock.tickAsync(time);
+    await vi.advanceTimersByTimeAsync(time);
   }
 }
 
-export async function tickUntil(f: () => boolean, msPerTest = 10) {
+export async function tickUntil(
+  vi: VitestUtils,
+  f: () => boolean,
+  msPerTest = 10,
+) {
   while (!f()) {
-    await clock.tickAsync(msPerTest);
+    await vi.advanceTimersByTimeAsync(msPerTest);
   }
 }
 
@@ -296,13 +304,13 @@ export async function addData(
 }
 
 export function expectLogContext(
-  consoleLogStub: sinon.SinonStub,
+  consoleLogStub: MockInstance,
   index: number,
   rep: Replicache,
   expectedContext: string,
 ) {
-  expect(consoleLogStub.callCount).to.greaterThan(index);
-  const {args} = consoleLogStub.getCall(index);
+  expect(consoleLogStub.mock.calls.length).to.greaterThan(index);
+  const args = consoleLogStub.mock.calls[index];
   expect(args).to.have.length(2);
   expect(args[0]).to.equal(`name=${rep.name}`);
   expect(args[1]).to.equal(expectedContext);
@@ -348,11 +356,10 @@ export function makePullResponseV1(
 
 export function expectConsoleLogContextStub(
   name: string,
-  call: sinon.SinonSpyCall,
+  args: unknown[],
   expectedMessage: string,
   additionalContexts: (string | RegExp)[] = [],
 ) {
-  const {args} = call;
   expect(args).to.have.length(2 + additionalContexts.length);
   expect(args[0]).to.equal(`name=${name}`);
   let i = 1;

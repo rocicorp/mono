@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {assertNotUndefined} from '../../../shared/src/asserts.ts';
 import type {Read} from '../dag/store.ts';
@@ -17,15 +16,14 @@ import {
 import {makeClientV6, setClientsForTesting} from './clients-test-helpers.ts';
 import type {OnClientsDeleted} from './clients.ts';
 
-let clock: SinonFakeTimers;
 const START_TIME = 0;
 const FIVE_MINS_IN_MS = 5 * 60 * 1000;
 beforeEach(() => {
-  clock = useFakeTimers(0);
+  vi.useFakeTimers({now: 0});
 });
 
 afterEach(() => {
-  clock.restore();
+  vi.restoreAllMocks();
 });
 
 function awaitLatestGCUpdate(): Promise<ClientGroupMap> {
@@ -123,7 +121,7 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
     expect(readClientGroupMap).to.deep.equal(clientGroupMap);
   });
 
-  await clock.tickAsync(FIVE_MINS_IN_MS);
+  await vi.advanceTimersByTimeAsync(FIVE_MINS_IN_MS);
   await awaitLatestGCUpdate();
 
   // client-group-1 is not collected because it is referred to by client1 and has pending mutations
@@ -154,7 +152,7 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
     'client-group-2': clientGroup2,
   });
 
-  await clock.tickAsync(FIVE_MINS_IN_MS);
+  await vi.advanceTimersByTimeAsync(FIVE_MINS_IN_MS);
   await awaitLatestGCUpdate();
 
   // client-group-1 is not collected because it has pending mutations
@@ -179,7 +177,7 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
     'client-group-2': clientGroup2,
   });
 
-  await clock.tickAsync(FIVE_MINS_IN_MS);
+  await vi.advanceTimersByTimeAsync(FIVE_MINS_IN_MS);
   await awaitLatestGCUpdate();
 
   // client-group-1 is collect because it is not referred to and has no pending mutations
@@ -199,7 +197,7 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
   // nothing collected yet because gc has not run yet
   await expectClientGroups(dagStore, {'client-group-2': clientGroup2});
 
-  await clock.tickAsync(FIVE_MINS_IN_MS);
+  await vi.advanceTimersByTimeAsync(FIVE_MINS_IN_MS);
   await awaitLatestGCUpdate();
 
   // client-group-2 is not collected because it is referred to by client3
@@ -211,7 +209,7 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
   // nothing collected yet because gc has not run yet
   await expectClientGroups(dagStore, {'client-group-2': clientGroup2});
 
-  await clock.tickAsync(FIVE_MINS_IN_MS);
+  await vi.advanceTimersByTimeAsync(FIVE_MINS_IN_MS);
   await awaitLatestGCUpdate();
 
   // client-group-2 is collected because it is not referred to and has pending mutations
@@ -297,7 +295,7 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
     expect(readClientGroupMap).to.deep.equal(clientGroupMap);
   });
 
-  await clock.tickAsync(FIVE_MINS_IN_MS);
+  await vi.advanceTimersByTimeAsync(FIVE_MINS_IN_MS);
   await awaitLatestGCUpdate();
 
   // client-group-1 is not collected because it is referred to by client1 and has pending mutations
@@ -325,7 +323,7 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
     'client-group-2': clientGroup2,
   });
 
-  await clock.tickAsync(FIVE_MINS_IN_MS);
+  await vi.advanceTimersByTimeAsync(FIVE_MINS_IN_MS);
   await awaitLatestGCUpdate();
 
   // client-group-1 is collected because we ignore pending mutations
@@ -347,7 +345,7 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
   // nothing collected yet because gc has not run yet
   await expectClientGroups(dagStore, {'client-group-2': clientGroup2});
 
-  await clock.tickAsync(FIVE_MINS_IN_MS);
+  await vi.advanceTimersByTimeAsync(FIVE_MINS_IN_MS);
   await awaitLatestGCUpdate();
 
   // client-group-2 is not collected because it is referred to by client3
@@ -359,7 +357,7 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
   // nothing collected yet because gc has not run yet
   await expectClientGroups(dagStore, {'client-group-2': clientGroup2});
 
-  await clock.tickAsync(FIVE_MINS_IN_MS);
+  await vi.advanceTimersByTimeAsync(FIVE_MINS_IN_MS);
   await awaitLatestGCUpdate();
 
   // client-group-2 is collected because it is not referred to and has pending mutations

@@ -1,5 +1,4 @@
-import * as sinon from 'sinon';
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {Queue} from '../../shared/src/queue.ts';
 import {
@@ -26,13 +25,13 @@ test('watch', async () => {
     },
   });
 
-  const spy = sinon.spy();
+  const spy = vi.fn();
   const unwatch = rep.experimentalWatch(spy);
 
   await rep.mutate.addData({a: 1, b: 2});
 
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'add',
@@ -47,13 +46,13 @@ test('watch', async () => {
     ],
   ]);
 
-  spy.resetHistory();
+  spy.mockClear();
   await rep.mutate.addData({a: 1, b: 2});
-  expect(spy.callCount).to.equal(0);
+  expect(spy).toHaveBeenCalledTimes(0);
 
   await rep.mutate.addData({a: 11});
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'change',
@@ -64,10 +63,10 @@ test('watch', async () => {
     ],
   ]);
 
-  spy.resetHistory();
+  spy.mockClear();
   await rep.mutate.del('b');
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'del',
@@ -79,9 +78,9 @@ test('watch', async () => {
 
   unwatch();
 
-  spy.resetHistory();
+  spy.mockClear();
   await rep.mutate.addData({c: 6});
-  expect(spy.callCount).to.equal(0);
+  expect(spy).toHaveBeenCalledTimes(0);
 });
 
 test('watch with prefix', async () => {
@@ -92,13 +91,13 @@ test('watch with prefix', async () => {
     },
   });
 
-  const spy = sinon.spy();
+  const spy = vi.fn();
   const unwatch = rep.experimentalWatch(spy, {prefix: 'b'});
 
   await rep.mutate.addData({a: 1, b: 2});
 
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'add',
@@ -108,16 +107,16 @@ test('watch with prefix', async () => {
     ],
   ]);
 
-  spy.resetHistory();
+  spy.mockClear();
   await rep.mutate.addData({a: 1, b: 2});
-  expect(spy.callCount).to.equal(0);
+  expect(spy).toHaveBeenCalledTimes(0);
 
   await rep.mutate.addData({a: 11});
-  expect(spy.callCount).to.equal(0);
+  expect(spy).toHaveBeenCalledTimes(0);
 
   await rep.mutate.addData({b: 3, b1: 4, c: 5});
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'change',
@@ -133,10 +132,10 @@ test('watch with prefix', async () => {
     ],
   ]);
 
-  spy.resetHistory();
+  spy.mockClear();
   await rep.mutate.del('b');
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'del',
@@ -148,9 +147,9 @@ test('watch with prefix', async () => {
 
   unwatch();
 
-  spy.resetHistory();
+  spy.mockClear();
   await rep.mutate.addData({b: 6});
-  expect(spy.callCount).to.equal(0);
+  expect(spy).toHaveBeenCalledTimes(0);
 });
 
 test('watch and initial callback with no data', async () => {
@@ -165,12 +164,12 @@ test('watch and initial callback with no data', async () => {
     disableAllBackgroundProcesses,
   );
 
-  const spy = sinon.spy();
+  const spy = vi.fn();
   const unwatch = rep.experimentalWatch(spy, {initialValuesInFirstDiff: true});
-  await tickAFewTimes();
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([[]]);
-  spy.resetHistory();
+  await tickAFewTimes(vi);
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([[]]);
+  spy.mockClear();
 
   unwatch();
 });
@@ -189,11 +188,11 @@ test('watch and initial callback with data', async () => {
 
   await rep.mutate.addData({a: 1, b: 2});
 
-  const spy = sinon.spy();
+  const spy = vi.fn();
   const unwatch = rep.experimentalWatch(spy, {initialValuesInFirstDiff: true});
-  await tickAFewTimes();
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  await tickAFewTimes(vi);
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'add',
@@ -208,7 +207,7 @@ test('watch and initial callback with data', async () => {
     ],
   ]);
 
-  spy.resetHistory();
+  spy.mockClear();
 
   unwatch();
 });
@@ -221,23 +220,23 @@ test('watch with prefix and initial callback no data', async () => {
     },
   });
 
-  const spy = sinon.spy();
+  const spy = vi.fn();
   const unwatch = rep.experimentalWatch(spy, {
     prefix: 'b',
     initialValuesInFirstDiff: true,
   });
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   // Initial callback should always be called even with no data.
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([[]]);
-  spy.resetHistory();
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([[]]);
+  spy.mockClear();
 
   await rep.mutate.addData({a: 1, b: 2});
 
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'add',
@@ -260,16 +259,16 @@ test('watch with prefix and initial callback and data', async () => {
 
   await rep.mutate.addData({a: 1, b: 2});
 
-  const spy = sinon.spy();
+  const spy = vi.fn();
   const unwatch = rep.experimentalWatch(spy, {
     prefix: 'b',
     initialValuesInFirstDiff: true,
   });
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'add',
@@ -291,17 +290,17 @@ test('watch on index', async () => {
     indexes: {id1: {jsonPointer: '/id'}},
   });
 
-  const spy = sinon.spy();
+  const spy = vi.fn();
   const unwatch = rep.experimentalWatch(spy, {
     indexName: 'id1',
   });
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   await rep.mutate.addData({a: {id: 'aaa'}, b: {id: 'bbb'}});
 
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'add',
@@ -316,10 +315,10 @@ test('watch on index', async () => {
     ],
   ]);
 
-  spy.resetHistory();
+  spy.mockClear();
   await rep.mutate.addData({b: {id: 'bbb', more: 42}});
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'change',
@@ -330,10 +329,10 @@ test('watch on index', async () => {
     ],
   ]);
 
-  spy.resetHistory();
+  spy.mockClear();
   await rep.mutate.del('a');
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'del',
@@ -355,18 +354,18 @@ test('watch on index with prefix', async () => {
     indexes: {id1: {jsonPointer: '/id'}},
   });
 
-  const spy = sinon.spy();
+  const spy = vi.fn();
   const unwatch = rep.experimentalWatch(spy, {
     indexName: 'id1',
     prefix: 'b',
   });
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   await rep.mutate.addData({a: {id: 'aaa'}, b: {id: 'bbb'}});
 
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'add',
@@ -376,10 +375,10 @@ test('watch on index with prefix', async () => {
     ],
   ]);
 
-  spy.resetHistory();
+  spy.mockClear();
   await rep.mutate.addData({b: {id: 'bbb', more: 42}});
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'change',
@@ -390,10 +389,10 @@ test('watch on index with prefix', async () => {
     ],
   ]);
 
-  spy.resetHistory();
+  spy.mockClear();
   await rep.mutate.addData({a: {id: 'baa'}});
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'add',
@@ -403,14 +402,14 @@ test('watch on index with prefix', async () => {
     ],
   ]);
 
-  spy.resetHistory();
+  spy.mockClear();
   await rep.mutate.addData({c: {id: 'abaa'}});
-  expect(spy.callCount).to.equal(0);
+  expect(spy).toHaveBeenCalledTimes(0);
 
-  spy.resetHistory();
+  spy.mockClear();
   await rep.mutate.del('b');
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'del',
@@ -436,17 +435,17 @@ test('watch with index and initial callback with no data', async () => {
     disableAllBackgroundProcesses,
   );
 
-  const spy = sinon.spy();
+  const spy = vi.fn();
   const unwatch = rep.experimentalWatch(spy, {
     initialValuesInFirstDiff: true,
     indexName: 'id1',
   });
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   // Initial callback should always be called even with no data.
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([[]]);
-  spy.resetHistory();
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([[]]);
+  spy.mockClear();
 
   unwatch();
 });
@@ -462,14 +461,14 @@ test('watch and initial callback with data', async () => {
 
   await rep.mutate.addData({a: {id: 'aaa'}, b: {id: 'bbb'}});
 
-  const spy = sinon.spy();
+  const spy = vi.fn();
   const unwatch = rep.experimentalWatch(spy, {
     initialValuesInFirstDiff: true,
     indexName: 'id1',
   });
-  await tickAFewTimes();
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  await tickAFewTimes(vi);
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'add',
@@ -498,17 +497,17 @@ test('watch with index and prefix and initial callback and data', async () => {
 
   await rep.mutate.addData({a: {id: 'aaa'}, b: {id: 'bbb'}});
 
-  const spy = sinon.spy();
+  const spy = vi.fn();
   const unwatch = rep.experimentalWatch(spy, {
     prefix: 'b',
     initialValuesInFirstDiff: true,
     indexName: 'id1',
   });
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
-  expect(spy.callCount).to.equal(1);
-  expect(spy.lastCall.args).to.deep.equal([
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy.mock.lastCall).to.deep.equal([
     [
       {
         op: 'add',

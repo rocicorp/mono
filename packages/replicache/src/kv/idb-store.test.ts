@@ -1,5 +1,5 @@
-import * as sinon from 'sinon';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {dropIDBStoreWithMemFallback} from './idb-store-with-mem-fallback.ts';
 import {IDBNotFoundError, IDBStore} from './idb-store.ts';
@@ -49,10 +49,12 @@ describe('reopening IDB', () => {
     await dropIDBStoreWithMemFallback(name);
 
     // Use spy to get a hold of the request object and then the idb instance.
-    const openSpy = sinon.spy(indexedDB, 'open');
+    const openSpy = vi.spyOn(indexedDB, 'open');
 
     store = new IDBStore(name);
-    const req = openSpy.returnValues[0];
+    const result = openSpy.mock.results[0];
+    assert(result.type === 'return');
+    const req = result.value;
     idb = new Promise((resolve, reject) => {
       req.addEventListener('success', () => resolve(req.result));
       req.addEventListener('error', () => reject(req.error));
@@ -60,7 +62,7 @@ describe('reopening IDB', () => {
   });
 
   afterEach(() => {
-    sinon.restore();
+    vi.restoreAllMocks();
   });
 
   test('succeeds if IDB still exists', async () => {

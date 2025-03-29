@@ -41,6 +41,10 @@
           {
             "group": ["**/*.test.ts", "**/*.test.tsx"],
             "message": "Do not import from test files."
+          },
+          {
+            "group": ["sinon"],
+            "message": "Use vi instead of sinon"
           }
         ],
         "paths": [

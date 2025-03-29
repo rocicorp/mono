@@ -1,5 +1,4 @@
-import * as sinon from 'sinon';
-import {afterEach, beforeEach, expect, test} from 'vitest';
+import {beforeEach, expect, test, vi} from 'vitest';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import type {Mutation} from '../../../zero-protocol/src/push.ts';
@@ -12,21 +11,16 @@ import {
 import * as ConnectionState from './connection-state-enum.ts';
 import {MockSocket, tickAFewTimes, zeroForTest} from './test-utils.ts';
 
-let clock: sinon.SinonFakeTimers;
 const startTime = 1678829450000;
 
 beforeEach(() => {
-  clock = sinon.useFakeTimers();
-  clock.setSystemTime(startTime);
-  sinon.replace(
-    globalThis,
-    'WebSocket',
-    MockSocket as unknown as typeof WebSocket,
-  );
-});
+  vi.useFakeTimers({now: startTime});
+  vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
 
-afterEach(() => {
-  sinon.restore();
+  return () => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  };
 });
 
 test('connection stays alive on rate limit error', async () => {
@@ -80,7 +74,7 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
   await z.mutate.issue.insert({id: 'a', value: 1});
   await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
 
-  await tickAFewTimes(clock, 0);
+  await tickAFewTimes(vi, 0);
   expect(mockSocket.messages).to.have.lengthOf(1);
   expect(mockSocket.closed).toBe(false);
   expect(z.connectionState).eq(ConnectionState.Connected);
@@ -91,7 +85,7 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
   // now send another mutation
   await z.mutate.issue.insert({id: 'b', value: 2});
   await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
-  await tickAFewTimes(clock, 0);
+  await tickAFewTimes(vi, 0);
 
   // two mutations should be sent in separate push messages
   expect(mockSocket.messages).to.have.lengthOf(2);
@@ -121,7 +115,7 @@ test('previously confirmed mutations are not resent after a rate limit error', a
   mockSocket.messages.length = 0;
 
   await z.mutate.issue.insert({id: 'a', value: 1});
-  await tickAFewTimes(clock);
+  await tickAFewTimes(vi);
   // confirm the mutation
   await z.triggerPokeStart({
     pokeID: '1',
@@ -133,7 +127,7 @@ test('previously confirmed mutations are not resent after a rate limit error', a
     lastMutationIDChanges: {[z.clientID]: 1},
   });
   await z.triggerPokeEnd({pokeID: '1', cookie: '1'});
-  await tickAFewTimes(clock);
+  await tickAFewTimes(vi);
 
   // reset messages
   mockSocket.messages.length = 0;
@@ -141,7 +135,7 @@ test('previously confirmed mutations are not resent after a rate limit error', a
   // now send another mutation but rate limit it
   await z.mutate.issue.insert({id: 'b', value: 2});
   await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
-  await tickAFewTimes(clock);
+  await tickAFewTimes(vi);
 
   // Only the new mutation should have been sent. The first was confirmed by a poke response.
   expect(
@@ -154,7 +148,7 @@ test('previously confirmed mutations are not resent after a rate limit error', a
   // Send another mutation. This and the last rate limited mutation should be sent
   await z.mutate.issue.insert({id: 'c', value: 3});
   await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
-  await tickAFewTimes(clock);
+  await tickAFewTimes(vi);
 
   expect(
     mockSocket.messages.flatMap(m =>
