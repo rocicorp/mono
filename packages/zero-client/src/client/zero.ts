@@ -133,6 +133,7 @@ import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
+import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -757,7 +758,7 @@ export class Zero<
    * ```
    */
   readonly mutate: MD extends CustomMutatorDefs<S>
-    ? DBMutator<S> & MakeCustomMutatorInterfaces<S, MD>
+    ? DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD>>
     : DBMutator<S>;
 
   /**
