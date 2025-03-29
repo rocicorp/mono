@@ -8,7 +8,6 @@ import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
 import {handlePush} from '../server/push-handler.ts';
-import type {ReadonlyJSONObject} from '@rocicorp/zero';
 import {must} from '../../../packages/shared/src/must.ts';
 import assert from 'assert';
 import {authDataSchema, type AuthData} from '../shared/auth.ts';
@@ -111,12 +110,7 @@ fastify.get<{
     );
 });
 
-fastify.post<{
-  Querystring: {
-    schema: string;
-    appID: string;
-  };
-}>('/api/push', async function (request, reply) {
+fastify.post('/api/push', async function (request, reply) {
   let {authorization} = request.headers;
   if (authorization !== undefined) {
     assert(authorization.toLowerCase().startsWith('bearer '));
@@ -131,11 +125,7 @@ fastify.post<{
         )
       : undefined;
 
-  const response = await handlePush(
-    authData,
-    request.query,
-    request.body as ReadonlyJSONObject,
-  );
+  const response = await handlePush(authData, request.query, request.body);
   reply.send(response);
 });
 
