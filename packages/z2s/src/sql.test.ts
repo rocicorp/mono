@@ -33,7 +33,7 @@ test('identical values result in a single placeholder', () => {
   `);
 });
 
-describe('json arg packing', () => {
+describe('arg packing', () => {
   test('single arg', () => {
     expect(
       formatPgInternalConvert(
@@ -72,7 +72,7 @@ describe('json arg packing', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "foo" WHERE "a" = $1::text::jsonb OR "b" = $2::text::numeric OR "c" = $3::text OR "d" = $4::text::boolean",
+        "text": "SELECT * FROM "foo" WHERE "a" = $1::text::jsonb OR "b" = $2::text::numeric OR "c" = $3::text  OR "d" = $4::text::boolean",
         "values": [
           "{}",
           "1",
