@@ -60,9 +60,8 @@ describe('out of order mutation', () => {
         version: 1,
       },
       () => new Connection(pg),
-      mutators,
     );
-    const result = await processor.process(params, makePush(15));
+    const result = await processor.process(mutators, params, makePush(15));
 
     expect(result).toEqual({
       mutations: [
@@ -90,10 +89,9 @@ describe('out of order mutation', () => {
         version: 1,
       },
       () => new Connection(pg),
-      mutators,
     );
 
-    expect(await processor.process(params, makePush(1))).toEqual({
+    expect(await processor.process(mutators, params, makePush(1))).toEqual({
       mutations: [
         {
           id: {
@@ -105,7 +103,7 @@ describe('out of order mutation', () => {
       ],
     });
 
-    expect(await processor.process(params, makePush(3))).toEqual({
+    expect(await processor.process(mutators, params, makePush(3))).toEqual({
       mutations: [
         {
           id: {
@@ -132,10 +130,9 @@ test('first mutation', async () => {
       version: 1,
     },
     () => new Connection(pg),
-    mutators,
   );
 
-  expect(await processor.process(params, makePush(1))).toEqual({
+  expect(await processor.process(mutators, params, makePush(1))).toEqual({
     mutations: [
       {
         id: {
@@ -158,14 +155,13 @@ test('previously seen mutation', async () => {
       version: 1,
     },
     () => new Connection(pg),
-    mutators,
   );
 
-  await processor.process(params, makePush(1));
-  await processor.process(params, makePush(2));
-  await processor.process(params, makePush(3));
+  await processor.process(mutators, params, makePush(1));
+  await processor.process(mutators, params, makePush(2));
+  await processor.process(mutators, params, makePush(3));
 
-  expect(await processor.process(params, makePush(2))).toEqual({
+  expect(await processor.process(mutators, params, makePush(2))).toEqual({
     mutations: [
       {
         id: {
@@ -188,12 +184,12 @@ test('lmid still moves forward if the mutator implementation throws', async () =
       version: 1,
     },
     () => new Connection(pg),
-    mutators,
   );
 
-  await processor.process(params, makePush(1));
-  await processor.process(params, makePush(2));
+  await processor.process(mutators, params, makePush(1));
+  await processor.process(mutators, params, makePush(2));
   const result = await processor.process(
+    mutators,
     params,
     makePush(3, customMutatorKey('foo', 'baz')),
   );

@@ -166,6 +166,14 @@ export const pushResponseMessageSchema = v.tuple([
   pushResponseSchema,
 ]);
 
+/**
+ * The schema for the querystring parameters of the custom push endpoint.
+ */
+export const pushParamsSchema = v.object({
+  schema: v.string(),
+  appID: v.string(),
+});
+
 export type InsertOp = v.Infer<typeof insertOpSchema>;
 export type UpsertOp = v.Infer<typeof upsertOpSchema>;
 export type UpdateOp = v.Infer<typeof updateOpSchema>;

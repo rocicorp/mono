@@ -13,4 +13,4 @@ export {
   type PostgresSQL,
   type PostgresTransaction,
 } from './postgres-connection.ts';
-export {type PushHandler, type Params, PushProcessor} from './web.ts';
+export {PushProcessor} from './web.ts';
