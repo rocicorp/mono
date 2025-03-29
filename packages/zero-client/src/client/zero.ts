@@ -1,4 +1,9 @@
-import {LogContext, type LogLevel} from '@rocicorp/logger';
+import {
+  type Context,
+  LogContext,
+  type LogLevel,
+  type LogSink,
+} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import {
   ReplicacheImpl,
@@ -363,6 +368,10 @@ export class Zero<
   // We use an accessor pair to allow the subclass to override the setter.
   #connectionState: ConnectionState = ConnectionState.Disconnected;
 
+  readonly #onError:
+    | ((context: Context | undefined, ...args: unknown[]) => void)
+    | undefined;
+
   #setConnectionState(state: ConnectionState) {
     if (state === this.#connectionState) {
       return;
@@ -413,6 +422,7 @@ export class Zero<
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
       slowMaterializeThreshold = 5_000,
+      onError,
     } = options as ZeroOptions<S>;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -449,6 +459,7 @@ export class Zero<
       enableAnalytics: this.#enableAnalytics,
     });
     const logOptions = this.#logOptions;
+    this.#onError = onError;
 
     const replicacheMutators: MutatorDefs & {
       [CRUD_MUTATION_NAME]: CRUDMutator;
@@ -464,7 +475,23 @@ export class Zero<
       );
     }
 
-    const lc = new LogContext(logOptions.logLevel, {}, logOptions.logSink);
+    const ls = logOptions.logSink;
+    // Wrap the log sink to call onError we get an error.
+    const logSink: LogSink = {
+      log: (level, context, ...args) => {
+        if (level === 'error' && this.#onError) {
+          this.#onError(context, ...args);
+        } else {
+          ls.log(level, context, ...args);
+        }
+      },
+      // eslint-disable-next-line require-await
+      async flush() {
+        return ls.flush?.();
+      },
+    };
+
+    const lc = new LogContext(logOptions.logLevel, {}, logSink);
     this.#mutationTracker = new MutationTracker();
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(

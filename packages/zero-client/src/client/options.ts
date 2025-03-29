@@ -1,4 +1,4 @@
-import type {LogLevel} from '@rocicorp/logger';
+import type {Context, LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
@@ -121,6 +121,14 @@ export interface ZeroOptions<
    * Default is 5_000.
    */
   hiddenTabDisconnectDelay?: number | undefined;
+
+  /**
+   * When we have an error we usually log this using console.error. If you want
+   * to do something else with the error, you can provide this function.
+   */
+  onError?:
+    | ((context: Context | undefined, ...args: unknown[]) => void)
+    | undefined;
 
   /**
    * Determines what kind of storage implementation to use on the client.
