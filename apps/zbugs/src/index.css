@@ -1015,7 +1015,8 @@ textarea.autoResize {
 
   /* Add the checkmark when checked */
   ul.contains-task-list
-    li.task-list-item:has(> input:disabled:checked)::before {
+    li.task-list-item
+    .task-line:has(> input:disabled:checked)::before {
     content: '';
     border-color: var(--color-primary-cta);
     color: var(--color-primary-cta);
