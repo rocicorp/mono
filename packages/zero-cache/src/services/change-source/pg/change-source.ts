@@ -800,15 +800,16 @@ export function tablesDifferent(a: PublishedTableSpec, b: PublishedTableSpec) {
 }
 
 export function relationDifferent(a: PublishedTableSpec, b: MessageRelation) {
+  if (a.oid !== b.relationOid || a.schema !== b.schema || a.name !== b.name) {
+    return true;
+  }
   if (
-    a.oid !== b.relationOid ||
-    a.schema !== b.schema ||
-    a.name !== b.name ||
     // The MessageRelation's `keyColumns` field contains the columns in column
     // declaration order, whereas the PublishedTableSpec's `primaryKey`
     // contains the columns in primary key (i.e. index) order. Do an
     // order-agnostic compare here since it is not possible to detect
     // key-order changes from the MessageRelation message alone.
+    b.replicaIdentity === 'default' &&
     !equals(new Set(a.primaryKey), new Set(b.keyColumns))
   ) {
     return true;

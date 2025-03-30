@@ -1,13 +1,13 @@
-import type {ReadonlyJSONObject} from '../../shared/src/json.ts';
-import type {
-  Mutation,
-  MutationResponse,
-  PushBody,
-  PushResponse,
+import {
+  type Mutation,
+  type MutationResponse,
+  type PushBody,
+  pushBodySchema,
+  pushParamsSchema,
+  type PushResponse,
 } from '../../zero-protocol/src/push.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import * as v from '../../shared/src/valita.ts';
-import {pushBodySchema} from '../../zero-protocol/src/push.ts';
 import {
   makeSchemaCRUD,
   TransactionImpl,
@@ -28,15 +28,7 @@ import {formatPg} from '../../z2s/src/sql.ts';
 import {sql} from '../../z2s/src/sql.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
 
-export type PushHandler = (
-  params: Params,
-  body: ReadonlyJSONObject,
-) => Promise<PushResponse>;
-
-export type Params = {
-  schema: string;
-  appID: string;
-};
+export type Params = v.Infer<typeof pushParamsSchema>;
 
 export class PushProcessor<
   S extends Schema,
@@ -44,7 +36,6 @@ export class PushProcessor<
   MD extends CustomMutatorDefs<S, TDBTransaction>,
 > {
   readonly #dbConnectionProvider: ConnectionProvider<TDBTransaction>;
-  readonly #customMutatorDefs: MD;
   readonly #lc: LogContext;
   readonly #mutate: (dbTransaction: DBTransaction<unknown>) => SchemaCRUD<S>;
   readonly #query: (dbTransaction: DBTransaction<unknown>) => SchemaQuery<S>;
@@ -52,20 +43,20 @@ export class PushProcessor<
   constructor(
     schema: S,
     dbConnectionProvider: ConnectionProvider<TDBTransaction>,
-    customMutatorDefs: MD,
   ) {
     this.#dbConnectionProvider = dbConnectionProvider;
-    this.#customMutatorDefs = customMutatorDefs;
     this.#lc = createLogContext('info');
     this.#mutate = makeSchemaCRUD(schema);
     this.#query = makeSchemaQuery(schema);
   }
 
   async process(
-    params: Params,
-    body: ReadonlyJSONObject,
+    mutators: MD,
+    queryString: unknown,
+    body: unknown,
   ): Promise<PushResponse> {
     const req = v.parse(body, pushBodySchema);
+    const params = v.parse(queryString, pushParamsSchema);
     const connection = await this.#dbConnectionProvider();
 
     if (req.pushVersion !== 1) {
@@ -76,7 +67,13 @@ export class PushProcessor<
 
     const responses: MutationResponse[] = [];
     for (const m of req.mutations) {
-      const res = await this.#processMutation(connection, params, req, m);
+      const res = await this.#processMutation(
+        connection,
+        mutators,
+        params,
+        req,
+        m,
+      );
       responses.push(res);
       if ('error' in res.result) {
         break;
@@ -90,6 +87,7 @@ export class PushProcessor<
 
   async #processMutation(
     dbConnection: DBConnection<TDBTransaction>,
+    mutators: MD,
     params: Params,
     req: PushBody,
     m: Mutation,
@@ -97,6 +95,7 @@ export class PushProcessor<
     try {
       return await this.#processMutationImpl(
         dbConnection,
+        mutators,
         params,
         req,
         m,
@@ -129,6 +128,7 @@ export class PushProcessor<
 
       const ret = await this.#processMutationImpl(
         dbConnection,
+        mutators,
         params,
         req,
         m,
@@ -152,6 +152,7 @@ export class PushProcessor<
 
   #processMutationImpl(
     dbConnection: DBConnection<TDBTransaction>,
+    mutators: MD,
     params: Params,
     req: PushBody,
     m: Mutation,
@@ -173,7 +174,7 @@ export class PushProcessor<
       );
 
       if (!errorMode) {
-        await this.#dispatchMutation(dbTx, m);
+        await this.#dispatchMutation(dbTx, mutators, m);
       }
 
       return {
@@ -188,6 +189,7 @@ export class PushProcessor<
 
   #dispatchMutation(
     dbTx: DBTransaction<TDBTransaction>,
+    mutators: MD,
     m: Mutation,
   ): Promise<void> {
     const zeroTx = new TransactionImpl(
@@ -199,7 +201,7 @@ export class PushProcessor<
     );
 
     const [namespace, name] = splitMutatorKey(m.name);
-    return this.#customMutatorDefs[namespace][name](zeroTx, m.args[0]);
+    return mutators[namespace][name](zeroTx, m.args[0]);
   }
 }
 

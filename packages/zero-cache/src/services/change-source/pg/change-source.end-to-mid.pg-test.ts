@@ -520,6 +520,57 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
     ],
     [
+      'change column default and set not null',
+      `
+       ALTER TABLE my.bar ALTER login SET DEFAULT floor(10000 * random())::text;
+       ALTER TABLE my.bar ALTER login SET NOT NULL;`,
+      [{tag: 'update-column'}],
+      {['my.bar']: []},
+      [
+        {
+          columns: {
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+            id: {
+              characterMaximumLength: null,
+              dataType: 'int8|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            handle: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            login: {
+              characterMaximumLength: null,
+              dataType: 'varchar|NOT_NULL',
+              dflt: null, // defaults should be ignored for update-column
+              notNull: false,
+              pos: 4,
+            },
+          },
+          name: 'my.bar',
+        },
+      ],
+      [
+        {
+          name: 'my.bar_username_key',
+          tableName: 'my.bar',
+          columns: {login: 'ASC'},
+          unique: true,
+        },
+      ],
+    ],
+    [
       'drop column with index',
       'ALTER TABLE my.bar DROP login;',
       [{tag: 'drop-index'}, {tag: 'drop-column'}],
