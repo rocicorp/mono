@@ -1,10 +1,6 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {sleep} from '../../shared/src/sleep.ts';
-import {
-  clock,
-  initReplicacheTesting,
-  replicacheForTesting,
-} from './test-util.ts';
+import {initReplicacheTesting, replicacheForTesting} from './test-util.ts';
 
 initReplicacheTesting();
 
@@ -23,7 +19,7 @@ test('collect IDB databases', async () => {
 
   expect(await getDatabases()).to.deep.equal(['collect-idb-databases-1']);
 
-  await clock.tickAsync(ONE_MONTH);
+  await vi.advanceTimersByTimeAsync(ONE_MONTH);
 
   const rep2 = await replicacheForTesting('collect-idb-databases-2');
   await rep2.close();
@@ -33,15 +29,15 @@ test('collect IDB databases', async () => {
     'collect-idb-databases-2',
   ]);
 
-  await clock.tickAsync(12 * HOURS);
+  await vi.advanceTimersByTimeAsync(12 * HOURS);
 
   // Open one more database and keep it open long enough to trigger the collection.
   const rep3 = await replicacheForTesting('collect-idb-databases-3');
-  await clock.tickAsync(5 * MINUTES);
+  await vi.advanceTimersByTimeAsync(5 * MINUTES);
   await rep3.close();
 
   // Restore real timers and wait a few ms to let the idb state "flush"
-  clock.restore();
+  vi.useRealTimers();
   await sleep(500);
 
   expect(await getDatabases()).to.deep.equal([

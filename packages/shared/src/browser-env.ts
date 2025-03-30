@@ -4,9 +4,25 @@
 
 type GlobalThis = typeof globalThis;
 
+const overrides = new Map<keyof GlobalThis, GlobalThis[keyof GlobalThis]>();
+
+export function overrideBrowserGlobal<T extends keyof GlobalThis>(
+  name: T,
+  value: GlobalThis[T],
+) {
+  overrides.set(name, value);
+}
+
+export function clearBrowserOverrides() {
+  overrides.clear();
+}
+
 export function getBrowserGlobal<T extends keyof GlobalThis>(
   name: T,
 ): GlobalThis[T] | undefined {
+  if (overrides.has(name)) {
+    return overrides.get(name);
+  }
   return globalThis[name];
 }
 
@@ -29,7 +45,7 @@ export function getBrowserGlobal<T extends keyof GlobalThis>(
 export function getBrowserGlobalMethod<T extends keyof GlobalThis>(
   name: T,
 ): GlobalThis[T] | undefined {
-  return globalThis[name]?.bind(globalThis);
+  return getBrowserGlobal(name)?.bind(globalThis);
 }
 
 export function mustGetBrowserGlobal<T extends keyof GlobalThis>(

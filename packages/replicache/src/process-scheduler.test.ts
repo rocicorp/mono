@@ -1,19 +1,17 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
-import sinon, {type SinonFakeTimers, useFakeTimers} from 'sinon';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {AbortError} from '../../shared/src/abort-error.ts';
 import {ProcessScheduler} from './process-scheduler.ts';
 import {expectPromiseToReject} from './test-util.ts';
 
 describe('ProcessScheduler', () => {
-  let clock: SinonFakeTimers;
   beforeEach(() => {
-    clock = useFakeTimers();
+    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    clock.restore();
-    sinon.restore();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   async function aFewMicrotasks(num = 10) {
@@ -350,7 +348,7 @@ describe('ProcessScheduler', () => {
     const result2 = schedule();
     expect(result1).to.equal(result2);
     // make idle take 100 ms
-    await clock.tickAsync(100);
+    await vi.advanceTimersByTimeAsync(100);
     requestIdleResolvers[0].resolve();
     await aFewMicrotasks();
     expect(testProcessCallCount).to.equal(1);
@@ -361,7 +359,7 @@ describe('ProcessScheduler', () => {
     expect(result3).to.equal(result4);
     expect(testProcessCallCount).to.equal(1);
     // make process take 200ms
-    await clock.tickAsync(200);
+    await vi.advanceTimersByTimeAsync(200);
     testProcessResolvers[0].resolve();
     await aFewMicrotasks();
     expect(resolved).to.deep.equal([1, 2]);
@@ -374,7 +372,7 @@ describe('ProcessScheduler', () => {
     // schedule during second scheduled process throttle
     const result5 = schedule();
     expect(result4).to.equal(result5);
-    await clock.tickAsync(50);
+    await vi.advanceTimersByTimeAsync(50);
     await aFewMicrotasks();
     // now 250ms has elapsed
     expect(requestIdleCalls.length).to.equal(2);
@@ -393,7 +391,7 @@ describe('ProcessScheduler', () => {
     expect(result7).to.equal(result8);
     expect(testProcessCallCount).to.equal(2);
     // make second process run take 250ms
-    await clock.tickAsync(250);
+    await vi.advanceTimersByTimeAsync(250);
     testProcessResolvers[1].resolve();
     await aFewMicrotasks();
     expect(resolved).to.deep.equal([1, 2, 3, 4, 5, 6]);

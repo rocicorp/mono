@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {assertNotUndefined} from '../../../shared/src/asserts.ts';
 import type {Read} from '../dag/store.ts';
@@ -21,17 +20,16 @@ import {
   setClient,
 } from './clients.ts';
 
-let clock: SinonFakeTimers;
 const START_TIME = 0;
 const MINUTES = 60 * 1000;
 const HOURS = 60 * 60 * 1000;
 
 beforeEach(() => {
-  clock = useFakeTimers(START_TIME);
+  vi.useFakeTimers({now: START_TIME});
 });
 
 afterEach(() => {
-  clock.restore();
+  vi.useRealTimers();
 });
 
 function awaitLatestGCUpdate(): Promise<ClientMap> {
@@ -89,8 +87,8 @@ test('initClientGC starts 5 min interval that collects clients that have been in
     expect(readClientMap).to.deep.equal(clientMap);
   });
 
-  clock.tick(24 * HOURS);
-  await clock.tickAsync(5 * MINUTES);
+  vi.setSystemTime(Date.now() + 24 * HOURS);
+  await vi.advanceTimersByTimeAsync(5 * MINUTES);
   await awaitLatestGCUpdate();
 
   // client1 is not collected because it is the current client (despite being old enough to collect)
@@ -117,14 +115,14 @@ test('initClientGC starts 5 min interval that collects clients that have been in
   // Update client4's heartbeat to now
   const client4UpdatedHeartbeat = {
     ...client4,
-    heartbeatTimestampMs: clock.now,
+    heartbeatTimestampMs: Date.now(),
   };
 
   await withWrite(dagStore, async dagWrite => {
     await setClient('client4', client4UpdatedHeartbeat, dagWrite);
   });
 
-  await clock.tickAsync(5 * MINUTES);
+  await vi.advanceTimersByTimeAsync(5 * MINUTES);
   await awaitLatestGCUpdate();
 
   // client1 is not collected because it is the current client (despite being old enough to collect)
@@ -147,8 +145,8 @@ test('initClientGC starts 5 min interval that collects clients that have been in
     removeDeletedClients(dagWrite, ['client2'], []),
   );
 
-  clock.tick(24 * HOURS - 5 * MINUTES * 2 + 1);
-  await clock.tickAsync(5 * MINUTES);
+  vi.setSystemTime(Date.now() + 24 * HOURS - 5 * MINUTES * 2 + 1);
+  await vi.advanceTimersByTimeAsync(5 * MINUTES);
   await awaitLatestGCUpdate();
 
   // client1 is not collected because it is the current client (despite being old enough to collect)

@@ -1,6 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
-import * as sinon from 'sinon';
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import type {VersionNotSupportedResponse} from './error-responses.ts';
 import {getDefaultPuller} from './get-default-puller.ts';
 import {type Hash, emptyHash} from './hash.ts';
@@ -94,7 +93,7 @@ test('pull', async () => {
     ),
   );
   rep.pullIgnorePromise();
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   expect(deleteCount).to.equal(2);
 
   fetchMock.postOnce(
@@ -176,7 +175,7 @@ test('pull', async () => {
     ),
   );
   rep.pullIgnorePromise();
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   expect(rep.lastMutationID).to.equal(6);
 
@@ -201,10 +200,10 @@ test('reauth pull', async () => {
 
   fetchMock.post(pullURL, {body: 'xxx', status: httpStatusUnauthorized});
 
-  const consoleErrorStub = sinon.stub(console, 'error');
+  const consoleErrorStub = vi.spyOn(console, 'error');
 
   const {promise, resolve} = resolver();
-  const getAuthFake = sinon.fake.returns(null);
+  const getAuthFake = vi.fn().mockReturnValue(null);
   rep.getAuth = () => {
     resolve();
     return getAuthFake();
@@ -214,26 +213,26 @@ test('reauth pull', async () => {
 
   await promise;
 
-  expect(getAuthFake.callCount).to.equal(1);
-  expect(consoleErrorStub.callCount).to.equal(1);
+  expect(getAuthFake).toHaveBeenCalledTimes(1);
+  expect(consoleErrorStub).toHaveBeenCalledTimes(1);
   expectConsoleLogContextStub(
     rep.name,
-    consoleErrorStub.lastCall,
+    consoleErrorStub.mock.calls[0],
     `Got a non 200 response doing pull: 401: xxx`,
     ['pull', requestIDLogContextRegex],
   );
   {
-    const consoleInfoStub = sinon.stub(console, 'info');
-    const getAuthFake = sinon.fake(() => 'boo');
+    const consoleInfoStub = vi.spyOn(console, 'info');
+    const getAuthFake = vi.fn(() => 'boo');
     rep.getAuth = getAuthFake;
 
     expect((await rep.beginPull()).syncHead).to.equal(emptyHash);
 
-    expect(getAuthFake.callCount).to.equal(8);
-    expect(consoleErrorStub.callCount).to.equal(9);
+    expect(getAuthFake).toHaveBeenCalledTimes(8);
+    expect(consoleErrorStub).toHaveBeenCalledTimes(9);
     expectConsoleLogContextStub(
       rep.name,
-      consoleInfoStub.lastCall,
+      consoleInfoStub.mock.calls[0],
       'Tried to reauthenticate too many times',
       ['pull'],
     );
@@ -251,42 +250,42 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
     {useDefaultURLs: false},
   );
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   fetchMock.reset();
   fetchMock.postAny({});
 
   rep.pullIgnorePromise();
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   expect(fetchMock.calls()).to.have.length(0);
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   fetchMock.reset();
 
   rep.pullURL = 'https://diff.com/pull';
   fetchMock.post(rep.pullURL, {lastMutationID: 0, patch: []});
 
   rep.pullIgnorePromise();
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   expect(fetchMock.calls()).to.have.length.greaterThan(0);
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   fetchMock.reset();
   fetchMock.postAny({});
 
   rep.pullURL = '';
 
   rep.pullIgnorePromise();
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   expect(fetchMock.calls()).to.have.length(0);
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   fetchMock.reset();
   fetchMock.postAny({});
 
   let pullerCallCount = 0;
 
-  const consoleErrorStub = sinon.stub(console, 'error');
+  const consoleErrorStub = vi.spyOn(console, 'error');
 
   rep.puller = () => {
     pullerCallCount++;
@@ -299,20 +298,20 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
   };
 
   rep.pullIgnorePromise();
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   expect(fetchMock.calls()).to.have.length(0);
   expect(pullerCallCount).to.be.greaterThan(0);
 
   expectConsoleLogContextStub(
     rep.name,
-    consoleErrorStub.firstCall,
+    consoleErrorStub.mock.calls[0],
     'Got a non 200 response doing pull: 500: Test failure',
     ['pull', requestIDLogContextRegex],
   );
-  consoleErrorStub.restore();
+  consoleErrorStub.mockRestore();
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   fetchMock.reset();
   fetchMock.postAny({});
   pullerCallCount = 0;
@@ -320,14 +319,14 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
   rep.puller = getDefaultPuller(rep);
 
   rep.pullIgnorePromise();
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   expect(fetchMock.calls()).to.have.length(0);
   expect(pullerCallCount).to.equal(0);
 });
 
 test('Client Group not found on server', async () => {
-  const onClientStateNotFound = sinon.stub();
+  const onClientStateNotFound = vi.fn();
 
   const rep = await replicacheForTesting(
     'client-group-not-found-pull',
@@ -357,7 +356,7 @@ test('Client Group not found on server', async () => {
   await waitForSync(rep);
 
   expect(rep.isClientGroupDisabled).true;
-  expect(onClientStateNotFound.callCount).to.equal(1);
+  expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
 });
 
 test('Version not supported on server', async () => {
@@ -372,11 +371,9 @@ test('Version not supported on server', async () => {
     );
 
     const {resolve, promise} = resolver();
-    const onUpdateNeededStub = (rep.onUpdateNeeded = sinon
-      .stub()
-      .callsFake(() => {
-        resolve();
-      }));
+    const onUpdateNeededStub = (rep.onUpdateNeeded = vi.fn(() => {
+      resolve();
+    }));
 
     // eslint-disable-next-line require-await
     const puller: Puller = async () => ({
@@ -392,8 +389,8 @@ test('Version not supported on server', async () => {
 
     await promise;
 
-    expect(onUpdateNeededStub.callCount).to.equal(1);
-    expect(onUpdateNeededStub.lastCall.args).deep.equal([reason]);
+    expect(onUpdateNeededStub).toHaveBeenCalledTimes(1);
+    expect(onUpdateNeededStub.mock.calls[0]).deep.equal([reason]);
   };
 
   await t({error: 'VersionNotSupported'}, {type: 'VersionNotSupported'});

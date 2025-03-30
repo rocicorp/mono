@@ -1,25 +1,23 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import sinon, {type SinonFakeTimers, useFakeTimers} from 'sinon';
-import {afterEach, beforeEach, expect, test} from 'vitest';
+import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {TestLogSink} from '../../shared/src/logging-test-utils.ts';
 import {initBgIntervalProcess} from './bg-interval.ts';
 
-let clock: SinonFakeTimers;
 beforeEach(() => {
-  clock = useFakeTimers();
+  vi.useFakeTimers();
 });
 
 afterEach(() => {
-  clock.restore();
-  sinon.restore();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 test('initBgIntervalProcess starts interval that executes process with delayMs between each execution', async () => {
   let processCallCount = 0;
   const process = async () => {
     processCallCount++;
-    await clock.tickAsync(50);
+    await vi.advanceTimersByTimeAsync(50);
   };
   const controller = new AbortController();
   initBgIntervalProcess(
@@ -31,14 +29,14 @@ test('initBgIntervalProcess starts interval that executes process with delayMs b
   );
 
   expect(processCallCount).to.equal(0);
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   expect(processCallCount).to.equal(1);
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   expect(processCallCount).to.equal(2);
-  await clock.tickAsync(100);
-  await clock.tickAsync(100);
-  await clock.tickAsync(100);
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   expect(processCallCount).to.equal(6);
 });
 
@@ -46,7 +44,7 @@ test('initBgIntervalProcess starts interval that executes process with delayMs a
   let processCallCount = 0;
   const process = async () => {
     processCallCount++;
-    await clock.tickAsync(50);
+    await vi.advanceTimersByTimeAsync(50);
   };
   const controller = new AbortController();
   initBgIntervalProcess(
@@ -63,19 +61,19 @@ test('initBgIntervalProcess starts interval that executes process with delayMs a
   );
 
   expect(processCallCount).to.equal(0);
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   expect(processCallCount).to.equal(1);
-  await clock.tickAsync(50);
+  await vi.advanceTimersByTimeAsync(50);
   expect(processCallCount).to.equal(2);
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   expect(processCallCount).to.equal(3);
-  await clock.tickAsync(50);
+  await vi.advanceTimersByTimeAsync(50);
   expect(processCallCount).to.equal(4);
-  await clock.tickAsync(50);
+  await vi.advanceTimersByTimeAsync(50);
   expect(processCallCount).to.equal(4);
-  await clock.tickAsync(50);
+  await vi.advanceTimersByTimeAsync(50);
   expect(processCallCount).to.equal(5);
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   expect(processCallCount).to.equal(6);
 });
 
@@ -95,18 +93,18 @@ test('calling function returned by initBgIntervalProcess, stops interval', async
   );
 
   expect(processCallCount).to.equal(0);
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   expect(processCallCount).to.equal(1);
   controller.abort();
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   expect(processCallCount).to.equal(1);
-  await clock.tickAsync(400);
+  await vi.advanceTimersByTimeAsync(400);
   expect(processCallCount).to.equal(1);
 });
 
 test('error thrown during process (before stop is called) is logged to error', async () => {
   const lc = new LogContext();
-  const errorStub = sinon.stub(console, 'error');
+  const errorStub = vi.spyOn(console, 'error').mockImplementation(() => {});
   const process = () => Promise.reject('TestErrorBeforeStop');
   const controller = new AbortController();
   initBgIntervalProcess(
@@ -116,9 +114,8 @@ test('error thrown during process (before stop is called) is logged to error', a
     lc,
     controller.signal,
   );
-  await clock.tickAsync(100);
-  sinon.assert.calledOnceWithExactly(
-    errorStub,
+  await vi.advanceTimersByTimeAsync(100);
+  expect(errorStub).toHaveBeenCalledExactlyOnceWith(
     'bgIntervalProcess=testProcess',
     'Error running.',
     'TestErrorBeforeStop',
@@ -144,7 +141,7 @@ test('error thrown during process (after stop is called) is logged to debug', as
     controller.signal,
   );
   expect(processCallCount).to.equal(0);
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   expect(processCallCount).to.equal(1);
   controller.abort();
   processResolver.reject('TestErrorAfterStop');

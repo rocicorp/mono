@@ -1,6 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import * as sinon from 'sinon';
-import {afterEach, expect, test} from 'vitest';
+import {afterEach, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {
   withRead,
@@ -14,11 +13,13 @@ import {
 import {IDBStore} from './idb-store.ts';
 
 afterEach(() => {
-  sinon.restore();
+  vi.restoreAllMocks();
 });
 
 test('Firefox private browsing', async () => {
-  sinon.stub(navigator, 'userAgent').get(() => 'abc Firefox def');
+  vi.spyOn(navigator, 'userAgent', 'get').mockImplementation(
+    () => 'abc Firefox def',
+  );
 
   const name = `ff-${Math.random()}`;
 
@@ -34,7 +35,9 @@ test('Firefox private browsing', async () => {
 });
 
 test('No wrapper if not Firefox', async () => {
-  sinon.stub(navigator, 'userAgent').get(() => 'abc Safari def');
+  vi.spyOn(navigator, 'userAgent', 'get').mockImplementation(
+    () => 'abc Safari def',
+  );
   const name = `not-ff-${Math.random()}`;
   const store = newIDBStoreWithMemFallback(new LogContext(), name);
   expect(store).not.instanceOf(IDBStoreWithMemFallback);
@@ -43,8 +46,10 @@ test('No wrapper if not Firefox', async () => {
 });
 
 test('race condition', async () => {
-  sinon.stub(navigator, 'userAgent').get(() => 'abc Firefox def');
-  const logFake = sinon.fake();
+  vi.spyOn(navigator, 'userAgent', 'get').mockImplementation(
+    () => 'abc Firefox def',
+  );
+  const logFake = vi.fn();
 
   const name = `ff-race-${Math.random()}`;
   const store = storeThatErrorsInOpen(
@@ -57,8 +62,8 @@ test('race condition', async () => {
   await p1;
   await p2;
 
-  expect(logFake.callCount).to.equal(1);
-  expect(logFake.firstCall.args).to.deep.equal([
+  expect(logFake).toBeCalledTimes(1);
+  expect(logFake.mock.calls[0]).to.deep.equal([
     'info',
     {my: 'context'},
     'Switching to MemStore because of Firefox private browsing error',
@@ -72,7 +77,7 @@ function storeThatErrorsInOpen(lc: LogContext, name: string) {
       'InvalidStateError',
     ),
   } as IDBOpenDBRequest;
-  sinon.replace(indexedDB, 'open', () => openRequest);
+  vi.spyOn(indexedDB, 'open').mockImplementation(() => openRequest);
 
   const store = newIDBStoreWithMemFallback(lc, name);
   expect(store).instanceOf(IDBStoreWithMemFallback);

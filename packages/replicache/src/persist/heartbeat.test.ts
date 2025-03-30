@@ -1,8 +1,6 @@
 import {LogContext, type LogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import * as sinon from 'sinon';
-import {type SinonFakeTimers, useFakeTimers} from 'sinon';
-import {afterEach, beforeEach, expect, test} from 'vitest';
+import {afterEach, beforeEach, expect, test, vi} from 'vitest';
 import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
 import {StoreImpl} from '../dag/store-impl.ts';
 import type {Read} from '../dag/store.ts';
@@ -28,16 +26,16 @@ import {
   writeHeartbeat,
 } from './heartbeat.ts';
 
-let clock: SinonFakeTimers;
 const START_TIME = 100000;
 const ONE_MIN_IN_MS = 60 * 1000;
+
 beforeEach(() => {
-  clock = useFakeTimers(START_TIME);
+  vi.useFakeTimers({now: START_TIME});
 });
 
 afterEach(() => {
-  sinon.restore();
-  clock.restore();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
 function awaitLatestHeartbeatUpdate(): Promise<ClientMap> {
@@ -79,7 +77,7 @@ test('startHeartbeats starts interval that writes heartbeat each minute', async 
     expect(readClientMap).to.deep.equal(clientMap);
   });
 
-  await clock.tickAsync(ONE_MIN_IN_MS);
+  await vi.advanceTimersByTimeAsync(ONE_MIN_IN_MS);
   await awaitLatestHeartbeatUpdate();
 
   await withRead(dagStore, async (read: Read) => {
@@ -97,7 +95,7 @@ test('startHeartbeats starts interval that writes heartbeat each minute', async 
     );
   });
 
-  await clock.tickAsync(ONE_MIN_IN_MS);
+  await vi.advanceTimersByTimeAsync(ONE_MIN_IN_MS);
   await awaitLatestHeartbeatUpdate();
 
   await withRead(dagStore, async (read: Read) => {
@@ -149,7 +147,7 @@ test('calling function returned by startHeartbeats, stops heartbeats', async () 
     expect(readClientMap).to.deep.equal(clientMap);
   });
 
-  await clock.tickAsync(ONE_MIN_IN_MS);
+  await vi.advanceTimersByTimeAsync(ONE_MIN_IN_MS);
   await awaitLatestHeartbeatUpdate();
 
   await withRead(dagStore, async (read: Read) => {
@@ -165,7 +163,7 @@ test('calling function returned by startHeartbeats, stops heartbeats', async () 
   });
 
   controller.abort();
-  clock.tick(ONE_MIN_IN_MS);
+  vi.setSystemTime(Date.now() + ONE_MIN_IN_MS);
   await awaitLatestHeartbeatUpdate();
 
   await withRead(dagStore, async (read: Read) => {
@@ -202,7 +200,7 @@ test('writeHeartbeat writes heartbeat', async () => {
   await setClientsForTesting(clientMap, dagStore);
 
   const TICK_IN_MS = 20000;
-  clock.tick(TICK_IN_MS);
+  vi.setSystemTime(Date.now() + TICK_IN_MS);
 
   await writeHeartbeat('client1', dagStore);
   await withRead(dagStore, async (read: Read) => {
@@ -236,7 +234,7 @@ test('writeHeartbeat throws Error if no Client is found for clientID', async () 
 
 test('heartbeat with missing client calls callback', async () => {
   const dagStore = new TestStore();
-  const onClientStateNotFound = sinon.fake();
+  const onClientStateNotFound = vi.fn();
   const controller = new AbortController();
   startHeartbeats(
     'client1',
@@ -246,8 +244,8 @@ test('heartbeat with missing client calls callback', async () => {
     new LogContext(),
     controller.signal,
   );
-  await clock.tickAsync(ONE_MIN_IN_MS);
-  expect(onClientStateNotFound.callCount).to.equal(1);
+  await vi.advanceTimersByTimeAsync(ONE_MIN_IN_MS);
+  expect(onClientStateNotFound).toBeCalledTimes(1);
   controller.abort();
 });
 
@@ -256,7 +254,7 @@ test('heartbeat with dropped idb throws', async () => {
   const name = `heartbeat-test-dropped-idb-${Math.random()}`;
   const ibdStore = new IDBStore(name);
   const dagStore = new StoreImpl(ibdStore, newRandomHash, assertHash);
-  const onClientStateNotFound = sinon.fake();
+  const onClientStateNotFound = vi.fn();
   const controller = new AbortController();
 
   let message: unknown[] = [];
@@ -276,13 +274,13 @@ test('heartbeat with dropped idb throws', async () => {
     controller.signal,
   );
 
-  await clock.tickAsync(ONE_MIN_IN_MS / 2);
+  await vi.advanceTimersByTimeAsync(ONE_MIN_IN_MS / 2);
 
   await dropIDBStoreWithMemFallback(name);
 
-  await clock.tickAsync(ONE_MIN_IN_MS / 2);
+  await vi.advanceTimersByTimeAsync(ONE_MIN_IN_MS / 2);
 
-  expect(onClientStateNotFound.callCount).equal(0);
+  expect(onClientStateNotFound).not.toBeCalled();
 
   await promise;
 

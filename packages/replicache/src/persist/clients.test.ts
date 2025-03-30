@@ -1,6 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {type SinonFakeTimers, useFakeTimers} from 'sinon';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
 import {BTreeRead} from '../btree/read.ts';
 import type {Read, Write} from '../dag/store.ts';
@@ -43,13 +42,12 @@ import {
 } from './clients.ts';
 import {makeClientID} from './make-client-id.ts';
 
-let clock: SinonFakeTimers;
 beforeEach(() => {
-  clock = useFakeTimers(0);
+  vi.setSystemTime(0);
 });
 
 afterEach(() => {
-  clock.restore();
+  vi.useRealTimers();
 });
 
 const headClient1Hash = fakeHash('f1');
@@ -340,7 +338,7 @@ test('updateClients throws errors if chunk pointed to by clients head does not c
 test('initClient creates new empty snapshot when no existing snapshot to bootstrap from', async () => {
   const formatVersion = FormatVersion.Latest;
   const dagStore = new TestStore();
-  clock.tick(4000);
+  vi.setSystemTime(Date.now() + 4000);
   const clientID = makeClientID();
   const [client, headHash, clients] = await initClientV6(
     clientID,
@@ -363,7 +361,7 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
   await withRead(dagStore, async (dagRead: Read) => {
     // New client was added to the client map.
     expect(await getClient(clientID, dagRead)).to.deep.equal(client);
-    expect(client.heartbeatTimestampMs).to.equal(clock.now);
+    expect(client.heartbeatTimestampMs).to.equal(Date.now());
 
     const {clientGroupID} = client;
     const clientGroup = await getClientGroup(clientGroupID, dagRead);
@@ -712,7 +710,7 @@ describe('initClientV6', () => {
         const mutatorNames: string[] = ['x'];
         const indexes: IndexDefinitions = {};
 
-        clock.setSystemTime(10);
+        vi.setSystemTime(10);
 
         const client1: ClientV5 = {
           clientGroupID,
@@ -795,7 +793,7 @@ describe('initClientV6', () => {
         const newMutatorNames = ['y'];
         const newIndexes: IndexDefinitions = {};
 
-        clock.setSystemTime(10);
+        vi.setSystemTime(10);
 
         const client1: ClientV5 = {
           clientGroupID: clientGroupID1,
@@ -912,7 +910,7 @@ describe('initClientV6', () => {
         const headHash = b.chain[2].chunk.hash;
         const initialMutatorNames = ['x'];
 
-        clock.setSystemTime(10);
+        vi.setSystemTime(10);
 
         const client1: ClientV5 = {
           clientGroupID: clientGroupID1,

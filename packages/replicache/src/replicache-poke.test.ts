@@ -1,5 +1,4 @@
-import * as sinon from 'sinon';
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import type {VersionNotSupportedResponse} from './error-responses.ts';
 import {
   addData,
@@ -148,7 +147,7 @@ test('overlapped pokes not supported', async () => {
 });
 
 test('Client group unknown on server', async () => {
-  const onClientStateNotFound = sinon.stub();
+  const onClientStateNotFound = vi.fn();
   const rep = await replicacheForTesting('client-group-unknown', {
     onClientStateNotFound,
   });
@@ -169,7 +168,7 @@ test('Client group unknown on server', async () => {
   }
 
   expect(err).undefined;
-  expect(onClientStateNotFound.callCount).equal(1);
+  expect(onClientStateNotFound).toHaveBeenCalledOnce();
   expect(rep.isClientGroupDisabled).true;
 });
 
@@ -184,7 +183,7 @@ test('Version not supported on server', async () => {
       disableAllBackgroundProcesses,
     );
 
-    const onUpdateNeededStub = (rep.onUpdateNeeded = sinon.stub());
+    const onUpdateNeededStub = (rep.onUpdateNeeded = vi.fn());
 
     const poke: Poke = {
       baseCookie: 123,
@@ -193,8 +192,8 @@ test('Version not supported on server', async () => {
 
     await rep.poke(poke);
 
-    expect(onUpdateNeededStub.callCount).to.equal(1);
-    expect(onUpdateNeededStub.lastCall.args).deep.equal([reason]);
+    expect(onUpdateNeededStub).toHaveBeenCalledOnce();
+    expect(onUpdateNeededStub.mock.calls[0]).toEqual([reason]);
   };
 
   await t({error: 'VersionNotSupported'}, {type: 'VersionNotSupported'});
