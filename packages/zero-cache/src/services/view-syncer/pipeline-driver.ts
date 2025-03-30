@@ -295,9 +295,9 @@ export class PipelineDriver {
             (acc, entry) => acc + entry[1],
             0,
           );
-          lc.debug?.(tableName + ' VENDED: ', entires);
+          lc.info?.(tableName + ' VENDED: ', entires);
         }
-        lc.debug?.(`Total rows considered: ${totalRowsConsidered}`);
+        lc.info?.(`Total rows considered: ${totalRowsConsidered}`);
       }
       runtimeDebugStats.resetRowsVended(this.#clientGroupID);
     }
