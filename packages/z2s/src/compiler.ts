@@ -1,6 +1,6 @@
 import type {SQLQuery} from '@databases/sql';
 import {zip} from '../../shared/src/arrays.ts';
-import {assert} from '../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {type JSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
 import type {
@@ -21,7 +21,7 @@ import type {
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
-import {sql} from './sql.ts';
+import {sql, sqlConvertArg, sqlConvertArgUnsafe} from './sql.ts';
 import {
   type JSONValue as BigIntJSONValue,
   parse as parseBigIntJson,
@@ -165,7 +165,7 @@ export class Compiler {
     if (!limit) {
       return sql``;
     }
-    return sql`LIMIT ${sql.value(limit)}`;
+    return sql`LIMIT ${sqlConvertArg('number', limit)}`;
   }
 
   related(
@@ -351,9 +351,13 @@ export class Compiler {
         return sql`${this.valuePosition(
           condition.left,
           table,
+          this.#extractType(table, condition.left, condition.right),
+          false,
         )} ${sql.__dangerous__rawValue(condition.op)} ${this.valuePosition(
           condition.right,
           table,
+          this.#extractType(table, condition.right, condition.left),
+          false,
         )}`;
       case 'NOT IN':
       case 'IN':
@@ -365,23 +369,28 @@ export class Compiler {
   }
 
   distinctFrom(condition: SimpleCondition, table: string): SQLQuery {
-    return sql`${this.valuePosition(condition.left, table)} ${
+    return sql`${this.valuePosition(condition.left, table, this.#extractType(table, condition.left, condition.right), false)} ${
       condition.op === 'IS' ? sql`IS NOT DISTINCT FROM` : sql`IS DISTINCT FROM`
-    } ${this.valuePosition(condition.right, table)}`;
+    } ${this.valuePosition(condition.right, table, this.#extractType(table, condition.right, condition.left), false)}`;
   }
 
   any(condition: SimpleCondition, table: string): SQLQuery {
-    return sql`${this.valuePosition(condition.left, table)} ${
+    return sql`${this.valuePosition(condition.left, table, this.#extractType(table, condition.left, condition.right), false)} ${
       condition.op === 'IN' ? sql`= ANY` : sql`!= ANY`
-    } (${this.valuePosition(condition.right, table)})`;
+    } (${this.valuePosition(condition.right, table, this.#extractType(table, condition.right, condition.left), true)})`;
   }
 
-  valuePosition(value: ValuePosition, table: string): SQLQuery {
+  valuePosition(
+    value: ValuePosition,
+    table: string,
+    valueType: ValueType,
+    plural: boolean,
+  ): SQLQuery {
     switch (value.type) {
       case 'column':
         return this.#mapColumnNoAlias(table, value.name);
       case 'literal':
-        return sql.value(value.value);
+        return sqlConvertArgUnsafe(valueType, value.value, plural);
       case 'static':
         throw new Error(
           'Static parameters must be bound to a value before compiling to SQL',
@@ -489,5 +498,53 @@ export class Compiler {
     }(row_to_json(${sql.ident(table)})) ${
       singular ? sql`` : sql`, '[]'::json)`
     }`;
+  }
+
+  #extractType(
+    table: string,
+    // first takes precedence over second in terms of type discovery
+    first: ValuePosition,
+    second: ValuePosition,
+  ): ValueType {
+    // Derive the type from the table schema first if able
+    const column =
+      first.type === 'column'
+        ? first.name
+        : second.type === 'column'
+          ? second.name
+          : undefined;
+    if (column) {
+      return this.#tables[table].columns[column].type;
+    }
+
+    // We're comparing two literals? Derive the type from the JS type itself.
+    const literalValue =
+      first.type === 'literal'
+        ? first.value
+        : second.type === 'literal'
+          ? second.value
+          : undefined;
+
+    assert(literalValue, 'Literal value not found');
+
+    if (literalValue === null) {
+      return 'null';
+    }
+
+    const jsType = typeof literalValue;
+    switch (jsType) {
+      case 'boolean':
+      case 'number':
+      case 'string':
+        return jsType;
+      case 'object':
+      case 'bigint':
+      case 'function':
+      case 'symbol':
+      case 'undefined':
+        throw new Error('Unsupported type: ' + jsType);
+      default:
+        unreachable(jsType);
+    }
   }
 }

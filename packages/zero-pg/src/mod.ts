@@ -7,4 +7,10 @@ export type {
   ConnectionProvider,
   Row,
 } from '../../zql/src/mutate/custom.ts';
-export {type PushHandler, type Params, PushProcessor} from './web.ts';
+export {
+  connectionProvider,
+  Connection,
+  type PostgresSQL,
+  type PostgresTransaction,
+} from './postgres-connection.ts';
+export {PushProcessor} from './web.ts';

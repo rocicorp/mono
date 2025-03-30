@@ -20,7 +20,7 @@ import {
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
 import {compile, extractZqlResult} from './compiler.ts';
-import {formatPg} from './sql.ts';
+import {formatPgInternalConvert} from './sql.ts';
 import './test/comparePg.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -204,7 +204,7 @@ describe('compiling ZQL to SQL', () => {
     test('All bigints in safe Number range', async () => {
       const query = issueQuery.related('comments').limit(2);
       const c = compile(ast(query), schema.tables);
-      const sqlQuery = formatPg(c);
+      const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
       );
@@ -251,10 +251,11 @@ describe('compiling ZQL to SQL', () => {
         ]
       `);
     });
+
     test('bigint exceeds safe range', async () => {
       const query = issueQuery.related('comments');
       const c = compile(ast(query), schema.tables);
-      const sqlQuery = formatPg(c);
+      const sqlQuery = formatPgInternalConvert(c);
       const result = await runPgQuery(
         sqlQuery.text,
         sqlQuery.values as JSONValue[],
@@ -262,6 +263,102 @@ describe('compiling ZQL to SQL', () => {
       expect(() => extractZqlResult(result)).toThrowErrorMatchingInlineSnapshot(
         `[Error: Value exceeds safe Number range. [2]['comments'][1]['hash'] = 9007199254740992]`,
       );
+    });
+
+    test('bigint comparison operators', async () => {
+      const query = issueQuery.related('comments', q =>
+        q
+          .where('hash', '>', Number(Number.MAX_SAFE_INTEGER - 6))
+          .where('hash', '<', Number(Number.MAX_SAFE_INTEGER))
+          .where('hash', '!=', Number(Number.MAX_SAFE_INTEGER - 3)),
+      );
+      const c = compile(ast(query), schema.tables);
+      const sqlQuery = formatPgInternalConvert(c);
+      const pgResult = extractZqlResult(
+        await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
+      );
+      const zqlResult = mapResultToClientNames(
+        await query.run(),
+        schema,
+        'issue',
+      );
+      expect(zqlResult).toEqualPg(pgResult);
+      expect(zqlResult).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [
+              {
+                "hash": 9007199254740987,
+                "id": "comment1",
+                "issueId": "issue1",
+              },
+            ],
+            "id": "issue1",
+            "title": "Test Issue 1",
+          },
+          {
+            "comments": [
+              {
+                "hash": 9007199254740989,
+                "id": "comment3",
+                "issueId": "issue2",
+              },
+              {
+                "hash": 9007199254740990,
+                "id": "comment4",
+                "issueId": "issue2",
+              },
+            ],
+            "id": "issue2",
+            "title": "Test Issue 2",
+          },
+          {
+            "comments": [],
+            "id": "issue3",
+            "title": "Test Issue 3",
+          },
+        ]
+      `);
+
+      const q2 = issueQuery.related('comments', q =>
+        q.where('hash', '=', Number.MAX_SAFE_INTEGER - 3),
+      );
+      const c2 = compile(ast(q2), schema.tables);
+      const sqlQuery2 = formatPgInternalConvert(c2);
+      const pgResult2 = extractZqlResult(
+        await runPgQuery(sqlQuery2.text, sqlQuery2.values as JSONValue[]),
+      );
+      const zqlResult2 = mapResultToClientNames(
+        await q2.run(),
+        schema,
+        'issue',
+      );
+      expect(zqlResult2).toEqualPg(pgResult2);
+      expect(zqlResult2).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [
+              {
+                "hash": 9007199254740988,
+                "id": "comment2",
+                "issueId": "issue1",
+              },
+            ],
+            "id": "issue1",
+            "title": "Test Issue 1",
+          },
+          {
+            "comments": [],
+            "id": "issue2",
+            "title": "Test Issue 2",
+          },
+          {
+            "comments": [],
+            "id": "issue3",
+            "title": "Test Issue 3",
+          },
+        ]
+      `);
     });
   }
 });

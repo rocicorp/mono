@@ -28,20 +28,28 @@ type SqlConvertArg = {
   [sqlConvert]: true;
   type: ValueType;
   value: unknown;
+  plural: boolean;
 };
 function isSqlConvert(value: unknown): value is SqlConvertArg {
   return value !== null && typeof value === 'object' && sqlConvert in value;
 }
 
-export function sqlConvertArg<T extends ValueType>(
+export function sqlConvertArg<T extends ValueType, P extends boolean = false>(
   type: T,
-  value: TypeNameToTypeMap[T],
+  value: true extends P ? TypeNameToTypeMap[T][] : TypeNameToTypeMap[T],
+  // plural is an explicit argument so we do not get confused by a singular JSON array vs
+  // an array of JSON.
+  plural?: P,
 ): SQLQuery {
-  return sql.value({[sqlConvert]: true, type, value});
+  return sql.value({[sqlConvert]: true, type, value, plural});
 }
 
-export function sqlConvertArgUnsafe(type: ValueType, value: unknown): SQLQuery {
-  return sql.value({[sqlConvert]: true, type, value});
+export function sqlConvertArgUnsafe(
+  type: ValueType,
+  value: unknown,
+  plural?: boolean,
+): SQLQuery {
+  return sqlConvertArg(type, value as never, plural);
 }
 
 class ReusingFormat implements FormatConfig {
@@ -64,22 +72,26 @@ class ReusingFormat implements FormatConfig {
   };
 }
 
-function stringify(type: ValueType, x: unknown): string {
-  switch (type) {
+function stringify(arg: SqlConvertArg): string {
+  if (arg.plural) {
+    return JSON.stringify(arg.value);
+  }
+
+  switch (arg.type) {
     case 'json':
-      return JSON.stringify(x);
+      return JSON.stringify(arg.value);
     case 'boolean':
-      return x ? 'true' : 'false';
+      return arg.value ? 'true' : 'false';
     case 'number':
     case 'date':
     case 'timestamp':
-      return (x as number).toString();
+      return (arg.value as number).toString();
     case 'string':
-      return x as string;
+      return arg.value as string;
     case 'null':
       return 'null';
     default:
-      unreachable(type);
+      unreachable(arg.type);
   }
 }
 
@@ -103,7 +115,7 @@ class SQLConvertFormat implements FormatConfig {
     this.#seen.set(key, this.#seen.size + 1);
     return {
       placeholder: this.#createPlaceholder(this.#seen.size, value),
-      value: stringify(value.type, value.value),
+      value: stringify(value),
     };
   };
 
@@ -114,25 +126,73 @@ class SQLConvertFormat implements FormatConfig {
     // as being text. Without the text cast the args are described as
     // being bool/json/numeric/whatever and the bindings try to coerce
     // the inputs to those types.
+
+    const sqlType = pgType(value.type);
+
+    if (!value.plural) {
+      switch (value.type) {
+        case 'json':
+          // We use JSONB since that can be used as a primary key type
+          // whereas JSON cannot. So JSONB covers more cases.
+          return `$${index}::text::${sqlType}`;
+        case 'boolean':
+          return `$${index}::text::${sqlType}`;
+        case 'number':
+          return `$${index}::text::${sqlType}`;
+        case 'string':
+          return `$${index}::text`;
+        case 'date':
+        case 'timestamp':
+          return `to_timestamp($${index}::text::${sqlType} / 1000.0) AT TIME ZONE 'UTC'`;
+        case 'null':
+          return 'NULL';
+        default:
+          unreachable(value.type);
+      }
+    }
+
     switch (value.type) {
       case 'json':
-        // We use JSONB since that can be used as a primary key type
-        // whereas JSON cannot. So JSONB covers more cases.
-        return `$${index}::text::jsonb`;
       case 'boolean':
-        return `$${index}::text::boolean`;
       case 'number':
-        return `$${index}::text::numeric`;
+        return `ARRAY(
+          SELECT value::${sqlType} FROM jsonb_array_elements_text($${index}::text::jsonb)
+        )`;
       case 'string':
-        return `$${index}::text`;
+        return `ARRAY(
+            SELECT value FROM jsonb_array_elements_text($${index}::text::jsonb)
+          )`;
       case 'date':
       case 'timestamp':
-        return `to_timestamp($${index}::text::bigint / 1000) AT TIME ZONE 'UTC'`;
+        return `ARRAY(
+          SELECT to_timestamp(value::bigint / 1000.0)
+          FROM jsonb_array_elements_text($${index}::text::jsonb)
+        )::timestamp[]`;
       case 'null':
-        throw new Error('unsupported type');
+        throw new Error('unsupported null');
       default:
         unreachable(value.type);
     }
+  }
+}
+
+function pgType(type: ValueType) {
+  switch (type) {
+    case 'json':
+      return 'jsonb';
+    case 'boolean':
+      return 'boolean';
+    case 'number':
+      return 'numeric';
+    case 'string':
+      return 'text';
+    case 'date':
+    case 'timestamp':
+      return 'bigint';
+    case 'null':
+      return 'null';
+    default:
+      unreachable(type);
   }
 }
 
