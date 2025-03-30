@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {expect, test} from 'vitest';
 import {Compiler} from './compiler.ts';
-import {formatPg} from './sql.ts';
+import {formatPgInternalConvert} from './sql.ts';
 import {
   boolean,
   number,
@@ -71,15 +71,16 @@ const schema = createSchema({
 
 test('limit', () => {
   const compiler = new Compiler(schema.tables);
-  expect(formatPg(compiler.limit(10))).toMatchInlineSnapshot(`
+  expect(formatPgInternalConvert(compiler.limit(10))).toMatchInlineSnapshot(`
     {
-      "text": "LIMIT $1",
+      "text": "LIMIT $1::text::numeric",
       "values": [
-        10,
+        "10",
       ],
     }
   `);
-  expect(formatPg(compiler.limit(undefined))).toMatchInlineSnapshot(`
+  expect(formatPgInternalConvert(compiler.limit(undefined)))
+    .toMatchInlineSnapshot(`
     {
       "text": "",
       "values": [],
@@ -89,14 +90,15 @@ test('limit', () => {
 
 test('orderBy', () => {
   const compiler = new Compiler(schema.tables);
-  expect(formatPg(compiler.orderBy([], 'user'))).toMatchInlineSnapshot(`
+  expect(formatPgInternalConvert(compiler.orderBy([], 'user')))
+    .toMatchInlineSnapshot(`
     {
       "text": "ORDER BY",
       "values": [],
     }
   `);
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.orderBy(
         [
           ['name', 'asc'],
@@ -112,7 +114,7 @@ test('orderBy', () => {
     }
   `);
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.orderBy(
         [
           ['name', 'asc'],
@@ -128,7 +130,8 @@ test('orderBy', () => {
       "values": [],
     }
   `);
-  expect(formatPg(compiler.orderBy(undefined, 'user'))).toMatchInlineSnapshot(`
+  expect(formatPgInternalConvert(compiler.orderBy(undefined, 'user')))
+    .toMatchInlineSnapshot(`
     {
       "text": "",
       "values": [],
@@ -139,7 +142,7 @@ test('orderBy', () => {
 test('any', () => {
   const compiler = new Compiler(schema.tables);
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.any(
         {
           type: 'simple',
@@ -152,19 +155,17 @@ test('any', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" = ANY ($1)",
+      "text": ""name" = ANY (ARRAY(
+                SELECT value FROM jsonb_array_elements_text($1::text::jsonb)
+              ))",
       "values": [
-        [
-          1,
-          2,
-          3,
-        ],
+        "[1,2,3]",
       ],
     }
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.any(
         {
           type: 'simple',
@@ -177,13 +178,11 @@ test('any', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" != ANY ($1)",
+      "text": ""name" != ANY (ARRAY(
+                SELECT value FROM jsonb_array_elements_text($1::text::jsonb)
+              ))",
       "values": [
-        [
-          1,
-          2,
-          3,
-        ],
+        "[1,2,3]",
       ],
     }
   `);
@@ -192,7 +191,14 @@ test('any', () => {
 test('valuePosition', () => {
   const compiler = new Compiler(schema.tables);
   expect(
-    formatPg(compiler.valuePosition({type: 'column', name: 'name'}, 'user')),
+    formatPgInternalConvert(
+      compiler.valuePosition(
+        {type: 'column', name: 'name'},
+        'user',
+        'string',
+        false,
+      ),
+    ),
   ).toMatchInlineSnapshot(`
     {
       "text": ""name"",
@@ -200,17 +206,24 @@ test('valuePosition', () => {
     }
   `);
   expect(
-    formatPg(compiler.valuePosition({type: 'literal', value: 'hello'}, 'user')),
+    formatPgInternalConvert(
+      compiler.valuePosition(
+        {type: 'literal', value: 'hello'},
+        'user',
+        'string',
+        false,
+      ),
+    ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "$1",
+      "text": "$1::text",
       "values": [
         "hello",
       ],
     }
   `);
   expect(() =>
-    formatPg(
+    formatPgInternalConvert(
       compiler.valuePosition(
         {
           type: 'static',
@@ -218,6 +231,8 @@ test('valuePosition', () => {
           field: 'name',
         },
         'user',
+        'string',
+        false,
       ),
     ),
   ).toThrow(
@@ -228,7 +243,7 @@ test('valuePosition', () => {
 test('distinctFrom', () => {
   const compiler = new Compiler(schema.tables);
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.distinctFrom(
         {
           type: 'simple',
@@ -241,7 +256,7 @@ test('distinctFrom', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" IS NOT DISTINCT FROM $1",
+      "text": ""name" IS NOT DISTINCT FROM $1::text",
       "values": [
         null,
       ],
@@ -249,7 +264,7 @@ test('distinctFrom', () => {
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.distinctFrom(
         {
           type: 'simple',
@@ -262,7 +277,7 @@ test('distinctFrom', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" IS DISTINCT FROM $1",
+      "text": ""name" IS DISTINCT FROM $1::text",
       "values": [
         null,
       ],
@@ -273,7 +288,7 @@ test('distinctFrom', () => {
 test('correlate', () => {
   const compiler = new Compiler(schema.tables);
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.correlate(
         'parent_table',
         'parent_table',
@@ -291,7 +306,7 @@ test('correlate', () => {
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.correlate(
         'parent_table',
         'parent_table',
@@ -309,7 +324,7 @@ test('correlate', () => {
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.correlate(
         'parent_table',
         'parent_table',
@@ -327,7 +342,7 @@ test('correlate', () => {
   `);
 
   expect(() =>
-    formatPg(
+    formatPgInternalConvert(
       compiler.correlate(
         'parent_table',
         'parent_table',
@@ -343,7 +358,7 @@ test('correlate', () => {
 test('simple', () => {
   const compiler = new Compiler(schema.tables);
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -356,7 +371,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" = $1",
+      "text": ""name" = $1::text",
       "values": [
         "test",
       ],
@@ -364,7 +379,7 @@ test('simple', () => {
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -377,7 +392,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" != $1",
+      "text": ""name" != $1::text",
       "values": [
         "test",
       ],
@@ -385,7 +400,7 @@ test('simple', () => {
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -398,15 +413,15 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""age" > $1",
+      "text": ""age" > $1::text::numeric",
       "values": [
-        21,
+        "21",
       ],
     }
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -419,15 +434,15 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""age" >= $1",
+      "text": ""age" >= $1::text::numeric",
       "values": [
-        21,
+        "21",
       ],
     }
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -440,15 +455,15 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""age" < $1",
+      "text": ""age" < $1::text::numeric",
       "values": [
-        21,
+        "21",
       ],
     }
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -461,15 +476,15 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""age" <= $1",
+      "text": ""age" <= $1::text::numeric",
       "values": [
-        21,
+        "21",
       ],
     }
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -482,7 +497,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" LIKE $1",
+      "text": ""name" LIKE $1::text",
       "values": [
         "%test%",
       ],
@@ -490,7 +505,7 @@ test('simple', () => {
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -503,7 +518,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" NOT LIKE $1",
+      "text": ""name" NOT LIKE $1::text",
       "values": [
         "%test%",
       ],
@@ -511,7 +526,7 @@ test('simple', () => {
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -524,7 +539,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" ILIKE $1",
+      "text": ""name" ILIKE $1::text",
       "values": [
         "%test%",
       ],
@@ -532,7 +547,7 @@ test('simple', () => {
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -545,7 +560,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" NOT ILIKE $1",
+      "text": ""name" NOT ILIKE $1::text",
       "values": [
         "%test%",
       ],
@@ -553,7 +568,7 @@ test('simple', () => {
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -566,19 +581,17 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""id" = ANY ($1)",
+      "text": ""id" = ANY (ARRAY(
+                SELECT value FROM jsonb_array_elements_text($1::text::jsonb)
+              ))",
       "values": [
-        [
-          1,
-          2,
-          3,
-        ],
+        "[1,2,3]",
       ],
     }
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -591,19 +604,17 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""id" != ANY ($1)",
+      "text": ""id" != ANY (ARRAY(
+                SELECT value FROM jsonb_array_elements_text($1::text::jsonb)
+              ))",
       "values": [
-        [
-          1,
-          2,
-          3,
-        ],
+        "[1,2,3]",
       ],
     }
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -616,7 +627,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" IS NOT DISTINCT FROM $1",
+      "text": ""name" IS NOT DISTINCT FROM $1::text",
       "values": [
         null,
       ],
@@ -624,7 +635,7 @@ test('simple', () => {
   `);
 
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.simple(
         {
           type: 'simple',
@@ -637,7 +648,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" IS DISTINCT FROM $1",
+      "text": ""name" IS DISTINCT FROM $1::text",
       "values": [
         null,
       ],
@@ -703,7 +714,7 @@ test('pull tables for junction', () => {
 test('make junction join', () => {
   const compiler = new Compiler(schema.tables);
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.makeJunctionJoin({
         correlation: {
           parentField: ['id'],
@@ -738,7 +749,7 @@ test('make junction join', () => {
 test('related thru junction edge', () => {
   const compiler = new Compiler(schema.tables);
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.compile({
         table: 'issue',
         related: [
@@ -781,7 +792,7 @@ test('related thru junction edge', () => {
 test('related w/o junction edge', () => {
   const compiler = new Compiler(schema.tables);
   expect(
-    formatPg(
+    formatPgInternalConvert(
       compiler.compile({
         table: 'issue',
         related: [

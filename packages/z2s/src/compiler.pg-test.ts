@@ -21,7 +21,7 @@ import {
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
 import {compile, extractZqlResult} from './compiler.ts';
-import {formatPg} from './sql.ts';
+import {formatPgInternalConvert} from './sql.ts';
 import {Client} from 'pg';
 import './test/comparePg.ts';
 
@@ -249,7 +249,7 @@ describe('compiling ZQL to SQL', () => {
     test('basic where clause', async () => {
       const query = issueQuery.where('title', '=', 'Test Issue 1');
       const c = compile(ast(query), schema.tables);
-      const sqlQuery = formatPg(c);
+      const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
@@ -277,7 +277,9 @@ describe('compiling ZQL to SQL', () => {
       const query = issueQuery
         .where('closed', '=', false)
         .where('ownerId', 'IS NOT', null);
-      const sqlQuery = formatPg(compile(ast(query), schema.tables));
+      const sqlQuery = formatPgInternalConvert(
+        compile(ast(query), schema.tables),
+      );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
@@ -305,7 +307,9 @@ describe('compiling ZQL to SQL', () => {
       const query = issueQuery.whereExists('labels', q =>
         q.where('name', '=', 'bug'),
       );
-      const sqlQuery = formatPg(compile(ast(query), schema.tables));
+      const sqlQuery = formatPgInternalConvert(
+        compile(ast(query), schema.tables),
+      );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
@@ -320,7 +324,9 @@ describe('compiling ZQL to SQL', () => {
 
     test('order by and limit', async () => {
       const query = issueQuery.orderBy('title', 'desc').limit(5);
-      const sqlQuery = formatPg(compile(ast(query), schema.tables));
+      const sqlQuery = formatPgInternalConvert(
+        compile(ast(query), schema.tables),
+      );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
@@ -362,7 +368,7 @@ describe('compiling ZQL to SQL', () => {
 
     test('1 to 1 foreign key relationship', async () => {
       const query = issueQuery.related('owner');
-      const sqlQuery = formatPg(
+      const sqlQuery = formatPgInternalConvert(
         compile(ast(query), schema.tables, query.format),
       );
       const pgResult = extractZqlResult(
@@ -423,7 +429,7 @@ describe('compiling ZQL to SQL', () => {
 
     test('1 to many foreign key relationship', async () => {
       const query = issueQuery.related('comments');
-      const sqlQuery = formatPg(
+      const sqlQuery = formatPgInternalConvert(
         compile(ast(query), schema.tables, query.format),
       );
       const pgResult = extractZqlResult(
@@ -515,7 +521,7 @@ describe('compiling ZQL to SQL', () => {
 
     test('junction relationship', async () => {
       const query = issueQuery.related('labels');
-      const sqlQuery = formatPg(
+      const sqlQuery = formatPgInternalConvert(
         compile(ast(query), schema.tables, query.format),
       );
       const pgResult = extractZqlResult(
@@ -580,14 +586,15 @@ describe('compiling ZQL to SQL', () => {
     });
 
     test('nested related with where clauses', async () => {
-      // TODO Change to filter comments on createdAt once
-      // timestamp params are supported.
       const query = issueQuery
         .where('closed', '=', false)
         .related('comments', q =>
-          q.where('text', 'ILIKE', '%2%').related('author'),
+          q
+            .where('text', 'ILIKE', '%2%')
+            .where('createdAt', '=', 1743041352952)
+            .related('author'),
         );
-      const sqlQuery = formatPg(
+      const sqlQuery = formatPgInternalConvert(
         compile(ast(query), schema.tables, query.format),
       );
       const pgResult = extractZqlResult(
@@ -644,7 +651,7 @@ describe('compiling ZQL to SQL', () => {
           q.orderBy('createdAt', 'desc').limit(3).related('author'),
         )
         .orderBy('title', 'asc');
-      const sqlQuery = formatPg(
+      const sqlQuery = formatPgInternalConvert(
         compile(ast(query), schema.tables, query.format),
       );
       const pgResult = extractZqlResult(

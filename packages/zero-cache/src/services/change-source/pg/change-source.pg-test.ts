@@ -5,7 +5,6 @@ import {beforeEach, describe, expect, test} from 'vitest';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {TestLogSink} from '../../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
-import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {sleep} from '../../../../../shared/src/sleep.ts';
 import {Default, Index} from '../../../db/postgres-replica-identity-enum.ts';
 import {StatementRunner} from '../../../db/statements.ts';
@@ -88,23 +87,6 @@ describe('change-source/pg', {timeout: 30000}, () => {
     CREATE PUBLICATION zero_zero FOR TABLES IN SCHEMA my;
     `);
 
-    ({changeSource: source} = await initializePostgresChangeSource(
-      lc,
-      upstreamURI,
-      {
-        appID: APP_ID,
-        publications: ['zero_foo', 'zero_zero'],
-        shardNum: SHARD_NUM,
-      },
-      replicaDbFile.path,
-      {tableCopyWorkers: 5, rowBatchSize: 10000},
-    ));
-
-    const [{slot}] = await upstream<{slot: string}[]>`
-      SELECT slot FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)};
-    `;
-    replicationSlot = slot;
-
     return async () => {
       streams.forEach(s => s.changes.cancel());
       await testDBs.drop(upstream);
@@ -130,15 +112,55 @@ describe('change-source/pg', {timeout: 30000}, () => {
 
   const WATERMARK_REGEX = /[0-9a-z]{2,}/;
 
-  function withTriggers() {
-    return promiseVoid;
+  async function setReplicaIdentityFull() {
+    await upstream.unsafe(
+      `
+      ALTER TABLE foo REPLICA IDENTITY FULL;
+      ALTER TABLE compound_key_same_order REPLICA IDENTITY FULL;
+      ALTER TABLE compound_key_reverse_order REPLICA IDENTITY FULL;
+      ALTER TABLE my.boo REPLICA IDENTITY FULL;
+      `,
+    );
+  }
+
+  async function startReplication() {
+    ({changeSource: source} = await initializePostgresChangeSource(
+      lc,
+      upstreamURI,
+      {
+        appID: APP_ID,
+        publications: ['zero_foo', 'zero_zero'],
+        shardNum: SHARD_NUM,
+      },
+      replicaDbFile.path,
+      {tableCopyWorkers: 5, rowBatchSize: 10000},
+    ));
+
+    [{slot: replicationSlot}] = await upstream<{slot: string}[]>`
+    SELECT slot FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)};
+  `;
+  }
+
+  async function withTriggers() {
+    await startReplication();
   }
 
   async function withoutTriggers() {
+    await startReplication();
     await upstream.unsafe(
       `UPDATE "${APP_ID}_${SHARD_NUM}"."shardConfig" SET "ddlDetection" = false;` +
         dropEventTriggerStatements(APP_ID, SHARD_NUM),
     );
+  }
+
+  async function replicaIdentityFullWithTriggers() {
+    await setReplicaIdentityFull();
+    await withTriggers();
+  }
+
+  async function replicaIdentityFullWithoutTriggers() {
+    await setReplicaIdentityFull();
+    await withoutTriggers();
   }
 
   const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 10;
@@ -168,21 +190,24 @@ describe('change-source/pg', {timeout: 30000}, () => {
     throw err;
   }
 
-  test.each([[withTriggers], [withoutTriggers]])(
-    'filtered changes and acks %o',
-    async init => {
-      await init();
-      const {replicaVersion} = getSubscriptionState(
-        new StatementRunner(replicaDbFile.connect(lc)),
-      );
+  test.each([
+    [withTriggers],
+    [withoutTriggers],
+    [replicaIdentityFullWithTriggers],
+    [replicaIdentityFullWithoutTriggers],
+  ])('filtered changes and acks %o', async init => {
+    await init();
+    const {replicaVersion} = getSubscriptionState(
+      new StatementRunner(replicaDbFile.connect(lc)),
+    );
 
-      const {changes, acks} = await startStream('00');
-      const downstream = drainToQueue(changes);
+    const {changes, acks} = await startStream('00');
+    const downstream = drainToQueue(changes);
 
-      await upstream.begin(async tx => {
-        await tx`INSERT INTO foo(id) VALUES('hello')`;
-        await tx`INSERT INTO foo(id) VALUES('world')`;
-        await tx`
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO foo(id) VALUES('hello')`;
+      await tx`INSERT INTO foo(id) VALUES('world')`;
+      await tx`
       INSERT INTO foo(id, int, big, flt, bool, timea, timeb, date, time, dates, times, num) 
         VALUES('datatypes',
                123456789, 
@@ -197,293 +222,10 @@ describe('change-source/pg', {timeout: 30000}, () => {
                ARRAY['2019-01-12T00:30:35.654321'::timestamp, '2019-01-12T00:30:35.123456'::timestamp],
                123456789012
                )`;
-        // schemaVersions
-        await tx`
+      // schemaVersions
+      await tx`
       UPDATE ${tx(APP_ID)}."schemaVersions" SET "maxSupportedVersion" = 2;
       `;
-      });
-
-      const begin1 = (await downstream.dequeue()) as Begin;
-      expect(begin1).toMatchObject([
-        'begin',
-        {tag: 'begin'},
-        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
-      ]);
-      expect(begin1[2].commitWatermark > replicaVersion).toBe(true);
-      expect(await downstream.dequeue()).toMatchObject([
-        'data',
-        {
-          tag: 'insert',
-          new: {id: 'hello'},
-        },
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'data',
-        {
-          tag: 'insert',
-          new: {id: 'world'},
-        },
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'data',
-        {
-          tag: 'insert',
-          new: {
-            id: 'datatypes',
-            int: 123456789,
-            big: 987654321987654321n,
-            flt: 123.456,
-            bool: true,
-            timea: 1050134706000,
-            timeb: 1547253035381.101,
-            date: Date.UTC(2003, 3, 12),
-            time: '04:05:06.123457', // PG rounds to microseconds
-            dates: [Date.UTC(2001, 1, 3), Date.UTC(2002, 2, 4)],
-            times: [1547253035654.321, 1547253035123.456],
-            num: 123456789012,
-          },
-        },
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'data',
-        {
-          tag: 'update',
-          new: {minSupportedVersion: 1, maxSupportedVersion: 2},
-        },
-      ]);
-      const commit1 = (await downstream.dequeue()) as Commit;
-      expect(commit1).toMatchObject([
-        'commit',
-        {tag: 'commit'},
-        {watermark: begin1[2]?.commitWatermark},
-      ]);
-      acks.push(['status', {}, commit1[2]]);
-
-      // Write more upstream changes.
-      await upstream.begin(async tx => {
-        await tx`DELETE FROM foo WHERE id = 'world'`;
-        await tx`UPDATE foo SET int = 123 WHERE id = 'hello';`;
-        await tx`TRUNCATE foo`;
-        // Should be excluded by zero_all.
-        await tx`INSERT INTO foo(id) VALUES ('exclude-me')`;
-        await tx`INSERT INTO foo(id) VALUES ('include-me')`;
-        // clients change that should be included.
-        await tx.unsafe(
-          `INSERT INTO "${APP_ID}_${SHARD_NUM}".clients("clientGroupID", "clientID", "lastMutationID")
-            VALUES ('foo', 'bar', 23)`,
-        );
-      });
-
-      const begin2 = (await downstream.dequeue()) as Begin;
-      expect(begin2).toMatchObject([
-        'begin',
-        {tag: 'begin'},
-        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'data',
-        {
-          tag: 'delete',
-          key: {id: 'world'},
-        },
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'data',
-        {
-          tag: 'update',
-          new: {id: 'hello', int: 123},
-        },
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'data',
-        {
-          tag: 'truncate',
-        },
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'data',
-        {
-          tag: 'insert',
-          new: {id: 'include-me'},
-        },
-      ]);
-      // Only client updates for this shard are replicated.
-      expect(await downstream.dequeue()).toMatchObject([
-        'data',
-        {
-          tag: 'insert',
-          new: {
-            clientGroupID: 'foo',
-            clientID: 'bar',
-            lastMutationID: 23n,
-          },
-        },
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'commit',
-        {tag: 'commit'},
-        {watermark: begin2[2]?.commitWatermark},
-      ]);
-
-      // Close the stream.
-      changes.cancel();
-
-      // Verify that the ACK was stored with the replication slot.
-      const results = await upstream<{confirmed: string}[]>`
-    SELECT confirmed_flush_lsn as confirmed FROM pg_replication_slots
-        WHERE slot_name = ${replicationSlot}`;
-      const expected = versionFromLexi(commit1[2].watermark);
-      expect(results).toEqual([
-        {confirmed: fromLexiVersion(versionToLexi(expected))},
-      ]);
-    },
-  );
-
-  test.each([[withTriggers], [withoutTriggers]])(
-    'relations with compound keys %o',
-    async init => {
-      await init();
-      const {replicaVersion} = getSubscriptionState(
-        new StatementRunner(replicaDbFile.connect(lc)),
-      );
-
-      const {changes, acks} = await startStream('00');
-      const downstream = drainToQueue(changes);
-
-      await upstream.begin(async tx => {
-        await tx`INSERT INTO compound_key_same_order(a, b) VALUES('c', 'd')`;
-        await tx`INSERT INTO compound_key_reverse_order(a, b) VALUES('e', 'f')`;
-      });
-
-      const begin1 = (await downstream.dequeue()) as Begin;
-      expect(begin1).toMatchObject([
-        'begin',
-        {tag: 'begin'},
-        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
-      ]);
-      expect(begin1[2].commitWatermark > replicaVersion).toBe(true);
-      expect(await downstream.dequeue()).toMatchObject([
-        'data',
-        {
-          tag: 'insert',
-          new: {a: 'c', b: 'd'},
-        },
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'data',
-        {
-          tag: 'insert',
-          new: {a: 'e', b: 'f'},
-        },
-      ]);
-      const commit1 = (await downstream.dequeue()) as Commit;
-      expect(commit1).toMatchObject([
-        'commit',
-        {tag: 'commit'},
-        {watermark: begin1[2]?.commitWatermark},
-      ]);
-      acks.push(['status', {}, commit1[2]]);
-    },
-  );
-
-  test.each([[withTriggers], [withoutTriggers]])(
-    'start after confirmed flush %o',
-    async init => {
-      await init();
-      const {replicaVersion} = getSubscriptionState(
-        new StatementRunner(replicaDbFile.connect(lc)),
-      );
-
-      // Write three transactions, to experiment with different starting points.
-      await upstream`INSERT INTO foo(id) VALUES('hello')`;
-      await upstream`INSERT INTO foo(id) VALUES('world')`;
-      await upstream`INSERT INTO foo(id) VALUES('foobar')`;
-
-      const stream1 = await startStream('00');
-      const changes1 = drainToQueue(stream1.changes);
-
-      const begin1 = (await changes1.dequeue()) as Begin;
-      expect(begin1).toMatchObject([
-        'begin',
-        {tag: 'begin'},
-        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
-      ]);
-      expect(begin1[2].commitWatermark > replicaVersion).toBe(true);
-      expect(await changes1.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
-      const commit1 = (await changes1.dequeue()) as Commit;
-      expect(commit1).toMatchObject([
-        'commit',
-        {tag: 'commit'},
-        {watermark: begin1[2]?.commitWatermark},
-      ]);
-
-      const begin2 = (await changes1.dequeue()) as Begin;
-      expect(begin2).toMatchObject([
-        'begin',
-        {tag: 'begin'},
-        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
-      ]);
-      expect(await changes1.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
-      const commit2 = (await changes1.dequeue()) as Commit;
-      expect(commit2).toMatchObject([
-        'commit',
-        {tag: 'commit'},
-        {watermark: begin2[2]?.commitWatermark},
-      ]);
-
-      const begin3 = (await changes1.dequeue()) as Begin;
-      expect(begin3).toMatchObject([
-        'begin',
-        {tag: 'begin'},
-        {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
-      ]);
-      expect(await changes1.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
-      const commit3 = (await changes1.dequeue()) as Commit;
-      expect(commit3).toMatchObject([
-        'commit',
-        {tag: 'commit'},
-        {watermark: begin3[2]?.commitWatermark},
-      ]);
-
-      stream1.changes.cancel();
-
-      // Starting a new stream should replay at the original position since we did not ACK.
-      const stream2 = await startStream('00');
-      const changes2 = drainToQueue(stream2.changes);
-
-      expect(await changes2.dequeue()).toMatchObject(begin1);
-      expect(await changes2.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
-      expect(await changes2.dequeue()).toEqual(commit1);
-
-      stream2.changes.cancel();
-
-      // Still with no ACK, start a stream from after the secondCommit.
-      const stream3 = await startStream(commit2[2].watermark);
-      const changes3 = drainToQueue(stream3.changes);
-
-      expect(await changes3.dequeue()).toMatchObject(begin3);
-      expect(await changes3.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
-      expect(await changes3.dequeue()).toEqual(commit3);
-
-      stream3.changes.cancel();
-    },
-  );
-
-  test('replica identity full', async () => {
-    await withTriggers();
-    const {replicaVersion} = getSubscriptionState(
-      new StatementRunner(replicaDbFile.connect(lc)),
-    );
-
-    const {changes} = await startStream('00');
-    const downstream = drainToQueue(changes);
-
-    await upstream.begin(async tx => {
-      await tx`ALTER TABLE foo REPLICA IDENTITY FULL`;
-      await tx`INSERT INTO foo(id, int) VALUES('hello', 1)`;
-      await tx`INSERT INTO foo(id, int) VALUES('world', 2)`;
-      await tx`UPDATE foo SET id = 'bello' WHERE id = 'hello'`;
-      await tx`DELETE FROM foo WHERE id = 'world'`;
     });
 
     const begin1 = (await downstream.dequeue()) as Begin;
@@ -497,41 +239,266 @@ describe('change-source/pg', {timeout: 30000}, () => {
       'data',
       {
         tag: 'insert',
-        relation: {replicaIdentity: 'full'},
-        new: {id: 'hello', int: 1},
+        new: {id: 'hello'},
       },
     ]);
     expect(await downstream.dequeue()).toMatchObject([
       'data',
       {
         tag: 'insert',
-        relation: {replicaIdentity: 'full'},
-        new: {id: 'world', int: 2},
+        new: {id: 'world'},
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        new: {
+          id: 'datatypes',
+          int: 123456789,
+          big: 987654321987654321n,
+          flt: 123.456,
+          bool: true,
+          timea: 1050134706000,
+          timeb: 1547253035381.101,
+          date: Date.UTC(2003, 3, 12),
+          time: '04:05:06.123457', // PG rounds to microseconds
+          dates: [Date.UTC(2001, 1, 3), Date.UTC(2002, 2, 4)],
+          times: [1547253035654.321, 1547253035123.456],
+          num: 123456789012,
+        },
       },
     ]);
     expect(await downstream.dequeue()).toMatchObject([
       'data',
       {
         tag: 'update',
-        relation: {replicaIdentity: 'full'},
-        new: {id: 'bello', int: 1},
-        key: {id: 'hello', int: 1},
+        new: {minSupportedVersion: 1, maxSupportedVersion: 2},
       },
+    ]);
+    const commit1 = (await downstream.dequeue()) as Commit;
+    expect(commit1).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: begin1[2]?.commitWatermark},
+    ]);
+    acks.push(['status', {}, commit1[2]]);
+
+    // Write more upstream changes.
+    await upstream.begin(async tx => {
+      await tx`DELETE FROM foo WHERE id = 'world'`;
+      await tx`UPDATE foo SET int = 123 WHERE id = 'hello';`;
+      await tx`TRUNCATE foo`;
+      // Should be excluded by zero_all.
+      await tx`INSERT INTO foo(id) VALUES ('exclude-me')`;
+      await tx`INSERT INTO foo(id) VALUES ('include-me')`;
+      // clients change that should be included.
+      await tx.unsafe(
+        `INSERT INTO "${APP_ID}_${SHARD_NUM}".clients("clientGroupID", "clientID", "lastMutationID")
+            VALUES ('foo', 'bar', 23)`,
+      );
+    });
+
+    const begin2 = (await downstream.dequeue()) as Begin;
+    expect(begin2).toMatchObject([
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
     ]);
     expect(await downstream.dequeue()).toMatchObject([
       'data',
       {
         tag: 'delete',
-        relation: {replicaIdentity: 'full'},
-        key: {id: 'world', int: 2},
+        key: {id: 'world'},
       },
     ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'update',
+        new: {id: 'hello', int: 123},
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'truncate',
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        new: {id: 'include-me'},
+      },
+    ]);
+    // Only client updates for this shard are replicated.
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        new: {
+          clientGroupID: 'foo',
+          clientID: 'bar',
+          lastMutationID: 23n,
+        },
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: begin2[2]?.commitWatermark},
+    ]);
 
+    // Close the stream.
+    changes.cancel();
+
+    // Verify that the ACK was stored with the replication slot.
+    const results = await upstream<{confirmed: string}[]>`
+    SELECT confirmed_flush_lsn as confirmed FROM pg_replication_slots
+        WHERE slot_name = ${replicationSlot}`;
+    const expected = versionFromLexi(commit1[2].watermark);
+    expect(results).toEqual([
+      {confirmed: fromLexiVersion(versionToLexi(expected))},
+    ]);
+  });
+
+  test.each([
+    [withTriggers],
+    [withoutTriggers],
+    [replicaIdentityFullWithTriggers],
+    [replicaIdentityFullWithoutTriggers],
+  ])('relations with compound keys %o', async init => {
+    await init();
+    const {replicaVersion} = getSubscriptionState(
+      new StatementRunner(replicaDbFile.connect(lc)),
+    );
+
+    const {changes, acks} = await startStream('00');
+    const downstream = drainToQueue(changes);
+
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO compound_key_same_order(a, b) VALUES('c', 'd')`;
+      await tx`INSERT INTO compound_key_reverse_order(a, b) VALUES('e', 'f')`;
+    });
+
+    const begin1 = (await downstream.dequeue()) as Begin;
+    expect(begin1).toMatchObject([
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+    expect(begin1[2].commitWatermark > replicaVersion).toBe(true);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        new: {a: 'c', b: 'd'},
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        new: {a: 'e', b: 'f'},
+      },
+    ]);
     const commit1 = (await downstream.dequeue()) as Commit;
-    expect(commit1[2].watermark).toEqual(begin1[2].commitWatermark);
+    expect(commit1).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: begin1[2]?.commitWatermark},
+    ]);
+    acks.push(['status', {}, commit1[2]]);
+  });
+
+  test.each([
+    [withTriggers],
+    [withoutTriggers],
+    [replicaIdentityFullWithTriggers],
+    [replicaIdentityFullWithoutTriggers],
+  ])('start after confirmed flush %o', async init => {
+    await init();
+    const {replicaVersion} = getSubscriptionState(
+      new StatementRunner(replicaDbFile.connect(lc)),
+    );
+
+    // Write three transactions, to experiment with different starting points.
+    await upstream`INSERT INTO foo(id) VALUES('hello')`;
+    await upstream`INSERT INTO foo(id) VALUES('world')`;
+    await upstream`INSERT INTO foo(id) VALUES('foobar')`;
+
+    const stream1 = await startStream('00');
+    const changes1 = drainToQueue(stream1.changes);
+
+    const begin1 = (await changes1.dequeue()) as Begin;
+    expect(begin1).toMatchObject([
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+    expect(begin1[2].commitWatermark > replicaVersion).toBe(true);
+    expect(await changes1.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
+    const commit1 = (await changes1.dequeue()) as Commit;
+    expect(commit1).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: begin1[2]?.commitWatermark},
+    ]);
+
+    const begin2 = (await changes1.dequeue()) as Begin;
+    expect(begin2).toMatchObject([
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+    expect(await changes1.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
+    const commit2 = (await changes1.dequeue()) as Commit;
+    expect(commit2).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: begin2[2]?.commitWatermark},
+    ]);
+
+    const begin3 = (await changes1.dequeue()) as Begin;
+    expect(begin3).toMatchObject([
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+    expect(await changes1.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
+    const commit3 = (await changes1.dequeue()) as Commit;
+    expect(commit3).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: begin3[2]?.commitWatermark},
+    ]);
+
+    stream1.changes.cancel();
+
+    // Starting a new stream should replay at the original position since we did not ACK.
+    const stream2 = await startStream('00');
+    const changes2 = drainToQueue(stream2.changes);
+
+    expect(await changes2.dequeue()).toMatchObject(begin1);
+    expect(await changes2.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
+    expect(await changes2.dequeue()).toEqual(commit1);
+
+    stream2.changes.cancel();
+
+    // Still with no ACK, start a stream from after the secondCommit.
+    const stream3 = await startStream(commit2[2].watermark);
+    const changes3 = drainToQueue(stream3.changes);
+
+    expect(await changes3.dequeue()).toMatchObject(begin3);
+    expect(await changes3.dequeue()).toMatchObject(['data', {tag: 'insert'}]);
+    expect(await changes3.dequeue()).toEqual(commit3);
+
+    stream3.changes.cancel();
   });
 
   test('set replica identity using index', async () => {
+    await startReplication();
     const stream = await startStream('00');
     const changes = drainToQueue(stream.changes);
 
@@ -611,6 +578,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
       `ALTER TABLE foo ADD pubid INT DEFAULT random()`,
     ],
   ])('bad schema change error: %s', async (errMsg, stmt) => {
+    await startReplication();
     const {changes} = await startStream('00');
     try {
       const downstream = drainToQueue(changes);
@@ -784,6 +752,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
   );
 
   test('missing replication slot', async () => {
+    await startReplication();
     // Purposely drop the replication slot to test the error case.
     await dropReplicationSlots(upstream);
 
@@ -797,6 +766,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
   });
 
   test('abort', async () => {
+    await startReplication();
     const {changes} = await startStream('00');
 
     const results = await upstream<{pid: number}[]>`
@@ -818,6 +788,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
   });
 
   test('handoff', {retry: 3}, async () => {
+    await startReplication();
     const {changes} = await startStream('00');
 
     // Starting another stream should stop the first.
@@ -837,6 +808,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
   });
 
   test('non-disruptive resync', async () => {
+    await startReplication();
     const {changes: changes1} = await startStream('00');
 
     // Force another initial sync with an empty replica.
@@ -924,6 +896,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
   });
 
   test('error on wrong publications', async () => {
+    await startReplication();
     let err;
     try {
       await initializePostgresChangeSource(

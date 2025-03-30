@@ -140,6 +140,18 @@ export async function runSchemaMigrations(
 
       db.exec('ANALYZE main');
       log.info?.('ANALYZE completed');
+    } else {
+      // Run optimize whenever opening an sqlite db file as recommended in
+      // https://www.sqlite.org/pragma.html#pragma_optimize
+      // It is important to run the same initialization steps as is done
+      // in the view-syncer (i.e. when preparing database for serving
+      // replication) so that any corruption detected in the view-syncer is
+      // similarly detected in the change-streamer, facilitating an eventual
+      // recovery by resyncing the replica anew.
+      db.pragma('optimize = 0x10002');
+
+      // TODO: Investigate running `integrity_check` or `quick_check` as well,
+      // provided that they are not inordinately expensive on large databases.
     }
 
     db.pragma('synchronous = NORMAL');
