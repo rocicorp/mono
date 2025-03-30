@@ -988,13 +988,10 @@ textarea.autoResize {
   }
 
   ul.contains-task-list li.task-list-item {
-    display: block;
-  }
-
-  ul.contains-task-list li.task-list-item > .task-line {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.1rem;
+    padding-left: 0;
   }
 
   ul.contains-task-list li.task-list-item::before {
