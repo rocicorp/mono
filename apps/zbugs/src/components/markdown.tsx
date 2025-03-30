@@ -148,15 +148,45 @@ export const Markdown = memo(({children}: {children: string}) => {
         img: ({node: _node, ...props}) => <img {...props} />,
         li: ({children, ...props}) => {
           const isTask = props.className?.includes('task-list-item');
+          const nodes: React.ReactNode[] = React.Children.toArray(children);
+          let checkbox: React.ReactNode = null;
+          let label: React.ReactNode = null;
+          const rest: React.ReactNode[] = [];
+          let seenCheckbox = false;
+          for (let i = 0; i < nodes.length; i++) {
+            const node = nodes[i];
+            if (
+              !seenCheckbox &&
+              React.isValidElement(node) &&
+              node.type === 'input' &&
+              node.props.type === 'checkbox'
+            ) {
+              seenCheckbox = true;
+              checkbox = node;
+              continue;
+            } else if (label === null) {
+              const isWhitespace =
+                typeof node === 'string' && node.trim().length === 0;
+              if (!isWhitespace) {
+                label = node;
+                continue;
+              }
+            }
+            rest.push(node);
+          }
+
           if (isTask) {
-            const [first, ...rest] = React.Children.toArray(children);
             return (
               <li className="task-list-item">
-                <div className="task-line">{first}</div>
+                <div className="task-line">
+                  {checkbox && <>{checkbox}</>}
+                  {label && <>{label}</>}
+                </div>
                 {rest.length > 0 && <div className="task-children">{rest}</div>}
               </li>
             );
           }
+
           return <li {...props}>{children}</li>;
         },
       }}
