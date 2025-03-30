@@ -781,7 +781,7 @@ textarea.autoResize {
 }
 
 .issue-detail-title {
-  font-size: 2rem;
+  font-size: 3rem;
   font-weight: 800;
   margin: 1.5rem 0;
 }
@@ -988,13 +988,16 @@ textarea.autoResize {
   }
 
   ul.contains-task-list li.task-list-item {
-    display: flex;
-    align-items: center;
-    gap: 0.1rem;
-    padding-left: 0;
+    display: block;
   }
 
-  ul.contains-task-list li.task-list-item::before {
+  ul.contains-task-list li.task-list-item > .task-line {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  ul.contains-task-list li.task-list-item .task-line::before {
     content: '';
     display: inline-block;
     width: 1.25rem;
@@ -1012,7 +1015,8 @@ textarea.autoResize {
 
   /* Add the checkmark when checked */
   ul.contains-task-list
-    li.task-list-item:has(> input:disabled:checked)::before {
+    li.task-list-item
+    .task-line:has(> input:disabled:checked)::before {
     content: '';
     border-color: var(--color-primary-cta);
     color: var(--color-primary-cta);
@@ -1082,17 +1086,20 @@ textarea.autoResize {
 
   /* Markdown: Headers */
   h1 {
-    font-size: 3rem;
+    font-size: 2.25rem;
+    margin-bottom: 1rem;
+    font-weight: 700;
   }
 
   h2 {
-    font-size: 2rem;
+    font-size: 1.6875rem;
+    font-weight: 700;
     margin: 3rem 0 1rem;
   }
 
   h3 {
     font-size: 1.25rem;
-    font-weight: 700;
+    font-weight: 600;
     margin: 2rem 0 1rem;
   }
 

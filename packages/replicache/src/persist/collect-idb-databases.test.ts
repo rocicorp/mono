@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {type SinonFakeTimers, useFakeTimers} from 'sinon';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {assertNotUndefined} from '../../../shared/src/asserts.ts';
 import type {Store} from '../dag/store.ts';
@@ -29,14 +28,12 @@ import {
 import {makeClientGroupMap} from './test-utils.ts';
 
 describe('collectIDBDatabases', () => {
-  let clock: SinonFakeTimers;
-
   beforeEach(() => {
-    clock = useFakeTimers(0);
+    vi.useFakeTimers({now: 0});
   });
 
   afterEach(() => {
-    clock.restore();
+    vi.useRealTimers();
   });
 
   type Entries = [
