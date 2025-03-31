@@ -14,7 +14,8 @@ describe('MutationTracker', () => {
   test('tracks a mutation and resolves on success', async () => {
     const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
-    const mutationPromise = tracker.trackMutation(1);
+    const {ephemeralID, serverPromise} = tracker.trackMutation();
+    tracker.mutationIDAssigned(ephemeralID, 1);
 
     const response: PushResponse = {
       mutations: [
@@ -26,14 +27,15 @@ describe('MutationTracker', () => {
     };
 
     tracker.processPushResponse(response);
-    const result = await mutationPromise;
+    const result = await serverPromise;
     expect(result).toEqual({});
   });
 
   test('tracks a mutation and rejects on error', async () => {
     const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
-    const mutationPromise = tracker.trackMutation(1);
+    const {serverPromise, ephemeralID} = tracker.trackMutation();
+    tracker.mutationIDAssigned(ephemeralID, 1);
 
     const response: PushResponse = {
       mutations: [
@@ -48,7 +50,7 @@ describe('MutationTracker', () => {
     };
 
     tracker.processPushResponse(response);
-    await expect(mutationPromise).rejects.toEqual({
+    await expect(serverPromise).rejects.toEqual({
       error: 'app',
       details: '',
     });
@@ -57,7 +59,8 @@ describe('MutationTracker', () => {
   test('does not resolve mutators for transient errors', async () => {
     const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
-    const mutationPromise = tracker.trackMutation(1);
+    const {ephemeralID, serverPromise} = tracker.trackMutation();
+    tracker.mutationIDAssigned(ephemeralID, 1);
 
     const response: PushResponse = {
       error: 'unsupportedPushVersion',
@@ -66,7 +69,7 @@ describe('MutationTracker', () => {
 
     tracker.processPushResponse(response);
     let called = false;
-    void mutationPromise.finally(() => {
+    void serverPromise.finally(() => {
       called = true;
     });
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -77,7 +80,8 @@ describe('MutationTracker', () => {
   test('rejects mutations from other clients', () => {
     const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
-    void tracker.trackMutation(1);
+    const mutation = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation.ephemeralID, 1);
 
     const response: PushResponse = {
       mutations: [
@@ -103,8 +107,11 @@ describe('MutationTracker', () => {
   test('handles multiple concurrent mutations', async () => {
     const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
-    const mutation1 = tracker.trackMutation(1);
-    const mutation2 = tracker.trackMutation(2);
+    const mutation1 = tracker.trackMutation();
+    const mutation2 = tracker.trackMutation();
+
+    tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
+    tracker.mutationIDAssigned(mutation2.ephemeralID, 2);
 
     const r1 = {};
     const r2 = {};
@@ -123,7 +130,10 @@ describe('MutationTracker', () => {
 
     tracker.processPushResponse(response);
 
-    const [result1, result2] = await Promise.all([mutation1, mutation2]);
+    const [result1, result2] = await Promise.all([
+      mutation1.serverPromise,
+      mutation2.serverPromise,
+    ]);
     expect(result1).toBe(r1);
     expect(result2).toBe(r2);
   });
@@ -131,8 +141,13 @@ describe('MutationTracker', () => {
   test('mutation tracker size goes down each time a mutation is resolved or rejected', () => {
     const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
-    void tracker.trackMutation(1);
-    tracker.trackMutation(2).catch(() => {
+    const mutation1 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
+
+    const mutation2 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation2.ephemeralID, 2);
+
+    mutation2.serverPromise.catch(() => {
       // expected
     });
 
@@ -160,7 +175,6 @@ describe('MutationTracker', () => {
     mt.clientID = CLIENT_ID;
     const mutator = makeReplicacheMutator(
       createSilentLogContext(),
-      mt,
       async () => {},
       createSchema({
         tables: [],
@@ -182,22 +196,30 @@ describe('MutationTracker', () => {
     const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
 
-    const mutation1 = tracker.trackMutation(1);
-    const mutation2 = tracker.trackMutation(2);
-    const mutation3 = tracker.trackMutation(3);
-    const mutation4 = tracker.trackMutation(4);
+    const mutation1 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
+    const mutation2 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation2.ephemeralID, 2);
+    const mutation3 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation3.ephemeralID, 3);
+    const mutation4 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation4.ephemeralID, 4);
 
     expect(tracker.size).toBe(4);
 
     tracker.onConnected(3);
-    await Promise.all([mutation1, mutation2, mutation3]);
+    await Promise.all([
+      mutation1.serverPromise,
+      mutation2.serverPromise,
+      mutation3.serverPromise,
+    ]);
 
     expect(tracker.size).toBe(1);
 
     tracker.onConnected(20);
 
     expect(tracker.size).toBe(0);
-    await mutation4;
+    await mutation4.serverPromise;
   });
 
   test('notified whenever the outstanding mutation count goes to 0', () => {
@@ -209,7 +231,8 @@ describe('MutationTracker', () => {
       callCount++;
     });
 
-    void tracker.trackMutation(1);
+    const mutation1 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
     tracker.processPushResponse({
       mutations: [
         {
@@ -236,9 +259,15 @@ describe('MutationTracker', () => {
 
     expect(callCount).toBe(1);
 
-    void tracker.trackMutation(2);
-    void tracker.trackMutation(3);
-    void tracker.trackMutation(4).catch(() => {});
+    const mutation2 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation2.ephemeralID, 2);
+    const mutation3 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation3.ephemeralID, 3);
+    const mutation4 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation4.ephemeralID, 4);
+    mutation4.serverPromise.catch(() => {
+      // expected
+    });
 
     tracker.processPushResponse({
       mutations: [
@@ -270,9 +299,12 @@ describe('MutationTracker', () => {
 
     expect(callCount).toBe(2);
 
-    void tracker.trackMutation(5);
-    void tracker.trackMutation(6);
-    void tracker.trackMutation(7);
+    const mutation5 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation5.ephemeralID, 5);
+    const mutation6 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation6.ephemeralID, 6);
+    const mutation7 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation7.ephemeralID, 7);
 
     tracker.onConnected(6);
 
@@ -281,5 +313,41 @@ describe('MutationTracker', () => {
     tracker.onConnected(7);
 
     expect(callCount).toBe(3);
+  });
+
+  test('mutations can be rejected before a mutation id is assigned', async () => {
+    const tracker = new MutationTracker(lc);
+    tracker.clientID = CLIENT_ID;
+
+    const {ephemeralID, serverPromise} = tracker.trackMutation();
+    tracker.rejectMutation(ephemeralID, new Error('test error'));
+    let caught: unknown | undefined;
+
+    try {
+      await serverPromise;
+    } catch (e) {
+      caught = e;
+    }
+
+    expect((caught as Record<string, string>).details).toBe('test error');
+    expect(tracker.size).toBe(0);
+  });
+
+  test('trying to resolve a mutation with an a unassigned ephemeral id throws', () => {
+    const tracker = new MutationTracker(lc);
+    tracker.clientID = CLIENT_ID;
+
+    tracker.trackMutation();
+    const response: PushResponse = {
+      mutations: [
+        {
+          id: {clientID: CLIENT_ID, id: 1},
+          result: {},
+        },
+      ],
+    };
+    expect(() => tracker.processPushResponse(response)).toThrow(
+      'invalid state. An ephemeral id was never assigned to mutation 1',
+    );
   });
 });

@@ -76,7 +76,11 @@ import {refresh} from './persist/refresh.ts';
 import {ProcessScheduler} from './process-scheduler.ts';
 import type {Puller} from './puller.ts';
 import {type Pusher, PushError} from './pusher.ts';
-import type {ReplicacheOptions, ZeroOption} from './replicache-options.ts';
+import type {
+  MutationTrackingData,
+  ReplicacheOptions,
+  ZeroOption,
+} from './replicache-options.ts';
 import {
   getKVStoreProvider,
   httpStatusUnauthorized,
@@ -122,6 +126,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.ts';
+import type {DiffsMap} from './sync/diff.ts';
 
 declare const TESTING: boolean;
 
@@ -1450,8 +1455,27 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       args: JSONValue | undefined,
     ) => Promise<void | JSONValue>;
 
-    return (args?: Args): Promise<Return> =>
-      this.#mutate(name, mutatorImpl, args, performance.now());
+    return (args?: Args): Promise<Return> => {
+      // DO NOT track CRUD mutations as they do not receive responses from
+      // the server.
+      const trackingData =
+        name === '_zero_crud' ? undefined : this.#zero?.trackMutation();
+
+      const result = this.#mutate(
+        trackingData,
+        name,
+        mutatorImpl,
+        args,
+        performance.now(),
+      );
+
+      if (trackingData) {
+        (result as unknown as Record<string, unknown>).server =
+          trackingData.serverPromise;
+      }
+
+      return result;
+    };
   }
 
   #registerMutators<
@@ -1474,6 +1498,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     R extends ReadonlyJSONValue | void,
     A extends ReadonlyJSONValue,
   >(
+    trackingData: MutationTrackingData | undefined,
     name: string,
     mutatorImpl: (tx: WriteTransaction, args?: A) => MaybePromise<R>,
     args: A | undefined,
@@ -1491,40 +1516,64 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     const {clientID} = this;
     return withWriteNoImplicitCommit(this.memdag, async dagWrite => {
       try {
-        const headHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite);
-        const originalHash = null;
+        let result: R;
+        let newHead: Hash;
+        let diffs: DiffsMap;
+        let headHash: Hash;
+        try {
+          headHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite);
+          const originalHash = null;
 
-        const dbWrite = await newWriteLocal(
-          headHash,
-          name,
-          frozenArgs,
-          originalHash,
-          dagWrite,
-          timestamp,
-          clientID,
-          FormatVersion.Latest,
-        );
+          const dbWrite = await newWriteLocal(
+            headHash,
+            name,
+            frozenArgs,
+            originalHash,
+            dagWrite,
+            timestamp,
+            clientID,
+            FormatVersion.Latest,
+          );
 
-        const tx = new WriteTransactionImpl(
-          clientID,
-          await dbWrite.getMutationID(),
-          'initial',
-          await this.#zero?.getTxData(headHash, {
-            openLazyRead: dagWrite,
-          }),
-          dbWrite,
-          this.#lc,
-        );
-        const result: R = await mutatorImpl(tx, args);
-        throwIfClosed(dbWrite);
-        const lastMutationID = await dbWrite.getMutationID();
-        const [newHead, diffs] = await dbWrite.commitWithDiffs(
-          DEFAULT_HEAD_NAME,
-          this.#subscriptions,
-        );
+          const mutationID = await dbWrite.getMutationID();
+          const tx = new WriteTransactionImpl(
+            clientID,
+            mutationID,
+            'initial',
+            await this.#zero?.getTxData(headHash, {
+              openLazyRead: dagWrite,
+            }),
+            dbWrite,
+            this.#lc,
+          );
 
-        // Update this after the commit in case the commit fails.
-        this.lastMutationID = lastMutationID;
+          if (trackingData) {
+            this.#zero?.mutationIDAssigned(
+              trackingData.ephemeralID,
+              mutationID,
+            );
+          }
+
+          result = await mutatorImpl(tx, args);
+
+          throwIfClosed(dbWrite);
+          const lastMutationID = await dbWrite.getMutationID();
+          [newHead, diffs] = await dbWrite.commitWithDiffs(
+            DEFAULT_HEAD_NAME,
+            this.#subscriptions,
+          );
+
+          // Update this after the commit in case the commit fails.
+          this.lastMutationID = lastMutationID;
+        } catch (e) {
+          // If we threw before we could persist the mutation
+          // then we need to reject the mutation.
+          if (trackingData) {
+            this.#zero?.rejectMutation(trackingData.ephemeralID, e);
+          }
+          throw e;
+        }
+
         this.#zero?.advance(headHash, newHead, diffs.get('') ?? []);
 
         // Send is not supposed to reject

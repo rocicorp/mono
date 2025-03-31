@@ -11,6 +11,10 @@ import type {
 import {assert} from '../../../shared/src/asserts.ts';
 import {emptyObject} from '../../../shared/src/sentinels.ts';
 import type {LogContext} from '@rocicorp/logger';
+import type {
+  EphemeralID,
+  MutationTrackingData,
+} from '../../../replicache/src/replicache-options.ts';
 
 const transientPushErrorTypes: PushError['error'][] = [
   'zeroPusher',
@@ -22,16 +26,23 @@ const transientPushErrorTypes: PushError['error'][] = [
   'unsupportedSchemaVersion',
 ];
 
+let currentEphemeralID = 0;
+function nextEphemeralID(): EphemeralID {
+  return ++currentEphemeralID as EphemeralID;
+}
+
 /**
  * Tracks what pushes are in-flight and resolves promises when they're acked.
  */
 export class MutationTracker {
   readonly #outstandingMutations: Map<
-    number,
+    EphemeralID,
     {
+      mutationID?: number | undefined;
       resolver: Resolver<MutationResult>;
     }
   >;
+  readonly #ephemeralIDsByMutationID: Map<number, EphemeralID>;
   readonly #allMutationsConfirmedListeners: Set<() => void>;
   readonly #lc: LogContext;
   #clientID: string | undefined;
@@ -39,6 +50,7 @@ export class MutationTracker {
   constructor(lc: LogContext) {
     this.#lc = lc.withContext('MutationTracker');
     this.#outstandingMutations = new Map();
+    this.#ephemeralIDsByMutationID = new Map();
     this.#allMutationsConfirmedListeners = new Set();
   }
 
@@ -46,14 +58,32 @@ export class MutationTracker {
     this.#clientID = clientID;
   }
 
-  trackMutation(id: number): Promise<MutationResult> {
-    assert(!this.#outstandingMutations.has(id));
+  trackMutation(): MutationTrackingData {
+    const id = nextEphemeralID();
     const mutationResolver = resolver<MutationResult>();
 
     this.#outstandingMutations.set(id, {
       resolver: mutationResolver,
     });
-    return mutationResolver.promise;
+    return {ephemeralID: id, serverPromise: mutationResolver.promise};
+  }
+
+  mutationIDAssigned(id: EphemeralID, mutationID: number): void {
+    const entry = this.#outstandingMutations.get(id);
+    if (entry) {
+      entry.mutationID = mutationID;
+      this.#ephemeralIDsByMutationID.set(mutationID, id);
+    }
+  }
+
+  rejectMutation(id: EphemeralID, e: unknown): void {
+    const entry = this.#outstandingMutations.get(id);
+    if (entry) {
+      this.#settleMutation(id, entry, 'reject', {
+        error: 'app',
+        details: e instanceof Error ? e.message : String(e),
+      });
+    }
   }
 
   processPushResponse(response: PushResponse): void {
@@ -91,7 +121,11 @@ export class MutationTracker {
    */
   onConnected(lastMutationID: number) {
     for (const [id, entry] of this.#outstandingMutations) {
-      if (id <= lastMutationID) {
+      if (!entry.mutationID) {
+        continue;
+      }
+
+      if (entry.mutationID <= lastMutationID) {
         this.#settleMutation(id, entry, 'resolve', emptyObject);
       } else {
         // the map is in insertion order which is in mutation ID order
@@ -143,9 +177,16 @@ export class MutationTracker {
       'received mutation for the wrong client',
     );
     this.#lc.error?.(`Mutation ${mid.id} returned an error`, error);
-    const entry = this.#outstandingMutations.get(mid.id);
-    assert(entry);
-    this.#settleMutation(mid.id, entry, 'reject', error);
+    const ephemeralID = this.#ephemeralIDsByMutationID.get(mid.id);
+    assert(
+      ephemeralID,
+      () =>
+        'invalid state. An ephemeral id was never assigned to mutation ' +
+        mid.id,
+    );
+    const entry = this.#outstandingMutations.get(ephemeralID);
+    assert(entry && entry.mutationID === mid.id);
+    this.#settleMutation(ephemeralID, entry, 'reject', error);
   }
 
   #processMutationOk(result: MutationOk, mid: MutationID): void {
@@ -153,14 +194,22 @@ export class MutationTracker {
       mid.clientID === this.#clientID,
       'received mutation for the wrong client',
     );
-    const entry = this.#outstandingMutations.get(mid.id);
-    assert(entry);
-    this.#settleMutation(mid.id, entry, 'resolve', result);
+    const ephemeralID = this.#ephemeralIDsByMutationID.get(mid.id);
+    assert(
+      ephemeralID,
+      () =>
+        'invalid state. An ephemeral id was never assigned to mutation ' +
+        mid.id,
+    );
+    const entry = this.#outstandingMutations.get(ephemeralID);
+    assert(entry && entry.mutationID === mid.id);
+    this.#settleMutation(ephemeralID, entry, 'resolve', result);
   }
 
   #settleMutation(
-    mutationID: number,
+    ephemeralID: EphemeralID,
     entry: {
+      mutationID?: number | undefined;
       resolver: Resolver<MutationResult>;
     },
     type: 'resolve' | 'reject',
@@ -177,7 +226,10 @@ export class MutationTracker {
         break;
     }
 
-    const removed = this.#outstandingMutations.delete(mutationID);
+    const removed = this.#outstandingMutations.delete(ephemeralID);
+    if (entry.mutationID) {
+      this.#ephemeralIDsByMutationID.delete(entry.mutationID);
+    }
     if (removed && this.#outstandingMutations.size === 0) {
       this.#notifyAllMutationsConfirmedListeners();
     }

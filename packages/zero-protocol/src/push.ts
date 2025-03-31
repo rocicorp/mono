@@ -5,6 +5,9 @@ import {rowSchema} from './data.ts';
 import * as MutationType from './mutation-type-enum.ts';
 import {primaryKeySchema, primaryKeyValueRecordSchema} from './primary-key.ts';
 
+// NOTE! If you change this name you must also change the
+// string in `replicache-impl.ts` But CRUD mutators are being
+// deleted soon so this should not happen.
 export const CRUD_MUTATION_NAME = '_zero_crud';
 
 /**

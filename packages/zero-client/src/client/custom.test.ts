@@ -12,6 +12,7 @@ import {
   TransactionImpl,
   type CustomMutatorDefs,
   type MakeCustomMutatorInterfaces,
+  type PromiseWithServerResult,
 } from './custom.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
@@ -21,7 +22,6 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import type {WriteTransaction} from './replicache-types.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {MutationResult} from '../../../zero-protocol/src/push.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 
 type Schema = typeof schema;
@@ -66,19 +66,19 @@ test('argument types are preserved on the generated mutator interface', () => {
       readonly setTitle: (args: {
         id: string;
         title: string;
-      }) => Promise<{server?: Promise<MutationResult>}>;
+      }) => PromiseWithServerResult;
       readonly setProps: (args: {
         id: string;
         title: string;
         status: 'closed' | 'open';
         assignee: string;
-      }) => Promise<{server?: Promise<MutationResult>}>;
+      }) => PromiseWithServerResult;
     };
     readonly nonTableNamespace: {
       readonly doThing: (_a: {
         arg1: string;
         arg2: number;
-      }) => Promise<{server?: Promise<MutationResult>}>;
+      }) => PromiseWithServerResult;
     };
   }>();
 });
@@ -390,7 +390,7 @@ describe('server results and keeping read queries', () => {
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
 
-    const create = await z.mutate.issue.create({
+    const create = z.mutate.issue.create({
       id: '1',
       title: 'foo',
       closed: false,
@@ -398,6 +398,7 @@ describe('server results and keeping read queries', () => {
       ownerId: '',
       createdAt: 1743018138477,
     });
+    await create;
 
     await z.triggerPushResponse({
       mutations: [
@@ -414,7 +415,8 @@ describe('server results and keeping read queries', () => {
 
     expect(await create.server).toEqual({data: {shortID: '1'}});
 
-    const close = await z.mutate.issue.close({});
+    const close = z.mutate.issue.close({});
+    await close;
 
     await z.triggerPushResponse({
       mutations: [
@@ -506,7 +508,8 @@ describe('server results and keeping read queries', () => {
 
     // check the error case
     const q2 = z.query.issue.materialize();
-    const close = await z.mutate.issue.close({});
+    const close = z.mutate.issue.close({});
+    await close;
     q2.destroy();
     // tick a time to be sure everything is collected
     await new Promise(resolve => setTimeout(resolve, 0));
