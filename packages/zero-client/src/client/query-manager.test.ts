@@ -23,15 +23,17 @@ import type {TTL} from '../../../zql/src/query/ttl.ts';
 import {toGotQueriesKey} from './keys.ts';
 import {QueryManager} from './query-manager.ts';
 import {MutationTracker} from './mutation-tracker.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 
 function createExperimentalWatchMock() {
   return vi.fn();
 }
 
+const lc = createSilentLogContext();
 test('add', () => {
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
-  const mutationTracker = new MutationTracker();
+  const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
     mutationTracker,
     'client1',
@@ -71,7 +73,7 @@ test('add', () => {
 test('add renamed fields', () => {
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
-  const mutationTracker = new MutationTracker();
+  const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
     mutationTracker,
     'client1',
@@ -242,7 +244,7 @@ test('add renamed fields', () => {
 test('remove, recent queries max size 0', () => {
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
-  const mutationTracker = new MutationTracker();
+  const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
     mutationTracker,
     'client1',
@@ -302,7 +304,7 @@ test('remove, recent queries max size 0', () => {
 test('remove, max recent queries size 2', () => {
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 2;
-  const mutationTracker = new MutationTracker();
+  const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
     mutationTracker,
     'client1',
@@ -454,7 +456,7 @@ test('remove, max recent queries size 2', () => {
 test('test add/remove/add/remove changes lru order max recent queries size 2', () => {
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 2;
-  const mutationTracker = new MutationTracker();
+  const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
     mutationTracker,
     'client1',
@@ -659,7 +661,7 @@ describe('getQueriesPatch', () => {
   test('basics', async () => {
     const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
     const maxRecentQueriesSize = 0;
-    const mutationTracker = new MutationTracker();
+    const mutationTracker = new MutationTracker(lc);
     const queryManager = new QueryManager(
       mutationTracker,
       'client1',
@@ -717,7 +719,7 @@ describe('getQueriesPatch', () => {
     beforeEach(() => {
       send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
       const maxRecentQueriesSize = 0;
-      const mutationTracker = new MutationTracker();
+      const mutationTracker = new MutationTracker(lc);
       queryManager = new QueryManager(
         mutationTracker,
         'client1',
@@ -907,7 +909,7 @@ describe('getQueriesPatch', () => {
   test('getQueriesPatch includes recent queries in desired', async () => {
     const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
     const maxRecentQueriesSize = 2;
-    const mutationTracker = new MutationTracker();
+    const mutationTracker = new MutationTracker(lc);
     const queryManager = new QueryManager(
       mutationTracker,
       'client1',
@@ -1012,7 +1014,7 @@ test('gotCallback, query already got', () => {
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
 
   const maxRecentQueriesSize = 0;
-  const mutationTracker = new MutationTracker();
+  const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
     mutationTracker,
     'client1',
@@ -1078,7 +1080,7 @@ test('gotCallback, query got after add', () => {
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
-  const mutationTracker = new MutationTracker();
+  const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
     mutationTracker,
     'client1',
@@ -1140,7 +1142,7 @@ test('gotCallback, query got after add then removed', () => {
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
-  const mutationTracker = new MutationTracker();
+  const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
     mutationTracker,
     'client1',
@@ -1212,7 +1214,7 @@ test('gotCallback, query got after subscription removed', () => {
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(q: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
-  const mutationTracker = new MutationTracker();
+  const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
     mutationTracker,
     'client1',
@@ -1287,7 +1289,7 @@ describe('queriesPatch with lastPatch', () => {
       () => false,
     );
     const maxRecentQueriesSize = 0;
-    const mutationTracker = new MutationTracker();
+    const mutationTracker = new MutationTracker(lc);
     const queryManager = new QueryManager(
       mutationTracker,
       'client1',
@@ -1324,7 +1326,7 @@ describe('queriesPatch with lastPatch', () => {
     const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => boolean>(
       () => false,
     );
-    const mutationTracker = new MutationTracker();
+    const mutationTracker = new MutationTracker(lc);
     const queryManager = new QueryManager(
       mutationTracker,
       'client1',
@@ -1395,7 +1397,7 @@ test('gotCallback, add same got callback twice', () => {
   const experimentalWatch = createExperimentalWatchMock();
   const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
-  const mutationTracker = new MutationTracker();
+  const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
     mutationTracker,
     'client1',
@@ -1474,7 +1476,7 @@ describe('query manager & mutator interaction', () => {
 
   beforeEach(() => {
     send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
-    mutationTracker = new MutationTracker();
+    mutationTracker = new MutationTracker(lc);
     queryManager = new QueryManager(
       mutationTracker,
       'client1',
