@@ -465,7 +465,7 @@ export class Zero<
     }
 
     const lc = new LogContext(logOptions.logLevel, {}, logOptions.logSink);
-    this.#mutationTracker = new MutationTracker();
+    this.#mutationTracker = new MutationTracker(lc);
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
         options.mutators,

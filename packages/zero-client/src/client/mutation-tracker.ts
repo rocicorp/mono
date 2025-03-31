@@ -10,6 +10,7 @@ import type {
 } from '../../../zero-protocol/src/push.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {emptyObject} from '../../../shared/src/sentinels.ts';
+import type {LogContext} from '@rocicorp/logger';
 
 const transientPushErrorTypes: PushError['error'][] = [
   'zeroPusher',
@@ -32,9 +33,11 @@ export class MutationTracker {
     }
   >;
   readonly #allMutationsConfirmedListeners: Set<() => void>;
+  readonly #lc: LogContext;
   #clientID: string | undefined;
 
-  constructor() {
+  constructor(lc: LogContext) {
+    this.#lc = lc.withContext('MutationTracker');
     this.#outstandingMutations = new Map();
     this.#allMutationsConfirmedListeners = new Set();
   }
@@ -55,6 +58,10 @@ export class MutationTracker {
 
   processPushResponse(response: PushResponse): void {
     if ('error' in response) {
+      this.#lc.error?.(
+        'Received an error response when pushing mutations',
+        response,
+      );
       this.#processPushError(response);
     } else {
       this.#processPushOk(response);
@@ -135,6 +142,7 @@ export class MutationTracker {
       mid.clientID === this.#clientID,
       'received mutation for the wrong client',
     );
+    this.#lc.error?.(`Mutation ${mid.id} returned an error`, error);
     const entry = this.#outstandingMutations.get(mid.id);
     assert(entry);
     this.#settleMutation(mid.id, entry, 'reject', error);

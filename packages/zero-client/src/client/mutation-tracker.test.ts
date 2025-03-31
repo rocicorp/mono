@@ -7,11 +7,12 @@ import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
 
+const lc = createSilentLogContext();
 describe('MutationTracker', () => {
   const CLIENT_ID = 'test-client-1';
 
   test('tracks a mutation and resolves on success', async () => {
-    const tracker = new MutationTracker();
+    const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
     const mutationPromise = tracker.trackMutation(1);
 
@@ -30,7 +31,7 @@ describe('MutationTracker', () => {
   });
 
   test('tracks a mutation and rejects on error', async () => {
-    const tracker = new MutationTracker();
+    const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
     const mutationPromise = tracker.trackMutation(1);
 
@@ -54,7 +55,7 @@ describe('MutationTracker', () => {
   });
 
   test('does not resolve mutators for transient errors', async () => {
-    const tracker = new MutationTracker();
+    const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
     const mutationPromise = tracker.trackMutation(1);
 
@@ -74,7 +75,7 @@ describe('MutationTracker', () => {
   });
 
   test('rejects mutations from other clients', () => {
-    const tracker = new MutationTracker();
+    const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
     void tracker.trackMutation(1);
 
@@ -100,7 +101,7 @@ describe('MutationTracker', () => {
   });
 
   test('handles multiple concurrent mutations', async () => {
-    const tracker = new MutationTracker();
+    const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
     const mutation1 = tracker.trackMutation(1);
     const mutation2 = tracker.trackMutation(2);
@@ -128,7 +129,7 @@ describe('MutationTracker', () => {
   });
 
   test('mutation tracker size goes down each time a mutation is resolved or rejected', () => {
-    const tracker = new MutationTracker();
+    const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
     void tracker.trackMutation(1);
     tracker.trackMutation(2).catch(() => {
@@ -155,7 +156,7 @@ describe('MutationTracker', () => {
   });
 
   test('mutations are not tracked on rebase', async () => {
-    const mt = new MutationTracker();
+    const mt = new MutationTracker(lc);
     mt.clientID = CLIENT_ID;
     const mutator = makeReplicacheMutator(
       createSilentLogContext(),
@@ -178,7 +179,7 @@ describe('MutationTracker', () => {
   });
 
   test('tracked mutations are resolved on reconnect', async () => {
-    const tracker = new MutationTracker();
+    const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
 
     const mutation1 = tracker.trackMutation(1);
@@ -200,7 +201,7 @@ describe('MutationTracker', () => {
   });
 
   test('notified whenever the outstanding mutation count goes to 0', () => {
-    const tracker = new MutationTracker();
+    const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
 
     let callCount = 0;
