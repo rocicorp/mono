@@ -992,25 +992,20 @@ textarea.autoResize {
   }
 
   ul.contains-task-list li.task-list-item > .task-line {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
+    position: relative;
+    padding-left: 2.25rem;
   }
 
   ul.contains-task-list li.task-list-item .task-line::before {
     content: '';
-    display: inline-block;
+    position: absolute;
+    left: 0;
+    top: 0.4em; /* adjust vertically as needed */
     width: 1.25rem;
     height: 1.25rem;
-    margin-right: 1rem;
     border: 1px solid var(--color-button-outline);
-    border-radius: 4px;
-    background-color: transparent;
     border-radius: 0.25rem;
-    flex: 0 0 auto;
-    align-self: start;
-    top: 7px;
-    position: relative;
+    background-color: transparent;
   }
 
   /* Add the checkmark when checked */
