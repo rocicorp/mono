@@ -350,7 +350,7 @@ describe('pusher streaming', () => {
       expect(s1Messages).toMatchInlineSnapshot(`
         [
           [
-            "push-response",
+            "pushResponse",
             {
               "mutations": [
                 {
@@ -368,7 +368,7 @@ describe('pusher streaming', () => {
       expect(s2Messages).toMatchInlineSnapshot(`
         [
           [
-            "push-response",
+            "pushResponse",
             {
               "mutations": [
                 {
@@ -436,7 +436,7 @@ describe('pusher streaming', () => {
 
       expect(messages1).toEqual([
         [
-          'push-response',
+          'pushResponse',
           {
             error: 'http',
             status: 500,
@@ -448,7 +448,7 @@ describe('pusher streaming', () => {
 
       expect(messages2).toEqual([
         [
-          'push-response',
+          'pushResponse',
           {
             error: 'http',
             status: 500,
@@ -490,9 +490,9 @@ describe('pusher streaming', () => {
 
       expect(messages).toEqual([
         [
-          'push-response',
+          'pushResponse',
           {
-            error: 'zero-pusher',
+            error: 'zeroPusher',
             details: 'Error: Network error',
             mutationIDs: [{clientID, id: 1}],
           },
@@ -577,7 +577,7 @@ describe('pusher streaming', () => {
         },
         {
           id: {clientID, id: 1},
-          result: {error: 'ooo-mutation'},
+          result: {error: 'oooMutation'},
         },
       ],
     };
@@ -614,7 +614,7 @@ describe('pusher streaming', () => {
       expect(messages).toMatchInlineSnapshot(`
         [
           [
-            "push-response",
+            "pushResponse",
             {
               "mutations": [
                 {
@@ -641,7 +641,7 @@ describe('pusher streaming', () => {
   test('fails the stream on unsupported schema version or push version', async () => {
     const fetch = (global.fetch = vi.fn());
     const errorResponse: PushResponse = {
-      error: 'unsupported-schema-version',
+      error: 'unsupportedSchemaVersion',
       mutationIDs: [{clientID, id: 1}],
     };
 
@@ -670,7 +670,7 @@ describe('pusher streaming', () => {
     if (result.type === 'stream') {
       await expect(
         result.stream[Symbol.asyncIterator]().next(),
-      ).rejects.toThrow('unsupported-schema-version');
+      ).rejects.toThrow('unsupportedSchemaVersion');
     }
   });
 });

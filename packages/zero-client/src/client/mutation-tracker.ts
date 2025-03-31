@@ -12,13 +12,13 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {emptyObject} from '../../../shared/src/sentinels.ts';
 
 const transientPushErrorTypes: PushError['error'][] = [
-  'zero-pusher',
+  'zeroPusher',
   'http',
 
   // These should never actually be received as they cause the websocket
   // connection to be closed.
-  'unsupported-push-version',
-  'unsupported-schema-version',
+  'unsupportedPushVersion',
+  'unsupportedSchemaVersion',
 ];
 
 /**

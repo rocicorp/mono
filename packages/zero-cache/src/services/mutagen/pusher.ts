@@ -195,8 +195,8 @@ class PushWorker {
         // We do not resolve mutations on the client if the push fails
         // as those mutations will be retried.
         if (
-          response.error === 'unsupported-push-version' ||
-          response.error === 'unsupported-schema-version'
+          response.error === 'unsupportedPushVersion' ||
+          response.error === 'unsupportedSchemaVersion'
         ) {
           client[1].fail(
             new ErrorForClient({
@@ -207,7 +207,7 @@ class PushWorker {
         } else {
           responses.push(
             client[1].push([
-              'push-response',
+              'pushResponse',
               {
                 ...response,
                 mutationIDs,
@@ -228,7 +228,7 @@ class PushWorker {
         let i = 0;
         for (; i < mutations.length; i++) {
           const m = mutations[i];
-          if ('error' in m.result && m.result.error === 'ooo-mutation') {
+          if ('error' in m.result && m.result.error === 'oooMutation') {
             failure = new ErrorForClient({
               kind: ErrorKind.InvalidPush,
               message: 'mutation was out of order',
@@ -249,7 +249,7 @@ class PushWorker {
 
         if (successes.length > 0) {
           responses.push(
-            client[1].push(['push-response', {mutations: successes}]).result,
+            client[1].push(['pushResponse', {mutations: successes}]).result,
           );
         }
 
@@ -317,7 +317,7 @@ class PushWorker {
       // and the client will eventually retry.
       this.#lc.error?.('failed to push', e);
       return {
-        error: 'zero-pusher',
+        error: 'zeroPusher',
         details: String(e),
         mutationIDs: entry.push.mutations.map(m => ({
           id: m.id,

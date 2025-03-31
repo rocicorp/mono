@@ -72,7 +72,7 @@ describe('out of order mutation', () => {
           },
           result: {
             details: 'Client cid sent mutation ID 15 but expected 1',
-            error: 'ooo-mutation',
+            error: 'oooMutation',
           },
         },
       ],
@@ -112,7 +112,7 @@ describe('out of order mutation', () => {
           },
           result: {
             details: 'Client cid sent mutation ID 3 but expected 2',
-            error: 'ooo-mutation',
+            error: 'oooMutation',
           },
         },
       ],

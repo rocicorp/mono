@@ -901,7 +901,7 @@ export class Zero<
           downMessage[1],
         );
 
-      case 'push-response':
+      case 'pushResponse':
         return this.#mutationTracker.processPushResponse(downMessage[1]);
 
       case 'inspect':
