@@ -871,17 +871,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       } else {
         await this.#catchupClients(lc, cvr);
       }
-
-      // If CVR was non-empty, then the CVR, database, and all clients
-      // should now be at the same version.
-      if (serverQueries.length > 0) {
-        const cvrVersion = must(this.#cvr).version;
-        const dbVersion = this.#pipelines.currentVersion();
-        assert(
-          cvrVersion.stateVersion === dbVersion,
-          `CVR@${versionString(cvrVersion)}" does not match DB@${dbVersion}`,
-        );
-      }
     });
   }
 

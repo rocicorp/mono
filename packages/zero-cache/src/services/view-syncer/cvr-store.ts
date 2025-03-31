@@ -383,16 +383,6 @@ export class CVRStore {
     });
   }
 
-  #setLastActive(lastActive: number) {
-    this.#writes.add({
-      stats: {instances: 1},
-      write: tx => tx`
-        UPDATE ${this.#cvr('instances')} SET ${tx({lastActive})}
-          WHERE "clientGroupID" = ${this.#id}
-        `,
-    });
-  }
-
   markQueryAsDeleted(version: CVRVersion, queryPatch: QueryPatch): void {
     this.#writes.add({
       stats: {queries: 1},
@@ -653,9 +643,8 @@ export class CVRStore {
 
   async #flush(
     expectedCurrentVersion: CVRVersion,
-    newVersion: CVRVersion,
+    cvr: CVRSnapshot,
     lastConnectTime: number,
-    lastActive: number,
   ): Promise<CVRFlushStats | null> {
     const stats: CVRFlushStats = {
       instances: 0,
@@ -690,7 +679,9 @@ export class CVRStore {
     if (this.#pendingRowRecordUpdates.size === 0 && this.#writes.size === 0) {
       return null;
     }
-    this.#setLastActive(lastActive);
+    // Note: The CVR instance itself is only updated if there are material
+    // changes (i.e. changes to the CVR contents) to flush.
+    this.putInstance(cvr);
 
     const rowsFlushed = await this.#db.begin(async tx => {
       const pipelined: Promise<unknown>[] = [
@@ -721,7 +712,7 @@ export class CVRStore {
 
       const rowUpdates = this.#rowCache.executeRowUpdates(
         tx,
-        newVersion,
+        cvr.version,
         this.#pendingRowRecordUpdates,
         'allow-defer',
       );
@@ -741,7 +732,7 @@ export class CVRStore {
     });
     this.#rowCount = await this.#rowCache.apply(
       this.#pendingRowRecordUpdates,
-      newVersion,
+      cvr.version,
       rowsFlushed,
     );
     return stats;
@@ -753,17 +744,11 @@ export class CVRStore {
 
   async flush(
     expectedCurrentVersion: CVRVersion,
-    newVersion: CVRVersion,
+    cvr: CVRSnapshot,
     lastConnectTime: number,
-    lastActive: number,
   ): Promise<CVRFlushStats | null> {
     try {
-      return await this.#flush(
-        expectedCurrentVersion,
-        newVersion,
-        lastConnectTime,
-        lastActive,
-      );
+      return await this.#flush(expectedCurrentVersion, cvr, lastConnectTime);
     } catch (e) {
       // Clear cached state if an error (e.g. ConcurrentModificationException) is encountered.
       this.#rowCache.clear();
