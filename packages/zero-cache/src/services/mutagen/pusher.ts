@@ -182,6 +182,10 @@ class PushWorker {
     const responses: Promise<Result>[] = [];
     const connectionTerminations: (() => void)[] = [];
     if ('error' in response) {
+      this.#lc.warn?.(
+        'The server behind ZERO_PUSH_URL returned a push error.',
+        response,
+      );
       const groupedMutationIDs = groupBy(
         response.mutationIDs ?? [],
         m => m.clientID,
@@ -228,6 +232,12 @@ class PushWorker {
         let i = 0;
         for (; i < mutations.length; i++) {
           const m = mutations[i];
+          if ('error' in m.result) {
+            this.#lc.warn?.(
+              'The server behind ZERO_PUSH_URL returned a mutation error.',
+              m.result,
+            );
+          }
           if ('error' in m.result && m.result.error === 'oooMutation') {
             failure = new ErrorForClient({
               kind: ErrorKind.InvalidPush,
