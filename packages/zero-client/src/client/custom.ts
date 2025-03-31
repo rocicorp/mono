@@ -26,7 +26,6 @@ import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import type {MutationResult} from '../../../zero-protocol/src/push.ts';
-import type {MutationTracker} from './mutation-tracker.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 
 /**
@@ -38,6 +37,10 @@ export type CustomMutatorDefs<S extends Schema> = {
         [key: string]: CustomMutatorImpl<S>;
       }
     | CustomMutatorImpl<S>;
+};
+
+export type PromiseWithServerResult = Promise<void> & {
+  server: Promise<MutationResult>;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -63,7 +66,7 @@ export type MakeCustomMutatorInterfaces<
     tx: Transaction<S>,
     ...args: infer Args
   ) => Promise<void>
-    ? (...args: Args) => Promise<{server?: Promise<MutationResult>}>
+    ? (...args: Args) => PromiseWithServerResult
     : {
         readonly [P in keyof MD[NamespaceOrName]]: MakeCustomMutatorInterface<
           S,
@@ -77,7 +80,7 @@ export type MakeCustomMutatorInterface<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   F,
 > = F extends (tx: ClientTransaction<S>, ...args: infer Args) => Promise<void>
-  ? (...args: Args) => Promise<{server?: Promise<MutationResult>}>
+  ? (...args: Args) => PromiseWithServerResult
   : never;
 
 export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
@@ -121,7 +124,6 @@ export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
 
 export function makeReplicacheMutator<S extends Schema>(
   lc: LogContext,
-  mutationTracker: MutationTracker,
   mutator: CustomMutatorImpl<S>,
   schema: S,
   slowMaterializeThreshold: number,
@@ -129,22 +131,9 @@ export function makeReplicacheMutator<S extends Schema>(
   return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,
-  ): Promise<{
-    server?: Promise<MutationResult>;
-  }> => {
+  ): Promise<void> => {
     const tx = new TransactionImpl(lc, repTx, schema, slowMaterializeThreshold);
-
     await mutator(tx, args);
-
-    if (repTx.reason === 'initial') {
-      const serverPromise = mutationTracker.trackMutation(repTx.mutationID);
-
-      return {
-        server: serverPromise,
-      };
-    }
-
-    return {};
   };
 }
 

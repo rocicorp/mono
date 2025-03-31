@@ -12,9 +12,12 @@ import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {LazyStore} from '../../../replicache/src/dag/lazy-store.ts';
 import type {
+  EphemeralID,
+  MutationTrackingData,
   ZeroOption,
   ZeroReadOptions,
 } from '../../../replicache/src/replicache-options.ts';
+import type {MutationTracker} from './mutation-tracker.ts';
 
 type TxData = {
   ivmSources: IVMSourceBranch;
@@ -25,6 +28,7 @@ export class ZeroRep implements ZeroOption {
   readonly #context: ZeroContext;
   readonly #ivmMain: IVMSourceBranch;
   readonly #customMutatorsEnabled: boolean;
+  readonly #mutationTracker: MutationTracker;
   #store: LazyStore | undefined;
   #auth: string | undefined;
 
@@ -32,10 +36,12 @@ export class ZeroRep implements ZeroOption {
     context: ZeroContext,
     ivmMain: IVMSourceBranch,
     customMutatorsEnabled: boolean,
+    mutationTracker: MutationTracker,
   ) {
     this.#context = context;
     this.#ivmMain = ivmMain;
     this.#customMutatorsEnabled = customMutatorsEnabled;
+    this.#mutationTracker = mutationTracker;
   }
 
   set auth(auth: string) {
@@ -88,4 +94,14 @@ export class ZeroRep implements ZeroOption {
   advance = (expectedHash: Hash, newHash: Hash, diffs: InternalDiff): void => {
     this.#context.processChanges(expectedHash, newHash, diffs);
   };
+
+  trackMutation(): MutationTrackingData {
+    return this.#mutationTracker.trackMutation();
+  }
+  mutationIDAssigned(ephemeralID: EphemeralID, mutationID: number): void {
+    this.#mutationTracker.mutationIDAssigned(ephemeralID, mutationID);
+  }
+  rejectMutation(ephemeralID: EphemeralID, ex: unknown): void {
+    this.#mutationTracker.rejectMutation(ephemeralID, ex);
+  }
 }

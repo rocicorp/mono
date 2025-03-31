@@ -261,6 +261,14 @@ export type ZeroReadOptions = {
   openLazySourceRead?: Read | undefined;
 };
 
+declare const idTag: unique symbol;
+export type EphemeralID = number & {[idTag]: true};
+
+export type MutationTrackingData = {
+  ephemeralID: EphemeralID;
+  serverPromise: Promise<unknown>;
+};
+
 /**
  * Minimal interface that Replicache needs to communicate with Zero.
  * Prevents us from creating any direct dependencies on Zero.
@@ -290,4 +298,8 @@ export interface ZeroOption {
    * When Replicache's main head moves forward, Zero must advance its IVM state.
    */
   advance(expectedHash: Hash, newHash: Hash, changes: InternalDiff): void;
+
+  trackMutation(): MutationTrackingData;
+  mutationIDAssigned(ephemeralID: EphemeralID, mutationID: number): void;
+  rejectMutation(ephemeralID: EphemeralID, ex: unknown): void;
 }

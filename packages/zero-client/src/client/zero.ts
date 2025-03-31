@@ -475,7 +475,6 @@ export class Zero<
           assertUnique(key);
           replicacheMutators[key] = makeReplicacheMutator(
             lc,
-            this.#mutationTracker,
             mutatorOrMutators,
             schema,
             slowMaterializeThreshold,
@@ -493,7 +492,6 @@ export class Zero<
             assertUnique(key);
             replicacheMutators[key] = makeReplicacheMutator(
               lc,
-              this.#mutationTracker,
               mutator as CustomMutatorImpl<S>,
               schema,
               slowMaterializeThreshold,
@@ -549,6 +547,7 @@ export class Zero<
         this.#zeroContext,
         this.#ivmMain,
         options.mutators !== undefined,
+        this.#mutationTracker,
       ),
     };
 

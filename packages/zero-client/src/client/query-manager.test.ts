@@ -1491,12 +1491,13 @@ describe('query manager & mutator interaction', () => {
     const remove = queryManager.add(ast1, 0);
     expect(send).toBeCalledTimes(1);
 
-    void mutationTracker.trackMutation(1);
+    const {ephemeralID} = mutationTracker.trackMutation();
+    mutationTracker.mutationIDAssigned(ephemeralID, 1);
 
     // try to remove the query
     remove();
 
-    // query was not removed
+    // query was not removed, just have the `add` send
     expect(send).toBeCalledTimes(1);
   });
 
@@ -1506,11 +1507,15 @@ describe('query manager & mutator interaction', () => {
     // once for each add
     expect(send).toBeCalledTimes(2);
 
-    void mutationTracker.trackMutation(1);
+    const {ephemeralID} = mutationTracker.trackMutation();
+    mutationTracker.mutationIDAssigned(ephemeralID, 1);
+
     remove1();
     remove2();
 
+    // send is still stuck at 2 -- no remove calls went through
     expect(send).toBeCalledTimes(2);
+
     mutationTracker.onConnected(1);
     // send was called for each removed query that was queued
     expect(send).toBeCalledTimes(4);
