@@ -106,7 +106,6 @@ export class CVRUpdater {
   protected _setVersion(version: CVRVersion) {
     assert(cmpVersions(this._cvr.version, version) < 0);
     this._cvr.version = version;
-    this._cvrStore.putInstance(this._cvr);
     return version;
   }
 
@@ -132,11 +131,11 @@ export class CVRUpdater {
   }> {
     const start = Date.now();
 
+    this._cvr.lastActive = lastActive;
     const flushed = await this._cvrStore.flush(
       this._orig.version,
-      this._cvr.version,
+      this._cvr,
       lastConnectTime,
-      lastActive,
     );
 
     if (!flushed) {
@@ -146,7 +145,6 @@ export class CVRUpdater {
       `flushed cvr@${versionString(this._cvr.version)} ` +
         `${JSON.stringify(flushed)} in (${Date.now() - start} ms)`,
     );
-    this._cvr.lastActive = lastActive;
     return {cvr: this._cvr, flushed};
   }
 }
