@@ -1953,11 +1953,19 @@ describe('view-syncer/service', () => {
       },
     ]);
 
+    let err;
+    try {
+      // Depending on the ordering of events, the error can happen on
+      // the first or second poke.
+      await nextPoke(client);
+      await nextPoke(client);
+    } catch (e) {
+      err = e;
+    }
     // Make sure it's the SchemaVersionNotSupported error that gets
     // propagated, and not any error related to the bad query.
-    const dequeuePromise = nextPoke(client);
-    await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
-    await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
+    expect(err).toBeInstanceOf(ErrorForClient);
+    expect((err as ErrorForClient).errorBody).toEqual({
       kind: ErrorKind.SchemaVersionNotSupported,
       message:
         'Schema version 1 is not in range of supported schema versions [2, 3].',
