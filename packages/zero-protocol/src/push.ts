@@ -107,7 +107,7 @@ const appErrorSchema = v.object({
   details: jsonSchema.optional(),
 });
 const zeroErrorSchema = v.object({
-  error: v.literal('ooo-mutation'),
+  error: v.literal('oooMutation'),
   details: jsonSchema.optional(),
 });
 
@@ -128,14 +128,14 @@ const pushOkSchema = v.object({
 });
 
 const unsupportedPushVersionSchema = v.object({
-  error: v.literal('unsupported-push-version'),
+  error: v.literal('unsupportedPushVersion'),
   // optional for backwards compatibility
   // This field is included so the client knows which mutations
   // were not processed by the server.
   mutationIDs: v.array(mutationIDSchema).optional(),
 });
 const unsupportedSchemaVersionSchema = v.object({
-  error: v.literal('unsupported-schema-version'),
+  error: v.literal('unsupportedSchemaVersion'),
   // optional for backwards compatibility
   // This field is included so the client knows which mutations
   // were not processed by the server.
@@ -148,7 +148,7 @@ const httpErrorSchema = v.object({
   mutationIDs: v.array(mutationIDSchema).optional(),
 });
 const zeroPusherErrorSchema = v.object({
-  error: v.literal('zero-pusher'),
+  error: v.literal('zeroPusher'),
   details: v.string(),
   mutationIDs: v.array(mutationIDSchema).optional(),
 });
@@ -162,7 +162,7 @@ const pushErrorSchema = v.union(
 
 export const pushResponseSchema = v.union(pushOkSchema, pushErrorSchema);
 export const pushResponseMessageSchema = v.tuple([
-  v.literal('push-response'),
+  v.literal('pushResponse'),
   pushResponseSchema,
 ]);
 

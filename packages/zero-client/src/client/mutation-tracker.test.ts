@@ -59,7 +59,7 @@ describe('MutationTracker', () => {
     const mutationPromise = tracker.trackMutation(1);
 
     const response: PushResponse = {
-      error: 'unsupported-push-version',
+      error: 'unsupportedPushVersion',
       mutationIDs: [{clientID: CLIENT_ID, id: 1}],
     };
 

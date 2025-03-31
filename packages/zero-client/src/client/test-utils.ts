@@ -215,7 +215,7 @@ export class TestZero<
   }
 
   triggerPushResponse(pushResponseBody: PushResponse): Promise<void> {
-    const msg: PushResponseMessage = ['push-response', pushResponseBody];
+    const msg: PushResponseMessage = ['pushResponse', pushResponseBody];
     return this.triggerMessage(msg);
   }
 

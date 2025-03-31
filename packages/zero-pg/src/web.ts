@@ -61,7 +61,7 @@ export class PushProcessor<
 
     if (req.pushVersion !== 1) {
       return {
-        error: 'unsupported-push-version',
+        error: 'unsupportedPushVersion',
       };
     }
 
@@ -109,7 +109,7 @@ export class PushProcessor<
             id: m.id,
           },
           result: {
-            error: 'ooo-mutation',
+            error: 'oooMutation',
             details: e.message,
           },
         };
