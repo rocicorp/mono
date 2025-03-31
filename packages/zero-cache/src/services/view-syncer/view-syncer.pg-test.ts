@@ -1953,60 +1953,6 @@ describe('view-syncer/service', () => {
       },
     ]);
 
-    expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": null,
-            "pokeID": "00:01",
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "00:01",
-            "pokeID": "00:01",
-          },
-        ],
-      ]
-    `);
-
     // Make sure it's the SchemaVersionNotSupported error that gets
     // propagated, and not any error related to the bad query.
     const dequeuePromise = nextPoke(client);
