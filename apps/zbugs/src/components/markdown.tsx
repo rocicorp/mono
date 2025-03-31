@@ -149,12 +149,15 @@ export const Markdown = memo(({children}: {children: string}) => {
         li: ({children, ...props}) => {
           const isTask = props.className?.includes('task-list-item');
           const nodes: React.ReactNode[] = React.Children.toArray(children);
+
           let checkbox: React.ReactNode = null;
-          let label: React.ReactNode = null;
-          const rest: React.ReactNode[] = [];
+          const label: React.ReactNode[] = [];
+          const taskChildren: React.ReactNode[] = [];
+
           let seenCheckbox = false;
-          for (let i = 0; i < nodes.length; i++) {
-            const node = nodes[i];
+          let switchedToChildren = false;
+
+          for (const node of nodes) {
             if (
               !seenCheckbox &&
               React.isValidElement(node) &&
@@ -164,25 +167,36 @@ export const Markdown = memo(({children}: {children: string}) => {
               seenCheckbox = true;
               checkbox = node;
               continue;
-            } else if (label === null) {
-              const isWhitespace =
-                typeof node === 'string' && node.trim().length === 0;
-              if (!isWhitespace) {
-                label = node;
-                continue;
-              }
             }
-            rest.push(node);
+
+            // Detect hard line breaks (which show up as <br>) or block elements
+            const isLineBreak = typeof node === 'string' && node.includes('\n');
+            const isBlock =
+              React.isValidElement(node) &&
+              typeof node.type === 'string' &&
+              ['p', 'div'].includes(node.type);
+
+            if (!switchedToChildren && (isLineBreak || isBlock)) {
+              switchedToChildren = true;
+            }
+
+            if (switchedToChildren) {
+              taskChildren.push(node);
+            } else {
+              label.push(node);
+            }
           }
 
           if (isTask) {
             return (
               <li className="task-list-item">
                 <div className="task-line">
-                  {checkbox && <>{checkbox}</>}
-                  {label && <>{label}</>}
+                  {checkbox}
+                  {label}
                 </div>
-                {rest.length > 0 && <div className="task-children">{rest}</div>}
+                {taskChildren.length > 0 && (
+                  <div className="task-children">{taskChildren}</div>
+                )}
               </li>
             );
           }
