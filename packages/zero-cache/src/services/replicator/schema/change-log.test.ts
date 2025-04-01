@@ -2,7 +2,7 @@ import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../../db/statements.ts';
-import {expectTables} from '../../../test/lite.ts';
+import {expectTableExact} from '../../../test/lite.ts';
 import {
   initChangeLog,
   logDeleteOp,
@@ -20,6 +20,18 @@ describe('replicator/schema/change-log', () => {
     db = new StatementRunner(conn);
   });
 
+  function expectChangeLog(...entries: unknown[]) {
+    expectTableExact(
+      db.db,
+      '_zero.changeLog',
+      entries,
+      'number',
+      'stateVersion',
+      'table',
+      'rowKey',
+    );
+  }
+
   test('replicator/schema/change-log', () => {
     expect(logSetOp(db, '01', 'foo', {a: 1, b: 2})).toMatchInlineSnapshot(
       `"{"a":1,"b":2}"`,
@@ -34,27 +46,23 @@ describe('replicator/schema/change-log', () => {
       `"{"a":2,"b":3}"`,
     );
 
-    expectTables(db.db, {
-      ['_zero.changeLog']: [
-        {stateVersion: '01', table: 'bar', rowKey: '{"a":1,"b":2}', op: 's'},
-        {stateVersion: '01', table: 'bar', rowKey: '{"a":2,"b":3}', op: 's'},
-        {stateVersion: '01', table: 'foo', rowKey: '{"a":1,"b":2}', op: 's'},
-        {stateVersion: '01', table: 'foo', rowKey: '{"a":2,"b":3}', op: 's'},
-      ],
-    });
+    expectChangeLog(
+      {stateVersion: '01', table: 'bar', rowKey: '{"a":1,"b":2}', op: 's'},
+      {stateVersion: '01', table: 'bar', rowKey: '{"a":2,"b":3}', op: 's'},
+      {stateVersion: '01', table: 'foo', rowKey: '{"a":1,"b":2}', op: 's'},
+      {stateVersion: '01', table: 'foo', rowKey: '{"a":2,"b":3}', op: 's'},
+    );
 
     expect(logDeleteOp(db, '02', 'bar', {b: 3, a: 2})).toMatchInlineSnapshot(
       `"{"a":2,"b":3}"`,
     );
 
-    expectTables(db.db, {
-      ['_zero.changeLog']: [
-        {stateVersion: '01', table: 'bar', rowKey: '{"a":1,"b":2}', op: 's'},
-        {stateVersion: '01', table: 'foo', rowKey: '{"a":1,"b":2}', op: 's'},
-        {stateVersion: '01', table: 'foo', rowKey: '{"a":2,"b":3}', op: 's'},
-        {stateVersion: '02', table: 'bar', rowKey: '{"a":2,"b":3}', op: 'd'},
-      ],
-    });
+    expectChangeLog(
+      {stateVersion: '01', table: 'bar', rowKey: '{"a":1,"b":2}', op: 's'},
+      {stateVersion: '01', table: 'foo', rowKey: '{"a":1,"b":2}', op: 's'},
+      {stateVersion: '01', table: 'foo', rowKey: '{"a":2,"b":3}', op: 's'},
+      {stateVersion: '02', table: 'bar', rowKey: '{"a":2,"b":3}', op: 'd'},
+    );
 
     expect(logDeleteOp(db, '03', 'foo', {a: 2, b: 3})).toMatchInlineSnapshot(
       `"{"a":2,"b":3}"`,
@@ -67,14 +75,13 @@ describe('replicator/schema/change-log', () => {
       `"{"a":8,"b":9}"`,
     );
 
-    expectTables(db.db, {
-      ['_zero.changeLog']: [
-        {stateVersion: '01', table: 'bar', rowKey: '{"a":1,"b":2}', op: 's'},
-        {stateVersion: '02', table: 'bar', rowKey: '{"a":2,"b":3}', op: 'd'},
-        {stateVersion: '03', table: 'foo', rowKey: '', op: 't'},
-        {stateVersion: '03', table: 'foo', rowKey: '{"a":8,"b":9}', op: 's'},
-      ],
-    });
+    expectChangeLog(
+      {stateVersion: '01', table: 'bar', rowKey: '{"a":1,"b":2}', op: 's'},
+      {stateVersion: '01', table: 'foo', rowKey: '{"a":1,"b":2}', op: 's'},
+      {stateVersion: '02', table: 'bar', rowKey: '{"a":2,"b":3}', op: 'd'},
+      {stateVersion: '03', table: 'foo', rowKey: '', op: 't'},
+      {stateVersion: '03', table: 'foo', rowKey: '{"a":8,"b":9}', op: 's'},
+    );
 
     expect(logDeleteOp(db, '04', 'bar', {a: 1, b: 2})).toMatchInlineSnapshot(
       `"{"a":1,"b":2}"`,
@@ -87,46 +94,41 @@ describe('replicator/schema/change-log', () => {
       `"{"a":7,"b":9}"`,
     );
 
-    expectTables(db.db, {
-      ['_zero.changeLog']: [
-        {stateVersion: '03', table: 'foo', rowKey: '', op: 't'},
-        {stateVersion: '03', table: 'foo', rowKey: '{"a":8,"b":9}', op: 's'},
-        {stateVersion: '04', table: 'bar', rowKey: null, op: 'r'},
-        {stateVersion: '04', table: 'bar', rowKey: '{"a":7,"b":9}', op: 's'},
-      ],
-    });
+    expectChangeLog(
+      {stateVersion: '01', table: 'foo', rowKey: '{"a":1,"b":2}', op: 's'},
+      {stateVersion: '03', table: 'foo', rowKey: '', op: 't'},
+      {stateVersion: '03', table: 'foo', rowKey: '{"a":8,"b":9}', op: 's'},
+      {stateVersion: '04', table: 'bar', rowKey: '', op: 'r'},
+      {stateVersion: '04', table: 'bar', rowKey: '{"a":7,"b":9}', op: 's'},
+    );
 
-    // Test that table-wide ops preserve each other and reset always sort before truncates.
+    // The last table-wide op is the only one that persists.
     logTruncateOp(db, '05', 'baz');
     logResetOp(db, '05', 'baz');
     logResetOp(db, '05', 'baz');
     logResetOp(db, '05', 'baz');
 
-    expectTables(db.db, {
-      ['_zero.changeLog']: [
-        {stateVersion: '03', table: 'foo', rowKey: '', op: 't'},
-        {stateVersion: '03', table: 'foo', rowKey: '{"a":8,"b":9}', op: 's'},
-        {stateVersion: '04', table: 'bar', rowKey: null, op: 'r'},
-        {stateVersion: '04', table: 'bar', rowKey: '{"a":7,"b":9}', op: 's'},
-        {stateVersion: '05', table: 'baz', rowKey: null, op: 'r'},
-        {stateVersion: '05', table: 'baz', rowKey: '', op: 't'},
-      ],
-    });
+    expectChangeLog(
+      {stateVersion: '01', table: 'foo', rowKey: '{"a":1,"b":2}', op: 's'},
+      {stateVersion: '03', table: 'foo', rowKey: '', op: 't'},
+      {stateVersion: '03', table: 'foo', rowKey: '{"a":8,"b":9}', op: 's'},
+      {stateVersion: '04', table: 'bar', rowKey: '', op: 'r'},
+      {stateVersion: '04', table: 'bar', rowKey: '{"a":7,"b":9}', op: 's'},
+      {stateVersion: '05', table: 'baz', rowKey: '', op: 'r'},
+    );
 
     logResetOp(db, '06', 'baz');
     logResetOp(db, '06', 'baz');
     logTruncateOp(db, '06', 'baz');
     logTruncateOp(db, '06', 'baz');
 
-    expectTables(db.db, {
-      ['_zero.changeLog']: [
-        {stateVersion: '03', table: 'foo', rowKey: '', op: 't'},
-        {stateVersion: '03', table: 'foo', rowKey: '{"a":8,"b":9}', op: 's'},
-        {stateVersion: '04', table: 'bar', rowKey: null, op: 'r'},
-        {stateVersion: '04', table: 'bar', rowKey: '{"a":7,"b":9}', op: 's'},
-        {stateVersion: '06', table: 'baz', rowKey: null, op: 'r'},
-        {stateVersion: '06', table: 'baz', rowKey: '', op: 't'},
-      ],
-    });
+    expectChangeLog(
+      {stateVersion: '01', table: 'foo', rowKey: '{"a":1,"b":2}', op: 's'},
+      {stateVersion: '03', table: 'foo', rowKey: '', op: 't'},
+      {stateVersion: '03', table: 'foo', rowKey: '{"a":8,"b":9}', op: 's'},
+      {stateVersion: '04', table: 'bar', rowKey: '', op: 'r'},
+      {stateVersion: '04', table: 'bar', rowKey: '{"a":7,"b":9}', op: 's'},
+      {stateVersion: '06', table: 'baz', rowKey: '', op: 't'},
+    );
   });
 });
