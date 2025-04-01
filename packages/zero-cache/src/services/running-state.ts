@@ -118,9 +118,6 @@ export class RunningState {
 
   /**
    * Returns a Promise that resolves when {@link stop()} is called.
-   * This is used internally to cut off a {@link backoff()} delay, but
-   * can also be used explicitly in a `Promise.race(...)` call to stop
-   * stop waiting for work.
    */
   stopped(): Promise<void> {
     return this.#stopped;

@@ -12,19 +12,22 @@ import {
 } from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
+import * as v from '../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../zero-protocol/src/ast.ts';
+import {clientSchemaSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import type {InspectQueryRow} from '../../../../zero-protocol/src/inspect-down.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
+import {cvrSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import type {CVR, CVRSnapshot} from './cvr.ts';
 import {RowRecordCache} from './row-record-cache.ts';
 import {
   type ClientsRow,
-  cvrSchema,
   type DesiresRow,
   type InstancesRow,
   type QueriesRow,
@@ -74,7 +77,7 @@ function asQuery(row: QueriesRow): QueryRecord {
         id: row.queryHash,
         ast,
         patchVersion: maybeVersion(row.patchVersion),
-        desiredBy: {},
+        clientState: {},
         transformationHash: row.transformationHash ?? undefined,
         transformationVersion: maybeVersion(row.transformationVersion),
       } satisfies ClientQueryRecord);
@@ -109,11 +112,12 @@ export class CVRStore {
   readonly #rowCache: RowRecordCache;
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
+  #rowCount: number = 0;
 
   constructor(
     lc: LogContext,
     db: PostgresDB,
-    shardID: string,
+    shard: ShardID,
     taskID: string,
     cvrID: string,
     failService: (e: unknown) => void,
@@ -123,13 +127,13 @@ export class CVRStore {
     setTimeoutFn = setTimeout,
   ) {
     this.#db = db;
-    this.#schema = cvrSchema(shardID);
+    this.#schema = cvrSchema(shard);
     this.#taskID = taskID;
     this.#id = cvrID;
     this.#rowCache = new RowRecordCache(
       lc,
       db,
-      shardID,
+      shard,
       cvrID,
       failService,
       deferredRowFlushThreshold,
@@ -180,6 +184,7 @@ export class CVRStore {
       replicaVersion: null,
       clients: {},
       queries: {},
+      clientSchema: null,
     };
 
     const [instance, clientsRows, queryRows, desiresRows] =
@@ -190,18 +195,19 @@ export class CVRStore {
                  "lastActive", 
                  "replicaVersion", 
                  "owner", 
-                 "grantedAt", 
+                 "grantedAt",
+                 "clientSchema", 
                  rows."version" as "rowsVersion"
             FROM ${this.#cvr('instances')} AS cvr
             LEFT JOIN ${this.#cvr('rowsVersion')} AS rows 
             ON cvr."clientGroupID" = rows."clientGroupID"
             WHERE cvr."clientGroupID" = ${id}`,
-        tx<Pick<ClientsRow, 'clientID'>[]>`
-        SELECT "clientID" FROM ${this.#cvr('clients')}
+        tx<Pick<ClientsRow, 'clientID'>[]>`SELECT "clientID" FROM ${this.#cvr(
+          'clients',
+        )}
            WHERE "clientGroupID" = ${id}`,
-        tx<QueriesRow[]>`
-        SELECT * FROM ${this.#cvr('queries')} 
-          WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
+        tx<QueriesRow[]>`SELECT * FROM ${this.#cvr('queries')} 
+          WHERE "clientGroupID" = ${id} AND deleted IS DISTINCT FROM true`,
         tx<DesiresRow[]>`SELECT 
           "clientGroupID",
           "clientID",
@@ -211,7 +217,7 @@ export class CVRStore {
           EXTRACT(EPOCH FROM "ttl") * 1000 AS "ttl",
           "inactivatedAt"
           FROM ${this.#cvr('desires')}
-          WHERE "clientGroupID" = ${id} AND (deleted IS NULL OR deleted = FALSE)`,
+          WHERE "clientGroupID" = ${id}`,
       ]);
 
     if (instance.length === 0) {
@@ -220,6 +226,7 @@ export class CVRStore {
         version: cvr.version,
         lastActive: 0,
         replicaVersion: null,
+        clientSchema: null,
       });
     } else {
       assert(instance.length === 1);
@@ -230,11 +237,12 @@ export class CVRStore {
         owner,
         grantedAt,
         rowsVersion,
+        clientSchema,
       } = instance[0];
 
       if (owner !== this.#taskID) {
         if ((grantedAt ?? 0) > lastConnectTime) {
-          throw new OwnershipError(owner, grantedAt);
+          throw new OwnershipError(owner, grantedAt, lastConnectTime);
         } else {
           // Fire-and-forget an ownership change to signal the current owner.
           // Note that the query is structured such that it only succeeds in the
@@ -260,6 +268,15 @@ export class CVRStore {
       cvr.version = versionFromString(version);
       cvr.lastActive = lastActive;
       cvr.replicaVersion = replicaVersion;
+
+      try {
+        cvr.clientSchema =
+          clientSchema === null
+            ? null
+            : v.parse(clientSchema, clientSchemaSchema);
+      } catch (e) {
+        throw new InvalidClientSchemaError(e);
+      }
     }
 
     for (const row of clientsRows) {
@@ -276,18 +293,24 @@ export class CVRStore {
 
     for (const row of desiresRows) {
       const client = cvr.clients[row.clientID];
-      if (!client) {
-        // should be impossible unless CVR is corrupted
-        lc.error?.(`Client ${row.clientID} not found`, cvr);
-        throw new Error(`Client ${row.clientID} not found`);
+      if (client) {
+        if (!row.deleted && row.inactivatedAt === null) {
+          client.desiredQueryIDs.push(row.queryHash);
+        }
+      } else {
+        // This can happen if the client was deleted but the queries are still alive.
+        lc.debug?.(`Client ${row.clientID} not found`, cvr);
       }
-      client.desiredQueryIDs.push(row.queryHash);
 
       const query = cvr.queries[row.queryHash];
-      if (query && !query.internal) {
-        query.desiredBy[row.clientID] = {
+      if (
+        query &&
+        !query.internal &&
+        (!row.deleted || row.inactivatedAt !== null)
+      ) {
+        query.clientState[row.clientID] = {
           inactivatedAt: row.inactivatedAt ?? undefined,
-          ttl: row.ttl ?? undefined,
+          ttl: row.ttl ?? -1,
           version: versionFromString(row.patchVersion),
         };
       }
@@ -312,9 +335,10 @@ export class CVRStore {
    *       {@link putRowRecord()} with `refCounts: null` in order to properly
    *       produce the appropriate delete patch when catching up old clients.
    *
-   * This `delRowRecord()` method, on the other hand, is only used when a
-   * row record is being *replaced* by another RowRecord, which currently
-   * only happens when the columns of the row key change.
+   * This `delRowRecord()` method, on the other hand, is only used:
+   * - when a row record is being *replaced* by another RowRecord, which currently
+   *   only happens when the columns of the row key change
+   * - for "canceling" the put of a row that was not in the CVR in the first place.
    */
   delRowRecord(id: RowID): void {
     this.#pendingRowRecordUpdates.set(id, null);
@@ -335,7 +359,11 @@ export class CVRStore {
     version,
     replicaVersion,
     lastActive,
-  }: Pick<CVRSnapshot, 'version' | 'replicaVersion' | 'lastActive'>): void {
+    clientSchema,
+  }: Pick<
+    CVRSnapshot,
+    'version' | 'replicaVersion' | 'lastActive' | 'clientSchema'
+  >): void {
     this.#writes.add({
       stats: {instances: 1},
       write: (tx, lastConnectTime) => {
@@ -346,21 +374,12 @@ export class CVRStore {
           replicaVersion,
           owner: this.#taskID,
           grantedAt: lastConnectTime,
+          clientSchema,
         };
         return tx`
         INSERT INTO ${this.#cvr('instances')} ${tx(change)} 
           ON CONFLICT ("clientGroupID") DO UPDATE SET ${tx(change)}`;
       },
-    });
-  }
-
-  #setLastActive(lastActive: number) {
-    this.#writes.add({
-      stats: {instances: 1},
-      write: tx => tx`
-        UPDATE ${this.#cvr('instances')} SET ${tx({lastActive})}
-          WHERE "clientGroupID" = ${this.#id}
-        `,
     });
   }
 
@@ -460,13 +479,11 @@ export class CVRStore {
   }
 
   deleteClient(clientID: string) {
-    for (const name of ['desires', 'clients'] as const) {
-      this.#writes.add({
-        stats: {[name]: 1},
-        write: tx =>
-          tx`DELETE FROM ${this.#cvr(name)} WHERE "clientID" = ${clientID}`,
-      });
-    }
+    this.#writes.add({
+      stats: {clients: 1},
+      write: tx =>
+        tx`DELETE FROM ${this.#cvr('clients')} WHERE "clientID" = ${clientID}`,
+    });
   }
 
   deleteClientGroup(clientGroupID: string) {
@@ -494,7 +511,7 @@ export class CVRStore {
     client: {id: string},
     deleted: boolean,
     inactivatedAt: number | undefined,
-    ttl: number | undefined,
+    ttl: number,
   ): void {
     const change: DesiresRow = {
       clientGroupID: this.#id,
@@ -503,7 +520,7 @@ export class CVRStore {
       inactivatedAt: inactivatedAt ?? null,
       patchVersion: versionString(newVersion),
       queryHash: query.id,
-      ttl: ttl ?? null,
+      ttl: ttl < 0 ? null : ttl,
     };
     this.#writes.add({
       stats: {desires: 1},
@@ -617,7 +634,7 @@ export class CVRStore {
             grantedAt: null,
           };
     if (owner !== this.#taskID && (grantedAt ?? 0) > lastConnectTime) {
-      throw new OwnershipError(owner, grantedAt);
+      throw new OwnershipError(owner, grantedAt, lastConnectTime);
     }
     if (version !== expected) {
       throw new ConcurrentModificationException(expected, version);
@@ -626,10 +643,8 @@ export class CVRStore {
 
   async #flush(
     expectedCurrentVersion: CVRVersion,
-    newVersion: CVRVersion,
-    skipNoopFlushes: boolean,
+    cvr: CVRSnapshot,
     lastConnectTime: number,
-    lastActive: number,
   ): Promise<CVRFlushStats | null> {
     const stats: CVRFlushStats = {
       instances: 0,
@@ -642,6 +657,7 @@ export class CVRStore {
     };
     if (this.#pendingRowRecordUpdates.size) {
       const existingRowRecords = await this.getRowRecords();
+      this.#rowCount = existingRowRecords.size;
       for (const [id, row] of this.#pendingRowRecordUpdates.entries()) {
         if (this.#forceUpdates.has(id)) {
           continue;
@@ -660,14 +676,12 @@ export class CVRStore {
         }
       }
     }
-    if (
-      skipNoopFlushes &&
-      this.#pendingRowRecordUpdates.size === 0 &&
-      this.#writes.size === 0
-    ) {
+    if (this.#pendingRowRecordUpdates.size === 0 && this.#writes.size === 0) {
       return null;
     }
-    this.#setLastActive(lastActive);
+    // Note: The CVR instance itself is only updated if there are material
+    // changes (i.e. changes to the CVR contents) to flush.
+    this.putInstance(cvr);
 
     const rowsFlushed = await this.#db.begin(async tx => {
       const pipelined: Promise<unknown>[] = [
@@ -698,7 +712,7 @@ export class CVRStore {
 
       const rowUpdates = this.#rowCache.executeRowUpdates(
         tx,
-        newVersion,
+        cvr.version,
         this.#pendingRowRecordUpdates,
         'allow-defer',
       );
@@ -716,29 +730,25 @@ export class CVRStore {
       stats.rows += this.#pendingRowRecordUpdates.size;
       return true;
     });
-    await this.#rowCache.apply(
+    this.#rowCount = await this.#rowCache.apply(
       this.#pendingRowRecordUpdates,
-      newVersion,
+      cvr.version,
       rowsFlushed,
     );
     return stats;
   }
 
+  get rowCount(): number {
+    return this.#rowCount;
+  }
+
   async flush(
     expectedCurrentVersion: CVRVersion,
-    newVersion: CVRVersion,
-    skipNoopFlushes: boolean,
+    cvr: CVRSnapshot,
     lastConnectTime: number,
-    lastActive: number,
   ): Promise<CVRFlushStats | null> {
     try {
-      return await this.#flush(
-        expectedCurrentVersion,
-        newVersion,
-        skipNoopFlushes,
-        lastConnectTime,
-        lastActive,
-      );
+      return await this.#flush(expectedCurrentVersion, cvr, lastConnectTime);
     } catch (e) {
       // Clear cached state if an error (e.g. ConcurrentModificationException) is encountered.
       this.#rowCache.clear();
@@ -757,6 +767,47 @@ export class CVRStore {
   /** Resolves when all pending updates are flushed. */
   flushed(lc: LogContext): Promise<void> {
     return this.#rowCache.flushed(lc);
+  }
+
+  async inspectQueries(
+    lc: LogContext,
+    clientID?: string,
+  ): Promise<InspectQueryRow[]> {
+    const db = this.#db;
+    const clientGroupID = this.#id;
+
+    const reader = new TransactionPool(lc, Mode.READONLY).run(db);
+    try {
+      return await reader.processReadTask(
+        tx => tx<InspectQueryRow[]>`
+  SELECT
+    d."clientID",
+    d."queryHash" AS "queryID",
+    COALESCE((EXTRACT(EPOCH FROM d."ttl") * 1000)::double precision, -1) AS "ttl",
+    (EXTRACT(EPOCH FROM d."inactivatedAt") * 1000)::double precision AS "inactivatedAt",
+    COUNT(r.*)::INT AS "rowCount",
+    q."clientAST" AS "ast",
+    (q."patchVersion" IS NOT NULL) AS "got",
+    COALESCE(d."deleted", FALSE) AS "deleted"
+  FROM ${this.#cvr('desires')} d
+  LEFT JOIN ${this.#cvr('rows')} r
+    ON r."clientGroupID" = d."clientGroupID"
+   AND r."refCounts" ? d."queryHash"
+  LEFT JOIN ${this.#cvr('queries')} q
+    ON q."clientGroupID" = d."clientGroupID"
+   AND q."queryHash" = d."queryHash"
+  WHERE d."clientGroupID" = ${clientGroupID}
+    ${clientID ? tx`AND d."clientID" = ${clientID}` : tx``}
+    AND NOT (
+      d."deleted" IS NOT DISTINCT FROM true AND
+      (d."inactivatedAt" IS NOT NULL AND d."ttl" IS NOT NULL AND d."inactivatedAt" + d."ttl" <= now())
+    )
+  GROUP BY d."clientID", d."queryHash", d."ttl", d."inactivatedAt", q."patchVersion", q."clientAST", d."deleted"
+  ORDER BY d."clientID", d."queryHash"`,
+      );
+    } finally {
+      reader.setDone();
+    }
   }
 }
 
@@ -796,16 +847,36 @@ export class ConcurrentModificationException extends ErrorWithLevel {
 export class OwnershipError extends ErrorForClient {
   readonly name = 'OwnershipError';
 
-  constructor(owner: string | null, grantedAt: number | null) {
+  constructor(
+    owner: string | null,
+    grantedAt: number | null,
+    lastConnectTime: number,
+  ) {
     super(
       {
         kind: ErrorKind.Rehome,
         message:
           `CVR ownership was transferred to ${owner} at ` +
-          `${new Date(grantedAt ?? 0).toISOString()}`,
+          `${new Date(grantedAt ?? 0).toISOString()} ` +
+          `(last connect time: ${new Date(lastConnectTime).toISOString()})`,
         maxBackoffMs: 0,
       },
       'info',
+    );
+  }
+}
+
+export class InvalidClientSchemaError extends ErrorForClient {
+  readonly name = 'InvalidClientSchemaError';
+
+  constructor(cause: unknown) {
+    super(
+      {
+        kind: ErrorKind.SchemaVersionNotSupported,
+        message: `Could not parse clientSchema stored in CVR: ${String(cause)}`,
+      },
+      'warn',
+      {cause},
     );
   }
 }

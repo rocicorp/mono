@@ -11,6 +11,19 @@ import {StatementRunner} from '../../../db/statements.ts';
 
 export const ZERO_VERSION_COLUMN_NAME = '_0_version';
 
+export type RuntimeEvent = 'sync' | 'upgrade' | 'vacuum';
+
+// event     : The RuntimeEvent. Only one row per event is tracked.
+//             Inserting an event will REPLACE any row for the same event.
+// timestamp : SQLite timestamp string, e.g. "2024-04-12 11:37:46".
+//             Append a `Z` when parsing with `new Date(...)`;
+export const CREATE_RUNTIME_EVENTS_TABLE = `
+  CREATE TABLE "_zero.runtimeEvents" (
+    event TEXT PRIMARY KEY ON CONFLICT REPLACE,
+    timestamp TEXT NOT NULL DEFAULT (current_timestamp)
+  );
+`;
+
 const CREATE_REPLICATION_STATE_SCHEMA =
   // replicaVersion   : A value identifying the version at which the initial sync happened, i.e.
   //                    the version at which all rows were copied, and to `_0_version` was set.
@@ -35,7 +48,8 @@ const CREATE_REPLICATION_STATE_SCHEMA =
     stateVersion TEXT NOT NULL,
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
-  `;
+  ` +
+  CREATE_RUNTIME_EVENTS_TABLE;
 
 const stringArray = v.array(v.string());
 
@@ -49,6 +63,8 @@ const subscriptionStateSchema = v
     ...s,
     publications: v.parse(JSON.parse(s.publications), stringArray),
   }));
+
+export type SubscriptionState = v.Infer<typeof subscriptionStateSchema>;
 
 const replicationStateSchema = v.object({
   stateVersion: v.string(),
@@ -73,9 +89,32 @@ export function initReplicationState(
     INSERT INTO "_zero.replicationState" (stateVersion) VALUES (?)
     `,
   ).run(watermark);
+  recordEvent(db, 'sync');
 }
 
-export function getSubscriptionState(db: StatementRunner) {
+export function recordEvent(db: Database, event: RuntimeEvent) {
+  db.prepare(
+    `
+    INSERT INTO "_zero.runtimeEvents" (event) VALUES (?) 
+    `,
+  ).run(event);
+}
+
+export function getAscendingEvents(db: Database) {
+  const result = db
+    .prepare(
+      `SELECT event, timestamp FROM "_zero.runtimeEvents" 
+         ORDER BY timestamp ASC
+    `,
+    )
+    .all<{event: string; timestamp: string}>();
+  return result.map(({event, timestamp}) => ({
+    event,
+    timestamp: new Date(timestamp + 'Z'),
+  }));
+}
+
+export function getSubscriptionState(db: StatementRunner): SubscriptionState {
   const result = db.get(
     `
       SELECT c.replicaVersion, c.publications, s.stateVersion as watermark

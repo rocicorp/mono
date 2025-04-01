@@ -59,7 +59,7 @@ test('relationship schema types', () => {
     ),
   }));
 
-  const schema = createSchema(1, {
+  const schema = createSchema({
     tables: [issueLabel, comment, label, issue],
     relationships: [issueRelationships],
   });

@@ -7,6 +7,7 @@ import {Database} from '../../../../../zqlite/src/db.ts';
 import {computeZqlSpecs} from '../../../db/lite-tables.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {stringify} from '../../../types/bigint-json.ts';
+import type {ShardConfig, ShardID} from '../../../types/shards.ts';
 import {stream} from '../../../types/streams.ts';
 import type {
   ChangeSource,
@@ -18,8 +19,8 @@ import {initChangeLog} from '../../replicator/schema/change-log.ts';
 import {
   getSubscriptionState,
   initReplicationState,
+  type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
-import type {ShardConfig} from '../pg/shard-config.ts';
 import {changeStreamMessageSchema} from '../protocol/current/downstream.ts';
 import {type ChangeSourceUpstream} from '../protocol/current/upstream.ts';
 import {initSyncSchema} from './sync-schema.ts';
@@ -33,23 +34,23 @@ export async function initializeCustomChangeSource(
   upstreamURI: string,
   shard: ShardConfig,
   replicaDbFile: string,
-): Promise<{replicationConfig: ReplicationConfig; changeSource: ChangeSource}> {
+): Promise<{subscriptionState: SubscriptionState; changeSource: ChangeSource}> {
   await initSyncSchema(
     lc,
-    `replica-${shard.id}`,
+    `replica-${shard.appID}-${shard.shardNum}`,
     shard,
     replicaDbFile,
     upstreamURI,
   );
 
   const replica = new Database(lc, replicaDbFile);
-  const replicationConfig = getSubscriptionState(new StatementRunner(replica));
+  const subscriptionState = getSubscriptionState(new StatementRunner(replica));
   replica.close();
 
   if (shard.publications.length) {
     // Verify that the publications match what has been synced.
     const requested = [...shard.publications].sort();
-    const replicated = replicationConfig.publications.sort();
+    const replicated = subscriptionState.publications.sort();
     if (!deepEqual(requested, replicated)) {
       throw new Error(
         `Invalid ShardConfig. Requested publications [${requested}] do not match synced publications: [${replicated}]`,
@@ -60,28 +61,28 @@ export async function initializeCustomChangeSource(
   const changeSource = new CustomChangeSource(
     lc,
     upstreamURI,
-    shard.id,
-    replicationConfig,
+    shard,
+    subscriptionState,
   );
 
-  return {replicationConfig, changeSource};
+  return {subscriptionState, changeSource};
 }
 
 class CustomChangeSource implements ChangeSource {
   readonly #lc: LogContext;
   readonly #upstreamUri: string;
-  readonly #shardID: string;
+  readonly #shard: ShardID;
   readonly #replicationConfig: ReplicationConfig;
 
   constructor(
     lc: LogContext,
     upstreamUri: string,
-    shardID: string,
+    shard: ShardID,
     replicationConfig: ReplicationConfig,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
     this.#upstreamUri = upstreamUri;
-    this.#shardID = shardID;
+    this.#shard = shard;
     this.#replicationConfig = replicationConfig;
   }
 
@@ -95,10 +96,12 @@ class CustomChangeSource implements ChangeSource {
 
   #startStream(clientWatermark?: string): ChangeStream {
     const {publications, replicaVersion} = this.#replicationConfig;
+    const {appID, shardNum} = this.#shard;
     const url = new URL(this.#upstreamUri);
-    url.searchParams.set('shardID', this.#shardID);
+    url.searchParams.set('appID', appID);
+    url.searchParams.set('shardNum', String(shardNum));
     for (const pub of publications) {
-      url.searchParams.append('shardPublications', pub);
+      url.searchParams.append('publications', pub);
     }
     if (clientWatermark) {
       assert(replicaVersion.length);
@@ -136,8 +139,8 @@ export async function initialSync(
   tx: Database,
   upstreamURI: string,
 ) {
-  const {id, publications} = shard;
-  const changeSource = new CustomChangeSource(lc, upstreamURI, id, {
+  const {appID: id, publications} = shard;
+  const changeSource = new CustomChangeSource(lc, upstreamURI, shard, {
     replicaVersion: '', // ignored for initialSync()
     publications,
   });
@@ -173,7 +176,7 @@ export async function initialSync(
         break;
       case 'commit':
         processor.processMessage(lc, change);
-        validateInitiallySyncedData(lc, tx, id);
+        validateInitiallySyncedData(lc, tx, shard);
         lc.info?.(`finished initial-sync of ${num} changes`);
         return;
 
@@ -195,21 +198,22 @@ export async function initialSync(
 
 // Verify that the upstream tables expected by the sync logic
 // have been properly initialized.
-function getRequiredTables(
-  shardID: string,
-): Record<string, Record<string, SchemaValue>> {
+function getRequiredTables({
+  appID,
+  shardNum,
+}: ShardID): Record<string, Record<string, SchemaValue>> {
   return {
-    [`zero_${shardID}.clients`]: {
+    [`${appID}_${shardNum}.clients`]: {
       clientGroupID: {type: 'string'},
       clientID: {type: 'string'},
       lastMutationID: {type: 'number'},
       userID: {type: 'string'},
     },
-    [`zero.permissions`]: {
+    [`${appID}.permissions`]: {
       permissions: {type: 'json'},
       hash: {type: 'string'},
     },
-    [`zero.schemaVersions`]: {
+    [`${appID}.schemaVersions`]: {
       minSupportedVersion: {type: 'number'},
       maxSupportedVersion: {type: 'number'},
     },
@@ -219,10 +223,10 @@ function getRequiredTables(
 function validateInitiallySyncedData(
   lc: LogContext,
   db: Database,
-  shardID: string,
+  shard: ShardID,
 ) {
   const tables = computeZqlSpecs(lc, db);
-  const required = getRequiredTables(shardID);
+  const required = getRequiredTables(shard);
   for (const [name, columns] of Object.entries(required)) {
     const table = tables.get(name)?.zqlSpec;
     if (!table) {

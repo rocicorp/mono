@@ -42,6 +42,7 @@ export function listTables(db: Database): LiteTableSpec[] {
       WHERE m.type = 'table'
       AND m.name NOT LIKE 'sqlite_%'
       AND m.name NOT LIKE '_zero.%'
+      AND m.name NOT LIKE '_litestream_%'
       `,
     )
     .all() as ColumnInfo[];
@@ -131,13 +132,19 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
  *   in unique indexes
  *
  * @param tableSpecs an optional map to reset and populate
+ * @param fullTables an optional map to receive the full table specs,
+ *        which may include tables and columns that are not synced to
+ *        the client because they lack a primary key or are of unsupported
+ *        data types.
  */
 export function computeZqlSpecs(
   lc: LogContext,
   replica: Database,
   tableSpecs: Map<string, LiteAndZqlSpec> = new Map(),
+  fullTables?: Map<string, LiteTableSpec>,
 ): Map<string, LiteAndZqlSpec> {
   tableSpecs.clear();
+  fullTables?.clear();
 
   const uniqueColumns = new Map<string, string[][]>();
   for (const {tableName, columns} of listIndexes(replica).filter(
@@ -150,6 +157,8 @@ export function computeZqlSpecs(
   }
 
   listTables(replica).forEach(fullTable => {
+    fullTables?.set(fullTable.name, fullTable);
+
     // Only include columns for which the mapped ZQL Value is defined.
     const visibleColumns = Object.entries(fullTable.columns).filter(
       ([_, {dataType}]) => dataTypeToZqlValueType(dataType),

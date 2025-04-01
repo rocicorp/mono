@@ -54,6 +54,7 @@ function benchmarkIDBReadGetAll(opts: {
 
         bench.stop();
         // Use the values to ensure they aren't optimized away.
+        // eslint-disable-next-line no-console
         console.log(`Read ${values.length} values`);
       } finally {
         db.close();
@@ -112,6 +113,7 @@ function benchmarkIDBReadGetAllGetAllKeys(opts: {
 
         bench.stop();
         // Use the values to ensure they aren't optimized away.
+        // eslint-disable-next-line no-console
         console.log(`Read ${values.length} values and ${keys.length} keys`);
       } finally {
         db.close();
@@ -169,6 +171,7 @@ function benchmarkIDBReadGet(opts: {
 
         bench.stop();
         // Use the values to ensure they aren't optimized away.
+        // eslint-disable-next-line no-console
         console.log(`Read ${values.length} values`);
       } finally {
         db.close();
@@ -295,6 +298,7 @@ function benchmarkIDBReadGetWithInlineKeys(opts: {
 
         bench.stop();
         // Use the values to ensure they aren't optimized away.
+        // eslint-disable-next-line no-console
         console.log(`Read ${vals.length} values`);
       } finally {
         db.close();
@@ -352,6 +356,7 @@ function benchmarkIDBReadGetAllWithInlineKey(opts: {
 
         bench.stop();
         // Use the values to ensure they aren't optimized away.
+        // eslint-disable-next-line no-console
         console.log(`Read ${values.length} values`);
       } finally {
         db.close();

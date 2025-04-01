@@ -4,21 +4,19 @@ import postgres, {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
+import {cdcSchema, type ShardID} from '../../../types/shards.ts';
 import type {Change} from '../../change-source/protocol/current/data.ts';
-
-export function cdcSchema(shardID: string) {
-  return `cdc_${shardID}`;
-}
+import type {SubscriptionState} from '../../replicator/schema/replication-state.ts';
 
 // For readability in the sql statements.
-function schema(shardID: string) {
-  return ident(cdcSchema(shardID));
+function schema(shard: ShardID) {
+  return ident(cdcSchema(shard));
 }
 
 export const PG_SCHEMA = 'cdc';
 
-function createSchema(shardID: string) {
-  return `CREATE SCHEMA IF NOT EXISTS ${schema(shardID)};`;
+function createSchema(shard: ShardID) {
+  return `CREATE SCHEMA IF NOT EXISTS ${schema(shard)};`;
 }
 
 export type ChangeLogEntry = {
@@ -28,12 +26,12 @@ export type ChangeLogEntry = {
   change: Change;
 };
 
-function createChangeLogTable(shardID: string) {
+function createChangeLogTable(shard: ShardID) {
   // Note: The "change" column used to be JSONB, but that was problematic in that
   // it does not handle the NULL unicode character.
   // https://vladimir.varank.in/notes/2021/01/you-dont-insert-unicode-null-character-as-postgres-jsonb/
   return `
-  CREATE TABLE ${schema(shardID)}."changeLog" (
+  CREATE TABLE ${schema(shard)}."changeLog" (
     watermark  TEXT,
     pos        INT8,
     change     JSON NOT NULL,
@@ -52,9 +50,9 @@ export type ReplicationState = {
   owner: string | null;
 };
 
-export function createReplicationStateTable(shardID: string) {
+export function createReplicationStateTable(shard: ShardID) {
   return `
-  CREATE TABLE ${schema(shardID)}."replicationState" (
+  CREATE TABLE ${schema(shard)}."replicationState" (
     "lastWatermark" TEXT NOT NULL,
     "owner" TEXT,
     "lock" INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
@@ -73,9 +71,9 @@ export type ReplicationConfig = {
   publications: readonly string[];
 };
 
-function createReplicationConfigTable(shardID: string) {
+function createReplicationConfigTable(shard: ShardID) {
   return `
-  CREATE TABLE ${schema(shardID)}."replicationConfig" (
+  CREATE TABLE ${schema(shard)}."replicationConfig" (
     "replicaVersion" TEXT NOT NULL,
     "publications" TEXT[] NOT NULL,
     "resetRequired" BOOL,
@@ -84,26 +82,26 @@ function createReplicationConfigTable(shardID: string) {
 `;
 }
 
-function createTables(shardID: string) {
+function createTables(shard: ShardID) {
   return (
-    createSchema(shardID) +
-    createChangeLogTable(shardID) +
-    createReplicationStateTable(shardID) +
-    createReplicationConfigTable(shardID)
+    createSchema(shard) +
+    createChangeLogTable(shard) +
+    createReplicationStateTable(shard) +
+    createReplicationConfigTable(shard)
   );
 }
 
 export async function setupCDCTables(
   lc: LogContext,
   db: postgres.TransactionSql,
-  shardID: string,
+  shard: ShardID,
 ) {
   lc.info?.(`Setting up CDC tables`);
-  await db.unsafe(createTables(shardID));
+  await db.unsafe(createTables(shard));
 }
 
-export async function markResetRequired(db: PostgresDB, shardID: string) {
-  const schema = cdcSchema(shardID);
+export async function markResetRequired(db: PostgresDB, shard: ShardID) {
+  const schema = cdcSchema(shard);
   await db`
   UPDATE ${db(schema)}."replicationConfig"
     SET "resetRequired" = true`;
@@ -112,17 +110,16 @@ export async function markResetRequired(db: PostgresDB, shardID: string) {
 export async function ensureReplicationConfig(
   lc: LogContext,
   db: PostgresDB,
-  config: ReplicationConfig,
-  shardID: string,
+  subscriptionState: SubscriptionState,
+  shard: ShardID,
   autoReset: boolean,
 ) {
-  // Restrict the fields of the supplied `config`.
-  const {publications, replicaVersion} = config;
+  const {publications, replicaVersion, watermark} = subscriptionState;
   const replicaConfig = {publications, replicaVersion};
   const replicationState: Partial<ReplicationState> = {
     lastWatermark: replicaVersion,
   };
-  const schema = cdcSchema(shardID);
+  const schema = cdcSchema(shard);
 
   await db.begin(async tx => {
     const stmts: PendingQuery<Row[]>[] = [];
@@ -142,6 +139,13 @@ export async function ensureReplicationConfig(
         replicaVersion !== replicaConfig.replicaVersion ||
         !equals(new Set(publications), new Set(replicaConfig.publications))
       ) {
+        if (replicaConfig.replicaVersion !== watermark) {
+          throw new AutoResetSignal(
+            `Cannot reset change db@${replicaVersion} to ` +
+              `service replica@${replicaConfig.replicaVersion} ` +
+              `from watermark ${watermark}`,
+          );
+        }
         lc.info?.(
           `Data in cdc tables @${replicaVersion} is incompatible ` +
             `with replica @${replicaConfig.replicaVersion}. Clearing tables.`,

@@ -1,6 +1,12 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {pipeline, Writable, type DuplexOptions} from 'node:stream';
+import {
+  pipeline,
+  Readable,
+  Transform,
+  Writable,
+  type DuplexOptions,
+} from 'node:stream';
 import {
   createWebSocketStream,
   type CloseEvent,
@@ -88,69 +94,82 @@ export function stream<In extends JSONValue, Out extends JSONValue>(
   });
 
   // Outgoing transform.
-  async function sendOut() {
-    for await (const msg of outstream) {
-      // Upstream backpressure is signaled by the tcp socket buffer.
-      if (!duplex.write(BigIntJSON.stringify(msg))) {
-        const {promise: canWriteMore, resolve: drained} = resolver();
+  function streamOut() {
+    // Mainly used for verifying that back-pressure kicks in tests.
+    duplex.on('drain', () => lc.debug?.(`drained messages to ${endpoint}`));
 
-        const start = Date.now();
-        duplex.once('drain', drained);
-        await canWriteMore;
-        lc.debug?.(
-          `drained messages to ${endpoint} in ${Date.now() - start} ms`,
-        );
-      }
-    }
+    pipeline(
+      Readable.from(outstream),
+      new Transform({
+        objectMode: true,
+        transform: (msg, _encoding, callback) =>
+          callback(null, BigIntJSON.stringify(msg)),
+      }),
+      duplex,
+      err => (err ? outstream.fail(err) : outstream.cancel()),
+    );
   }
 
   if (ws.readyState === ws.CONNECTING) {
     ws.on('open', () => {
       lc.info?.(`connected to ${endpoint}`);
-      void sendOut();
+      streamOut();
     });
   } else {
-    void sendOut();
+    streamOut();
   }
 
   // Incoming transform.
+  pipe(duplex, instream, chunk => {
+    const json = BigIntJSON.parse(chunk.toString());
+    return v.parse(json, inSchema, 'passthrough');
+  });
+
+  return {outstream, instream};
+}
+
+export function pipe<T>(
+  source: Readable,
+  sink: Subscription<T>,
+  parse: (buffer: Buffer) => T | null,
+) {
   pipeline(
-    duplex,
+    source,
     new Writable({
       decodeStrings: false,
       write: (chunk, _encoding, callback) => {
-        let msg: In;
+        let msg: T | null;
         try {
-          const json = BigIntJSON.parse(chunk.toString());
-          msg = v.parse(json, inSchema, 'passthrough');
+          if ((msg = parse(chunk)) === null) {
+            callback();
+            return;
+          }
         } catch (err) {
           callback(ensureError(err));
           return;
         }
-        const {result} = instream.push(msg);
+        const {result} = sink.push(msg);
         // Inbound backpressure is exerted by unconsumed
         // messages in the subscription.
         void result.then(
           () => callback(),
-          err => callback(err),
+          err => callback(ensureError(err)),
         );
       },
       destroy: (err, callback) => {
         if (err) {
-          instream.fail(ensureError(err));
+          sink.fail(ensureError(err));
         }
         // Otherwise, final will handle the cancel.
         callback();
       },
       final: callback => {
-        instream.cancel();
+        sink.cancel();
         callback();
       },
     }),
-    close,
+    err => (err ? sink.fail(err) : sink.cancel()),
   );
-
-  return {outstream, instream};
 }
 
 function ensureError(err: unknown) {
@@ -182,7 +201,7 @@ export async function streamOut<T extends JSONValue>(
       if (typeof data !== 'string') {
         throw new Error('Expected string message');
       }
-      void acks.enqueue(v.parse(JSON.parse(data), ackSchema));
+      acks.enqueue(v.parse(JSON.parse(data), ackSchema));
     } catch (e) {
       lc.error?.(`error parsing ack`, e);
       closer.close(e);
@@ -201,13 +220,14 @@ export async function streamOut<T extends JSONValue>(
         // lc.debug?.(`pipelining`, data);
         sink.send(data);
 
-        void acks.dequeue().then(({ack}) => {
+        void (async () => {
+          const {ack} = await acks.dequeue();
           // lc.debug?.(`received ack`, ack);
           if (ack !== id) {
             throw new Error(`Unexpected ack for ${id}: ${ack}`);
           }
           consumed();
-        });
+        })();
       }
     } else {
       lc.debug?.(`started synchronous outbound stream`);

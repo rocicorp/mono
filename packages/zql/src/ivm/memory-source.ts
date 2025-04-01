@@ -15,6 +15,7 @@ import {
   transformFilters,
   type NoSubqueryCondition,
 } from '../builder/filter.ts';
+import type {AddChange, Change, RemoveChange} from './change.ts';
 import {
   constraintMatchesPrimaryKey,
   constraintMatchesRow,
@@ -22,6 +23,7 @@ import {
 } from './constraint.ts';
 import {
   compareValues,
+  valuesEqual,
   makeComparator,
   type Comparator,
   type Node,
@@ -34,7 +36,12 @@ import {
   type Start,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Source, SourceChange, SourceInput} from './source.ts';
+import type {
+  Source,
+  SourceChange,
+  SourceChangeSet,
+  SourceInput,
+} from './source.ts';
 import type {Stream} from './stream.ts';
 
 export type Overlay = {
@@ -53,10 +60,11 @@ type Index = {
   usedBy: Set<Connection>;
 };
 
-type Connection = {
+export type Connection = {
   input: Input;
   output: Output | undefined;
   sort: Ordering;
+  splitEditKeys: Set<string> | undefined;
   compareRows: Comparator;
   filters:
     | {
@@ -82,6 +90,7 @@ export class MemorySource implements Source {
   readonly #connections: Connection[] = [];
 
   #overlay: Overlay | undefined;
+  #splitEditOverlay: Overlay | undefined;
 
   constructor(
     tableName: string,
@@ -134,7 +143,11 @@ export class MemorySource implements Source {
     };
   }
 
-  connect(sort: Ordering, filters?: Condition | undefined): SourceInput {
+  connect(
+    sort: Ordering,
+    filters?: Condition | undefined,
+    splitEditKeys?: Set<string> | undefined,
+  ): SourceInput {
     const transformedFilters = transformFilters(filters);
 
     const input: SourceInput = {
@@ -154,6 +167,7 @@ export class MemorySource implements Source {
       input,
       output: undefined,
       sort,
+      splitEditKeys,
       compareRows: makeComparator(sort),
       filters: transformedFilters.filters
         ? {
@@ -231,11 +245,9 @@ export class MemorySource implements Source {
   }
 
   *#fetch(req: FetchRequest, from: Connection): Stream<Node> {
-    let overlay: Overlay | undefined;
-
-    const callingConnectionNum = this.#connections.indexOf(from);
-    assert(callingConnectionNum !== -1, 'Output not found');
-    const conn = this.#connections[callingConnectionNum];
+    const callingConnectionIndex = this.#connections.indexOf(from);
+    assert(callingConnectionIndex !== -1, 'Output not found');
+    const conn = this.#connections[callingConnectionIndex];
     const {sort: requestedSort} = conn;
 
     // If there is a constraint, we need an index sorted by it first.
@@ -261,15 +273,6 @@ export class MemorySource implements Source {
     const {data, comparator: compare} = index;
     const comparator = (r1: Row, r2: Row) =>
       compare(r1, r2) * (req.reverse ? -1 : 1);
-
-    // When we receive a push, we send it to each output one at a time. Once the
-    // push is sent to an output, it should keep being sent until all datastores
-    // have received it and the change has been made to the datastore.
-    if (this.#overlay) {
-      if (callingConnectionNum <= this.#overlay.outputIndex) {
-        overlay = this.#overlay;
-      }
-    }
 
     const startAt = req.start?.row;
 
@@ -305,7 +308,9 @@ export class MemorySource implements Source {
       startAt,
       generateRows(data, scanStart, req.reverse),
       req.constraint,
-      overlay,
+      this.#overlay,
+      this.#splitEditOverlay,
+      callingConnectionIndex,
       comparator,
       conn.filters?.predicate,
     );
@@ -324,70 +329,46 @@ export class MemorySource implements Source {
     return this.#fetch(req, connection);
   }
 
-  push(change: SourceChange): void {
+  push(change: SourceChange | SourceChangeSet): void {
     for (const _ of this.genPush(change)) {
       // Nothing to do.
     }
   }
 
-  *genPush(change: SourceChange) {
+  *genPush(change: SourceChange | SourceChangeSet) {
     const primaryIndex = this.#getPrimaryIndex();
     const {data} = primaryIndex;
+    const exists = (row: Row) => data.has(row);
+    const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
+    const setSplitEditOverlay = (o: Overlay | undefined) =>
+      (this.#splitEditOverlay = o);
 
-    switch (change.type) {
-      case 'add':
-        assert(
-          !data.has(change.row),
-          () => `Row already exists ${JSON.stringify(change)}`,
-        );
-        break;
-      case 'remove':
-        assert(
-          data.has(change.row),
-          () => `Row not found ${JSON.stringify(change)}`,
-        );
-        break;
-      case 'edit':
-        assert(
-          data.has(change.oldRow),
-          () => `Row not found ${JSON.stringify(change)}`,
-        );
-        break;
-      default:
-        unreachable(change);
-    }
-
-    const outputChange =
-      change.type === 'edit'
-        ? {
-            type: change.type,
-            oldNode: {
-              row: change.oldRow,
-              relationships: {},
-            },
-            node: {
-              row: change.row,
-              relationships: {},
-            },
-          }
-        : {
-            type: change.type,
-            node: {
-              row: change.row,
-              relationships: {},
-            },
-          };
-    for (const [
-      outputIndex,
-      {output, filters},
-    ] of this.#connections.entries()) {
-      if (output) {
-        this.#overlay = {outputIndex, change};
-        filterPush(outputChange, output, filters?.predicate);
-        yield;
+    if (change.type === 'set') {
+      const existing = data.get(change.row);
+      if (existing !== undefined) {
+        change = {
+          type: 'edit',
+          row: change.row,
+          oldRow: existing,
+        };
+      } else {
+        change = {
+          type: 'add',
+          row: change.row,
+        };
       }
     }
-    this.#overlay = undefined;
+
+    for (const x of genPush(
+      change,
+      exists,
+      this.#connections.entries(),
+      setOverlay,
+      setSplitEditOverlay,
+    )) {
+      yield x;
+    }
+
     for (const {data} of this.#indexes.values()) {
       switch (change.type) {
         case 'add': {
@@ -441,6 +422,100 @@ function* generateWithFilter(it: Stream<Node>, filter: (row: Row) => boolean) {
   }
 }
 
+export function* genPush(
+  change: SourceChange,
+  exists: (row: Row) => boolean,
+  connections: Iterable<[number, Connection]>,
+  setOverlay: (o: Overlay | undefined) => void,
+  setSplitEditOverlay: (o: Overlay | undefined) => void,
+) {
+  switch (change.type) {
+    case 'add':
+      assert(
+        !exists(change.row),
+        () => `Row already exists ${stringify(change)}`,
+      );
+      break;
+    case 'remove':
+      assert(exists(change.row), () => `Row not found ${stringify(change)}`);
+      break;
+    case 'edit':
+      assert(exists(change.oldRow), () => `Row not found ${stringify(change)}`);
+      break;
+    default:
+      unreachable(change);
+  }
+
+  for (const [outputIndex, {output, splitEditKeys, filters}] of connections) {
+    if (output) {
+      let splitEdit = false;
+      if (change.type === 'edit' && splitEditKeys) {
+        for (const key of splitEditKeys) {
+          if (!valuesEqual(change.row[key], change.oldRow[key])) {
+            splitEdit = true;
+            break;
+          }
+        }
+      }
+      if (splitEdit) {
+        assert(change.type === 'edit');
+        setSplitEditOverlay({
+          outputIndex,
+          change: {
+            type: 'remove',
+            row: change.oldRow,
+          },
+        });
+        const outputRemove: RemoveChange = {
+          type: 'remove',
+          node: {
+            row: change.oldRow,
+            relationships: {},
+          },
+        };
+        filterPush(outputRemove, output, filters?.predicate);
+        yield;
+        setSplitEditOverlay(undefined);
+        setOverlay({outputIndex, change});
+        const outputAdd: AddChange = {
+          type: 'add',
+          node: {
+            row: change.row,
+            relationships: {},
+          },
+        };
+        filterPush(outputAdd, output, filters?.predicate);
+        yield;
+      } else {
+        setOverlay({outputIndex, change});
+        const outputChange: Change =
+          change.type === 'edit'
+            ? {
+                type: change.type,
+                oldNode: {
+                  row: change.oldRow,
+                  relationships: {},
+                },
+                node: {
+                  row: change.row,
+                  relationships: {},
+                },
+              }
+            : {
+                type: change.type,
+                node: {
+                  row: change.row,
+                  relationships: {},
+                },
+              };
+        filterPush(outputChange, output, filters?.predicate);
+        yield;
+      }
+    }
+  }
+  setOverlay(undefined);
+}
+
 export function* generateWithStart(
   nodes: Iterable<Node>,
   start: Start | undefined,
@@ -486,13 +561,21 @@ export function* generateWithOverlay(
   rows: Iterable<Row>,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
+  splitEditOverlay: Overlay | undefined,
+  connectionIndex: number,
   compare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
 ) {
+  let overlayToApply: Overlay | undefined = undefined;
+  if (splitEditOverlay && splitEditOverlay.outputIndex === connectionIndex) {
+    overlayToApply = splitEditOverlay;
+  } else if (overlay && connectionIndex <= overlay.outputIndex) {
+    overlayToApply = overlay;
+  }
   const overlays = computeOverlays(
     startAt,
     constraint,
-    overlay,
+    overlayToApply,
     compare,
     filterPredicate,
   );
@@ -674,5 +757,11 @@ function* generateRows(
 ) {
   yield* data[reverse ? 'valuesFromReversed' : 'valuesFrom'](
     scanStart as Row | undefined,
+  );
+}
+
+export function stringify(change: SourceChange) {
+  return JSON.stringify(change, (_, v) =>
+    typeof v === 'bigint' ? v.toString() : v,
   );
 }

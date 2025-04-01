@@ -49,10 +49,13 @@ export const RESET_OP = 'r';
 const CREATE_CHANGELOG_SCHEMA =
   // stateVersion : a.k.a. row version
   // table        : The table associated with the change
-  // rowKey       : JSON row key for a row change, or NULL for a table TRUNCATE.
-  //                Note that SQLite will sort rows such that TRUNCATE and RESET operations
-  //                appear before row operations (as desired), as NULL appears before non-NULL
-  //                 values.
+  // rowKey       : JSON row key for a row change. For table-wide changes,
+  //                this is set to '', which guarantees that they sort before
+  //                any (subsequent) row-level changes. Note that because
+  //                RESET and TRUNCATE use the same rowKey, only the last
+  //                one will persist. This is fine because they are both
+  //                handled in the same way, i.e. by resetting the pipelines,
+  //                as they cannot be processed via change log entries.
   // op           : 't' for table truncation
   //              : 'r' for table reset (schema change)
   //                's' for set (insert/update)
@@ -82,7 +85,7 @@ export const changeLogEntrySchema = v
   })
   .map(val => ({
     ...val,
-    // Note: both `null` (for reset) and empty string "" (for truncate) will result in `null`
+    // Note: the empty string "" (for table-wide ops) will result in `null`
     rowKey: val.rowKey ? v.parse(parse(val.rowKey), jsonObjectSchema) : null,
   }));
 
@@ -97,8 +100,8 @@ export function logSetOp(
   version: LexiVersion,
   table: string,
   row: LiteRowKey,
-) {
-  logRowOp(db, version, table, row, SET_OP);
+): string {
+  return logRowOp(db, version, table, row, SET_OP);
 }
 
 export function logDeleteOp(
@@ -106,8 +109,8 @@ export function logDeleteOp(
   version: LexiVersion,
   table: string,
   row: LiteRowKey,
-) {
-  logRowOp(db, version, table, row, DEL_OP);
+): string {
+  return logRowOp(db, version, table, row, DEL_OP);
 }
 
 function logRowOp(
@@ -116,17 +119,17 @@ function logRowOp(
   table: string,
   row: LiteRowKey,
   op: string,
-) {
+): string {
   const rowKey = stringify(normalizedKeyOrder(row));
   db.run(
     `
-    INSERT INTO "_zero.changeLog" (stateVersion, "table", rowKey, op)
+    INSERT OR REPLACE INTO "_zero.changeLog" 
+      (stateVersion, "table", rowKey, op)
       VALUES (@version, @table, JSON(@rowKey), @op)
-      ON CONFLICT ("table", rowKey) DO UPDATE
-      SET stateVersion = @version, op = @op
     `,
     {version, table, rowKey, op},
   );
+  return rowKey;
 }
 export function logTruncateOp(
   db: StatementRunner,
@@ -150,22 +153,22 @@ function logTableWideOp(
   table: string,
   op: 't' | 'r',
 ) {
+  // Delete any existing changes for the table (in this version) since the
+  // table wide op invalidates them.
   db.run(
-    // Delete all row ops for the table (`rowKey > ''`),
-    // and any previous instance of the same (table-wide) op (`op = ?`).
     `
-    DELETE FROM "_zero.changeLog" WHERE "table" = ? AND (rowKey > '' OR op = ?)
+    DELETE FROM "_zero.changeLog" WHERE stateVersion = ? AND "table" = ?
     `,
+    version,
     table,
-    op,
   );
 
   db.run(
     `
-    INSERT INTO "_zero.changeLog" (stateVersion, "table", rowKey, op) 
+    INSERT OR REPLACE INTO "_zero.changeLog" (stateVersion, "table", rowKey, op) 
       VALUES (@version, @table, @rowKey, @op)
     `,
     // See file JSDoc for explanation of the rowKey w.r.t. ordering of table-wide ops.
-    {version, table, rowKey: op === RESET_OP ? null : '', op},
+    {version, table, rowKey: '', op},
   );
 }

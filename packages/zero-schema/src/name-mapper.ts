@@ -42,10 +42,10 @@ function createMapperFrom(
           }
         }
         return [
-          src === 'client' ? tableName : serverTableName ?? tableName,
+          src === 'client' ? tableName : (serverTableName ?? tableName),
           {
             tableName:
-              src === 'client' ? serverTableName ?? tableName : tableName,
+              src === 'client' ? (serverTableName ?? tableName) : tableName,
             columns: names,
             allColumnsSame,
           },

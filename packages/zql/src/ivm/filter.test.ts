@@ -3,20 +3,14 @@ import {Catch} from './catch.ts';
 import {Filter} from './filter.ts';
 import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 test('basics', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
@@ -100,7 +94,7 @@ test('basics', () => {
 test('edit', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'number'}, x: {type: 'number'}},
     ['a'],

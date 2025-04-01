@@ -15,8 +15,10 @@ import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
+import {warmupConnections} from '../db/warmup.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
+import {PusherService} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
 import {DatabaseStorage} from '../services/view-syncer/database-storage.ts';
 import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
@@ -29,11 +31,11 @@ import {
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
+import {getShardID} from '../types/shards.ts';
 import {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
 import {createLogContext} from './logging.ts';
-import {PusherService} from '../services/mutagen/pusher.ts';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -71,29 +73,26 @@ export default function runWorker(
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
-  assert(config.cvr.maxConnsPerWorker);
-  assert(config.upstream.maxConnsPerWorker);
+  const {cvr, upstream} = config;
+  assert(cvr.maxConnsPerWorker);
+  assert(upstream.maxConnsPerWorker);
 
-  const replicaFile = replicaFileName(config.replicaFile, fileMode);
+  const replicaFile = replicaFileName(config.replica.file, fileMode);
   lc.debug?.(`running view-syncer on ${replicaFile}`);
 
-  const cvrDB = pgClient(lc, config.cvr.db, {
-    max: config.cvr.maxConnsPerWorker,
+  const cvrDB = pgClient(lc, cvr.db ?? upstream.db, {
+    max: cvr.maxConnsPerWorker,
     connection: {['application_name']: `zero-sync-worker-${pid}-cvr`},
   });
 
-  const upstreamDB = pgClient(lc, config.upstream.db, {
-    max: config.upstream.maxConnsPerWorker,
+  const upstreamDB = pgClient(lc, upstream.db, {
+    max: upstream.maxConnsPerWorker,
     connection: {['application_name']: `zero-sync-worker-${pid}-upstream`},
   });
 
   const dbWarmup = Promise.allSettled([
-    ...Array.from({length: config.cvr.maxConnsPerWorker}, () =>
-      cvrDB`SELECT 1`.simple().execute(),
-    ),
-    ...Array.from({length: config.upstream.maxConnsPerWorker}, () =>
-      upstreamDB`SELECT 1`.simple().execute(),
-    ),
+    warmupConnections(lc, cvrDB, 'cvr'),
+    warmupConnections(lc, upstreamDB, 'upstream'),
   ]);
 
   const tmpDir = config.storageDBTmpDir ?? tmpdir();
@@ -101,6 +100,8 @@ export default function runWorker(
     lc,
     path.join(tmpDir, `sync-worker-${pid}-${randInt(1000000, 9999999)}`),
   );
+
+  const shard = getShardID(config);
 
   const viewSyncerFactory = (
     id: string,
@@ -113,26 +114,30 @@ export default function runWorker(
       .withContext('instance', randomID());
     return new ViewSyncerService(
       logger,
+      shard,
       must(config.taskID, 'main must set --task-id'),
       id,
-      config.shard.id,
       cvrDB,
       new PipelineDriver(
         logger,
         config.log,
-        new Snapshotter(logger, replicaFile),
+        new Snapshotter(logger, replicaFile, shard),
+        shard,
         operatorStorage.createClientGroupStorage(id),
         id,
       ),
       sub,
       drainCoordinator,
+      config.log.slowHydrateThreshold,
+      undefined,
+      config.targetClientRowCount,
     );
   };
 
   const mutagenFactory = (id: string) =>
     new MutagenService(
       lc.withContext('component', 'mutagen').withContext('clientGroupID', id),
-      config.shard.id,
+      shard,
       id,
       upstreamDB,
       config,
@@ -143,6 +148,7 @@ export default function runWorker(
       ? undefined
       : (id: string) =>
           new PusherService(
+            config,
             lc.withContext('clientGroupID', id),
             id,
             must(config.push.url),

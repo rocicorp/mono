@@ -5,197 +5,201 @@ import {
   number,
   string,
   table,
+  timestamp,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 
 // auto-generated from `Chinook_PostgreSql.sql` by Claude
 // Table definitions
 const album = table('album')
   .columns({
-    album_id: number(),
+    id: number().from('album_id'),
     title: string(),
-    artist_id: number(),
+    artistId: number().from('artist_id'),
   })
-  .primaryKey('album_id');
+  .primaryKey('id');
 
 const artist = table('artist')
   .columns({
-    artist_id: number(),
+    id: number().from('artist_id'),
     name: string().optional(),
   })
-  .primaryKey('artist_id');
+  .primaryKey('id');
 
 const customer = table('customer')
   .columns({
-    customer_id: number(),
-    first_name: string(),
-    last_name: string(),
+    id: number().from('customer_id'),
+    firstName: string().from('first_name'),
+    lastName: string().from('last_name'),
     company: string().optional(),
     address: string().optional(),
     city: string().optional(),
     state: string().optional(),
     country: string().optional(),
-    postal_code: string().optional(),
+    postalCode: string().optional().from('postal_code'),
     phone: string().optional(),
     fax: string().optional(),
     email: string(),
-    support_rep_id: number().optional(),
+    supportRepId: number().optional().from('support_rep_id'),
   })
-  .primaryKey('customer_id');
+  .primaryKey('id');
 
 const employee = table('employee')
   .columns({
-    employee_id: number(),
-    last_name: string(),
-    first_name: string(),
+    id: number().from('employee_id'),
+    lastName: string().from('last_name'),
+    firstName: string().from('first_name'),
     title: string().optional(),
-    reports_to: number().optional(),
-    birth_date: number().optional(), // TIMESTAMP as number
-    hire_date: number().optional(), // TIMESTAMP as number
+    reportsTo: number().optional().from('reports_to'),
+    birthDate: timestamp().optional().from('birth_date'),
+    hireDate: timestamp().optional().from('hire_date'),
     address: string().optional(),
     city: string().optional(),
     state: string().optional(),
     country: string().optional(),
-    postal_code: string().optional(),
+    postalCode: string().optional().from('postal_code'),
     phone: string().optional(),
     fax: string().optional(),
     email: string().optional(),
   })
-  .primaryKey('employee_id');
+  .primaryKey('id');
 
 const genre = table('genre')
   .columns({
-    genre_id: number(),
+    id: number().from('genre_id'),
     name: string().optional(),
   })
-  .primaryKey('genre_id');
+  .primaryKey('id');
 
 const invoice = table('invoice')
   .columns({
-    invoice_id: number(),
-    customer_id: number(),
-    invoice_date: number(), // TIMESTAMP as number
-    billing_address: string().optional(),
-    billing_city: string().optional(),
-    billing_state: string().optional(),
-    billing_country: string().optional(),
-    billing_postal_code: string().optional(),
+    id: number().from('invoice_id'),
+    customerId: number().from('customer_id'),
+    invoiceDate: timestamp().from('invoice_date'),
+    billingAddress: string().optional().from('billing_address'),
+    billingCity: string().optional().from('billing_city'),
+    billingState: string().optional().from('billing_state'),
+    billingCountry: string().optional().from('billing_country'),
+    billingPostalCode: string().optional().from('billing_postal_code'),
     total: number(),
   })
-  .primaryKey('invoice_id');
+  .primaryKey('id');
 
-const invoice_line = table('invoice_line')
+const invoiceLine = table('invoiceLine')
+  .from('invoice_line')
   .columns({
-    invoice_line_id: number(),
-    invoice_id: number(),
-    track_id: number(),
-    unit_price: number(),
+    id: number().from('invoice_line_id'),
+    invoiceId: number().from('invoice_id'),
+    trackId: number().from('track_id'),
+    unitPrice: number().from('unit_price'),
     quantity: number(),
   })
-  .primaryKey('invoice_line_id');
+  .primaryKey('id');
 
-const media_type = table('media_type')
+const mediaType = table('mediaType')
+  .from('media_type')
   .columns({
-    media_type_id: number(),
+    id: number().from('media_type_id'),
     name: string().optional(),
   })
-  .primaryKey('media_type_id');
+  .primaryKey('id');
 
 const playlist = table('playlist')
   .columns({
-    playlist_id: number(),
+    id: number().from('playlist_id'),
     name: string().optional(),
   })
-  .primaryKey('playlist_id');
+  .primaryKey('id');
 
-const playlist_track = table('playlist_track')
+const playlistTrack = table('playlistTrack')
+  .from('playlist_track')
   .columns({
-    playlist_id: number(),
-    track_id: number(),
+    playlistId: number().from('playlist_id'),
+    trackId: number().from('track_id'),
   })
-  .primaryKey('playlist_id', 'track_id');
+  .primaryKey('playlistId', 'trackId');
 
 const track = table('track')
   .columns({
-    track_id: number(),
+    id: number().from('track_id'),
     name: string(),
-    album_id: number().optional(),
-    media_type_id: number(),
-    genre_id: number().optional(),
+    albumId: number().optional().from('album_id'),
+    mediaTypeId: number().from('media_type_id'),
+    genreId: number().optional().from('genre_id'),
     composer: string().optional(),
     milliseconds: number(),
     bytes: number().optional(),
-    unit_price: number(),
+    unitPrice: number().from('unit_price'),
   })
-  .primaryKey('track_id');
+  .primaryKey('id');
 
 // Relationships
 const albumRelationships = relationships(album, ({one, many}) => ({
   artist: one({
-    sourceField: ['artist_id'],
-    destField: ['artist_id'],
+    sourceField: ['artistId'],
+    destField: ['id'],
     destSchema: artist,
   }),
   tracks: many({
-    sourceField: ['album_id'],
-    destField: ['album_id'],
+    sourceField: ['id'],
+    destField: ['albumId'],
     destSchema: track,
   }),
 }));
 
 const customerRelationships = relationships(customer, ({one}) => ({
   supportRep: one({
-    sourceField: ['support_rep_id'],
-    destField: ['employee_id'],
+    sourceField: ['supportRepId'],
+    destField: ['id'],
     destSchema: employee,
   }),
 }));
 
 const employeeRelationships = relationships(employee, ({one}) => ({
   reportsTo: one({
-    sourceField: ['reports_to'],
-    destField: ['employee_id'],
+    sourceField: ['reportsTo'],
+    destField: ['id'],
     destSchema: employee,
   }),
 }));
 
 const invoiceRelationships = relationships(invoice, ({one, many}) => ({
   customer: one({
-    sourceField: ['customer_id'],
-    destField: ['customer_id'],
+    sourceField: ['customerId'],
+    destField: ['id'],
     destSchema: customer,
   }),
   lines: many({
-    sourceField: ['invoice_id'],
-    destField: ['invoice_id'],
-    destSchema: invoice_line,
+    sourceField: ['id'],
+    destField: ['invoiceId'],
+    destSchema: invoiceLine,
   }),
 }));
 
 const trackRelationships = relationships(track, ({one, many}) => ({
   album: one({
-    sourceField: ['album_id'],
-    destField: ['album_id'],
+    sourceField: ['albumId'],
+    destField: ['id'],
     destSchema: album,
   }),
   genre: one({
-    sourceField: ['genre_id'],
-    destField: ['genre_id'],
+    sourceField: ['genreId'],
+    destField: ['id'],
     destSchema: genre,
   }),
   mediaType: one({
-    sourceField: ['media_type_id'],
-    destField: ['media_type_id'],
-    destSchema: media_type,
+    sourceField: ['mediaTypeId'],
+    destField: ['id'],
+    destSchema: mediaType,
   }),
   playlists: many(
     {
-      sourceField: ['track_id'],
-      destField: ['track_id'],
-      destSchema: playlist_track,
+      sourceField: ['id'],
+      destField: ['trackId'],
+      destSchema: playlistTrack,
     },
     {
-      sourceField: ['playlist_id'],
-      destField: ['playlist_id'],
+      sourceField: ['playlistId'],
+      destField: ['id'],
       destSchema: playlist,
     },
   ),
@@ -204,19 +208,19 @@ const trackRelationships = relationships(track, ({one, many}) => ({
 const playlistRelationships = relationships(playlist, ({many}) => ({
   tracks: many(
     {
-      sourceField: ['playlist_id'],
-      destField: ['playlist_id'],
-      destSchema: playlist_track,
+      sourceField: ['id'],
+      destField: ['playlistId'],
+      destSchema: playlistTrack,
     },
     {
-      sourceField: ['track_id'],
-      destField: ['track_id'],
+      sourceField: ['trackId'],
+      destField: ['id'],
       destSchema: track,
     },
   ),
 }));
 
-export const schema = createSchema(1, {
+export const schema = createSchema({
   tables: [
     album,
     artist,
@@ -224,10 +228,10 @@ export const schema = createSchema(1, {
     employee,
     genre,
     invoice,
-    invoice_line,
-    media_type,
+    invoiceLine,
+    mediaType,
     playlist,
-    playlist_track,
+    playlistTrack,
     track,
   ],
   relationships: [

@@ -7,6 +7,7 @@ import {
   type LexiVersion,
 } from '../../types/lexi-version.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import type {ShardID} from '../../types/shards.ts';
 import type {Sink, Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {orTimeout} from '../../types/timeout.ts';
@@ -16,6 +17,7 @@ import {
   type ChangeStreamMessage,
 } from '../change-source/protocol/current/downstream.ts';
 import type {ChangeSourceUpstream} from '../change-source/protocol/current/upstream.ts';
+import type {SubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
   DEFAULT_MAX_RETRY_DELAY_MS,
   RunningState,
@@ -33,7 +35,6 @@ import {
   AutoResetSignal,
   ensureReplicationConfig,
   markResetRequired,
-  type ReplicationConfig,
 } from './schema/tables.ts';
 import {Storer} from './storer.ts';
 import {Subscriber} from './subscriber.ts';
@@ -43,28 +44,28 @@ import {Subscriber} from './subscriber.ts';
  */
 export async function initializeStreamer(
   lc: LogContext,
-  shardID: string,
+  shard: ShardID,
   taskID: string,
   changeDB: PostgresDB,
   changeSource: ChangeSource,
-  replicationConfig: ReplicationConfig,
+  subscriptionState: SubscriptionState,
   autoReset: boolean,
   setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
   // Make sure the ChangeLog DB is set up.
-  await initChangeStreamerSchema(lc, changeDB, shardID);
+  await initChangeStreamerSchema(lc, changeDB, shard);
   await ensureReplicationConfig(
     lc,
     changeDB,
-    replicationConfig,
-    shardID,
+    subscriptionState,
+    shard,
     autoReset,
   );
 
-  const {replicaVersion} = replicationConfig;
+  const {replicaVersion} = subscriptionState;
   return new ChangeStreamerImpl(
     lc,
-    shardID,
+    shard,
     taskID,
     changeDB,
     replicaVersion,
@@ -253,7 +254,7 @@ const MAX_SERVING_DELAY = 30_000;
 class ChangeStreamerImpl implements ChangeStreamerService {
   readonly id: string;
   readonly #lc: LogContext;
-  readonly #shardID: string;
+  readonly #shard: ShardID;
   readonly #changeDB: PostgresDB;
   readonly #replicaVersion: string;
   readonly #source: ChangeSource;
@@ -278,7 +279,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   constructor(
     lc: LogContext,
-    shardID: string,
+    shard: ShardID,
     taskID: string,
     changeDB: PostgresDB,
     replicaVersion: string,
@@ -288,17 +289,18 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   ) {
     this.id = `change-streamer`;
     this.#lc = lc.withContext('component', 'change-streamer');
-    this.#shardID = shardID;
+    this.#shard = shard;
     this.#changeDB = changeDB;
     this.#replicaVersion = replicaVersion;
     this.#source = source;
     this.#storer = new Storer(
       lc,
-      shardID,
+      shard,
       taskID,
       changeDB,
       replicaVersion,
       consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
+      err => this.stop(err),
     );
     this.#forwarder = new Forwarder();
     this.#autoReset = autoReset;
@@ -325,7 +327,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     while (this.#state.shouldRun()) {
       let err: unknown;
       try {
-        const startAfter = await this.#storer.getLastWatermark();
+        const startAfter = await this.#storer.getLastWatermarkToStartStream();
         const stream = await this.#source.startStream(startAfter);
         this.#stream = stream;
         this.#state.resetBackoff();
@@ -365,6 +367,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
           if (type === 'commit') {
             watermark = null;
+            // After each transaction, allow storer to exert back pressure.
+            await this.#storer.readyForMore();
           }
         }
       } catch (e) {
@@ -385,7 +389,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
     switch (tag) {
       case 'reset-required':
-        await markResetRequired(this.#changeDB, this.#shardID);
+        await markResetRequired(this.#changeDB, this.#shard);
         if (this.#autoReset) {
           this.#lc.warn?.('shutting down for auto-reset');
           await this.stop(new AutoResetSignal());
@@ -419,7 +423,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       this.#lc.debug?.(`adding subscriber ${subscriber.id}`);
 
       this.#forwarder.add(subscriber);
-      this.#storer.catchup(subscriber);
+      this.#storer.catchup(subscriber, mode);
 
       if (initial) {
         this.#scheduleCleanup(watermark);

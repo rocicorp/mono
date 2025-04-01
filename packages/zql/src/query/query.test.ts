@@ -19,7 +19,6 @@ import {
 } from '../../../zero-schema/src/table-schema.ts';
 import type {ExpressionFactory} from './expression.ts';
 import {staticParam} from './query-impl.ts';
-import type {AdvancedQuery} from './query-internal.ts';
 import {type Query, type Row} from './query.ts';
 
 const mockQuery = {
@@ -171,7 +170,7 @@ const testWithMoreRelationshipsRelationships = relationships(
   }),
 );
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [
     testSchema,
     testSchemaWithNulls,
@@ -208,10 +207,12 @@ describe('types', () => {
   test('simple select with enums', () => {
     const query = mockQuery as unknown as Query<Schema, 'testWithEnums'>;
     expectTypeOf(query.run()).toMatchTypeOf<
-      ReadonlyArray<{
-        s: string;
-        e: 'open' | 'closed';
-      }>
+      Promise<
+        ReadonlyArray<{
+          s: string;
+          e: 'open' | 'closed';
+        }>
+      >
     >();
 
     const q2 = mockQuery as unknown as Query<Schema, 'schemaWithAdvancedTypes'>;
@@ -219,14 +220,16 @@ describe('types', () => {
     // @ts-expect-error - invalid enum value
     q2.where('e', 'bogus');
     expectTypeOf(q2.run()).toMatchTypeOf<
-      ReadonlyArray<{
-        s: string;
-        n: Timestamp;
-        b: boolean;
-        j: {foo: string; bar: boolean};
-        e: 'open' | 'closed';
-        otherId: IdOf<Schema['tables']['testWithEnums']>;
-      }>
+      Promise<
+        ReadonlyArray<{
+          s: string;
+          n: Timestamp;
+          b: boolean;
+          j: {foo: string; bar: boolean};
+          e: 'open' | 'closed';
+          otherId: IdOf<Schema['tables']['testWithEnums']>;
+        }>
+      >
     >();
 
     // @ts-expect-error - 'foo' is not an id of `SchemaWithEnums`
@@ -246,22 +249,24 @@ describe('types', () => {
 
     const query2 = query.related('self');
     expectTypeOf(query2.run()).toMatchTypeOf<
-      ReadonlyArray<{
-        s: string;
-        n: Timestamp;
-        b: boolean;
-        j: {foo: string; bar: boolean};
-        e: 'open' | 'closed';
-        otherId: IdOf<Schema['tables']['testWithEnums']>;
-        self: ReadonlyArray<{
+      Promise<
+        ReadonlyArray<{
           s: string;
           n: Timestamp;
           b: boolean;
           j: {foo: string; bar: boolean};
           e: 'open' | 'closed';
           otherId: IdOf<Schema['tables']['testWithEnums']>;
-        }>;
-      }>
+          self: ReadonlyArray<{
+            s: string;
+            n: Timestamp;
+            b: boolean;
+            j: {foo: string; bar: boolean};
+            e: 'open' | 'closed';
+            otherId: IdOf<Schema['tables']['testWithEnums']>;
+          }>;
+        }>
+      >
     >();
 
     // @ts-expect-error - missing enum value
@@ -322,10 +327,12 @@ describe('types', () => {
 
     const query2 = query.related('self');
     expectTypeOf(query2.run()).toMatchTypeOf<
-      ReadonlyArray<
-        Row<SchemaWithEnums> & {
-          self: ReadonlyArray<Row<SchemaWithEnums>>;
-        }
+      Promise<
+        ReadonlyArray<
+          Row<SchemaWithEnums> & {
+            self: ReadonlyArray<Row<SchemaWithEnums>>;
+          }
+        >
       >
     >();
   });
@@ -342,12 +349,14 @@ describe('types', () => {
   test('one', () => {
     const q1 = mockQuery as unknown as Query<Schema, 'test'>;
     expectTypeOf(q1.one().run()).toMatchTypeOf<
-      | {
-          readonly s: string;
-          readonly b: boolean;
-          readonly n: number;
-        }
-      | undefined
+      Promise<
+        | {
+            readonly s: string;
+            readonly b: boolean;
+            readonly n: number;
+          }
+        | undefined
+      >
     >();
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -647,7 +656,7 @@ describe('schema structure', () => {
       }),
     }));
 
-    const schema = createSchema(1, {
+    const schema = createSchema({
       tables: [comment, issue],
       relationships: [issueRelationships],
     });
@@ -693,7 +702,7 @@ describe('schema structure', () => {
       }),
     }));
 
-    const schema = createSchema(1, {
+    const schema = createSchema({
       tables: [issue, comment],
       relationships: [issueRelationships, commentRelationships],
     });
@@ -747,7 +756,7 @@ function takeSchema(x: TableSchema) {
 }
 
 test('custom materialize factory', () => {
-  const query = mockQuery as unknown as AdvancedQuery<Schema, 'test'>;
+  const query = mockQuery as unknown as Query<Schema, 'test'>;
   const x = query.materialize();
   expectTypeOf(x.data).toMatchTypeOf<
     ReadonlyArray<{s: string; b: boolean; n: number}>
@@ -774,7 +783,7 @@ test('Make sure that QueryInternal does not expose the ast', () => {
   // @ts-expect-error - ast is not part of the public API
   query.ast;
 
-  const internalQuery = mockQuery as unknown as AdvancedQuery<Schema, 'test'>;
+  const internalQuery = mockQuery as unknown as Query<Schema, 'test'>;
   // @ts-expect-error - ast is not part of the public API
   internalQuery.ast;
 });

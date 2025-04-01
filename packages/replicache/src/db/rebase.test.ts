@@ -1,6 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import sinon from 'sinon';
-import {afterEach, describe, expect, test} from 'vitest';
+import {afterEach, describe, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {BTreeRead} from '../btree/read.ts';
@@ -28,7 +27,7 @@ import {ChainBuilder} from './test-helpers.ts';
 type FormatVersion = Enum<typeof FormatVersion>;
 
 afterEach(() => {
-  sinon.restore();
+  vi.restoreAllMocks();
 });
 
 async function createMutationSequenceFixture() {
@@ -143,7 +142,7 @@ async function createMutationSequenceFixture() {
 
 async function createMissingMutatorFixture() {
   const formatVersion = FormatVersion.Latest;
-  const consoleErrorStub = sinon.stub(console, 'error');
+  const consoleErrorStub = vi.spyOn(console, 'error');
   const clientID = 'test_client_id';
   const store = new TestStore();
   const b = new ChainBuilder(store, undefined, formatVersion);
@@ -194,8 +193,8 @@ async function createMissingMutatorFixture() {
       expect(await btreeRead.get('foo')).to.equal('bar');
     },
     expectMissingMutatorErrorLog: () => {
-      expect(consoleErrorStub.callCount).to.equal(1);
-      const {args} = consoleErrorStub.getCall(0);
+      expect(consoleErrorStub).toBeCalledTimes(1);
+      const args = consoleErrorStub.mock.calls[0];
       expect(args[0]).to.equal(
         `Cannot rebase unknown mutator ${localCommit.meta.mutatorName}`,
       );
@@ -229,6 +228,7 @@ describe('rebaseMutationAndCommit', () => {
           new LogContext(),
           fixture.clientID,
           fixture.formatVersion,
+          undefined,
         ),
     );
     expect(fixture.testMutator1CallCount).to.equal(1);
@@ -256,6 +256,7 @@ describe('rebaseMutationAndCommit', () => {
           new LogContext(),
           fixture.clientID,
           fixture.formatVersion,
+          undefined,
         ),
     );
     expect(fixture.testMutator1CallCount).to.equal(1);
@@ -291,6 +292,7 @@ describe('rebaseMutationAndCommit', () => {
           new LogContext(),
           fixture.clientID,
           fixture.formatVersion,
+          undefined,
         ),
     );
     await withRead(fixture.store, async read => {
@@ -329,6 +331,7 @@ describe('rebaseMutationAndPutCommit', () => {
           new LogContext(),
           fixture.clientID,
           fixture.formatVersion,
+          undefined,
         );
         await fixture.expectRebasedCommit1(
           commit,
@@ -363,6 +366,7 @@ describe('rebaseMutationAndPutCommit', () => {
           new LogContext(),
           fixture.clientID,
           fixture.formatVersion,
+          undefined,
         );
         await fixture.expectRebasedCommit2(
           commit,
@@ -407,6 +411,7 @@ describe('rebaseMutationAndPutCommit', () => {
           new LogContext(),
           fixture.clientID,
           fixture.formatVersion,
+          undefined,
         );
         await fixture.expectRebasedCommit(
           commit,
@@ -473,6 +478,7 @@ async function testThrowsErrorOnClientIDMismatch(
             new LogContext(),
             'wrong_client_id',
             formatVersion,
+            undefined,
           )
         : await rebaseMutationAndPutCommit(
             localCommit,
@@ -484,6 +490,7 @@ async function testThrowsErrorOnClientIDMismatch(
             new LogContext(),
             'wrong_client_id',
             formatVersion,
+            undefined,
           );
     } catch (expected) {
       expect(formatVersion).to.be.greaterThanOrEqual(FormatVersion.DD31);
@@ -541,6 +548,7 @@ async function testThrowsErrorOnMutationIDMismatch(
             new LogContext(),
             clientID,
             formatVersion,
+            undefined,
           )
         : await rebaseMutationAndPutCommit(
             localCommit2,
@@ -550,6 +558,7 @@ async function testThrowsErrorOnMutationIDMismatch(
             new LogContext(),
             clientID,
             formatVersion,
+            undefined,
           );
     } catch (e) {
       expectedError = e;

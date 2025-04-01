@@ -14,7 +14,7 @@ import {
   TableSource,
   UnsupportedValueError,
 } from './table-source.ts';
-import type {LogConfig} from '../../otel/src/log-options.ts';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
 
 const columns = {
   id: {type: 'string'},
@@ -24,12 +24,6 @@ const columns = {
 } as const;
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 describe('fetching from a table source', () => {
   type Foo = {id: string; a: number; b: number; c: number};
@@ -183,7 +177,7 @@ describe('fetching from a table source', () => {
   ] as const)('$name', ({sourceArgs, fetchArgs, expectedRows}) => {
     const source = new TableSource(
       lc,
-      logConfig,
+      testLogConfig,
       'table-source.test.ts',
       db,
       sourceArgs[0],
@@ -199,7 +193,13 @@ describe('fetching from a table source', () => {
 });
 
 describe('fetched value types', () => {
-  type Foo = {id: string; a: number; b: number; c: boolean; d: JSONValue};
+  type Foo = {
+    id: string;
+    a: number | null;
+    b: number | null;
+    c: boolean | null;
+    d: JSONValue | null;
+  };
   const columns = {
     id: {type: 'string'},
     a: {type: 'number'},
@@ -215,6 +215,11 @@ describe('fetched value types', () => {
   };
 
   const cases: Case[] = [
+    {
+      name: 'nulls',
+      input: ['0', null, null, null, null],
+      output: {id: '0', a: null, b: null, c: null, d: null},
+    },
     {
       name: 'number, float, false boolean, json string',
       input: ['1', 1, 2.123, 0, '"json string"'],
@@ -274,7 +279,7 @@ describe('fetched value types', () => {
       stmt.run(c.input);
       const source = new TableSource(
         lc,
-        logConfig,
+        testLogConfig,
         'table-source.test.ts',
         db,
         'foo',
@@ -316,7 +321,7 @@ describe('no primary key', () => {
   stmt.run(['foo', 345, 789, 555]);
   const source = new TableSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table-source.test.ts',
     db,
     'foo',
@@ -339,7 +344,7 @@ describe('no primary key', () => {
       const createSource = () =>
         new TableSource(
           lc,
-          logConfig,
+          testLogConfig,
           'table-source.test.ts',
           db,
           'foo',
@@ -435,7 +440,7 @@ test('pushing values does the correct writes and outputs', () => {
   );
   const source = new TableSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table-source.test.ts',
     db1,
     'foo',
@@ -701,7 +706,7 @@ test('getByKey', () => {
 
   const source = new TableSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table-source.test.ts',
     db,
     'foo',

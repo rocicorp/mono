@@ -13,7 +13,7 @@ import {
   assertPatchOperations,
 } from '../patch-operation.ts';
 import {withWriteNoImplicitCommit} from '../with-transactions.ts';
-import {apply, type Diff} from './patch.ts';
+import {apply} from './patch.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
@@ -30,7 +30,6 @@ describe('patch', () => {
       patch: PatchOperationInternal[];
       expErr?: string | undefined;
       expMap?: Map<string, JSONValue> | undefined;
-      expDiffs?: Diff[] | undefined;
     };
 
     const cases: Case[] = [
@@ -42,23 +41,18 @@ describe('patch', () => {
           ['key', 'value'],
           ['foo', 'bar'],
         ]),
-        expDiffs: [{op: 'add', key: 'foo', newValue: 'bar'}],
       },
       {
         name: 'del',
         patch: [{op: 'del', key: 'key'}],
         expErr: undefined,
         expMap: new Map(),
-        expDiffs: [{op: 'del', key: 'key', oldValue: 'value'}],
       },
       {
         name: 'replace',
         patch: [{op: 'put', key: 'key', value: 'newvalue'}],
         expErr: undefined,
         expMap: new Map([['key', 'newvalue']]),
-        expDiffs: [
-          {op: 'change', key: 'key', oldValue: 'value', newValue: 'newvalue'},
-        ],
       },
       {
         name: 'put empty key',
@@ -68,7 +62,6 @@ describe('patch', () => {
           ['key', 'value'],
           ['', 'empty'],
         ]),
-        expDiffs: [{op: 'add', key: '', newValue: 'empty'}],
       },
       {
         name: 'put/replace empty key',
@@ -81,10 +74,6 @@ describe('patch', () => {
           ['key', 'value'],
           ['', 'changed'],
         ]),
-        expDiffs: [
-          {op: 'add', key: '', newValue: 'empty'},
-          {op: 'change', key: '', oldValue: 'empty', newValue: 'changed'},
-        ],
       },
       {
         name: 'put/remove empty key',
@@ -94,17 +83,12 @@ describe('patch', () => {
         ],
         expErr: undefined,
         expMap: new Map([['key', 'value']]),
-        expDiffs: [
-          {op: 'add', key: '', newValue: 'empty'},
-          {op: 'del', key: '', oldValue: 'empty'},
-        ],
       },
       {
         name: 'top-level clear',
         patch: [{op: 'clear'}],
         expErr: undefined,
         expMap: new Map(),
-        expDiffs: [{op: 'clear'}],
       },
       {
         name: 'compound ops',
@@ -119,11 +103,6 @@ describe('patch', () => {
           ['key', 'newvalue'],
           ['baz', 'baz'],
         ]),
-        expDiffs: [
-          {op: 'add', key: 'foo', newValue: 'bar'},
-          {op: 'change', key: 'key', oldValue: 'value', newValue: 'newvalue'},
-          {op: 'add', key: 'baz', newValue: 'baz'},
-        ],
       },
       {
         name: 'no escaping 1',
@@ -133,7 +112,6 @@ describe('patch', () => {
           ['key', 'value'],
           ['~1', 'bar'],
         ]),
-        expDiffs: [{op: 'add', key: '~1', newValue: 'bar'}],
       },
       {
         name: 'no escaping 2',
@@ -143,7 +121,6 @@ describe('patch', () => {
           ['key', 'value'],
           ['~0', 'bar'],
         ]),
-        expDiffs: [{op: 'add', key: '~0', newValue: 'bar'}],
       },
       {
         name: 'no escaping 3',
@@ -153,7 +130,6 @@ describe('patch', () => {
           ['key', 'value'],
           ['/', 'bar'],
         ]),
-        expDiffs: [{op: 'add', key: '/', newValue: 'bar'}],
       },
       {
         name: 'update no merge no constrain no existing',
@@ -163,7 +139,6 @@ describe('patch', () => {
           ['key', 'value'],
           ['foo', {}],
         ]),
-        expDiffs: [{op: 'add', key: 'foo', newValue: {}}],
       },
       {
         name: 'update no merge with constrain no existing',
@@ -173,7 +148,6 @@ describe('patch', () => {
           ['key', 'value'],
           ['foo', {}],
         ]),
-        expDiffs: [{op: 'add', key: 'foo', newValue: {}}],
       },
       {
         name: 'update with merge no constrain no existing',
@@ -185,9 +159,6 @@ describe('patch', () => {
           ['key', 'value'],
           ['foo', {bar: 'baz', fuzzy: 'wuzzy'}],
         ]),
-        expDiffs: [
-          {op: 'add', key: 'foo', newValue: {bar: 'baz', fuzzy: 'wuzzy'}},
-        ],
       },
       {
         name: 'update with merge with constrain no existing',
@@ -204,7 +175,6 @@ describe('patch', () => {
           ['key', 'value'],
           ['foo', {bar: 'baz'}],
         ]),
-        expDiffs: [{op: 'add', key: 'foo', newValue: {bar: 'baz'}}],
       },
       ////
       {
@@ -219,14 +189,6 @@ describe('patch', () => {
           ['key', 'value'],
           ['foo', {bing: 'bong', bar: 'baz'}],
         ]),
-        expDiffs: [
-          {
-            op: 'change',
-            key: 'foo',
-            oldValue: {bing: 'bong', bar: 'baz'},
-            newValue: {bing: 'bong', bar: 'baz'},
-          },
-        ],
       },
       {
         name: 'update no merge with constrain with existing',
@@ -240,14 +202,6 @@ describe('patch', () => {
           ['key', 'value'],
           ['foo', {bar: 'baz'}],
         ]),
-        expDiffs: [
-          {
-            op: 'change',
-            key: 'foo',
-            oldValue: {bing: 'bong', bar: 'baz'},
-            newValue: {bar: 'baz'},
-          },
-        ],
       },
       {
         name: 'update with merge no constrain with existing',
@@ -263,14 +217,6 @@ describe('patch', () => {
           ['key', 'value'],
           ['foo', {bing: 'bong', bar: 'baz2', fuzzy: 'wuzzy'}],
         ]),
-        expDiffs: [
-          {
-            op: 'change',
-            key: 'foo',
-            oldValue: {bing: 'bong', bar: 'baz'},
-            newValue: {bing: 'bong', bar: 'baz2', fuzzy: 'wuzzy'},
-          },
-        ],
       },
       {
         name: 'update with merge with constrain with existing',
@@ -291,14 +237,6 @@ describe('patch', () => {
           ['key', 'value'],
           ['foo', {bing: 'bong', bar: 'baz2'}],
         ]),
-        expDiffs: [
-          {
-            op: 'change',
-            key: 'foo',
-            oldValue: {bing: 'bong', bar: 'baz'},
-            newValue: {bing: 'bong', bar: 'baz2'},
-          },
-        ],
       },
       {
         name: 'update existing is not an object',
@@ -316,7 +254,6 @@ describe('patch', () => {
         ],
         expErr: 'Invalid type: string `bar`, expected object',
         expMap: undefined,
-        expDiffs: undefined,
       },
       {
         name: 'invalid op',
@@ -324,7 +261,6 @@ describe('patch', () => {
         expErr:
           'unknown patch op `BOOM`, expected one of `put`, `del`, `clear`',
         expMap: undefined,
-        expDiffs: undefined,
       },
       {
         name: 'invalid key',
@@ -337,7 +273,6 @@ describe('patch', () => {
         ],
         expErr: 'Invalid type: number `42`, expected string',
         expMap: undefined,
-        expDiffs: undefined,
       },
       {
         name: 'missing value',
@@ -390,10 +325,7 @@ describe('patch', () => {
           let err;
           try {
             assertPatchOperations(ops);
-            const diffs = await apply(lc, dbWrite, ops);
-            if (c.expDiffs) {
-              expect(diffs).toEqual(c.expDiffs);
-            }
+            await apply(lc, dbWrite, ops);
           } catch (e) {
             err = e;
           }

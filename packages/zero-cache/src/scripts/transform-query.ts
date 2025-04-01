@@ -1,17 +1,20 @@
 /* eslint-disable no-console */
-import 'dotenv/config';
+import '@dotenvx/dotenvx/config';
 
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {must} from '../../../shared/src/must.ts';
 import {parseOptions} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {transformAndHashQuery} from '../auth/read-authorizer.ts';
-import {ZERO_ENV_VAR_PREFIX, zeroOptions} from '../config/zero-config.ts';
+import {ZERO_ENV_VAR_PREFIX} from '../config/zero-config.ts';
 import {pgClient} from '../types/pg.ts';
-import {deployPermissionsOptions, loadPermissions} from './permissions.ts';
+import {
+  deployPermissionsOptions,
+  loadSchemaAndPermissions,
+} from './permissions.ts';
 
 const options = {
-  cvr: zeroOptions.cvr,
+  cvr: {db: v.string()},
   schema: deployPermissionsOptions.schema,
   debug: {
     hash: {
@@ -28,7 +31,7 @@ const config = parseOptions(
 );
 
 const lc = new LogContext('debug', {}, consoleLogSink);
-const permissions = await loadPermissions(lc, config.schema.path);
+const {permissions} = await loadSchemaAndPermissions(lc, config.schema.path);
 
 const cvrDB = pgClient(
   new LogContext('debug', undefined, consoleLogSink),

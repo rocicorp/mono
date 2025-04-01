@@ -1,28 +1,26 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import {beforeEach, expect, expectTypeOf, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
 import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
 import {schema} from '../../zql/src/query/test/test-schemas.ts';
 import {Database} from './db.ts';
-import type {LogConfig} from '../../otel/src/log-options.ts';
-import {newQueryDelegate} from './test/source-factory.ts';
+import {
+  mapResultToClientNames,
+  newQueryDelegate,
+} from './test/source-factory.ts';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
 
 let queryDelegate: QueryDelegate;
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 beforeEach(() => {
   const db = new Database(createSilentLogContext(), ':memory:');
-  queryDelegate = newQueryDelegate(lc, logConfig, db, schema);
+  queryDelegate = newQueryDelegate(lc, testLogConfig, db, schema);
 
-  const userSource = must(queryDelegate.getSource('user'));
-  const issueSource = must(queryDelegate.getSource('issue'));
+  const userSource = must(queryDelegate.getSource('users'));
+  const issueSource = must(queryDelegate.getSource('issues'));
   const labelSource = must(queryDelegate.getSource('label'));
 
   userSource.push({
@@ -55,7 +53,7 @@ beforeEach(() => {
       title: 'issue 1',
       description: 'description 1',
       closed: false,
-      ownerId: '0001',
+      owner_id: '0001',
     },
   });
   issueSource.push({
@@ -65,7 +63,7 @@ beforeEach(() => {
       title: 'issue 2',
       description: 'description 2',
       closed: false,
-      ownerId: '0002',
+      owner_id: '0002',
     },
   });
   issueSource.push({
@@ -75,7 +73,7 @@ beforeEach(() => {
       title: 'issue 3',
       description: 'description 3',
       closed: false,
-      ownerId: null,
+      owner_id: null,
     },
   });
 
@@ -94,27 +92,31 @@ test('row type', () => {
     .related('labels');
   type RT = ReturnType<typeof query.run>;
   expectTypeOf<RT>().toEqualTypeOf<
-    {
-      readonly id: string;
-      readonly title: string;
-      readonly description: string;
-      readonly closed: boolean;
-      readonly ownerId: string | null;
-      readonly labels: readonly {
+    Promise<
+      {
         readonly id: string;
-        readonly name: string;
-      }[];
-    }[]
+        readonly title: string;
+        readonly description: string;
+        readonly closed: boolean;
+        readonly ownerId: string | null;
+        readonly createdAt: number;
+        readonly labels: readonly {
+          readonly id: string;
+          readonly name: string;
+        }[];
+      }[]
+    >
   >();
 });
 
-test('basic query', () => {
+test('basic query', async () => {
   const query = newQuery(queryDelegate, schema, 'issue');
-  const data = query.run();
+  const data = mapResultToClientNames(await query.run(), schema, 'issue');
   expect(data).toMatchInlineSnapshot(`
     [
       {
         "closed": false,
+        "createdAt": null,
         "description": "description 1",
         "id": "0001",
         "ownerId": "0001",
@@ -122,6 +124,7 @@ test('basic query', () => {
       },
       {
         "closed": false,
+        "createdAt": null,
         "description": "description 2",
         "id": "0002",
         "ownerId": "0002",
@@ -129,6 +132,7 @@ test('basic query', () => {
       },
       {
         "closed": false,
+        "createdAt": null,
         "description": "description 3",
         "id": "0003",
         "ownerId": null,
@@ -138,15 +142,16 @@ test('basic query', () => {
   `);
 });
 
-test('null compare', () => {
-  let rows = newQuery(queryDelegate, schema, 'issue')
+test('null compare', async () => {
+  let rows = await newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS', null)
     .run();
 
-  expect(rows).toMatchInlineSnapshot(`
+  expect(mapResultToClientNames(rows, schema, 'issue')).toMatchInlineSnapshot(`
     [
       {
         "closed": false,
+        "createdAt": null,
         "description": "description 3",
         "id": "0003",
         "ownerId": null,
@@ -155,7 +160,7 @@ test('null compare', () => {
     ]
   `);
 
-  rows = newQuery(queryDelegate, schema, 'issue')
+  rows = await newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS NOT', null)
     .run();
 
@@ -163,31 +168,36 @@ test('null compare', () => {
     [
       {
         "closed": false,
+        "createdAt": null,
         "description": "description 1",
         "id": "0001",
-        "ownerId": "0001",
+        "owner_id": "0001",
         "title": "issue 1",
+        Symbol(rc): 1,
       },
       {
         "closed": false,
+        "createdAt": null,
         "description": "description 2",
         "id": "0002",
-        "ownerId": "0002",
+        "owner_id": "0002",
         "title": "issue 2",
+        Symbol(rc): 1,
       },
     ]
   `);
 });
 
-test('or', () => {
+test('or', async () => {
   const query = newQuery(queryDelegate, schema, 'issue').where(({or, cmp}) =>
     or(cmp('ownerId', '=', '0001'), cmp('ownerId', '=', '0002')),
   );
-  const data = query.run();
+  const data = mapResultToClientNames(await query.run(), schema, 'issue');
   expect(data).toMatchInlineSnapshot(`
     [
       {
         "closed": false,
+        "createdAt": null,
         "description": "description 1",
         "id": "0001",
         "ownerId": "0001",
@@ -195,6 +205,7 @@ test('or', () => {
       },
       {
         "closed": false,
+        "createdAt": null,
         "description": "description 2",
         "id": "0002",
         "ownerId": "0002",
@@ -222,23 +233,25 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
     },
   });
 
-  expect(view.data).toMatchInlineSnapshot(`
-    [
-      {
-        "closed": false,
-        "description": "description 1",
-        "id": "0001",
-        "labels": [
-          {
-            "id": "0001",
-            "name": "bug",
-          },
-        ],
-        "ownerId": "0001",
-        "title": "issue 1",
-      },
-    ]
-  `);
+  expect(mapResultToClientNames(view.data, schema, 'issue'))
+    .toMatchInlineSnapshot(`
+      [
+        {
+          "closed": false,
+          "createdAt": null,
+          "description": "description 1",
+          "id": "0001",
+          "labels": [
+            {
+              "id": "0001",
+              "name": "bug",
+            },
+          ],
+          "ownerId": "0001",
+          "title": "issue 1",
+        },
+      ]
+    `);
 
   labelSource.push({
     type: 'remove',
@@ -251,16 +264,16 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
   expect(view.data).toMatchInlineSnapshot(`[]`);
 });
 
-test('schema applied `one`', () => {
+test('schema applied `one`', async () => {
   // test only one item is returned when `one` is applied to a relationship in the schema
-  const commentSource = must(queryDelegate.getSource('comment'));
+  const commentSource = must(queryDelegate.getSource('comments'));
   const revisionSource = must(queryDelegate.getSource('revision'));
   commentSource.push({
     type: 'add',
     row: {
       id: '0001',
       authorId: '0001',
-      issueId: '0001',
+      issue_id: '0001',
       text: 'comment 1',
       createdAt: 1,
     },
@@ -270,7 +283,7 @@ test('schema applied `one`', () => {
     row: {
       id: '0002',
       authorId: '0002',
-      issueId: '0001',
+      issue_id: '0001',
       text: 'comment 2',
       createdAt: 2,
     },
@@ -288,7 +301,7 @@ test('schema applied `one`', () => {
     .related('owner')
     .related('comments', q => q.related('author').related('revisions'))
     .where('id', '=', '0001');
-  const data = query.run();
+  const data = mapResultToClientNames(await query.run(), schema, 'issue');
   expect(data).toMatchInlineSnapshot(`
     [
       {
@@ -328,6 +341,7 @@ test('schema applied `one`', () => {
             "text": "comment 2",
           },
         ],
+        "createdAt": null,
         "description": "description 1",
         "id": "0001",
         "owner": {

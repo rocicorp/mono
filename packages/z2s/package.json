@@ -13,16 +13,21 @@
     "test": "vitest run",
     "test:watch": "vitest watch"
   },
+  "dependencies": {
+    "@databases/escape-identifier": "^1.0.3",
+    "@databases/sql": "^3.3.0"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^9.6.0",
+    "@rocicorp/eslint-config": "^0.7.0",
+    "@rocicorp/prettier-config": "^0.3.0",
+    "@types/pg": "^8.11.11",
+    "@vitest/runner": "3.0.8",
+    "pg": "^8.14.1",
+    "vitest": "3.0.8"
+  },
   "eslintConfig": {
     "extends": "../../eslint-config.json"
   },
-  "prettier": "@rocicorp/prettier-config",
-  "dependencies": {
-    "@databases/escape-identifier": "^1.0.3",
-    "@databases/sql": "^3.3.0",
-    "vitest": "^2.1.5"
-  },
-  "devDependencies": {
-    "@faker-js/faker": "^9.4.0"
-  }
+  "prettier": "@rocicorp/prettier-config"
 }

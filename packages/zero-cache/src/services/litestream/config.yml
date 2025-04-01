@@ -1,9 +1,11 @@
 dbs:
   - path: ${ZERO_REPLICA_FILE}
-    monitor-interval: 1m
+    min-checkpoint-page-count: ${ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT}
+    max-checkpoint-page-count: ${ZERO_LITESTREAM_MAX_CHECKPOINT_PAGE_COUNT}
     replicas:
       - url: ${ZERO_LITESTREAM_BACKUP_URL}
-        retention: ${ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS}h
+        retention: ${ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_MINUTES}m
+        retention-check-interval: 1h
         sync-interval: ${ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES}m
 
 logging:

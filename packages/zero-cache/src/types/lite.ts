@@ -20,38 +20,52 @@ function columnType(col: string, table: LiteTableSpec) {
   return spec.dataType;
 }
 
+export const JSON_STRINGIFIED = 's';
+export const JSON_PARSED = 'p';
+
+export type JSONFormat = typeof JSON_STRINGIFIED | typeof JSON_PARSED;
+
 /**
  * Creates a LiteRow from the supplied RowValue. A copy of the `row`
  * is made only if a value conversion is performed.
  */
-export function liteRow(row: RowValue, table: LiteTableSpec): LiteRow {
+export function liteRow(
+  row: RowValue,
+  table: LiteTableSpec,
+  jsonFormat: JSONFormat,
+): {row: LiteRow; numCols: number} {
   let copyNeeded = false;
+  let numCols = 0;
+
   for (const key in row) {
+    numCols++;
     const val = row[key];
-    const liteVal = liteValue(val, columnType(key, table));
+    const liteVal = liteValue(val, columnType(key, table), jsonFormat);
     if (val !== liteVal) {
       copyNeeded = true;
       break;
     }
   }
   if (!copyNeeded) {
-    return row as unknown as LiteRow;
+    return {row: row as unknown as LiteRow, numCols};
   }
   // Slow path for when a conversion is needed.
-  return Object.fromEntries(
-    Object.entries(row).map(([key, val]) => [
-      key,
-      liteValue(val, columnType(key, table)),
-    ]),
-  );
+  numCols = 0;
+  const converted: Record<string, LiteValueType> = {};
+  for (const key in row) {
+    numCols++;
+    converted[key] = liteValue(row[key], columnType(key, table), jsonFormat);
+  }
+  return {row: converted, numCols};
 }
 
 export function liteValues(
   row: RowValue,
   table: LiteTableSpec,
+  jsonFormat: JSONFormat,
 ): LiteValueType[] {
   return Object.entries(row).map(([col, val]) =>
-    liteValue(val, columnType(col, table)),
+    liteValue(val, columnType(col, table), jsonFormat),
   );
 }
 
@@ -68,13 +82,19 @@ export function liteValues(
 export function liteValue(
   val: PostgresValueType,
   pgType: string,
+  jsonFormat: JSONFormat,
 ): LiteValueType {
   if (val instanceof Uint8Array || val === null) {
     return val;
   }
   const valueType = dataTypeToZqlValueType(pgType);
   if (valueType === 'json') {
-    return stringify(val); // JSON values are stored as stringified strings.
+    if (jsonFormat === JSON_STRINGIFIED && typeof val === 'string') {
+      // JSON and JSONB values are already strings if the JSON was not parsed.
+      return val;
+    }
+    // Non-JSON/JSONB values will always appear as objects / arrays.
+    return stringify(val);
   }
   const obj = toLiteValue(val);
   return obj && typeof obj === 'object' ? stringify(obj) : obj;
@@ -201,14 +221,15 @@ export function dataTypeToZqlValueType(
     case 'float8':
       return 'number';
 
+    // Timestamps are represented as epoch milliseconds (at microsecond resolution using floating point),
+    // and DATEs are represented as epoch milliseconds of UTC midnight of the date.
     case 'date':
+      return 'date';
     case 'timestamp':
     case 'timestamptz':
     case 'timestamp with time zone':
     case 'timestamp without time zone':
-      // Timestamps are represented as epoch milliseconds (at microsecond resolution using floating point),
-      // and DATEs are represented as epoch milliseconds of UTC midnight of the date.
-      return 'number';
+      return 'timestamp';
 
     case 'bpchar':
     case 'character':

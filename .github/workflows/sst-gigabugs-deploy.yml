@@ -1,0 +1,107 @@
+name: Build and Deploy Gigabugs Zero-Cache AWS SST
+
+on:
+  push:
+    branches: [gigabugs]
+env:
+  # Setting an environment variable with the value of a configuration variable
+  ECR_IMAGE_ZERO_CACHE: zero-zgigabugs
+  AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_DEFAULT_REGION }}
+
+      - name: Set up QEMU for amd64
+        run: |
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+        if: runner.os == 'Linux'
+
+      - name: Set up Docker for amd64
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: linux/amd64
+
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+      - name: Install dependencies
+        run: |
+          npm run build-ci
+      - name: Create package tarball
+        run: |
+          cd packages/zero
+          npm pack
+          cp rocicorp-zero-*.tgz ./pkgs/
+      - name: Get Git SHA
+        id: git-sha
+        run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+      - name: Create package tarball
+        run: |
+          cd packages/zero
+          npm pack
+          ZERO_TARBALL="$(ls rocicorp-zero-*.tgz | xargs -- basename -s .tgz)+${{ env.SHA }}.tgz"
+          mv rocicorp-zero-*.tgz ./pkgs/$ZERO_TARBALL
+          echo "ZERO_VERSION=$ZERO_TARBALL" >> $GITHUB_ENV
+      - name: Build and push Docker image
+        run: |
+          cd packages/zero
+          docker buildx create --use
+          docker buildx inspect --bootstrap
+          docker buildx build --platform linux/amd64 --build-arg ZERO_VERSION=${{ env.ZERO_VERSION }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:${{ env.SHA }} -f ./Dockerfile --push .
+      - name: Deploy SST app
+        env:
+          ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
+          ZERO_PUSH_URL: ${{ secrets.GIGABUGS_ZERO_PUSH_URL }}
+          ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}
+          ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}
+          ZERO_AUTH_JWK: ${{ secrets.GIGABUGS_ZERO_AUTH_JWK }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
+          DOMAIN_NAME: 'zgigabugs-sync.rocicorp.dev'
+          DOMAIN_CERT: 'arn:aws:acm:us-east-1:712907626835:certificate/83339ba0-dc7e-4fb7-b834-65e8307eeb4f'
+        run: |
+          cd prod/sst
+          npm install
+          npx sst deploy --stage gigabugs-ebs
+      - name: Deploy SST app non ebs
+        env:
+          ZERO_APP_ID: '1'
+          ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
+          ZERO_PUSH_URL: ${{ secrets.GIGABUGS_ZERO_PUSH_URL }}
+          ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}2
+          ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}2
+          ZERO_AUTH_JWK: ${{ secrets.GIGABUGS_ZERO_AUTH_JWK }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
+          DOMAIN_NAME: 'zgigabugs2-sync.rocicorp.dev'
+          DOMAIN_CERT: 'arn:aws:acm:us-east-1:712907626835:certificate/b0dd8b0b-2007-42e7-b61d-6573b571b19c'
+        run: |
+          cd prod/sst
+          npm install
+          npx sst deploy --stage gigabugs

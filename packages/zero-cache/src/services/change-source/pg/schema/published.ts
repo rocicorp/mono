@@ -4,7 +4,7 @@ import {equals} from '../../../../../../shared/src/set-utils.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {publishedIndexSpec, publishedTableSpec} from '../../../../db/specs.ts';
 
-export function publishedTableQuery(publications: string[]) {
+export function publishedTableQuery(publications: readonly string[]) {
   // Notes:
   // * There's a bug in PG15 in which generated columns are incorrectly
   //   included in pg_publication_tables.attnames, (even though the generated
@@ -83,7 +83,7 @@ SELECT COALESCE(json_agg("table"), '[]'::json) as "tables" FROM tables
   `;
 }
 
-export function indexDefinitionsQuery(publications: string[]) {
+export function indexDefinitionsQuery(publications: readonly string[]) {
   // Note: pg_attribute contains column names for tables and for indexes.
   // However, the latter does not get updated when a column in a table is
   // renamed.
@@ -94,8 +94,13 @@ export function indexDefinitionsQuery(publications: string[]) {
   // table rather than the index itself, using the pg_index.indkey array
   // to determine the set and order of columns to include.
   //
-  // Note: The first bit of indoption is 1 for DESC and 0 for ASC:
-  // https://github.com/postgres/postgres/blob/4e1fad37872e49a711adad5d9870516e5c71a375/src/include/catalog/pg_index.h#L89
+  // Notes:
+  // * The first bit of indoption is 1 for DESC and 0 for ASC:
+  //   https://github.com/postgres/postgres/blob/4e1fad37872e49a711adad5d9870516e5c71a375/src/include/catalog/pg_index.h#L89
+  // * pg_index.indkey is an int2vector which is 0-based instead of 1-based.
+  // * The additional check fo attgenerated is required for the aforementioned
+  //   (in publishedTableQuery) bug in PG15 in which generated columns are
+  //   incorrectly included in pg_publication_tables.attnames
   return `
   WITH indexed_columns AS (SELECT
       pg_indexes.schemaname as "schema",
@@ -116,6 +121,11 @@ export function indexDefinitionsQuery(publications: string[]) {
       pb.tablename = pg_indexes.tablename
     JOIN pg_index ON pg_index.indexrelid = pc.oid
     JOIN LATERAL (
+      SELECT array_agg(attname) as attnames, array_agg(attgenerated != '') as generated FROM pg_attribute
+        WHERE attrelid = pg_index.indrelid
+          AND attnum = ANY( (pg_index.indkey::smallint[] )[:pg_index.indnkeyatts - 1] )
+    ) as indexed ON true
+    JOIN LATERAL (
       SELECT pg_attribute.attname as name, col.index_pos as pos
         FROM UNNEST(pg_index.indkey) WITH ORDINALITY as col(table_pos, index_pos)
         JOIN pg_attribute ON attrelid = pg_index.indrelid AND attnum = col.table_pos
@@ -125,6 +135,8 @@ export function indexDefinitionsQuery(publications: string[]) {
       AND pg_index.indexprs IS NULL
       AND pg_index.indpred IS NULL
       AND (pg_constraint.contype IS NULL OR pg_constraint.contype IN ('p', 'u'))
+      AND indexed.attnames <@ pb.attnames
+      AND false = ALL(indexed.generated)
     ORDER BY
       pg_indexes.schemaname,
       pg_indexes.tablename,
@@ -172,9 +184,7 @@ const publicationInfoSchema = publishedSchema.extend({
 export type PublicationInfo = v.Infer<typeof publicationInfoSchema>;
 
 /**
- * Retrieves published tables and columns. By default, includes all
- * publications that start with "zero_" or "_zero_", but this can be
- * overridden by specifying a specific set of `publications`.
+ * Retrieves published tables and columns.
  */
 export async function getPublicationInfo(
   sql: postgres.Sql,

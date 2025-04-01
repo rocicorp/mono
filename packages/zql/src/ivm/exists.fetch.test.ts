@@ -12,7 +12,7 @@ import {MemoryStorage} from './memory-storage.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
 import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 
 const base = {
   columns: [
@@ -28,12 +28,6 @@ const base = {
 } as const;
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 const oneParentWithChildTest: FetchTest = {
   ...base,
@@ -224,7 +218,6 @@ suite('EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "row/["i1"]": 1,
         "row/["i1"]/["c1"]": 1,
       }
     `);
@@ -603,9 +596,7 @@ suite('EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "row/["i1"]": 1,
         "row/["i1"]/["c1"]": 1,
-        "row/["i3"]": 1,
         "row/["i3"]/["c2"]": 1,
       }
     `);
@@ -885,7 +876,6 @@ suite('NOT EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "row/["i1"]": 1,
         "row/["i1"]/["c1"]": 1,
       }
     `);
@@ -1209,9 +1199,7 @@ suite('NOT EXISTS', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       {
-        "row/["i1"]": 1,
         "row/["i1"]/["c1"]": 1,
-        "row/["i3"]": 1,
         "row/["i3"]/["c2"]": 1,
       }
     `);
@@ -1441,7 +1429,7 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
     const ordering = t.sorts?.[i] ?? [['id', 'asc']];
     const source = createSource(
       lc,
-      logConfig,
+      testLogConfig,
       `t${i}`,
       t.columns[i],
       t.primaryKeys[i],

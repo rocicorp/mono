@@ -25,7 +25,7 @@ import {
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
-import {orTimeout} from '../types/timeout.ts';
+import {getShardID} from '../types/shards.ts';
 import {
   createNotifierFrom,
   handleSubscriptionsFrom,
@@ -43,6 +43,7 @@ export default async function runWorker(
   const config = getZeroConfig(env);
   const lc = createLogContext(config, {worker: 'dispatcher'});
   const taskID = must(config.taskID, `main must set --task-id`);
+  const shard = getShardID(config);
 
   const processes = new ProcessManager(lc, parent ?? process);
 
@@ -94,7 +95,21 @@ export default async function runWorker(
     // For the replication-manager (i.e. authoritative replica), only attempt
     // a restore once, allowing the backup to be absent.
     // For view-syncers, attempt a restore for up to 10 times over 30 seconds.
-    await restoreReplica(lc, config, runChangeStreamer ? 1 : 10, 3000);
+    try {
+      await restoreReplica(lc, config, runChangeStreamer ? 1 : 10, 3000);
+    } catch (e) {
+      if (runChangeStreamer) {
+        // If the restore failed, e.g. due to a corrupt backup, the
+        // replication-manager recovers by re-syncing.
+        lc.error?.('error restoring backup. resyncing the replica.');
+      } else {
+        // View-syncers, on the other hand, have no option other than to retry
+        // until a valid backup has been published. This is achieved by
+        // shutting down and letting the container runner retry with its
+        // configured policy.
+        throw e;
+      }
+    }
   }
 
   const {promise: changeStreamerReady, resolve} = resolver();
@@ -109,8 +124,9 @@ export default async function runWorker(
     // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
     // but it is done here in the main thread because it is wasteful to have all of
     // the Syncers attempt the migration in parallel.
-    const cvrDB = pgClient(lc, config.cvr.db);
-    await initViewSyncerSchema(lc, cvrDB, config.shard.id);
+    const {cvr, upstream} = config;
+    const cvrDB = pgClient(lc, cvr.db ?? upstream.db);
+    await initViewSyncerSchema(lc, cvrDB, shard);
     void cvrDB.end();
   }
 
@@ -120,19 +136,23 @@ export default async function runWorker(
 
   if (runChangeStreamer && litestream) {
     // Start a backup replicator and corresponding litestream backup process.
+    const {promise: backupReady, resolve} = resolver();
     const mode: ReplicaFileMode = 'backup';
     loadWorker('./server/replicator.ts', 'supporting', mode, mode).once(
       // Wait for the Replicator's first message (i.e. "ready") before starting
       // litestream backup in order to avoid contending on the lock when the
       // replicator first prepares the db file.
       'message',
-      () =>
+      () => {
         processes.addSubprocess(
           startReplicaBackupProcess(config),
           'supporting',
           'litestream',
-        ),
+        );
+        resolve();
+      },
     );
+    await backupReady;
   }
 
   const syncers: Worker[] = [];
@@ -159,11 +179,13 @@ export default async function runWorker(
   }
 
   lc.info?.('waiting for workers to be ready ...');
-  if ((await orTimeout(processes.allWorkersReady(), 60_000)) === 'timed-out') {
-    lc.info?.(`timed out waiting for readiness (${Date.now() - startMs} ms)`);
-  } else {
-    lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
-  }
+  const logWaiting = setInterval(
+    () => lc.info?.(`still waiting for ${processes.initializing().join(', ')}`),
+    10_000,
+  );
+  await processes.allWorkersReady();
+  clearInterval(logWaiting);
+  lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
 
   const mainServices: Service[] = [];
   const {port} = config;

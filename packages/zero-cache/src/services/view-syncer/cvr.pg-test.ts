@@ -1,9 +1,10 @@
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {testDBs} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import {cvrSchema} from '../../types/shards.ts';
 import type {PatchToVersion} from './client-handler.ts';
 import {
   ConcurrentModificationException,
@@ -30,16 +31,18 @@ import {
   type RowsVersionRow,
   setupCVRTables,
 } from './schema/cvr.ts';
-import type {CVRVersion, RowID} from './schema/types.ts';
+import type {ClientQueryRecord, CVRVersion, RowID} from './schema/types.ts';
 
-const SHARD_ID = 'jkl';
+const APP_ID = 'dapp';
+const SHARD_NUM = 3;
+const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 
 const LAST_CONNECT = Date.UTC(2024, 2, 1);
 
 describe('view-syncer/cvr', () => {
   type DBState = {
     instances: (Partial<InstancesRow> &
-      Pick<InstancesRow, 'clientGroupID' | 'version'>)[];
+      Pick<InstancesRow, 'clientGroupID' | 'version' | 'clientSchema'>)[];
     clients: ClientsRow[];
     queries: QueriesRow[];
     desires: DesiresRow[];
@@ -64,7 +67,9 @@ describe('view-syncer/cvr', () => {
       }
       for (const [table, rows] of Object.entries(state)) {
         for (const row of rows) {
-          await tx`INSERT INTO ${tx('cvr_jkl.' + table)} ${tx(row)}`;
+          await tx`INSERT INTO ${tx(`${cvrSchema(SHARD)}.` + table)} ${tx(
+            row,
+          )}`;
         }
       }
     });
@@ -72,7 +77,9 @@ describe('view-syncer/cvr', () => {
 
   async function expectState(db: PostgresDB, state: Partial<DBState>) {
     for (const table of Object.keys(state)) {
-      const res = [...(await db`SELECT * FROM ${db('cvr_jkl.' + table)}`)];
+      const res = [
+        ...(await db`SELECT * FROM ${db(`${cvrSchema(SHARD)}.` + table)}`),
+      ];
       const tableState = [...(state[table as keyof DBState] || [])];
       switch (table) {
         case 'instances': {
@@ -91,6 +98,11 @@ describe('view-syncer/cvr', () => {
           break;
         }
         case 'desires': {
+          res.forEach(row => {
+            // expiresAt is deprecated. It is still in the db but we do not
+            // want it in the js objects.
+            delete row.expiresAt;
+          });
           (res as DesiresRow[]).sort(compareDesiresRows);
           (tableState as DesiresRow[]).sort(compareDesiresRows);
           break;
@@ -110,12 +122,18 @@ describe('view-syncer/cvr', () => {
 
   async function getAllState(db: PostgresDB): Promise<DBState> {
     const [instances, clients, queries, desires, rows] = await Promise.all([
-      db`SELECT * FROM ${db('cvr_jkl.instances')}`,
-      db`SELECT * FROM ${db('cvr_jkl.clients')}`,
-      db`SELECT * FROM ${db('cvr_jkl.queries')}`,
-      db`SELECT * FROM ${db('cvr_jkl.desires')}`,
-      db`SELECT * FROM ${db('cvr_jkl.rows')}`,
+      db`SELECT * FROM ${db('dapp_3/cvr.instances')}`,
+      db`SELECT * FROM ${db('dapp_3/cvr.clients')}`,
+      db`SELECT * FROM ${db('dapp_3/cvr.queries')}`,
+      db`SELECT * FROM ${db('dapp_3/cvr.desires')}`,
+      db`SELECT * FROM ${db('dapp_3/cvr.rows')}`,
     ]);
+
+    desires.forEach(row => {
+      // expiresAt is deprecated. It is still in the db but we do not
+      // want it in the js objects.
+      delete row.expiresAt;
+    });
     return {
       instances,
       clients,
@@ -134,7 +152,7 @@ describe('view-syncer/cvr', () => {
 
   beforeEach(async () => {
     db = await testDBs.create('cvr_test_db');
-    await db.begin(tx => setupCVRTables(lc, tx, SHARD_ID));
+    await db.begin(tx => setupCVRTables(lc, tx, SHARD));
   });
 
   afterEach(async () => {
@@ -165,7 +183,7 @@ describe('view-syncer/cvr', () => {
     const pgStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -179,11 +197,11 @@ describe('view-syncer/cvr', () => {
       replicaVersion: null,
       clients: {},
       queries: {},
+      clientSchema: null,
     } satisfies CVRSnapshot);
     const flushed = (
       await new CVRUpdater(pgStore, cvr, cvr.replicaVersion).flush(
         lc,
-        true,
         LAST_CONNECT,
         Date.UTC(2024, 3, 20),
       )
@@ -198,7 +216,7 @@ describe('view-syncer/cvr', () => {
     const pgStore2 = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -215,12 +233,144 @@ describe('view-syncer/cvr', () => {
           replicaVersion: null,
           owner: 'my-task',
           grantedAt: 1709251200000,
+          clientSchema: null,
         },
       ],
       clients: [],
       queries: [],
       desires: [],
     });
+  });
+
+  test('set client schema', async () => {
+    const pgStore = new CVRStore(
+      lc,
+      db,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+
+    const cvr = await pgStore.load(lc, LAST_CONNECT);
+    expect(cvr).toEqual({
+      id: 'abc123',
+      version: {stateVersion: '00'},
+      lastActive: 0,
+      replicaVersion: null,
+      clients: {},
+      queries: {},
+      clientSchema: null,
+    } satisfies CVRSnapshot);
+
+    const updater = new CVRConfigDrivenUpdater(pgStore, cvr, SHARD);
+    updater.setClientSchema(lc, {
+      tables: {
+        foo: {
+          columns: {
+            bar: {type: 'string'},
+            baz: {type: 'number'},
+          },
+        },
+      },
+    });
+
+    const {cvr: updated} = await updater.flush(
+      lc,
+      LAST_CONNECT,
+      Date.UTC(2024, 3, 20),
+    );
+    expect(updated).toMatchInlineSnapshot(`
+      {
+        "clientSchema": {
+          "tables": {
+            "foo": {
+              "columns": {
+                "bar": {
+                  "type": "string",
+                },
+                "baz": {
+                  "type": "number",
+                },
+              },
+            },
+          },
+        },
+        "clients": {},
+        "id": "abc123",
+        "lastActive": 1713571200000,
+        "queries": {},
+        "replicaVersion": null,
+        "version": {
+          "stateVersion": "00",
+        },
+      }
+    `);
+
+    // Verify round tripping.
+    const pgStore2 = new CVRStore(
+      lc,
+      db,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const reloaded = await pgStore2.load(lc, LAST_CONNECT);
+    expect(reloaded).toEqual(updated);
+
+    await expectState(db, {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '00',
+          lastActive: 1713571200000,
+          replicaVersion: null,
+          owner: 'my-task',
+          grantedAt: 1709251200000,
+          clientSchema: {
+            tables: {
+              foo: {columns: {bar: {type: 'string'}, baz: {type: 'number'}}},
+            },
+          },
+        },
+      ],
+      clients: [],
+      queries: [],
+      desires: [],
+    });
+
+    const updater2 = new CVRConfigDrivenUpdater(pgStore, updated, SHARD);
+
+    // Setting the same client schema should be fine.
+    updater2.setClientSchema(lc, {
+      tables: {
+        foo: {
+          columns: {
+            // baz is first this time.
+            baz: {type: 'number'},
+            bar: {type: 'string'},
+          },
+        },
+      },
+    });
+
+    // Setting a different client schema should result in an error.
+    expect(() =>
+      updater2.setClientSchema(lc, {
+        tables: {
+          foo: {
+            columns: {
+              // data types are flipped
+              baz: {type: 'string'},
+              bar: {type: 'number'},
+            },
+          },
+        },
+      }),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[Error: {"kind":"InvalidConnectionRequest","message":"Provided schema does not match previous schema"}]`,
+    );
   });
 
   // Relies on an async homing signal (with no explicit flush, so allow retries)
@@ -232,6 +382,7 @@ describe('view-syncer/cvr', () => {
           version: '1a9:02',
           replicaVersion: '123',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [
@@ -261,7 +412,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: false,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -273,7 +423,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -296,16 +446,17 @@ describe('view-syncer/cvr', () => {
           id: 'oneHash',
           ast: {table: 'issues'},
           transformationHash: 'twoHash',
-          desiredBy: {
+          clientState: {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
         },
       },
+      clientSchema: null,
     } satisfies CVRSnapshot);
 
     await expectState(db, {
@@ -328,6 +479,7 @@ describe('view-syncer/cvr', () => {
           version: '1a9:02',
           replicaVersion: '112',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [
@@ -357,7 +509,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: false,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -369,7 +520,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -379,7 +530,6 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 24),
     );
@@ -401,16 +551,17 @@ describe('view-syncer/cvr', () => {
           id: 'oneHash',
           ast: {table: 'issues'},
           transformationHash: 'twoHash',
-          desiredBy: {
+          clientState: {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
         },
       },
+      clientSchema: null,
     } satisfies CVRSnapshot);
 
     expect(updated).toEqual(cvr);
@@ -419,7 +570,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -451,6 +602,7 @@ describe('view-syncer/cvr', () => {
           version: '1a9:02',
           replicaVersion: '100',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [],
@@ -463,29 +615,27 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
     );
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
-    const updater = new CVRUpdater(cvrStore, cvr, cvr.replicaVersion);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     // Simulate an external modification, incrementing the patch version.
-    await db`UPDATE cvr_jkl.instances SET version = '1a9:03' WHERE "clientGroupID" = 'abc123'`;
+    await db`UPDATE "dapp_3/cvr".instances SET version = '1a9:03' WHERE "clientGroupID" = 'abc123'`;
+
+    // force a flush to trigger detection
+    updater.ensureClient('client-foo');
 
     await expect(
-      updater.flush(
-        lc,
-        false, // force flush to trigger detection
-        LAST_CONNECT,
-        Date.UTC(2024, 4, 19),
-      ),
+      updater.flush(lc, LAST_CONNECT, Date.UTC(2024, 4, 19)),
     ).rejects.toThrow(ConcurrentModificationException);
 
     // The last active time should not have been modified.
     expect(
-      await db`SELECT "lastActive" FROM cvr_jkl.instances WHERE "clientGroupID" = 'abc123'`,
+      await db`SELECT "lastActive" FROM "dapp_3/cvr".instances WHERE "clientGroupID" = 'abc123'`,
     ).toEqual([{lastActive: Date.UTC(2024, 3, 23)}]);
   });
 
@@ -499,6 +649,7 @@ describe('view-syncer/cvr', () => {
           lastActive: Date.UTC(2024, 3, 23),
           owner: 'my-task',
           grantedAt: LAST_CONNECT,
+          clientSchema: null,
         },
       ],
       clients: [],
@@ -511,32 +662,30 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
     );
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
-    const updater = new CVRUpdater(cvrStore, cvr, cvr.replicaVersion);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     // Simulate an ownership change.
     await db`
-    UPDATE cvr_jkl.instances SET "owner"     = 'other-task', 
+    UPDATE "dapp_3/cvr".instances SET "owner"     = 'other-task', 
                              "grantedAt" = ${LAST_CONNECT + 1}
     WHERE "clientGroupID" = 'abc123'`;
 
+    // force flush to trigger detection
+    updater.ensureClient('client-bar');
+
     await expect(
-      updater.flush(
-        lc,
-        false, // force flush to trigger detection
-        LAST_CONNECT,
-        Date.UTC(2024, 4, 19),
-      ),
+      updater.flush(lc, LAST_CONNECT, Date.UTC(2024, 4, 19)),
     ).rejects.toThrow(OwnershipError);
 
     // The last active time should not have been modified.
     expect(
-      await db`SELECT "lastActive" FROM cvr_jkl.instances WHERE "clientGroupID" = 'abc123'`,
+      await db`SELECT "lastActive" FROM "dapp_3/cvr".instances WHERE "clientGroupID" = 'abc123'`,
     ).toEqual([{lastActive: Date.UTC(2024, 3, 23)}]);
   });
 
@@ -548,6 +697,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '101',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [
@@ -583,7 +733,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a8',
           deleted: false,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -593,7 +742,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: false,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -605,7 +753,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -632,43 +780,44 @@ describe('view-syncer/cvr', () => {
           ast: {table: 'issues'},
           transformationHash: 'twoHash',
           transformationVersion: undefined,
-          desiredBy: {
+          clientState: {
             dooClient: {
               version: {stateVersion: '1a8'},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
         },
       },
+      clientSchema: null,
     } satisfies CVRSnapshot);
 
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     // This removes and adds desired queries to the existing fooClient.
     expect(updater.deleteDesiredQueries('fooClient', ['oneHash', 'twoHash']))
       .toMatchInlineSnapshot(`
-        [
-          {
-            "patch": {
-              "clientID": "fooClient",
-              "id": "oneHash",
-              "op": "del",
-              "type": "query",
-            },
-            "toVersion": {
-              "minorVersion": 1,
-              "stateVersion": "1aa",
-            },
+      [
+        {
+          "patch": {
+            "clientID": "fooClient",
+            "id": "oneHash",
+            "op": "del",
+            "type": "query",
           },
-        ]
-      `);
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        },
+      ]
+    `);
 
     expect(
       updater.putDesiredQueries('fooClient', [
@@ -774,7 +923,6 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 24),
     );
@@ -783,11 +931,11 @@ describe('view-syncer/cvr', () => {
       {
         "clients": 2,
         "desires": 6,
-        "instances": 2,
+        "instances": 1,
         "queries": 7,
         "rows": 0,
         "rowsDeferred": 0,
-        "statements": 18,
+        "statements": 17,
       }
     `);
     expect(updated).toEqual({
@@ -818,7 +966,7 @@ describe('view-syncer/cvr', () => {
           id: 'lmids',
           internal: true,
           ast: {
-            table: `zero_${SHARD_ID}.clients`,
+            table: `${APP_ID}_${SHARD_NUM}.clients`,
             schema: '',
             where: {
               type: 'simple',
@@ -843,11 +991,11 @@ describe('view-syncer/cvr', () => {
           ast: {table: 'issues'},
           transformationHash: 'twoHash',
           transformationVersion: undefined,
-          desiredBy: {
+          clientState: {
             barClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -855,31 +1003,32 @@ describe('view-syncer/cvr', () => {
         threeHash: {
           id: 'threeHash',
           ast: {table: 'comments'},
-          desiredBy: {
+          clientState: {
             barClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
             fooClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
         },
         fourHash: {
           id: 'fourHash',
           ast: {table: 'users'},
-          desiredBy: {
+          clientState: {
             fooClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
         },
       },
+      clientSchema: null,
     } satisfies CVRSnapshot);
 
     await expectState(db, {
@@ -891,6 +1040,7 @@ describe('view-syncer/cvr', () => {
           replicaVersion: '101',
           owner: 'my-task',
           grantedAt: 1709251200000,
+          clientSchema: null,
         },
       ],
       clients: [
@@ -935,7 +1085,7 @@ describe('view-syncer/cvr', () => {
         {
           clientAST: {
             schema: '',
-            table: `zero_${SHARD_ID}.clients`,
+            table: `${APP_ID}_${SHARD_NUM}.clients`,
             where: {
               left: {
                 type: 'column',
@@ -993,7 +1143,6 @@ describe('view-syncer/cvr', () => {
           deleted: true,
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -1003,7 +1152,6 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           patchVersion: '1aa:01',
           queryHash: 'fourHash',
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -1013,7 +1161,6 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           patchVersion: '1aa:01',
           queryHash: 'threeHash',
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -1023,7 +1170,6 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -1033,7 +1179,6 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           patchVersion: '1aa:01',
           queryHash: 'threeHash',
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -1043,7 +1188,6 @@ describe('view-syncer/cvr', () => {
           deleted: true,
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -1056,7 +1200,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -1066,7 +1210,7 @@ describe('view-syncer/cvr', () => {
 
     // Add the deleted desired query back. This ensures that the
     // desired query update statement is an UPSERT.
-    const updater2 = new CVRConfigDrivenUpdater(cvrStore2, reloaded, SHARD_ID);
+    const updater2 = new CVRConfigDrivenUpdater(cvrStore2, reloaded, SHARD);
     expect(
       updater2.putDesiredQueries('fooClient', [
         {hash: 'oneHash', ast: {table: 'issues'}, ttl: undefined},
@@ -1093,7 +1237,6 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated2} = await updater2.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 24, 1),
     );
@@ -1108,6 +1251,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '03',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [
@@ -1137,7 +1281,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: false,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -1149,13 +1292,13 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
     );
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     // Same desired query set. Nothing should change except last active time.
     expect(
@@ -1167,7 +1310,6 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -1179,7 +1321,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -1229,6 +1371,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: null,
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [
@@ -1278,7 +1421,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -1337,7 +1479,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -1469,21 +1611,20 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
     expect(flushed).toMatchInlineSnapshot(`
-        {
-          "clients": 0,
-          "desires": 0,
-          "instances": 2,
-          "queries": 1,
-          "rows": 3,
-          "rowsDeferred": 0,
-          "statements": 5,
-        }
-      `);
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 1,
+        "queries": 1,
+        "rows": 3,
+        "rowsDeferred": 0,
+        "statements": 4,
+      }
+    `);
 
     expect(
       await cvrStore.catchupConfigPatches(
@@ -1550,11 +1691,11 @@ describe('view-syncer/cvr', () => {
         oneHash: {
           id: 'oneHash',
           ast: {table: 'issues'},
-          desiredBy: {
+          clientState: {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           transformationHash: 'serverOneHash',
@@ -1569,7 +1710,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -1586,6 +1727,7 @@ describe('view-syncer/cvr', () => {
           replicaVersion: '123',
           owner: 'my-task',
           grantedAt: 1709251200000,
+          clientSchema: null,
         },
       ],
       clients: [
@@ -1641,7 +1783,6 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -1713,6 +1854,7 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '123',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [
@@ -1762,7 +1904,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -1820,14 +1961,7 @@ describe('view-syncer/cvr', () => {
     };
     await setInitialState(db, initialState);
 
-    let cvrStore = new CVRStore(
-      lc,
-      db,
-      SHARD_ID,
-      'my-task',
-      'abc123',
-      ON_FAILURE,
-    );
+    let cvrStore = new CVRStore(lc, db, SHARD, 'my-task', 'abc123', ON_FAILURE);
     let cvr = await cvrStore.load(lc, LAST_CONNECT);
     let updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '123');
 
@@ -1907,21 +2041,20 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     let {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
     expect(flushed).toMatchInlineSnapshot(`
-        {
-          "clients": 0,
-          "desires": 0,
-          "instances": 2,
-          "queries": 1,
-          "rows": 2,
-          "rowsDeferred": 0,
-          "statements": 5,
-        }
-      `);
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 1,
+        "queries": 1,
+        "rows": 2,
+        "rowsDeferred": 0,
+        "statements": 4,
+      }
+    `);
 
     expect(
       await cvrStore.catchupConfigPatches(
@@ -2001,11 +2134,11 @@ describe('view-syncer/cvr', () => {
         oneHash: {
           id: 'oneHash',
           ast: {table: 'issues'},
-          desiredBy: {
+          clientState: {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           transformationHash: 'serverTwoHash',
@@ -2017,11 +2150,11 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    cvrStore = new CVRStore(lc, db, SHARD_ID, 'my-task', 'abc123', ON_FAILURE);
+    cvrStore = new CVRStore(lc, db, SHARD, 'my-task', 'abc123', ON_FAILURE);
     cvr = await cvrStore.load(lc, LAST_CONNECT);
     expect(cvr).toEqual(updated);
 
-    expect(await getAllState(db)).toEqual({
+    await expectState(db, {
       instances: [
         {
           clientGroupID: 'abc123',
@@ -2030,6 +2163,7 @@ describe('view-syncer/cvr', () => {
           replicaVersion: '123',
           owner: 'my-task',
           grantedAt: 1709251200000,
+          clientSchema: null,
         },
       ],
       clients: initialState.clients,
@@ -2078,7 +2212,6 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -2149,7 +2282,6 @@ describe('view-syncer/cvr', () => {
 
     ({cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 2),
     ));
@@ -2157,11 +2289,11 @@ describe('view-syncer/cvr', () => {
       {
         "clients": 0,
         "desires": 0,
-        "instances": 2,
+        "instances": 1,
         "queries": 1,
         "rows": 0,
         "rowsDeferred": 0,
-        "statements": 4,
+        "statements": 3,
       }
     `);
 
@@ -2179,6 +2311,7 @@ describe('view-syncer/cvr', () => {
           replicaVersion: '123',
           owner: 'my-task',
           grantedAt: 1709251200000,
+          clientSchema: null,
         },
       ],
       clients: initialState.clients,
@@ -2231,6 +2364,7 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '123',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [
@@ -2290,7 +2424,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -2300,7 +2433,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'twoHash',
           patchVersion: '1a9:01',
           deleted: null,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -2362,7 +2494,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -2473,7 +2605,6 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -2481,11 +2612,11 @@ describe('view-syncer/cvr', () => {
       {
         "clients": 0,
         "desires": 0,
-        "instances": 2,
+        "instances": 1,
         "queries": 2,
         "rows": 2,
         "rowsDeferred": 0,
-        "statements": 6,
+        "statements": 5,
       }
     `);
 
@@ -2598,11 +2729,11 @@ describe('view-syncer/cvr', () => {
         oneHash: {
           id: 'oneHash',
           ast: {table: 'issues'},
-          desiredBy: {
+          clientState: {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           transformationHash: 'updatedServerOneHash',
@@ -2612,11 +2743,11 @@ describe('view-syncer/cvr', () => {
         twoHash: {
           id: 'twoHash',
           ast: {table: 'issues'},
-          desiredBy: {
+          clientState: {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: undefined,
+              ttl: -1,
             },
           },
           transformationHash: 'updatedServerTwoHash',
@@ -2630,7 +2761,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -2647,6 +2778,7 @@ describe('view-syncer/cvr', () => {
           replicaVersion: '123',
           owner: 'my-task',
           grantedAt: 1709251200000,
+          clientSchema: null,
         },
       ],
       clients: initialState.clients,
@@ -2707,7 +2839,6 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -2717,7 +2848,6 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'twoHash',
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -2786,6 +2916,7 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '123',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [],
@@ -2879,7 +3010,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -2920,7 +3051,6 @@ describe('view-syncer/cvr', () => {
     // Note: Must flush before generating config patches.
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -2928,11 +3058,11 @@ describe('view-syncer/cvr', () => {
       {
         "clients": 0,
         "desires": 0,
-        "instances": 2,
+        "instances": 1,
         "queries": 1,
         "rows": 2,
         "rowsDeferred": 0,
-        "statements": 5,
+        "statements": 4,
       }
     `);
 
@@ -3019,7 +3149,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -3036,6 +3166,7 @@ describe('view-syncer/cvr', () => {
           replicaVersion: '123',
           owner: 'my-task',
           grantedAt: 1709251200000,
+          clientSchema: null,
         },
       ],
       clients: [],
@@ -3140,6 +3271,7 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [
@@ -3199,7 +3331,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -3209,7 +3340,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'twoHash',
           patchVersion: '1a9:01',
           deleted: null,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -3271,7 +3401,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -3279,6 +3409,7 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     expect(cvr).toMatchInlineSnapshot(`
       {
+        "clientSchema": null,
         "clients": {
           "fooClient": {
             "desiredQueryIDs": [
@@ -3295,10 +3426,10 @@ describe('view-syncer/cvr', () => {
             "ast": {
               "table": "issues",
             },
-            "desiredBy": {
+            "clientState": {
               "fooClient": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -3319,10 +3450,10 @@ describe('view-syncer/cvr', () => {
             "ast": {
               "table": "issues",
             },
-            "desiredBy": {
+            "clientState": {
               "fooClient": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -3444,7 +3575,6 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -3557,7 +3687,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -3586,6 +3716,7 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '123',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [
@@ -3615,7 +3746,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -3656,7 +3786,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -3780,7 +3910,6 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -3788,11 +3917,11 @@ describe('view-syncer/cvr', () => {
       {
         "clients": 0,
         "desires": 0,
-        "instances": 2,
+        "instances": 1,
         "queries": 0,
         "rows": 6,
         "rowsDeferred": 0,
-        "statements": 6,
+        "statements": 5,
       }
     `);
 
@@ -3800,7 +3929,7 @@ describe('view-syncer/cvr', () => {
     const doCVRStore2 = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -3817,6 +3946,7 @@ describe('view-syncer/cvr', () => {
           replicaVersion: '123',
           owner: 'my-task',
           grantedAt: 1709251200000,
+          clientSchema: null,
         },
       ],
       clients: initialState.clients,
@@ -3841,7 +3971,6 @@ describe('view-syncer/cvr', () => {
           deleted: null,
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -3898,6 +4027,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [
@@ -3927,7 +4057,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -3959,7 +4088,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -4009,7 +4138,6 @@ describe('view-syncer/cvr', () => {
     // Same last active day (no index change), but different hour.
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -4017,11 +4145,11 @@ describe('view-syncer/cvr', () => {
       {
         "clients": 0,
         "desires": 0,
-        "instances": 2,
+        "instances": 1,
         "queries": 0,
         "rows": 1,
         "rowsDeferred": 0,
-        "statements": 4,
+        "statements": 3,
       }
     `);
 
@@ -4029,7 +4157,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore2 = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -4046,6 +4174,7 @@ describe('view-syncer/cvr', () => {
           lastActive: Date.UTC(2024, 3, 23, 1),
           owner: 'my-task',
           grantedAt: 1709251200000,
+          clientSchema: null,
         },
       ],
       clients: [
@@ -4075,7 +4204,6 @@ describe('view-syncer/cvr', () => {
           queryHash: 'oneHash',
           patchVersion: '1a9:01',
           deleted: null,
-          expiresAt: null,
           inactivatedAt: null,
           ttl: null,
         },
@@ -4103,6 +4231,160 @@ describe('view-syncer/cvr', () => {
     });
   });
 
+  test('advance with add and delete of new row', async () => {
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1aa',
+          replicaVersion: '120',
+          lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
+        },
+      ],
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      queries: [
+        {
+          clientGroupID: 'abc123',
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          transformationHash: null,
+          transformationVersion: null,
+          patchVersion: null,
+          internal: null,
+          deleted: null,
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+          inactivatedAt: null,
+          ttl: null,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY1,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY2,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    };
+
+    await setInitialState(db, initialState);
+
+    const cvrStore = new CVRStore(
+      lc,
+      db,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, LAST_CONNECT);
+    const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+    const newVersion = updater.updatedVersion();
+    expect(newVersion).toEqual({stateVersion: '1ba'});
+
+    expect(
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID3,
+            {
+              version: '01',
+              refCounts: {oneHash: 1},
+              contents: {id: '123'},
+            },
+          ],
+        ]),
+      ),
+    ).toEqual([
+      {
+        toVersion: {stateVersion: '1ba'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: ROW_ID3,
+          contents: {id: '123'},
+        },
+      },
+    ] satisfies PatchToVersion[]);
+
+    expect(
+      await updater.received(
+        lc,
+        new Map([[ROW_ID3, {refCounts: {oneHash: -1}}]]),
+      ),
+    ).toEqual([
+      {
+        toVersion: {stateVersion: '1ba'},
+        patch: {
+          type: 'row',
+          op: 'del',
+          id: ROW_ID3,
+        },
+      },
+    ] satisfies PatchToVersion[]);
+
+    // Same last active day (no index change), but different hour.
+    const {flushed} = await updater.flush(
+      lc,
+      LAST_CONNECT,
+      Date.UTC(2024, 3, 23, 1),
+    );
+    expect(flushed).toBe(false);
+
+    // Verify round tripping.
+    const cvrStore2 = new CVRStore(
+      lc,
+      db,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
+    expect(reloaded).toEqual(cvr);
+
+    await expectState(db, {
+      ...initialState,
+      instances: [
+        {
+          ...initialState.instances[0],
+          owner: 'my-task',
+          grantedAt: 1709251200000,
+        },
+      ],
+    });
+  });
+
   describe('markDesiredQueryAsInactive', () => {
     test('no ttl', async () => {
       const now = Date.UTC(2025, 2, 18);
@@ -4114,6 +4396,7 @@ describe('view-syncer/cvr', () => {
             version: '1aa',
             replicaVersion: '120',
             lastActive: now,
+            clientSchema: null,
           },
         ],
         clients: [
@@ -4143,7 +4426,6 @@ describe('view-syncer/cvr', () => {
             queryHash: 'oneHash',
             patchVersion: '1a9:01',
             deleted: null,
-            expiresAt: null,
             inactivatedAt: null,
             ttl: null,
           },
@@ -4175,7 +4457,7 @@ describe('view-syncer/cvr', () => {
       const cvrStore = new CVRStore(
         lc,
         db,
-        SHARD_ID,
+        SHARD,
         'my-task',
         'abc123',
         ON_FAILURE,
@@ -4183,6 +4465,7 @@ describe('view-syncer/cvr', () => {
       const cvr = await cvrStore.load(lc, LAST_CONNECT);
       expect(cvr).toMatchInlineSnapshot(`
         {
+          "clientSchema": null,
           "clients": {
             "fooClient": {
               "desiredQueryIDs": [
@@ -4198,10 +4481,10 @@ describe('view-syncer/cvr', () => {
               "ast": {
                 "table": "issues",
               },
-              "desiredBy": {
+              "clientState": {
                 "fooClient": {
                   "inactivatedAt": undefined,
-                  "ttl": undefined,
+                  "ttl": -1,
                   "version": {
                     "minorVersion": 1,
                     "stateVersion": "1a9",
@@ -4221,14 +4504,14 @@ describe('view-syncer/cvr', () => {
         }
       `);
 
-      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
-      updater.markDesiredQueryAsInactive('fooClient', 'oneHash', now);
+      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
+      updater.markDesiredQueriesAsInactive('fooClient', ['oneHash'], now);
 
-      const {cvr: updated} = await updater.flush(lc, true, LAST_CONNECT, now);
+      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now);
       expect(updated).toEqual({
         clients: {
           fooClient: {
-            desiredQueryIDs: ['oneHash'],
+            desiredQueryIDs: [],
             id: 'fooClient',
           },
         },
@@ -4239,10 +4522,10 @@ describe('view-syncer/cvr', () => {
             ast: {
               table: 'issues',
             },
-            desiredBy: {
+            clientState: {
               fooClient: {
                 inactivatedAt: now,
-                ttl: undefined,
+                ttl: -1,
                 version: {
                   minorVersion: 1,
                   stateVersion: '1aa',
@@ -4260,7 +4543,8 @@ describe('view-syncer/cvr', () => {
           minorVersion: 1,
           stateVersion: '1aa',
         },
-      });
+        clientSchema: null,
+      } satisfies CVRSnapshot);
     });
 
     test('with ttl', async () => {
@@ -4274,6 +4558,7 @@ describe('view-syncer/cvr', () => {
             version: '1aa',
             replicaVersion: '120',
             lastActive: now,
+            clientSchema: null,
           },
         ],
         clients: [
@@ -4303,7 +4588,6 @@ describe('view-syncer/cvr', () => {
             queryHash: 'oneHash',
             patchVersion: '1a9:01',
             deleted: null,
-            expiresAt: null,
             inactivatedAt: null,
             ttl: ttl / 1000,
           },
@@ -4335,7 +4619,7 @@ describe('view-syncer/cvr', () => {
       const cvrStore = new CVRStore(
         lc,
         db,
-        SHARD_ID,
+        SHARD,
         'my-task',
         'abc123',
         ON_FAILURE,
@@ -4346,7 +4630,7 @@ describe('view-syncer/cvr', () => {
           ast: {
             table: 'issues',
           },
-          desiredBy: {
+          clientState: {
             fooClient: {
               inactivatedAt: undefined,
               ttl,
@@ -4363,16 +4647,16 @@ describe('view-syncer/cvr', () => {
         },
       });
 
-      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
-      updater.markDesiredQueryAsInactive('fooClient', 'oneHash', now);
+      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
+      updater.markDesiredQueriesAsInactive('fooClient', ['oneHash'], now);
 
-      const {cvr: updated} = await updater.flush(lc, true, LAST_CONNECT, now);
+      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now);
       expect(updated.queries).toEqual({
         oneHash: {
           ast: {
             table: 'issues',
           },
-          desiredBy: {
+          clientState: {
             fooClient: {
               inactivatedAt: now,
               ttl,
@@ -4389,9 +4673,312 @@ describe('view-syncer/cvr', () => {
         },
       });
     });
+
+    test('no ttl, got', async () => {
+      const now = Date.UTC(2025, 2, 18);
+
+      const initialState: DBState = {
+        instances: [
+          {
+            clientGroupID: 'abc123',
+            version: '1aa',
+            replicaVersion: '120',
+            lastActive: now,
+            clientSchema: null,
+          },
+        ],
+        clients: [
+          {
+            clientGroupID: 'abc123',
+            clientID: 'fooClient',
+            patchVersion: '1a9:01',
+            deleted: null,
+          },
+        ],
+        queries: [
+          {
+            clientGroupID: 'abc123',
+            queryHash: 'oneHash',
+            clientAST: {table: 'issues'},
+            transformationHash: 'oneHashTransformed',
+            transformationVersion: '1a9:01',
+            patchVersion: null,
+            internal: null,
+            deleted: null,
+          },
+        ],
+        desires: [
+          {
+            clientGroupID: 'abc123',
+            clientID: 'fooClient',
+            queryHash: 'oneHash',
+            patchVersion: '1a9:01',
+            deleted: null,
+            inactivatedAt: null,
+            ttl: null,
+          },
+        ],
+        rows: [
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY1,
+            rowVersion: '03',
+            refCounts: {oneHash: 1},
+            patchVersion: '1a0',
+            schema: 'public',
+            table: 'issues',
+          },
+          {
+            clientGroupID: 'abc123',
+            rowKey: ROW_KEY2,
+            rowVersion: '03',
+            refCounts: {oneHash: 1},
+            patchVersion: '1a0',
+            schema: 'public',
+            table: 'issues',
+          },
+        ],
+      };
+
+      await setInitialState(db, initialState);
+
+      const cvrStore = new CVRStore(
+        lc,
+        db,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const cvr = await cvrStore.load(lc, LAST_CONNECT);
+      expect(cvr).toMatchInlineSnapshot(`
+        {
+          "clientSchema": null,
+          "clients": {
+            "fooClient": {
+              "desiredQueryIDs": [
+                "oneHash",
+              ],
+              "id": "fooClient",
+            },
+          },
+          "id": "abc123",
+          "lastActive": 1742256000000,
+          "queries": {
+            "oneHash": {
+              "ast": {
+                "table": "issues",
+              },
+              "clientState": {
+                "fooClient": {
+                  "inactivatedAt": undefined,
+                  "ttl": -1,
+                  "version": {
+                    "minorVersion": 1,
+                    "stateVersion": "1a9",
+                  },
+                },
+              },
+              "id": "oneHash",
+              "patchVersion": undefined,
+              "transformationHash": "oneHashTransformed",
+              "transformationVersion": {
+                "minorVersion": 1,
+                "stateVersion": "1a9",
+              },
+            },
+          },
+          "replicaVersion": "120",
+          "version": {
+            "stateVersion": "1aa",
+          },
+        }
+      `);
+
+      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
+      expect(
+        updater.markDesiredQueriesAsInactive('fooClient', ['oneHash'], now),
+      ).toMatchInlineSnapshot(`
+        [
+          {
+            "patch": {
+              "clientID": "fooClient",
+              "id": "oneHash",
+              "op": "del",
+              "type": "query",
+            },
+            "toVersion": {
+              "minorVersion": 1,
+              "stateVersion": "1aa",
+            },
+          },
+        ]
+      `);
+
+      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now);
+      expect(updated).toEqual({
+        clients: {
+          fooClient: {
+            desiredQueryIDs: [],
+            id: 'fooClient',
+          },
+        },
+        id: 'abc123',
+        lastActive: now,
+        queries: {
+          oneHash: {
+            ast: {
+              table: 'issues',
+            },
+            clientState: {
+              fooClient: {
+                inactivatedAt: now,
+                ttl: -1,
+                version: {
+                  minorVersion: 1,
+                  stateVersion: '1aa',
+                },
+              },
+            },
+            id: 'oneHash',
+            patchVersion: undefined,
+            transformationHash: 'oneHashTransformed',
+            transformationVersion: {
+              minorVersion: 1,
+              stateVersion: '1a9',
+            },
+          },
+        },
+        replicaVersion: '120',
+        version: {
+          minorVersion: 1,
+          stateVersion: '1aa',
+        },
+        clientSchema: null,
+      } satisfies CVRSnapshot);
+    });
+
+    test('using negative numbers for ttl', async () => {
+      // Negative number are treated as no ttl/forever.
+      const now = Date.UTC(2025, 2, 18);
+
+      const initialState: DBState = {
+        instances: [
+          {
+            clientGroupID: 'abc123',
+            version: '1aa',
+            replicaVersion: '120',
+            lastActive: now,
+            clientSchema: null,
+          },
+        ],
+        clients: [
+          {
+            clientGroupID: 'abc123',
+            clientID: 'fooClient',
+            patchVersion: '1a9:01',
+            deleted: null,
+          },
+        ],
+        queries: [
+          {
+            clientGroupID: 'abc123',
+            queryHash: 'oneHash',
+            clientAST: {table: 'issues'},
+            transformationHash: null,
+            transformationVersion: null,
+            patchVersion: null,
+            internal: null,
+            deleted: null,
+          },
+        ],
+        desires: [
+          {
+            clientGroupID: 'abc123',
+            clientID: 'fooClient',
+            queryHash: 'oneHash',
+            patchVersion: '1a9:01',
+            deleted: null,
+            inactivatedAt: null,
+            ttl: 10 / 1000,
+          },
+        ],
+        rows: [],
+      };
+
+      await setInitialState(db, initialState);
+
+      const cvrStore = new CVRStore(
+        lc,
+        db,
+        SHARD,
+        'my-task',
+        'abc123',
+        ON_FAILURE,
+      );
+      const cvr = await cvrStore.load(lc, LAST_CONNECT);
+      expect(cvr.clients.fooClient).toMatchInlineSnapshot(`
+        {
+          "desiredQueryIDs": [
+            "oneHash",
+          ],
+          "id": "fooClient",
+        }
+      `);
+      expect((cvr.queries.oneHash as ClientQueryRecord).clientState.fooClient)
+        .toMatchInlineSnapshot(`
+          {
+            "inactivatedAt": undefined,
+            "ttl": 10,
+            "version": {
+              "minorVersion": 1,
+              "stateVersion": "1a9",
+            },
+          }
+        `);
+
+      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
+      expect(
+        updater.putDesiredQueries('fooClient', [
+          {hash: 'oneHash', ast: {table: 'issues'}, ttl: -1},
+        ]),
+      ).toMatchInlineSnapshot(`
+        [
+          {
+            "patch": {
+              "ast": {
+                "table": "issues",
+              },
+              "clientID": "fooClient",
+              "id": "oneHash",
+              "op": "put",
+              "type": "query",
+            },
+            "toVersion": {
+              "minorVersion": 1,
+              "stateVersion": "1aa",
+            },
+          },
+        ]
+      `);
+      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now);
+      expect(
+        (updated.queries.oneHash as ClientQueryRecord).clientState.fooClient,
+      ).toMatchInlineSnapshot(`
+        {
+          "inactivatedAt": undefined,
+          "ttl": -1,
+          "version": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        }
+      `);
+    });
   });
 
   test('deleteClient', async () => {
+    vi.setSystemTime(Date.UTC(2024, 2, 6));
     const initialState: DBState = {
       instances: [
         {
@@ -4399,6 +4986,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [
@@ -4489,13 +5077,13 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
     );
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     expect(updater.deleteClient('client-b')).toMatchInlineSnapshot(`
       [
@@ -4516,12 +5104,12 @@ describe('view-syncer/cvr', () => {
 
     const {cvr: updated, flushed} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
-      Date.UTC(2024, 3, 23, 1),
+      Date.now(),
     );
     expect(updated).toMatchInlineSnapshot(`
       {
+        "clientSchema": null,
         "clients": {
           "client-a": {
             "desiredQueryIDs": [
@@ -4537,24 +5125,32 @@ describe('view-syncer/cvr', () => {
           },
         },
         "id": "abc123",
-        "lastActive": 1713834000000,
+        "lastActive": 1709683200000,
         "queries": {
           "oneHash": {
             "ast": {
               "table": "issues",
             },
-            "desiredBy": {
+            "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
                 },
               },
+              "client-b": {
+                "inactivatedAt": 1709683200000,
+                "ttl": -1,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1aa",
+                },
+              },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -4577,12 +5173,12 @@ describe('view-syncer/cvr', () => {
     expect(flushed).toMatchInlineSnapshot(`
       {
         "clients": 1,
-        "desires": 2,
-        "instances": 2,
+        "desires": 1,
+        "instances": 1,
         "queries": 1,
         "rows": 0,
         "rowsDeferred": 0,
-        "statements": 7,
+        "statements": 5,
       }
     `);
 
@@ -4607,7 +5203,6 @@ describe('view-syncer/cvr', () => {
             "clientGroupID": "abc123",
             "clientID": "client-a",
             "deleted": null,
-            "expiresAt": null,
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
@@ -4617,9 +5212,17 @@ describe('view-syncer/cvr', () => {
             "clientGroupID": "abc123",
             "clientID": "client-c",
             "deleted": null,
-            "expiresAt": null,
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
+            "queryHash": "oneHash",
+            "ttl": null,
+          },
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-b",
+            "deleted": true,
+            "inactivatedAt": 1709683200000,
+            "patchVersion": "1aa:01",
             "queryHash": "oneHash",
             "ttl": null,
           },
@@ -4627,8 +5230,9 @@ describe('view-syncer/cvr', () => {
         "instances": Result [
           {
             "clientGroupID": "abc123",
+            "clientSchema": null,
             "grantedAt": 1709251200000,
-            "lastActive": 1713834000000,
+            "lastActive": 1709683200000,
             "owner": "my-task",
             "replicaVersion": "120",
             "version": "1aa:01",
@@ -4688,6 +5292,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
 
         {
@@ -4695,6 +5300,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
         },
       ],
       clients: [
@@ -4813,7 +5419,7 @@ describe('view-syncer/cvr', () => {
     const cvrStore = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       'my-task',
       'abc123',
       ON_FAILURE,
@@ -4822,6 +5428,7 @@ describe('view-syncer/cvr', () => {
 
     expect(cvr).toMatchInlineSnapshot(`
       {
+        "clientSchema": null,
         "clients": {
           "client-a": {
             "desiredQueryIDs": [
@@ -4843,10 +5450,10 @@ describe('view-syncer/cvr', () => {
             "ast": {
               "table": "issues",
             },
-            "desiredBy": {
+            "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -4854,7 +5461,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -4874,14 +5481,13 @@ describe('view-syncer/cvr', () => {
       }
     `);
 
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     // No patches because client-b is from a different group.
     expect(updater.deleteClient('client-b')).toEqual([]);
 
     const {cvr: updated} = await updater.flush(
       lc,
-      true,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
@@ -4907,7 +5513,15 @@ describe('view-syncer/cvr', () => {
             "clientGroupID": "abc123",
             "clientID": "client-a",
             "deleted": null,
-            "expiresAt": null,
+            "inactivatedAt": null,
+            "patchVersion": "1a9:01",
+            "queryHash": "oneHash",
+            "ttl": null,
+          },
+          {
+            "clientGroupID": "def456",
+            "clientID": "client-b",
+            "deleted": null,
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
@@ -4917,7 +5531,6 @@ describe('view-syncer/cvr', () => {
             "clientGroupID": "abc123",
             "clientID": "client-c",
             "deleted": null,
-            "expiresAt": null,
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
@@ -4927,6 +5540,7 @@ describe('view-syncer/cvr', () => {
         "instances": Result [
           {
             "clientGroupID": "def456",
+            "clientSchema": null,
             "grantedAt": null,
             "lastActive": 1713830400000,
             "owner": null,
@@ -4935,6 +5549,7 @@ describe('view-syncer/cvr', () => {
           },
           {
             "clientGroupID": "abc123",
+            "clientSchema": null,
             "grantedAt": 1709251200000,
             "lastActive": 1713834000000,
             "owner": "my-task",
@@ -5027,6 +5642,7 @@ describe('view-syncer/cvr', () => {
 
     expect(updated).toMatchInlineSnapshot(`
       {
+        "clientSchema": null,
         "clients": {
           "client-a": {
             "desiredQueryIDs": [
@@ -5048,10 +5664,10 @@ describe('view-syncer/cvr', () => {
             "ast": {
               "table": "issues",
             },
-            "desiredBy": {
+            "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -5059,7 +5675,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": undefined,
+                "ttl": -1,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -5081,12 +5697,11 @@ describe('view-syncer/cvr', () => {
 
     {
       const cvr = await cvrStore.load(lc, LAST_CONNECT);
-      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD_ID);
+      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
       updater.deleteClientGroup('def456');
       const {cvr: updated2} = await updater.flush(
         lc,
-        true,
         LAST_CONNECT,
         Date.UTC(2024, 3, 23, 1),
       );
@@ -5114,7 +5729,6 @@ describe('view-syncer/cvr', () => {
               "clientGroupID": "abc123",
               "clientID": "client-a",
               "deleted": null,
-              "expiresAt": null,
               "inactivatedAt": null,
               "patchVersion": "1a9:01",
               "queryHash": "oneHash",
@@ -5124,7 +5738,6 @@ describe('view-syncer/cvr', () => {
               "clientGroupID": "abc123",
               "clientID": "client-c",
               "deleted": null,
-              "expiresAt": null,
               "inactivatedAt": null,
               "patchVersion": "1a9:01",
               "queryHash": "oneHash",
@@ -5134,6 +5747,7 @@ describe('view-syncer/cvr', () => {
           "instances": Result [
             {
               "clientGroupID": "abc123",
+              "clientSchema": null,
               "grantedAt": 1709251200000,
               "lastActive": 1713834000000,
               "owner": "my-task",

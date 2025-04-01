@@ -3,7 +3,13 @@ import {
   versionFromLexi,
   type LexiVersion,
 } from '../../../types/lexi-version.ts';
-import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.ts';
+import {
+  fromBigInt,
+  fromLexiVersion,
+  toBigInt,
+  toLexiVersion,
+  type LSN,
+} from './lsn.ts';
 
 describe('lsn to/from LexiVersion', () => {
   type Case = [LSN, LexiVersion, bigint];
@@ -15,6 +21,8 @@ describe('lsn to/from LexiVersion', () => {
   ];
   test.each(cases)('convert(%s <=> %s)', (lsn, lexi, ver) => {
     expect(toLexiVersion(lsn)).toBe(lexi);
+    expect(toBigInt(lsn)).toBe(ver);
+    expect(fromBigInt(ver)).toBe(lsn);
     expect(versionFromLexi(lexi).toString()).toBe(ver.toString());
     expect(fromLexiVersion(lexi)).toBe(lsn);
   });

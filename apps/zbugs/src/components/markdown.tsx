@@ -146,6 +146,63 @@ export const Markdown = memo(({children}: {children: string}) => {
         // Ensure no additional processing for <img> elements
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         img: ({node: _node, ...props}) => <img {...props} />,
+        li: ({children, ...props}) => {
+          const isTask = props.className?.includes('task-list-item');
+          const nodes: React.ReactNode[] = React.Children.toArray(children);
+
+          let checkbox: React.ReactNode = null;
+          const label: React.ReactNode[] = [];
+          const taskChildren: React.ReactNode[] = [];
+
+          let seenCheckbox = false;
+          let switchedToChildren = false;
+
+          for (const node of nodes) {
+            if (
+              !seenCheckbox &&
+              React.isValidElement(node) &&
+              node.type === 'input' &&
+              node.props.type === 'checkbox'
+            ) {
+              seenCheckbox = true;
+              checkbox = node;
+              continue;
+            }
+
+            // Detect hard line breaks (which show up as <br>) or block elements
+            const isLineBreak = typeof node === 'string' && node.includes('\n');
+            const isBlock =
+              React.isValidElement(node) &&
+              typeof node.type === 'string' &&
+              ['p', 'div'].includes(node.type);
+
+            if (!switchedToChildren && (isLineBreak || isBlock)) {
+              switchedToChildren = true;
+            }
+
+            if (switchedToChildren) {
+              taskChildren.push(node);
+            } else {
+              label.push(node);
+            }
+          }
+
+          if (isTask) {
+            return (
+              <li className="task-list-item">
+                <div className="task-line">
+                  {checkbox}
+                  {label}
+                </div>
+                {taskChildren.length > 0 && (
+                  <div className="task-children">{taskChildren}</div>
+                )}
+              </li>
+            );
+          }
+
+          return <li {...props}>{children}</li>;
+        },
       }}
     >
       {children}

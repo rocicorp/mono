@@ -1,13 +1,19 @@
 import {LogContext} from '@rocicorp/logger';
 import * as v from '../../../shared/src/valita.ts';
 import {Database} from '../../../zqlite/src/db.ts';
+import type {ReplicaOptions} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
+import {upgradeReplica} from '../services/change-source/replica-schema.ts';
 import {Notifier} from '../services/replicator/notifier.ts';
 import type {
   ReplicaState,
   ReplicaStateNotifier,
   Replicator,
 } from '../services/replicator/replicator.ts';
+import {
+  getAscendingEvents,
+  recordEvent,
+} from '../services/replicator/schema/replication-state.ts';
 import type {Worker} from '../types/processes.ts';
 
 export const replicaFileModeSchema = v.union(
@@ -22,50 +28,95 @@ export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
   return mode === 'serving-copy' ? `${replicaFile}-serving-copy` : replicaFile;
 }
 
-function connect(
+const MILLIS_PER_HOUR = 1000 * 60 * 60;
+const MB = 1024 * 1024;
+
+async function connect(
   lc: LogContext,
-  replicaDbFile: string,
+  {file, vacuumIntervalHours}: ReplicaOptions,
   walMode: 'wal' | 'wal2',
-): Database {
-  const replica = new Database(lc, replicaDbFile);
+  mode: ReplicaFileMode,
+): Promise<Database> {
+  const replica = new Database(lc, file);
 
-  const [{journal_mode: mode}] = replica.pragma('journal_mode') as {
-    // eslint-disable-next-line @typescript-eslint/naming-convention
-    journal_mode: string;
-  }[];
+  // Perform any upgrades to the replica in case the backup is an
+  // earlier version.
+  await upgradeReplica(lc, `${mode}-replica`, file);
 
-  if (mode !== walMode) {
-    lc.info?.(`switching ${replicaDbFile} from ${mode} to ${walMode} mode`);
-    replica.pragma('journal_mode = delete');
-    replica.pragma(`journal_mode = ${walMode}`);
+  // Start by folding any (e.g. restored) WAL(2) files into the main db.
+  replica.pragma('journal_mode = delete');
+
+  //eslint-disable-next-line @typescript-eslint/naming-convention
+  const [{page_size: pageSize}] = replica.pragma<{page_size: number}>(
+    'page_size',
+  );
+  //eslint-disable-next-line @typescript-eslint/naming-convention
+  const [{page_count: pageCount}] = replica.pragma<{page_count: number}>(
+    'page_count',
+  );
+  const [{freelist_count: freelistCount}] = replica.pragma<{
+    //eslint-disable-next-line @typescript-eslint/naming-convention
+    freelist_count: number;
+  }>('freelist_count');
+
+  const dbSize = ((pageCount * pageSize) / MB).toFixed(2);
+  const freelistSize = ((freelistCount * pageSize) / MB).toFixed(2);
+
+  // TODO: Consider adding a freelist size or ratio based vacuum trigger.
+  lc.info?.(`Size of db ${file}: ${dbSize} MB (${freelistSize} MB freeable)`);
+
+  // Check for the VACUUM threshold.
+  const events = getAscendingEvents(replica);
+  lc.debug?.(`Runtime events for db ${file}`, {events});
+  if (vacuumIntervalHours !== undefined) {
+    const millisSinceLastEvent =
+      Date.now() - (events.at(-1)?.timestamp.getTime() ?? 0);
+    if (millisSinceLastEvent / MILLIS_PER_HOUR > vacuumIntervalHours) {
+      lc.info?.(`Performing maintenance cleanup on ${file}`);
+      const t0 = performance.now();
+      replica.unsafeMode(true);
+      replica.pragma('journal_mode = OFF');
+      // Clear the changeLog to reclaim as much space as possible. The
+      // changeLog is only used for IVM advancements (i.e. from an initial
+      // hydration), so it is fine for it to be empty at startup.
+      replica.prepare('DELETE FROM "_zero.changeLog"').run();
+      const t1 = performance.now();
+      lc.info?.(`Cleared _zero.changeLog (${t1 - t0} ms)`);
+      replica.exec('VACUUM');
+      recordEvent(replica, 'vacuum');
+      replica.unsafeMode(false);
+      const t2 = performance.now();
+      lc.info?.(`VACUUM completed (${t2 - t1} ms)`);
+    }
   }
 
-  // Set a busy timeout at litestream's recommended 5 seconds:
-  // (https://litestream.io/tips/#busy-timeout).
-  //
-  // In the view-syncer (for which there is no litestream replicate
-  // process), this is still useful for handling the `PRAGMA optimize`
-  // call the sync workers, which results in occasional `ANALYZE` calls
-  // that may contend with each other and with the replicator for the lock.
-  replica.pragma('busy_timeout = 5000');
+  lc.info?.(`setting ${file} to ${walMode} mode`);
+  replica.pragma(`journal_mode = ${walMode}`);
 
-  replica.pragma('synchronous = NORMAL');
-  replica.exec('VACUUM');
+  // The duration of the loop in which the replicator attempts
+  // to begin a transaction while litestream is performing a
+  // checkpoint.
+  replica.pragma('busy_timeout = 30000');
+
   replica.pragma('optimize = 0x10002');
-  lc.info?.(`vacuumed and optimized ${replicaDbFile}`);
+  // Cap the running time of `PRAGMA optimize` calls that happen
+  // after replicating schema changes. 1000 is the limit recommended
+  // in https://sqlite.org/lang_analyze.html#approx
+  replica.pragma('analysis_limit = 1000');
+  lc.info?.(`optimized ${file}`);
   return replica;
 }
 
-export function setupReplica(
+export async function setupReplica(
   lc: LogContext,
   mode: ReplicaFileMode,
-  replicaDbFile: string,
-): Database {
+  replicaOptions: ReplicaOptions,
+): Promise<Database> {
   lc.info?.(`setting up ${mode} replica`);
 
   switch (mode) {
     case 'backup': {
-      const replica = connect(lc, replicaDbFile, 'wal');
+      const replica = await connect(lc, replicaOptions, 'wal', mode);
       // https://litestream.io/tips/#disable-autocheckpoints-for-high-write-load-servers
       replica.pragma('wal_autocheckpoint = 0');
       return replica;
@@ -74,21 +125,22 @@ export function setupReplica(
     case 'serving-copy': {
       // In 'serving-copy' mode, the original file is being used for 'backup'
       // mode, so we make a copy for servicing sync requests.
-      const copyLocation = replicaFileName(replicaDbFile, mode);
+      const {file} = replicaOptions;
+      const copyLocation = replicaFileName(file, mode);
       deleteLiteDB(copyLocation);
 
       const start = Date.now();
-      lc.info?.(`copying ${replicaDbFile} to ${copyLocation}`);
-      const replica = connect(lc, replicaDbFile, 'wal');
+      lc.info?.(`copying ${file} to ${copyLocation}`);
+      const replica = new Database(lc, file);
       replica.prepare(`VACUUM INTO ?`).run(copyLocation);
       replica.close();
       lc.info?.(`finished copy (${Date.now() - start} ms)`);
 
-      return connect(lc, copyLocation, 'wal2');
+      return connect(lc, {...replicaOptions, file: copyLocation}, 'wal2', mode);
     }
 
     case 'serving':
-      return connect(lc, replicaDbFile, 'wal2');
+      return connect(lc, replicaOptions, 'wal2', mode);
 
     default:
       throw new Error(`Invalid ReplicaMode ${mode}`);

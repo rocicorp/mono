@@ -1,8 +1,9 @@
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import 'dotenv/config';
+import '@dotenvx/dotenvx/config';
 import {writeFile} from 'node:fs/promises';
-import {literal} from 'pg-format';
+import {ident as id, literal} from 'pg-format';
 import {parseOptions} from '../../../shared/src/options.ts';
+import {difference} from '../../../shared/src/set-utils.ts';
 import {mapCondition} from '../../../zero-protocol/src/ast.ts';
 import {
   type AssetPermissions,
@@ -13,13 +14,16 @@ import {validator} from '../../../zero-schema/src/name-mapper.ts';
 import {ZERO_ENV_VAR_PREFIX} from '../config/zero-config.ts';
 import {getPublicationInfo} from '../services/change-source/pg/schema/published.ts';
 import {
-  APP_PUBLICATION_PREFIX,
   ensureGlobalTables,
-  INTERNAL_PUBLICATION_PREFIX,
+  SHARD_CONFIG_TABLE,
 } from '../services/change-source/pg/schema/shard.ts';
 import {liteTableName} from '../types/names.ts';
 import {pgClient, type PostgresDB} from '../types/pg.ts';
-import {deployPermissionsOptions, loadPermissions} from './permissions.ts';
+import {appSchema, getShardID, upstreamSchema} from '../types/shards.ts';
+import {
+  deployPermissionsOptions,
+  loadSchemaAndPermissions,
+} from './permissions.ts';
 
 const config = parseOptions(
   deployPermissionsOptions,
@@ -27,34 +31,60 @@ const config = parseOptions(
   ZERO_ENV_VAR_PREFIX,
 );
 
-const lc = new LogContext('debug', {}, consoleLogSink);
+const shard = getShardID(config);
+const app = appSchema(shard);
+
+const lc = new LogContext(config.log.level, {}, consoleLogSink);
 
 async function validatePermissions(
   db: PostgresDB,
   permissions: PermissionsConfig,
 ) {
-  const pubnames = await db.unsafe<{pubname: string}[]>(`
-  SELECT pubname FROM pg_publication 
-    WHERE pubname LIKE '${APP_PUBLICATION_PREFIX}%'
-       OR pubname LIKE '${INTERNAL_PUBLICATION_PREFIX}%'`);
-  if (pubnames.length === 0) {
-    // If zero-cache has not yet initialized the upstream publications,
-    // we can't validate the permissions against what's been published.
-    // This can happen while bootstrapping / initializing a new stack.
-    // In this case we deploy permissions without validate.
-    lc.info?.(
+  const schema = upstreamSchema(shard);
+
+  // Check if the shardConfig table has been initialized.
+  const result = await db`
+    SELECT relname FROM pg_class 
+      JOIN pg_namespace ON relnamespace = pg_namespace.oid
+      WHERE nspname = ${schema} AND relname = ${SHARD_CONFIG_TABLE}`;
+  if (result.length === 0) {
+    lc.warn?.(
       `zero-cache has not yet initialized the upstream database.\n` +
-        `Deploying permissions without validating against published tables/columns.`,
+        `Deploying ${app} permissions without validating against published tables/columns.`,
     );
     return;
   }
 
-  lc.info?.('Validating permissions against upstream table and column names.');
-
-  const {tables} = await getPublicationInfo(
-    db,
-    pubnames.map(p => p.pubname),
+  // Get the publications for the shard
+  const config = await db<{publications: string[]}[]>`
+    SELECT publications FROM ${db(schema + '.' + SHARD_CONFIG_TABLE)}
+  `;
+  if (config.length === 0) {
+    lc.warn?.(
+      `zero-cache has not yet initialized the upstream database.\n` +
+        `Deploying ${app} permissions without validating against published tables/columns.`,
+    );
+    return;
+  }
+  lc.info?.(
+    `Validating permissions against tables and columns published for "${app}".`,
   );
+
+  const [{publications: shardPublications}] = config;
+  const {tables, publications} = await getPublicationInfo(
+    db,
+    shardPublications,
+  );
+  const pubnames = publications.map(p => p.pubname);
+  const missing = difference(new Set(shardPublications), new Set(pubnames));
+  if (missing.size) {
+    lc.warn?.(
+      `Upstream is missing expected publications "${[...missing]}".\n` +
+        `You may need to re-initialize your replica.\n` +
+        `Deploying ${app} permissions without validating against published tables/columns.`,
+    );
+    return;
+  }
   const tablesToColumns = new Map(
     tables.map(t => [liteTableName(t), Object.keys(t.columns)]),
   );
@@ -93,8 +123,10 @@ async function deployPermissions(
   force: boolean,
 ) {
   const db = pgClient(lc, upstreamURI);
+  const {host, port} = db.options;
+  lc.debug?.(`Connecting to upstream@${host}:${port}`);
   try {
-    await ensureGlobalTables(db);
+    await ensureGlobalTables(db, shard);
 
     const {hash, changed} = await db.begin(async tx => {
       if (force) {
@@ -103,11 +135,14 @@ async function deployPermissions(
         await validatePermissions(tx, permissions);
       }
 
-      lc.info?.(`Deploying permissions to upstream@${db.options.host}`);
+      const {appID} = shard;
+      lc.info?.(
+        `Deploying permissions for --app-id "${appID}" to upstream@${db.options.host}`,
+      );
       const [{hash: beforeHash}] = await tx<{hash: string}[]>`
-        SELECT hash from zero.permissions`;
+        SELECT hash from ${tx(app)}.permissions`;
       const [{hash}] = await tx<{hash: string}[]>`
-        UPDATE zero.permissions SET ${db({permissions})} RETURNING hash`;
+        UPDATE ${tx(app)}.permissions SET ${db({permissions})} RETURNING hash`;
 
       return {hash: hash.substring(0, 7), changed: beforeHash !== hash};
     });
@@ -128,7 +163,7 @@ async function writePermissionsFile(
 ) {
   const contents =
     format === 'sql'
-      ? `UPDATE zero.permissions SET permissions = ${literal(
+      ? `UPDATE ${id(app)}.permissions SET permissions = ${literal(
           JSON.stringify(perms),
         )};`
       : JSON.stringify(perms, null, format === 'pretty' ? 2 : 0);
@@ -136,7 +171,7 @@ async function writePermissionsFile(
   lc.info?.(`Wrote ${format} permissions to ${config.output.file}`);
 }
 
-const permissions = await loadPermissions(lc, config.schema.path);
+const {permissions} = await loadSchemaAndPermissions(lc, config.schema.path);
 if (config.output.file) {
   await writePermissionsFile(
     permissions,

@@ -1,7 +1,6 @@
 import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import * as sinon from 'sinon';
-import {describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {promiseVoid} from '../../shared/src/resolved-promises.ts';
@@ -20,7 +19,6 @@ import {
   MemStoreWithCounters,
   ReplicacheTest,
   addData,
-  clock,
   disableAllBackgroundProcesses,
   expectAsyncFuncToThrow,
   expectConsoleLogContextStub,
@@ -41,6 +39,10 @@ import {withRead} from './with-transactions.ts';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
+import {
+  clearBrowserOverrides,
+  overrideBrowserGlobal,
+} from '../../shared/src/browser-env.ts';
 
 initReplicacheTesting();
 
@@ -69,8 +71,8 @@ test('cookie', async () => {
 
   await rep.pull();
 
-  await tickUntil(() => pullDone);
-  await tickAFewTimes();
+  await tickUntil(vi, () => pullDone);
+  await tickAFewTimes(vi);
 
   expect(await rep.impl.cookie).to.equal('newCookie');
   fetchMock.reset();
@@ -360,7 +362,7 @@ test('overlapping writes', async () => {
 
   let resA = mut({duration: 250, ret: 'a'});
   // create a gap to make sure resA starts first (our rwlock isn't fair).
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   let resB = mut({duration: 0, ret: 'b'});
   // race them, a should complete first, indicating that b waited
   expect(await Promise.race([resA, resB])).to.equal('a');
@@ -369,14 +371,14 @@ test('overlapping writes', async () => {
 
   // reads wait on writes
   resA = mut({duration: 250, ret: 'a'});
-  await clock.tickAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
   resB = rep.query(() => 'b');
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   expect(await Promise.race([resA, resB])).to.equal('a');
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   await resA;
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   await resB;
 });
 
@@ -401,7 +403,7 @@ test('push delay', async () => {
 
   const id1 = 14323534;
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   fetchMock.reset();
 
   fetchMock.postOnce(pushURL, {
@@ -414,7 +416,7 @@ test('push delay', async () => {
 
   expect(fetchMock.calls()).to.have.length(0);
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   expect(fetchMock.calls()).to.have.length(1);
 });
@@ -432,37 +434,37 @@ test('reauth push', async () => {
     },
   });
 
-  const consoleErrorStub = sinon.stub(console, 'error');
-  const getAuthFake = sinon.fake.returns(null);
+  const consoleErrorStub = vi.spyOn(console, 'error');
+  const getAuthFake = vi.fn().mockReturnValue(null);
   rep.getAuth = getAuthFake;
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   fetchMock.post(pushURL, {body: 'xxx', status: httpStatusUnauthorized});
 
   await rep.mutate.noop();
-  await tickUntil(() => getAuthFake.callCount > 0, 1);
+  await tickUntil(vi, () => getAuthFake.mock.calls.length > 0, 1);
 
   expectConsoleLogContextStub(
     rep.name,
-    consoleErrorStub.firstCall,
+    consoleErrorStub.mock.calls[0],
     'Got a non 200 response doing push: 401: xxx',
     ['push', requestIDLogContextRegex],
   );
 
   {
-    await tickAFewTimes();
+    await tickAFewTimes(vi);
 
-    const consoleInfoStub = sinon.stub(console, 'info');
-    const getAuthFake = sinon.fake(() => 'boo');
+    const consoleInfoStub = vi.spyOn(console, 'info');
+    const getAuthFake = vi.fn(() => 'boo');
     rep.getAuth = getAuthFake;
 
     await rep.mutate.noop();
-    await tickUntil(() => consoleInfoStub.callCount > 0, 1);
+    await tickUntil(vi, () => consoleInfoStub.mock.calls.length > 0, 1);
 
     expectConsoleLogContextStub(
       rep.name,
-      consoleInfoStub.firstCall,
+      consoleInfoStub.mock.calls[0],
       'Tried to reauthenticate too many times',
       ['push'],
     );
@@ -496,34 +498,34 @@ test('HTTP status pull', async () => {
     }
   });
 
-  const consoleErrorStub = sinon.stub(console, 'error');
+  const consoleErrorStub = vi.spyOn(console, 'error');
 
   rep.pullIgnorePromise({now: true});
 
-  await tickAFewTimes(60, 10);
+  await tickAFewTimes(vi, 60, 10);
 
-  expect(consoleErrorStub.callCount).to.equal(4);
+  expect(consoleErrorStub).toHaveBeenCalledTimes(4);
   expectConsoleLogContextStub(
     rep.name,
-    consoleErrorStub.firstCall,
+    consoleErrorStub.mock.calls[0],
     'Got a non 200 response doing pull: 500: internal error',
     ['pull', requestIDLogContextRegex],
   );
   expectConsoleLogContextStub(
     rep.name,
-    consoleErrorStub.secondCall,
+    consoleErrorStub.mock.calls[1],
     'Got a non 200 response doing pull: 404: not found',
     ['pull', requestIDLogContextRegex],
   );
   expectConsoleLogContextStub(
     rep.name,
-    consoleErrorStub.thirdCall,
+    consoleErrorStub.mock.calls[2],
     'Got a non 200 response doing pull: 201: created',
     ['pull', requestIDLogContextRegex],
   );
   expectConsoleLogContextStub(
     rep.name,
-    consoleErrorStub.lastCall,
+    consoleErrorStub.mock.lastCall!,
     'Got a non 200 response doing pull: 204',
     ['pull', requestIDLogContextRegex],
   );
@@ -559,36 +561,36 @@ test('HTTP status push', async () => {
     }
   });
 
-  const consoleErrorStub = sinon.stub(console, 'error');
+  const consoleErrorStub = vi.spyOn(console, 'error');
 
   await add({
     a: 0,
   });
 
-  await tickAFewTimes(60, 10);
+  await tickAFewTimes(vi, 60, 10);
 
-  expect(consoleErrorStub.callCount).to.equal(4);
+  expect(consoleErrorStub).toHaveBeenCalledTimes(4);
   expectConsoleLogContextStub(
     rep.name,
-    consoleErrorStub.firstCall,
+    consoleErrorStub.mock.calls[0],
     'Got a non 200 response doing push: 500: internal error',
     ['push', requestIDLogContextRegex],
   );
   expectConsoleLogContextStub(
     rep.name,
-    consoleErrorStub.secondCall,
+    consoleErrorStub.mock.calls[1],
     'Got a non 200 response doing push: 404: not found',
     ['push', requestIDLogContextRegex],
   );
   expectConsoleLogContextStub(
     rep.name,
-    consoleErrorStub.thirdCall,
+    consoleErrorStub.mock.calls[2],
     'Got a non 200 response doing push: 201: created',
     ['push', requestIDLogContextRegex],
   );
   expectConsoleLogContextStub(
     rep.name,
-    consoleErrorStub.lastCall,
+    consoleErrorStub.mock.lastCall!,
     'Got a non 200 response doing push: 204',
     ['push', requestIDLogContextRegex],
   );
@@ -1045,66 +1047,62 @@ test('index scan start', async () => {
 });
 
 test('logLevel', async () => {
-  const info = sinon.stub(console, 'info');
-  const debug = sinon.stub(console, 'debug');
+  const info = vi.spyOn(console, 'info');
+  const debug = vi.spyOn(console, 'debug');
 
   // Just testing that we get some output
   let rep = await replicacheForTesting('log-level', {logLevel: 'error'});
   await rep.query(() => 42);
-  expect(info.callCount).to.equal(0);
+  expect(info).toHaveBeenCalledTimes(0);
   await rep.close();
 
-  info.reset();
-  debug.reset();
-  await tickAFewTimes(10, 100);
+  info.mockClear();
+  debug.mockClear();
+  await tickAFewTimes(vi, 10, 100);
 
   rep = await replicacheForTesting('log-level', {logLevel: 'info'});
   await rep.query(() => 42);
-  expect(info.callCount).to.equal(0);
-  expect(debug.callCount).to.equal(0);
+  expect(info).toHaveBeenCalledTimes(0);
+  expect(debug).toHaveBeenCalledTimes(0);
   await rep.close();
 
-  info.reset();
-  debug.reset();
-  await tickAFewTimes(10, 100);
+  info.mockClear();
+  debug.mockClear();
+  await tickAFewTimes(vi, 10, 100);
 
   rep = await replicacheForTesting('log-level', {logLevel: 'debug'});
 
   await rep.query(() => 42);
-  expect(info.callCount).to.be.equal(0);
-  expect(debug.callCount).to.be.greaterThan(0);
+  expect(info).toHaveBeenCalledTimes(0);
+  expect(debug.mock.calls.length).to.be.greaterThan(0);
 
   expect(
-    debug.getCalls().some(call => call.firstArg.startsWith(`name=${rep.name}`)),
+    debug.mock.calls.some(args => args[0].startsWith(`name=${rep.name}`)),
   ).to.equal(true);
   expect(
-    debug
-      .getCalls()
-      .some(call => call.args.length > 0 && call.args[1].endsWith('PULL')),
+    debug.mock.calls.some(args => args.length > 0 && args[1].endsWith('PULL')),
   ).to.equal(true);
   expect(
-    debug
-      .getCalls()
-      .some(call => call.args.length > 0 && call.args[1].endsWith('PUSH')),
+    debug.mock.calls.some(args => args.length > 0 && args[1].endsWith('PUSH')),
   ).to.equal(true);
 
   await rep.close();
 });
 
 test('logSinks length 0', async () => {
-  const infoStub = sinon.stub(console, 'info');
-  const debugStub = sinon.stub(console, 'debug');
+  const infoStub = vi.spyOn(console, 'info');
+  const debugStub = vi.spyOn(console, 'debug');
   const expectNoLogsToConsole = () => {
-    expect(infoStub.callCount).to.equal(0);
-    expect(debugStub.callCount).to.equal(0);
+    expect(infoStub).toHaveBeenCalledTimes(0);
+    expect(debugStub).toHaveBeenCalledTimes(0);
   };
 
-  const resetLogCounts = () => {
-    infoStub.reset();
-    debugStub.reset();
+  const clearLogCounts = () => {
+    infoStub.mockClear();
+    debugStub.mockClear();
   };
 
-  resetLogCounts();
+  clearLogCounts();
   let rep = await replicacheForTesting('logSinks-0', {
     logLevel: 'info',
     logSinks: [],
@@ -1122,11 +1120,11 @@ test('logSinks length 0', async () => {
 });
 
 test('logSinks length 1', async () => {
-  const infoStub = sinon.stub(console, 'info');
-  const debugStub = sinon.stub(console, 'debug');
+  const infoStub = vi.spyOn(console, 'info');
+  const debugStub = vi.spyOn(console, 'debug');
   const expectNoLogsToConsole = () => {
-    expect(infoStub.callCount).to.equal(0);
-    expect(debugStub.callCount).to.equal(0);
+    expect(infoStub).toHaveBeenCalledTimes(0);
+    expect(debugStub).toHaveBeenCalledTimes(0);
   };
 
   const initLogCounts = () => ({
@@ -1136,10 +1134,10 @@ test('logSinks length 1', async () => {
     error: 0,
   });
   let logCounts: Record<LogLevel, number> = initLogCounts();
-  const resetLogCounts = () => {
+  const clearLogCounts = () => {
     logCounts = initLogCounts();
-    infoStub.reset();
-    debugStub.reset();
+    infoStub.mockClear();
+    debugStub.mockClear();
   };
 
   const logSink = {
@@ -1147,7 +1145,7 @@ test('logSinks length 1', async () => {
       logCounts[level]++;
     },
   };
-  resetLogCounts();
+  clearLogCounts();
   let rep = await replicacheForTesting('logSinks-1', {
     logLevel: 'info',
     logSinks: [logSink],
@@ -1171,11 +1169,11 @@ test('logSinks length 1', async () => {
 });
 
 test('logSinks length 3', async () => {
-  const infoStub = sinon.stub(console, 'info');
-  const debugStub = sinon.stub(console, 'debug');
+  const infoStub = vi.spyOn(console, 'info');
+  const debugStub = vi.spyOn(console, 'debug');
   const expectNoLogsToConsole = () => {
-    expect(infoStub.callCount).to.equal(0);
-    expect(debugStub.callCount).to.equal(0);
+    expect(infoStub).toHaveBeenCalledTimes(0);
+    expect(debugStub).toHaveBeenCalledTimes(0);
   };
 
   const initLogCounts = () =>
@@ -1186,10 +1184,10 @@ test('logSinks length 3', async () => {
       error: 0,
     }));
   let logCounts: Record<LogLevel, number>[] = initLogCounts();
-  const resetLogCounts = () => {
+  const clearLogCounts = () => {
     logCounts = initLogCounts();
-    infoStub.reset();
-    debugStub.reset();
+    infoStub.mockClear();
+    debugStub.mockClear();
   };
 
   const logSinks = Array.from({length: 3}, (_, i) => ({
@@ -1197,7 +1195,7 @@ test('logSinks length 3', async () => {
       logCounts[i][level]++;
     },
   }));
-  resetLogCounts();
+  clearLogCounts();
   let rep = await replicacheForTesting('log-level', {
     logLevel: 'info',
     logSinks,
@@ -1319,42 +1317,42 @@ test('onSync', async () => {
   );
   const add = rep.mutate.addData;
 
-  const onSync = sinon.fake();
+  const onSync = vi.fn();
   rep.onSync = onSync;
 
-  expect(onSync.callCount).to.equal(0);
+  expect(onSync).toHaveBeenCalledTimes(0);
 
   const {clientID} = rep;
   fetchMock.postOnce(pullURL, makePullResponseV1(clientID, 2, undefined, 1));
   await rep.pull();
-  await tickAFewTimes(15);
+  await tickAFewTimes(vi, 15);
 
-  expect(onSync.callCount).to.equal(2);
-  expect(onSync.getCall(0).args[0]).to.be.true;
-  expect(onSync.getCall(1).args[0]).to.be.false;
+  expect(onSync).toHaveBeenCalledTimes(2);
+  expect(onSync.mock.calls[0][0]).to.be.true;
+  expect(onSync.mock.calls[1][0]).to.be.false;
 
-  onSync.resetHistory();
+  onSync.mockClear();
   fetchMock.postOnce(pushURL, {});
   await add({a: 'a'});
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
-  expect(onSync.callCount).to.equal(2);
-  expect(onSync.getCall(0).args[0]).to.be.true;
-  expect(onSync.getCall(1).args[0]).to.be.false;
+  expect(onSync).toHaveBeenCalledTimes(2);
+  expect(onSync.mock.calls[0][0]).to.be.true;
+  expect(onSync.mock.calls[1][0]).to.be.false;
 
   fetchMock.postOnce(pushURL, {});
-  onSync.resetHistory();
+  onSync.mockClear();
   await add({b: 'b'});
-  await tickAFewTimes();
-  expect(onSync.callCount).to.equal(2);
-  expect(onSync.getCall(0).args[0]).to.be.true;
-  expect(onSync.getCall(1).args[0]).to.be.false;
+  await tickAFewTimes(vi);
+  expect(onSync).toHaveBeenCalledTimes(2);
+  expect(onSync.mock.calls[0][0]).to.be.true;
+  expect(onSync.mock.calls[1][0]).to.be.false;
 
   {
     // Try with reauth
-    const consoleErrorStub = sinon.stub(console, 'error');
+    const consoleErrorStub = vi.spyOn(console, 'error');
     fetchMock.postOnce(pushURL, {body: 'xxx', status: httpStatusUnauthorized});
-    onSync.resetHistory();
+    onSync.mockClear();
     rep.getAuth = () => {
       // Next time it is going to be fine
       fetchMock.postOnce({url: pushURL, headers: {authorization: 'ok'}}, {});
@@ -1363,26 +1361,26 @@ test('onSync', async () => {
 
     await add({c: 'c'});
 
-    await tickUntil(() => onSync.callCount >= 4);
+    await tickUntil(vi, () => onSync.mock.calls.length >= 4);
 
     expectConsoleLogContextStub(
       rep.name,
-      consoleErrorStub.firstCall,
+      consoleErrorStub.mock.calls[0],
       'Got a non 200 response doing push: 401: xxx',
       ['push', requestIDLogContextRegex],
     );
 
-    expect(onSync.callCount).to.equal(4);
-    expect(onSync.getCall(0).args[0]).to.be.true;
-    expect(onSync.getCall(1).args[0]).to.be.false;
-    expect(onSync.getCall(2).args[0]).to.be.true;
-    expect(onSync.getCall(3).args[0]).to.be.false;
+    expect(onSync).toHaveBeenCalledTimes(4);
+    expect(onSync.mock.calls[0][0]).to.be.true;
+    expect(onSync.mock.calls[1][0]).to.be.false;
+    expect(onSync.mock.calls[2][0]).to.be.true;
+    expect(onSync.mock.calls[3][0]).to.be.false;
   }
 
   rep.onSync = null;
-  onSync.resetHistory();
+  onSync.mockClear();
   fetchMock.postOnce(pushURL, {});
-  expect(onSync.callCount).to.equal(0);
+  expect(onSync).toHaveBeenCalledTimes(0);
 });
 
 test('push timing', async () => {
@@ -1395,17 +1393,17 @@ test('push timing', async () => {
     mutators: {addData},
   });
 
-  const onInvokePush = (rep.onPushInvoked = sinon.fake());
+  const onInvokePush = (rep.onPushInvoked = vi.fn());
 
   const add = rep.mutate.addData;
 
   fetchMock.post(pushURL, {});
   await add({a: 0});
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   const pushCallCount = () => {
-    const rv = onInvokePush.callCount;
-    onInvokePush.resetHistory();
+    const rv = onInvokePush.mock.calls.length;
+    onInvokePush.mockClear();
     return rv;
   };
 
@@ -1419,7 +1417,7 @@ test('push timing', async () => {
 
   expect(pushCallCount()).to.equal(0);
 
-  await clock.tickAsync(pushDelay + 10);
+  await vi.advanceTimersByTimeAsync(pushDelay + 10);
 
   expect(pushCallCount()).to.equal(1);
 
@@ -1429,13 +1427,13 @@ test('push timing', async () => {
 
   expect(pushCallCount()).to.equal(0);
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   await p1;
   expect(pushCallCount()).to.equal(1);
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   await p2;
   expect(pushCallCount()).to.equal(0);
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
   await p3;
   expect(pushCallCount()).to.equal(0);
 });
@@ -1457,21 +1455,21 @@ test('push and pull concurrently', async () => {
     },
   );
 
-  const onBeginPull = (rep.onBeginPull = sinon.fake());
-  const commitSpy = sinon.spy(Write.prototype, 'commitWithDiffs');
-  const onPushInvoked = (rep.onPushInvoked = sinon.fake());
+  const onBeginPull = (rep.onBeginPull = vi.fn());
+  const commitSpy = vi.spyOn(Write.prototype, 'commitWithDiffs');
+  const onPushInvoked = (rep.onPushInvoked = vi.fn());
 
   function resetSpies() {
-    onBeginPull.resetHistory();
-    commitSpy.resetHistory();
-    onPushInvoked.resetHistory();
+    onBeginPull.mockClear();
+    commitSpy.mockClear();
+    onPushInvoked.mockClear();
   }
 
   const callCounts = () => {
     const rv = {
-      beginPull: onBeginPull.callCount,
-      commit: commitSpy.callCount,
-      invokePush: onPushInvoked.callCount,
+      beginPull: onBeginPull.mock.calls.length,
+      commit: commitSpy.mock.calls.length,
+      invokePush: onPushInvoked.mock.calls.length,
     };
     resetSpies();
     return rv;
@@ -1497,7 +1495,7 @@ test('push and pull concurrently', async () => {
   await add({b: 1});
   await rep.pull();
 
-  await clock.tickAsync(10);
+  await vi.advanceTimersByTimeAsync(10);
 
   // Only one push at a time but we want push and pull to be concurrent.
   expect(callCounts()).to.deep.equal({
@@ -1506,11 +1504,11 @@ test('push and pull concurrently', async () => {
     invokePush: 1,
   });
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   expect(requests).to.deep.equal([pullURL, pushURL]);
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   expect(requests).to.deep.equal([pullURL, pushURL]);
 
@@ -1529,7 +1527,7 @@ test('schemaVersion pull', async () => {
   });
 
   await rep.pull();
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   const req = await fetchMock.lastCall().request.json();
   expect(req.schemaVersion).to.deep.equal(schemaVersion);
@@ -1550,7 +1548,7 @@ test('schemaVersion push', async () => {
   await add({a: 1});
 
   fetchMock.post(pushURL, {});
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   const req = await fetchMock.lastCall().request.json();
   expect(req.schemaVersion).to.deep.equal(schemaVersion);
@@ -1633,8 +1631,8 @@ test('pull and index update', async () => {
 
     await rep.pull();
 
-    await tickUntil(() => pullDone);
-    await tickAFewTimes();
+    await tickUntil(vi, () => pullDone);
+    await tickAFewTimes(vi);
 
     const actualResult = await rep.query(tx =>
       tx.scan({indexName}).entries().toArray(),
@@ -1713,15 +1711,15 @@ async function populateDataUsingPull<
   await rep.pull();
 
   // Allow pull to finish (larger than PERSIST_TIMEOUT)
-  await clock.tickAsync(22 * 1000);
-  await tickAFewTimes(20, 100);
+  await vi.advanceTimersByTimeAsync(22 * 1000);
+  await tickAFewTimes(vi, 20, 100);
 
   await rep.persist();
 }
 
 async function tickUntilTimeIs(time: number, tick = 10) {
   while (Date.now() < time) {
-    await clock.tickAsync(tick);
+    await vi.advanceTimersByTimeAsync(tick);
   }
 }
 
@@ -1750,21 +1748,21 @@ test('pull mutate options', async () => {
 
   while (Date.now() < 1150) {
     rep.pullIgnorePromise();
-    await clock.tickAsync(10);
+    await vi.advanceTimersByTimeAsync(10);
   }
 
   rep.requestOptions.minDelayMs = 500;
 
   while (Date.now() < 2000) {
     rep.pullIgnorePromise();
-    await clock.tickAsync(100);
+    await vi.advanceTimersByTimeAsync(100);
   }
 
   rep.requestOptions.minDelayMs = 25;
 
   while (Date.now() < 2500) {
     rep.pullIgnorePromise();
-    await clock.tickAsync(5);
+    await vi.advanceTimersByTimeAsync(5);
   }
 
   // the first one is often off by a few ms
@@ -1790,7 +1788,7 @@ test('online', async () => {
     log.push(b);
   };
 
-  const consoleDebugStub = sinon.stub(console, 'debug');
+  const consoleDebugStub = vi.spyOn(console, 'debug');
 
   fetchMock.post(pushURL, async () => {
     await sleep(10);
@@ -1802,27 +1800,27 @@ test('online', async () => {
 
   await rep.mutate.addData({a: 0});
 
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   expect(rep.online).to.equal(false);
   expect(
-    consoleDebugStub
-      .getCalls()
-      .some(({args}) => args.join('\n').indexOf('Push threw') > -1),
+    consoleDebugStub.mock.calls.some(
+      args => args.join('\n').indexOf('Push threw') > -1,
+    ),
   );
   expect(log).to.deep.equal([false]);
 
-  consoleDebugStub.resetHistory();
+  consoleDebugStub.mockClear();
 
   fetchMock.post(pushURL, 'ok');
   await rep.mutate.addData({a: 1});
 
-  await tickAFewTimes(20);
+  await tickAFewTimes(vi, 20);
 
   expect(
-    !consoleDebugStub
-      .getCalls()
-      .some(({args}) => args.join('\n').indexOf('Push threw') > -1),
+    !consoleDebugStub.mock.calls.some(
+      args => args.join('\n').indexOf('Push threw') > -1,
+    ),
   );
   expect(rep.online).to.equal(true);
   expect(log).to.deep.equal([false, true]);
@@ -1879,7 +1877,7 @@ async function testMemStoreWithCounters<MD extends MutatorDefs>(
   // Safari does not have requestIdleTimeout so it delays 1 second for persist
   // and 1 second for refresh. We need to wait to have all browsers have a
   // chance to run persist and the refresh triggered by persist before we continue.
-  await clock.tickAsync(2000);
+  await vi.advanceTimersByTimeAsync(2000);
 
   expect(store.readCount).to.be.greaterThan(0, 'readCount');
   expect(store.writeCount).to.be.greaterThan(0, 'writeCount');
@@ -1998,7 +1996,7 @@ test('mutate args in mutation throws due to frozen', async () => {
   expect(err).instanceOf(Error);
 
   // Safari does not have requestIdleTimeout so it waits for a second.
-  await clock.tickAsync(1000);
+  await vi.advanceTimersByTimeAsync(1000);
 
   const o = findPropertyValue(store.map(), 'mutatorName', 'mutArgs');
   expect(o).undefined;
@@ -2061,7 +2059,7 @@ test('mutation timestamps are immutable', async () => {
   // Move clock forward, then cause a rebase, the pending mutation will
   // replay internally.
   pending = [];
-  await tickAFewTimes();
+  await tickAFewTimes(vi);
 
   const {clientID} = rep;
   const poke: Poke = {
@@ -2102,17 +2100,37 @@ test('mutation timestamps are immutable', async () => {
 type DocumentVisibilityState = 'hidden' | 'visible';
 
 describe('check for client not found in visibilitychange', () => {
+  let document: Document;
+
+  beforeEach(() => {
+    document = new (class extends EventTarget {
+      //  #visibilityState = 'visible';
+      get visibilityState() {
+        return 'visible';
+      }
+    })() as Document;
+
+    overrideBrowserGlobal('document', document);
+
+    return () => {
+      clearBrowserOverrides();
+      vi.restoreAllMocks();
+    };
+  });
+
   const t = (
     visibilityState: DocumentVisibilityState,
     shouldBeCalled: boolean,
   ) => {
     test('visibilityState: ' + visibilityState, async () => {
-      const consoleErrorStub = sinon.stub(console, 'error');
+      const consoleErrorStub = vi.spyOn(console, 'error');
       const visibilityStateResolver = resolver<void>();
-      sinon.stub(document, 'visibilityState').get(() => {
-        visibilityStateResolver.resolve();
-        return visibilityState;
-      });
+      const spy = vi
+        .spyOn(document, 'visibilityState', 'get')
+        .mockImplementation(() => {
+          visibilityStateResolver.resolve();
+          return visibilityState;
+        });
 
       const rep = await replicacheForTesting(
         `check-for-client-not-found-in-visibilitychange-${visibilityState}`,
@@ -2129,7 +2147,7 @@ describe('check for client not found in visibilitychange', () => {
       const {clientID} = rep;
       await deleteClientForTesting(clientID, rep.perdag);
 
-      consoleErrorStub.resetHistory();
+      consoleErrorStub.mockClear();
 
       document.dispatchEvent(new Event('visibilitychange'));
       await visibilityStateResolver.promise;
@@ -2148,6 +2166,8 @@ describe('check for client not found in visibilitychange', () => {
       }
 
       await rep.close();
+
+      spy.mockClear();
     });
   };
 
@@ -2421,19 +2441,19 @@ test('subscribe while closing', async () => {
   });
   await rep.mutate.addData({a: 1});
   const p = rep.close();
-  const query = sinon.fake();
-  const onData = sinon.fake();
-  const watchCallback = sinon.fake();
+  const query = vi.fn();
+  const onData = vi.fn();
+  const watchCallback = vi.fn();
   const unsubscribe = rep.subscribe(query, onData);
   const unwatch = rep.experimentalWatch(watchCallback);
 
-  await clock.tickAsync(10);
+  await vi.advanceTimersByTimeAsync(10);
 
   await p;
   unsubscribe();
   unwatch();
 
-  expect(query.callCount).to.equal(0);
-  expect(onData.callCount).to.equal(0);
-  expect(watchCallback.callCount).to.equal(0);
+  expect(query).toHaveBeenCalledTimes(0);
+  expect(onData).toHaveBeenCalledTimes(0);
+  expect(watchCallback).toHaveBeenCalledTimes(0);
 });

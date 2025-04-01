@@ -13,15 +13,9 @@ import {Snitch, type SnitchMessage} from './snitch.ts';
 import type {SourceChange} from './source.ts';
 import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 suite('sibling relationships tests with issues, comments, and owners', () => {
   const base = {
@@ -814,7 +808,7 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
     const ordering = t.sorts?.[i] ?? [['id', 'asc']];
     const source = createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'test',
       t.columns[i],
       t.primaryKeys[i],

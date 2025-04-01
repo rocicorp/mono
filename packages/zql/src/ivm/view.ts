@@ -5,7 +5,7 @@ import type {Input} from './operator.ts';
 
 export type View = EntryList | Entry | undefined;
 export type EntryList = readonly Entry[];
-export type Entry = {[key: string]: Value | View};
+export type Entry = {readonly [key: string]: Value | View};
 
 export type Format = {
   singular: boolean;

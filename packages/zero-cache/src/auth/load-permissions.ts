@@ -19,15 +19,17 @@ export type LoadedPermissions = {
 export function loadPermissions(
   lc: LogContext,
   replica: StatementRunner,
+  appID: string,
 ): LoadedPermissions {
   const {permissions, hash} = replica.get(
-    `SELECT permissions, hash FROM "zero.permissions"`,
+    `SELECT permissions, hash FROM "${appID}.permissions"`,
   );
   if (permissions === null) {
+    const appIDFlag = appID === 'zero' ? '' : ` --app-id=${appID}`;
     lc.warn?.(
       `\n\n\n` +
         `No upstream permissions deployed.\n` +
-        `Run 'npx zero-deploy-permissions' to enforce permissions.` +
+        `Run 'npx zero-deploy-permissions${appIDFlag}' to enforce permissions.` +
         `\n\n\n`,
     );
     return {permissions, hash: null};
@@ -47,22 +49,22 @@ export function loadPermissions(
       {cause: e},
     );
   }
-  lc.debug?.(`Loaded permissions (hash: ${hash})`);
   return {permissions: parsed, hash};
 }
 
 export function reloadPermissionsIfChanged(
   lc: LogContext,
   replica: StatementRunner,
+  appID: string,
   current: LoadedPermissions | null,
 ): {permissions: LoadedPermissions; changed: boolean} {
   if (current === null) {
-    return {permissions: loadPermissions(lc, replica), changed: true};
+    return {permissions: loadPermissions(lc, replica, appID), changed: true};
   }
-  const {hash} = replica.get(`SELECT hash FROM "zero.permissions"`);
+  const {hash} = replica.get(`SELECT hash FROM "${appID}.permissions"`);
   return hash === current.hash
     ? {permissions: current, changed: false}
-    : {permissions: loadPermissions(lc, replica), changed: true};
+    : {permissions: loadPermissions(lc, replica, appID), changed: true};
 }
 
 export function getSchema(lc: LogContext, replica: Database): Schema {
@@ -77,7 +79,6 @@ export function getSchema(lc: LogContext, replica: Database): Schema {
     }),
   );
   return {
-    version: 1, // only used on the client-side
     tables,
     relationships: {}, // relationships are already denormalized in ASTs
   };

@@ -11,15 +11,15 @@ import {
   type Format,
   type HumanReadable,
   type Input,
+  type Node,
   type Output,
   type Query,
+  type ResultType,
+  type Schema,
+  type Stream,
+  type ViewChange,
   type ViewFactory,
-} from '../../zero-advanced/src/mod.js';
-import type {Schema} from '../../zero-schema/src/mod.js';
-import type {ResultType} from '../../zql/src/query/typed-view.js';
-import type {Node} from '../../zql/src/ivm/data.ts';
-import type {ViewChange} from '../../zql/src/ivm/view-apply-change.ts';
-import type {Stream} from '../../zql/src/ivm/stream.ts';
+} from '../../zero-client/src/mod.js';
 
 export type QueryResultDetails = {
   readonly type: ResultType;

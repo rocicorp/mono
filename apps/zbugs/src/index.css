@@ -781,7 +781,7 @@ textarea.autoResize {
 }
 
 .issue-detail-title {
-  font-size: 2rem;
+  font-size: 3rem;
   font-weight: 800;
   margin: 1.5rem 0;
 }
@@ -988,31 +988,30 @@ textarea.autoResize {
   }
 
   ul.contains-task-list li.task-list-item {
-    display: flex;
-    align-items: center;
-    gap: 0.1rem;
-    padding-left: 0;
+    display: block;
   }
 
-  ul.contains-task-list li.task-list-item::before {
+  ul.contains-task-list li.task-list-item > .task-line {
+    position: relative;
+    padding-left: 2.25rem;
+  }
+
+  ul.contains-task-list li.task-list-item .task-line::before {
     content: '';
-    display: inline-block;
+    position: absolute;
+    left: 0;
+    top: 0.4em; /* adjust vertically as needed */
     width: 1.25rem;
     height: 1.25rem;
-    margin-right: 1rem;
     border: 1px solid var(--color-button-outline);
-    border-radius: 4px;
-    background-color: transparent;
     border-radius: 0.25rem;
-    flex: 0 0 auto;
-    align-self: start;
-    top: 7px;
-    position: relative;
+    background-color: transparent;
   }
 
   /* Add the checkmark when checked */
   ul.contains-task-list
-    li.task-list-item:has(> input:disabled:checked)::before {
+    li.task-list-item
+    .task-line:has(> input:disabled:checked)::before {
     content: '';
     border-color: var(--color-primary-cta);
     color: var(--color-primary-cta);
@@ -1082,17 +1081,20 @@ textarea.autoResize {
 
   /* Markdown: Headers */
   h1 {
-    font-size: 3rem;
+    font-size: 2.25rem;
+    margin: 3rem 0 1rem;
+    font-weight: 700;
   }
 
   h2 {
-    font-size: 2rem;
+    font-size: 1.6875rem;
+    font-weight: 700;
     margin: 3rem 0 1rem;
   }
 
   h3 {
     font-size: 1.25rem;
-    font-weight: 700;
+    font-weight: 600;
     margin: 2rem 0 1rem;
   }
 
@@ -1309,6 +1311,10 @@ textarea.autoResize {
 
   .list-view-filter-container > .sort-control-container {
     flex: unset;
+  }
+
+  .hide-on-small {
+    display: none;
   }
 
   .list-view-filter-container > .set-filter-container {

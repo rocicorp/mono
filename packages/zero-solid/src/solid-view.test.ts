@@ -1,28 +1,23 @@
 import {resolver} from '@rocicorp/resolver';
 import {expect, test, vi} from 'vitest';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {unreachable} from '../../shared/src/asserts.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {stringCompare} from '../../shared/src/string-compare.ts';
 import {createSchema, number, string, table} from '../../zero/src/zero.ts';
+import type {Change} from '../../zql/src/ivm/change.ts';
+import {Join} from '../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
+import type {Input} from '../../zql/src/ivm/operator.ts';
+import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
+import {Take} from '../../zql/src/ivm/take.ts';
+import {createSource} from '../../zql/src/ivm/test/source-factory.ts';
+import {refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
 import {SolidView, solidViewFactory} from './solid-view.ts';
-import {createSource} from '../../zql/src/ivm/test/source-factory.ts';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import type {LogConfig} from '../../otel/src/log-options.ts';
-import {Join} from '../../zql/src/ivm/join.ts';
-import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
-import {Take} from '../../zql/src/ivm/take.ts';
-import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
-import type {Input} from '../../zql/src/ivm/operator.ts';
-import type {Change} from '../../zql/src/ivm/change.ts';
-import {stringCompare} from '../../shared/src/string-compare.ts';
-import {unreachable} from '../../shared/src/asserts.ts';
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 test('basics', () => {
   const ms = new MemorySource(
@@ -53,8 +48,8 @@ test('basics', () => {
   );
 
   const state0 = [
-    {a: 1, b: 'a'},
-    {a: 2, b: 'b'},
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state0);
 
@@ -65,9 +60,9 @@ test('basics', () => {
   commit();
 
   const state1 = [
-    {a: 1, b: 'a'},
-    {a: 2, b: 'b'},
-    {a: 3, b: 'c'},
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
+    {a: 3, b: 'c', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state1);
 
@@ -77,7 +72,7 @@ test('basics', () => {
   expect(view.data).toEqual(state1);
   commit();
 
-  const state2 = [{a: 3, b: 'c'}];
+  const state2 = [{a: 3, b: 'c', [refCountSymbol]: 1}];
   expect(view.data).toEqual(state2);
 
   ms.push({row: {a: 3, b: 'c'}, type: 'remove'});
@@ -112,7 +107,7 @@ test('single-format', () => {
     true,
   );
 
-  const state0 = {a: 1, b: 'a'};
+  const state0 = {a: 1, b: 'a', [refCountSymbol]: 1};
   expect(view.data).toEqual(state0);
 
   // trying to add another element should be an error
@@ -120,7 +115,12 @@ test('single-format', () => {
   expect(() => {
     ms.push({row: {a: 2, b: 'b'}, type: 'add'});
     commit();
-  }).toThrow('single output already exists');
+  }).toThrow(
+    "Singular relationship '' should not have multiple rows. You may need to declare this relationship with the `many` helper instead of the `one` helper in your schema.",
+  );
+
+  // Adding the same element is not an error in the ArrayView but it is an error
+  // in the Source. This case is tested in view-apply-change.ts.
 
   ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
   expect(view.data).toEqual(state0);
@@ -132,7 +132,7 @@ test('single-format', () => {
 test('hydrate-empty', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
@@ -159,7 +159,7 @@ test('hydrate-empty', () => {
 test('tree', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
@@ -224,14 +224,17 @@ test('tree', () => {
           id: 2,
           name: 'foobar',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
       name: 'foobar',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -242,14 +245,17 @@ test('tree', () => {
           id: 4,
           name: 'monkey',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
       name: 'monkey',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state0);
@@ -268,8 +274,10 @@ test('tree', () => {
           id: 2,
           name: 'foobar',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 1,
@@ -280,14 +288,17 @@ test('tree', () => {
           id: 2,
           name: 'foobar',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
       name: 'foobar',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -298,14 +309,17 @@ test('tree', () => {
           id: 4,
           name: 'monkey',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
       name: 'monkey',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state1);
@@ -324,14 +338,17 @@ test('tree', () => {
           id: 2,
           name: 'foobar',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
       name: 'foobar',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -342,14 +359,17 @@ test('tree', () => {
           id: 4,
           name: 'monkey',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
       name: 'monkey',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state2);
@@ -371,6 +391,7 @@ test('tree', () => {
       name: 'foo',
       childID: 2,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -381,14 +402,17 @@ test('tree', () => {
           id: 4,
           name: 'monkey',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
       name: 'monkey',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state3);
@@ -414,14 +438,17 @@ test('tree', () => {
           id: 2,
           name: 'foobaz',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
       name: 'foobaz',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -432,14 +459,17 @@ test('tree', () => {
           id: 4,
           name: 'monkey',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
       name: 'monkey',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ]);
 });
@@ -447,7 +477,7 @@ test('tree', () => {
 test('tree-single', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
@@ -508,7 +538,9 @@ test('tree-single', () => {
       id: 2,
       name: 'foobar',
       childID: null,
+      [refCountSymbol]: 1,
     },
+    [refCountSymbol]: 1,
   };
   expect(view.data).toEqual(state0);
 
@@ -526,6 +558,7 @@ test('tree-single', () => {
     name: 'foo',
     childID: 2,
     child: undefined,
+    [refCountSymbol]: 1,
   };
   expect(view.data).toEqual(state1);
 
@@ -664,9 +697,11 @@ test('collapse', () => {
         {
           id: 1,
           name: 'label',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state1);
@@ -776,13 +811,16 @@ test('collapse', () => {
         {
           id: 1,
           name: 'label',
+          [refCountSymbol]: 1,
         },
         {
           id: 2,
           name: 'label2',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state3);
@@ -893,13 +931,16 @@ test('collapse', () => {
         {
           id: 1,
           name: 'label',
+          [refCountSymbol]: 1,
         },
         {
           id: 2,
           name: 'label2',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state4);
@@ -1011,13 +1052,16 @@ test('collapse', () => {
         {
           id: 1,
           name: 'label',
+          [refCountSymbol]: 1,
         },
         {
           id: 2,
           name: 'label2x',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ]);
 });
@@ -1146,8 +1190,10 @@ test('collapse-single', () => {
       labels: {
         id: 1,
         name: 'label',
+        [refCountSymbol]: 1,
       },
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ]);
 });
@@ -1155,7 +1201,7 @@ test('collapse-single', () => {
 test('basic with edit pushes', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {id: {type: 'number'}, b: {type: 'string'}},
     ['id'],
@@ -1177,8 +1223,8 @@ test('basic with edit pushes', () => {
   );
 
   const state0 = [
-    {id: 1, b: 'a'},
-    {id: 2, b: 'b'},
+    {id: 1, b: 'a', [refCountSymbol]: 1},
+    {id: 2, b: 'b', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state0);
 
@@ -1188,8 +1234,8 @@ test('basic with edit pushes', () => {
   commit();
 
   const state1 = [
-    {id: 1, b: 'a'},
-    {id: 2, b: 'b2'},
+    {id: 1, b: 'a', [refCountSymbol]: 1},
+    {id: 2, b: 'b2', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state1);
 
@@ -1198,15 +1244,15 @@ test('basic with edit pushes', () => {
   expect(view.data).toEqual(state1);
   commit();
   expect(view.data).toEqual([
-    {id: 1, b: 'a'},
-    {id: 3, b: 'b3'},
+    {id: 1, b: 'a', [refCountSymbol]: 1},
+    {id: 3, b: 'b3', [refCountSymbol]: 1},
   ]);
 });
 
 test('tree edit', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {
       id: {type: 'number'},
@@ -1270,8 +1316,10 @@ test('tree edit', () => {
           name: 'foobar',
           data: 'b',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
@@ -1279,6 +1327,7 @@ test('tree edit', () => {
       data: 'b',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -1291,8 +1340,10 @@ test('tree edit', () => {
           name: 'monkey',
           data: 'd',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
@@ -1300,6 +1351,7 @@ test('tree edit', () => {
       data: 'd',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state0);
@@ -1326,8 +1378,10 @@ test('tree edit', () => {
           name: 'foobar',
           data: 'b',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
@@ -1335,6 +1389,7 @@ test('tree edit', () => {
       data: 'b',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -1347,8 +1402,10 @@ test('tree edit', () => {
           name: 'monkey',
           data: 'd',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
@@ -1356,6 +1413,7 @@ test('tree edit', () => {
       data: 'd',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state1);
@@ -1393,8 +1451,10 @@ test('tree edit', () => {
           name: 'foobar',
           data: 'b',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
@@ -1402,6 +1462,7 @@ test('tree edit', () => {
       data: 'b',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -1414,8 +1475,10 @@ test('tree edit', () => {
           name: 'monkey',
           data: 'd2',
           childID: null,
+          [refCountSymbol]: 1,
         },
       ],
+      [refCountSymbol]: 1,
     },
     {
       id: 4,
@@ -1423,6 +1486,7 @@ test('tree edit', () => {
       data: 'd2',
       childID: null,
       children: [],
+      [refCountSymbol]: 1,
     },
   ];
 
@@ -1432,7 +1496,7 @@ test('tree edit', () => {
 test('edit to change the order', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
@@ -1459,9 +1523,9 @@ test('edit to change the order', () => {
   );
 
   const state0 = [
-    {a: 10, b: 'a'},
-    {a: 20, b: 'b'},
-    {a: 30, b: 'c'},
+    {a: 10, b: 'a', [refCountSymbol]: 1},
+    {a: 20, b: 'b', [refCountSymbol]: 1},
+    {a: 30, b: 'c', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state0);
 
@@ -1475,9 +1539,9 @@ test('edit to change the order', () => {
   commit();
 
   const state1 = [
-    {a: 5, b: 'b2'},
-    {a: 10, b: 'a'},
-    {a: 30, b: 'c'},
+    {a: 5, b: 'b2', [refCountSymbol]: 1},
+    {a: 10, b: 'a', [refCountSymbol]: 1},
+    {a: 30, b: 'c', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state1);
 
@@ -1491,9 +1555,9 @@ test('edit to change the order', () => {
   commit();
 
   const state2 = [
-    {a: 4, b: 'b3'},
-    {a: 10, b: 'a'},
-    {a: 30, b: 'c'},
+    {a: 4, b: 'b3', [refCountSymbol]: 1},
+    {a: 10, b: 'a', [refCountSymbol]: 1},
+    {a: 30, b: 'c', [refCountSymbol]: 1},
   ];
   expect(view.data).toEqual(state2);
 
@@ -1507,9 +1571,9 @@ test('edit to change the order', () => {
   commit();
 
   expect(view.data).toEqual([
-    {a: 10, b: 'a'},
-    {a: 20, b: 'b4'},
-    {a: 30, b: 'c'},
+    {a: 10, b: 'a', [refCountSymbol]: 1},
+    {a: 20, b: 'b4', [refCountSymbol]: 1},
+    {a: 30, b: 'c', [refCountSymbol]: 1},
   ]);
 });
 
@@ -1613,9 +1677,11 @@ test('edit to preserve relationships', () => {
         {
           id: 1,
           name: 'label1',
+          [refCountSymbol]: 1,
         },
       ],
       title: 'issue1',
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
@@ -1623,9 +1689,11 @@ test('edit to preserve relationships', () => {
         {
           id: 2,
           name: 'label2',
+          [refCountSymbol]: 1,
         },
       ],
       title: 'issue2',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state1);
@@ -1649,9 +1717,11 @@ test('edit to preserve relationships', () => {
         {
           id: 1,
           name: 'label1',
+          [refCountSymbol]: 1,
         },
       ],
       title: 'issue1 changed',
+      [refCountSymbol]: 1,
     },
     {
       id: 2,
@@ -1659,9 +1729,11 @@ test('edit to preserve relationships', () => {
         {
           id: 2,
           name: 'label2',
+          [refCountSymbol]: 1,
         },
       ],
       title: 'issue2',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state2);
@@ -1683,9 +1755,11 @@ test('edit to preserve relationships', () => {
         {
           id: 2,
           name: 'label2',
+          [refCountSymbol]: 1,
         },
       ],
       title: 'issue2',
+      [refCountSymbol]: 1,
     },
     {
       id: 3,
@@ -1693,9 +1767,11 @@ test('edit to preserve relationships', () => {
         {
           id: 1,
           name: 'label1',
+          [refCountSymbol]: 1,
         },
       ],
       title: 'issue1 is now issue3',
+      [refCountSymbol]: 1,
     },
   ]);
 });
@@ -1802,9 +1878,11 @@ test('edit leaf', () => {
           issueId: 1,
           labelId: 1,
           extra: 'a',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state1);
@@ -1886,15 +1964,18 @@ test('edit leaf', () => {
           issueId: 1,
           labelId: 1,
           extra: 'a',
+          [refCountSymbol]: 1,
         },
         {
           id: 2,
           issueId: 1,
           labelId: 2,
           extra: 'b',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
   ];
   expect(view.data).toEqual(state3);
@@ -1958,7 +2039,7 @@ test('edit leaf', () => {
   expect(view.data).toEqual(state3);
   commit();
 
-  const state4 = [
+  expect(view.data).toEqual([
     {
       id: 1,
       labels: [
@@ -1967,18 +2048,20 @@ test('edit leaf', () => {
           issueId: 1,
           labelId: 1,
           extra: 'a',
+          [refCountSymbol]: 1,
         },
         {
           id: 2,
           issueId: 1,
           labelId: 2,
           extra: 'b2',
+          [refCountSymbol]: 1,
         },
       ],
       name: 'issue',
+      [refCountSymbol]: 1,
     },
-  ];
-  expect(view.data).toEqual(state4);
+  ]);
 });
 
 test('queryComplete promise', async () => {
@@ -2005,10 +2088,20 @@ test('queryComplete promise', async () => {
     queryCompleteResolver.promise,
   );
 
-  expect(view.data).toEqual([
-    {a: 1, b: 'a'},
-    {a: 2, b: 'b'},
-  ]);
+  expect(view.data).toMatchInlineSnapshot(`
+    [
+      {
+        "a": 1,
+        "b": "a",
+        Symbol(rc): 1,
+      },
+      {
+        "a": 2,
+        "b": "b",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   expect(view.resultDetails).toEqual({type: 'unknown'});
 
@@ -2017,7 +2110,7 @@ test('queryComplete promise', async () => {
   expect(view.resultDetails).toEqual({type: 'complete'});
 });
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [
     table('test')
       .columns({

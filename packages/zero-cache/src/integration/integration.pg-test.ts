@@ -63,7 +63,7 @@ const nopk = table('nopk')
   })
   .primaryKey('id');
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [foo, bar, nopk],
 });
 
@@ -76,7 +76,8 @@ const permissions = await definePermissions(schema, () => ({
 // Note: The NULL unicode character \u0000 is specifically used to verify
 //       end-to-end JSON compatibility. In particular, any intermediate
 //       JSONB storage of row contents would not be able to handle it.
-const INITIAL_PG_SETUP = `
+function initialPGSetup(replicaIdentity = 'DEFAULT') {
+  return `
       CREATE TABLE foo(
         id TEXT PRIMARY KEY, 
         far_id TEXT,
@@ -86,6 +87,7 @@ const INITIAL_PG_SETUP = `
         j3 JSON,
         j4 JSON
       );
+      ALTER TABLE foo REPLICA IDENTITY ${replicaIdentity};
       INSERT INTO foo(id, far_id, b, j1, j2, j3, j4) 
         VALUES (
           'bar',
@@ -105,18 +107,19 @@ const INITIAL_PG_SETUP = `
 
       CREATE PUBLICATION zero_all FOR TABLE foo, TABLE boo.far, TABLE nopk;
 
-      CREATE SCHEMA zero;
+      CREATE SCHEMA "123";
 
-      CREATE TABLE zero.permissions (
+      CREATE TABLE "123".permissions (
         permissions JSON,
         hash TEXT
       );
-      INSERT INTO zero.permissions (permissions, hash) VALUES ('${JSON.stringify(
+      INSERT INTO "123".permissions (permissions, hash) VALUES ('${JSON.stringify(
         permissions,
       )}', '${h128(JSON.stringify(permissions)).toString(16)}');
       `;
+}
 
-// Keep this in sync with the INITIAL_PG_SETUP
+// Keep this in sync with the initialPGSetup
 const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
   ['begin', {tag: 'begin'}, {commitWatermark: '101'}],
   [
@@ -246,7 +249,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-table',
       spec: {
-        schema: 'zero_0',
+        schema: '123_0',
         name: 'clients',
         primaryKey: ['clientGroupID', 'clientID'],
         columns: {
@@ -263,8 +266,8 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-index',
       spec: {
-        name: 'zero_clients_key',
-        schema: 'zero_0',
+        name: '123_clients_key',
+        schema: '123_0',
         tableName: 'clients',
         columns: {
           clientGroupID: 'ASC',
@@ -279,7 +282,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-table',
       spec: {
-        schema: 'zero',
+        schema: '123',
         name: 'schemaVersions',
         primaryKey: ['lock'],
         columns: {
@@ -295,8 +298,8 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-index',
       spec: {
-        name: 'zero_schemaVersions_key',
-        schema: 'zero',
+        name: '123_schemaVersions_key',
+        schema: '123',
         tableName: 'schemaVersions',
         columns: {lock: 'ASC'},
         unique: true,
@@ -308,7 +311,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-table',
       spec: {
-        schema: 'zero',
+        schema: '123',
         name: 'permissions',
         primaryKey: ['lock'],
         columns: {
@@ -324,8 +327,8 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-index',
       spec: {
-        name: 'zero_permissions_key',
-        schema: 'zero',
+        name: '123_permissions_key',
+        schema: '123',
         tableName: 'permissions',
         columns: {lock: 'ASC'},
         unique: true,
@@ -337,7 +340,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'insert',
       relation: {
-        schema: 'zero',
+        schema: '123',
         name: 'permissions',
         keyColumns: ['lock'],
       },
@@ -353,7 +356,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'insert',
       relation: {
-        schema: 'zero',
+        schema: '123',
         name: 'schemaVersions',
         keyColumns: ['lock'],
       },
@@ -424,8 +427,6 @@ describe('integration', {timeout: 30000}, () => {
     customChangeSourceURI =
       (await customBackend.listen({port: 0})) + CHANGE_SOURCE_PATH;
 
-    await upDB.unsafe(INITIAL_PG_SETUP);
-
     port = randInt(5000, 16000);
     port2 = randInt(5000, 16000);
 
@@ -438,7 +439,8 @@ describe('integration', {timeout: 30000}, () => {
       ['ZERO_UPSTREAM_MAX_CONNS']: '3',
       ['ZERO_CVR_DB']: getConnectionURI(cvrDB),
       ['ZERO_CVR_MAX_CONNS']: '3',
-      ['ZERO_SHARD_PUBLICATIONS']: 'zero_all',
+      ['ZERO_APP_ID']: '123', // Verify that a numeric App ID works end-to-end
+      ['ZERO_APP_PUBLICATIONS']: 'zero_all',
       ['ZERO_CHANGE_DB']: getConnectionURI(changeDB),
       ['ZERO_REPLICA_FILE']: replicaDbFile.path,
       ['ZERO_NUM_SYNC_WORKERS']: '1',
@@ -495,6 +497,12 @@ describe('integration', {timeout: 30000}, () => {
     }
   }
 
+  async function expectNoPokes(client: Queue<unknown>) {
+    // Use the dequeue() API that cancels the dequeue() request after a timeout.
+    const timedOut = 'nothing';
+    expect(await client.dequeue(timedOut, 500)).toBe(timedOut);
+  }
+
   afterEach(async () => {
     try {
       zeros.forEach(zero => zero.kill('SIGTERM')); // initiate and await graceful shutdown
@@ -516,7 +524,8 @@ describe('integration', {timeout: 30000}, () => {
   const WATERMARK_REGEX = /[0-9a-z]{4,}/;
 
   test.each([
-    ['single-node standalone', 'pg', () => [env]],
+    ['single-node standalone', 'pg', () => [env], undefined],
+    ['replica identity full', 'pg', () => [env], 'FULL'],
     [
       'single-node multi-tenant direct-dispatch',
       'pg',
@@ -529,6 +538,7 @@ describe('integration', {timeout: 30000}, () => {
           }),
         },
       ],
+      undefined,
     ],
     [
       'single-node multi-tenant, double-dispatch',
@@ -548,6 +558,7 @@ describe('integration', {timeout: 30000}, () => {
           }),
         },
       ],
+      undefined,
     ],
     [
       'multi-node standalone',
@@ -566,6 +577,7 @@ describe('integration', {timeout: 30000}, () => {
           ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
         },
       ],
+      undefined,
     ],
     [
       'multi-node multi-tenant',
@@ -607,6 +619,7 @@ describe('integration', {timeout: 30000}, () => {
           }),
         },
       ],
+      undefined,
     ],
     [
       'single-node standalone',
@@ -618,10 +631,14 @@ describe('integration', {timeout: 30000}, () => {
           ['ZERO_UPSTREAM_TYPE']: 'custom',
         },
       ],
+      undefined,
     ],
-  ] satisfies [string, 'pg' | 'custom', () => Envs][])(
+  ] satisfies [string, 'pg' | 'custom', () => Envs, 'FULL' | undefined][])(
     '%s (%s)',
-    async (_name, backend, makeEnvs) => {
+    async (_name, backend, makeEnvs, replicaIdentity) => {
+      if (backend === 'pg') {
+        await upDB.unsafe(initialPGSetup(replicaIdentity));
+      }
       await startZero(makeEnvs());
 
       const downstream = new Queue<unknown>();
@@ -719,12 +736,13 @@ describe('integration', {timeout: 30000}, () => {
       if (backend === 'pg') {
         await upDB`
           INSERT INTO foo(id, far_id, b, j1, j2, j3, j4) 
-            VALUES ('voo', 'doo', false, '"foo"', 'false', '456.789', '{"bar":"baz"}');
+            VALUES ('voo', 'doo', null, '"foo"', 'false', '456.789', '{"bar":"baz"}');
           UPDATE foo SET far_id = 'not_baz' WHERE id = 'bar';
         `.simple();
       } else {
         await streamCustomChanges([
-          ['begin', {tag: 'begin'}, {commitWatermark: '102'}],
+          // Unlike initial sync, this transaction uses JSON_STRINGIFIED.
+          ['begin', {tag: 'begin', json: 's'}, {commitWatermark: '102'}],
           [
             'data',
             {
@@ -737,11 +755,11 @@ describe('integration', {timeout: 30000}, () => {
               new: {
                 id: 'voo',
                 ['far_id']: 'doo',
-                b: false,
-                j1: 'foo',
-                j2: false,
-                j3: 456.789,
-                j4: {bar: 'baz'},
+                b: null,
+                j1: '"foo"',
+                j2: 'false',
+                j3: '456.789',
+                j4: '{"bar":"baz"}',
               },
             },
           ],
@@ -757,9 +775,13 @@ describe('integration', {timeout: 30000}, () => {
               new: {
                 id: 'bar',
                 ['far_id']: 'not_baz',
+                b: true,
+                j1: '{"foo":"bar\\u0000"}',
+                j2: 'true',
+                j3: '123',
+                j4: '"string"',
               },
               key: null,
-              old: null,
             },
           ],
           ['commit', {tag: 'commit'}, {watermark: '102'}],
@@ -802,7 +824,7 @@ describe('integration', {timeout: 30000}, () => {
               value: {
                 id: 'voo',
                 ['far_id']: 'doo',
-                b: false,
+                b: null,
                 j1: 'foo',
                 j2: false,
                 j3: 456.789,
@@ -908,18 +930,12 @@ describe('integration', {timeout: 30000}, () => {
         ]);
       }
 
-      // A rare case of a no-op poke happens when the advancement resets the
-      // pipelines, bumping the CVR to the current state version. This conveniently
-      // allows the integration test to correctly wait for the schema change to
-      // take effect.
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokeStart',
-        {pokeID: WATERMARK_REGEX},
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokeEnd',
-        {pokeID: WATERMARK_REGEX},
-      ]);
+      // The schema change should result in resetting the pipelines but no
+      // poke will result. expectNoPoke() verifies that nothing arrives for
+      // a short interval of time, which also allows the schema change to
+      // take effect (which is necessary for the subsequent
+      // "changeDesiredQueries" to succeed).
+      await expectNoPokes(downstream);
 
       // Now that nopk has a unique index, add a query to retrieve the data.
       ws.send(

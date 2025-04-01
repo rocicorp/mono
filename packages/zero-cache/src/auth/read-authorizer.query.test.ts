@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 /* eslint-disable arrow-body-style */
+import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
@@ -33,6 +35,7 @@ import {
 } from '../../../zql/src/builder/builder.ts';
 import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {
@@ -44,19 +47,12 @@ import {
 import type {Query, Row} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
-import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
+import type {ZeroConfig} from '../config/zero-config.ts';
 import {transformQuery} from './read-authorizer.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
-import {LogContext} from '@rocicorp/logger';
 
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 const zeroConfig = {
-  log: logConfig,
+  log: testLogConfig,
 } as unknown as ZeroConfig;
 
 const user = table('user')
@@ -282,7 +278,7 @@ type AuthData = {
   };
 };
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [
     user,
     issue,
@@ -481,15 +477,19 @@ let writeAuthorizer: WriteAuthorizerImpl;
 beforeEach(() => {
   replica = new Database(lc, ':memory:');
   replica.exec(`
-    CREATE TABLE "zero.permissions" (permissions JSON, hash TEXT);
+    CREATE TABLE "app.permissions" (permissions JSON, hash TEXT);
   `);
   const permsJSON = JSON.stringify(permissions);
   replica
-    .prepare(`INSERT INTO "zero.permissions" (permissions, hash) VALUES (?, ?)`)
+    .prepare(`INSERT INTO "app.permissions" (permissions, hash) VALUES (?, ?)`)
     .run(permsJSON, h128(permsJSON).toString(16));
 
   const sources = new Map<string, Source>();
   queryDelegate = {
+    mapAst(ast) {
+      return ast;
+    },
+
     getSource: (name: string) => {
       let source = sources.get(name);
       if (source) {
@@ -509,7 +509,7 @@ beforeEach(() => {
 
       source = new TableSource(
         lc,
-        logConfig,
+        testLogConfig,
         'read-auth-test',
         replica,
         name,
@@ -524,9 +524,14 @@ beforeEach(() => {
     createStorage() {
       return new MemoryStorage();
     },
+    decorateInput(input: Input): Input {
+      return input;
+    },
     addServerQuery() {
       return () => {};
     },
+    updateServerQuery() {},
+    onQueryMaterialized() {},
     onTransactionCommit() {
       return () => {};
     },
@@ -540,7 +545,13 @@ beforeEach(() => {
     must(queryDelegate.getSource(table.name));
   }
 
-  writeAuthorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, 'cg');
+  writeAuthorizer = new WriteAuthorizerImpl(
+    lc,
+    zeroConfig,
+    replica,
+    'app',
+    'cg',
+  );
 });
 const lc = createSilentLogContext();
 

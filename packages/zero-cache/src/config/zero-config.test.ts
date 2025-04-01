@@ -1,6 +1,10 @@
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import {expect, test, vi} from 'vitest';
-import {parseOptions} from '../../../shared/src/options.ts';
+import {
+  parseOptions,
+  parseOptionsAdvanced,
+} from '../../../shared/src/options.ts';
+import {INVALID_APP_ID_MESSAGE} from '../types/shards.ts';
 import {zeroOptions} from './zero-config.ts';
 
 class ExitAfterUsage extends Error {}
@@ -40,12 +44,11 @@ test('zero-cache --help', () => {
        ZERO_PUSH_API_KEY env                                                                                                                                      
                                                                 An optional secret used to authorize zero-cache to call the API server.                           
                                                                                                                                                                   
-     --cvr-db string                                            required                                                                                          
+     --cvr-db string                                            optional                                                                                          
        ZERO_CVR_DB env                                                                                                                                            
-                                                                A separate Postgres database we use to store CVRs. CVRs (client view records)                     
-                                                                keep track of which clients have which data. This is how we know what diff to                     
-                                                                send on reconnect. It can be same database as above, but it makes most sense                      
-                                                                for it to be a separate "database" in the same postgres "cluster".                                
+                                                                The Postgres database used to store CVRs. CVRs (client view records) keep track                   
+                                                                of the data synced to clients in order to determine the diff to send on reconnect.                
+                                                                If unspecified, the upstream-db will be used.                                                     
                                                                                                                                                                   
      --cvr-max-conns number                                     default: 30                                                                                       
        ZERO_CVR_MAX_CONNS env                                                                                                                                     
@@ -60,11 +63,13 @@ test('zero-cache --help', () => {
                                                                 Track and log the number of rows considered by each query in the system.                          
                                                                 This is useful for debugging and performance tuning.                                              
                                                                                                                                                                   
-     --change-db string                                         required                                                                                          
+     --change-db string                                         optional                                                                                          
        ZERO_CHANGE_DB env                                                                                                                                         
-                                                                Yet another Postgres database, used to store a replication log.                                   
+                                                                The Postgres database used to store recent replication log entries, in order                      
+                                                                to sync multiple view-syncers without requiring multiple replication slots on                     
+                                                                the upstream database. If unspecified, the upstream-db will be used.                              
                                                                                                                                                                   
-     --change-max-conns number                                  default: 1                                                                                        
+     --change-max-conns number                                  default: 5                                                                                        
        ZERO_CHANGE_MAX_CONNS env                                                                                                                                  
                                                                 The maximum number of connections to open to the change database.                                 
                                                                 This is used by the change-streamer for catching up                                               
@@ -75,6 +80,13 @@ test('zero-cache --help', () => {
                                                                 File path to the SQLite replica that zero-cache maintains.                                        
                                                                 This can be lost, but if it is, zero-cache will have to re-replicate next                         
                                                                 time it starts up.                                                                                
+                                                                                                                                                                  
+     --replica-vacuum-interval-hours number                     optional                                                                                          
+       ZERO_REPLICA_VACUUM_INTERVAL_HOURS env                                                                                                                     
+                                                                Performs a VACUUM at server startup if the specified number of hours has elapsed                  
+                                                                since the last VACUUM (or initial-sync). The VACUUM operation is heavyweight                      
+                                                                and requires double the size of the db in disk space. If unspecified, VACUUM                      
+                                                                operations are not performed.                                                                     
                                                                                                                                                                   
      --log-level debug,info,warn,error                          default: "info"                                                                                   
        ZERO_LOG_LEVEL env                                                                                                                                         
@@ -93,39 +105,52 @@ test('zero-cache --help', () => {
        ZERO_LOG_SLOW_ROW_THRESHOLD env                                                                                                                            
                                                                 The number of ms a row must take to fetch from table-source before it is considered slow.         
                                                                                                                                                                   
+     --log-slow-hydrate-threshold number                        default: 100                                                                                      
+       ZERO_LOG_SLOW_HYDRATE_THRESHOLD env                                                                                                                        
+                                                                The number of milliseconds a query hydration must take to print a slow warning.                   
+                                                                                                                                                                  
      --log-ivm-sampling number                                  default: 5000                                                                                     
        ZERO_LOG_IVM_SAMPLING env                                                                                                                                  
                                                                 How often to collect IVM metrics. 1 out of N requests will be sampled where N is this value.      
                                                                                                                                                                   
-     --shard-id string                                          default: "0"                                                                                      
-       ZERO_SHARD_ID env                                                                                                                                          
-                                                                Unique identifier for the zero-cache shard.                                                       
+     --app-id string                                            default: "zero"                                                                                   
+       ZERO_APP_ID env                                                                                                                                            
+                                                                Unique identifier for the app.                                                                    
                                                                                                                                                                   
-                                                                A shard presents a logical partition of the upstream database, delineated                         
-                                                                by a set of publications and managed by a dedicated replication slot.                             
+                                                                Multiple zero-cache apps can run on a single upstream database, each of which                     
+                                                                is isolated from the others, with its own permissions, sharding (future feature),                 
+                                                                and change/cvr databases.                                                                         
                                                                                                                                                                   
-                                                                A shard's zero clients table and shard-internal functions are stored in                           
-                                                                the zero_{id} schema in the upstream database.                                                    
+                                                                The metadata of an app is stored in an upstream schema with the same name,                        
+                                                                e.g. "zero", and the metadata for each app shard, e.g. client and mutation                        
+                                                                ids, is stored in the "{app-id}_{#}" schema. (Currently there is only a single                    
+                                                                "0" shard, but this will change with sharding).                                                   
                                                                                                                                                                   
-                                                                Due to constraints on replication slot names, a shard ID may only consist of                      
+                                                                The CVR and Change data are managed in schemas named "{app-id}_{shard-num}/cvr"                   
+                                                                and "{app-id}_{shard-num}/cdc", respectively, allowing multiple apps and shards                   
+                                                                to share the same database instance (e.g. a Postgres "cluster") for CVR and Change management.    
+                                                                                                                                                                  
+                                                                Due to constraints on replication slot names, an App ID may only consist of                       
                                                                 lower-case letters, numbers, and the underscore character.                                        
                                                                                                                                                                   
-     --shard-publications string[]                              default: []                                                                                       
-       ZERO_SHARD_PUBLICATIONS env                                                                                                                                
-                                                                Postgres PUBLICATIONs that define the partition of the upstream                                   
-                                                                replicated to the shard. All publication names must begin with the prefix                         
-                                                                zero_, and all tables must be in the public schema.                                               
+                                                                Note that this option is used by both zero-cache and zero-deploy-permissions.                     
+                                                                                                                                                                  
+     --app-publications string[]                                default: []                                                                                       
+       ZERO_APP_PUBLICATIONS env                                                                                                                                  
+                                                                Postgres PUBLICATIONs that define the tables and columns to                                       
+                                                                replicate. Publication names may not begin with an underscore,                                    
+                                                                as zero reserves that prefix for internal use.                                                    
                                                                                                                                                                   
                                                                 If unspecified, zero-cache will create and use an internal publication that                       
                                                                 publishes all tables in the public schema, i.e.:                                                  
                                                                                                                                                                   
-                                                                CREATE PUBLICATION _zero_public_0 FOR TABLES IN SCHEMA public;                                    
+                                                                CREATE PUBLICATION _{app-id}_public_0 FOR TABLES IN SCHEMA public;                                
                                                                                                                                                                   
-                                                                Note that once a shard has begun syncing data, this list of publications                          
+                                                                Note that once an app has begun syncing data, this list of publications                           
                                                                 cannot be changed, and zero-cache will refuse to start if a specified                             
                                                                 value differs from what was originally synced.                                                    
                                                                                                                                                                   
-                                                                To use a different set of publications, a new shard should be created.                            
+                                                                To use a different set of publications, a new app should be created.                              
                                                                                                                                                                   
      --auth-jwk string                                          optional                                                                                          
        ZERO_AUTH_JWK env                                                                                                                                          
@@ -182,7 +207,7 @@ test('zero-cache --help', () => {
                                                                 the replication-manager URI, which runs a change-streamer                                         
                                                                 on port 4849.                                                                                     
                                                                                                                                                                   
-     --auto-reset boolean                                       optional                                                                                          
+     --auto-reset boolean                                       default: true                                                                                     
        ZERO_AUTO_RESET env                                                                                                                                        
                                                                 Automatically wipe and resync the replica when replication is halted.                             
                                                                 This situation can occur for configurations in which the upstream database                        
@@ -219,14 +244,22 @@ test('zero-cache --help', () => {
                                                                 The location of the litestream backup, usually an s3:// URL.                                      
                                                                 If set, the litestream-executable must also be specified.                                         
                                                                                                                                                                   
-     --litestream-incremental-backup-interval-minutes number    default: 5                                                                                        
+     --litestream-checkpoint-threshold-mb number                default: 40                                                                                       
+       ZERO_LITESTREAM_CHECKPOINT_THRESHOLD_MB env                                                                                                                
+                                                                The size of the WAL file at which to perform an SQlite checkpoint to apply                        
+                                                                the writes in the WAL to the main database file. Each checkpoint creates                          
+                                                                a new WAL segment file that will be backed up by litestream. Smaller thresholds                   
+                                                                may improve read performance, at the expense of creating more files to download                   
+                                                                when restoring the replica from the backup.                                                       
+                                                                                                                                                                  
+     --litestream-incremental-backup-interval-minutes number    default: 15                                                                                       
        ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES env                                                                                                    
                                                                 The interval between incremental backups of the replica. Shorter intervals                        
                                                                 reduce the amount of change history that needs to be replayed when catching                       
                                                                 up a new view-syncer, at the expense of increasing the number of files needed                     
                                                                 to download for the initial litestream restore.                                                   
                                                                                                                                                                   
-     --litestream-snapshot-backup-interval-hours number         default: 1                                                                                        
+     --litestream-snapshot-backup-interval-hours number         default: 12                                                                                       
        ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS env                                                                                                         
                                                                 The interval between snapshot backups of the replica. Snapshot backups                            
                                                                 make a full copy of the database to a new litestream generation. This                             
@@ -234,7 +267,7 @@ test('zero-cache --help', () => {
                                                                 large database and low write rate can increase this interval to reduce                            
                                                                 network usage for backups (litestream defaults to 24 hours).                                      
                                                                                                                                                                   
-     --litestream-restore-parallelism number                    default: 32                                                                                       
+     --litestream-restore-parallelism number                    default: 48                                                                                       
        ZERO_LITESTREAM_RESTORE_PARALLELISM env                                                                                                                    
                                                                 The number of WAL files to download in parallel when performing the                               
                                                                 initial restore of the replica from the backup.                                                   
@@ -256,6 +289,65 @@ test('zero-cache --help', () => {
                                                                 to reduce the amount of heap memory used during initial sync (e.g. for tables                     
                                                                 with large rows).                                                                                 
                                                                                                                                                                   
+     --target-client-row-count number                           optional                                                                                          
+       ZERO_TARGET_CLIENT_ROW_COUNT env                                                                                                                           
+                                                                The target number of rows to keep per client in the client side cache.                            
+                                                                This limit is a soft limit. When the number of rows in the cache exceeds                          
+                                                                this limit, zero-cache will evict inactive queries in order of ttl-based expiration.              
+                                                                Active queries, on the other hand, are never evicted and are allowed to use more                  
+                                                                rows than the limit.                                                                              
+                                                                                                                                                                  
     "
   `);
+});
+
+test.each([['has/slashes'], ['has-dashes'], ['has.dots']])(
+  '--app-id %s',
+  appID => {
+    const logger = {info: vi.fn()};
+    expect(() =>
+      parseOptionsAdvanced(
+        zeroOptions,
+        ['--app-id', appID],
+        'ZERO_',
+        false, // allow unknown
+        true, // allow partial
+        {},
+        logger,
+        exit,
+      ),
+    ).toThrowError(INVALID_APP_ID_MESSAGE);
+  },
+);
+
+test.each([['isok'], ['has_underscores'], ['1'], ['123']])(
+  '--app-id %s',
+  appID => {
+    const {config} = parseOptionsAdvanced(
+      zeroOptions,
+      ['--app-id', appID],
+      'ZERO_',
+      false,
+      true,
+    );
+    expect(config.app.id).toBe(appID);
+  },
+);
+
+test('--shard-id disallowed', () => {
+  const logger = {info: vi.fn()};
+  expect(() =>
+    parseOptionsAdvanced(
+      zeroOptions,
+      ['--shard-id', 'prod'],
+      'ZERO_',
+      false, // allow unknown
+      true, // allow partial
+      {},
+      logger,
+      exit,
+    ),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: ZERO_SHARD_ID is deprecated. Please use ZERO_APP_ID instead.]`,
+  );
 });

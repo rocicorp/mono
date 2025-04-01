@@ -1,4 +1,7 @@
 import type {SQLQuery} from '@databases/sql';
+import type {LogContext} from '@rocicorp/logger';
+import type {LogConfig} from '../../otel/src/log-options.ts';
+import {timeSampled} from '../../otel/src/maybe-time.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import {difference} from '../../shared/src/set-utils.ts';
@@ -20,28 +23,20 @@ import {
   transformFilters,
   type NoSubqueryCondition,
 } from '../../zql/src/builder/filter.ts';
-import type {Change} from '../../zql/src/ivm/change.ts';
-import {
-  makeComparator,
-  type Comparator,
-  type Node,
-} from '../../zql/src/ivm/data.ts';
-import {filterPush} from '../../zql/src/ivm/filter-push.ts';
+import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
   generateWithOverlay,
   generateWithStart,
+  genPush,
+  type Connection,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.ts';
-import type {
-  FetchRequest,
-  Input,
-  Output,
-  Start,
-} from '../../zql/src/ivm/operator.ts';
+import type {FetchRequest, Start} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import type {
   Source,
   SourceChange,
+  SourceChangeSet,
   SourceInput,
 } from '../../zql/src/ivm/source.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
@@ -49,22 +44,6 @@ import {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
 import {runtimeDebugFlags, runtimeDebugStats} from './runtime-debug.ts';
-import type {LogConfig} from '../../otel/src/log-options.ts';
-import {timeSampled} from '../../otel/src/maybe-time.ts';
-import type {LogContext} from '@rocicorp/logger';
-
-type Connection = {
-  input: Input;
-  output: Output | undefined;
-  sort: Ordering;
-  filters:
-    | {
-        condition: NoSubqueryCondition;
-        predicate: (row: Row) => boolean;
-      }
-    | undefined;
-  compareRows: Comparator;
-};
 
 type Statements = {
   readonly cache: StatementCache;
@@ -72,6 +51,7 @@ type Statements = {
   readonly delete: Statement;
   readonly update: Statement | undefined;
   readonly checkExists: Statement;
+  readonly getExisting: Statement;
 };
 
 let eventCount = 0;
@@ -103,6 +83,7 @@ export class TableSource implements Source {
   readonly #lc: LogContext;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
+  #splitEditOverlay?: Overlay | undefined;
 
   constructor(
     logContext: LogContext,
@@ -193,6 +174,14 @@ export class TableSource implements Source {
           )} LIMIT 1`,
         ),
       ),
+      getExisting: db.prepare(
+        compile(
+          sql`SELECT * FROM ${sql.ident(this.#table)} WHERE ${sql.join(
+            this.#primaryKey.map(k => sql`${sql.ident(k)}=?`),
+            ' AND ',
+          )}`,
+        ),
+      ),
     };
     this.#dbCache.set(db, stmts);
     return stmts;
@@ -218,7 +207,11 @@ export class TableSource implements Source {
     };
   }
 
-  connect(sort: Ordering, filters?: Condition | undefined) {
+  connect(
+    sort: Ordering,
+    filters?: Condition | undefined,
+    splitEditKeys?: Set<string> | undefined,
+  ) {
     const transformedFilters = transformFilters(filters);
     const input: SourceInput = {
       getSchema: () => schema,
@@ -239,6 +232,7 @@ export class TableSource implements Source {
       input,
       output: undefined,
       sort,
+      splitEditKeys,
       filters: transformedFilters.filters
         ? {
             condition: transformedFilters.filters,
@@ -284,13 +278,6 @@ export class TableSource implements Source {
 
       const comparator = makeComparator(sort, req.reverse);
 
-      let overlay: Overlay | undefined;
-      if (this.#overlay) {
-        if (callingConnectionIndex <= this.#overlay.outputIndex) {
-          overlay = this.#overlay;
-        }
-      }
-
       yield* generateWithStart(
         generateWithOverlay(
           req.start?.row,
@@ -300,7 +287,9 @@ export class TableSource implements Source {
             sqlAndBindings.text,
           ),
           req.constraint,
-          overlay,
+          this.#overlay,
+          this.#splitEditOverlay,
+          callingConnectionIndex,
           comparator,
           connection.filters?.predicate,
         ),
@@ -342,70 +331,49 @@ export class TableSource implements Source {
     }
   }
 
-  push(change: SourceChange): void {
+  push(change: SourceChange | SourceChangeSet): void {
     for (const _ of this.genPush(change)) {
       // Nothing to do.
     }
   }
 
-  *genPush(change: SourceChange) {
+  *genPush(change: SourceChange | SourceChangeSet) {
     const exists = (row: Row) =>
-      this.#stmts.checkExists.get<{exists: number}>(
+      this.#stmts.checkExists.get<{exists: number} | undefined>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
       )?.exists === 1;
+    const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
+    const setSplitEditOverlay = (o: Overlay | undefined) =>
+      (this.#splitEditOverlay = o);
 
-    switch (change.type) {
-      case 'add':
-        assert(
-          !exists(change.row),
-          () => `Row already exists ${stringify(change)}`,
-        );
-        break;
-      case 'remove':
-        assert(exists(change.row), () => `Row not found ${stringify(change)}`);
-        break;
-      case 'edit':
-        assert(
-          exists(change.oldRow),
-          () => `Row not found ${stringify(change)}`,
-        );
-        break;
-      default:
-        unreachable(change);
-    }
-
-    const outputChange: Change =
-      change.type === 'edit'
-        ? {
-            type: change.type,
-            oldNode: {
-              row: change.oldRow,
-              relationships: {},
-            },
-            node: {
-              row: change.row,
-              relationships: {},
-            },
-          }
-        : {
-            type: change.type,
-            node: {
-              row: change.row,
-              relationships: {},
-            },
-          };
-
-    for (const [
-      outputIndex,
-      {output, filters},
-    ] of this.#connections.entries()) {
-      if (output) {
-        this.#overlay = {outputIndex, change};
-        filterPush(outputChange, output, filters?.predicate);
-        yield;
+    if (change.type === 'set') {
+      const existing = this.#stmts.getExisting.get<Row | undefined>(
+        ...toSQLiteTypes(this.#primaryKey, change.row, this.#columns),
+      );
+      if (existing !== undefined) {
+        change = {
+          type: 'edit',
+          oldRow: existing,
+          row: change.row,
+        };
+      } else {
+        change = {
+          type: 'add',
+          row: change.row,
+        };
       }
     }
-    this.#overlay = undefined;
+
+    for (const x of genPush(
+      change,
+      exists,
+      this.#connections.entries(),
+      setOverlay,
+      setSplitEditOverlay,
+    )) {
+      yield x;
+    }
+
     switch (change.type) {
       case 'add':
         this.#stmts.insert.run(
@@ -628,8 +596,8 @@ function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
     filter.op === 'ILIKE'
       ? 'LIKE'
       : filter.op === 'NOT ILIKE'
-      ? 'NOT LIKE'
-      : filter.op,
+        ? 'NOT LIKE'
+        : filter.op,
   )} ${valuePositionToSQL(filter.right)}`;
 }
 
@@ -653,10 +621,10 @@ function getJsType(value: unknown): ValueType {
   return typeof value === 'string'
     ? 'string'
     : typeof value === 'number'
-    ? 'number'
-    : typeof value === 'boolean'
-    ? 'boolean'
-    : 'json';
+      ? 'number'
+      : typeof value === 'boolean'
+        ? 'boolean'
+        : 'json';
 }
 
 /**
@@ -797,6 +765,8 @@ function toSQLiteType(v: unknown, type: ValueType): unknown {
       return v === null ? null : v ? 1 : 0;
     case 'number':
     case 'string':
+    case 'timestamp':
+    case 'date':
     case 'null':
       return v;
     case 'json':
@@ -816,6 +786,10 @@ export function toSQLiteTypeName(type: ValueType) {
       return 'NULL';
     case 'json':
       return 'TEXT';
+    case 'date':
+      return 'REAL';
+    case 'timestamp':
+      return 'REAL';
   }
 }
 
@@ -839,11 +813,16 @@ export function fromSQLiteTypes(
 }
 
 function fromSQLiteType(valueType: ValueType, v: Value): Value {
+  if (v === null) {
+    return null;
+  }
   switch (valueType) {
     case 'boolean':
       return !!v;
     case 'number':
     case 'string':
+    case 'date':
+    case 'timestamp':
     case 'null':
       if (typeof v === 'bigint') {
         if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
@@ -894,10 +873,4 @@ function nonPrimaryKeys(
   primaryKey: PrimaryKey,
 ) {
   return Object.keys(columns).filter(c => !primaryKey.includes(c));
-}
-
-function stringify(change: SourceChange) {
-  return JSON.stringify(change, (_, v) =>
-    typeof v === 'bigint' ? v.toString() : v,
-  );
 }

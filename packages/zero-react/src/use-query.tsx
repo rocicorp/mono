@@ -3,8 +3,8 @@ import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {AdvancedQuery} from '../../zql/src/query/query-internal.ts';
-import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
+import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
+import {DEFAULT_TTL, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './use-zero.tsx';
 
@@ -17,20 +17,34 @@ export type QueryResult<TReturn> = readonly [
   QueryResultDetails,
 ];
 
+export type UseQueryOptions = {
+  enabled?: boolean | undefined;
+  /**
+   * Time to live (TTL) in seconds. Controls how long query results are cached
+   * after the query is removed. During this time, Zero continues to sync the query.
+   * Default is 10 seconds.
+   */
+  ttl?: TTL | undefined;
+};
+
 export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
-  q: Query<TSchema, TTable, TReturn>,
-  enable: boolean = true,
+  query: Query<TSchema, TTable, TReturn>,
+  options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
+  let enabled = true;
+  let ttl: TTL = DEFAULT_TTL;
+  if (typeof options === 'boolean') {
+    enabled = options;
+  } else if (options) {
+    ({enabled = true, ttl = DEFAULT_TTL} = options);
+  }
+
   const z = useZero();
-  const view = viewStore.getView(
-    z.clientID,
-    q as AdvancedQuery<TSchema, TTable, TReturn>,
-    enable,
-  );
+  const view = viewStore.getView(z.clientID, query, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
     view.subscribeReactInternals,
@@ -162,8 +176,9 @@ export class ViewStore {
     TReturn,
   >(
     clientID: string,
-    query: AdvancedQuery<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn>,
     enabled: boolean,
+    ttl: TTL,
   ): {
     getSnapshot: () => QueryResult<TReturn>;
     subscribeReactInternals: (internals: () => void) => () => void;
@@ -180,6 +195,7 @@ export class ViewStore {
     if (!existing) {
       existing = new ViewWrapper(
         query,
+        ttl,
         view => {
           const lastView = this.#views.get(hash);
           // I don't think this can happen
@@ -195,6 +211,8 @@ export class ViewStore {
         },
       ) as ViewWrapper<TSchema, TTable, TReturn>;
       this.#views.set(hash, existing);
+    } else {
+      existing.updateTTL(ttl);
     }
     return existing as ViewWrapper<TSchema, TTable, TReturn>;
   }
@@ -235,20 +253,23 @@ class ViewWrapper<
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
   readonly #onMaterialized;
-  readonly #query: AdvancedQuery<TSchema, TTable, TReturn>;
+  readonly #query: Query<TSchema, TTable, TReturn>;
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
+  #ttl: TTL;
 
   constructor(
-    query: AdvancedQuery<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn>,
+    ttl: TTL,
     onMaterialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
     onDematerialized: () => void,
   ) {
-    this.#snapshot = getDefaultSnapshot(query.format.singular);
+    this.#query = query;
+    this.#ttl = ttl;
     this.#onMaterialized = onMaterialized;
     this.#onDematerialized = onDematerialized;
+    this.#snapshot = getDefaultSnapshot(query.format.singular);
     this.#reactInternals = new Set();
-    this.#query = query;
     this.#materializeIfNeeded();
   }
 
@@ -271,7 +292,7 @@ class ViewWrapper<
       return;
     }
 
-    this.#view = this.#query.materialize();
+    this.#view = this.#query.materialize(this.#ttl);
     this.#view.addListener(this.#onData);
 
     this.#onMaterialized(this);
@@ -305,4 +326,9 @@ class ViewWrapper<
       }
     };
   };
+
+  updateTTL(ttl: TTL): void {
+    this.#ttl = ttl;
+    this.#query.updateTTL(ttl);
+  }
 }

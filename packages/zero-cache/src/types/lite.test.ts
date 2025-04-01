@@ -1,5 +1,14 @@
 import {describe, expect, test} from 'vitest';
-import {liteRow, liteValue, liteValues} from './lite.ts';
+import type {LiteTableSpec} from '../db/specs.ts';
+import {
+  JSON_PARSED,
+  JSON_STRINGIFIED,
+  liteRow,
+  liteValue,
+  liteValues,
+  type JSONFormat,
+} from './lite.ts';
+import type {RowValue} from './row-key.ts';
 
 describe('types/lite', () => {
   test.each([
@@ -11,6 +20,7 @@ describe('types/lite', () => {
         primaryKey: ['foo'],
         columns: {foo: {dataType: 'string', pos: 1}},
       },
+      JSON_PARSED,
     ],
     [
       {foo: 'bar', baz: 2n},
@@ -23,6 +33,7 @@ describe('types/lite', () => {
           baz: {dataType: 'int', pos: 2},
         },
       },
+      JSON_PARSED,
     ],
     [
       {foo: 'bar', baz: 2n, boo: 3},
@@ -36,6 +47,7 @@ describe('types/lite', () => {
           boo: {dataType: 'int', pos: 3},
         },
       },
+      JSON_PARSED,
     ],
     [
       {foo: 'bar', baz: 2n, boo: 3, zoo: null},
@@ -50,6 +62,7 @@ describe('types/lite', () => {
           zoo: {dataType: 'int', pos: 4},
         },
       },
+      JSON_PARSED,
     ],
     [
       {foo: true},
@@ -59,6 +72,7 @@ describe('types/lite', () => {
         primaryKey: ['foo'],
         columns: {foo: {dataType: 'bool', pos: 1}},
       },
+      JSON_PARSED,
     ],
     [
       {foo: 'bar', b: false},
@@ -71,6 +85,7 @@ describe('types/lite', () => {
           b: {dataType: 'boolean', pos: 2},
         },
       },
+      JSON_PARSED,
     ],
     [
       {foo: 'bar', b: true, baz: 2n},
@@ -84,6 +99,7 @@ describe('types/lite', () => {
           baz: {dataType: 'int', pos: 3},
         },
       },
+      JSON_PARSED,
     ],
     [
       {b: true, foo: 'bar', baz: 2n, boo: 3},
@@ -98,6 +114,7 @@ describe('types/lite', () => {
           baz: {dataType: 'int', pos: 4},
         },
       },
+      JSON_PARSED,
     ],
     [
       {foo: 'bar', baz: 2n, boo: 3, zoo: null, b: false},
@@ -113,15 +130,65 @@ describe('types/lite', () => {
           zoo: {dataType: 'float', pos: 5},
         },
       },
+      JSON_PARSED,
     ],
-  ])('liteRow: %s', (input, output, table) => {
-    const lite = liteRow(input, table);
-    if (output) {
-      expect(lite).toEqual(output);
-    } else {
-      expect(lite).toBe(input); // toBe => identity (i.e. no copy)
-    }
-  });
+    [
+      {
+        foo: 'bar',
+        bar: 1,
+        baz: true,
+        boo: {key: 'val'},
+      },
+      {
+        foo: '"bar"',
+        bar: '1',
+        baz: 'true',
+        boo: '{"key":"val"}',
+      },
+      {
+        name: 'tableName',
+        primaryKey: ['foo'],
+        columns: {
+          foo: {dataType: 'json', pos: 1},
+          bar: {dataType: 'jsonb', pos: 2},
+          baz: {dataType: 'json', pos: 3},
+          boo: {dataType: 'jsonb', pos: 4},
+        },
+      },
+      JSON_PARSED,
+    ],
+    [
+      {
+        foo: '"bar"',
+        bar: '1',
+        baz: 'true',
+        boo: '{"key":"val"}',
+      },
+      undefined,
+      {
+        name: 'tableName',
+        primaryKey: ['foo'],
+        columns: {
+          foo: {dataType: 'json', pos: 1},
+          bar: {dataType: 'jsonb', pos: 2},
+          baz: {dataType: 'json', pos: 3},
+          boo: {dataType: 'jsonb', pos: 4},
+        },
+      },
+      JSON_STRINGIFIED,
+    ],
+  ] satisfies [RowValue, RowValue | undefined, LiteTableSpec, JSONFormat][])(
+    'liteRow: %s',
+    (input, output, table, jsonFormat) => {
+      const {row: lite, numCols} = liteRow(input, table, jsonFormat);
+      if (output) {
+        expect(lite).toEqual(output);
+      } else {
+        expect(lite).toBe(input); // toBe => identity (i.e. no copy)
+      }
+      expect(numCols).toBe(Object.keys(input).length);
+    },
+  );
 
   test('values', () => {
     expect(
@@ -146,6 +213,7 @@ describe('types/lite', () => {
             f: {dataType: 'int8', pos: 6},
           },
         },
+        JSON_PARSED,
       ),
     ).toEqual([1, 'two', 1, 0, null, 12313214123432n]);
   });
@@ -187,6 +255,6 @@ describe('types/lite', () => {
       '[[{"custom":{"json":"object"}},{"another":{"json":"object"}}],[{"custom":{"foo":"bar"}},{"another":{"boo":"far"}}]]',
     ],
   ])('liteValue: %s', (dataType, input, output) => {
-    expect(liteValue(input, dataType)).toEqual(output);
+    expect(liteValue(input, dataType, JSON_PARSED)).toEqual(output);
   });
 });

@@ -8,7 +8,11 @@ import {
   createIndexStatement,
   createTableStatement,
 } from '../../db/create.ts';
-import {listIndexes, listTables} from '../../db/lite-tables.ts';
+import {
+  computeZqlSpecs,
+  listIndexes,
+  listTables,
+} from '../../db/lite-tables.ts';
 import {
   mapPostgresToLite,
   mapPostgresToLiteColumn,
@@ -18,8 +22,16 @@ import type {LiteTableSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
 import {stringify} from '../../types/bigint-json.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
-import {liteRow, type LiteRowKey} from '../../types/lite.ts';
+import {
+  JSON_PARSED,
+  liteRow,
+  type JSONFormat,
+  type LiteRow,
+  type LiteRowKey,
+  type LiteValueType,
+} from '../../types/lite.ts';
 import {liteTableName} from '../../types/names.ts';
+import {normalizedKeyOrder} from '../../types/row-key.ts';
 import {id} from '../../types/sql.ts';
 import type {
   Change,
@@ -31,6 +43,7 @@ import type {
   MessageCommit,
   MessageDelete,
   MessageInsert,
+  MessageRelation,
   MessageTruncate,
   MessageUpdate,
   TableCreate,
@@ -118,8 +131,8 @@ export class ChangeProcessor {
         type === 'begin'
           ? downstream[2].commitWatermark
           : type === 'commit'
-          ? downstream[2].watermark
-          : undefined;
+            ? downstream[2].watermark
+            : undefined;
       return this.#processMessage(lc, message, watermark);
     } catch (e) {
       this.#fail(lc, e);
@@ -130,8 +143,17 @@ export class ChangeProcessor {
   #beginTransaction(
     lc: LogContext,
     commitVersion: string,
+    jsonFormat: JSONFormat,
   ): TransactionProcessor {
-    let start = Date.now();
+    const start = Date.now();
+
+    // litestream can technically hold the lock for an arbitrary amount of time
+    // when checkpointing a large commit. Crashing on the busy-timeout in this
+    // scenario will either produce a corrupt backup or otherwise prevent
+    // replication from proceeding.
+    //
+    // Instead, retry the lock acquisition indefinitely. If this masks
+    // an unknown deadlock situation, manual intervention will be necessary.
     for (let i = 0; ; i++) {
       try {
         return new TransactionProcessor(
@@ -140,23 +162,17 @@ export class ChangeProcessor {
           this.#txMode,
           this.#tableSpecs,
           commitVersion,
+          jsonFormat,
         );
       } catch (e) {
-        // The db occasionally errors with a 'database is locked' error when
-        // being concurrently processed by `litestream replicate`, even with
-        // a long busy_timeout. Retry once to see if any deadlock situation
-        // was resolved when aborting the first attempt.
-        if (e instanceof SqliteError) {
-          lc.error?.(
-            `${e.code} after ${Date.now() - start} ms (attempt ${i + 1})`,
+        if (e instanceof SqliteError && e.code === 'SQLITE_BUSY') {
+          lc.warn?.(
+            `SQLITE_BUSY for ${Date.now() - start} ms (attempt ${i + 1}). ` +
+              `This is only expected if litestream is performing a large ` +
+              `checkpoint.`,
             e,
           );
-
-          if (i === 0) {
-            // retry once
-            start = Date.now();
-            continue;
-          }
+          continue;
         }
         throw e;
       }
@@ -173,7 +189,11 @@ export class ChangeProcessor {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
-      this.#currentTx = this.#beginTransaction(lc, must(watermark));
+      this.#currentTx = this.#beginTransaction(
+        lc,
+        must(watermark),
+        msg.json ?? JSON_PARSED,
+      );
       return false;
     }
 
@@ -273,6 +293,7 @@ class TransactionProcessor {
   readonly #txMode: TransactionMode;
   readonly #version: LexiVersion;
   readonly #tableSpecs: Map<string, LiteTableSpec>;
+  readonly #jsonFormat: JSONFormat;
 
   #schemaChanged = false;
 
@@ -282,9 +303,11 @@ class TransactionProcessor {
     txMode: TransactionMode,
     tableSpecs: Map<string, LiteTableSpec>,
     commitVersion: LexiVersion,
+    jsonFormat: JSONFormat,
   ) {
     this.#startMs = Date.now();
     this.#txMode = txMode;
+    this.#jsonFormat = jsonFormat;
 
     if (txMode === 'CONCURRENT') {
       // Although the Replicator / Incremental Syncer is the only writer of the replica,
@@ -314,7 +337,17 @@ class TransactionProcessor {
 
   #reloadTableSpecs() {
     this.#tableSpecs.clear();
-    for (const spec of listTables(this.#db.db)) {
+    // zqlSpecs include the primary key derived from unique indexes
+    const zqlSpecs = computeZqlSpecs(this.#lc, this.#db.db);
+    for (let spec of listTables(this.#db.db)) {
+      if (!spec.primaryKey) {
+        spec = {
+          ...spec,
+          primaryKey: [
+            ...(zqlSpecs.get(spec.name)?.tableSpec.primaryKey ?? []),
+          ],
+        };
+      }
       this.#tableSpecs.set(spec.name, spec);
     }
   }
@@ -323,21 +356,43 @@ class TransactionProcessor {
     return must(this.#tableSpecs.get(name), `Unknown table ${name}`);
   }
 
+  #getKey(
+    {row, numCols}: {row: LiteRow; numCols: number},
+    {relation}: {relation: MessageRelation},
+  ): LiteRowKey {
+    const keyColumns =
+      relation.replicaIdentity !== 'full'
+        ? relation.keyColumns // already a suitable key
+        : this.#tableSpec(liteTableName(relation)).primaryKey;
+    if (!keyColumns?.length) {
+      throw new Error(
+        `Cannot replicate table "${relation.name}" without a PRIMARY KEY or UNIQUE INDEX`,
+      );
+    }
+    // For the common case (replica identity default), the row is already the
+    // key for deletes and updates, in which case a new object can be avoided.
+    if (numCols === keyColumns.length) {
+      return row;
+    }
+    const key: Record<string, LiteValueType> = {};
+    for (const col of keyColumns) {
+      key[col] = row[col];
+    }
+    return key;
+  }
+
   processInsert(insert: MessageInsert) {
     const table = liteTableName(insert.relation);
-    const newRow = liteRow(insert.new, this.#tableSpec(table));
-    const row = {
-      ...newRow,
-      [ZERO_VERSION_COLUMN_NAME]: this.#version,
-    };
-    const columns = Object.keys(row).map(c => id(c));
-    this.#db.run(
-      `
-      INSERT INTO ${id(table)} (${columns.join(',')})
-        VALUES (${new Array(columns.length).fill('?').join(',')})
-      `,
-      Object.values(row),
+    const newRow = liteRow(
+      insert.new,
+      this.#tableSpec(table),
+      this.#jsonFormat,
     );
+
+    this.#upsert(table, {
+      ...newRow.row,
+      [ZERO_VERSION_COLUMN_NAME]: this.#version,
+    });
 
     if (insert.relation.keyColumns.length === 0) {
       // INSERTs can be replicated for rows without a PRIMARY KEY or a
@@ -349,31 +404,64 @@ class TransactionProcessor {
       //  loaded via hydration.)
       return;
     }
-    const key = Object.fromEntries(
-      insert.relation.keyColumns.map(col => [col, newRow[col]]),
-    );
+    const key = this.#getKey(newRow, insert);
     this.#logSetOp(table, key);
   }
 
+  #upsert(table: string, row: LiteRow) {
+    const columns = Object.keys(row).map(c => id(c));
+    this.#db.run(
+      `
+      INSERT OR REPLACE INTO ${id(table)} (${columns.join(',')})
+        VALUES (${new Array(columns.length).fill('?').join(',')})
+      `,
+      Object.values(row),
+    );
+  }
+
+  // Updates by default are applied as UPDATE commands to support partial
+  // row specifications from the change source. In particular, this is needed
+  // to handle updates for which unchanged TOASTed values are not sent:
+  //
+  // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-TUPLEDATA
+  //
+  // However, in certain cases an UPDATE may be received for a row that
+  // was not initially synced, such as when:
+  // (1) an existing table is added to the app's publication, or
+  // (2) a new sharding key is added to a shard during resharding.
+  //
+  // In order to facilitate "resumptive" replication, the logic falls back to
+  // an INSERT if the update did not change any rows.
+  // TODO: Figure out a solution for resumptive replication of rows
+  //       with TOASTed values.
   processUpdate(update: MessageUpdate) {
     const table = liteTableName(update.relation);
-    const newRow = liteRow(update.new, this.#tableSpec(table));
-    const row = {
-      ...newRow,
-      [ZERO_VERSION_COLUMN_NAME]: this.#version,
-    };
+    const newRow = liteRow(
+      update.new,
+      this.#tableSpec(table),
+      this.#jsonFormat,
+    );
+    const row = {...newRow.row, [ZERO_VERSION_COLUMN_NAME]: this.#version};
+
     // update.key is set with the old values if the key has changed.
     const oldKey = update.key
-      ? liteRow(update.key, this.#tableSpec(table))
+      ? this.#getKey(
+          liteRow(update.key, this.#tableSpec(table), this.#jsonFormat),
+          update,
+        )
       : null;
-    const newKey = Object.fromEntries(
-      update.relation.keyColumns.map(col => [col, newRow[col]]),
-    );
-    const currKey = oldKey ?? newKey;
-    const setExprs = Object.keys(row).map(col => `${id(col)}=?`);
-    const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
+    const newKey = this.#getKey(newRow, update);
 
-    this.#db.run(
+    if (oldKey) {
+      this.#logDeleteOp(table, oldKey);
+    }
+    this.#logSetOp(table, newKey);
+
+    const currKey = oldKey ?? newKey;
+    const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
+    const setExprs = Object.keys(row).map(col => `${id(col)}=?`);
+
+    const {changes} = this.#db.run(
       `
       UPDATE ${id(table)}
         SET ${setExprs.join(',')}
@@ -382,25 +470,33 @@ class TransactionProcessor {
       [...Object.values(row), ...Object.values(currKey)],
     );
 
-    if (oldKey) {
-      this.#logDeleteOp(table, oldKey);
+    // If the UPDATE did not affect any rows, perform an UPSERT of the
+    // new row for resumptive replication.
+    if (changes === 0) {
+      this.#upsert(table, row);
     }
-    this.#logSetOp(table, newKey);
   }
 
   processDelete(del: MessageDelete) {
     const table = liteTableName(del.relation);
-    const rowKey = liteRow(del.key, this.#tableSpec(table));
+    const rowKey = this.#getKey(
+      liteRow(del.key, this.#tableSpec(table), this.#jsonFormat),
+      del,
+    );
 
+    this.#delete(table, rowKey);
+
+    if (this.#txMode !== 'INITIAL-SYNC') {
+      this.#logDeleteOp(table, rowKey);
+    }
+  }
+
+  #delete(table: string, rowKey: LiteRowKey) {
     const conds = Object.keys(rowKey).map(col => `${id(col)}=?`);
     this.#db.run(
       `DELETE FROM ${id(table)} WHERE ${conds.join(' AND ')}`,
       Object.values(rowKey),
     );
-
-    if (this.#txMode !== 'INITIAL-SYNC') {
-      this.#logDeleteOp(table, rowKey);
-    }
   }
 
   processTruncate(truncate: MessageTruncate) {
@@ -448,8 +544,18 @@ class TransactionProcessor {
     let oldName = msg.old.name;
     const newName = msg.new.name;
 
-    const oldSpec = mapPostgresToLiteColumn(table, msg.old);
-    const newSpec = mapPostgresToLiteColumn(table, msg.new);
+    // update-column can ignore defaults because it does not change the values
+    // in existing rows.
+    //
+    // https://www.postgresql.org/docs/current/sql-altertable.html#SQL-ALTERTABLE-DESC-SET-DROP-DEFAULT
+    //
+    // "The new default value will only apply in subsequent INSERT or UPDATE
+    //  commands; it does not cause rows already in the table to change."
+    //
+    // This allows support for _changing_ column defaults to any expression,
+    // since it does not affect what the replica needs to do.
+    const oldSpec = mapPostgresToLiteColumn(table, msg.old, 'ignore-default');
+    const newSpec = mapPostgresToLiteColumn(table, msg.new, 'ignore-default');
 
     // The only updates that are relevant are the column name and the data type.
     if (oldName === newName && oldSpec.dataType === newSpec.dataType) {
@@ -529,16 +635,18 @@ class TransactionProcessor {
     this.#logResetOp(table);
   }
 
-  #logSetOp(table: string, key: LiteRowKey) {
+  #logSetOp(table: string, key: LiteRowKey): string {
     if (this.#txMode !== 'INITIAL-SYNC') {
-      logSetOp(this.#db, this.#version, table, key);
+      return logSetOp(this.#db, this.#version, table, key);
     }
+    return stringify(normalizedKeyOrder(key));
   }
 
-  #logDeleteOp(table: string, key: LiteRowKey) {
+  #logDeleteOp(table: string, key: LiteRowKey): string {
     if (this.#txMode !== 'INITIAL-SYNC') {
-      logDeleteOp(this.#db, this.#version, table, key);
+      return logDeleteOp(this.#db, this.#version, table, key);
     }
+    return stringify(normalizedKeyOrder(key));
   }
 
   #logTruncateOp(table: string) {

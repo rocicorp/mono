@@ -1,6 +1,5 @@
 import {LogContext, type LogLevel} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
-import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
@@ -17,6 +16,7 @@ import type {PullRequest} from '../../../replicache/src/sync/pull.ts';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import type {
   MutatorDefs,
+  MutatorReturn,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from '../../../replicache/src/types.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
@@ -32,6 +32,8 @@ import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
+import type {CloseConnectionMessage} from '../../../zero-protocol/src/close-connection.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
 import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.ts';
@@ -63,7 +65,10 @@ import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  type Schema,
+  clientSchemaFrom,
+} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   type NameMapper,
   clientToServer,
@@ -77,6 +82,7 @@ import * as ConnectionState from './connection-state-enum.ts';
 import {ZeroContext} from './context.ts';
 import {
   type BatchMutator,
+  type CRUDMutator,
   type DBMutator,
   type WithCRUD,
   makeCRUDMutate,
@@ -96,8 +102,8 @@ import {
   appendPath,
   toWSString,
 } from './http-string.ts';
-import {IVMSourceRepo} from './ivm-source-repo.ts';
-import {ENTITIES_KEY_PREFIX} from './keys.ts';
+import type {Inspector} from './inspector/types.ts';
+import {IVMSourceBranch} from './ivm-branch.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
   DID_NOT_CONNECT_VALUE,
@@ -107,11 +113,8 @@ import {
   type Series,
   getLastConnectErrorValue,
 } from './metrics.ts';
-import type {
-  UpdateNeededReason,
-  ZeroAdvancedOptions,
-  ZeroOptions,
-} from './options.ts';
+import {MutationTracker} from './mutation-tracker.ts';
+import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import * as PingResult from './ping-result-enum.ts';
 import {QueryManager} from './query-manager.ts';
 import {
@@ -129,6 +132,8 @@ import {
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
+import {ZeroRep} from './zero-rep.ts';
+import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -223,7 +228,7 @@ function updateNeededReloadReason(
         "The server no longer supports this client's protocol version.";
       break;
     case 'SchemaVersionNotSupported':
-      reasonMsg = "The server no longer supports this client's schema version.";
+      reasonMsg = 'Client and server schemas incompatible.';
       break;
     default:
       unreachable(type);
@@ -258,6 +263,10 @@ export function getInternalReplicacheImplForTesting(
   return must(internalReplicacheImplMap.get(z));
 }
 
+const CLOSE_CODE_NORMAL = 1000;
+const CLOSE_CODE_GOING_AWAY = 1001;
+type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
+
 export class Zero<
   const S extends Schema,
   MD extends CustomMutatorDefs<S> | undefined = undefined,
@@ -272,12 +281,15 @@ export class Zero<
   readonly #lc: LogContext;
   readonly #logOptions: LogOptions;
   readonly #enableAnalytics: boolean;
+  readonly #schema: S;
+  readonly #clientSchema: ClientSchema;
 
   readonly #pokeHandler: PokeHandler;
   readonly #queryManager: QueryManager;
-  readonly #ivmSources: IVMSourceRepo;
+  readonly #ivmMain: IVMSourceBranch;
   readonly #clientToServer: NameMapper;
   readonly #deleteClientsManager: DeleteClientsManager;
+  readonly #mutationTracker: MutationTracker;
 
   /**
    * The queries we sent when inside the sec-protocol header when establishing a connection.
@@ -397,11 +409,11 @@ export class Zero<
       onUpdateNeeded,
       onClientStateNotFound,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-      kvStore = 'idb',
       schema,
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
-    } = options as ZeroAdvancedOptions<S>;
+      slowMaterializeThreshold = 5_000,
+    } = options as ZeroOptions<S>;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
     }
@@ -410,6 +422,17 @@ export class Zero<
       server,
       false /*options.enableAnalytics,*/, // Reenable analytics
     );
+
+    let {kvStore = 'idb'} = options as ZeroOptions<S>;
+    if (kvStore === 'idb') {
+      if (!getBrowserGlobal('indexedDB')) {
+        // eslint-disable-next-line no-console
+        console.warn(
+          'IndexedDB is not supported in this environment. Falling back to memory storage.',
+        );
+        kvStore = 'mem';
+      }
+    }
 
     if (hiddenTabDisconnectDelay < 0) {
       throw new Error(
@@ -427,28 +450,69 @@ export class Zero<
     });
     const logOptions = this.#logOptions;
 
-    const replicacheMutators = {
+    const replicacheMutators: MutatorDefs & {
+      [CRUD_MUTATION_NAME]: CRUDMutator;
+    } = {
       [CRUD_MUTATION_NAME]: makeCRUDMutator(schema),
     };
-    this.#ivmSources = new IVMSourceRepo(schema.tables);
+    this.#ivmMain = new IVMSourceBranch(schema.tables);
 
-    for (const [namespace, mutatorsForNamespace] of Object.entries(
-      options.mutators ?? {},
-    )) {
-      for (const [name, mutator] of Object.entries(
-        mutatorsForNamespace as Record<string, CustomMutatorImpl<Schema>>,
+    function assertUnique(key: string) {
+      assert(
+        replicacheMutators[key] === undefined,
+        `A mutator, or mutator namespace, has already been defined for ${key}`,
+      );
+    }
+
+    const lc = new LogContext(logOptions.logLevel, {}, logOptions.logSink);
+    this.#mutationTracker = new MutationTracker(lc);
+    if (options.mutators) {
+      for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
+        options.mutators,
       )) {
-        (replicacheMutators as MutatorDefs)[customMutatorKey(namespace, name)] =
-          makeReplicacheMutator(mutator, schema, this.#ivmSources);
+        if (typeof mutatorOrMutators === 'function') {
+          const key = namespaceOrKey as string;
+          assertUnique(key);
+          replicacheMutators[key] = makeReplicacheMutator(
+            lc,
+            mutatorOrMutators,
+            schema,
+            slowMaterializeThreshold,
+            // Replicache expects mutators to only be able to return JSON
+            // but Zero wraps the return with: `{server?: Promise<MutationResult>, client?: T}`
+          ) as () => MutatorReturn;
+          continue;
+        }
+        if (typeof mutatorOrMutators === 'object') {
+          for (const [name, mutator] of Object.entries(mutatorOrMutators)) {
+            const key = customMutatorKey(
+              namespaceOrKey as string,
+              name as string,
+            );
+            assertUnique(key);
+            replicacheMutators[key] = makeReplicacheMutator(
+              lc,
+              mutator as CustomMutatorImpl<S>,
+              schema,
+              slowMaterializeThreshold,
+            ) as () => MutatorReturn;
+          }
+          continue;
+        }
+        unreachable(mutatorOrMutators);
       }
     }
 
     this.storageKey = storageKey ?? '';
 
+    this.#schema = schema;
+    const {clientSchema, hash} = clientSchemaFrom(schema);
+    this.#clientSchema = clientSchema;
+
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
-      // The schema stored in IDB is dependent upon both the application schema
+      // The schema stored in IDB is dependent upon both the ClientSchema
       // and the AST schema (i.e. PROTOCOL_VERSION).
-      schemaVersion: `${schema.version}.${PROTOCOL_VERSION}`,
+      schemaVersion: `${PROTOCOL_VERSION}.${hash}`,
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
@@ -463,11 +527,28 @@ export class Zero<
       licenseKey: 'zero-client-static-key',
       kvStore,
     };
+
+    this.#zeroContext = new ZeroContext(
+      lc,
+      this.#ivmMain,
+      (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
+      (ast, ttl) => this.#queryManager.update(ast, ttl),
+      batchViewUpdates,
+      slowMaterializeThreshold,
+    );
+
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
       enableMutationRecovery: false,
+      enablePullAndPushInOpen: false, // Zero calls push in its connection management code
       onClientsDeleted: (clientIDs, clientGroupIDs) =>
         this.#deleteClientsManager.onClientsDeleted(clientIDs, clientGroupIDs),
+      zero: new ZeroRep(
+        this.#zeroContext,
+        this.#ivmMain,
+        options.mutators !== undefined,
+        this.#mutationTracker,
+      ),
     };
 
     const rep = new ReplicacheImpl(replicacheOptions, replicacheImplOptions);
@@ -478,11 +559,8 @@ export class Zero<
     }
     this.#server = server;
     this.userID = userID;
-    this.#lc = new LogContext(
-      logOptions.logLevel,
-      {clientID: rep.clientID},
-      logOptions.logSink,
-    );
+    this.#lc = lc.withContext('clientID', rep.clientID);
+    this.#mutationTracker.clientID = rep.clientID;
 
     const onUpdateNeededCallback =
       onUpdateNeeded ??
@@ -513,25 +591,34 @@ export class Zero<
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
 
-    for (const [namespace, mutatorsForNamespace] of Object.entries(
-      options.mutators ?? {},
-    )) {
-      let existing = mutate[namespace];
-      if (existing === undefined) {
-        existing = {};
-        mutate[namespace] = existing;
-      }
-
-      for (const name of Object.keys(
-        mutatorsForNamespace as Record<string, CustomMutatorImpl<Schema>>,
+    if (options.mutators) {
+      for (const [namespaceOrKey, mutatorsOrMutator] of Object.entries(
+        options.mutators,
       )) {
-        existing[name] = must(rep.mutate[customMutatorKey(namespace, name)]);
+        if (typeof mutatorsOrMutator === 'function') {
+          mutate[namespaceOrKey] = must(rep.mutate[namespaceOrKey as string]);
+          continue;
+        }
+
+        let existing = mutate[namespaceOrKey];
+        if (existing === undefined) {
+          existing = {};
+          mutate[namespaceOrKey] = existing;
+        }
+
+        for (const name of Object.keys(mutatorsOrMutator)) {
+          existing[name] = must(
+            rep.mutate[customMutatorKey(namespaceOrKey as string, name)],
+          );
+        }
       }
     }
+
     this.mutate = mutate;
     this.mutateBatch = mutateBatch;
 
     this.#queryManager = new QueryManager(
+      this.#mutationTracker,
       rep.clientID,
       schema.tables,
       msg => this.#sendChangeDesiredQueries(msg),
@@ -544,20 +631,6 @@ export class Zero<
       msg => this.#send(msg),
       rep.perdag,
       this.#lc,
-    );
-
-    this.#zeroContext = new ZeroContext(
-      this.#ivmSources.main,
-      (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
-      batchViewUpdates,
-    );
-
-    rep.experimentalWatch(
-      diff => this.#zeroContext.processChanges(diff as NoIndexDiff),
-      {
-        prefix: ENTITIES_KEY_PREFIX,
-        initialValuesInFirstDiff: true,
-      },
     );
 
     this.query = this.#registerQueries(schema);
@@ -576,7 +649,7 @@ export class Zero<
     this.#metrics.tags.push(`version:${this.version}`);
 
     this.#pokeHandler = new PokeHandler(
-      poke => this.#rep.poke(poke, this.#ivmSources.advanceSyncHead),
+      poke => this.#rep.poke(poke),
       () => this.#onPokeError(),
       rep.clientID,
       schema,
@@ -684,7 +757,7 @@ export class Zero<
    * ```
    */
   readonly mutate: MD extends CustomMutatorDefs<S>
-    ? DBMutator<S> & MakeCustomMutatorInterfaces<S, MD>
+    ? DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD>>
     : DBMutator<S>;
 
   /**
@@ -725,16 +798,44 @@ export class Zero<
   close(): Promise<void> {
     const lc = this.#lc.withContext('close');
 
+    lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
+
     if (this.#connectionState !== ConnectionState.Disconnected) {
-      this.#disconnect(lc, {
-        client: 'ClientClosed',
-      });
+      let closeReason = JSON.stringify([
+        'closeConnection',
+        [],
+      ] satisfies CloseConnectionMessage);
+      if (closeReason.length > 123) {
+        lc.warn?.('Close reason is too long. Removing it.');
+        closeReason = '';
+      }
+      this.#disconnect(
+        lc,
+        {
+          client: 'ClientClosed',
+        },
+        CLOSE_CODE_NORMAL,
+        closeReason,
+      );
     }
     lc.debug?.('Aborting closeAbortController due to close()');
     this.#closeAbortController.abort();
     this.#metrics.stop();
     return this.#rep.close();
   }
+
+  #onPageHide = (e: PageTransitionEvent) => {
+    // When pagehide fires and persisted is true it means the page is going into
+    // the BFCache. If that happens the page might get restored and this client
+    // will be operational again. If that happens we do not want to remove the
+    // client from the server.
+    if (e.persisted) {
+      this.#lc.debug?.('Ignoring pagehide event because it was persisted');
+    } else {
+      this.#lc.debug?.('Closing client because we got a clean close');
+      this.close().catch(() => {});
+    }
+  };
 
   #onMessage = (e: MessageEvent<string>) => {
     const lc = this.#lc;
@@ -771,12 +872,21 @@ export class Zero<
         return this.#handleErrorMessage(lc, downMessage);
 
       case 'pong':
+        // Receiving a pong means that the connection is healthy, as the
+        // initial schema / versioning negotiations would produce an error
+        // before a ping-pong timeout.
+        resetBackoff();
         return this.#onPong();
 
       case 'pokeStart':
         return this.#handlePokeStart(lc, downMessage);
 
       case 'pokePart':
+        if (downMessage[1].rowsPatch) {
+          // Receiving row data indicates that the client is in a good state
+          // and can reset the reload backoff state.
+          resetBackoff();
+        }
         return this.#handlePokePart(lc, downMessage);
 
       case 'pokeEnd':
@@ -785,14 +895,17 @@ export class Zero<
       case 'pull':
         return this.#handlePullResponse(lc, downMessage);
 
-      case 'warm':
-        // we ignore warming messages
-        break;
-
       case 'deleteClients':
         return this.#deleteClientsManager.clientsDeletedOnServer(
           downMessage[1],
         );
+
+      case 'pushResponse':
+        return this.#mutationTracker.processPushResponse(downMessage[1]);
+
+      case 'inspect':
+        // ignore at this layer.
+        break;
 
       default:
         msgType satisfies never;
@@ -952,11 +1065,15 @@ export class Zero<
     } else if (this.#initConnectionQueries === undefined) {
       // if #initConnectionQueries was undefined that means we never
       // sent `initConnection` to the server inside the sec-protocol header.
+      const clientSchema = this.#clientSchema;
       send(socket, [
         'initConnection',
         {
           desiredQueriesPatch: [...queriesPatch.values()],
           deleted: skipEmptyDeletedClients(this.#deletedClients),
+          // The clientSchema only needs to be sent for the very first request.
+          // Henceforth it is stored with the CVR and verified automatically.
+          ...(this.#connectCookie === null ? {clientSchema} : {}),
         },
       ]);
       this.#deletedClients = undefined;
@@ -1043,7 +1160,7 @@ export class Zero<
       this.#connectCookie,
       this.clientID,
       await this.clientGroupID,
-      this.#options.schema.version,
+      this.#clientSchema,
       this.userID,
       this.#rep.auth,
       this.#lastMutationIDReceived,
@@ -1066,9 +1183,17 @@ export class Zero<
     this.#socket = ws;
     this.#socketResolver.resolve(ws);
 
+    getBrowserGlobal('window')?.addEventListener?.(
+      'pagehide',
+      this.#onPageHide,
+    );
+
     try {
       l.debug?.('Waiting for connection to be acknowledged');
       await this.#connectResolver.promise;
+      this.#mutationTracker.onConnected(this.#lastMutationIDReceived);
+      // push any outstanding mutations on reconnect.
+      this.#rep.push().catch(() => {});
     } finally {
       clearTimeout(timeoutID);
       this.#closeAbortController.signal.removeEventListener(
@@ -1078,7 +1203,12 @@ export class Zero<
     }
   }
 
-  #disconnect(l: LogContext, reason: DisconnectReason): void {
+  #disconnect(
+    l: LogContext,
+    reason: DisconnectReason,
+    closeCode?: CloseCode,
+    closeReason?: string,
+  ): void {
     if (this.#connectionState === ConnectionState.Connecting) {
       this.#connectErrorCount++;
     }
@@ -1143,14 +1273,18 @@ export class Zero<
     this.#socket?.removeEventListener('message', this.#onMessage);
     this.#socket?.removeEventListener('open', this.#onOpen);
     this.#socket?.removeEventListener('close', this.#onClose);
-    this.#socket?.close();
+    this.#socket?.close(closeCode, closeReason);
     this.#socket = undefined;
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
     this.#pokeHandler.handleDisconnect();
+
+    getBrowserGlobal('window')?.removeEventListener?.(
+      'pagehide',
+      this.#onPageHide,
+    );
   }
 
   #handlePokeStart(_lc: LogContext, pokeMessage: PokeStartMessage): void {
-    resetBackoff();
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeStart(pokeMessage[1]);
   }
@@ -1260,8 +1394,6 @@ export class Zero<
           clientGroupID: req.clientGroupID,
           mutations: [zeroM],
           pushVersion: req.pushVersion,
-          // Zero schema versions are always numbers.
-          schemaVersion: parseInt(req.schemaVersion),
           requestID,
         },
       ];
@@ -1595,7 +1727,7 @@ export class Zero<
   }
 
   /**
-   * Starts a a ping and waits for a pong.
+   * Starts a ping and waits for a pong.
    *
    * If it takes too long to get a pong we disconnect and this returns
    * {@code PingResult.TimedOut}.
@@ -1693,6 +1825,22 @@ export class Zero<
 
     return rv as MakeEntityQueriesFromSchema<S>;
   }
+
+  /**
+   * `inspect` returns an object that can be used to inspect the state of the
+   * queries a Zero instance uses. It is intended for debugging purposes.
+   */
+  async inspect(): Promise<Inspector> {
+    // We use esbuild dropLabels to strip this code when we build the code for the bundle size dashboard.
+    // https://esbuild.github.io/api/#ignore-annotations
+    // /packages/zero/tool/build.ts
+
+    // eslint-disable-next-line no-unused-labels
+    BUNDLE_SIZE: {
+      const m = await import('./inspector/inspector.ts');
+      return m.newInspector(this.#rep, this.#schema, () => this.#socket);
+    }
+  }
 }
 
 export async function createSocket(
@@ -1703,7 +1851,7 @@ export async function createSocket(
   baseCookie: NullableVersion,
   clientID: string,
   clientGroupID: string,
-  schemaVersion: number,
+  clientSchema: ClientSchema,
   userID: string,
   auth: string | undefined,
   lmid: number,
@@ -1725,7 +1873,6 @@ export async function createSocket(
   const {searchParams} = url;
   searchParams.set('clientID', clientID);
   searchParams.set('clientGroupID', clientGroupID);
-  searchParams.set('schemaVersion', schemaVersion.toString());
   searchParams.set('userID', userID);
   searchParams.set('baseCookie', baseCookie === null ? '' : String(baseCookie));
   searchParams.set('ts', String(performance.now()));
@@ -1764,6 +1911,9 @@ export async function createSocket(
       {
         desiredQueriesPatch: [...queriesPatch.values()],
         deleted: skipEmptyDeletedClients(deletedClients),
+        // The clientSchema only needs to be sent for the very first request.
+        // Henceforth it is stored with the CVR and verified automatically.
+        ...(baseCookie === null ? {clientSchema} : {}),
       },
     ],
     auth,

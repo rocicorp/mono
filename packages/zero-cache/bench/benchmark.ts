@@ -1,26 +1,21 @@
 // create a zql query
 
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import type {AST} from '../../zero-protocol/src/ast.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
+import type {Input} from '../../zql/src/ivm/operator.ts';
 import type {Source} from '../../zql/src/ivm/source.ts';
 import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
-import type {LogConfig} from '../src/config/zero-config.ts';
 import {computeZqlSpecs} from '../src/db/lite-tables.ts';
 import {mapLiteDataTypeToZqlSchemaValue} from '../src/types/lite.ts';
 import {schema} from './schema.ts';
 
 type Options = {
   dbFile: string;
-};
-
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
 };
 
 // load up some data!
@@ -31,6 +26,9 @@ export function bench(opts: Options) {
   const sources = new Map<string, Source>();
   const tableSpecs = computeZqlSpecs(lc, db);
   const host: QueryDelegate = {
+    mapAst(ast: AST): AST {
+      return ast;
+    },
     getSource: (name: string) => {
       let source = sources.get(name);
       if (source) {
@@ -42,7 +40,7 @@ export function bench(opts: Options) {
 
       source = new TableSource(
         lc,
-        logConfig,
+        testLogConfig,
         'benchmark',
         db,
         name,
@@ -63,9 +61,14 @@ export function bench(opts: Options) {
       // TODO: table storage!!
       return new MemoryStorage();
     },
+    decorateInput(input: Input): Input {
+      return input;
+    },
     addServerQuery() {
       return () => {};
     },
+    updateServerQuery() {},
+    onQueryMaterialized() {},
     onTransactionCommit() {
       return () => {};
     },

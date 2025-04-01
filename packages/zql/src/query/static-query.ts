@@ -2,15 +2,21 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../ivm/view.ts';
 import {ExpressionBuilder} from './expression.ts';
-import {AbstractQuery} from './query-impl.ts';
+import {AbstractQuery, defaultFormat} from './query-impl.ts';
 import type {HumanReadable, PullRow, Query} from './query.ts';
+import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 export function staticQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
 >(schema: TSchema, tableName: TTable): Query<TSchema, TTable> {
-  return new StaticQuery<TSchema, TTable>(schema, tableName);
+  return new StaticQuery<TSchema, TTable>(
+    schema,
+    tableName,
+    {table: tableName},
+    defaultFormat,
+  );
 }
 
 /**
@@ -36,10 +42,9 @@ export class StaticQuery<
     schema: TSchema,
     tableName: TTable,
     ast: AST,
-    ttl: number | undefined,
-    format: Format | undefined,
-  ): Query<TSchema, TTable, TReturn> {
-    return new StaticQuery(schema, tableName, ast, ttl, format);
+    format: Format,
+  ): StaticQuery<TSchema, TTable, TReturn> {
+    return new StaticQuery(schema, tableName, ast, format);
   }
 
   get ast() {
@@ -47,17 +52,21 @@ export class StaticQuery<
   }
 
   materialize(): TypedView<HumanReadable<TReturn>> {
-    throw new Error('AuthQuery cannot be materialized');
+    throw new Error('StaticQuery cannot be materialized');
   }
 
-  run(): HumanReadable<TReturn> {
-    throw new Error('AuthQuery cannot be run');
+  run(): Promise<HumanReadable<TReturn>> {
+    return Promise.reject(new Error('StaticQuery cannot be run'));
   }
 
   preload(): {
     cleanup: () => void;
     complete: Promise<void>;
   } {
-    throw new Error('AuthQuery cannot be preloaded');
+    throw new Error('StaticQuery cannot be preloaded');
+  }
+
+  updateTTL(_ttl: TTL): void {
+    throw new Error('StaticQuery cannot have a TTL');
   }
 }

@@ -1,34 +1,39 @@
 {
   "name": "@rocicorp/mono",
+  "packageManager": "npm@10.9.2",
   "version": "0.0.0",
   "private": true,
   "workspaces": [
     "apps/*",
     "packages/*",
-    "prod"
+    "prod",
+    "tools/*"
   ],
   "type": "module",
   "scripts": {
     "download-deps": "bash ./deps/download.sh",
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "test": "turbo run --concurrency 1 test",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "turbo run lint",
     "format": "turbo run format",
     "check-format": "turbo run check-format",
     "check-types": "turbo run check-types",
+    "check-types:watch": "turbo watch check-types",
     "build-ci": "npm install && turbo run build",
     "start-zero-cache": "cd packages/zero-cache && npm run start"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
-    "@rocicorp/prettier-config": "^0.2.0",
-    "@vitest/coverage-v8": "^2.1.5",
+    "@rocicorp/prettier-config": "^0.3.0",
+    "@vitest/coverage-v8": "3.0.8",
+    "@vitest/runner": "3.0.8",
     "prettier": "^3.0.3",
     "syncpack": "^12.3.2",
     "tsx": "^4.19.1",
-    "turbo": "^1.13.2",
-    "vitest": "^2.1.5"
+    "turbo": "^2.4.4",
+    "vitest": "3.0.8"
   },
   "eslintConfig": {
     "extends": "./eslint-config.json"

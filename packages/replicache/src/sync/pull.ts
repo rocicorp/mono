@@ -186,7 +186,6 @@ type HandlePullResponseResult =
   | {
       type: HandlePullResponseResultType.Applied;
       syncHead: Hash;
-      diffs: readonly patch.Diff[];
     }
   | {
       type:
@@ -294,12 +293,11 @@ export function handlePullResponseV1(
       formatVersion,
     );
 
-    const diffs = await patch.apply(lc, dbWrite, response.patch);
+    await patch.apply(lc, dbWrite, response.patch);
 
     return {
       type: HandlePullResponseResultType.Applied,
       syncHead: await dbWrite.commit(SYNC_HEAD_NAME),
-      diffs,
     };
   });
 }
@@ -313,6 +311,8 @@ export function maybeEndPull<M extends LocalMeta>(
   formatVersion: FormatVersion,
 ): Promise<{
   syncHead: Hash;
+  mainHead: Hash;
+  oldMainHead: Hash;
   replayMutations: Commit<M>[];
   diffs: DiffsMap;
 }> {
@@ -382,6 +382,8 @@ export function maybeEndPull<M extends LocalMeta>(
     if (pending.length > 0) {
       return {
         syncHead: syncHeadHash,
+        oldMainHead: mainHeadHash,
+        mainHead: mainHeadHash,
         replayMutations: pending,
         // The changed keys are not reported when further replays are
         // needed. The diffs will be reported at the end when there
@@ -424,6 +426,8 @@ export function maybeEndPull<M extends LocalMeta>(
       dagWrite.removeHead(SYNC_HEAD_NAME),
     ]);
     await dagWrite.commit();
+    // main head was set to sync head
+    const newMainHeadHash = syncHeadHash;
 
     if (lc.debug) {
       const [oldLastMutationID, oldCookie] = snapshotMetaParts(
@@ -456,6 +460,8 @@ export function maybeEndPull<M extends LocalMeta>(
 
     return {
       syncHead: syncHeadHash,
+      oldMainHead: mainHeadHash,
+      mainHead: newMainHeadHash,
       replayMutations: [],
       diffs: diffsMap,
     };

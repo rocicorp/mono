@@ -1,7 +1,7 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "lib": ["DOM", "DOM.Iterable", "ESNext"],
+    "lib": ["DOM", "DOM.Iterable", "ES2022"],
     "jsx": "react-jsx",
     "baseUrl": "../../packages",
     "paths": {
@@ -10,5 +10,5 @@
     },
     "declaration": true
   },
-  "include": ["src", "schema.ts"]
+  "include": ["src", "shared/*"]
 }

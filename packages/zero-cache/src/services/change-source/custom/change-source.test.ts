@@ -1,9 +1,10 @@
 import websocket from '@fastify/websocket';
-import {consoleLogSink, LogContext} from '@rocicorp/logger';
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {type FastifyInstance} from 'fastify';
 import {afterEach, beforeEach, describe, test} from 'vitest';
 import type WebSocket from 'ws';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {DbFile, expectTables} from '../../../test/lite.ts';
 import {stream, type Sink} from '../../../types/streams.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
@@ -13,6 +14,8 @@ import {
 } from '../protocol/current/upstream.ts';
 import {initializeCustomChangeSource} from './change-source.ts';
 
+const APP_ID = 'bongo';
+
 describe('change-source/custom', () => {
   let lc: LogContext;
   let downstream: Promise<Sink<ChangeStreamMessage>>;
@@ -21,7 +24,7 @@ describe('change-source/custom', () => {
   let replicaDbFile: DbFile;
 
   beforeEach(async () => {
-    lc = new LogContext('debug', {}, consoleLogSink);
+    lc = createSilentLogContext();
     server = Fastify();
     await server.register(websocket);
 
@@ -100,7 +103,7 @@ describe('change-source/custom', () => {
         {
           tag: 'create-table',
           spec: {
-            schema: 'zero_0',
+            schema: 'bongo_0',
             name: 'clients',
             primaryKey: ['clientGroupID', 'clientID'],
             columns: {
@@ -117,8 +120,8 @@ describe('change-source/custom', () => {
         {
           tag: 'create-index',
           spec: {
-            name: 'zero_clients_key',
-            schema: 'zero_0',
+            name: 'bongo_clients_key',
+            schema: 'bongo_0',
             tableName: 'clients',
             columns: {
               clientGroupID: 'ASC',
@@ -133,7 +136,7 @@ describe('change-source/custom', () => {
         {
           tag: 'create-table',
           spec: {
-            schema: 'zero',
+            schema: 'bongo',
             name: 'schemaVersions',
             primaryKey: ['lock'],
             columns: {
@@ -149,8 +152,8 @@ describe('change-source/custom', () => {
         {
           tag: 'create-index',
           spec: {
-            name: 'zero_schemaVersions_key',
-            schema: 'zero',
+            name: 'bongo_schemaVersions_key',
+            schema: 'bongo',
             tableName: 'schemaVersions',
             columns: {lock: 'ASC'},
             unique: true,
@@ -162,7 +165,7 @@ describe('change-source/custom', () => {
         {
           tag: 'create-table',
           spec: {
-            schema: 'zero',
+            schema: 'bongo',
             name: 'permissions',
             primaryKey: ['lock'],
             columns: {
@@ -178,8 +181,8 @@ describe('change-source/custom', () => {
         {
           tag: 'create-index',
           spec: {
-            name: 'zero_permissions_key',
-            schema: 'zero',
+            name: 'bongo_permissions_key',
+            schema: 'bongo',
             tableName: 'permissions',
             columns: {lock: 'ASC'},
             unique: true,
@@ -191,7 +194,7 @@ describe('change-source/custom', () => {
         {
           tag: 'insert',
           relation: {
-            schema: 'zero',
+            schema: 'bongo',
             name: 'schemaVersions',
             keyColumns: ['lock'],
           },
@@ -204,13 +207,13 @@ describe('change-source/custom', () => {
     await initializeCustomChangeSource(
       lc,
       changeSourceURI,
-      {id: '0', publications: ['b', 'a']},
+      {appID: APP_ID, shardNum: 0, publications: ['b', 'a']},
       replicaDbFile.path,
     );
 
     expectTables(replicaDbFile.connect(lc), {
       foo: [{id: 'abcde', bar: 'baz', ['_0_version']: '123'}],
-      ['zero.schemaVersions']: [
+      ['bongo.schemaVersions']: [
         {
           lock: 1,
           minSupportedVersion: 1,
@@ -218,7 +221,7 @@ describe('change-source/custom', () => {
           ['_0_version']: '123',
         },
       ],
-      ['zero_0.clients']: [],
+      ['bongo_0.clients']: [],
       ['_zero.replicationState']: [{lock: 1, stateVersion: '123'}],
       ['_zero.replicationConfig']: [
         {

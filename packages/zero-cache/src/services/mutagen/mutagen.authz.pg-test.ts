@@ -22,32 +22,28 @@ import {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import type {Row} from '../../../../zql/src/query/query.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {WriteAuthorizerImpl} from '../../auth/write-authorizer.ts';
-import type {LogConfig, ZeroConfig} from '../../config/zero-config.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
 import {testDBs} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {zeroSchema} from './mutagen-test-shared.ts';
 import {processMutation} from './mutagen.ts';
+import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 const zeroConfig = {
-  log: logConfig,
+  log: testLogConfig,
 } as unknown as ZeroConfig;
 
-const SHARD_ID = '0';
+const APP_ID = 'fooz';
+const SHARD_NUM = 0;
+const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 const CG_ID = 'abc';
-const TEST_SCHEMA_VERSION = 1;
 
 const sqlSchema = /* sql */ `
-CREATE TABLE "zero.permissions" (
+CREATE TABLE "${APP_ID}.permissions" (
   permissions JSON,
   hash TEXT
 );
-INSERT INTO "zero.permissions" (permissions) VALUES (NULL);
+INSERT INTO "${APP_ID}.permissions" (permissions) VALUES (NULL);
 
 CREATE TABLE "user" (
   id text PRIMARY KEY,
@@ -131,14 +127,14 @@ INSERT INTO "dataTypeTest" (
 `;
 
 async function createUpstreamTables(db: PostgresDB) {
-  await db.unsafe(sqlSchema + zeroSchema(SHARD_ID));
+  await db.unsafe(sqlSchema + zeroSchema(SHARD));
 }
 
 function createReplicaTables(db: Database) {
   db.exec(sqlSchema);
 }
 
-const schema = createSchema(TEST_SCHEMA_VERSION, {
+const schema = createSchema({
   tables: [
     table('user')
       .columns({
@@ -347,10 +343,10 @@ beforeEach(async () => {
 
   const perms = JSON.stringify(permissionsConfig);
   replica
-    .prepare(`UPDATE "zero.permissions" SET permissions = ?, hash = ?`)
+    .prepare(`UPDATE "${APP_ID}.permissions" SET permissions = ?, hash = ?`)
     .run(perms, h128(perms).toString(16));
 
-  authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, SHARD_ID);
+  authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, APP_ID, CG_ID);
   lmid = 0;
 });
 
@@ -371,7 +367,7 @@ function procMutation(
       ? undefined
       : {sub: uid, role: uid === 'admn' ? 'admin' : 'user'},
     upstream,
-    SHARD_ID,
+    SHARD,
     CG_ID,
     {
       type: MutationType.CRUD,
@@ -393,7 +389,7 @@ function procMutation(
       timestamp: Date.now(),
     },
     authorizer,
-    TEST_SCHEMA_VERSION,
+    undefined,
   );
 }
 

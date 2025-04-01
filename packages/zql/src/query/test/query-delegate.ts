@@ -1,7 +1,10 @@
-import type {LogConfig} from '../../../../otel/src/log-options.ts';
+import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
+import {assert} from '../../../../shared/src/asserts.ts';
+import {deepEqual} from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {MemoryStorage} from '../../ivm/memory-storage.ts';
+import type {Input} from '../../ivm/operator.ts';
 import type {Source} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
 import type {
@@ -9,6 +12,7 @@ import type {
   GotCallback,
   QueryDelegate,
 } from '../query-impl.ts';
+import type {TTL} from '../ttl.ts';
 import {
   commentSchema,
   issueLabelSchema,
@@ -19,18 +23,12 @@ import {
 } from './test-schemas.ts';
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 export class QueryDelegateImpl implements QueryDelegate {
   readonly #sources: Record<string, Source> = makeSources();
   readonly #commitListeners: Set<CommitListener> = new Set();
 
-  readonly addedServerQueries: {ast: AST; ttl: number | undefined}[] = [];
+  readonly addedServerQueries: {ast: AST; ttl: TTL}[] = [];
   readonly gotCallbacks: (GotCallback | undefined)[] = [];
   synchronouslyCallNextGotCallback = false;
 
@@ -49,14 +47,21 @@ export class QueryDelegateImpl implements QueryDelegate {
     };
   }
 
+  mapAst(ast: AST): AST {
+    return ast;
+  }
+
+  onQueryMaterialized() {}
+
   commit() {
     for (const listener of this.#commitListeners) {
       listener();
     }
   }
+
   addServerQuery(
     ast: AST,
-    ttl?: number | undefined,
+    ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ): () => void {
     this.addedServerQueries.push({ast, ttl});
@@ -67,11 +72,25 @@ export class QueryDelegateImpl implements QueryDelegate {
     }
     return () => {};
   }
+
+  updateServerQuery(ast: AST, ttl: TTL): void {
+    const query = this.addedServerQueries.find(({ast: otherAST}) =>
+      deepEqual(otherAST, ast),
+    );
+    assert(query);
+    query.ttl = ttl;
+  }
+
   getSource(name: string): Source {
     return this.#sources[name];
   }
+
   createStorage() {
     return new MemoryStorage();
+  }
+
+  decorateInput(input: Input, _description: string): Input {
+    return input;
   }
 }
 
@@ -86,38 +105,44 @@ function makeSources() {
   };
 
   return {
-    user: createSource(lc, logConfig, 'user', user.columns, user.primaryKey),
+    user: createSource(
+      lc,
+      testLogConfig,
+      'user',
+      user.columns,
+      user.primaryKey,
+    ),
     issue: createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'issue',
       issue.columns,
       issue.primaryKey,
     ),
     comment: createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'comment',
       comment.columns,
       comment.primaryKey,
     ),
     revision: createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'revision',
       revision.columns,
       revision.primaryKey,
     ),
     label: createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'label',
       label.columns,
       label.primaryKey,
     ),
     issueLabel: createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'issueLabel',
       issueLabel.columns,
       issueLabel.primaryKey,

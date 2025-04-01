@@ -232,7 +232,7 @@ describe('db/transaction-pool', () => {
 
     const blockingTask =
       (stmt: string) => async (tx: postgres.TransactionSql) => {
-        void processing.enqueue(true);
+        processing.enqueue(true);
         await canProceed.dequeue();
         return task(stmt)(tx);
       };
@@ -258,7 +258,7 @@ describe('db/transaction-pool', () => {
 
     // Let all 6 tasks proceed.
     for (let i = 0; i < 6; i++) {
-      void canProceed.enqueue(true);
+      canProceed.enqueue(true);
     }
 
     await pool.done();
@@ -301,7 +301,7 @@ describe('db/transaction-pool', () => {
 
     const blockingTask =
       (stmt: string) => async (tx: postgres.TransactionSql) => {
-        void processing.enqueue(true);
+        processing.enqueue(true);
         await canProceed.dequeue();
         return task(stmt)(tx);
       };
@@ -325,7 +325,7 @@ describe('db/transaction-pool', () => {
     }
     // Let all 5 tasks proceed.
     for (let i = 0; i < 5; i++) {
-      void canProceed.enqueue(true);
+      canProceed.enqueue(true);
     }
 
     // Let the extra workers hit their 50ms idle timeout.
@@ -354,7 +354,7 @@ describe('db/transaction-pool', () => {
 
     // Let all 5 tasks proceed.
     for (let i = 0; i < 5; i++) {
-      void canProceed.enqueue(true);
+      canProceed.enqueue(true);
     }
 
     // Let the new extra workers hit their 50ms idle timeout.
@@ -620,7 +620,7 @@ describe('db/transaction-pool', () => {
 
     const blockingTask =
       (stmt: string) => async (tx: postgres.TransactionSql) => {
-        void processing.enqueue(true);
+        processing.enqueue(true);
         await canProceed.dequeue();
         return task(stmt)(tx);
       };
@@ -651,7 +651,7 @@ describe('db/transaction-pool', () => {
     // first tasks complete (and succeed) before the last task errors, exercising
     // the scenario being tested.
     for (let i = 0; i < 5; i++) {
-      await canProceed.enqueue(true);
+      canProceed.enqueue(true);
     }
 
     // run() should throw the error even though it may not have come from the
@@ -670,7 +670,7 @@ describe('db/transaction-pool', () => {
   test('snapshot synchronization', async () => {
     const processing = new Queue<boolean>();
     const blockingTask = (stmt: string) => (tx: postgres.TransactionSql) => {
-      void processing.enqueue(true);
+      processing.enqueue(true);
       return task(stmt)(tx);
     };
 
@@ -777,7 +777,7 @@ describe('db/transaction-pool', () => {
   test('sharedSnapshot', async () => {
     const processing = new Queue<boolean>();
     const readTask = () => async (tx: postgres.TransactionSql) => {
-      void processing.enqueue(true);
+      processing.enqueue(true);
       return (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat();
     };
 
@@ -840,7 +840,7 @@ describe('db/transaction-pool', () => {
   test('externally shared snapshot', async () => {
     const processing = new Queue<boolean>();
     const readTask = () => async (tx: postgres.TransactionSql) => {
-      void processing.enqueue(true);
+      processing.enqueue(true);
       return (await tx<{id: number}[]>`SELECT id FROM foo;`.values()).flat();
     };
 

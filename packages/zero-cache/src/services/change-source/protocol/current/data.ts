@@ -14,6 +14,17 @@ import type {Satisfies} from '../../../../types/satisfies.ts';
 
 export const beginSchema = v.object({
   tag: v.literal('begin'),
+  // The format of values of "json"-typed columns (e.g. "JSON" and "JSONB").
+  // - 'p' is for parsed JSON, which may include JSON values or JSON objects.
+  //   These values are parsed and stringified at every process boundary
+  //   between the change-source and the replica.
+  // - 's' is for stringified JSON. These values skip the parsing and
+  //   stringification, and are directly ferried to the replica as a JSON
+  //   string. For JSON values this improves performance by 20~25% in the
+  //   change-streamer and 25~30% in the replicator.
+  //
+  // If absent, the format is assumed to be 'p' (parsed JSON objects/values).
+  json: v.union(v.literal('p'), v.literal('s')).optional(),
 });
 
 export const commitSchema = v.object({
@@ -29,8 +40,12 @@ export const relationSchema = v.object({
   name: v.string(),
   keyColumns: v.array(v.string()),
 
-  // Deprecated tags will be removed in a later release.
-  tag: v.literal('relation').optional(),
+  // PG-specific. When replicaIdentity is 'full':
+  // * `keyColumns` contain all of the columns in the table.
+  // * the `key` of the Delete and Update messages represent the full row.
+  //
+  // The replicator handles these tables by extracting a row key from
+  // the full row based on the table's PRIMARY KEY or UNIQUE INDEX.
   replicaIdentity: v
     .union(
       v.literal('default'),
@@ -52,14 +67,19 @@ export const insertSchema = v.object({
 export const updateSchema = v.object({
   tag: v.literal('update'),
   relation: relationSchema,
+  // `key` is present if the update changed the key of the row, or if the
+  // table's replicaIdentity === 'full'
   key: rowSchema.nullable(),
-  old: rowSchema.nullable(),
+  // `new` is the full row (and not just the updated columns). This is
+  // necessary for "catchup" replication scenarios such as adding tables
+  // to a publication, or resharding.
   new: rowSchema,
 });
 
 export const deleteSchema = v.object({
   tag: v.literal('delete'),
   relation: relationSchema,
+  // key is the full row if replicaIdentity === 'full'
   key: rowSchema,
 });
 

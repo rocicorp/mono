@@ -1,19 +1,15 @@
 import {describe, expect, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {deepClone} from '../../../shared/src/deep-clone.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
-import {
-  createSchema,
-  type Schema,
-} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {number, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
-import {newQuery, type QueryDelegate, QueryImpl} from './query-impl.ts';
-import type {AdvancedQuery} from './query-internal.ts';
+import {newQuery, type QueryDelegate} from './query-impl.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
 
 /**
  * Some basic manual tests to get us started.
@@ -31,12 +27,6 @@ import type {LogConfig} from '../../../otel/src/log-options.ts';
  */
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 function addData(queryDelegate: QueryDelegate) {
   const userSource = must(queryDelegate.getSource('user'));
@@ -76,6 +66,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'description 1',
       closed: false,
       ownerId: '0001',
+      createdAt: 1,
     },
   });
   issueSource.push({
@@ -86,6 +77,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'description 2',
       closed: false,
       ownerId: '0002',
+      createdAt: 2,
     },
   });
   issueSource.push({
@@ -96,6 +88,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'description 3',
       closed: false,
       ownerId: null,
+      createdAt: 3,
     },
   });
   commentSource.push({
@@ -222,6 +215,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     });
 
@@ -240,6 +234,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     ]);
   });
@@ -255,6 +250,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     });
 
@@ -273,6 +269,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     ]);
 
@@ -284,6 +281,7 @@ describe('bare select', () => {
         description: 'description2',
         closed: false,
         ownerId: '0002',
+        createdAt: 20,
       },
     });
     queryDelegate.commit();
@@ -295,6 +293,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
       {
         id: '0002',
@@ -302,6 +301,7 @@ describe('bare select', () => {
         description: 'description2',
         closed: false,
         ownerId: '0002',
+        createdAt: 20,
       },
     ]);
   });
@@ -326,6 +326,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     });
     queryDelegate.commit();
@@ -337,6 +338,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     ]);
 
@@ -358,6 +360,7 @@ describe('bare select', () => {
         description: 'description',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     ]);
   });
@@ -407,6 +410,7 @@ describe('joins and filters', () => {
         description: 'description 1',
         closed: false,
         ownerId: '0001',
+        createdAt: 10,
       },
     });
     queryDelegate.commit();
@@ -423,6 +427,7 @@ describe('joins and filters', () => {
         description: 'description 1',
         closed: true,
         ownerId: '0001',
+        createdAt: 10,
       },
     });
 
@@ -474,6 +479,7 @@ describe('joins and filters', () => {
               "text": "comment 2",
             },
           ],
+          "createdAt": 1,
           "description": "description 1",
           "id": "0001",
           "labels": [
@@ -496,6 +502,7 @@ describe('joins and filters', () => {
         {
           "closed": false,
           "comments": [],
+          "createdAt": 2,
           "description": "description 2",
           "id": "0002",
           "labels": [],
@@ -518,6 +525,7 @@ describe('joins and filters', () => {
         {
           "closed": false,
           "comments": [],
+          "createdAt": 3,
           "description": "description 3",
           "id": "0003",
           "labels": [],
@@ -535,6 +543,7 @@ describe('joins and filters', () => {
         description: 'description 1',
         closed: false,
         ownerId: '0001',
+        createdAt: 1,
       },
     });
     queryDelegate.getSource('issue').push({
@@ -545,6 +554,7 @@ describe('joins and filters', () => {
         description: 'description 2',
         closed: false,
         ownerId: '0002',
+        createdAt: 2,
       },
     });
     queryDelegate.getSource('issue').push({
@@ -555,6 +565,7 @@ describe('joins and filters', () => {
         description: 'description 3',
         closed: false,
         ownerId: null,
+        createdAt: 3,
       },
     });
     queryDelegate.commit();
@@ -567,7 +578,7 @@ describe('joins and filters', () => {
     addData(queryDelegate);
 
     const q1 = newQuery(queryDelegate, schema, 'issue').one();
-    expect((q1 as unknown as QueryImpl<Schema, string>).format).toEqual({
+    expect(q1.format).toEqual({
       singular: true,
       relationships: {},
     });
@@ -575,7 +586,7 @@ describe('joins and filters', () => {
     const q2 = newQuery(queryDelegate, schema, 'issue')
       .one()
       .related('comments', q => q.one());
-    expect((q2 as unknown as QueryImpl<never, never>).format).toEqual({
+    expect(q2.format).toEqual({
       singular: true,
       relationships: {
         comments: {
@@ -588,7 +599,7 @@ describe('joins and filters', () => {
     const q3 = newQuery(queryDelegate, schema, 'issue').related('comments', q =>
       q.one(),
     );
-    expect((q3 as unknown as QueryImpl<never, never>).format).toEqual({
+    expect(q3.format).toEqual({
       singular: false,
       relationships: {
         comments: {
@@ -606,7 +617,7 @@ describe('joins and filters', () => {
       .where('closed', false)
       .limit(100)
       .orderBy('title', 'desc');
-    expect((q4 as unknown as QueryImpl<never, never>).format).toEqual({
+    expect(q4.format).toEqual({
       singular: true,
       relationships: {
         comments: {
@@ -617,7 +628,7 @@ describe('joins and filters', () => {
     });
   });
 
-  test('schema applied one', () => {
+  test('schema applied one', async () => {
     const queryDelegate = new QueryDelegateImpl();
     addData(queryDelegate);
 
@@ -625,7 +636,7 @@ describe('joins and filters', () => {
       .related('owner')
       .related('comments', q => q.related('author').related('revisions'))
       .where('id', '=', '0001');
-    const data = query.run();
+    const data = await query.run();
     expect(data).toMatchInlineSnapshot(`
       [
         {
@@ -639,6 +650,7 @@ describe('joins and filters', () => {
                   "registrar": "github",
                 },
                 "name": "Alice",
+                Symbol(rc): 1,
               },
               "authorId": "0001",
               "createdAt": 1,
@@ -650,9 +662,11 @@ describe('joins and filters', () => {
                   "commentId": "0001",
                   "id": "0001",
                   "text": "revision 1",
+                  Symbol(rc): 1,
                 },
               ],
               "text": "comment 1",
+              Symbol(rc): 1,
             },
             {
               "author": {
@@ -667,6 +681,7 @@ describe('joins and filters', () => {
                   "registar": "google",
                 },
                 "name": "Bob",
+                Symbol(rc): 1,
               },
               "authorId": "0002",
               "createdAt": 2,
@@ -674,8 +689,10 @@ describe('joins and filters', () => {
               "issueId": "0001",
               "revisions": [],
               "text": "comment 2",
+              Symbol(rc): 1,
             },
           ],
+          "createdAt": 1,
           "description": "description 1",
           "id": "0001",
           "owner": {
@@ -685,9 +702,11 @@ describe('joins and filters', () => {
               "registrar": "github",
             },
             "name": "Alice",
+            Symbol(rc): 1,
           },
           "ownerId": "0001",
           "title": "issue 1",
+          Symbol(rc): 1,
         },
       ]
     `);
@@ -708,7 +727,7 @@ test('non int limit', () => {
   }).toThrow('Limit must be an integer');
 });
 
-test('run', () => {
+test('run', async () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
@@ -718,9 +737,9 @@ test('run', () => {
     'issue 1',
   );
 
-  const singleFilterRows = issueQuery1.run();
-  const doubleFilterRows = issueQuery1.where('closed', '=', false).run();
-  const doubleFilterWithNoResultsRows = issueQuery1
+  const singleFilterRows = await issueQuery1.run();
+  const doubleFilterRows = await issueQuery1.where('closed', '=', false).run();
+  const doubleFilterWithNoResultsRows = await issueQuery1
     .where('closed', '=', true)
     .run();
 
@@ -732,7 +751,7 @@ test('run', () => {
     .related('labels')
     .related('owner')
     .related('comments');
-  const rows = issueQuery2.run();
+  const rows = await issueQuery2.run();
   expect(rows).toMatchInlineSnapshot(`
     [
       {
@@ -744,6 +763,7 @@ test('run', () => {
             "id": "0001",
             "issueId": "0001",
             "text": "comment 1",
+            Symbol(rc): 1,
           },
           {
             "authorId": "0002",
@@ -751,14 +771,17 @@ test('run', () => {
             "id": "0002",
             "issueId": "0001",
             "text": "comment 2",
+            Symbol(rc): 1,
           },
         ],
+        "createdAt": 1,
         "description": "description 1",
         "id": "0001",
         "labels": [
           {
             "id": "0001",
             "name": "label 1",
+            Symbol(rc): 1,
           },
         ],
         "owner": {
@@ -768,13 +791,16 @@ test('run', () => {
             "registrar": "github",
           },
           "name": "Alice",
+          Symbol(rc): 1,
         },
         "ownerId": "0001",
         "title": "issue 1",
+        Symbol(rc): 1,
       },
       {
         "closed": false,
         "comments": [],
+        "createdAt": 2,
         "description": "description 2",
         "id": "0002",
         "labels": [],
@@ -790,19 +816,23 @@ test('run', () => {
             "registar": "google",
           },
           "name": "Bob",
+          Symbol(rc): 1,
         },
         "ownerId": "0002",
         "title": "issue 2",
+        Symbol(rc): 1,
       },
       {
         "closed": false,
         "comments": [],
+        "createdAt": 3,
         "description": "description 3",
         "id": "0003",
         "labels": [],
         "owner": undefined,
         "ownerId": null,
         "title": "issue 3",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -827,44 +857,50 @@ test('view creation is wrapped in context.batchViewUpdates call', () => {
   const queryDelegate = new TestQueryDelegate();
 
   const issueQuery = newQuery(queryDelegate, schema, 'issue');
-  const view = (
-    issueQuery as AdvancedQuery<typeof schema, 'issue'>
-  ).materialize(viewFactory);
+  const view = issueQuery.materialize(viewFactory);
   expect(viewFactoryCalls).toEqual(1);
   expect(view).toBe(testView);
 });
 
-test('json columns are returned as JS objects', () => {
+test('json columns are returned as JS objects', async () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  const rows = newQuery(queryDelegate, schema, 'user').run();
-  expect(rows).toEqual([
-    {
-      id: '0001',
-      metadata: {
-        login: 'alicegh',
-        registrar: 'github',
+  const rows = await newQuery(queryDelegate, schema, 'user').run();
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "id": "0001",
+        "metadata": {
+          "login": "alicegh",
+          "registrar": "github",
+        },
+        "name": "Alice",
+        Symbol(rc): 1,
       },
-      name: 'Alice',
-    },
-    {
-      id: '0002',
-      metadata: {
-        altContacts: ['bobwave', 'bobyt', 'bobplus'],
-        login: 'bob@gmail.com',
-        registar: 'google',
+      {
+        "id": "0002",
+        "metadata": {
+          "altContacts": [
+            "bobwave",
+            "bobyt",
+            "bobplus",
+          ],
+          "login": "bob@gmail.com",
+          "registar": "google",
+        },
+        "name": "Bob",
+        Symbol(rc): 1,
       },
-      name: 'Bob',
-    },
-  ]);
+    ]
+  `);
 });
 
-test('complex expression', () => {
+test('complex expression', async () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  let rows = newQuery(queryDelegate, schema, 'issue')
+  let rows = await newQuery(queryDelegate, schema, 'issue')
     .where(({or, cmp}) =>
       or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')),
     )
@@ -874,22 +910,26 @@ test('complex expression', () => {
     [
       {
         "closed": false,
+        "createdAt": 1,
         "description": "description 1",
         "id": "0001",
         "ownerId": "0001",
         "title": "issue 1",
+        Symbol(rc): 1,
       },
       {
         "closed": false,
+        "createdAt": 2,
         "description": "description 2",
         "id": "0002",
         "ownerId": "0002",
         "title": "issue 2",
+        Symbol(rc): 1,
       },
     ]
   `);
 
-  rows = newQuery(queryDelegate, schema, 'issue')
+  rows = await newQuery(queryDelegate, schema, 'issue')
     .where(({and, cmp, or}) =>
       and(
         cmp('ownerId', '=', '0001'),
@@ -902,95 +942,115 @@ test('complex expression', () => {
     [
       {
         "closed": false,
+        "createdAt": 1,
         "description": "description 1",
         "id": "0001",
         "ownerId": "0001",
         "title": "issue 1",
+        Symbol(rc): 1,
       },
     ]
   `);
 });
 
-test('null compare', () => {
+test('null compare', async () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  let rows = newQuery(queryDelegate, schema, 'issue')
+  let rows = await newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS', null)
     .run();
 
-  expect(rows).toEqual([
-    {
-      closed: false,
-      description: 'description 3',
-      id: '0003',
-      ownerId: null,
-      title: 'issue 3',
-    },
-  ]);
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "createdAt": 3,
+        "description": "description 3",
+        "id": "0003",
+        "ownerId": null,
+        "title": "issue 3",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
-  rows = newQuery(queryDelegate, schema, 'issue')
+  rows = await newQuery(queryDelegate, schema, 'issue')
     .where('ownerId', 'IS NOT', null)
     .run();
 
-  expect(rows).toEqual([
-    {
-      closed: false,
-      description: 'description 1',
-      id: '0001',
-      ownerId: '0001',
-      title: 'issue 1',
-    },
-    {
-      closed: false,
-      description: 'description 2',
-      id: '0002',
-      ownerId: '0002',
-      title: 'issue 2',
-    },
-  ]);
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "createdAt": 1,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+        Symbol(rc): 1,
+      },
+      {
+        "closed": false,
+        "createdAt": 2,
+        "description": "description 2",
+        "id": "0002",
+        "ownerId": "0002",
+        "title": "issue 2",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 });
 
-test('literal filter', () => {
+test('literal filter', async () => {
   const queryDelegate = new QueryDelegateImpl();
   addData(queryDelegate);
 
-  let rows = newQuery(queryDelegate, schema, 'issue')
+  let rows = await newQuery(queryDelegate, schema, 'issue')
     .where(({cmpLit}) => cmpLit(true, '=', false))
     .run();
 
   expect(rows).toEqual([]);
 
-  rows = newQuery(queryDelegate, schema, 'issue')
+  rows = await newQuery(queryDelegate, schema, 'issue')
     .where(({cmpLit}) => cmpLit(true, '=', true))
     .run();
 
-  expect(rows).toEqual([
-    {
-      closed: false,
-      description: 'description 1',
-      id: '0001',
-      ownerId: '0001',
-      title: 'issue 1',
-    },
-    {
-      closed: false,
-      description: 'description 2',
-      id: '0002',
-      ownerId: '0002',
-      title: 'issue 2',
-    },
-    {
-      closed: false,
-      description: 'description 3',
-      id: '0003',
-      ownerId: null,
-      title: 'issue 3',
-    },
-  ]);
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "createdAt": 1,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+        Symbol(rc): 1,
+      },
+      {
+        "closed": false,
+        "createdAt": 2,
+        "description": "description 2",
+        "id": "0002",
+        "ownerId": "0002",
+        "title": "issue 2",
+        Symbol(rc): 1,
+      },
+      {
+        "closed": false,
+        "createdAt": 3,
+        "description": "description 3",
+        "id": "0003",
+        "ownerId": null,
+        "title": "issue 3",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 });
 
-test('join with compound keys', () => {
+test('join with compound keys', async () => {
   const b = table('b')
     .columns({
       id: number(),
@@ -1017,7 +1077,7 @@ test('join with compound keys', () => {
     }),
   }));
 
-  const schema = createSchema(1, {
+  const schema = createSchema({
     tables: [a, b],
     relationships: [aRelationships],
   });
@@ -1025,14 +1085,14 @@ test('join with compound keys', () => {
   const sources = {
     a: createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'a',
       schema.tables.a.columns,
       schema.tables.a.primaryKey,
     ),
     b: createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'b',
       schema.tables.b.columns,
       schema.tables.b.primaryKey,
@@ -1065,7 +1125,7 @@ test('join with compound keys', () => {
     });
   }
 
-  const rows = newQuery(queryDelegate, schema, 'a').related('b').run();
+  const rows = await newQuery(queryDelegate, schema, 'a').related('b').run();
 
   expect(rows).toMatchInlineSnapshot(`
     [
@@ -1079,15 +1139,18 @@ test('join with compound keys', () => {
             "b2": 2,
             "b3": 3,
             "id": 0,
+            Symbol(rc): 1,
           },
           {
             "b1": 1,
             "b2": 2,
             "b3": 4,
             "id": 1,
+            Symbol(rc): 1,
           },
         ],
         "id": 0,
+        Symbol(rc): 1,
       },
       {
         "a1": 2,
@@ -1099,9 +1162,11 @@ test('join with compound keys', () => {
             "b2": 3,
             "b3": 5,
             "id": 2,
+            Symbol(rc): 1,
           },
         ],
         "id": 1,
+        Symbol(rc): 1,
       },
       {
         "a1": 2,
@@ -1113,9 +1178,11 @@ test('join with compound keys', () => {
             "b2": 3,
             "b3": 5,
             "id": 2,
+            Symbol(rc): 1,
           },
         ],
         "id": 2,
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -1134,6 +1201,7 @@ test('where exists', () => {
       description: 'description 1',
       closed: false,
       ownerId: '0001',
+      createdAt: 10,
     },
   });
   issueSource.push({
@@ -1144,6 +1212,7 @@ test('where exists', () => {
       description: 'description 2',
       closed: true,
       ownerId: '0002',
+      createdAt: 20,
     },
   });
   labelSource.push({
@@ -1174,16 +1243,19 @@ test('where exists', () => {
     [
       {
         "closed": true,
+        "createdAt": 20,
         "description": "description 2",
         "id": "0002",
         "labels": [
           {
             "id": "0001",
             "name": "bug",
+            Symbol(rc): 1,
           },
         ],
         "ownerId": "0002",
         "title": "issue 2",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -1212,6 +1284,7 @@ test('duplicative where exists', () => {
       description: 'description 1',
       closed: false,
       ownerId: '0001',
+      createdAt: 10,
     },
   });
   issueSource.push({
@@ -1222,6 +1295,7 @@ test('duplicative where exists', () => {
       description: 'description 2',
       closed: true,
       ownerId: '0002',
+      createdAt: 20,
     },
   });
   labelSource.push({
@@ -1253,16 +1327,19 @@ test('duplicative where exists', () => {
     [
       {
         "closed": true,
+        "createdAt": 20,
         "description": "description 2",
         "id": "0002",
         "labels": [
           {
             "id": "0001",
             "name": "bug",
+            Symbol(rc): 1,
           },
         ],
         "ownerId": "0002",
         "title": "issue 2",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -1296,6 +1373,7 @@ test('where exists before where, see https://bugs.rocicorp.dev/issue/3417', () =
       description: 'description 1',
       closed: false,
       ownerId: '0001',
+      createdAt: 10,
     },
   });
 

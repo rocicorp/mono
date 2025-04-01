@@ -4,7 +4,6 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
-import type {LogConfig} from '../../config/zero-config.ts';
 import {DbFile} from '../../test/lite.ts';
 import {initChangeLog} from '../replicator/schema/change-log.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
@@ -16,13 +15,7 @@ import {
 import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
-
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
+import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 
 describe('view-syncer/pipeline-driver', () => {
   let dbFile: DbFile;
@@ -41,8 +34,9 @@ describe('view-syncer/pipeline-driver', () => {
 
     pipelines = new PipelineDriver(
       lc,
-      logConfig,
-      new Snapshotter(lc, dbFile.path),
+      testLogConfig,
+      new Snapshotter(lc, dbFile.path, {appID: 'zeroz'}),
+      {appID: 'zeroz', shardNum: 1},
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
       'pipeline-driver.test.ts',
     );
@@ -51,14 +45,14 @@ describe('view-syncer/pipeline-driver', () => {
     initReplicationState(db, ['zero_data'], '123');
     initChangeLog(db);
     db.exec(`
-      CREATE TABLE "zero.schemaVersions" (
+      CREATE TABLE "zeroz.schemaVersions" (
         -- Note: Using "INT" to avoid the special semantics of "INTEGER PRIMARY KEY" in SQLite.
         "lock"                INT PRIMARY KEY,
         "minSupportedVersion" INT,
         "maxSupportedVersion" INT,
         _0_version            TEXT NOT NULL
       );
-      INSERT INTO "zero.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
+      INSERT INTO "zeroz.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
         VALUES (1, 1, 1, '123');
       CREATE TABLE issues (
         id TEXT PRIMARY KEY,
@@ -286,16 +280,16 @@ describe('view-syncer/pipeline-driver', () => {
   });
   const zeroMessages = new ReplicationMessages(
     {schemaVersions: 'lock'},
-    'zero',
+    'zeroz',
   );
 
   test('replica version', () => {
-    pipelines.init();
+    pipelines.init(null);
     expect(pipelines.replicaVersion).toBe('123');
   });
 
   test('add query', () => {
-    pipelines.init();
+    pipelines.init(null);
 
     expect([...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)])
       .toMatchInlineSnapshot(`
@@ -405,7 +399,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('insert', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction(
@@ -467,7 +461,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('delete', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction(
@@ -510,7 +504,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('truncate', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction('134', messages.truncate('comments'));
@@ -521,12 +515,12 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('update', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction(
       '134',
-      messages.update('comments', {id: '22', issueID: '3'}),
+      messages.update('comments', {id: '22', issueID: '3', upvotes: 20000}),
     );
 
     expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
@@ -559,7 +553,7 @@ describe('view-syncer/pipeline-driver', () => {
 
     replicator.processTransaction(
       '135',
-      messages.update('comments', {id: '22', upvotes: 10}),
+      messages.update('comments', {id: '22', issueID: '3', upvotes: 10}),
     );
 
     expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
@@ -583,7 +577,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('reset', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
     expect(pipelines.addedQueries()).toEqual(new Set(['hash1']));
 
@@ -593,7 +587,7 @@ describe('view-syncer/pipeline-driver', () => {
     );
 
     pipelines.advanceWithoutDiff();
-    pipelines.reset();
+    pipelines.reset(null);
 
     expect(pipelines.addedQueries()).toEqual(new Set());
 
@@ -704,7 +698,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('whereExists query', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_QUERY_WITH_EXISTS)];
 
     replicator.processTransaction(
@@ -718,6 +712,15 @@ describe('view-syncer/pipeline-driver', () => {
 
     expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
       [
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": "remove",
+        },
         {
           "queryHash": "hash1",
           "row": undefined,
@@ -738,21 +741,12 @@ describe('view-syncer/pipeline-driver', () => {
           "table": "labels",
           "type": "remove",
         },
-        {
-          "queryHash": "hash1",
-          "row": undefined,
-          "rowKey": {
-            "id": "1",
-          },
-          "table": "issues",
-          "type": "remove",
-        },
       ]
     `);
   });
 
   test('whereExists added by permissions return no rows', () => {
-    pipelines.init();
+    pipelines.init(null);
     expect([
       ...pipelines.addQuery('hash1', ISSUES_QUERY_WITH_EXISTS_FROM_PERMISSIONS),
     ]).toMatchInlineSnapshot(`
@@ -915,7 +909,7 @@ describe('view-syncer/pipeline-driver', () => {
       ],
     };
 
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', query)];
 
     replicator.processTransaction(
@@ -1018,6 +1012,15 @@ describe('view-syncer/pipeline-driver', () => {
           "queryHash": "hash1",
           "row": undefined,
           "rowKey": {
+            "id": "2",
+          },
+          "table": "issues",
+          "type": "remove",
+        },
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
             "issueID": "2",
             "labelID": "1",
             "legacyID": "2-1",
@@ -1032,15 +1035,6 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "labels",
-          "type": "remove",
-        },
-        {
-          "queryHash": "hash1",
-          "row": undefined,
-          "rowKey": {
-            "id": "2",
-          },
-          "table": "issues",
           "type": "remove",
         },
         {
@@ -1068,7 +1062,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('getRow', () => {
-    pipelines.init();
+    pipelines.init(null);
 
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
@@ -1121,7 +1115,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('schemaVersions change and insert', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction(
@@ -1164,7 +1158,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('multiple advancements', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction(
@@ -1241,7 +1235,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('remove query', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     expect([...pipelines.addedQueries()]).toEqual(['hash1']);
@@ -1261,7 +1255,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('push fails on out of bounds numbers', () => {
-    pipelines.init();
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
 
     replicator.processTransaction(

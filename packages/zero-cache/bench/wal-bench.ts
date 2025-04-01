@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '@dotenvx/dotenvx/config';
 import {walBenchmark} from './wal-benchmark.ts';
 
 walBenchmark({

@@ -660,7 +660,7 @@ function watcherMatchesDiff(
   return i < diff.length && compareKey(diff[i]).startsWith(prefix);
 }
 
-function diffBinarySearch<Key, Value>(
+export function diffBinarySearch<Key, Value>(
   diff: readonly InternalDiffOperation<Key, Value>[],
   prefix: string,
   compareKey: (diff: InternalDiffOperation<Key, Value>) => string,

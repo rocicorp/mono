@@ -1,11 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-
-import {
-  runSchemaMigrations,
-  type IncrementalMigrationMap,
-  type Migration,
-} from '../../../db/migration-lite.ts';
-import type {ShardConfig} from '../pg/shard-config.ts';
+import type {ShardConfig} from '../../../types/shards.ts';
+import {initReplica} from '../replica-schema.ts';
 import {initialSync} from './change-source.ts';
 
 export async function initSyncSchema(
@@ -15,20 +10,7 @@ export async function initSyncSchema(
   dbPath: string,
   upstreamURI: string,
 ): Promise<void> {
-  const setupMigration: Migration = {
-    migrateSchema: (log, tx) => initialSync(log, shard, tx, upstreamURI),
-    minSafeVersion: 1,
-  };
-
-  const schemaVersionMigrationMap: IncrementalMigrationMap = {
-    1: setupMigration,
-  };
-
-  await runSchemaMigrations(
-    log,
-    debugName,
-    dbPath,
-    setupMigration,
-    schemaVersionMigrationMap,
+  await initReplica(log, debugName, dbPath, (log, tx) =>
+    initialSync(log, shard, tx, upstreamURI),
   );
 }

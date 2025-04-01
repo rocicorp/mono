@@ -86,7 +86,7 @@ const commentRelationships = relationships(comment, connect => ({
   }),
 }));
 
-export const schema = createSchema(1, {
+export const schema = createSchema({
   tables: [member, issue, comment, label, issueLabel],
   relationships: [issueRelationships, commentRelationships],
 });

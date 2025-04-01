@@ -1,56 +1,54 @@
+import type {LogContext} from '@rocicorp/logger';
+import {
+  WriteTransactionImpl,
+  zeroData,
+} from '../../../replicache/src/transactions.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {ClientID} from '../types/client-state.ts';
-import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
-import type {WriteTransaction} from './replicache-types.ts';
-import type {IVMSourceBranch, IVMSourceRepo} from './ivm-source-repo.ts';
-import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import type {Query} from '../../../zql/src/query/query.ts';
-import {ZeroContext} from './context.ts';
 import type {
+  ClientTransaction,
   DeleteID,
   InsertValue,
   SchemaCRUD,
   SchemaQuery,
   TableCRUD,
-  TransactionBase,
+  Transaction,
   UpdateValue,
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
-
-/**
- * An instance of this is passed to custom mutator implementations and
- * allows reading and writing to the database and IVM at the head
- * at which the mutator is being applied.
- */
-export interface Transaction<S extends Schema> extends TransactionBase<S> {
-  readonly location: 'client';
-  readonly reason: 'optimistic' | 'rebase';
-}
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
+import type {ClientID} from '../types/client-state.ts';
+import {ZeroContext} from './context.ts';
+import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
+import type {IVMSourceBranch} from './ivm-branch.ts';
+import type {WriteTransaction} from './replicache-types.ts';
+import type {MutationResult} from '../../../zero-protocol/src/push.ts';
+import {emptyFunction} from '../../../shared/src/sentinels.ts';
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
  */
 export type CustomMutatorDefs<S extends Schema> = {
-  readonly [Table in keyof S['tables']]?: {
-    readonly [key: string]: CustomMutatorImpl<S>;
-  };
-} & {
-  // The user is not required to associate mutators with tables.
-  // Maybe that have some other arbitrary way to namespace.
-  [namespace: string]: {
-    [key: string]: CustomMutatorImpl<S>;
-  };
+  [namespaceOrKey: string]:
+    | {
+        [key: string]: CustomMutatorImpl<S>;
+      }
+    | CustomMutatorImpl<S>;
 };
 
-export type CustomMutatorImpl<S extends Schema> = (
+export type PromiseWithServerResult = Promise<void> & {
+  server: Promise<MutationResult>;
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type CustomMutatorImpl<S extends Schema, TArgs = any> = (
   tx: Transaction<S>,
   // TODO: many args. See commit: 52657c2f934b4a458d628ea77e56ce92b61eb3c6 which did have many args.
   // The issue being that it will be a protocol change to support varargs.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  args: any,
+  args: TArgs,
 ) => Promise<void>;
 
 /**
@@ -64,99 +62,138 @@ export type MakeCustomMutatorInterfaces<
   S extends Schema,
   MD extends CustomMutatorDefs<S>,
 > = {
-  readonly [Table in keyof MD]: {
-    readonly [P in keyof MD[Table]]: MakeCustomMutatorInterface<
-      S,
-      MD[Table][P]
-    >;
-  };
+  readonly [NamespaceOrName in keyof MD]: MD[NamespaceOrName] extends (
+    tx: Transaction<S>,
+    ...args: infer Args
+  ) => Promise<void>
+    ? (...args: Args) => PromiseWithServerResult
+    : {
+        readonly [P in keyof MD[NamespaceOrName]]: MakeCustomMutatorInterface<
+          S,
+          MD[NamespaceOrName][P]
+        >;
+      };
 };
 
 export type MakeCustomMutatorInterface<
   S extends Schema,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   F,
-> = F extends (tx: Transaction<S>, ...args: infer Args) => Promise<void>
-  ? (...args: Args) => Promise<void>
+> = F extends (tx: ClientTransaction<S>, ...args: infer Args) => Promise<void>
+  ? (...args: Args) => PromiseWithServerResult
   : never;
 
-export class TransactionImpl implements Transaction<Schema> {
+export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
   constructor(
+    lc: LogContext,
     repTx: WriteTransaction,
-    schema: Schema,
-    ivmSourceRepo: IVMSourceRepo,
+    schema: S,
+    slowMaterializeThreshold: number,
   ) {
+    const castedRepTx = repTx as WriteTransactionImpl;
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
     this.clientID = repTx.clientID;
     this.mutationID = repTx.mutationID;
     this.reason = repTx.reason === 'initial' ? 'optimistic' : 'rebase';
-    // ~ Note: we will likely need to leverage proxies one day to create
-    // ~ crud mutators and queries on demand for users with very large schemas.
+    const txData = must(
+      castedRepTx[zeroData],
+      'zero was not set on replicache internal options!',
+    );
     this.mutate = makeSchemaCRUD(
       schema,
       repTx,
-      // Mutators do not write to the main IVM sources during optimistic mutations
-      // so we pass undefined here.
-      // ExperimentalWatch handles updating main.
-      this.reason === 'optimistic' ? undefined : ivmSourceRepo.rebase,
+      txData.ivmSources as IVMSourceBranch,
     );
     this.query = makeSchemaQuery(
+      lc,
       schema,
-      this.reason === 'optimistic' ? ivmSourceRepo.main : ivmSourceRepo.rebase,
+      txData.ivmSources as IVMSourceBranch,
+      slowMaterializeThreshold,
     );
+    this.token = txData.token;
   }
 
   readonly clientID: ClientID;
   readonly mutationID: number;
   readonly reason: 'optimistic' | 'rebase';
   readonly location = 'client';
-  readonly mutate: SchemaCRUD<Schema>;
-  readonly query: SchemaQuery<Schema>;
+  readonly mutate: SchemaCRUD<S>;
+  readonly query: SchemaQuery<S>;
+  readonly token: string | undefined;
 }
 
-export function makeReplicacheMutator(
-  mutator: CustomMutatorImpl<Schema>,
-  schema: Schema,
-  ivmSourceRepo: IVMSourceRepo,
+export function makeReplicacheMutator<S extends Schema>(
+  lc: LogContext,
+  mutator: CustomMutatorImpl<S>,
+  schema: S,
+  slowMaterializeThreshold: number,
 ) {
-  return (repTx: WriteTransaction, args: ReadonlyJSONValue): Promise<void> => {
-    const tx = new TransactionImpl(repTx, schema, ivmSourceRepo);
-    return mutator(tx, args);
+  return async (
+    repTx: WriteTransaction,
+    args: ReadonlyJSONValue,
+  ): Promise<void> => {
+    const tx = new TransactionImpl(lc, repTx, schema, slowMaterializeThreshold);
+    await mutator(tx, args);
   };
 }
 
-function makeSchemaQuery(schema: Schema, ivmBranch: IVMSourceBranch) {
-  const rv = {} as Record<string, Query<Schema, string>>;
-  const context = new ZeroContext(
-    ivmBranch,
-    () => () => {},
-    applyViewUpdates => applyViewUpdates(),
-  );
+function makeSchemaCRUD<S extends Schema>(
+  schema: S,
+  tx: WriteTransaction,
+  ivmBranch: IVMSourceBranch,
+) {
+  // Only creates the CRUD mutators on demand
+  // rather than creating them all up-front for each mutation.
+  return new Proxy(
+    {},
+    {
+      get(target: Record<string, TableCRUD<TableSchema>>, prop: string) {
+        if (prop in target) {
+          return target[prop];
+        }
 
-  for (const name of Object.keys(schema.tables)) {
-    rv[name] = newQuery(context, schema, name);
-  }
-
-  return rv as SchemaQuery<Schema>;
+        target[prop] = makeTableCRUD(schema, prop, tx, ivmBranch);
+        return target[prop];
+      },
+    },
+  ) as SchemaCRUD<S>;
 }
 
-function makeSchemaCRUD(
-  schema: Schema,
-  tx: WriteTransaction,
-  ivmBranch: IVMSourceBranch | undefined,
+function makeSchemaQuery<S extends Schema>(
+  lc: LogContext,
+  schema: S,
+  ivmBranch: IVMSourceBranch,
+  slowMaterializeThreshold: number,
 ) {
-  const mutate: Record<string, TableCRUD<TableSchema>> = {};
-  for (const [name] of Object.entries(schema.tables)) {
-    mutate[name] = makeTableCRUD(schema, name, tx, ivmBranch);
-  }
-  return mutate;
+  const context = new ZeroContext(
+    lc,
+    ivmBranch,
+    () => emptyFunction,
+    () => {},
+    applyViewUpdates => applyViewUpdates(),
+    slowMaterializeThreshold,
+  );
+
+  return new Proxy(
+    {},
+    {
+      get(target: Record<string, Query<S, string>>, prop: string) {
+        if (prop in target) {
+          return target[prop];
+        }
+
+        target[prop] = newQuery(context, schema, prop);
+        return target[prop];
+      },
+    },
+  ) as SchemaQuery<S>;
 }
 
 function makeTableCRUD(
   schema: Schema,
   tableName: string,
   tx: WriteTransaction,
-  ivmBranch: IVMSourceBranch | undefined,
+  ivmBranch: IVMSourceBranch,
 ) {
   const table = must(schema.tables[tableName]);
   const {primaryKey} = table;

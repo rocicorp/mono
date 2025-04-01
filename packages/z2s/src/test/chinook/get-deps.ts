@@ -1,10 +1,10 @@
+import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {existsSync} from 'fs';
-import {writeFile, readFile} from 'fs/promises';
+import {readFile, writeFile} from 'fs/promises';
+import {initialSync} from '../../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
+import {getConnectionURI} from '../../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../../zero-cache/src/types/pg.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
-import {initialSync} from '../../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
-import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import {getConnectionURI} from '../../../../zero-cache/src/test/db.ts';
 
 const PG_URL =
   'https://github.com/lerocha/chinook-database/releases/download/v1.4.5/Chinook_PostgreSql.sql';
@@ -26,7 +26,9 @@ async function getChinook(fileName: string, url: string): Promise<string> {
   const content = (await response.text())
     .replaceAll('DROP DATABASE IF EXISTS chinook;', '')
     .replaceAll('CREATE DATABASE chinook;', '')
-    .replaceAll('\\c chinook;', '');
+    .replaceAll('\\c chinook;', '')
+    // disabled foreign key constraints as push tests do not respect an insertion order that would preserved them.
+    .replace(/ALTER TABLE.*?FOREIGN KEY.*?;/gs, '');
   await writeFile(fileName, content);
   return content;
 }
@@ -37,7 +39,7 @@ export async function writeChinook(pg: PostgresDB, replica: Database) {
 
   await initialSync(
     new LogContext('debug', {}, consoleLogSink),
-    {id: 'chinook_test', publications: []},
+    {appID: 'chinook_test', shardNum: 0, publications: []},
     replica,
     getConnectionURI(pg),
     {tableCopyWorkers: 1, rowBatchSize: 10000},

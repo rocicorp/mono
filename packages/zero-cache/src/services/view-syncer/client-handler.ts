@@ -4,14 +4,15 @@ import {
   assertJSONValue,
   type JSONObject as SafeJSONObject,
 } from '../../../../shared/src/json.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Writable} from '../../../../shared/src/writable.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {rowSchema} from '../../../../zero-protocol/src/data.ts';
 import type {DeleteClientsBody} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
+import type {InspectDownBody} from '../../../../zero-protocol/src/inspect-down.ts';
 import type {
-  PokeEndBody,
   PokePartBody,
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
@@ -23,18 +24,18 @@ import {
   getErrorForClientIfSchemaVersionNotSupported,
   type SchemaVersions,
 } from '../../types/schema-versions.ts';
+import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Subscription} from '../../types/subscription.ts';
-import {unescapedSchema as schema} from '../change-source/pg/schema/shard.ts';
 import {
   cmpVersions,
   cookieToVersion,
+  versionToCookie,
+  versionToNullableCookie,
   type CVRVersion,
   type DelQueryPatch,
   type NullableCVRVersion,
   type PutQueryPatch,
   type RowID,
-  versionToCookie,
-  versionToNullableCookie,
 } from './schema/types.ts';
 
 export type PutRowPatch = {
@@ -61,16 +62,42 @@ export type PatchToVersion = {
 };
 
 export interface PokeHandler {
-  addPatch(patch: PatchToVersion): void;
-  cancel(): void;
-  end(finalVersion: CVRVersion): void;
+  addPatch(patch: PatchToVersion): Promise<void>;
+  cancel(): Promise<void>;
+  end(finalVersion: CVRVersion): Promise<void>;
 }
 
 const NOOP: PokeHandler = {
-  addPatch: () => {},
-  cancel: () => {},
-  end: () => {},
+  addPatch: () => promiseVoid,
+  cancel: () => promiseVoid,
+  end: () => promiseVoid,
 };
+
+/** Wraps PokeHandlers for multiple clients in a single PokeHandler. */
+export function startPoke(
+  clients: ClientHandler[],
+  tentativeVersion: CVRVersion,
+  schemaVersions?: SchemaVersions, // absent for config-only pokes
+): PokeHandler {
+  const pokers = clients.map(c =>
+    c.startPoke(tentativeVersion, schemaVersions),
+  );
+
+  // Promise.allSettled() ensures that a failed (e.g. disconnected) client
+  // does not prevent other clients from receiving the pokes. However, the
+  // rate (per client group) will be limited by the slowest connection.
+  return {
+    addPatch: async patch => {
+      await Promise.allSettled(pokers.map(poker => poker.addPatch(patch)));
+    },
+    cancel: async () => {
+      await Promise.allSettled(pokers.map(poker => poker.cancel()));
+    },
+    end: async finalVersion => {
+      await Promise.allSettled(pokers.map(poker => poker.end(finalVersion)));
+    },
+  };
+}
 
 // Semi-arbitrary threshold at which poke body parts are flushed.
 // When row size is being computed, that should be used as a threshold instead.
@@ -87,28 +114,25 @@ export class ClientHandler {
   readonly #lc: LogContext;
   readonly #downstream: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
-  readonly #protocolVersion: number;
-  readonly #schemaVersion: number;
+  readonly #schemaVersion: number | null;
 
   constructor(
     lc: LogContext,
     clientGroupID: string,
     clientID: string,
     wsID: string,
-    shardID: string,
+    shard: ShardID,
     baseCookie: string | null,
-    protocolVersion: number,
-    schemaVersion: number,
+    schemaVersion: number | null,
     downstream: Subscription<Downstream>,
   ) {
     this.#clientGroupID = clientGroupID;
     this.clientID = clientID;
     this.wsID = wsID;
-    this.#zeroClientsTable = `${schema(shardID)}.clients`;
+    this.#zeroClientsTable = `${upstreamSchema(shard)}.clients`;
     this.#lc = lc;
     this.#downstream = downstream;
     this.#baseVersion = cookieToVersion(baseCookie);
-    this.#protocolVersion = protocolVersion;
     this.#schemaVersion = schemaVersion;
   }
 
@@ -116,9 +140,9 @@ export class ClientHandler {
     return this.#baseVersion;
   }
 
-  supportsRevisedCookieProtocol() {
-    // https://github.com/rocicorp/mono/pull/3735
-    return this.#protocolVersion >= 5;
+  async #push(msg: Downstream): Promise<void> {
+    const {result} = this.#downstream.push(msg);
+    await result;
   }
 
   fail(e: unknown) {
@@ -141,7 +165,7 @@ export class ClientHandler {
     const pokeID = versionToCookie(tentativeVersion);
     const lc = this.#lc.withContext('pokeID', pokeID);
 
-    if (schemaVersions) {
+    if (schemaVersions && this.#schemaVersion) {
       const schemaVersionError = getErrorForClientIfSchemaVersionNotSupported(
         this.#schemaVersion,
         schemaVersions,
@@ -162,7 +186,7 @@ export class ClientHandler {
     const cookie = versionToCookie(tentativeVersion);
     lc.info?.(`starting poke from ${baseCookie} to ${cookie}`);
 
-    const pokeStart: PokeStartBody = {pokeID, baseCookie, cookie};
+    const pokeStart: PokeStartBody = {pokeID, baseCookie};
     if (schemaVersions) {
       pokeStart.schemaVersions = schemaVersions;
     }
@@ -170,27 +194,27 @@ export class ClientHandler {
     let pokeStarted = false;
     let body: PokePartBody | undefined;
     let partCount = 0;
-    const ensureBody = () => {
+    const ensureBody = async () => {
       if (!pokeStarted) {
-        this.#downstream.push(['pokeStart', pokeStart]);
+        await this.#push(['pokeStart', pokeStart]);
         pokeStarted = true;
       }
       return (body ??= {pokeID});
     };
-    const flushBody = () => {
+    const flushBody = async () => {
       if (body) {
-        this.#downstream.push(['pokePart', body]);
+        await this.#push(['pokePart', body]);
         body = undefined;
         partCount = 0;
       }
     };
 
-    const addPatch = (patchToVersion: PatchToVersion) => {
+    const addPatch = async (patchToVersion: PatchToVersion) => {
       const {patch, toVersion} = patchToVersion;
       if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
         return;
       }
-      const body = ensureBody();
+      const body = await ensureBody();
 
       const {type, op} = patch;
       switch (type) {
@@ -218,35 +242,32 @@ export class ClientHandler {
       }
 
       if (++partCount >= PART_COUNT_FLUSH_THRESHOLD) {
-        flushBody();
+        await flushBody();
       }
     };
 
     return {
-      addPatch: (patchToVersion: PatchToVersion) => {
+      addPatch: async (patchToVersion: PatchToVersion) => {
         try {
-          addPatch(patchToVersion);
+          await addPatch(patchToVersion);
         } catch (e) {
           this.#downstream.fail(e instanceof Error ? e : new Error(String(e)));
         }
       },
 
-      cancel: () => {
+      cancel: async () => {
         if (pokeStarted) {
-          this.#downstream.push([
-            'pokeEnd',
-            {pokeID, cookie: '', cancel: true},
-          ]);
+          await this.#push(['pokeEnd', {pokeID, cookie: '', cancel: true}]);
         }
       },
 
-      end: (finalVersion: CVRVersion) => {
+      end: async (finalVersion: CVRVersion) => {
         const cookie = versionToCookie(finalVersion);
         if (!pokeStarted) {
           if (cmpVersions(this.#baseVersion, finalVersion) === 0) {
             return; // Nothing changed and nothing was sent.
           }
-          this.#downstream.push(['pokeStart', {...pokeStart, cookie}]);
+          await this.#push(['pokeStart', pokeStart]);
         } else if (cmpVersions(this.#baseVersion, finalVersion) >= 0) {
           // Sanity check: If the poke was started, the finalVersion
           // must be > #baseVersion.
@@ -255,22 +276,18 @@ export class ClientHandler {
               `not greater than baseVersion ${this.#baseVersion}`,
           );
         }
-        flushBody();
-        this.#downstream.push([
-          'pokeEnd',
-          this.supportsRevisedCookieProtocol()
-            ? {pokeID, cookie}
-            : ({pokeID} as PokeEndBody),
-        ]);
+        await flushBody();
+        await this.#push(['pokeEnd', {pokeID, cookie}]);
         this.#baseVersion = finalVersion;
       },
     };
   }
 
-  sendDeleteClients(
+  async sendDeleteClients(
+    lc: LogContext,
     deletedClientIDs: string[],
     deletedClientGroupIDs: string[],
-  ): void {
+  ) {
     const deleteClientsBody: Writable<DeleteClientsBody> = {};
     if (deletedClientIDs.length > 0) {
       deleteClientsBody.clientIDs = deletedClientIDs;
@@ -278,7 +295,13 @@ export class ClientHandler {
     if (deletedClientGroupIDs.length > 0) {
       deleteClientsBody.clientGroupIDs = deletedClientGroupIDs;
     }
-    this.#downstream.push(['deleteClients', deleteClientsBody]);
+    lc.debug?.('sending deleteClients', deleteClientsBody);
+    await this.#push(['deleteClients', deleteClientsBody]);
+  }
+
+  sendInspectResponse(lc: LogContext, response: InspectDownBody): void {
+    lc.debug?.('sending inspect response', response);
+    this.#downstream.push(['inspect', response]);
   }
 
   #updateLMIDs(lmids: Record<string, number>, patch: RowPatch) {
@@ -291,20 +314,20 @@ export class ClientHandler {
       );
       if (clientGroupID !== this.#clientGroupID) {
         this.#lc.error?.(
-          `Received zero.clients row for wrong clientGroupID. Ignoring.`,
+          `Received clients row for wrong clientGroupID. Ignoring.`,
           clientGroupID,
         );
       } else {
         lmids[clientID] = lastMutationID;
       }
     } else {
-      // The 'constrain' and 'del' ops for zero.clients can be ignored.
+      // The 'constrain' and 'del' ops for clients can be ignored.
       patch.op satisfies 'constrain' | 'del';
     }
   }
 }
 
-// Note: The zero_{SHARD_ID}.clients table is set up in replicator/initial-sync.ts.
+// Note: The {APP_ID}_{SHARD_ID}.clients table is set up in replicator/initial-sync.ts.
 const lmidRowSchema = v.object({
   clientGroupID: v.string(),
   clientID: v.string(),
@@ -359,14 +382,7 @@ export function ensureSafeJSON(row: JSONObject): SafeJSONObject {
     })
     .map(([k, v]) => [k, Number(v)]);
 
-  return modified.length ? {...row, ...Object.fromEntries(modified)} : row;
-}
-
-export function revisedCookieProtocolSupportedByAll(clients: ClientHandler[]) {
-  for (const c of clients) {
-    if (!c.supportsRevisedCookieProtocol()) {
-      return false;
-    }
-  }
-  return true;
+  return modified.length
+    ? {...row, ...Object.fromEntries(modified)}
+    : (row as SafeJSONObject);
 }

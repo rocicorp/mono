@@ -1,27 +1,9 @@
-import {argv} from 'node:process';
 import {makeDefine} from '../build.ts';
 
 const define = {
   ...makeDefine(),
   ['TESTING']: 'true',
 };
-
-/**
- * Find name from process.argv.
- *
- * The argv has --browser.name=chromium which
- * overrides the test.browser.name in the config but there is no way to read it
- * at this level so we have to do it manually.
- */
-function findBrowserName() {
-  for (const arg of argv) {
-    const m = arg.match(/--browser\.name=(.+)/);
-    if (m) {
-      return m[1];
-    }
-  }
-  return undefined;
-}
 
 const logSilenceMessages = [
   'Skipping license check for TEST_LICENSE_KEY.',
@@ -44,7 +26,6 @@ export default {
   },
 
   test: {
-    name: findBrowserName(),
     onConsoleLog(log: string) {
       for (const message of logSilenceMessages) {
         if (log.includes(message)) {
@@ -54,12 +35,17 @@ export default {
       return undefined;
     },
     include: ['src/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
+    silent: true,
     browser: {
       enabled: true,
       provider: 'playwright',
       headless: true,
-      name: 'chromium',
       screenshotFailures: false,
+      instances: [
+        {browser: 'chromium'},
+        // {browser: 'firefox'},
+        {browser: 'webkit'},
+      ],
     },
     typecheck: {
       enabled: false,

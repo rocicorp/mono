@@ -1,5 +1,4 @@
 import {describe, expect, test} from 'vitest';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
@@ -13,18 +12,13 @@ import {
 } from './memory-source.ts';
 import {compareRowsTest} from './test/compare-rows-test.ts';
 import {createSource} from './test/source-factory.ts';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 test('schema', () => {
   compareRowsTest((order: Ordering) => {
-    const ms = createSource(lc, logConfig, 'table', {a: {type: 'string'}}, [
+    const ms = createSource(lc, testLogConfig, 'table', {a: {type: 'string'}}, [
       'a',
     ]);
     return ms.connect(order).getSchema().compareRows;
@@ -110,7 +104,7 @@ test('indexes get cleaned up when not needed', () => {
 test('push edit change', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'string'}, b: {type: 'string'}, c: {type: 'string'}},
     ['a'],
@@ -165,7 +159,7 @@ test('push edit change', () => {
 test('fetch during push edit change', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'string'}, b: {type: 'string'}, c: {type: 'string'}},
     ['a'],

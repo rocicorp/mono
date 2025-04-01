@@ -68,12 +68,12 @@ jobs:
 
       - run: npm ci
 
-      - name: Install Playwright Deps
+      - name: Install Playwright
         run: npx playwright install --with-deps
 
       - name: Run benchmarks
         working-directory: packages/zero-client
-        run: npm run bench -- --outputJson output.json
+        run: npm run bench -- --browser.name=chromium --outputJson output.json
 
       - name: Upload benchmarks results to bencher.dev
         working-directory: packages/zero-client

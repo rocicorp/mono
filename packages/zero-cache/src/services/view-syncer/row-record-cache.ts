@@ -8,10 +8,10 @@ import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
+import {cvrSchema, type ShardID} from '../../types/shards.ts';
 import {checkVersion} from './cvr-store.ts';
 import type {CVRSnapshot} from './cvr.ts';
 import {
-  cvrSchema,
   rowRecordToRowsRow,
   type RowsRow,
   rowsRowToRowRecord,
@@ -98,7 +98,7 @@ export class RowRecordCache {
   constructor(
     lc: LogContext,
     db: PostgresDB,
-    shardID: string,
+    shard: ShardID,
     cvrID: string,
     failService: (e: unknown) => void,
     deferredRowFlushThreshold = 100,
@@ -106,7 +106,7 @@ export class RowRecordCache {
   ) {
     this.#lc = lc;
     this.#db = db;
-    this.#schema = cvrSchema(shardID);
+    this.#schema = cvrSchema(shard);
     this.#cvrID = cvrID;
     this.#failService = failService;
     this.#deferredRowFlushThreshold = deferredRowFlushThreshold;
@@ -164,7 +164,7 @@ export class RowRecordCache {
     rowRecords: Map<RowID, RowRecord | null>,
     rowsVersion: CVRVersion,
     flushed: boolean,
-  ) {
+  ): Promise<number> {
     const cache = await this.#ensureLoaded();
     for (const [id, row] of rowRecords.entries()) {
       if (row === null || row.refCounts === null) {
@@ -182,6 +182,7 @@ export class RowRecordCache {
       this.#flushing = resolver();
       this.#setTimeout(() => this.#flush(), 0);
     }
+    return cache.size;
   }
 
   async #flush() {

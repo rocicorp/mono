@@ -6,6 +6,7 @@ import type {
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
 import type {Query} from '../query/query.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
 
 type ClientID = string;
 
@@ -13,6 +14,7 @@ export type Location = 'client' | 'server';
 export type TransactionReason = 'optimistic' | 'rebase' | 'authoritative';
 
 export interface TransactionBase<S extends Schema> {
+  readonly location: Location;
   readonly clientID: ClientID;
   /**
    * The ID of the mutation that is being applied.
@@ -26,6 +28,54 @@ export interface TransactionBase<S extends Schema> {
 
   readonly mutate: SchemaCRUD<S>;
   readonly query: SchemaQuery<S>;
+}
+
+export type Transaction<S extends Schema, TWrappedTransaction = unknown> =
+  | ServerTransaction<S, TWrappedTransaction>
+  | ClientTransaction<S>;
+
+export interface ServerTransaction<S extends Schema, TWrappedTransaction>
+  extends TransactionBase<S> {
+  readonly location: 'server';
+  readonly reason: 'authoritative';
+  readonly dbTransaction: DBTransaction<TWrappedTransaction>;
+}
+
+/**
+ * An instance of this is passed to custom mutator implementations and
+ * allows reading and writing to the database and IVM at the head
+ * at which the mutator is being applied.
+ */
+export interface ClientTransaction<S extends Schema>
+  extends TransactionBase<S> {
+  readonly location: 'client';
+  readonly reason: 'optimistic' | 'rebase';
+}
+
+export interface Row {
+  [column: string]: unknown;
+}
+
+/**
+ * A function that returns a connection to the database which
+ * will be used by custom mutators.
+ */
+export type ConnectionProvider<TWrappedTransaction> = () => MaybePromise<
+  DBConnection<TWrappedTransaction>
+>;
+
+export interface DBConnection<TWrappedTransaction> extends Queryable {
+  transaction: <T>(
+    cb: (tx: DBTransaction<TWrappedTransaction>) => Promise<T>,
+  ) => Promise<T>;
+}
+
+export interface DBTransaction<T> extends Queryable {
+  readonly wrappedTransaction: T;
+}
+
+interface Queryable {
+  query: (query: string, args: unknown[]) => Promise<Iterable<Row>>;
 }
 
 export type SchemaCRUD<S extends Schema> = {
@@ -64,10 +114,7 @@ export type TableCRUD<S extends TableSchema> = {
 };
 
 export type SchemaQuery<S extends Schema> = {
-  readonly [K in keyof S['tables'] & string]: Omit<
-    Query<S, K>,
-    'materialize' | 'preload'
-  >;
+  readonly [K in keyof S['tables'] & string]: Query<S, K>;
 };
 
 export type DeleteID<S extends TableSchema> = Expand<PrimaryKeyFields<S>>;

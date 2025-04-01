@@ -5,6 +5,9 @@ import {rowSchema} from './data.ts';
 import * as MutationType from './mutation-type-enum.ts';
 import {primaryKeySchema, primaryKeyValueRecordSchema} from './primary-key.ts';
 
+// NOTE! If you change this name you must also change the
+// string in `replicache-impl.ts` But CRUD mutators are being
+// deleted soon so this should not happen.
 export const CRUD_MUTATION_NAME = '_zero_crud';
 
 /**
@@ -87,13 +90,15 @@ export const pushBodySchema = v.object({
   clientGroupID: v.string(),
   mutations: v.array(mutationSchema),
   pushVersion: v.number(),
-  schemaVersion: v.number(),
+  // For legacy (CRUD) mutations, the schema is tied to the client group /
+  // sync connection. For custom mutations, schema versioning is delegated
+  // to the custom protocol / api-server.
+  schemaVersion: v.number().optional(),
   timestamp: v.number(),
   requestID: v.string(),
 });
 
 export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);
-
 const mutationIDSchema = v.object({
   id: v.number(),
   clientID: v.string(),
@@ -101,14 +106,20 @@ const mutationIDSchema = v.object({
 
 const appErrorSchema = v.object({
   error: v.literal('app'),
-  details: v.string(),
+  // The user can return any additional data here
+  details: jsonSchema.optional(),
 });
 const zeroErrorSchema = v.object({
-  error: v.literal('ooo-mutation'),
+  error: v.literal('oooMutation'),
+  details: jsonSchema.optional(),
 });
 
-const mutationOkSchema = v.object({});
+const mutationOkSchema = v.object({
+  // The user can return any additional data here
+  data: jsonSchema.optional(),
+});
 const mutationErrorSchema = v.union(appErrorSchema, zeroErrorSchema);
+
 const mutationResultSchema = v.union(mutationOkSchema, mutationErrorSchema);
 const mutationResponseSchema = v.object({
   id: mutationIDSchema,
@@ -120,18 +131,51 @@ const pushOkSchema = v.object({
 });
 
 const unsupportedPushVersionSchema = v.object({
-  error: v.literal('unsupported-push-version'),
+  error: v.literal('unsupportedPushVersion'),
+  // optional for backwards compatibility
+  // This field is included so the client knows which mutations
+  // were not processed by the server.
+  mutationIDs: v.array(mutationIDSchema).optional(),
 });
 const unsupportedSchemaVersionSchema = v.object({
-  error: v.literal('unsupported-schema-version'),
+  error: v.literal('unsupportedSchemaVersion'),
+  // optional for backwards compatibility
+  // This field is included so the client knows which mutations
+  // were not processed by the server.
+  mutationIDs: v.array(mutationIDSchema).optional(),
+});
+const httpErrorSchema = v.object({
+  error: v.literal('http'),
+  status: v.number(),
+  details: v.string(),
+  mutationIDs: v.array(mutationIDSchema).optional(),
+});
+const zeroPusherErrorSchema = v.object({
+  error: v.literal('zeroPusher'),
+  details: v.string(),
+  mutationIDs: v.array(mutationIDSchema).optional(),
 });
 
 const pushErrorSchema = v.union(
   unsupportedPushVersionSchema,
   unsupportedSchemaVersionSchema,
+  httpErrorSchema,
+  zeroPusherErrorSchema,
 );
 
 export const pushResponseSchema = v.union(pushOkSchema, pushErrorSchema);
+export const pushResponseMessageSchema = v.tuple([
+  v.literal('pushResponse'),
+  pushResponseSchema,
+]);
+
+/**
+ * The schema for the querystring parameters of the custom push endpoint.
+ */
+export const pushParamsSchema = v.object({
+  schema: v.string(),
+  appID: v.string(),
+});
 
 export type InsertOp = v.Infer<typeof insertOpSchema>;
 export type UpsertOp = v.Infer<typeof upsertOpSchema>;
@@ -146,7 +190,14 @@ export type Mutation = v.Infer<typeof mutationSchema>;
 export type PushBody = v.Infer<typeof pushBodySchema>;
 export type PushMessage = v.Infer<typeof pushMessageSchema>;
 export type PushResponse = v.Infer<typeof pushResponseSchema>;
+export type PushResponseMessage = v.Infer<typeof pushResponseMessageSchema>;
 export type MutationResponse = v.Infer<typeof mutationResponseSchema>;
+export type MutationOk = v.Infer<typeof mutationOkSchema>;
+export type MutationError = v.Infer<typeof mutationErrorSchema>;
+export type PushError = v.Infer<typeof pushErrorSchema>;
+export type PushOk = v.Infer<typeof pushOkSchema>;
+export type MutationID = v.Infer<typeof mutationIDSchema>;
+export type MutationResult = v.Infer<typeof mutationResultSchema>;
 
 export function mapCRUD(
   arg: CRUDMutationArg,

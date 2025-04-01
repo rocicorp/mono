@@ -2,11 +2,15 @@
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
-import 'dotenv/config';
+import '@dotenvx/dotenvx/config';
 import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
-import {SignJWT} from 'jose';
+import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
+import {handlePush} from '../server/push-handler.ts';
+import {must} from '../../../packages/shared/src/must.ts';
+import assert from 'assert';
+import {authDataSchema, type AuthData} from '../shared/auth.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -16,6 +20,7 @@ declare module 'fastify' {
 
 const sql = postgres(process.env.ZERO_UPSTREAM_DB as string);
 type QueryParams = {redirect?: string | undefined};
+let privateJwk: JWK | undefined;
 
 export const fastify = Fastify({
   logger: true,
@@ -48,6 +53,9 @@ fastify.register(oauthPlugin, {
 fastify.get<{
   Querystring: QueryParams;
 }>('/api/login/github/callback', async function (request, reply) {
+  if (!privateJwk) {
+    privateJwk = JSON.parse(process.env.PRIVATE_JWK as string) as JWK;
+  }
   const {token} =
     await this.githubOAuth2.getAccessTokenFromAuthorizationCodeFlow(request);
 
@@ -79,17 +87,18 @@ fastify.get<{
 
   const userRows = await sql`SELECT * FROM "user" WHERE "id" = ${userId}`;
 
-  const jwtPayload = {
+  const jwtPayload: AuthData = {
     sub: userId,
     iat: Math.floor(Date.now() / 1000),
     role: userRows[0].role,
     name: userDetails.data.login,
+    exp: 0, // setExpirationTime below sets it
   };
 
   const jwt = await new SignJWT(jwtPayload)
-    .setProtectedHeader({alg: 'HS256'})
+    .setProtectedHeader({alg: must(privateJwk.alg)})
     .setExpirationTime('30days')
-    .sign(new TextEncoder().encode(process.env.ZERO_AUTH_SECRET));
+    .sign(privateJwk);
 
   reply
     .cookie('jwt', jwt, {
@@ -99,6 +108,25 @@ fastify.get<{
     .redirect(
       request.query.redirect ? decodeURIComponent(request.query.redirect) : '/',
     );
+});
+
+fastify.post('/api/push', async function (request, reply) {
+  let {authorization} = request.headers;
+  if (authorization !== undefined) {
+    assert(authorization.toLowerCase().startsWith('bearer '));
+    authorization = authorization.substring('Bearer '.length);
+  }
+
+  const jwk = process.env.VITE_PUBLIC_JWK;
+  const authData: AuthData | undefined =
+    jwk && authorization
+      ? authDataSchema.parse(
+          (await jwtVerify(authorization, JSON.parse(jwk))).payload,
+        )
+      : undefined;
+
+  const response = await handlePush(authData, request.query, request.body);
+  reply.send(response);
 });
 
 export default async function handler(

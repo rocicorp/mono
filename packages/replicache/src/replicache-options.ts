@@ -4,6 +4,9 @@ import type {StoreProvider} from './kv/store.ts';
 import type {Puller} from './puller.ts';
 import type {Pusher} from './pusher.ts';
 import type {MutatorDefs, RequestOptions} from './types.ts';
+import type {Hash} from './hash.ts';
+import type {InternalDiff} from './btree/node.ts';
+import type {Read, Store} from './dag/store.ts';
 
 /**
  * The options passed to {@link Replicache}.
@@ -223,4 +226,80 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
    * instance.
    */
   clientMaxAgeMs?: number | undefined;
+}
+
+/**
+ * Replicache calls the `ZeroOption` to create a new
+ * IVM branch at the correct head. This branch
+ * is tacked onto Replicache's `WriteTransaction`
+ * which is passed to the mutators.
+ *
+ * Replicache shouldn't depend on Zero directly, so
+ * we define a minimal interface as a placeholder.
+ *
+ * Zero will cast `ZeroTxData` to `IVMSourceBranch`
+ * inside of it's `Transaction` object.
+ *
+ * ```ts
+ * const zeroData = await zeroOption.getTxData(expectedHead, desiredHead);
+ * const tx = new WriteTransaction(
+ *   zeroData,
+ * );
+ * await mutatorImpl(tx, args);
+ * ```
+ *
+ * `mutatorImpl` is a function that was created by Zero
+ *
+ */
+export interface ZeroTxData {
+  ivmSources: unknown;
+  token: string | undefined;
+}
+
+export type ZeroReadOptions = {
+  openLazyRead?: Read | undefined;
+  openLazySourceRead?: Read | undefined;
+};
+
+declare const idTag: unique symbol;
+export type EphemeralID = number & {[idTag]: true};
+
+export type MutationTrackingData = {
+  ephemeralID: EphemeralID;
+  serverPromise: Promise<unknown>;
+};
+
+/**
+ * Minimal interface that Replicache needs to communicate with Zero.
+ * Prevents us from creating any direct dependencies on Zero.
+ */
+export interface ZeroOption {
+  auth: string;
+
+  /**
+   * Allow Zero to initialize its IVM state from the given hash and dag.
+   */
+  init(hash: Hash, store: Store): Promise<void>;
+
+  /**
+   * When a refresh, persist, or pullEnd occurs Zero must fork its IVM sources
+   * for use in rebase operations. Replicache will call zero during these
+   * operations so it can fork its IVM state to the desired head.
+   *
+   * The data returned by `getTxData` will be available on the Replicache transaction
+   * object for use in Zero's mutators.
+   */
+  getTxData(
+    desiredHead: Hash,
+    readOptions?: ZeroReadOptions | undefined,
+  ): Promise<ZeroTxData> | undefined;
+
+  /**
+   * When Replicache's main head moves forward, Zero must advance its IVM state.
+   */
+  advance(expectedHash: Hash, newHash: Hash, changes: InternalDiff): void;
+
+  trackMutation(): MutationTrackingData;
+  mutationIDAssigned(ephemeralID: EphemeralID, mutationID: number): void;
+  rejectMutation(ephemeralID: EphemeralID, ex: unknown): void;
 }

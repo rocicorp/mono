@@ -1,0 +1,29 @@
+{
+  "name": "client-simulator",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "go": "tsx src/main.ts",
+    "check-types": "tsc",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+  },
+  "dependencies": {
+    "@dotenvx/dotenvx": "^1.39.0",
+    "@rocicorp/logger": "^5.3.0",
+    "nanoid": "^5.1.2",
+    "ws": "^8.18.1"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.7.0",
+    "@rocicorp/prettier-config": "^0.3.0",
+    "shared": "0.0.0",
+    "zero-protocol": "0.0.0"
+  },
+  "eslintConfig": {
+    "extends": "../../eslint-config.json"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}

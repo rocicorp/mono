@@ -3,7 +3,7 @@ import {createSchema} from './builder/schema-builder.ts';
 import {boolean, string, table} from './builder/table-builder.ts';
 import {clientToServer, serverToClient} from './name-mapper.ts';
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [
     table('issue')
       .from('issues')

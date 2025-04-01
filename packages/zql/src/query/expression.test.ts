@@ -1,5 +1,5 @@
 import fc from 'fast-check';
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {
   type Condition,
@@ -7,7 +7,7 @@ import {
 } from '../../../zero-protocol/src/ast.ts';
 import {dnf} from './dnf.ts';
 import {parse, stringify} from './expression-test-util.ts';
-import {and, not, or} from './expression.ts';
+import {and, ExpressionBuilder, not, or} from './expression.ts';
 
 type TestCondition =
   | {
@@ -336,4 +336,75 @@ test('not', () => {
   expect(stringify(not(parse('EXISTS () | NOT EXISTS ()')))).toEqual(
     'NOT EXISTS () & EXISTS ()',
   );
+});
+
+test('bound methods/properties', () => {
+  type Exists = ConstructorParameters<typeof ExpressionBuilder>[0];
+  const mock = vi.fn<Exists>();
+  const builder = new ExpressionBuilder(mock);
+
+  const {eb, exists, cmp, cmpLit, and, or, not} = builder;
+
+  expect(eb).toBe(builder);
+
+  exists('a');
+  expect(mock.mock.calls.length).toBe(1);
+  expect(mock.mock.calls[0][0]).toBe('a');
+
+  expect(cmp('a', '=', 'b')).toEqual({
+    type: 'simple',
+    left: {type: 'column', name: 'a'},
+    right: {type: 'literal', value: 'b'},
+    op: '=',
+  });
+
+  expect(cmpLit('a', '=', 'b')).toEqual({
+    type: 'simple',
+    left: {type: 'literal', value: 'a'},
+    right: {type: 'literal', value: 'b'},
+    op: '=',
+  });
+
+  expect(and(cmp('a', '=', 'b'), cmp('c', '=', 'd'))).toEqual({
+    type: 'and',
+    conditions: [
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'a'},
+        right: {type: 'literal', value: 'b'},
+        op: '=',
+      },
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'c'},
+        right: {type: 'literal', value: 'd'},
+        op: '=',
+      },
+    ],
+  });
+
+  expect(or(cmp('a', '=', 'b'), cmp('c', '=', 'd'))).toEqual({
+    type: 'or',
+    conditions: [
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'a'},
+        right: {type: 'literal', value: 'b'},
+        op: '=',
+      },
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'c'},
+        right: {type: 'literal', value: 'd'},
+        op: '=',
+      },
+    ],
+  });
+
+  expect(not(cmp('a', '=', 'b'))).toEqual({
+    type: 'simple',
+    left: {type: 'column', name: 'a'},
+    right: {type: 'literal', value: 'b'},
+    op: '!=',
+  });
 });

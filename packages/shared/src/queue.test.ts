@@ -6,18 +6,17 @@ describe('Queue', () => {
   test('dequeues enqueued value', async () => {
     const q = new Queue<string>();
     expect(q.size()).toBe(0);
-    const consumed = q.enqueue('foo');
+    q.enqueue('foo');
     expect(q.size()).toBe(1);
     const val = await q.dequeue();
     expect(q.size()).toBe(0);
-    await consumed;
     expect(val).toBe('foo');
   });
 
   test('dequeues enqueued rejection', async () => {
     const q = new Queue<string>();
     expect(q.size()).toBe(0);
-    const consumed = q.enqueueRejection('bar');
+    q.enqueueRejection('bar');
     expect(q.size()).toBe(1);
     let rejection: unknown;
     try {
@@ -26,7 +25,6 @@ describe('Queue', () => {
       rejection = error;
     }
     expect(q.size()).toBe(0);
-    await consumed;
     expect(rejection).toBe('bar');
   });
 
@@ -37,9 +35,9 @@ describe('Queue', () => {
     const val3 = q.dequeue();
     expect(q.size()).toBe(0);
 
-    await q.enqueue('a');
-    await q.enqueueRejection('b');
-    await q.enqueue('c');
+    q.enqueue('a');
+    q.enqueueRejection('b');
+    q.enqueue('c');
     expect(q.size()).toBe(0);
 
     expect(await val1).toBe('a');
@@ -62,8 +60,8 @@ describe('Queue', () => {
 
     expect(await val2).toBe('timed out');
 
-    await q.enqueue('a');
-    await q.enqueue('b');
+    q.enqueue('a');
+    q.enqueue('b');
 
     expect(await val1).toBe('a');
     expect(await val3).toBe('b');
@@ -72,13 +70,13 @@ describe('Queue', () => {
 
   test('deletes enqueued values', async () => {
     const q = new Queue<string>();
-    const c0 = q.enqueue('b');
-    const c1 = q.enqueue('a');
-    const c2 = q.enqueue('c');
-    const c3 = q.enqueue('b');
-    const c4 = q.enqueue('b');
-    const c5 = q.enqueue('d');
-    const c6 = q.enqueue('b');
+    q.enqueue('b');
+    q.enqueue('a');
+    q.enqueue('c');
+    q.enqueue('b');
+    q.enqueue('b');
+    q.enqueue('d');
+    q.enqueue('b');
     expect(q.size()).toBe(7);
 
     expect(q.delete('b')).toBe(4);
@@ -90,27 +88,23 @@ describe('Queue', () => {
     expect(await q.dequeue()).toBe('c');
     expect(await q.dequeue()).toBe('d');
     expect(q.size()).toBe(0);
-
-    await Promise.all([c0, c1, c2, c3, c4, c5, c6]);
   });
 
   test('supports mixed order', async () => {
     const q = new Queue<string>();
     expect(q.size()).toBe(0);
-    const consumed1 = q.enqueue('a');
+    q.enqueue('a');
     expect(q.size()).toBe(1);
     const val1 = q.dequeue();
     expect(q.size()).toBe(0);
-    await consumed1;
     const val2 = q.dequeue();
     expect(q.size()).toBe(0);
-    await q.enqueue('b');
+    q.enqueue('b');
     expect(q.size()).toBe(0);
-    const consumed3 = q.enqueue('c');
+    q.enqueue('c');
     expect(q.size()).toBe(1);
     const val3 = q.dequeue();
     expect(q.size()).toBe(0);
-    await consumed3;
 
     expect(await val1).toBe('a');
     expect(await val2).toBe('b');
@@ -120,9 +114,9 @@ describe('Queue', () => {
   test('async iterator cleanup on break', async () => {
     const {promise: cleanedUp, resolve: cleanup} = resolver<void>();
     const q = new Queue<string>();
-    void q.enqueue('foo');
-    void q.enqueue('bar');
-    void q.enqueue('baz');
+    q.enqueue('foo');
+    q.enqueue('bar');
+    q.enqueue('baz');
     const received = [];
     for await (const snapshot of q.asAsyncIterable(cleanup)) {
       received.push(snapshot);
@@ -137,9 +131,9 @@ describe('Queue', () => {
   test('async iterator cleanup on thrown error', async () => {
     const {promise: cleanedUp, resolve: cleanup} = resolver<void>();
     const q = new Queue<string>();
-    void q.enqueue('foo');
-    void q.enqueue('bar');
-    void q.enqueue('baz');
+    q.enqueue('foo');
+    q.enqueue('bar');
+    q.enqueue('baz');
     const received = [];
     let err: unknown;
     try {
@@ -160,9 +154,9 @@ describe('Queue', () => {
   test('async iterator cleanup on enqueued rejection error', async () => {
     const {promise: cleanedUp, resolve: cleanup} = resolver<void>();
     const q = new Queue<string>();
-    void q.enqueue('foo');
-    void q.enqueue('bar');
-    void q.enqueueRejection(new Error('bonk'));
+    q.enqueue('foo');
+    q.enqueue('bar');
+    q.enqueueRejection(new Error('bonk'));
     const received = [];
     let err: unknown;
     try {
@@ -179,46 +173,50 @@ describe('Queue', () => {
 
   test('a consumer blocks until tasks are available', async () => {
     const queue = new Queue<number>();
-    const promise = queue.dequeue().then(head => {
+    const promise = (async () => {
+      const head = await queue.dequeue();
       const tasks = queue.drain();
       expect(head).toEqual(1);
       expect(tasks).toEqual([]);
-    });
-    void queue.enqueue(1);
+    })();
+    queue.enqueue(1);
     await promise;
   });
 
   test('drain will get all tasks that were accumulated in the prior tick', async () => {
     const queue = new Queue<number>();
-    const promise = queue.dequeue().then(head => {
+    const promise = (async () => {
+      const head = await queue.dequeue();
       const tasks = queue.drain();
       expect([head, ...tasks]).toEqual([1, 2, 3]);
-    });
-    void queue.enqueue(1);
-    void queue.enqueue(2);
-    void queue.enqueue(3);
+    })();
+    queue.enqueue(1);
+    queue.enqueue(2);
+    queue.enqueue(3);
     await promise;
   });
 
   test('a consumer is called if tasks are already available', async () => {
     const queue = new Queue<number>();
-    void queue.enqueue(1);
-    const promise = queue.dequeue().then(head => {
+    queue.enqueue(1);
+    const promise = (async () => {
+      const head = await queue.dequeue();
       const tasks = queue.drain();
       expect([head, ...tasks]).toEqual([1]);
-    });
+    })();
     await promise;
   });
 
   test('drain will get all tasks that were accumulated in the prior tick | 2', async () => {
     const queue = new Queue<number>();
-    void queue.enqueue(1);
-    const promise = queue.dequeue().then(head => {
+    queue.enqueue(1);
+    const promise = (async () => {
+      const head = await queue.dequeue();
       const tasks = queue.drain();
       expect([head, ...tasks]).toEqual([1, 2, 3]);
-    });
-    void queue.enqueue(2);
-    void queue.enqueue(3);
+    })();
+    queue.enqueue(2);
+    queue.enqueue(3);
     await promise;
   });
 });

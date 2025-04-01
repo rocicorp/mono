@@ -13,9 +13,13 @@ import {assert} from '../../shared/src/asserts.ts';
  * running the new code.
  */
 // History:
-// -- Version 5 adds support for `pokeEnd.cookie`.
-// -- Version 6 makes `pokeStart.cookie` optional.
-export const PROTOCOL_VERSION = 6;
+// -- Version 5 adds support for `pokeEnd.cookie`. (0.14)
+// -- Version 6 makes `pokeStart.cookie` optional. (0.16)
+// -- Version 7 introduces the initConnection.clientSchema field. (0.17)
+// -- Version 8 drops support for Version 5 (0.18).
+// -- Version 11 adds inspect queries. (0.18)
+// -- Version 12 adds 'timestamp' and 'date' types to the ClientSchema ValueType. (0.18)
+export const PROTOCOL_VERSION = 13;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version
@@ -27,16 +31,6 @@ export const PROTOCOL_VERSION = 6;
  * from protocol versions before `MIN_SERVER_SUPPORTED_PROTOCOL_VERSION` are
  * closed with a `VersionNotSupported` error.
  */
-export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL = 2;
+export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL = 6;
 
 assert(MIN_SERVER_SUPPORTED_SYNC_PROTOCOL < PROTOCOL_VERSION);
-
-/**
- * The minimum server-supported upstream permissions protocol version
- * (i.e. the `protocolVersion` stored with the compiled permissions JSON).
- * This should correspond to the last time the AST definition was
- * changed in a backwards-incompatible way.
- */
-export const MIN_SERVER_SUPPORTED_PERMISSIONS_PROTOCOL = 4;
-
-assert(MIN_SERVER_SUPPORTED_PERMISSIONS_PROTOCOL < PROTOCOL_VERSION);

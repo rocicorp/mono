@@ -1,6 +1,8 @@
 import {expect, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {assertArray, unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {stringCompare} from '../../../shared/src/string-compare.ts';
 import {ArrayView} from './array-view.ts';
 import type {Change} from './change.ts';
@@ -10,21 +12,14 @@ import type {Input} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {Take} from './take.ts';
 import {createSource} from './test/source-factory.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
+import {refCountSymbol} from './view-apply-change.ts';
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 test('basics', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
@@ -50,8 +45,16 @@ test('basics', () => {
   });
 
   expect(data).toEqual([
-    {a: 1, b: 'a'},
-    {a: 2, b: 'b'},
+    {
+      a: 1,
+      b: 'a',
+      [refCountSymbol]: 1,
+    },
+    {
+      a: 2,
+      b: 'b',
+      [refCountSymbol]: 1,
+    },
   ]);
 
   expect(callCount).toBe(1);
@@ -64,9 +67,21 @@ test('basics', () => {
   view.flush();
   expect(callCount).toBe(2);
   expect(data).toEqual([
-    {a: 1, b: 'a'},
-    {a: 2, b: 'b'},
-    {a: 3, b: 'c'},
+    {
+      a: 1,
+      b: 'a',
+      [refCountSymbol]: 1,
+    },
+    {
+      a: 2,
+      b: 'b',
+      [refCountSymbol]: 1,
+    },
+    {
+      a: 3,
+      b: 'c',
+      [refCountSymbol]: 1,
+    },
   ]);
 
   ms.push({row: {a: 2, b: 'b'}, type: 'remove'});
@@ -76,7 +91,13 @@ test('basics', () => {
 
   view.flush();
   expect(callCount).toBe(3);
-  expect(data).toEqual([{a: 3, b: 'c'}]);
+  expect(data).toEqual([
+    {
+      a: 3,
+      b: 'c',
+      [refCountSymbol]: 1,
+    },
+  ]);
 
   unlisten();
   ms.push({row: {a: 3, b: 'c'}, type: 'remove'});
@@ -84,13 +105,21 @@ test('basics', () => {
 
   view.flush();
   expect(callCount).toBe(3);
-  expect(data).toEqual([{a: 3, b: 'c'}]);
+  expect(view.data).toEqual([]);
+  // The data remains but the rc gets updated.
+  expect(data).toEqual([
+    {
+      a: 3,
+      b: 'c',
+      [refCountSymbol]: 0,
+    },
+  ]);
 });
 
 test('single-format', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
@@ -118,8 +147,11 @@ test('single-format', () => {
   // trying to add another element should be an error
   // pipeline should have been configured with a limit of one
   expect(() => ms.push({row: {a: 2, b: 'b'}, type: 'add'})).toThrow(
-    'single output already exists',
+    "Singular relationship '' should not have multiple rows. You may need to declare this relationship with the `many` helper instead of the `one` helper in your schema.",
   );
+
+  // Adding the same element is not an error in the ArrayView but it is an error
+  // in the Source. This case is tested in view-apply-change.ts.
 
   ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
 
@@ -137,7 +169,7 @@ test('single-format', () => {
 test('hydrate-empty', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
@@ -165,7 +197,7 @@ test('hydrate-empty', () => {
 test('tree', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
@@ -214,140 +246,166 @@ test('tree', () => {
     data = [...entries];
   });
 
-  expect(data).toEqual([
-    {
-      id: 1,
-      name: 'foo',
-      childID: 2,
-      children: [
-        {
-          id: 2,
-          name: 'foobar',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: 'foobar',
-      childID: null,
-      children: [],
-    },
-    {
-      id: 3,
-      name: 'mon',
-      childID: 4,
-      children: [
-        {
-          id: 4,
-          name: 'monkey',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 4,
-      name: 'monkey',
-      childID: null,
-      children: [],
-    },
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "childID": 2,
+        "children": [
+          {
+            "childID": null,
+            "id": 2,
+            "name": "foobar",
+            Symbol(rc): 1,
+          },
+        ],
+        "id": 1,
+        "name": "foo",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": null,
+        "children": [],
+        "id": 2,
+        "name": "foobar",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": 4,
+        "children": [
+          {
+            "childID": null,
+            "id": 4,
+            "name": "monkey",
+            Symbol(rc): 1,
+          },
+        ],
+        "id": 3,
+        "name": "mon",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": null,
+        "children": [],
+        "id": 4,
+        "name": "monkey",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   // add parent with child
   ms.push({type: 'add', row: {id: 5, name: 'chocolate', childID: 2}});
   view.flush();
-  expect(data).toEqual([
-    {
-      id: 5,
-      name: 'chocolate',
-      childID: 2,
-      children: [
-        {
-          id: 2,
-          name: 'foobar',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 1,
-      name: 'foo',
-      childID: 2,
-      children: [
-        {
-          id: 2,
-          name: 'foobar',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: 'foobar',
-      childID: null,
-      children: [],
-    },
-    {
-      id: 3,
-      name: 'mon',
-      childID: 4,
-      children: [
-        {
-          id: 4,
-          name: 'monkey',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 4,
-      name: 'monkey',
-      childID: null,
-      children: [],
-    },
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "childID": 2,
+        "children": [
+          {
+            "childID": null,
+            "id": 2,
+            "name": "foobar",
+            Symbol(rc): 1,
+          },
+        ],
+        "id": 5,
+        "name": "chocolate",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": 2,
+        "children": [
+          {
+            "childID": null,
+            "id": 2,
+            "name": "foobar",
+            Symbol(rc): 1,
+          },
+        ],
+        "id": 1,
+        "name": "foo",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": null,
+        "children": [],
+        "id": 2,
+        "name": "foobar",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": 4,
+        "children": [
+          {
+            "childID": null,
+            "id": 4,
+            "name": "monkey",
+            Symbol(rc): 1,
+          },
+        ],
+        "id": 3,
+        "name": "mon",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": null,
+        "children": [],
+        "id": 4,
+        "name": "monkey",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   // remove parent with child
   ms.push({type: 'remove', row: {id: 5, name: 'chocolate', childID: 2}});
   view.flush();
-  expect(data).toEqual([
-    {
-      id: 1,
-      name: 'foo',
-      childID: 2,
-      children: [
-        {
-          id: 2,
-          name: 'foobar',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: 'foobar',
-      childID: null,
-      children: [],
-    },
-    {
-      id: 3,
-      name: 'mon',
-      childID: 4,
-      children: [
-        {
-          id: 4,
-          name: 'monkey',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 4,
-      name: 'monkey',
-      childID: null,
-      children: [],
-    },
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "childID": 2,
+        "children": [
+          {
+            "childID": null,
+            "id": 2,
+            "name": "foobar",
+            Symbol(rc): 1,
+          },
+        ],
+        "id": 1,
+        "name": "foo",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": null,
+        "children": [],
+        "id": 2,
+        "name": "foobar",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": 4,
+        "children": [
+          {
+            "childID": null,
+            "id": 4,
+            "name": "monkey",
+            Symbol(rc): 1,
+          },
+        ],
+        "id": 3,
+        "name": "mon",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": null,
+        "children": [],
+        "id": 4,
+        "name": "monkey",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   // remove just child
   ms.push({
@@ -359,32 +417,38 @@ test('tree', () => {
     },
   });
   view.flush();
-  expect(data).toEqual([
-    {
-      id: 1,
-      name: 'foo',
-      childID: 2,
-      children: [],
-    },
-    {
-      id: 3,
-      name: 'mon',
-      childID: 4,
-      children: [
-        {
-          id: 4,
-          name: 'monkey',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 4,
-      name: 'monkey',
-      childID: null,
-      children: [],
-    },
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "childID": 2,
+        "children": [],
+        "id": 1,
+        "name": "foo",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": 4,
+        "children": [
+          {
+            "childID": null,
+            "id": 4,
+            "name": "monkey",
+            Symbol(rc): 1,
+          },
+        ],
+        "id": 3,
+        "name": "mon",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": null,
+        "children": [],
+        "id": 4,
+        "name": "monkey",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   // add child
   ms.push({
@@ -396,50 +460,58 @@ test('tree', () => {
     },
   });
   view.flush();
-  expect(data).toEqual([
-    {
-      id: 1,
-      name: 'foo',
-      childID: 2,
-      children: [
-        {
-          id: 2,
-          name: 'foobaz',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: 'foobaz',
-      childID: null,
-      children: [],
-    },
-    {
-      id: 3,
-      name: 'mon',
-      childID: 4,
-      children: [
-        {
-          id: 4,
-          name: 'monkey',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 4,
-      name: 'monkey',
-      childID: null,
-      children: [],
-    },
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "childID": 2,
+        "children": [
+          {
+            "childID": null,
+            "id": 2,
+            "name": "foobaz",
+            Symbol(rc): 1,
+          },
+        ],
+        "id": 1,
+        "name": "foo",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": null,
+        "children": [],
+        "id": 2,
+        "name": "foobaz",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": 4,
+        "children": [
+          {
+            "childID": null,
+            "id": 4,
+            "name": "monkey",
+            Symbol(rc): 1,
+          },
+        ],
+        "id": 3,
+        "name": "mon",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": null,
+        "children": [],
+        "id": 4,
+        "name": "monkey",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 });
 
 test('tree-single', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {id: {type: 'number'}, name: {type: 'string'}, childID: {type: 'number'}},
     ['id'],
@@ -625,18 +697,22 @@ test('collapse', () => {
   });
   view.flush();
 
-  expect(data).toEqual([
-    {
-      id: 1,
-      labels: [
-        {
-          id: 1,
-          name: 'label',
-        },
-      ],
-      name: 'issue',
-    },
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "id": 1,
+        "labels": [
+          {
+            "id": 1,
+            "name": "label",
+            Symbol(rc): 1,
+          },
+        ],
+        "name": "issue",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   view.push({
     type: 'remove',
@@ -644,14 +720,14 @@ test('collapse', () => {
   });
   view.flush();
 
-  expect(data).toEqual([]);
+  expect(data).toMatchInlineSnapshot(`[]`);
 
   view.push({
     type: 'add',
     ...changeSansType,
   });
   // no commit
-  expect(data).toEqual([]);
+  expect(data).toMatchInlineSnapshot(`[]`);
 
   view.push({
     type: 'child',
@@ -731,22 +807,27 @@ test('collapse', () => {
   });
   view.flush();
 
-  expect(data).toEqual([
-    {
-      id: 1,
-      labels: [
-        {
-          id: 1,
-          name: 'label',
-        },
-        {
-          id: 2,
-          name: 'label2',
-        },
-      ],
-      name: 'issue',
-    },
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "id": 1,
+        "labels": [
+          {
+            "id": 1,
+            "name": "label",
+            Symbol(rc): 1,
+          },
+          {
+            "id": 2,
+            "name": "label2",
+            Symbol(rc): 1,
+          },
+        ],
+        "name": "issue",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   // edit the hidden row
   view.push({
@@ -846,22 +927,27 @@ test('collapse', () => {
   });
   view.flush();
 
-  expect(data).toEqual([
-    {
-      id: 1,
-      labels: [
-        {
-          id: 1,
-          name: 'label',
-        },
-        {
-          id: 2,
-          name: 'label2',
-        },
-      ],
-      name: 'issue',
-    },
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "id": 1,
+        "labels": [
+          {
+            "id": 1,
+            "name": "label",
+            Symbol(rc): 1,
+          },
+          {
+            "id": 2,
+            "name": "label2",
+            Symbol(rc): 1,
+          },
+        ],
+        "name": "issue",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   // edit the leaf
   view.push({
@@ -962,22 +1048,27 @@ test('collapse', () => {
   });
   view.flush();
 
-  expect(data).toEqual([
-    {
-      id: 1,
-      labels: [
-        {
-          id: 1,
-          name: 'label',
-        },
-        {
-          id: 2,
-          name: 'label2x',
-        },
-      ],
-      name: 'issue',
-    },
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "id": 1,
+        "labels": [
+          {
+            "id": 1,
+            "name": "label",
+            Symbol(rc): 1,
+          },
+          {
+            "id": 2,
+            "name": "label2x",
+            Symbol(rc): 1,
+          },
+        ],
+        "name": "issue",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 });
 
 test('collapse-single', () => {
@@ -1101,7 +1192,7 @@ test('collapse-single', () => {
 test('basic with edit pushes', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
@@ -1119,10 +1210,20 @@ test('basic with edit pushes', () => {
     data = [...entries];
   });
 
-  expect(data).toEqual([
-    {a: 1, b: 'a'},
-    {a: 2, b: 'b'},
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "a": 1,
+        "b": "a",
+        Symbol(rc): 1,
+      },
+      {
+        "a": 2,
+        "b": "b",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   expect(callCount).toBe(1);
 
@@ -1133,19 +1234,39 @@ test('basic with edit pushes', () => {
 
   view.flush();
   expect(callCount).toBe(2);
-  expect(data).toEqual([
-    {a: 1, b: 'a'},
-    {a: 2, b: 'b2'},
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "a": 1,
+        "b": "a",
+        Symbol(rc): 1,
+      },
+      {
+        "a": 2,
+        "b": "b2",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   ms.push({type: 'edit', row: {a: 3, b: 'b3'}, oldRow: {a: 2, b: 'b2'}});
 
   view.flush();
   expect(callCount).toBe(3);
-  expect(data).toEqual([
-    {a: 1, b: 'a'},
-    {a: 3, b: 'b3'},
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "a": 1,
+        "b": "a",
+        Symbol(rc): 1,
+      },
+      {
+        "a": 3,
+        "b": "b3",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   unlisten();
 });
@@ -1153,7 +1274,7 @@ test('basic with edit pushes', () => {
 test('tree edit', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {
       id: {type: 'number'},
@@ -1199,50 +1320,58 @@ test('tree edit', () => {
     data = [...entries];
   });
 
-  expect(data).toEqual([
-    {
-      id: 1,
-      name: 'foo',
-      data: 'a',
-      childID: 2,
-      children: [
-        {
-          id: 2,
-          name: 'foobar',
-          data: 'b',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: 'foobar',
-      data: 'b',
-      childID: null,
-      children: [],
-    },
-    {
-      id: 3,
-      name: 'mon',
-      data: 'c',
-      childID: 4,
-      children: [
-        {
-          id: 4,
-          name: 'monkey',
-          data: 'd',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 4,
-      name: 'monkey',
-      data: 'd',
-      childID: null,
-      children: [],
-    },
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "childID": 2,
+        "children": [
+          {
+            "childID": null,
+            "data": "b",
+            "id": 2,
+            "name": "foobar",
+            Symbol(rc): 1,
+          },
+        ],
+        "data": "a",
+        "id": 1,
+        "name": "foo",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": null,
+        "children": [],
+        "data": "b",
+        "id": 2,
+        "name": "foobar",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": 4,
+        "children": [
+          {
+            "childID": null,
+            "data": "d",
+            "id": 4,
+            "name": "monkey",
+            Symbol(rc): 1,
+          },
+        ],
+        "data": "c",
+        "id": 3,
+        "name": "mon",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": null,
+        "children": [],
+        "data": "d",
+        "id": 4,
+        "name": "monkey",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   // Edit root
   ms.push({
@@ -1251,56 +1380,64 @@ test('tree edit', () => {
     row: {id: 1, name: 'foo', data: 'a2', childID: 2},
   });
   view.flush();
-  expect(data).toEqual([
-    {
-      id: 1,
-      name: 'foo',
-      data: 'a2',
-      childID: 2,
-      children: [
-        {
-          id: 2,
-          name: 'foobar',
-          data: 'b',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: 'foobar',
-      data: 'b',
-      childID: null,
-      children: [],
-    },
-    {
-      id: 3,
-      name: 'mon',
-      data: 'c',
-      childID: 4,
-      children: [
-        {
-          id: 4,
-          name: 'monkey',
-          data: 'd',
-          childID: null,
-        },
-      ],
-    },
-    {
-      id: 4,
-      name: 'monkey',
-      data: 'd',
-      childID: null,
-      children: [],
-    },
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "childID": 2,
+        "children": [
+          {
+            "childID": null,
+            "data": "b",
+            "id": 2,
+            "name": "foobar",
+            Symbol(rc): 1,
+          },
+        ],
+        "data": "a2",
+        "id": 1,
+        "name": "foo",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": null,
+        "children": [],
+        "data": "b",
+        "id": 2,
+        "name": "foobar",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": 4,
+        "children": [
+          {
+            "childID": null,
+            "data": "d",
+            "id": 4,
+            "name": "monkey",
+            Symbol(rc): 1,
+          },
+        ],
+        "data": "c",
+        "id": 3,
+        "name": "mon",
+        Symbol(rc): 1,
+      },
+      {
+        "childID": null,
+        "children": [],
+        "data": "d",
+        "id": 4,
+        "name": "monkey",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 });
 
 test('edit to change the order', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
@@ -1320,11 +1457,25 @@ test('edit to change the order', () => {
     data = [...entries];
   });
 
-  expect(data).toEqual([
-    {a: 10, b: 'a'},
-    {a: 20, b: 'b'},
-    {a: 30, b: 'c'},
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "a": 10,
+        "b": "a",
+        Symbol(rc): 1,
+      },
+      {
+        "a": 20,
+        "b": "b",
+        Symbol(rc): 1,
+      },
+      {
+        "a": 30,
+        "b": "c",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   ms.push({
     type: 'edit',
@@ -1332,11 +1483,25 @@ test('edit to change the order', () => {
     row: {a: 5, b: 'b2'},
   });
   view.flush();
-  expect(data).toEqual([
-    {a: 5, b: 'b2'},
-    {a: 10, b: 'a'},
-    {a: 30, b: 'c'},
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "a": 5,
+        "b": "b2",
+        Symbol(rc): 1,
+      },
+      {
+        "a": 10,
+        "b": "a",
+        Symbol(rc): 1,
+      },
+      {
+        "a": 30,
+        "b": "c",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   ms.push({
     type: 'edit',
@@ -1345,11 +1510,25 @@ test('edit to change the order', () => {
   });
 
   view.flush();
-  expect(data).toEqual([
-    {a: 4, b: 'b3'},
-    {a: 10, b: 'a'},
-    {a: 30, b: 'c'},
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "a": 4,
+        "b": "b3",
+        Symbol(rc): 1,
+      },
+      {
+        "a": 10,
+        "b": "a",
+        Symbol(rc): 1,
+      },
+      {
+        "a": 30,
+        "b": "c",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   ms.push({
     type: 'edit',
@@ -1357,11 +1536,25 @@ test('edit to change the order', () => {
     row: {a: 20, b: 'b4'},
   });
   view.flush();
-  expect(data).toEqual([
-    {a: 10, b: 'a'},
-    {a: 20, b: 'b4'},
-    {a: 30, b: 'c'},
-  ]);
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "a": 10,
+        "b": "a",
+        Symbol(rc): 1,
+      },
+      {
+        "a": 20,
+        "b": "b4",
+        Symbol(rc): 1,
+      },
+      {
+        "a": 30,
+        "b": "c",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 });
 
 test('edit to preserve relationships', () => {
@@ -1450,9 +1643,11 @@ test('edit to preserve relationships', () => {
           {
             "id": 1,
             "name": "label1",
+            Symbol(rc): 1,
           },
         ],
         "title": "issue1",
+        Symbol(rc): 1,
       },
       {
         "id": 2,
@@ -1460,9 +1655,11 @@ test('edit to preserve relationships', () => {
           {
             "id": 2,
             "name": "label2",
+            Symbol(rc): 1,
           },
         ],
         "title": "issue2",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -1484,9 +1681,11 @@ test('edit to preserve relationships', () => {
           {
             "id": 1,
             "name": "label1",
+            Symbol(rc): 1,
           },
         ],
         "title": "issue1 changed",
+        Symbol(rc): 1,
       },
       {
         "id": 2,
@@ -1494,9 +1693,11 @@ test('edit to preserve relationships', () => {
           {
             "id": 2,
             "name": "label2",
+            Symbol(rc): 1,
           },
         ],
         "title": "issue2",
+        Symbol(rc): 1,
       },
     ]
   `);
@@ -1516,9 +1717,11 @@ test('edit to preserve relationships', () => {
           {
             "id": 2,
             "name": "label2",
+            Symbol(rc): 1,
           },
         ],
         "title": "issue2",
+        Symbol(rc): 1,
       },
       {
         "id": 3,
@@ -1526,9 +1729,11 @@ test('edit to preserve relationships', () => {
           {
             "id": 1,
             "name": "label1",
+            Symbol(rc): 1,
           },
         ],
         "title": "issue1 is now issue3",
+        Symbol(rc): 1,
       },
     ]
   `);

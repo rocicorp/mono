@@ -1,6 +1,6 @@
 import {PG_SERIALIZATION_FAILURE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
+import {resolver, type Resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
@@ -8,21 +8,34 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
-import type {JSONValue} from '../../types/bigint-json.ts';
+import {type JSONValue} from '../../types/bigint-json.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
 import type {StatusMessage} from '../change-source/protocol/current/status.ts';
+import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
 import {type ChangeEntry} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
-import {cdcSchema, type ReplicationState} from './schema/tables.ts';
+import {
+  AutoResetSignal,
+  markResetRequired,
+  type ReplicationState,
+} from './schema/tables.ts';
 import {Subscriber} from './subscriber.ts';
+
+type SubscriberAndMode = {
+  subscriber: Subscriber;
+  mode: ReplicatorMode;
+};
 
 type QueueEntry =
   | ['change', WatermarkedChange]
-  | ['subscriber', Subscriber]
-  | StatusMessage;
+  | ['ready', callback: () => void]
+  | ['subscriber', SubscriberAndMode]
+  | StatusMessage
+  | 'stop';
 
 type PendingTransaction = {
   pool: TransactionPool;
@@ -30,6 +43,20 @@ type PendingTransaction = {
   pos: number;
   startingReplicationState: Promise<ReplicationState>;
 };
+
+// Technically, any threshold is fine because the point of back pressure
+// is to adjust the rate of incoming messages, and the size of the pending
+// work queue does not affect that mechanism.
+//
+// However, it is theoretically possible to exceed the available memory if
+// the size of changes is very large. This threshold can be improved by
+// roughly measuring the size of the enqueued contents and setting the
+// threshold based on available memory.
+//
+// TODO: switch to a message size-based thresholding when migrating over
+// to stringified JSON messages, which will bound the computation involved
+// in measuring the size of row messages.
+const QUEUE_SIZE_BACK_PRESSURE_THRESHOLD = 100_000;
 
 /**
  * Handles the storage of changes and the catchup of subscribers
@@ -64,33 +91,35 @@ type PendingTransaction = {
 export class Storer implements Service {
   readonly id = 'storer';
   readonly #lc: LogContext;
-  readonly #shardID: string;
+  readonly #shard: ShardID;
   readonly #taskID: string;
   readonly #db: PostgresDB;
   readonly #replicaVersion: string;
   readonly #onConsumed: (c: Commit | StatusMessage) => void;
+  readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
-  readonly stopped = resolver<false>();
 
   constructor(
     lc: LogContext,
-    shardID: string,
+    shard: ShardID,
     taskID: string,
     db: PostgresDB,
     replicaVersion: string,
     onConsumed: (c: Commit | StatusMessage) => void,
+    onFatal: (err: Error) => void,
   ) {
     this.#lc = lc;
-    this.#shardID = shardID;
+    this.#shard = shard;
     this.#taskID = taskID;
     this.#db = db;
     this.#replicaVersion = replicaVersion;
     this.#onConsumed = onConsumed;
+    this.#onFatal = onFatal;
   }
 
   // For readability in SQL statements.
   #cdc(table: string) {
-    return this.#db(`${cdcSchema(this.#shardID)}.${table}`);
+    return this.#db(`${cdcSchema(this.#shard)}.${table}`);
   }
 
   async assumeOwnership() {
@@ -99,7 +128,14 @@ export class Storer implements Service {
     await db`UPDATE ${this.#cdc('replicationState')} SET ${db({owner})}`;
   }
 
-  async getLastWatermark(): Promise<string> {
+  async getLastWatermarkToStartStream(): Promise<string> {
+    // Before starting or restarting a stream from the change source,
+    // wait for all queued changes to be processed so that we pick up
+    // from the right spot.
+    const {promise: ready, resolve} = resolver();
+    this.#queue.enqueue(['ready', resolve]);
+    await ready;
+
     const [{lastWatermark}] = await this.#db<{lastWatermark: string}[]>`
       SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`;
     return lastWatermark;
@@ -116,38 +152,73 @@ export class Storer implements Service {
   }
 
   store(entry: WatermarkedChange) {
-    void this.#queue.enqueue(['change', entry]);
+    this.#queue.enqueue(['change', entry]);
   }
 
   status(s: StatusMessage) {
-    void this.#queue.enqueue(s);
+    this.#queue.enqueue(s);
   }
 
-  catchup(sub: Subscriber) {
-    void this.#queue.enqueue(['subscriber', sub]);
+  catchup(subscriber: Subscriber, mode: ReplicatorMode) {
+    this.#queue.enqueue(['subscriber', {subscriber, mode}]);
+  }
+
+  #readyForMore: Resolver<void> | null = null;
+
+  readyForMore(): Promise<void> | undefined {
+    if (
+      this.#readyForMore === null &&
+      this.#queue.size() > QUEUE_SIZE_BACK_PRESSURE_THRESHOLD
+    ) {
+      this.#lc.warn?.(
+        `applying back pressure with ${this.#queue.size()} queued changes`,
+      );
+      this.#readyForMore = resolver();
+    }
+    return this.#readyForMore?.promise;
+  }
+
+  #maybeReleaseBackPressure() {
+    if (
+      this.#readyForMore !== null &&
+      // Wait for at least 10% of the threshold to free up.
+      this.#queue.size() < QUEUE_SIZE_BACK_PRESSURE_THRESHOLD * 0.9
+    ) {
+      this.#lc.info?.(
+        `releasing back pressure with ${this.#queue.size()} queued changes`,
+      );
+      this.#readyForMore.resolve();
+      this.#readyForMore = null;
+    }
   }
 
   async run() {
     let tx: PendingTransaction | null = null;
     let msg: QueueEntry | false;
 
-    const catchupQueue: Subscriber[] = [];
-    while (
-      (msg = await Promise.race([this.#queue.dequeue(), this.stopped.promise]))
-    ) {
+    const catchupQueue: SubscriberAndMode[] = [];
+    while ((msg = await this.#queue.dequeue()) !== 'stop') {
+      this.#maybeReleaseBackPressure();
+
       const [msgType] = msg;
-      if (msgType === 'subscriber') {
-        const subscriber = msg[1];
-        if (tx) {
-          catchupQueue.push(subscriber); // Wait for the current tx to complete.
-        } else {
-          await this.#startCatchup([subscriber]); // Catch up immediately.
+      switch (msgType) {
+        case 'ready': {
+          const signalReady = msg[1];
+          signalReady();
+          continue;
         }
-        continue;
-      }
-      if (msgType === 'status') {
-        this.#onConsumed(msg);
-        continue;
+        case 'subscriber': {
+          const subscriber = msg[1];
+          if (tx) {
+            catchupQueue.push(subscriber); // Wait for the current tx to complete.
+          } else {
+            await this.#startCatchup([subscriber]); // Catch up immediately.
+          }
+          continue;
+        }
+        case 'status':
+          this.#onConsumed(msg);
+          continue;
       }
       // msgType === 'change'
       const [watermark, downstream] = msg[1];
@@ -244,7 +315,7 @@ export class Storer implements Service {
     this.#lc.info?.('storer stopped');
   }
 
-  async #startCatchup(subs: Subscriber[]) {
+  async #startCatchup(subs: SubscriberAndMode[]) {
     if (subs.length === 0) {
       return;
     }
@@ -268,7 +339,10 @@ export class Storer implements Service {
     );
   }
 
-  async #catchup(sub: Subscriber, reader: TransactionPool) {
+  async #catchup(
+    {subscriber: sub, mode}: SubscriberAndMode,
+    reader: TransactionPool,
+  ) {
     try {
       await reader.processReadTask(async tx => {
         const start = Date.now();
@@ -289,6 +363,10 @@ export class Storer implements Service {
             } else if (watermarkFound) {
               sub.catchup(toDownstream(entry));
               count++;
+            } else if (mode === 'backup') {
+              throw new AutoResetSignal(
+                `backup replica at watermark ${sub.watermark} is behind change db: ${entry.watermark})`,
+              );
             } else {
               this.#lc.warn?.(
                 `rejecting subscriber at watermark ${sub.watermark} (earliest watermark: ${entry.watermark})`,
@@ -308,10 +386,8 @@ export class Storer implements Service {
             } ms)`,
           );
         } else {
-          const [{lastWatermark}] = await this.#db<{lastWatermark: string}[]>`
-            SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}`;
           this.#lc.warn?.(
-            `subscriber at watermark ${sub.watermark} is ahead of latest watermark: ${lastWatermark}`,
+            `subscriber at watermark ${sub.watermark} is ahead of latest watermark`,
           );
         }
         // Flushes the backlog of messages buffered during catchup and
@@ -319,13 +395,17 @@ export class Storer implements Service {
         sub.setCaughtUp();
       });
     } catch (err) {
-      sub.fail(err);
       this.#lc.error?.(`error while catching up subscriber ${sub.id}`, err);
+      if (err instanceof AutoResetSignal) {
+        await markResetRequired(this.#db, this.#shard);
+        this.#onFatal(err);
+      }
+      sub.fail(err);
     }
   }
 
   stop() {
-    this.stopped.resolve(false);
+    this.#queue.enqueue('stop');
     return promiseVoid;
   }
 }

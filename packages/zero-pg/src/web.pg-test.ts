@@ -9,6 +9,10 @@ import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {Connection} from './test/util.ts';
 
 let pg: PostgresDB;
+const params = {
+  schema: 'zero_0',
+  appID: 'zero',
+};
 beforeEach(async () => {
   pg = await testDBs.create('zero-pg-web');
   await pg.unsafe(`
@@ -50,16 +54,14 @@ const mutators = {
 describe('out of order mutation', () => {
   test('first mutation is out of order', async () => {
     const processor = new PushProcessor(
-      '0',
       {
         tables: {},
         relationships: {},
         version: 1,
       },
       () => new Connection(pg),
-      mutators,
     );
-    const result = await processor.process({}, makePush(15));
+    const result = await processor.process(mutators, params, makePush(15));
 
     expect(result).toEqual({
       mutations: [
@@ -69,7 +71,8 @@ describe('out of order mutation', () => {
             id: 15,
           },
           result: {
-            error: 'ooo-mutation',
+            details: 'Client cid sent mutation ID 15 but expected 1',
+            error: 'oooMutation',
           },
         },
       ],
@@ -80,17 +83,15 @@ describe('out of order mutation', () => {
 
   test('later mutations are out of order', async () => {
     const processor = new PushProcessor(
-      '0',
       {
         tables: {},
         relationships: {},
         version: 1,
       },
       () => new Connection(pg),
-      mutators,
     );
 
-    expect(await processor.process({}, makePush(1))).toEqual({
+    expect(await processor.process(mutators, params, makePush(1))).toEqual({
       mutations: [
         {
           id: {
@@ -102,7 +103,7 @@ describe('out of order mutation', () => {
       ],
     });
 
-    expect(await processor.process({}, makePush(3))).toEqual({
+    expect(await processor.process(mutators, params, makePush(3))).toEqual({
       mutations: [
         {
           id: {
@@ -110,7 +111,8 @@ describe('out of order mutation', () => {
             id: 3,
           },
           result: {
-            error: 'ooo-mutation',
+            details: 'Client cid sent mutation ID 3 but expected 2',
+            error: 'oooMutation',
           },
         },
       ],
@@ -122,17 +124,15 @@ describe('out of order mutation', () => {
 
 test('first mutation', async () => {
   const processor = new PushProcessor(
-    '0',
     {
       tables: {},
       relationships: {},
       version: 1,
     },
     () => new Connection(pg),
-    mutators,
   );
 
-  expect(await processor.process({}, makePush(1))).toEqual({
+  expect(await processor.process(mutators, params, makePush(1))).toEqual({
     mutations: [
       {
         id: {
@@ -149,21 +149,19 @@ test('first mutation', async () => {
 
 test('previously seen mutation', async () => {
   const processor = new PushProcessor(
-    '0',
     {
       tables: {},
       relationships: {},
       version: 1,
     },
     () => new Connection(pg),
-    mutators,
   );
 
-  await processor.process({}, makePush(1));
-  await processor.process({}, makePush(2));
-  await processor.process({}, makePush(3));
+  await processor.process(mutators, params, makePush(1));
+  await processor.process(mutators, params, makePush(2));
+  await processor.process(mutators, params, makePush(3));
 
-  expect(await processor.process({}, makePush(2))).toEqual({
+  expect(await processor.process(mutators, params, makePush(2))).toEqual({
     mutations: [
       {
         id: {
@@ -180,20 +178,19 @@ test('previously seen mutation', async () => {
 
 test('lmid still moves forward if the mutator implementation throws', async () => {
   const processor = new PushProcessor(
-    '0',
     {
       tables: {},
       relationships: {},
       version: 1,
     },
     () => new Connection(pg),
-    mutators,
   );
 
-  await processor.process({}, makePush(1));
-  await processor.process({}, makePush(2));
+  await processor.process(mutators, params, makePush(1));
+  await processor.process(mutators, params, makePush(2));
   const result = await processor.process(
-    {},
+    mutators,
+    params,
     makePush(3, customMutatorKey('foo', 'baz')),
   );
   expect(result).toEqual({

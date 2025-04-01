@@ -66,9 +66,10 @@ jobs:
       - name: Deploy SST app
         env:
           ZERO_UPSTREAM_DB: ${{ secrets.SANDBOX_ZERO_UPSTREAM_DB }}
+          ZERO_PUSH_URL: ${{ secrets.SANDBOX_ZERO_PUSH_URL }}
           ZERO_CVR_DB: ${{ secrets.SANDBOX_ZERO_CVR_DB }}
           ZERO_CHANGE_DB: ${{ secrets.SANDBOX_ZERO_CHANGE_DB }}
-          ZERO_AUTH_SECRET: ${{ secrets.SANDBOX_ZERO_JWT_SECRET }}
+          ZERO_AUTH_JWK: ${{ secrets.SANDBOX_ZERO_AUTH_JWK }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
@@ -78,5 +79,9 @@ jobs:
           DOMAIN_CERT: ${{ vars.SANDBOX_CERTIFICATE_ARN }}
         run: |
           cd prod/sst
+          # The permissions.deployer function's package.json is configured to install
+          # "@rocicorp/zero" from "file:rocicorp-zero.tgz". This allows us to deploy
+          # permissions with the same code that the view-syncer is running.
+          cp ../../packages/zero/pkgs/${{ env.ZERO_VERSION }} ./rocicorp-zero.tgz
           npm install
           npx sst deploy --stage sandbox

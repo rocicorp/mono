@@ -30,15 +30,6 @@ export function transformAndHashQuery(
   const transformed = internalQuery
     ? query // application permissions do not apply to internal queries
     : transformQuery(lc, query, permissionRules, authData);
-  lc.debug?.(
-    `read authorizer transformed query ${JSON.stringify(
-      query,
-    )} to ${JSON.stringify(
-      transformed,
-    )} using PermissionsConfig ${JSON.stringify(
-      permissionRules,
-    )} and authData ${JSON.stringify(authData)}`,
-  );
   return {
     query: transformed,
     hash: hashOfAST(transformed),

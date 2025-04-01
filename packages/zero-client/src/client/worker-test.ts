@@ -1,6 +1,5 @@
 // This test file is loaded by worker.test.ts
 
-import sinon from 'sinon';
 import {assert} from '../../../shared/src/asserts.ts';
 import {deepEqual} from '../../../shared/src/json.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
@@ -12,20 +11,19 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
+const {WebSocket} = globalThis;
+
 onmessage = async (e: MessageEvent) => {
   const {userID} = e.data;
   try {
-    sinon.replace(
-      globalThis,
-      'WebSocket',
-      MockSocket as unknown as typeof WebSocket,
-    );
+    globalThis.WebSocket = MockSocket as unknown as typeof WebSocket;
     await testBasics(userID);
     postMessage(undefined);
   } catch (ex) {
     postMessage(ex);
   } finally {
-    sinon.restore();
+    globalThis.WebSocket = WebSocket;
   }
 };
 
@@ -40,7 +38,7 @@ async function testBasics(userID: string) {
 
   const r = zeroForTest({
     userID,
-    schema: createSchema(1, {
+    schema: createSchema({
       tables: [
         table('e')
           .columns({

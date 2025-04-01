@@ -54,11 +54,13 @@ export {
 } from '../../zero-schema/src/builder/schema-builder.ts';
 export {
   boolean,
+  date,
   enumeration,
   json,
   number,
   string,
   table,
+  timestamp,
   type ColumnBuilder,
   type TableBuilderWithColumns,
 } from '../../zero-schema/src/builder/table-builder.ts';
@@ -86,19 +88,32 @@ export type {
   SchemaValueWithCustomType,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
+export type {Change} from '../../zql/src/ivm/change.ts';
+export type {Node} from '../../zql/src/ivm/data.ts';
+export type {Input, Output} from '../../zql/src/ivm/operator.ts';
+export type {Stream} from '../../zql/src/ivm/stream.ts';
+export {
+  applyChange,
+  type ViewChange,
+} from '../../zql/src/ivm/view-apply-change.ts';
+export type {Entry, Format, View, ViewFactory} from '../../zql/src/ivm/view.ts';
+export type {
+  DeleteID,
+  InsertValue,
+  ServerTransaction,
+  Transaction,
+  UpdateValue,
+  UpsertValue,
+} from '../../zql/src/mutate/custom.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,
   ExpressionFactory,
 } from '../../zql/src/query/expression.ts';
-export type {Query, Row} from '../../zql/src/query/query.ts';
+export type {HumanReadable, Query, Row} from '../../zql/src/query/query.ts';
+export {DEFAULT_TTL, type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export type {DBMutator, TableMutator} from './client/crud.ts';
-export type {
-  DeleteID,
-  InsertValue,
-  UpdateValue,
-  UpsertValue,
-} from '../../zql/src/mutate/custom.ts';
+export type {CustomMutatorDefs, CustomMutatorImpl} from './client/custom.ts';
 export type {ZeroOptions} from './client/options.ts';
 export {Zero} from './client/zero.ts';

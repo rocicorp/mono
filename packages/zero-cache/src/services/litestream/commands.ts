@@ -6,10 +6,7 @@ import {must} from '../../../../shared/src/must.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 
-type ZeroLitestreamConfig = Pick<
-  ZeroConfig,
-  'log' | 'replicaFile' | 'litestream'
->;
+type ZeroLitestreamConfig = Pick<ZeroConfig, 'log' | 'replica' | 'litestream'>;
 
 export async function restoreReplica(
   lc: LogContext,
@@ -48,21 +45,35 @@ function getLitestream(
     backupURL,
     logLevel,
     configPath,
+    checkpointThresholdMB,
     incrementalBackupIntervalMinutes,
     snapshotBackupIntervalHours,
   } = config.litestream;
+
+  // Set the snapshot interval to something smaller than x hours so that
+  // the hourly check triggers on the hour, rather than the hour after.
+  const snapshotBackupIntervalMinutes = snapshotBackupIntervalHours * 60 - 5;
+  const minCheckpointPageCount = checkpointThresholdMB * 250; // SQLite page size is 4k
+  const maxCheckpointPageCount = minCheckpointPageCount * 10;
+
   return {
     litestream: must(executable, `Missing --litestream-executable`),
     env: {
       ...process.env,
-      ['ZERO_REPLICA_FILE']: config.replicaFile,
+      ['ZERO_REPLICA_FILE']: config.replica.file,
       ['ZERO_LITESTREAM_BACKUP_URL']: must(backupURL),
+      ['ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT']: String(
+        minCheckpointPageCount,
+      ),
+      ['ZERO_LITESTREAM_MAX_CHECKPOINT_PAGE_COUNT']: String(
+        maxCheckpointPageCount,
+      ),
       ['ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES']: String(
         incrementalBackupIntervalMinutes,
       ),
       ['ZERO_LITESTREAM_LOG_LEVEL']: logLevelOverride ?? logLevel,
-      ['ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS']: String(
-        snapshotBackupIntervalHours,
+      ['ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_MINUTES']: String(
+        snapshotBackupIntervalMinutes,
       ),
       ['ZERO_LOG_FORMAT']: config.log.format,
       ['LITESTREAM_CONFIG']: configPath,
@@ -82,7 +93,7 @@ async function tryRestore(config: ZeroLitestreamConfig) {
       '-if-replica-exists',
       '-parallelism',
       String(parallelism),
-      config.replicaFile,
+      config.replica.file,
     ],
     {env, stdio: 'inherit', windowsHide: true},
   );
@@ -98,7 +109,7 @@ async function tryRestore(config: ZeroLitestreamConfig) {
     }
   });
   await promise;
-  return existsSync(config.replicaFile);
+  return existsSync(config.replica.file);
 }
 
 export function startReplicaBackupProcess(

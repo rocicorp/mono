@@ -5,21 +5,15 @@ import {type Bound, Skip} from './skip.ts';
 import type {SourceChange} from './source.ts';
 import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 suite('fetch', () => {
   function t(c: {skipBound: Bound; fetchRequest: FetchRequest}) {
     const ms = createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'users',
       {
         id: {type: 'number'},
@@ -889,7 +883,7 @@ suite('push', () => {
   function t(c: {name?: string; skipBound: Bound; pushes: SourceChange[]}) {
     const ms = createSource(
       lc,
-      logConfig,
+      testLogConfig,
       'users',
       {
         id: {type: 'number'},

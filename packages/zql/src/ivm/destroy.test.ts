@@ -6,20 +6,14 @@ import {Filter} from './filter.ts';
 import {Snitch} from './snitch.ts';
 import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 
 const lc = createSilentLogContext();
-const logConfig: LogConfig = {
-  format: 'text',
-  level: 'debug',
-  ivmSampling: 0,
-  slowRowThreshold: 0,
-};
 
 test('destroy source connections', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'string'}, b: {type: 'string'}},
     ['a'],
@@ -72,7 +66,7 @@ test('destroy source connections', () => {
 test('destroy a pipeline that has forking', () => {
   const ms = createSource(
     lc,
-    logConfig,
+    testLogConfig,
     'table',
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
@@ -83,6 +77,7 @@ test('destroy a pipeline that has forking', () => {
   const filter2 = new Filter(fanOut, () => true);
   const filter3 = new Filter(fanOut, () => true);
   const fanIn = new FanIn(fanOut, [filter1, filter2, filter3]);
+  fanOut.setFanIn(fanIn);
   const out = new Catch(fanIn);
 
   ms.push({type: 'add', row: {a: 1, b: 'foo'}});

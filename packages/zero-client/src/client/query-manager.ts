@@ -16,10 +16,19 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {GotCallback} from '../../../zql/src/query/query-impl.ts';
+import {compareTTL, parseTTL, type TTL} from '../../../zql/src/query/ttl.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
+import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
 
 type QueryHash = string;
+
+type Entry = {
+  normalized: AST;
+  count: number;
+  gotCallbacks: GotCallback[];
+  ttl: TTL;
+};
 
 /**
  * Tracks what queries the client is currently subscribed to on the server.
@@ -30,20 +39,15 @@ export class QueryManager {
   readonly #clientID: ClientID;
   readonly #clientToServer: NameMapper;
   readonly #send: (change: ChangeDesiredQueriesMessage) => void;
-  readonly #queries: Map<
-    QueryHash,
-    {
-      normalized: AST;
-      count: number;
-      gotCallbacks: GotCallback[];
-      ttl: number | undefined;
-    }
-  > = new Map();
+  readonly #queries: Map<QueryHash, Entry> = new Map();
   readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
   readonly #gotQueries: Set<string> = new Set();
+  readonly #mutationTracker: MutationTracker;
+  #pendingRemovals: Array<() => void> = [];
 
   constructor(
+    mutationTracker: MutationTracker,
     clientID: ClientID,
     tables: Record<string, TableSchema>,
     send: (change: ChangeDesiredQueriesMessage) => void,
@@ -54,6 +58,19 @@ export class QueryManager {
     this.#clientToServer = clientToServer(tables);
     this.#recentQueriesMaxSize = recentQueriesMaxSize;
     this.#send = send;
+    this.#mutationTracker = mutationTracker;
+
+    this.#mutationTracker.onAllMutationsConfirmed(() => {
+      if (this.#pendingRemovals.length === 0) {
+        return;
+      }
+      const pendingRemovals = this.#pendingRemovals;
+      this.#pendingRemovals = [];
+      for (const removal of pendingRemovals) {
+        removal();
+      }
+    });
+
     experimentalWatch(
       diff => {
         for (const diffOp of diff) {
@@ -116,7 +133,7 @@ export class QueryManager {
     }
     for (const [hash, {normalized, ttl}] of this.#queries) {
       if (!existingQueryHashes.has(hash)) {
-        patch.set(hash, {op: 'put', hash, ast: normalized, ttl});
+        patch.set(hash, {op: 'put', hash, ast: normalized, ttl: parseTTL(ttl)});
       }
     }
 
@@ -140,11 +157,7 @@ export class QueryManager {
     return patch;
   }
 
-  add(
-    ast: AST,
-    ttl?: number | undefined,
-    gotCallback?: GotCallback | undefined,
-  ): () => void {
+  add(ast: AST, ttl: TTL, gotCallback?: GotCallback | undefined): () => void {
     const normalized = normalizeAST(ast);
     const astHash = hashOfAST(normalized);
     let entry = this.#queries.get(astHash);
@@ -154,7 +167,7 @@ export class QueryManager {
       entry = {
         normalized: serverAST,
         count: 1,
-        gotCallbacks: gotCallback === undefined ? [] : [gotCallback],
+        gotCallbacks: gotCallback ? [gotCallback] : [],
         ttl,
       };
       this.#queries.set(astHash, entry);
@@ -162,26 +175,13 @@ export class QueryManager {
         'changeDesiredQueries',
         {
           desiredQueriesPatch: [
-            {op: 'put', hash: astHash, ast: serverAST, ttl},
+            {op: 'put', hash: astHash, ast: serverAST, ttl: parseTTL(ttl)},
           ],
         },
       ]);
     } else {
       ++entry.count;
-
-      // If the query already exists and the new ttl is larger than the old one
-      // we send a changeDesiredQueries message to the server to update the ttl.
-      if (ttl !== undefined && (entry.ttl === undefined || ttl > entry.ttl)) {
-        entry.ttl = ttl;
-        this.#send([
-          'changeDesiredQueries',
-          {
-            desiredQueriesPatch: [
-              {op: 'put', hash: astHash, ast: entry.normalized, ttl},
-            ],
-          },
-        ]);
-      }
+      this.#updateEntry(entry, astHash, ttl);
 
       if (gotCallback) {
         entry.gotCallbacks.push(gotCallback);
@@ -198,12 +198,49 @@ export class QueryManager {
         return;
       }
       removed = true;
-      this.#remove(astHash, gotCallback);
+
+      // We cannot remove queries while mutations are pending
+      // as that could take data out of scope that is needed in a rebase
+      if (this.#mutationTracker.size > 0) {
+        this.#pendingRemovals.push(() =>
+          this.#remove(entry, astHash, gotCallback),
+        );
+        return;
+      }
+
+      this.#remove(entry, astHash, gotCallback);
     };
   }
 
-  #remove(astHash: string, gotCallback: GotCallback | undefined) {
+  update(ast: AST, ttl: TTL) {
+    const normalized = normalizeAST(ast);
+    const astHash = hashOfAST(normalized);
     const entry = must(this.#queries.get(astHash));
+    this.#updateEntry(entry, astHash, ttl);
+  }
+
+  #updateEntry(entry: Entry, hash: string, ttl: TTL): void {
+    // If the query already exists and the new ttl is larger than the old one
+    // we send a changeDesiredQueries message to the server to update the ttl.
+    if (compareTTL(ttl, entry.ttl) > 0) {
+      entry.ttl = ttl;
+      this.#send([
+        'changeDesiredQueries',
+        {
+          desiredQueriesPatch: [
+            {
+              op: 'put',
+              hash,
+              ast: entry.normalized,
+              ttl: parseTTL(ttl),
+            },
+          ],
+        },
+      ]);
+    }
+  }
+
+  #remove(entry: Entry, astHash: string, gotCallback: GotCallback | undefined) {
     if (gotCallback) {
       const index = entry.gotCallbacks.indexOf(gotCallback);
       entry.gotCallbacks.splice(index, 1);

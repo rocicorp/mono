@@ -30,14 +30,15 @@ import {
   ExpressionBuilder,
   type ExpressionFactory,
 } from './expression.ts';
-import type {AdvancedQuery} from './query-internal.ts';
-import type {
-  GetFilterType,
-  HumanReadable,
-  Operator,
-  PullRow,
-  Query,
+import {
+  type GetFilterType,
+  type HumanReadable,
+  type Operator,
+  type PreloadOptions,
+  type PullRow,
+  type Query,
 } from './query.ts';
+import {DEFAULT_TTL, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 type AnyQuery = Query<Schema, string, any>;
@@ -51,7 +52,7 @@ export function newQuery<
   schema: TSchema,
   table: TTable,
 ): Query<TSchema, TTable> {
-  return new QueryImpl(delegate, schema, table);
+  return new QueryImpl(delegate, schema, table, {table}, defaultFormat);
 }
 
 function newQueryWithDetails<
@@ -63,10 +64,9 @@ function newQueryWithDetails<
   schema: TSchema,
   tableName: TTable,
   ast: AST,
-  ttl: number | undefined,
-  format: Format | undefined,
-): Query<TSchema, TTable, TReturn> {
-  return new QueryImpl(delegate, schema, tableName, ast, ttl, format);
+  format: Format,
+): QueryImpl<TSchema, TTable, TReturn> {
+  return new QueryImpl(delegate, schema, tableName, ast, format);
 }
 
 export type CommitListener = () => void;
@@ -74,11 +74,13 @@ export type GotCallback = (got: boolean) => void;
 export interface QueryDelegate extends BuilderDelegate {
   addServerQuery(
     ast: AST,
-    ttl?: number | undefined,
+    ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ): () => void;
+  updateServerQuery(ast: AST, ttl: TTL): void;
   onTransactionCommit(cb: CommitListener): () => void;
   batchViewUpdates<T>(applyViewUpdates: () => T): T;
+  onQueryMaterialized(hash: string, ast: AST, duration: number): void;
 }
 
 export function staticParam(
@@ -95,35 +97,25 @@ export function staticParam(
 
 export const SUBQ_PREFIX = 'zsubq_';
 
+export const defaultFormat = {singular: false, relationships: {}} as const;
+
 export abstract class AbstractQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
-> implements AdvancedQuery<TSchema, TTable, TReturn>
+> implements Query<TSchema, TTable, TReturn>
 {
   readonly #schema: TSchema;
   readonly #tableName: TTable;
   readonly #ast: AST;
-  readonly #ttl: number | undefined;
-  readonly #format: Format;
+  readonly format: Format;
   #hash: string = '';
 
-  constructor(
-    schema: TSchema,
-    tableName: TTable,
-    ast: AST = {table: tableName},
-    ttl?: number | undefined,
-    format?: Format | undefined,
-  ) {
+  constructor(schema: TSchema, tableName: TTable, ast: AST, format: Format) {
     this.#schema = schema;
     this.#tableName = tableName;
     this.#ast = ast;
-    this.#ttl = ttl;
-    this.#format = format ?? {singular: false, relationships: {}};
-  }
-
-  get format(): Format {
-    return this.#format;
+    this.format = format;
   }
 
   // Not part of Query or QueryInternal interface
@@ -133,9 +125,7 @@ export abstract class AbstractQuery<
 
   hash(): string {
     if (!this.#hash) {
-      const ast = this._completeAst();
-      const hash = hashOfAST(ast);
-      this.#hash = hash;
+      this.#hash = hashOfAST(this._completeAst());
     }
     return this.#hash;
   }
@@ -150,9 +140,8 @@ export abstract class AbstractQuery<
     schema: TSchema,
     table: TTable,
     ast: AST,
-    ttl: number | undefined,
     format: Format | undefined,
-  ): Query<TSchema, TTable, TReturn>;
+  ): AbstractQuery<TSchema, TTable, TReturn>;
 
   one(): Query<TSchema, TTable, TReturn | undefined> {
     return this._newQuery(
@@ -162,9 +151,8 @@ export abstract class AbstractQuery<
         ...this.#ast,
         limit: 1,
       },
-      this.#ttl,
       {
-        ...this.#format,
+        ...this.format,
         singular: true,
       },
     );
@@ -196,7 +184,6 @@ export abstract class AbstractQuery<
             table: destSchema,
             alias: relationship,
           },
-          this.#ttl,
           {
             relationships: {},
             singular: cardinality === 'one',
@@ -237,12 +224,11 @@ export abstract class AbstractQuery<
             },
           ],
         },
-        this.#ttl,
         {
-          ...this.#format,
+          ...this.format,
           relationships: {
-            ...this.#format.relationships,
-            [relationship]: sq.#format,
+            ...this.format.relationships,
+            [relationship]: sq.format,
           },
         },
       );
@@ -261,7 +247,6 @@ export abstract class AbstractQuery<
             table: destSchema,
             alias: relationship,
           },
-          this.#ttl,
           {
             relationships: {},
             singular: secondRelation.cardinality === 'one',
@@ -312,12 +297,11 @@ export abstract class AbstractQuery<
             },
           ],
         },
-        this.#ttl,
         {
-          ...this.#format,
+          ...this.format,
           relationships: {
-            ...this.#format.relationships,
-            [relationship]: sq.#format,
+            ...this.format.relationships,
+            [relationship]: sq.format,
           },
         },
       );
@@ -357,8 +341,7 @@ export abstract class AbstractQuery<
         ...this.#ast,
         where: dnf(cond),
       },
-      this.#ttl,
-      this.#format,
+      this.format,
     );
   }
 
@@ -376,8 +359,7 @@ export abstract class AbstractQuery<
           exclusive: !opts?.inclusive,
         },
       },
-      this.#ttl,
-      this.#format,
+      this.format,
     );
   }
 
@@ -396,8 +378,7 @@ export abstract class AbstractQuery<
         ...this.#ast,
         limit,
       },
-      this.#ttl,
-      this.#format,
+      this.format,
     );
   }
 
@@ -412,8 +393,7 @@ export abstract class AbstractQuery<
         ...this.#ast,
         orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
       },
-      this.#ttl,
-      this.#format,
+      this.format,
     );
   }
 
@@ -437,7 +417,6 @@ export abstract class AbstractQuery<
             table: destSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
-          this.#ttl,
           undefined,
         ),
       ) as unknown as QueryImpl<any, any>;
@@ -475,7 +454,6 @@ export abstract class AbstractQuery<
             table: destSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
-          this.#ttl,
           undefined,
         ),
       );
@@ -557,11 +535,12 @@ export abstract class AbstractQuery<
 
   abstract materialize(): TypedView<HumanReadable<TReturn>>;
   abstract materialize<T>(factory: ViewFactory<TSchema, TTable, TReturn, T>): T;
-  abstract run(): HumanReadable<TReturn>;
+  abstract run(): Promise<HumanReadable<TReturn>>;
   abstract preload(): {
     cleanup: () => void;
     complete: Promise<void>;
   };
+  abstract updateTTL(ttl: TTL): void;
 }
 
 export const completedAstSymbol = Symbol();
@@ -577,11 +556,10 @@ export class QueryImpl<
     delegate: QueryDelegate,
     schema: TSchema,
     tableName: TTable,
-    ast?: AST,
-    ttl?: number | undefined,
-    format?: Format | undefined,
+    ast: AST,
+    format: Format,
   ) {
-    super(schema, tableName, ast, ttl, format);
+    super(schema, tableName, ast, format);
     this.#delegate = delegate;
   }
 
@@ -595,26 +573,29 @@ export class QueryImpl<
     schema: TSchema,
     tableName: TTable,
     ast: AST,
-    ttl: number | undefined,
-    format: Format | undefined,
-  ): Query<TSchema, TTable, TReturn> {
-    return newQueryWithDetails(
-      this.#delegate,
-      schema,
-      tableName,
-      ast,
-      ttl,
-      format,
-    );
+    format: Format,
+  ): QueryImpl<TSchema, TTable, TReturn> {
+    return newQueryWithDetails(this.#delegate, schema, tableName, ast, format);
   }
 
-  materialize<T>(factory?: ViewFactory<TSchema, TTable, TReturn, T>): T {
+  materialize<T>(
+    factoryOrTTL?: ViewFactory<TSchema, TTable, TReturn, T> | TTL,
+    ttl: TTL = DEFAULT_TTL,
+  ): T {
+    const t0 = Date.now();
+    let factory: ViewFactory<TSchema, TTable, TReturn, T> | undefined;
+    if (typeof factoryOrTTL === 'function') {
+      factory = factoryOrTTL;
+    } else {
+      ttl = factoryOrTTL ?? DEFAULT_TTL;
+    }
     const ast = this._completeAst();
     const queryCompleteResolver = resolver<true>();
     let queryGot = false;
-    const ttl = undefined;
     const removeServerQuery = this.#delegate.addServerQuery(ast, ttl, got => {
       if (got) {
+        const t1 = Date.now();
+        this.#delegate.onQueryMaterialized(this.hash(), ast, t1 - t0);
         queryGot = true;
         queryCompleteResolver.resolve(true);
       }
@@ -645,25 +626,32 @@ export class QueryImpl<
     return view as T;
   }
 
-  run() {
+  override updateTTL(ttl: TTL): void {
+    this.#delegate.updateServerQuery(this._completeAst(), ttl);
+  }
+
+  run(): Promise<HumanReadable<TReturn>> {
     const v: TypedView<HumanReadable<TReturn>> = this.materialize();
     const ret = v.data;
     v.destroy();
-    return ret;
+    return Promise.resolve(ret);
   }
 
-  preload(): {
+  preload(options?: PreloadOptions): {
     cleanup: () => void;
     complete: Promise<void>;
   } {
     const {resolve, promise: complete} = resolver<void>();
     const ast = this._completeAst();
-    const ttl = undefined;
-    const unsub = this.#delegate.addServerQuery(ast, ttl, got => {
-      if (got) {
-        resolve();
-      }
-    });
+    const unsub = this.#delegate.addServerQuery(
+      ast,
+      options?.ttl ?? DEFAULT_TTL,
+      got => {
+        if (got) {
+          resolve();
+        }
+      },
+    );
     return {
       cleanup: unsub,
       complete,

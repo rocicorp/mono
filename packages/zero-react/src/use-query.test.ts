@@ -1,23 +1,19 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {AdvancedQuery} from '../../zql/src/query/query-internal.ts';
+import type {Query} from '../../zql/src/query/query.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
 import {getAllViewsSizeForTesting, ViewStore} from './use-query.tsx';
 
-function newMockQuery(
-  query: string,
-  singular = false,
-): AdvancedQuery<Schema, string> {
+function newMockQuery(query: string, singular = false): Query<Schema, string> {
   const view = newView();
   return {
     hash() {
       return query;
     },
-    materialize() {
-      return view;
-    },
+    materialize: vi.fn().mockImplementation(() => view),
     format: {singular},
-  } as unknown as AdvancedQuery<Schema, string>;
+    updateTTL: vi.fn<Query<Schema, string>['updateTTL']>(),
+  } as unknown as Query<Schema, string>;
 }
 
 function newView() {
@@ -41,8 +37,18 @@ describe('ViewStore', () => {
     test('duplicate queries do not create duplicate views', () => {
       const viewStore = new ViewStore();
 
-      const view1 = viewStore.getView('client1', newMockQuery('query1'), true);
-      const view2 = viewStore.getView('client1', newMockQuery('query1'), true);
+      const view1 = viewStore.getView(
+        'client1',
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
+      const view2 = viewStore.getView(
+        'client1',
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
 
       expect(view1).toBe(view2);
 
@@ -52,8 +58,18 @@ describe('ViewStore', () => {
     test('removing a duplicate query does not destroy the shared view', () => {
       const viewStore = new ViewStore();
 
-      const view1 = viewStore.getView('client1', newMockQuery('query1'), true);
-      const view2 = viewStore.getView('client1', newMockQuery('query1'), true);
+      const view1 = viewStore.getView(
+        'client1',
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
+      const view2 = viewStore.getView(
+        'client1',
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
 
       const cleanup1 = view1.subscribeReactInternals(() => {});
       view2.subscribeReactInternals(() => {});
@@ -64,14 +80,65 @@ describe('ViewStore', () => {
 
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
     });
+
+    test('Using the same query with different TTL should reuse views', () => {
+      const viewStore = new ViewStore();
+
+      const q1 = newMockQuery('query1');
+      const view1 = viewStore.getView('client1', q1, true, '1s');
+      expect(q1.updateTTL).not.toHaveBeenCalled();
+      expect(q1.materialize).toHaveBeenCalledExactlyOnceWith('1s');
+
+      const q2 = newMockQuery('query1');
+      const view2 = viewStore.getView('client1', q2, true, '1m');
+      // Same query hash so call updateTTL on the existing one.
+      expect(q2.updateTTL).not.toHaveBeenCalled();
+      expect(q2.materialize).not.toHaveBeenCalled();
+      expect(q1.updateTTL).toHaveBeenCalledExactlyOnceWith('1m');
+
+      expect(view1).toBe(view2);
+
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+    });
+
+    test('Using the same query with same TTL but different representation', () => {
+      const viewStore = new ViewStore();
+
+      const q1 = newMockQuery('query1');
+      const view1 = viewStore.getView('client1', q1, true, '60s');
+      expect(q1.updateTTL).not.toHaveBeenCalled();
+      expect(q1.materialize).toHaveBeenCalledTimes(1);
+
+      const q2 = newMockQuery('query1');
+      const view2 = viewStore.getView('client1', q2, true, '1m');
+      expect(q1.updateTTL).toHaveBeenCalledExactlyOnceWith('1m');
+
+      const q3 = newMockQuery('query1');
+      const view3 = viewStore.getView('client1', q3, true, 60_000);
+
+      expect(view1).toBe(view2);
+      expect(view1).toBe(view3);
+
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+    });
   });
 
   describe('destruction', () => {
     test('removing all duplicate queries destroys the shared view', () => {
       const viewStore = new ViewStore();
 
-      const view1 = viewStore.getView('client1', newMockQuery('query1'), true);
-      const view2 = viewStore.getView('client1', newMockQuery('query1'), true);
+      const view1 = viewStore.getView(
+        'client1',
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
+      const view2 = viewStore.getView(
+        'client1',
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
 
       const cleanup1 = view1.subscribeReactInternals(() => {});
       const cleanup2 = view2.subscribeReactInternals(() => {});
@@ -87,7 +154,12 @@ describe('ViewStore', () => {
     test('removing a unique query destroys the view', () => {
       const viewStore = new ViewStore();
 
-      const view = viewStore.getView('client1', newMockQuery('query1'), true);
+      const view = viewStore.getView(
+        'client1',
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
 
       const cleanup = view.subscribeReactInternals(() => {});
       cleanup();
@@ -99,7 +171,12 @@ describe('ViewStore', () => {
     test('view destruction is delayed via setTimeout', () => {
       const viewStore = new ViewStore();
 
-      const view = viewStore.getView('client1', newMockQuery('query1'), true);
+      const view = viewStore.getView(
+        'client1',
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
 
       const cleanup = view.subscribeReactInternals(() => {});
       cleanup();
@@ -113,7 +190,12 @@ describe('ViewStore', () => {
 
     test('subscribing to a view scheduled for cleanup prevents the cleanup', () => {
       const viewStore = new ViewStore();
-      const view = viewStore.getView('client1', newMockQuery('query1'), true);
+      const view = viewStore.getView(
+        'client1',
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
       const cleanup = view.subscribeReactInternals(() => {});
 
       cleanup();
@@ -122,7 +204,12 @@ describe('ViewStore', () => {
       vi.advanceTimersByTime(5);
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
 
-      const view2 = viewStore.getView('client1', newMockQuery('query1'), true);
+      const view2 = viewStore.getView(
+        'client1',
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
       const cleanup2 = view.subscribeReactInternals(() => {});
       vi.advanceTimersByTime(100);
 
@@ -137,7 +224,12 @@ describe('ViewStore', () => {
 
     test('destroying the same underlying view twice is a no-op', () => {
       const viewStore = new ViewStore();
-      const view = viewStore.getView('client1', newMockQuery('query1'), true);
+      const view = viewStore.getView(
+        'client1',
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
       const cleanup = view.subscribeReactInternals(() => {});
 
       cleanup();
@@ -152,8 +244,18 @@ describe('ViewStore', () => {
     test('the same query for different clients results in different views', () => {
       const viewStore = new ViewStore();
 
-      const view1 = viewStore.getView('client1', newMockQuery('query1'), true);
-      const view2 = viewStore.getView('client2', newMockQuery('query1'), true);
+      const view1 = viewStore.getView(
+        'client1',
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
+      const view2 = viewStore.getView(
+        'client2',
+        newMockQuery('query1'),
+        true,
+        'forever',
+      );
 
       expect(view1).not.toBe(view2);
     });
@@ -166,7 +268,7 @@ describe('ViewStore', () => {
       const {listeners} = q.materialize() as unknown as {
         listeners: Set<(data: unknown, resultType: ResultType) => void>;
       };
-      const view = viewStore.getView('client1', q, true);
+      const view = viewStore.getView('client1', q, true, 'forever');
 
       const cleanup = view.subscribeReactInternals(() => {});
 
@@ -202,7 +304,7 @@ describe('ViewStore', () => {
       const {listeners} = q.materialize() as unknown as {
         listeners: Set<(...args: unknown[]) => void>;
       };
-      const view = viewStore.getView('client1', q, true);
+      const view = viewStore.getView('client1', q, true, 'forever');
 
       const cleanup = view.subscribeReactInternals(() => {});
 

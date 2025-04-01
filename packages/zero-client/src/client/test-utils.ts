@@ -1,6 +1,6 @@
 import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import type {SinonFakeTimers} from 'sinon';
+// import {type VitestUtils} from 'vitest';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
@@ -22,29 +22,37 @@ import type {
   PullResponseBody,
   PullResponseMessage,
 } from '../../../zero-protocol/src/pull.ts';
+import type {
+  PushResponse,
+  PushResponseMessage,
+} from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import * as ConnectionState from './connection-state-enum.ts';
+import type {CustomMutatorDefs} from './custom.ts';
 import type {LogOptions} from './log-options.ts';
 import type {ZeroOptions} from './options.ts';
 import {
-  type TestingContext,
   Zero,
   createLogOptionsSymbol,
   exposedToTestingSymbol,
   getInternalReplicacheImplForTesting,
   onSetConnectionStateSymbol,
+  type TestingContext,
 } from './zero.ts';
-import type {CustomMutatorDefs} from './custom.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type ErrorKind = Enum<typeof ErrorKind>;
 
-export async function tickAFewTimes(clock: SinonFakeTimers, duration = 100) {
+// Do not use an import statement here because vitest will then load that file
+// which does not work in a worker context.
+type VitestUtils = import('vitest').VitestUtils;
+
+export async function tickAFewTimes(vi: VitestUtils, duration = 100) {
   const n = 10;
   const t = Math.ceil(duration / n);
   for (let i = 0; i < n; i++) {
-    await clock.tickAsync(t);
+    await vi.advanceTimersByTimeAsync(t);
   }
 }
 
@@ -74,8 +82,10 @@ export class MockSocket extends EventTarget {
 
 export class TestZero<
   const S extends Schema,
-  MD extends CustomMutatorDefs<S> = CustomMutatorDefs<S>,
+  MD extends CustomMutatorDefs<S> | undefined = undefined,
 > extends Zero<S, MD> {
+  pokeIDCounter = 0;
+
   #connectionStateResolvers: Set<{
     state: ConnectionState;
     resolve: (state: ConnectionState) => void;
@@ -179,8 +189,33 @@ export class TestZero<
     return this.triggerMessage(msg);
   }
 
+  async triggerPoke(
+    cookieStart: string | null,
+    cookieEnd: string,
+    pokePart: Omit<PokePartBody, 'pokeID'>,
+  ): Promise<void> {
+    const id = `${this.pokeIDCounter++}`;
+    await this.triggerPokeStart({
+      pokeID: id,
+      baseCookie: cookieStart,
+    });
+    await this.triggerPokePart({
+      ...pokePart,
+      pokeID: id,
+    });
+    await this.triggerPokeEnd({
+      pokeID: id,
+      cookie: cookieEnd,
+    });
+  }
+
   triggerPullResponse(pullResponseBody: PullResponseBody): Promise<void> {
     const msg: PullResponseMessage = ['pull', pullResponseBody];
+    return this.triggerMessage(msg);
+  }
+
+  triggerPushResponse(pushResponseBody: PushResponse): Promise<void> {
+    const msg: PushResponseMessage = ['pushResponse', pushResponseBody];
     return this.triggerMessage(msg);
   }
 
@@ -222,7 +257,7 @@ let testZeroCounter = 0;
 
 export function zeroForTest<
   const S extends Schema,
-  MD extends CustomMutatorDefs<S> = CustomMutatorDefs<S>,
+  MD extends CustomMutatorDefs<S> | undefined = undefined,
 >(
   options: Partial<ZeroOptions<S, MD>> = {},
   errorOnUpdateNeeded = true,
@@ -234,14 +269,12 @@ export function zeroForTest<
     newOptions.kvStore = 'mem';
   }
 
-  const schema = options.schema ?? ({version: 1, tables: {}} as S);
-
-  const r = new TestZero({
+  return new TestZero({
     server: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
     userID: options.userID ?? 'test-user-id-' + testZeroCounter++,
     auth: () => 'test-auth',
-    schema,
+    schema: options.schema ?? ({tables: {}} as S),
     // We do not want any unexpected onUpdateNeeded calls in tests. If the test
     // needs to call onUpdateNeeded it should set this as needed.
     onUpdateNeeded: errorOnUpdateNeeded
@@ -251,14 +284,12 @@ export function zeroForTest<
       : undefined,
     ...newOptions,
   } satisfies ZeroOptions<S, MD>);
-
-  return r;
 }
 
 export async function waitForUpstreamMessage(
   r: TestZero<Schema>,
   name: string,
-  clock: SinonFakeTimers,
+  vi: VitestUtils,
 ) {
   let gotMessage = false;
   (await r.socket).onUpstream = message => {
@@ -269,12 +300,13 @@ export async function waitForUpstreamMessage(
     }
   };
   for (;;) {
-    await clock.tickAsync(100);
+    await vi.advanceTimersByTimeAsync(100);
     if (gotMessage) {
       break;
     }
   }
 }
+
 export function storageMock(storage: Record<string, string>): Storage {
   return {
     setItem: (key, value) => {

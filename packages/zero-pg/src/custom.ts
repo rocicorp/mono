@@ -1,4 +1,3 @@
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
 import type {
@@ -6,17 +5,21 @@ import type {
   SchemaQuery,
   TableCRUD,
   TransactionBase,
+  DBTransaction,
+  Transaction,
 } from '../../zql/src/mutate/custom.ts';
-import type {ConnectionProvider, DBTransaction} from './db.ts';
-import {PushProcessor, type PushHandler} from './web.ts';
-import {formatPg, sql} from '../../z2s/src/sql.ts';
+import {
+  formatPgInternalConvert,
+  sqlConvertArgUnsafe,
+  sql,
+} from '../../z2s/src/sql.ts';
+import {must} from '../../shared/src/must.ts';
 
-export interface Transaction<S extends Schema, TWrappedTransaction>
+interface ServerTransaction<S extends Schema, TWrappedTransaction>
   extends TransactionBase<S> {
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
-  readonly token: string | undefined;
 }
 
 export type CustomMutatorDefs<S extends Schema, TDBTransaction> = {
@@ -29,48 +32,18 @@ export type CustomMutatorDefs<S extends Schema, TDBTransaction> = {
   };
 };
 
-export type CustomMutatorImpl<S extends Schema, TDBTransaction> = (
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type CustomMutatorImpl<S extends Schema, TDBTransaction, TArgs = any> = (
   tx: Transaction<S, TDBTransaction>,
-  args: ReadonlyJSONValue,
+  args: TArgs,
 ) => Promise<void>;
 
-type Options<
-  S extends Schema,
-  TDBTransaction,
-  MD extends CustomMutatorDefs<S, TDBTransaction>,
-> = {
-  schema: S;
-  dbConnectionProvider: ConnectionProvider<TDBTransaction>;
-  mutators: MD;
-  shardID?: string;
-};
-
-export function createPushHandler<
-  S extends Schema,
-  TDBTransaction,
-  MD extends CustomMutatorDefs<S, TDBTransaction>,
->({
-  schema,
-  dbConnectionProvider,
-  mutators,
-  shardID,
-}: Options<S, TDBTransaction, MD>): PushHandler {
-  const processor = new PushProcessor(
-    shardID ?? '0',
-    schema,
-    dbConnectionProvider,
-    mutators,
-  );
-  return (headers, body) => processor.process(headers, body);
-}
-
 export class TransactionImpl<S extends Schema, TWrappedTransaction>
-  implements Transaction<S, TWrappedTransaction>
+  implements ServerTransaction<S, TWrappedTransaction>
 {
   readonly location = 'server';
   readonly reason = 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
-  readonly token: string | undefined;
   readonly clientID: string;
   readonly mutationID: number;
   readonly mutate: SchemaCRUD<S>;
@@ -78,14 +51,12 @@ export class TransactionImpl<S extends Schema, TWrappedTransaction>
 
   constructor(
     dbTransaction: DBTransaction<TWrappedTransaction>,
-    token: string | undefined,
     clientID: string,
     mutationID: number,
     mutate: SchemaCRUD<S>,
     query: SchemaQuery<S>,
   ) {
     this.dbTransaction = dbTransaction;
-    this.token = token;
     this.clientID = clientID;
     this.mutationID = mutationID;
     this.mutate = mutate;
@@ -143,12 +114,12 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
   return {
     async insert(this: WithHiddenTx, value) {
       const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
-      const stmt = formatPg(
+      const stmt = formatPgInternalConvert(
         sql`INSERT INTO ${sql.ident(serverName(schema))} (${sql.join(
           targetedColumns.map(([, serverName]) => sql.ident(serverName)),
           ',',
         )}) VALUES (${sql.join(
-          Object.values(value).map(v => sql.value(v)),
+          Object.entries(value).map(([col, v]) => sqlValue(schema, col, v)),
           ', ',
         )})`,
       );
@@ -161,12 +132,12 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
         schema.primaryKey,
         schema,
       );
-      const stmt = formatPg(
+      const stmt = formatPgInternalConvert(
         sql`INSERT INTO ${sql.ident(serverName(schema))} (${sql.join(
           targetedColumns.map(([, serverName]) => sql.ident(serverName)),
           ',',
         )}) VALUES (${sql.join(
-          Object.values(value).map(v => sql.value(v)),
+          Object.entries(value).map(([col, val]) => sqlValue(schema, col, val)),
           ', ',
         )}) ON CONFLICT (${sql.join(
           primaryKeyColumns.map(([, serverName]) => sql.ident(serverName)),
@@ -176,7 +147,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
             ([col, val]) =>
               sql`${sql.ident(
                 schema.columns[col].serverName ?? col,
-              )} = ${sql.value(val)}`,
+              )} = ${sqlValue(schema, col, val)}`,
           ),
           ', ',
         )}`,
@@ -186,11 +157,11 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
     },
     async update(this: WithHiddenTx, value) {
       const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
-      const stmt = formatPg(
+      const stmt = formatPgInternalConvert(
         sql`UPDATE ${sql.ident(serverName(schema))} SET ${sql.join(
           targetedColumns.map(
             ([origName, serverName]) =>
-              sql`${sql.ident(serverName)} = ${sql.value(value[origName])}`,
+              sql`${sql.ident(serverName)} = ${sqlValue(schema, origName, value[origName])}`,
           ),
           ', ',
         )} WHERE ${primaryKeyClause(schema, value)}`,
@@ -199,7 +170,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       await tx.query(stmt.text, stmt.values);
     },
     async delete(this: WithHiddenTx, value) {
-      const stmt = formatPg(
+      const stmt = formatPgInternalConvert(
         sql`DELETE FROM ${sql.ident(
           serverName(schema),
         )} WHERE ${primaryKeyClause(schema, value)}`,
@@ -208,15 +179,6 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       await tx.query(stmt.text, stmt.values);
     },
   };
-}
-
-export function makeSchemaQuery<S extends Schema>(
-  _schema: Schema,
-): (dbTransaction: DBTransaction<unknown>) => SchemaQuery<S> {
-  return (_dbTransaction: DBTransaction<unknown>) =>
-    // TODO: Implement this
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ({}) as any;
 }
 
 function serverName(x: {name: string; serverName?: string | undefined}) {
@@ -228,7 +190,7 @@ function primaryKeyClause(schema: TableSchema, row: Record<string, unknown>) {
   return sql`${sql.join(
     primaryKey.map(
       ([origName, serverName]) =>
-        sql`${sql.ident(serverName)} = ${sql.value(row[origName])}`,
+        sql`${sql.ident(serverName)} = ${sqlValue(schema, origName, row[origName])}`,
     ),
     ' AND ',
   )}`;
@@ -242,4 +204,8 @@ function origAndServerNamesFor(
     const col = schema.columns[name];
     return [name, col.serverName ?? name] as const;
   });
+}
+
+function sqlValue(schema: TableSchema, column: string, value: unknown) {
+  return sqlConvertArgUnsafe(must(schema.columns[column].type), value);
 }

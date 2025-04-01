@@ -20,9 +20,15 @@ import {toast, ToastContainer} from 'react-toastify';
 import {assert} from 'shared/src/asserts.js';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
+import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.ts';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
-import type {CommentRow, IssueRow, Schema, UserRow} from '../../../schema.ts';
+import type {
+  CommentRow,
+  IssueRow,
+  Schema,
+  UserRow,
+} from '../../../shared/schema.ts';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
 import {commentQuery} from '../../comment-query.ts';
@@ -51,17 +57,17 @@ import {
 } from '../../limits.ts';
 import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
+import {CACHE_AWHILE} from '../../query-cache-policy.ts';
 import {links, type ListContext, type ZbugsHistoryState} from '../../routes.ts';
 import {preload} from '../../zero-setup.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
+import type {Mutators} from '../../../shared/mutators.ts';
 
 const emojiToastShowDuration = 3_000;
 
-// One more than we display so we can detect if there are more
-// to load.
-export const INITIAL_COMMENT_LIMIT = 101;
+export const INITIAL_COMMENT_LIMIT = 100;
 
 export function IssuePage({onReady}: {onReady: () => void}) {
   const z = useZero();
@@ -86,15 +92,19 @@ export function IssuePage({onReady}: {onReady: () => void}) {
       comments
         .related('creator')
         .related('emoji', emoji => emoji.related('creator'))
-        .limit(INITIAL_COMMENT_LIMIT)
+        // One more than we display so we can detect if there are more to load.
+        .limit(INITIAL_COMMENT_LIMIT + 1)
         .orderBy('created', 'desc')
         .orderBy('id', 'desc'),
     )
     .one();
-  const [issue, issueResult] = useQuery(q);
-  if (issue) {
-    onReady();
-  }
+
+  const [issue, issueResult] = useQuery(q, CACHE_AWHILE);
+  useEffect(() => {
+    if (issue) {
+      onReady();
+    }
+  }, [issue, onReady]);
 
   const login = useLogin();
 
@@ -155,9 +165,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     ) {
       // only set to viewed if the user has looked at it for > 1 second
       const handle = setTimeout(() => {
-        z.mutate.viewState.upsert({
+        z.mutate.viewState.set({
           issueID: displayed.id,
-          userID: z.userID,
           viewed: Date.now(),
         });
       }, 1000);
@@ -169,7 +178,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const [editing, setEditing] = useState<typeof displayed | null>(null);
   const [edits, setEdits] = useState<Partial<typeof displayed>>({});
   useEffect(() => {
-    if (displayed?.shortID !== undefined && idField !== 'shortID') {
+    if (displayed?.shortID != null && idField !== 'shortID') {
       navigate(links.issue(displayed), {
         replace: true,
         state: zbugsHistoryState,
@@ -181,7 +190,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     if (!editing) {
       return;
     }
-    z.mutate.issue.update({id: editing.id, ...edits});
+    z.mutate.issue.update({id: editing.id, ...edits, modified: Date.now()});
     setEditing(null);
     setEdits({});
   };
@@ -202,9 +211,12 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   ) {
     setIssueSnapshot(displayed);
   }
+  const useQueryOptions = {
+    enabled: listContext !== undefined && issueSnapshot !== undefined,
+  } as const;
   const [next] = useQuery(
     buildListQuery(z, listContext, displayed, 'next'),
-    listContext !== undefined && issueSnapshot !== undefined,
+    useQueryOptions,
   );
   useKeypress('j', () => {
     if (next) {
@@ -214,7 +226,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const [prev] = useQuery(
     buildListQuery(z, listContext, displayed, 'prev'),
-    listContext !== undefined && issueSnapshot !== undefined,
+    useQueryOptions,
   );
   useKeypress('k', () => {
     if (prev) {
@@ -231,7 +243,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const [allComments, allCommentsResult] = useQuery(
     commentQuery(z, displayed),
-    displayAllComments && displayed !== undefined,
+    {enabled: displayAllComments && displayed !== undefined, ...CACHE_AWHILE},
   );
 
   const [comments, hasOlderComments] = useMemo(() => {
@@ -242,8 +254,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
       return [allComments, false];
     }
     return [
-      displayed.comments.slice(0, 100).reverse(),
-      displayed.comments.length > 100,
+      displayed.comments.slice(0, INITIAL_COMMENT_LIMIT).reverse(),
+      displayed.comments.length > INITIAL_COMMENT_LIMIT,
     ];
   }, [displayed?.comments, allCommentsResult.type, allComments]);
 
@@ -351,7 +363,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const remove = () => {
     // TODO: Implement undo - https://github.com/rocicorp/undo
-    z.mutate.issue.delete({id: displayed.id});
+    z.mutate.issue.delete(displayed.id);
     navigate(listContext?.href ?? links.home());
   };
 
@@ -494,7 +506,11 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               ]}
               selectedValue={displayed.open}
               onChange={value =>
-                z.mutate.issue.update({id: displayed.id, open: value})
+                z.mutate.issue.update({
+                  id: displayed.id,
+                  open: value,
+                  modified: Date.now(),
+                })
               }
             />
           </div>
@@ -511,6 +527,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                 z.mutate.issue.update({
                   id: displayed.id,
                   assigneeID: user?.id ?? null,
+                  modified: Date.now(),
                 });
               }}
             />
@@ -539,6 +556,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                   z.mutate.issue.update({
                     id: displayed.id,
                     visibility: value,
+                    modified: Date.now(),
                   })
                 }
               />
@@ -569,22 +587,23 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               <LabelPicker
                 selected={labelSet}
                 onAssociateLabel={labelID =>
-                  z.mutate.issueLabel.insert({
+                  z.mutate.issue.addLabel({
                     issueID: displayed.id,
                     labelID,
                   })
                 }
                 onDisassociateLabel={labelID =>
-                  z.mutate.issueLabel.delete({
+                  z.mutate.issue.removeLabel({
                     issueID: displayed.id,
                     labelID,
                   })
                 }
                 onCreateNewLabel={labelName => {
                   const labelID = nanoid();
-                  z.mutateBatch(tx => {
-                    tx.label.insert({id: labelID, name: labelName});
-                    tx.issueLabel.insert({issueID: displayed.id, labelID});
+                  z.mutate.label.createAndAddToIssue({
+                    labelID,
+                    labelName,
+                    issueID: displayed.id,
                   });
                 }}
               />
@@ -893,7 +912,7 @@ function noop() {
 }
 
 function buildListQuery(
-  z: Zero<Schema>,
+  z: Zero<Schema, Mutators>,
   listContext: ListContext | undefined,
   issue: Row<Schema['tables']['issue']> | undefined,
   dir: 'next' | 'prev',
@@ -950,13 +969,13 @@ function useEmojiChangeListener(
   cb: (added: readonly Emoji[], removed: readonly Emoji[]) => void,
 ) {
   const z = useZero();
-  const enable = issue !== undefined;
+  const enabled = issue !== undefined;
   const issueID = issue?.id;
   const [emojis, result] = useQuery(
     z.query.emoji
       .where('subjectID', issueID ?? '')
       .related('creator', creator => creator.one()),
-    enable,
+    {enabled},
   );
 
   const lastEmojis = useRef<Map<string, Emoji> | undefined>();
@@ -1032,7 +1051,7 @@ function useShowToastForNewComment(
     }
 
     for (const commentID of newCommentIDs) {
-      const index = comments.findLastIndex(c => c.id === commentID);
+      const index = findLastIndex(comments, c => c.id === commentID);
       if (index === -1) {
         continue;
       }

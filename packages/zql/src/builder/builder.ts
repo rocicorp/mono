@@ -50,7 +50,17 @@ export interface BuilderDelegate {
    * Called once for each operator that requires storage. Should return a new
    * unique storage object for each call.
    */
-  createStorage(): Storage;
+  createStorage(name: string): Storage;
+
+  decorateInput(input: Input, name: string): Input;
+
+  /**
+   * The AST is mapped on-the-wire between client and server names.
+   *
+   * There is no "wire" for zqlite tests so this function is provided
+   * to allow tests to remap the AST.
+   */
+  mapAst(ast: AST): AST;
 }
 
 /**
@@ -78,7 +88,7 @@ export interface BuilderDelegate {
  * ```
  */
 export function buildPipeline(ast: AST, delegate: BuilderDelegate): Input {
-  return buildPipelineInternal(ast, delegate);
+  return buildPipelineInternal(delegate.mapAst(ast), delegate, '');
 }
 
 export function bindStaticParameters(
@@ -161,36 +171,60 @@ function isParameter(value: ValuePosition): value is Parameter {
 function buildPipelineInternal(
   ast: AST,
   delegate: BuilderDelegate,
+  name: string,
   partitionKey?: CompoundKey | undefined,
 ): Input {
   const source = delegate.getSource(ast.table);
   if (!source) {
     throw new Error(`Source not found: ${ast.table}`);
   }
-  const conn = source.connect(must(ast.orderBy), ast.where);
-  let end: Input = conn;
-  const {fullyAppliedFilters} = conn;
   ast = uniquifyCorrelatedSubqueryConditionAliases(ast);
 
+  const csqsFromCondition = gatherCorrelatedSubqueryQueriesFromCondition(
+    ast.where,
+  );
+  const splitEditKeys: Set<string> = partitionKey
+    ? new Set(partitionKey)
+    : new Set();
+  for (const csq of csqsFromCondition) {
+    for (const key of csq.correlation.parentField) {
+      splitEditKeys.add(key);
+    }
+  }
+  if (ast.related) {
+    for (const csq of ast.related) {
+      for (const key of csq.correlation.parentField) {
+        splitEditKeys.add(key);
+      }
+    }
+  }
+  const conn = source.connect(must(ast.orderBy), ast.where, splitEditKeys);
+  let end: Input = delegate.decorateInput(conn, `${name}:source(${ast.table})`);
+  const {fullyAppliedFilters} = conn;
+
   if (ast.start) {
-    end = new Skip(end, ast.start);
+    end = delegate.decorateInput(new Skip(end, ast.start), `${name}:skip)`);
   }
 
-  for (const csq of gatherCorrelatedSubqueryQueriesFromCondition(ast.where)) {
-    end = applyCorrelatedSubQuery(csq, delegate, end);
+  for (const csq of csqsFromCondition) {
+    end = applyCorrelatedSubQuery(csq, delegate, end, name);
   }
 
   if (ast.where && !fullyAppliedFilters) {
-    end = applyWhere(end, ast.where, delegate);
+    end = applyWhere(end, ast.where, delegate, name);
   }
 
-  if (ast.limit) {
-    end = new Take(end, delegate.createStorage(), ast.limit, partitionKey);
+  if (ast.limit !== undefined) {
+    const takeName = `${name}:take`;
+    end = delegate.decorateInput(
+      new Take(end, delegate.createStorage(takeName), ast.limit, partitionKey),
+      takeName,
+    );
   }
 
   if (ast.related) {
     for (const csq of ast.related) {
-      end = applyCorrelatedSubQuery(csq, delegate, end);
+      end = applyCorrelatedSubQuery(csq, delegate, end, name);
     }
   }
 
@@ -201,14 +235,15 @@ function applyWhere(
   input: Input,
   condition: Condition,
   delegate: BuilderDelegate,
+  name: string,
 ): Input {
   switch (condition.type) {
     case 'and':
-      return applyAnd(input, condition, delegate);
+      return applyAnd(input, condition, delegate, name);
     case 'or':
-      return applyOr(input, condition, delegate);
+      return applyOr(input, condition, delegate, name);
     case 'correlatedSubquery':
-      return applyCorrelatedSubqueryCondition(input, condition, delegate);
+      return applyCorrelatedSubqueryCondition(input, condition, delegate, name);
     case 'simple':
       return applySimpleCondition(input, condition);
   }
@@ -218,9 +253,10 @@ function applyAnd(
   input: Input,
   condition: Conjunction,
   delegate: BuilderDelegate,
+  name: string,
 ) {
   for (const subCondition of condition.conditions) {
-    input = applyWhere(input, subCondition, delegate);
+    input = applyWhere(input, subCondition, delegate, name);
   }
   return input;
 }
@@ -229,6 +265,7 @@ export function applyOr(
   input: Input,
   condition: Disjunction,
   delegate: BuilderDelegate,
+  name: string,
 ): Input {
   const [subqueryConditions, otherConditions] =
     groupSubqueryConditions(condition);
@@ -245,7 +282,7 @@ export function applyOr(
 
   const fanOut = new FanOut(input);
   const branches = subqueryConditions.map(subCondition =>
-    applyWhere(fanOut, subCondition, delegate),
+    applyWhere(fanOut, subCondition, delegate, name),
   );
   if (otherConditions.length > 0) {
     branches.push(
@@ -258,7 +295,9 @@ export function applyOr(
       ),
     );
   }
-  return new FanIn(fanOut, branches);
+  const ret = new FanIn(fanOut, branches);
+  fanOut.setFanIn(ret);
+  return ret;
 }
 
 export function groupSubqueryConditions(condition: Disjunction) {
@@ -297,38 +336,46 @@ function applyCorrelatedSubQuery(
   sq: CorrelatedSubquery,
   delegate: BuilderDelegate,
   end: Input,
+  name: string,
 ) {
   assert(sq.subquery.alias, 'Subquery must have an alias');
   const child = buildPipelineInternal(
     sq.subquery,
     delegate,
+    `${name}.${sq.subquery.alias}`,
     sq.correlation.childField,
   );
+  const joinName = `${name}:join(${sq.subquery.alias})`;
   end = new Join({
     parent: end,
     child,
-    storage: delegate.createStorage(),
+    storage: delegate.createStorage(joinName),
     parentKey: sq.correlation.parentField,
     childKey: sq.correlation.childField,
     relationshipName: sq.subquery.alias,
     hidden: sq.hidden ?? false,
     system: sq.system ?? 'client',
   });
-  return end;
+  return delegate.decorateInput(end, joinName);
 }
 
 function applyCorrelatedSubqueryCondition(
   input: Input,
   condition: CorrelatedSubqueryCondition,
   delegate: BuilderDelegate,
+  name: string,
 ): Input {
   assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
-  return new Exists(
-    input,
-    delegate.createStorage(),
-    must(condition.related.subquery.alias),
-    condition.related.correlation.parentField,
-    condition.op,
+  const existsName = `${name}:exists(${condition.related.subquery.alias})`;
+  return delegate.decorateInput(
+    new Exists(
+      input,
+      delegate.createStorage(existsName),
+      must(condition.related.subquery.alias),
+      condition.related.correlation.parentField,
+      condition.op,
+    ),
+    existsName,
   );
 }
 

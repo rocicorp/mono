@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {
   initReplicacheTesting,
@@ -52,7 +52,7 @@ test('pending mutation', async () => {
   rep.pullURL = 'https://diff.com/pull';
   fetchMock.post(rep.pullURL, makePullResponseV1(clientID, 2, undefined, 1));
   rep.pullIgnorePromise();
-  await tickAFewTimes(100);
+  await tickAFewTimes(vi, 100);
   await rep.mutate.addData({a: 3});
   const addAMutation = {id: 3, name: 'addData', args: {a: 3}, clientID};
   expect(await rep.experimentalPendingMutations()).to.deep.equal([
@@ -62,7 +62,7 @@ test('pending mutation', async () => {
   fetchMock.reset();
   fetchMock.post(rep.pullURL, makePullResponseV1(clientID, 3, undefined, 2));
   rep.pullIgnorePromise();
-  await tickAFewTimes(100);
+  await tickAFewTimes(vi, 100);
   expect(await rep.experimentalPendingMutations()).to.deep.equal([]);
 });
 

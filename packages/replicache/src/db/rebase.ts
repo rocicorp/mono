@@ -17,6 +17,7 @@ import {
   isLocalMetaDD31,
 } from './commit.ts';
 import {Write, newWriteLocal} from './write.ts';
+import type {ZeroTxData} from '../replicache-options.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 
@@ -28,6 +29,7 @@ async function rebaseMutation(
   lc: LogContext,
   mutationClientID: ClientID,
   formatVersion: FormatVersion,
+  zeroData: ZeroTxData | undefined,
 ): Promise<Write> {
   const localMeta = mutation.meta;
   const name = localMeta.mutatorName;
@@ -87,6 +89,7 @@ async function rebaseMutation(
     mutationClientID,
     await dbWrite.getMutationID(),
     'rebase',
+    zeroData,
     dbWrite,
     lc,
   );
@@ -104,6 +107,7 @@ export async function rebaseMutationAndPutCommit(
   // is a LocalMetaDD31.  As part of DD31 cleanup we can remove this arg.
   mutationClientID: ClientID,
   formatVersion: FormatVersion,
+  zeroData: ZeroTxData | undefined,
 ): Promise<Commit<Meta>> {
   const tx = await rebaseMutation(
     mutation,
@@ -113,6 +117,7 @@ export async function rebaseMutationAndPutCommit(
     lc,
     mutationClientID,
     formatVersion,
+    zeroData,
   );
   return tx.putCommit();
 }
@@ -128,6 +133,7 @@ export async function rebaseMutationAndCommit(
   // is a LocalMetaDD31.  As part of DD31 cleanup we can remove this arg.
   mutationClientID: ClientID,
   formatVersion: FormatVersion,
+  zeroData: ZeroTxData | undefined,
 ): Promise<Hash> {
   const dbWrite = await rebaseMutation(
     mutation,
@@ -137,6 +143,7 @@ export async function rebaseMutationAndCommit(
     lc,
     mutationClientID,
     formatVersion,
+    zeroData,
   );
   return dbWrite.commit(headName);
 }

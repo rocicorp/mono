@@ -6,17 +6,18 @@ import {
   type Migration,
 } from '../../../db/migration.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
-import {createRowsVersionTable, cvrSchema, setupCVRTables} from './cvr.ts';
+import {cvrSchema, type ShardID} from '../../../types/shards.ts';
+import {createRowsVersionTable, setupCVRTables} from './cvr.ts';
 
 export async function initViewSyncerSchema(
   log: LogContext,
   db: PostgresDB,
-  shardID: string,
+  shard: ShardID,
 ): Promise<void> {
-  const schema = cvrSchema(shardID);
+  const schema = cvrSchema(shard);
 
   const setupMigration: Migration = {
-    migrateSchema: (lc, tx) => setupCVRTables(lc, tx, shardID),
+    migrateSchema: (lc, tx) => setupCVRTables(lc, tx, shard),
     minSafeVersion: 1,
   };
 
@@ -28,7 +29,7 @@ export async function initViewSyncerSchema(
 
   const migrateV2ToV3: Migration = {
     migrateSchema: async (_, tx) => {
-      await tx.unsafe(createRowsVersionTable(shardID));
+      await tx.unsafe(createRowsVersionTable(shard));
     },
 
     /** Populates the cvr.rowsVersion table with versions from cvr.instances. */
@@ -88,6 +89,20 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migrateV7ToV8: Migration = {
+    migrateSchema: async (_, tx) => {
+      await tx`ALTER TABLE ${tx(
+        schema,
+      )}."desires" DROP CONSTRAINT fk_desires_client`;
+    },
+  };
+
+  const migrateV8ToV9: Migration = {
+    migrateSchema: async (_, tx) => {
+      await tx`ALTER TABLE ${tx(schema)}.instances ADD "clientSchema" JSONB`;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -97,12 +112,14 @@ export async function initViewSyncerSchema(
     5: {minSafeVersion: 3},
     6: migrateV5ToV6,
     7: migrateV6ToV7,
+    8: migrateV7ToV8,
+    9: migrateV8ToV9,
   };
 
   await runSchemaMigrations(
     log,
     'view-syncer',
-    cvrSchema(shardID),
+    cvrSchema(shard),
     db,
     setupMigration,
     schemaVersionMigrationMap,

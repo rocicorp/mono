@@ -1,13 +1,14 @@
-import {
-  LogicalReplicationService,
-  Pgoutput,
-  PgoutputPlugin,
-} from 'pg-logical-replication';
 import type postgres from 'postgres';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../../../shared/src/queue.ts';
-import {getConnectionURI, testDBs} from '../../../../test/db.ts';
+import {testDBs} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
+import type {
+  Message,
+  MessageMessage,
+} from '../logical-replication/pgoutput.types.ts';
+import {subscribe} from '../logical-replication/stream.ts';
 import {
   createEventTriggerStatements,
   type DdlStartEvent,
@@ -18,11 +19,11 @@ const SLOT_NAME = 'ddl_test_slot';
 
 describe('change-source/tables/ddl', () => {
   let upstream: PostgresDB;
-  let messages: Queue<Pgoutput.Message>;
+  let messages: Queue<Message>;
   let notices: Queue<postgres.Notice>;
-  let service: LogicalReplicationService;
 
-  const SHARD_ID = '0';
+  const APP_ID = 'zap';
+  const SHARD_NUM = 0;
 
   beforeEach(async () => {
     notices = new Queue();
@@ -30,44 +31,44 @@ describe('change-source/tables/ddl', () => {
       notices.enqueue(n),
     );
 
-    const upstreamURI = getConnectionURI(upstream);
     await upstream.unsafe(STARTING_SCHEMA);
 
     await upstream.unsafe(
-      createEventTriggerStatements(SHARD_ID, ['zero_all', 'zero_sum']),
+      createEventTriggerStatements({
+        appID: APP_ID,
+        shardNum: SHARD_NUM,
+        publications: ['zero_all', 'zero_sum'],
+      }),
     );
 
     await upstream`SELECT pg_create_logical_replication_slot(${SLOT_NAME}, 'pgoutput')`;
 
-    messages = new Queue<Pgoutput.Message>();
-    service = new LogicalReplicationService(
-      {connectionString: upstreamURI},
-      {acknowledge: {auto: false, timeoutSeconds: 0}},
-    )
-      .on('heartbeat', (lsn, _time, respond) => {
-        respond && void service.acknowledge(lsn);
-      })
-      .on('data', (_lsn, msg) => void messages.enqueue(msg));
-
-    void service.subscribe(
-      new PgoutputPlugin({
-        protoVersion: 1,
-        publicationNames: ['zero_all'],
-        messages: true,
-      }),
+    messages = new Queue<Message>();
+    const sub = await subscribe(
+      createSilentLogContext(),
+      upstream,
       SLOT_NAME,
+      ['zero_all'],
+      0n,
     );
+
+    void (async function () {
+      for await (const [_lsn, msg] of sub.messages) {
+        if (msg.tag === 'keepalive') {
+          sub.acks.push(0n);
+        } else {
+          messages.enqueue(msg);
+        }
+      }
+    })();
+    return async () => {
+      sub.messages.cancel();
+      await testDBs.drop(upstream);
+    };
   });
 
-  afterEach(async () => {
-    void service?.stop();
-    await testDBs.drop(upstream);
-  });
-
-  async function drainReplicationMessages(
-    num: number,
-  ): Promise<Pgoutput.Message[]> {
-    const drained: Pgoutput.Message[] = [];
+  async function drainReplicationMessages(num: number): Promise<Message[]> {
+    const drained: Message[] = [];
     while (drained.length < num) {
       drained.push(await messages.dequeue());
     }
@@ -311,8 +312,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'CREATE TABLE',
-          table: {schema: 'pub', name: 'bar'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           tables: inserted(DDL_START.schema.tables, 0, {
             oid: expect.any(Number),
@@ -396,8 +397,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'CREATE INDEX',
-          index: {schema: 'pub', name: 'foo_name_index'},
-        },
+          index: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           tables: DDL_START.schema.tables,
           indexes: inserted(DDL_START.schema.indexes, 3, {
@@ -424,8 +425,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          table: {schema: 'pub', name: 'food'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
@@ -504,8 +505,8 @@ describe('change-source/tables/ddl', () => {
         },
         event: {
           tag: 'ALTER TABLE',
-          table: {schema: 'pub', name: 'foo'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         type: 'ddlUpdate',
         version: 1,
         schema: {
@@ -574,8 +575,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          table: {schema: 'pub', name: 'foo'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           indexes: DDL_START.schema.indexes,
           tables: replaced(DDL_START.schema.tables, 1, 1, {
@@ -636,8 +637,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          table: {schema: 'pub', name: 'foo'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           indexes: DDL_START.schema.indexes,
           tables: replaced(DDL_START.schema.tables, 1, 1, {
@@ -690,8 +691,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          table: {schema: 'pub', name: 'foo'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
@@ -763,8 +764,8 @@ describe('change-source/tables/ddl', () => {
         version: 1,
         event: {
           tag: 'ALTER TABLE',
-          table: {schema: 'pub', name: 'foo'},
-        },
+          table: {schema: 'deprecated', name: 'deprecated'},
+        } as {tag: string},
         schema: {
           tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
@@ -1068,6 +1069,191 @@ describe('change-source/tables/ddl', () => {
         },
       },
     ],
+    [
+      'alter schema',
+      `ALTER SCHEMA pub RENAME TO bup`,
+      {
+        context: {
+          query: 'ALTER SCHEMA pub RENAME TO bup',
+        },
+        type: 'ddlUpdate',
+        version: 1,
+        event: {tag: 'ALTER SCHEMA'},
+        schema: {
+          tables: [
+            {
+              oid: expect.any(Number),
+              schema: 'bup',
+              name: 'boo',
+              columns: {
+                description: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: false,
+                  pos: 3,
+                },
+                id: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: true,
+                  pos: 1,
+                },
+                name: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: false,
+                  pos: 2,
+                },
+              },
+              primaryKey: ['id'],
+              publications: {
+                ['zero_all']: {rowFilter: null},
+                ['zero_sum']: {rowFilter: null},
+              },
+            },
+            {
+              oid: expect.any(Number),
+              schema: 'bup',
+              name: 'foo',
+              columns: {
+                description: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: false,
+                  pos: 3,
+                },
+                id: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: true,
+                  pos: 1,
+                },
+                name: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: false,
+                  pos: 2,
+                },
+              },
+              primaryKey: ['id'],
+              publications: {
+                ['zero_all']: {rowFilter: null},
+                ['zero_sum']: {rowFilter: null},
+              },
+            },
+            {
+              oid: expect.any(Number),
+              schema: 'bup',
+              name: 'yoo',
+              columns: {
+                description: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: false,
+                  pos: 3,
+                },
+                id: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: true,
+                  pos: 1,
+                },
+                name: {
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  dflt: null,
+                  notNull: false,
+                  pos: 2,
+                },
+              },
+              primaryKey: ['id'],
+              publications: {['zero_all']: {rowFilter: null}},
+            },
+          ],
+          indexes: [
+            {
+              name: 'boo_name_key',
+              schema: 'bup',
+              tableName: 'boo',
+              columns: {name: 'ASC'},
+              unique: true,
+            },
+            {
+              name: 'boo_pkey',
+              schema: 'bup',
+              tableName: 'boo',
+              columns: {id: 'ASC'},
+              unique: true,
+            },
+            {
+              name: 'foo_custom_index',
+              schema: 'bup',
+              tableName: 'foo',
+              columns: {
+                description: 'ASC',
+                name: 'ASC',
+              },
+              unique: false,
+            },
+            {
+              name: 'foo_name_key',
+              schema: 'bup',
+              tableName: 'foo',
+              columns: {name: 'ASC'},
+              unique: true,
+            },
+            {
+              name: 'foo_pkey',
+              schema: 'bup',
+              tableName: 'foo',
+              columns: {id: 'ASC'},
+              unique: true,
+            },
+            {
+              name: 'yoo_custom_index',
+              schema: 'bup',
+              tableName: 'yoo',
+              columns: {
+                description: 'ASC',
+                name: 'ASC',
+              },
+              unique: false,
+            },
+            {
+              name: 'yoo_name_key',
+              schema: 'bup',
+              tableName: 'yoo',
+              columns: {name: 'ASC'},
+              unique: true,
+            },
+            {
+              name: 'yoo_pkey',
+              schema: 'bup',
+              tableName: 'yoo',
+              columns: {id: 'ASC'},
+              unique: true,
+            },
+          ],
+        },
+      },
+    ],
   ] satisfies [string, string, DdlUpdateEvent][])(
     '%s',
     async (_, query, ddlUpdate) => {
@@ -1083,14 +1269,14 @@ describe('change-source/tables/ddl', () => {
         {tag: 'insert'},
         {
           tag: 'message',
-          prefix: 'zero/' + SHARD_ID,
+          prefix: 'zap/0',
           content: expect.any(Uint8Array),
           flags: 1,
           transactional: true,
         },
         {
           tag: 'message',
-          prefix: 'zero/' + SHARD_ID,
+          prefix: 'zap/0',
           content: expect.any(Uint8Array),
           flags: 1,
           transactional: true,
@@ -1098,13 +1284,13 @@ describe('change-source/tables/ddl', () => {
         {tag: 'commit'},
       ]);
 
-      const {content: start} = messages[3] as Pgoutput.MessageMessage;
+      const {content: start} = messages[3] as MessageMessage;
       expect(JSON.parse(new TextDecoder().decode(start))).toMatchObject({
         ...DDL_START,
         context: {query},
       } satisfies DdlStartEvent);
 
-      const {content: update} = messages[4] as Pgoutput.MessageMessage;
+      const {content: update} = messages[4] as MessageMessage;
       expect(JSON.parse(new TextDecoder().decode(update))).toMatchObject(
         ddlUpdate,
       );
@@ -1194,7 +1380,7 @@ describe('change-source/tables/ddl', () => {
         {tag: 'insert'},
         {
           tag: 'message',
-          prefix: 'zero/' + SHARD_ID,
+          prefix: 'zap/0',
           content: expect.any(Uint8Array),
           flags: 1,
           transactional: true,
@@ -1202,7 +1388,7 @@ describe('change-source/tables/ddl', () => {
         {tag: 'commit'},
       ]);
 
-      const {content: start} = messages[3] as Pgoutput.MessageMessage;
+      const {content: start} = messages[3] as MessageMessage;
       expect(JSON.parse(new TextDecoder().decode(start))).toMatchObject({
         type: 'ddlStart',
       });
@@ -1229,14 +1415,14 @@ describe('change-source/tables/ddl', () => {
       {tag: 'begin'},
       {
         tag: 'message',
-        prefix: 'zero/' + SHARD_ID,
+        prefix: 'zap/0',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
       },
       {
         tag: 'message',
-        prefix: 'zero/' + SHARD_ID,
+        prefix: 'zap/0',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
@@ -1246,28 +1432,28 @@ describe('change-source/tables/ddl', () => {
       {tag: 'begin'},
       {
         tag: 'message',
-        prefix: 'zero/' + SHARD_ID,
+        prefix: 'zap/0',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
       },
       {
         tag: 'message',
-        prefix: 'zero/' + SHARD_ID,
+        prefix: 'zap/0',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
       },
       {
         tag: 'message',
-        prefix: 'zero/' + SHARD_ID,
+        prefix: 'zap/0',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
       },
       {
         tag: 'message',
-        prefix: 'zero/' + SHARD_ID,
+        prefix: 'zap/0',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
@@ -1275,7 +1461,7 @@ describe('change-source/tables/ddl', () => {
       {tag: 'commit'},
     ]);
 
-    let msg = messages[2] as Pgoutput.MessageMessage;
+    let msg = messages[2] as MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
       type: 'ddlUpdate',
       version: 1,
@@ -1284,7 +1470,7 @@ describe('change-source/tables/ddl', () => {
       event: {tag: 'ALTER TABLE'},
     });
 
-    msg = messages[6] as Pgoutput.MessageMessage;
+    msg = messages[6] as MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
       type: 'ddlUpdate',
       version: 1,
@@ -1294,7 +1480,7 @@ describe('change-source/tables/ddl', () => {
       },
       event: {tag: 'ALTER TABLE'},
     });
-    msg = messages[8] as Pgoutput.MessageMessage;
+    msg = messages[8] as MessageMessage;
     expect(JSON.parse(new TextDecoder().decode(msg.content))).toMatchObject({
       type: 'ddlUpdate',
       version: 1,

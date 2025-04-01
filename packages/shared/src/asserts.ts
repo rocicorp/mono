@@ -3,8 +3,7 @@ export function assert(
   msg: string | (() => string) = 'Assertion failed',
 ): asserts b {
   if (!b) {
-    const msgStr = typeof msg === 'string' ? msg : msg();
-    throw new Error(msgStr);
+    throw new Error(typeof msg === 'string' ? msg : msg());
   }
 }
 

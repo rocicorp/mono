@@ -2,23 +2,12 @@ import {
   PG_ADMIN_SHUTDOWN,
   PG_OBJECT_IN_USE,
 } from '@drdgvhbh/postgres-error-codes';
-import {Lock} from '@rocicorp/lock';
 import {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
-import {
-  LogicalReplicationService,
-  Pgoutput,
-  PgoutputPlugin,
-} from 'pg-logical-replication';
-import type {
-  MessageMessage,
-  MessageRelation,
-} from 'pg-logical-replication/dist/output-plugins/pgoutput/pgoutput.types.ts';
-import {DatabaseError} from 'pg-protocol';
+import postgres from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
-import {assert} from '../../../../../shared/src/asserts.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
+import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {
   equals,
   intersection,
@@ -27,6 +16,7 @@ import {
 import {sleep} from '../../../../../shared/src/sleep.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
+import {mapPostgresToLiteColumn} from '../../../db/pg-to-lite.ts';
 import {ShortLivedClient} from '../../../db/short-lived-client.ts';
 import type {
   ColumnSpec,
@@ -35,22 +25,29 @@ import type {
 } from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {stringify} from '../../../types/bigint-json.ts';
-import {oneAfter, type LexiVersion} from '../../../types/lexi-version.ts';
 import {
-  pgClient,
-  registerPostgresTypeParsers,
-  type PostgresDB,
-} from '../../../types/pg.ts';
-import {Subscription} from '../../../types/subscription.ts';
+  oneAfter,
+  versionFromLexi,
+  versionToLexi,
+  type LexiVersion,
+} from '../../../types/lexi-version.ts';
+import {pgClient, type PostgresDB} from '../../../types/pg.ts';
+import {
+  upstreamSchema,
+  type ShardConfig,
+  type ShardID,
+} from '../../../types/shards.ts';
+import type {Sink} from '../../../types/streams.ts';
+import {Subscription, type PendingResult} from '../../../types/subscription.ts';
 import type {
   ChangeSource,
   ChangeStream,
 } from '../../change-streamer/change-streamer-service.ts';
+import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {
-  AutoResetSignal,
-  type ReplicationConfig,
-} from '../../change-streamer/schema/tables.ts';
-import {getSubscriptionState} from '../../replicator/schema/replication-state.ts';
+  getSubscriptionState,
+  type SubscriptionState,
+} from '../../replicator/schema/replication-state.ts';
 import type {
   DataChange,
   Identifier,
@@ -61,23 +58,29 @@ import type {
   ChangeStreamMessage,
   Data,
 } from '../protocol/current/downstream.ts';
-import {replicationSlot, type InitialSyncOptions} from './initial-sync.ts';
-import {fromLexiVersion, toLexiVersion, type LSN} from './lsn.ts';
+import {type InitialSyncOptions} from './initial-sync.ts';
+import type {
+  Message,
+  MessageMessage,
+  MessageRelation,
+} from './logical-replication/pgoutput.types.ts';
+import {subscribe} from './logical-replication/stream.ts';
+import {fromBigInt, toLexiVersion, type LSN} from './lsn.ts';
 import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.ts';
 import {updateShardSchema} from './schema/init.ts';
 import {getPublicationInfo, type PublishedSchema} from './schema/published.ts';
 import {
   getInternalShardConfig,
-  INTERNAL_PUBLICATION_PREFIX,
+  getReplicaAtVersion,
+  internalPublicationPrefix,
+  legacyReplicationSlot,
   replicaIdentitiesForTablesWithoutPrimaryKeys,
+  replicationSlotExpression,
   type InternalShardConfig,
+  type Replica,
 } from './schema/shard.ts';
 import {validate} from './schema/validation.ts';
-import type {ShardConfig} from './shard-config.ts';
 import {initSyncSchema} from './sync-schema.ts';
-
-// BigInt support from LogicalReplicationService.
-registerPostgresTypeParsers();
 
 /**
  * Initializes a Postgres change source, including the initial sync of the
@@ -90,10 +93,10 @@ export async function initializePostgresChangeSource(
   shard: ShardConfig,
   replicaDbFile: string,
   syncOptions: InitialSyncOptions,
-): Promise<{replicationConfig: ReplicationConfig; changeSource: ChangeSource}> {
+): Promise<{subscriptionState: SubscriptionState; changeSource: ChangeSource}> {
   await initSyncSchema(
     lc,
-    `replica-${shard.id}`,
+    `replica-${shard.appID}-${shard.shardNum}`,
     shard,
     replicaDbFile,
     upstreamURI,
@@ -101,14 +104,14 @@ export async function initializePostgresChangeSource(
   );
 
   const replica = new Database(lc, replicaDbFile);
-  const replicationConfig = getSubscriptionState(new StatementRunner(replica));
+  const subscriptionState = getSubscriptionState(new StatementRunner(replica));
   replica.close();
 
   if (shard.publications.length) {
     // Verify that the publications match what has been synced.
     const requested = [...shard.publications].sort();
-    const replicated = replicationConfig.publications
-      .filter(p => !p.startsWith(INTERNAL_PUBLICATION_PREFIX))
+    const replicated = subscriptionState.publications
+      .filter(p => !p.startsWith(internalPublicationPrefix(shard)))
       .sort();
     if (!deepEqual(requested, replicated)) {
       throw new Error(
@@ -121,27 +124,42 @@ export async function initializePostgresChangeSource(
   // initial sync if not.
   const db = pgClient(lc, upstreamURI);
   try {
-    await checkAndUpdateUpstream(lc, db, shard);
+    const upstreamReplica = await checkAndUpdateUpstream(
+      lc,
+      db,
+      shard,
+      subscriptionState.replicaVersion,
+    );
+
+    const changeSource = new PostgresChangeSource(
+      lc,
+      upstreamURI,
+      shard,
+      upstreamReplica,
+    );
+
+    return {subscriptionState, changeSource};
   } finally {
     await db.end();
   }
-
-  const changeSource = new PostgresChangeSource(
-    lc,
-    upstreamURI,
-    shard.id,
-    replicationConfig,
-  );
-
-  return {replicationConfig, changeSource};
 }
 
 async function checkAndUpdateUpstream(
   lc: LogContext,
   db: PostgresDB,
   shard: ShardConfig,
+  replicaVersion: string,
 ) {
-  const slot = replicationSlot(shard.id);
+  // Perform any shard schema updates
+  await updateShardSchema(lc, db, shard, replicaVersion);
+
+  const upstreamReplica = await getReplicaAtVersion(db, shard, replicaVersion);
+  if (!upstreamReplica) {
+    throw new AutoResetSignal(
+      `No replication slot for replica at version ${replicaVersion}`,
+    );
+  }
+  const {slot} = upstreamReplica;
   const result = await db<{restartLSN: LSN | null}[]>`
   SELECT restart_lsn as "restartLSN" FROM pg_replication_slots WHERE slot_name = ${slot}`;
   if (result.length === 0) {
@@ -153,14 +171,8 @@ async function checkAndUpdateUpstream(
       `replication slot ${slot} has been invalidated for exceeding the max_slot_wal_keep_size`,
     );
   }
-  // Perform any shard schema updates
-  await updateShardSchema(lc, db, {
-    id: shard.id,
-    publications: shard.publications,
-  });
+  return upstreamReplica;
 }
-
-const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 5;
 
 /**
  * Postgres implementation of a {@link ChangeSource} backed by a logical
@@ -169,167 +181,89 @@ const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 5;
 class PostgresChangeSource implements ChangeSource {
   readonly #lc: LogContext;
   readonly #upstreamUri: string;
-  readonly #shardID: string;
-  readonly #replicationConfig: ReplicationConfig;
+  readonly #shard: ShardID;
+  readonly #replica: Replica;
 
   constructor(
     lc: LogContext,
     upstreamUri: string,
-    shardID: string,
-    replicationConfig: ReplicationConfig,
+    shard: ShardID,
+    replica: Replica,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
     this.#upstreamUri = upstreamUri;
-    this.#shardID = shardID;
-    this.#replicationConfig = replicationConfig;
+    this.#shard = shard;
+    this.#replica = replica;
   }
 
   async startStream(clientWatermark: string): Promise<ChangeStream> {
     const db = pgClient(this.#lc, this.#upstreamUri);
-    const slot = replicationSlot(this.#shardID);
+    const {slot} = this.#replica;
 
+    let cleanup = promiseVoid;
     try {
-      await this.#stopExistingReplicationSlotSubscriber(db, slot);
-
-      const config = await getInternalShardConfig(db, this.#shardID);
+      ({cleanup} = await this.#stopExistingReplicationSlotSubscribers(
+        db,
+        slot,
+      ));
+      const config = await getInternalShardConfig(db, this.#shard);
       this.#lc.info?.(`starting replication stream@${slot}`);
-
-      // Enabling ssl according to the logic in:
-      // https://github.com/brianc/node-postgres/blob/95d7e620ef8b51743b4cbca05dd3c3ce858ecea7/packages/pg-connection-string/index.js#L90
-      const url = new URL(this.#upstreamUri);
-      let useSSL =
-        url.searchParams.get('ssl') !== '0' &&
-        url.searchParams.get('sslmode') !== 'disable';
-      this.#lc.debug?.(`connecting with ssl=${useSSL} ${url.search}`);
-
-      for (let i = 0; i < MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE; i++) {
-        try {
-          // Unlike the postgres.js client, the pg client does not have an option to
-          // only use SSL if the server supports it. We achieve it manually by
-          // trying SSL first, and then falling back to connecting without SSL.
-          return await this.#startStream(slot, clientWatermark, config, useSSL);
-        } catch (e) {
-          if (e instanceof SSLUnsupportedError) {
-            this.#lc.info?.('retrying upstream connection without SSL');
-            useSSL = false;
-            i--; // don't use up an attempt.
-            await this.#stopExistingReplicationSlotSubscriber(db, slot); // Send another SIGTERM to the process
-          } else if (
-            // error: replication slot "zero_slot_change_source_test_id" is active for PID 268
-            e instanceof DatabaseError &&
-            e.code === PG_OBJECT_IN_USE
-          ) {
-            // The freeing up of the replication slot is not transaction;
-            // sometimes it takes time for Postgres to consider the slot
-            // inactive.
-            this.#lc.warn?.(`attempt ${i + 1}: ${String(e)}`, e);
-            await sleep(5);
-          } else {
-            throw e;
-          }
-        }
-      }
-      throw new Error('exceeded max attempts to start the Postgres stream');
+      return await this.#startStream(db, slot, clientWatermark, config);
     } finally {
-      await db.end();
+      void cleanup.then(() => db.end());
     }
   }
 
   async #startStream(
+    db: PostgresDB,
     slot: string,
     clientWatermark: string,
     shardConfig: InternalShardConfig,
-    useSSL: boolean,
   ): Promise<ChangeStream> {
+    const clientStart = oneAfter(clientWatermark);
+    const {messages, acks} = await subscribe(
+      this.#lc,
+      db,
+      slot,
+      [...shardConfig.publications],
+      versionFromLexi(clientStart),
+    );
+
     const changes = Subscription.create<ChangeStreamMessage>({
-      cleanup: () => service.stop(),
+      cleanup: () => messages.cancel(),
     });
+    const acker = new Acker(acks);
 
-    // To avoid a race condition when handing off the replication stream
-    // between tasks, query the `confirmed_flush_lsn` for the replication
-    // slot only after the replication stream starts, as that is when it
-    // is guaranteed not to change (i.e. until we ACK a commit).
-    const {promise: started, resolve, reject} = resolver();
-
-    const ssl = useSSL ? {rejectUnauthorized: false} : undefined;
-    const handleError = (err: Error) => {
-      if (
-        useSSL &&
-        // https://github.com/brianc/node-postgres/blob/8b2768f91d284ff6b97070aaf6602560addac852/packages/pg/lib/connection.js#L74
-        err.message === 'The server does not support SSL connections'
-      ) {
-        reject(new SSLUnsupportedError());
-      } else {
-        const e = translateError(err);
-        reject(e);
-        changes.fail(e);
-      }
-    };
-
-    let acker: Acker | undefined = undefined;
     const changeMaker = new ChangeMaker(
       this.#lc,
-      this.#shardID,
+      this.#shard,
       shardConfig,
+      this.#replica.initialSchema,
       this.#upstreamUri,
     );
-    const lock = new Lock();
-    const service = new LogicalReplicationService(
-      {
-        connectionString: this.#upstreamUri,
-        ssl,
-        ['application_name']: `zero-replicator`,
-      },
-      {acknowledge: {auto: false, timeoutSeconds: 0}},
-    )
-      .on('start', resolve)
-      .on('heartbeat', (lsn, time, respond) => {
-        if (respond) {
-          // immediately set a timeout that responds with a keepalive if it
-          // takes too long for the 'status' message to flow to (and back from)
-          // the change-streamer.
-          acker?.keepalive();
 
-          // lock to ensure in-order processing
-          void lock.withLock(() => {
-            changes.push([
-              'status',
-              {lsn, time},
-              {watermark: toLexiVersion(lsn)},
-            ]);
-          });
-        }
-      })
-      .on('data', (lsn, msg) =>
-        // lock to ensure in-order processing
-        lock.withLock(async () => {
-          for (const change of await changeMaker.makeChanges(lsn, msg)) {
-            changes.push(change);
+    void (async function () {
+      try {
+        for await (const [lsn, msg] of messages) {
+          if (msg.tag === 'keepalive') {
+            changes.push(['status', msg, {watermark: versionToLexi(lsn)}]);
+            continue;
           }
-        }),
-      )
-      .on('error', handleError);
+          let last: PendingResult | undefined;
+          for (const change of await changeMaker.makeChanges(lsn, msg)) {
+            last = changes.push(change);
+          }
+          await last?.result; // Allow the change-streamer to push back.
+        }
+      } catch (e) {
+        changes.fail(translateError(e));
+      }
+    })();
 
-    acker = new Acker(service);
-
-    const clientStart = oneAfter(clientWatermark);
-    service
-      .subscribe(
-        new PgoutputPlugin({
-          protoVersion: 1,
-          publicationNames: [...this.#replicationConfig.publications],
-          messages: true,
-        }),
-        slot,
-        fromLexiVersion(clientStart),
-      )
-      .then(() => changes.cancel(), handleError);
-
-    await started;
-
-    const {replicaVersion} = this.#replicationConfig;
     this.#lc.info?.(
-      `started replication stream@${slot} from ${clientWatermark} (replicaVersion: ${replicaVersion})`,
+      `started replication stream@${slot} from ${clientWatermark} (replicaVersion: ${
+        this.#replica.version
+      })`,
     );
 
     return {
@@ -338,35 +272,85 @@ class PostgresChangeSource implements ChangeSource {
     };
   }
 
-  async #stopExistingReplicationSlotSubscriber(
+  /**
+   * Stops all replication slots associated with this shard, and returns
+   * a `cleanup` task that drops any slot other than the specified
+   * `slotToKeep`.
+   */
+  async #stopExistingReplicationSlotSubscribers(
     db: PostgresDB,
-    slot: string,
-  ): Promise<void> {
-    const result = await db<{pid: string | null}[]>`
-    SELECT pg_terminate_backend(active_pid), active_pid as pid
-      FROM pg_replication_slots WHERE slot_name = ${slot}`;
+    slotToKeep: string,
+  ): Promise<{cleanup: Promise<void>}> {
+    const slotExpression = replicationSlotExpression(this.#shard);
+    const legacySlotName = legacyReplicationSlot(this.#shard);
+
+    const result = await db<{slot: string; pid: string | null}[]>`
+    SELECT slot_name as slot, pg_terminate_backend(active_pid), active_pid as pid
+      FROM pg_replication_slots 
+      WHERE slot_name LIKE ${slotExpression} OR slot_name = ${legacySlotName}`;
     if (result.length === 0) {
       // Note: This should not happen as it is checked at initialization time,
       //       but it is technically possible for the replication slot to be
       //       dropped (e.g. manually).
       throw new AbortError(
-        `replication slot ${slot} is missing. Delete the replica and resync.`,
+        `replication slot ${slotToKeep} is missing. Delete the replica and resync.`,
       );
     }
-    const {pid} = result[0];
-    if (pid) {
-      this.#lc.info?.(`signaled subscriber ${pid} to shut down`);
+    // Clean up the replicas table.
+    const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
+    await db`DELETE FROM ${db(replicasTable)} WHERE slot != ${slotToKeep}`;
+
+    const pids = result.filter(({pid}) => pid !== null).map(({pid}) => pid);
+    if (pids.length) {
+      this.#lc.info?.(`signaled subscriber ${pids} to shut down`);
     }
+    const otherSlots = result
+      .filter(({slot}) => slot !== slotToKeep)
+      .map(({slot}) => slot);
+    return {
+      cleanup: otherSlots.length
+        ? this.#dropReplicationSlots(db, otherSlots)
+        : promiseVoid,
+    };
+  }
+
+  async #dropReplicationSlots(db: PostgresDB, slots: string[]) {
+    this.#lc.info?.(`dropping other replication slot(s) ${slots}`);
+    for (let i = 0; i < 5; i++) {
+      try {
+        await db`
+          SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
+            WHERE slot_name IN ${db(slots)}
+        `;
+        this.#lc.info?.(`successfully dropped ${slots}`);
+        return;
+      } catch (e) {
+        // error: replication slot "zero_slot_change_source_test_id" is active for PID 268
+        if (
+          e instanceof postgres.PostgresError &&
+          e.code === PG_OBJECT_IN_USE
+        ) {
+          // The freeing up of the replication slot is not transactional;
+          // sometimes it takes time for Postgres to consider the slot
+          // inactive.
+          this.#lc.debug?.(`attempt ${i + 1}: ${String(e)}`, e);
+        } else {
+          this.#lc.warn?.(`error dropping ${slots}`, e);
+        }
+        await sleep(1000);
+      }
+    }
+    this.#lc.warn?.(`maximum attempts exceeded dropping ${slots}`);
   }
 }
 
 // Exported for testing.
 export class Acker {
-  #service: LogicalReplicationService;
+  #acks: Sink<bigint>;
   #keepaliveTimer: NodeJS.Timeout | undefined;
 
-  constructor(service: LogicalReplicationService) {
-    this.#service = service;
+  constructor(acks: Sink<bigint>) {
+    this.#acks = acks;
   }
 
   keepalive() {
@@ -396,14 +380,14 @@ export class Acker {
 
     // Note: Sending '0/0' means "keep alive but do not update confirmed_flush_lsn"
     // https://github.com/postgres/postgres/blob/3edc67d337c2e498dad1cd200e460f7c63e512e6/src/backend/replication/walsender.c#L2457
-    const lsn = watermark ? fromLexiVersion(watermark) : '0/0';
-    void this.#service.acknowledge(lsn);
+    const lsn = watermark ? versionFromLexi(watermark) : 0n;
+    this.#acks.push(lsn);
   }
 }
 
 type ReplicationError = {
-  lsn: string;
-  msg: Pgoutput.Message;
+  lsn: bigint;
+  msg: Message;
   err: unknown;
   lastLogTime: number;
 };
@@ -414,6 +398,7 @@ class ChangeMaker {
   readonly #lc: LogContext;
   readonly #shardPrefix: string;
   readonly #shardConfig: InternalShardConfig;
+  readonly #initialSchema: PublishedSchema;
   readonly #upstream: ShortLivedClient;
 
   #replicaIdentityTimer: NodeJS.Timeout | undefined;
@@ -421,14 +406,16 @@ class ChangeMaker {
 
   constructor(
     lc: LogContext,
-    shardID: string,
+    {appID, shardNum}: ShardID,
     shardConfig: InternalShardConfig,
+    initialSchema: PublishedSchema,
     upstreamURI: string,
   ) {
     this.#lc = lc;
     // Note: This matches the prefix used in pg_logical_emit_message() in pg/schema/ddl.ts.
-    this.#shardPrefix = `zero/${shardID}`;
+    this.#shardPrefix = `${appID}/${shardNum}`;
     this.#shardConfig = shardConfig;
+    this.#initialSchema = initialSchema;
     this.#upstream = new ShortLivedClient(
       lc,
       upstreamURI,
@@ -436,10 +423,7 @@ class ChangeMaker {
     );
   }
 
-  async makeChanges(
-    lsn: string,
-    msg: Pgoutput.Message,
-  ): Promise<ChangeStreamMessage[]> {
+  async makeChanges(lsn: bigint, msg: Message): Promise<ChangeStreamMessage[]> {
     if (this.#error) {
       this.#logError(this.#error);
       return [];
@@ -466,7 +450,9 @@ class ChangeMaker {
     // at most once a minute.
     if (now - lastLogTime > 60_000) {
       this.#lc.error?.(
-        `Unable to continue replication from LSN ${lsn}: ${String(err)}`,
+        `Unable to continue replication from LSN ${fromBigInt(lsn)}: ${String(
+          err,
+        )}`,
         // 'content' can be a large byte Buffer. Exclude it from logging output.
         {...msg, content: undefined},
       );
@@ -475,7 +461,7 @@ class ChangeMaker {
   }
 
   // eslint-disable-next-line require-await
-  async #makeChanges(msg: Pgoutput.Message): Promise<ChangeStreamData[]> {
+  async #makeChanges(msg: Message): Promise<ChangeStreamData[]> {
     switch (msg.tag) {
       case 'begin':
         return [
@@ -483,17 +469,23 @@ class ChangeMaker {
         ];
 
       case 'delete': {
-        const key = msg.key ?? msg.old;
-        if (!key) {
+        if (!(msg.key ?? msg.old)) {
           throw new Error(
             `Invalid DELETE msg (missing key): ${stringify(msg)}`,
           );
         }
-        return [['data', msg.key ? (msg as MessageDelete) : {...msg, key}]];
+        // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-DELETE
+        return [
+          ['data', msg.old ? {...msg, key: msg.old} : (msg as MessageDelete)],
+        ];
+      }
+
+      case 'update': {
+        // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-UPDATE
+        return [['data', msg.old ? {...msg, key: msg.old} : msg]];
       }
 
       case 'insert':
-      case 'update':
       case 'truncate':
         return [['data', msg]];
 
@@ -685,7 +677,14 @@ class ChangeMaker {
     // ADD
     for (const id of added) {
       const {name, ...spec} = must(newColumns.get(id));
-      changes.push({tag: 'add-column', table, column: {name, spec}});
+      const column = {name, spec};
+      try {
+        // Validate that the ChangeProcessor will accept the column change.
+        mapPostgresToLiteColumn(table.name, column);
+      } catch (cause) {
+        throw new UnsupportedSchemaChangeError({cause});
+      }
+      changes.push({tag: 'add-column', table, column});
     }
     return changes;
   }
@@ -718,23 +717,24 @@ class ChangeMaker {
    * However, they serve the purpose determining if schemas have changed.
    */
   async #handleRelation(rel: MessageRelation): Promise<ChangeStreamData[]> {
-    const {publications, ddlDetection, initialSchema} = this.#shardConfig;
+    const {publications, ddlDetection} = this.#shardConfig;
     if (ddlDetection) {
       return [];
     }
-    assert(initialSchema); // Written in initial-sync
     const currentSchema = await getPublicationInfo(
       this.#upstream.db,
       publications,
     );
-    if (schemasDifferent(initialSchema, currentSchema, this.#lc)) {
+    if (schemasDifferent(this.#initialSchema, currentSchema, this.#lc)) {
       throw new UnsupportedSchemaChangeError();
     }
     // Even if the currentSchema is equal to the initialSchema, the
     // MessageRelation itself must be checked to detect transient
     // schema changes within the transaction (e.g. adding and dropping
     // a table, or renaming a column and then renaming it back).
-    const orel = initialSchema.tables.find(t => t.oid === rel.relationOid);
+    const orel = this.#initialSchema.tables.find(
+      t => t.oid === rel.relationOid,
+    );
     if (!orel) {
       // Can happen if a table is created and then dropped in the same transaction.
       this.#lc.info?.(`relation not in initialSchema: ${stringify(rel)}`);
@@ -800,15 +800,16 @@ export function tablesDifferent(a: PublishedTableSpec, b: PublishedTableSpec) {
 }
 
 export function relationDifferent(a: PublishedTableSpec, b: MessageRelation) {
+  if (a.oid !== b.relationOid || a.schema !== b.schema || a.name !== b.name) {
+    return true;
+  }
   if (
-    a.oid !== b.relationOid ||
-    a.schema !== b.schema ||
-    a.name !== b.name ||
     // The MessageRelation's `keyColumns` field contains the columns in column
     // declaration order, whereas the PublishedTableSpec's `primaryKey`
     // contains the columns in primary key (i.e. index) order. Do an
     // order-agnostic compare here since it is not possible to detect
     // key-order changes from the MessageRelation message alone.
+    b.replicaIdentity === 'default' &&
     !equals(new Set(a.primaryKey), new Set(b.keyColumns))
   ) {
     return true;
@@ -828,7 +829,7 @@ function translateError(e: unknown): Error {
   if (!(e instanceof Error)) {
     return new Error(String(e));
   }
-  if (e instanceof DatabaseError && e.code === PG_ADMIN_SHUTDOWN) {
+  if (e instanceof postgres.PostgresError && e.code === PG_ADMIN_SHUTDOWN) {
     return new ShutdownSignal(e);
   }
   return e;
@@ -856,14 +857,13 @@ function columnsByID(
   return colsByID;
 }
 
-class SSLUnsupportedError extends Error {}
-
 export class UnsupportedSchemaChangeError extends Error {
   readonly name = 'UnsupportedSchemaChangeError';
 
-  constructor() {
+  constructor(options?: ErrorOptions) {
     super(
       'Replication halted. Schema changes cannot be reliably replicated without event trigger support. Resync the replica to recover.',
+      options,
     );
   }
 }

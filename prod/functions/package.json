@@ -1,0 +1,19 @@
+{
+  "name": "functions",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+  },
+  "dependencies": {
+    "@rocicorp/zero": "file:rocicorp-zero.tgz"
+  },
+  "devDependencies": {
+    "@rocicorp/prettier-config": "^0.3.0"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}

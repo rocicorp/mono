@@ -28,6 +28,7 @@ import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import type {ListContext} from '../../routes.ts';
 import {preload} from '../../zero-setup.ts';
+import {CACHE_AWHILE, CACHE_NONE} from '../../query-cache-policy.ts';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -93,10 +94,18 @@ export function ListPage({onReady}: {onReady: () => void}) {
     q = q.whereExists('labels', q => q.where('name', label));
   }
 
-  const [issues, issuesResult] = useQuery(q);
-  if (issues.length > 0 || issuesResult.type === 'complete') {
-    onReady();
-  }
+  // We don't want to cache every single keystroke. We already debounce
+  // keystrokes for the URL, so we just reuse that.
+  const [issues, issuesResult] = useQuery(
+    q,
+    textFilterQuery === textFilter ? CACHE_AWHILE : CACHE_NONE,
+  );
+
+  useEffect(() => {
+    if (issues.length > 0 || issuesResult.type === 'complete') {
+      onReady();
+    }
+  }, [issues.length, issuesResult.type, onReady]);
 
   useEffect(() => {
     if (issuesResult.type === 'complete') {

@@ -19,6 +19,7 @@ import {
 import type {ScanSubscriptionInfo} from './subscriptions.ts';
 import type {ClientID} from './sync/ids.ts';
 import {rejectIfClosed, throwIfClosed} from './transaction-closed-error.ts';
+import type {ZeroTxData} from './replicache-options.ts';
 
 export type TransactionEnvironment = 'client' | 'server';
 export type TransactionLocation = TransactionEnvironment;
@@ -300,6 +301,10 @@ export interface WriteTransaction extends ReadTransaction {
   del(key: string): Promise<boolean>;
 }
 
+// Internal symbol, not exported by Replicache
+// but accessible to Zero.
+export const zeroData = Symbol();
+
 export class WriteTransactionImpl
   extends ReadTransactionImpl
   implements WriteTransaction
@@ -308,11 +313,13 @@ export class WriteTransactionImpl
   declare readonly dbtx: Write;
   readonly reason: TransactionReason;
   readonly mutationID: number;
+  readonly [zeroData]: ZeroTxData | undefined;
 
   constructor(
     clientID: ClientID,
     mutationID: number,
     reason: TransactionReason,
+    zData: ZeroTxData | undefined,
     dbWrite: Write,
     lc: LogContext,
     rpcName = 'openWriteTransaction',
@@ -320,6 +327,7 @@ export class WriteTransactionImpl
     super(clientID, dbWrite, lc, rpcName);
     this.mutationID = mutationID;
     this.reason = reason;
+    this[zeroData] = zData;
   }
 
   put(key: string, value: ReadonlyJSONValue): Promise<void> {

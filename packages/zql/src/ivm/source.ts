@@ -18,6 +18,11 @@ export type SourceChangeEdit = {
   oldRow: Row;
 };
 
+export type SourceChangeSet = {
+  type: 'set';
+  row: Row;
+};
+
 export type SourceChange =
   | SourceChangeAdd
   | SourceChangeRemove
@@ -52,13 +57,20 @@ export interface Source {
    * @param sort The ordering of the rows. Source must return rows in this
    * order.
    * @param filters Filters to apply to the source.
+   * @param splitEditKeys If an edit change modifies the values of any of the
+   *   keys in splitEditKeys, the source should split the edit change into
+   *   a remove of the old row followed by an add of the new row.
    */
-  connect(sort: Ordering, filters?: Condition | undefined): SourceInput;
+  connect(
+    sort: Ordering,
+    filters?: Condition | undefined,
+    splitEditKeys?: Set<string> | undefined,
+  ): SourceInput;
 
   /**
    * Pushes a change into the source and into all connected outputs.
    */
-  push(change: SourceChange): void;
+  push(change: SourceChange | SourceChangeSet): void;
 
   /**
    * Pushes a change into the source.

@@ -199,12 +199,11 @@ export class TransactionPool {
                 ...result.stmts.map(stmt =>
                   stmt
                     .execute()
-                    .then(
-                      () =>
-                        lc.debug?.(
-                          `Executed statement (${Date.now() - start} ms)`,
-                          (stmt as unknown as Stmt).strings,
-                        ),
+                    .then(() =>
+                      lc.debug?.(
+                        `Executed statement (${Date.now() - start} ms)`,
+                        (stmt as unknown as Stmt).strings,
+                      ),
                     )
                     .catch(e => this.fail(e)),
                 ),
@@ -279,10 +278,10 @@ export class TransactionPool {
     // terminal states (both of which prevent more tasks from being enqueued), to ensure
     // that the added worker eventually exits.
     if (this.#done) {
-      void this.#tasks.enqueue('done');
+      this.#tasks.enqueue('done');
     }
     if (this.#failure) {
-      void this.#tasks.enqueue(this.#failure);
+      this.#tasks.enqueue(this.#failure);
     }
   }
 
@@ -297,7 +296,7 @@ export class TransactionPool {
       return;
     }
 
-    void this.#tasks.enqueue(taskTracker);
+    this.#tasks.enqueue(taskTracker);
 
     // Check if the pool size can and should be increased.
     if (this.#numWorkers < this.#maxWorkers) {
@@ -337,7 +336,7 @@ export class TransactionPool {
     this.#done = true;
 
     for (let i = 0; i < this.#numWorkers; i++) {
-      void this.#tasks.enqueue('done');
+      this.#tasks.enqueue('done');
     }
   }
 
@@ -397,7 +396,7 @@ export class TransactionPool {
 
       for (let i = 0; i < this.#numWorkers; i++) {
         // Enqueue the Error to terminate any workers waiting for tasks.
-        void this.#tasks.enqueue(this.#failure);
+        this.#tasks.enqueue(this.#failure);
       }
     }
   }

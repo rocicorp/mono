@@ -34,6 +34,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'Description 1',
       closed: false,
       ownerId: '001',
+      createdAt: 1,
     },
   });
   issueSource.push({
@@ -44,6 +45,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'Description 2',
       closed: false,
       ownerId: '001',
+      createdAt: 2,
     },
   });
   issueSource.push({
@@ -54,6 +56,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'Description 3',
       closed: false,
       ownerId: '001',
+      createdAt: 3,
     },
   });
 
@@ -65,6 +68,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'Description 4',
       closed: false,
       ownerId: '002',
+      createdAt: 4,
     },
   });
   issueSource.push({
@@ -75,6 +79,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'Description 5',
       closed: false,
       ownerId: '002',
+      createdAt: 5,
     },
   });
   issueSource.push({
@@ -85,6 +90,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'Description 6',
       closed: true,
       ownerId: '002',
+      createdAt: 6,
     },
   });
   issueSource.push({
@@ -95,6 +101,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'Description 7',
       closed: true,
       ownerId: '003',
+      createdAt: 7,
     },
   });
   issueSource.push({
@@ -105,6 +112,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'Description 8',
       closed: true,
       ownerId: '003',
+      createdAt: 8,
     },
   });
   issueSource.push({
@@ -115,6 +123,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'Description 9',
       closed: false,
       ownerId: '003',
+      createdAt: 9,
     },
   });
   issueSource.push({
@@ -125,6 +134,7 @@ function addData(queryDelegate: QueryDelegate) {
       description: 'Description 10',
       closed: false,
       ownerId: '004',
+      createdAt: 10,
     },
   });
 
@@ -500,7 +510,7 @@ describe('kitchen sink query', () => {
               "type": "and",
             },
           },
-          "ttl": undefined,
+          "ttl": "none",
         },
       ]
     `);
@@ -532,6 +542,7 @@ describe('kitchen sink query', () => {
               "issueId": "102",
               "revisions": [],
               "text": "Comment 6",
+              Symbol(rc): 1,
             },
             {
               "authorId": "002",
@@ -540,27 +551,33 @@ describe('kitchen sink query', () => {
               "issueId": "102",
               "revisions": [],
               "text": "Comment 5",
+              Symbol(rc): 1,
             },
           ],
+          "createdAt": 2,
           "description": "Description 2",
           "id": "102",
           "labels": [
             {
               "id": "401",
               "name": "bug",
+              Symbol(rc): 1,
             },
             {
               "id": "402",
               "name": "feature",
+              Symbol(rc): 1,
             },
           ],
           "owner": {
             "id": "001",
             "metadata": null,
             "name": "Alice",
+            Symbol(rc): 1,
           },
           "ownerId": "001",
           "title": "Issue 2",
+          Symbol(rc): 1,
         },
         {
           "closed": false,
@@ -576,9 +593,11 @@ describe('kitchen sink query', () => {
                   "commentId": "209",
                   "id": "303",
                   "text": "Revision 3",
+                  Symbol(rc): 1,
                 },
               ],
               "text": "Comment 9",
+              Symbol(rc): 1,
             },
             {
               "authorId": "002",
@@ -591,30 +610,37 @@ describe('kitchen sink query', () => {
                   "commentId": "208",
                   "id": "306",
                   "text": "Revision 3",
+                  Symbol(rc): 1,
                 },
               ],
               "text": "Comment 8",
+              Symbol(rc): 1,
             },
           ],
+          "createdAt": 3,
           "description": "Description 3",
           "id": "103",
           "labels": [
             {
               "id": "401",
               "name": "bug",
+              Symbol(rc): 1,
             },
           ],
           "owner": {
             "id": "001",
             "metadata": null,
             "name": "Alice",
+            Symbol(rc): 1,
           },
           "ownerId": "001",
           "title": "Issue 3",
+          Symbol(rc): 1,
         },
         {
           "closed": false,
           "comments": [],
+          "createdAt": 4,
           "description": "Description 4",
           "id": "104",
           "labels": [],
@@ -622,9 +648,11 @@ describe('kitchen sink query', () => {
             "id": "002",
             "metadata": null,
             "name": "Bob",
+            Symbol(rc): 1,
           },
           "ownerId": "002",
           "title": "Issue 4",
+          Symbol(rc): 1,
         },
         {
           "closed": false,
@@ -636,6 +664,7 @@ describe('kitchen sink query', () => {
               "issueId": "105",
               "revisions": [],
               "text": "Comment 12",
+              Symbol(rc): 1,
             },
             {
               "authorId": "002",
@@ -648,11 +677,14 @@ describe('kitchen sink query', () => {
                   "commentId": "211",
                   "id": "309",
                   "text": "Revision 3",
+                  Symbol(rc): 1,
                 },
               ],
               "text": "Comment 11",
+              Symbol(rc): 1,
             },
           ],
+          "createdAt": 5,
           "description": "Description 5",
           "id": "105",
           "labels": [],
@@ -660,13 +692,16 @@ describe('kitchen sink query', () => {
             "id": "002",
             "metadata": null,
             "name": "Bob",
+            Symbol(rc): 1,
           },
           "ownerId": "002",
           "title": "Issue 5",
+          Symbol(rc): 1,
         },
         {
           "closed": false,
           "comments": [],
+          "createdAt": 9,
           "description": "Description 9",
           "id": "109",
           "labels": [],
@@ -676,9 +711,11 @@ describe('kitchen sink query', () => {
               "foo": 1,
             },
             "name": "Charlie",
+            Symbol(rc): 1,
           },
           "ownerId": "003",
           "title": "Issue 9",
+          Symbol(rc): 1,
         },
       ]
     `);

@@ -42,6 +42,9 @@ export type PartitionKey = PrimaryKey;
  * new incoming pushes should be accepted or rejected.
  *
  * Take can count rows globally or by unique value of some field.
+ *
+ * Maintains the invariant that its output size is always <= limit, even
+ * mid processing of a push.
  */
 export class Take implements Operator {
   readonly #input: Input;
@@ -49,6 +52,8 @@ export class Take implements Operator {
   readonly #limit: number;
   readonly #partitionKey: PartitionKey | undefined;
   readonly #partitionKeyComparator: Comparator | undefined;
+  // Fetch overlay needed for some split push cases.
+  #rowHiddenFromFetch: Row | undefined;
 
   #output: Output = throwOutput;
 
@@ -98,6 +103,15 @@ export class Take implements Operator {
       for (const inputNode of this.#input.fetch(req)) {
         if (this.getSchema().compareRows(takeState.bound, inputNode.row) < 0) {
           return;
+        }
+        if (
+          this.#rowHiddenFromFetch &&
+          this.getSchema().compareRows(
+            this.#rowHiddenFromFetch,
+            inputNode.row,
+          ) === 0
+        ) {
+          continue;
         }
         yield inputNode;
       }
@@ -288,6 +302,8 @@ export class Take implements Operator {
         type: 'remove',
         node: boundNode,
       };
+      // Remove before add to maintain invariant that
+      // output size <= limit.
       this.#setTakeState(
         takeStateKey,
         takeState.size,
@@ -297,7 +313,9 @@ export class Take implements Operator {
           : beforeBoundNode.row,
         maxBound,
       );
-      this.#output.push(removeChange);
+      this.#withRowHiddenFromFetch(change.node.row, () => {
+        this.#output.push(removeChange);
+      });
       this.#output.push(change);
     } else if (change.type === 'remove') {
       if (takeState.bound === undefined) {
@@ -349,13 +367,13 @@ export class Take implements Operator {
       }
 
       if (newBound?.push) {
+        this.#output.push(change);
         this.#setTakeState(
           takeStateKey,
           takeState.size,
           newBound.node.row,
           maxBound,
         );
-        this.#output.push(change);
         this.#output.push({
           type: 'add',
           node: newBound.node,
@@ -382,30 +400,11 @@ export class Take implements Operator {
   }
 
   #pushEditChange(change: EditChange): void {
-    if (
-      this.#partitionKeyComparator &&
-      this.#partitionKeyComparator(change.oldNode.row, change.node.row) !== 0
-    ) {
-      // different partition key so fall back to remove/add.
-
-      // TODO: So in some cases these don't need to be transformed into a remove
-      // + add.
-      //
-      // If the oldRow was <= the bound of the old partition value, and the
-      // newRow is <= the bound of the new partition value, this can be sent as
-      // an edit, as the row is present in the output of this operator before
-      // and after applying this push.
-
-      this.push({
-        type: 'remove',
-        node: change.oldNode,
-      });
-      this.push({
-        type: 'add',
-        node: change.node,
-      });
-      return;
-    }
+    assert(
+      !this.#partitionKeyComparator ||
+        this.#partitionKeyComparator(change.oldNode.row, change.node.row) === 0,
+      'Unexpected change of partition key',
+    );
 
     const {takeState, takeStateKey, maxBound, constraint} =
       this.#getStateAndConstraint(change.oldNode.row);
@@ -500,10 +499,6 @@ export class Take implements Operator {
         maxBound,
       );
       this.#output.push({
-        type: 'remove',
-        node: change.oldNode,
-      });
-      this.#output.push({
         type: 'add',
         node: newBoundNode,
       });
@@ -532,19 +527,20 @@ export class Take implements Operator {
         }),
         2,
       );
-
+      // Remove before add to maintain invariant that
+      // output size <= limit.
       this.#setTakeState(
         takeStateKey,
         takeState.size,
         newBoundNode.row,
         maxBound,
       );
-
-      this.#output.push({
-        type: 'remove',
-        node: oldBoundNode,
+      this.#withRowHiddenFromFetch(change.node.row, () => {
+        this.#output.push({
+          type: 'remove',
+          node: oldBoundNode,
+        });
       });
-
       this.#output.push({
         type: 'add',
         node: change.node,
@@ -586,17 +582,16 @@ export class Take implements Operator {
         return;
       }
 
+      this.#output.push({
+        type: 'remove',
+        node: change.oldNode,
+      });
       this.#setTakeState(
         takeStateKey,
         takeState.size,
         afterBoundNode.row,
         maxBound,
       );
-
-      this.#output.push({
-        type: 'remove',
-        node: change.oldNode,
-      });
       this.#output.push({
         type: 'add',
         node: afterBoundNode,
@@ -605,6 +600,15 @@ export class Take implements Operator {
     }
 
     unreachable();
+  }
+
+  #withRowHiddenFromFetch(row: Row, fn: () => void) {
+    this.#rowHiddenFromFetch = row;
+    try {
+      fn();
+    } finally {
+      this.#rowHiddenFromFetch = undefined;
+    }
   }
 
   #setTakeState(

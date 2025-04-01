@@ -1,22 +1,22 @@
 import {trace} from '@opentelemetry/api';
 import {Lock} from '@rocicorp/lock';
+import type {LogContext} from '@rocicorp/logger';
+import type {JWTPayload} from 'jose';
+import {startAsyncSpan, startSpan} from '../../../otel/src/span.ts';
+import {version} from '../../../otel/src/version.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
+import type {Upstream} from '../../../zero-protocol/src/up.ts';
+import type {ConnectParams} from '../services/dispatcher/connect-params.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
+import type {Pusher} from '../services/mutagen/pusher.ts';
 import type {
   SyncContext,
   TokenData,
   ViewSyncer,
 } from '../services/view-syncer/view-syncer.ts';
 import type {HandlerResult, MessageHandler} from './connection.ts';
-import {version} from '../../../otel/src/version.ts';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
-import type {Upstream} from '../../../zero-protocol/src/up.ts';
-import {startAsyncSpan, startSpan} from '../../../otel/src/span.ts';
-import {unreachable} from '../../../shared/src/asserts.ts';
-import type {LogContext} from '@rocicorp/logger';
-import type {JWTPayload} from 'jose';
-import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
-import type {ConnectParams} from '../services/dispatcher/connect-params.ts';
-import type {Pusher} from '../services/mutagen/pusher.ts';
 
 const tracer = trace.getTracer('syncer-ws-server', version);
 
@@ -56,6 +56,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
       .withContext('clientGroupID', clientGroupID)
       .withContext('wsID', wsID);
     this.#authData = tokenData?.decoded;
+    this.#token = tokenData?.raw;
     this.#clientGroupID = clientGroupID;
     this.#pusher = pusher;
     this.#syncContext = {
@@ -74,7 +75,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
     const viewSyncer = this.#viewSyncer;
     switch (msgType) {
       case 'ping':
-        lc.error?.('Pull is not supported by Zero');
+        lc.error?.('Ping is not supported at this layer by Zero');
         break;
       case 'pull':
         lc.error?.('Pull is not supported by Zero');
@@ -97,12 +98,26 @@ export class SyncerWsMessageHandler implements MessageHandler {
               } satisfies HandlerResult;
             }
 
-            if (this.#pusher) {
-              this.#pusher.enqueuePush(msg[1], this.#token);
-              // We do not call mutagen since if a pusher is set
-              // the precludes crud mutators.
-              // We'll be removing crud mutators when we release custom mutators.
-              return {type: 'ok'} satisfies HandlerResult;
+            if (mutations.length === 0) {
+              return {
+                type: 'ok',
+              };
+            }
+
+            // The client only ever sends 1 mutation per push.
+            // #pusher will throw if it sees a CRUD mutation.
+            // #mutagen will throw if it see a custom mutation.
+            if (mutations[0].type === 'custom') {
+              assert(
+                this.#pusher,
+                'A ZERO_PUSH_URL must be set in order to process custom mutations.',
+              );
+              return this.#pusher.enqueuePush(
+                this.#syncContext.clientID,
+                this.#syncContext.wsID,
+                msg[1],
+                this.#token,
+              );
             }
 
             // Hold a connection-level lock while processing mutations so that:
@@ -115,6 +130,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
                   mutation,
                   this.#authData,
                   schemaVersion,
+                  this.#pusher !== undefined,
                 );
                 if (maybeError !== undefined) {
                   errors.push({kind: maybeError[0], message: maybeError[1]});
@@ -148,9 +164,22 @@ export class SyncerWsMessageHandler implements MessageHandler {
         );
         return {
           type: 'stream',
+          source: 'viewSyncer',
           stream,
         };
       }
+      case 'closeConnection':
+        await startAsyncSpan(tracer, 'connection.closeConnection', () =>
+          viewSyncer.closeConnection(this.#syncContext, msg),
+        );
+        break;
+
+      case 'inspect':
+        await startAsyncSpan(tracer, 'connection.inspect', () =>
+          viewSyncer.inspect(this.#syncContext, msg),
+        );
+        break;
+
       default:
         unreachable(msgType);
     }

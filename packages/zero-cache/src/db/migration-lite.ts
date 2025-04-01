@@ -69,7 +69,6 @@ export async function runSchemaMigrations(
     randInt(0, Number.MAX_SAFE_INTEGER).toString(36),
   );
   const db = new Database(log, dbPath);
-  db.pragma('foreign_keys = OFF');
 
   try {
     const versionMigrations = sorted(incrementalMigrationMap);
@@ -104,6 +103,16 @@ export async function runSchemaMigrations(
     });
 
     if (versions.dataVersion < codeVersion) {
+      db.unsafeMode(true); // Enables journal_mode = OFF
+      db.pragma('locking_mode = EXCLUSIVE');
+      db.pragma('foreign_keys = OFF');
+      db.pragma('journal_mode = OFF');
+      db.pragma('synchronous = OFF');
+      // Unfortunately, AUTO_VACUUM is not compatible with BEGIN CONCURRENT,
+      // so it is not an option for the replica file.
+      // https://sqlite.org/forum/forumpost/25f183416a
+      // db.pragma('auto_vacuum = INCREMENTAL');
+
       const migrations =
         versions.dataVersion === 0
           ? // For the empty database v0, only run the setup migration.
@@ -117,8 +126,6 @@ export async function runSchemaMigrations(
           );
           void log.flush(); // Flush logs before each migration to help debug crash-y migrations.
 
-          db.pragma('synchronous = OFF'); // For schema migrations we'll wait for the disk flush after the migration.
-
           versions = await runTransaction(log, db, async tx => {
             // Fetch meta from within the transaction to make the migration atomic.
             let versions = getVersionHistory(tx);
@@ -128,15 +135,27 @@ export async function runSchemaMigrations(
             }
             return versions;
           });
-
-          db.pragma('synchronous = NORMAL');
-          db.exec('VACUUM');
-          log.info?.('VACUUM completed');
-          db.exec('ANALYZE main');
-          log.info?.('ANALYZE completed');
         }
       }
+
+      db.exec('ANALYZE main');
+      log.info?.('ANALYZE completed');
+    } else {
+      // Run optimize whenever opening an sqlite db file as recommended in
+      // https://www.sqlite.org/pragma.html#pragma_optimize
+      // It is important to run the same initialization steps as is done
+      // in the view-syncer (i.e. when preparing database for serving
+      // replication) so that any corruption detected in the view-syncer is
+      // similarly detected in the change-streamer, facilitating an eventual
+      // recovery by resyncing the replica anew.
+      db.pragma('optimize = 0x10002');
+
+      // TODO: Investigate running `integrity_check` or `quick_check` as well,
+      // provided that they are not inordinately expensive on large databases.
     }
+
+    db.pragma('synchronous = NORMAL');
+    db.unsafeMode(false);
 
     assert(versions.dataVersion === codeVersion);
     log.info?.(

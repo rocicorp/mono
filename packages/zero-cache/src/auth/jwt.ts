@@ -8,6 +8,24 @@ import {
 } from 'jose';
 import type {AuthConfig} from '../config/zero-config.ts';
 import {assert} from '../../../shared/src/asserts.ts';
+import {exportJWK, generateKeyPair} from 'jose';
+
+export async function createJwkPair() {
+  const {publicKey, privateKey} = await generateKeyPair('PS256');
+
+  const privateJwk = await exportJWK(privateKey);
+  const publicJwk = await exportJWK(publicKey);
+
+  privateJwk.kid = 'key-2024-001';
+  privateJwk.use = 'sig';
+  privateJwk.alg = 'PS256';
+
+  publicJwk.kid = privateJwk.kid;
+  publicJwk.use = privateJwk.use;
+  publicJwk.alg = privateJwk.alg;
+
+  return {privateJwk, publicJwk};
+}
 
 let remoteKeyset: ReturnType<typeof createRemoteJWKSet> | undefined;
 function getRemoteKeyset(jwksUrl: string) {
@@ -23,13 +41,13 @@ export async function verifyToken(
   token: string,
   verifyOptions: JWTClaimVerificationOptions,
 ): Promise<JWTPayload> {
-  const numOptionsSet = [config.jwk, config.secret, config.jwksUrl].reduce(
-    (l, r) => l + (r !== undefined ? 1 : 0),
-    0,
+  const optionsSet = (['jwk', 'secret', 'jwksUrl'] as const).filter(
+    key => config[key] !== undefined,
   );
   assert(
-    numOptionsSet === 1,
-    'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens',
+    optionsSet.length === 1,
+    'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
+      JSON.stringify(optionsSet),
   );
 
   if (config.jwk !== undefined) {

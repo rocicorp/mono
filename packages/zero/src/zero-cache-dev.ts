@@ -4,7 +4,7 @@
 import {resolver} from '@rocicorp/resolver';
 import chalk from 'chalk';
 import {watch} from 'chokidar';
-import 'dotenv/config';
+import '@dotenvx/dotenvx/config';
 import {spawn, type ChildProcess} from 'node:child_process';
 import {parseOptionsAdvanced} from '../../shared/src/options.ts';
 import {

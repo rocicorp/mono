@@ -201,24 +201,22 @@ describe('db/migration-lite', () => {
   ];
 
   let dbFile: DbFile;
-  let db: Db;
 
   beforeEach(() => {
     dbFile = new DbFile('migration-test');
-    db = dbFile.connect(createSilentLogContext());
-    db.pragma('journal_mode = WAL');
-    db.pragma('synchronous = NORMAL');
+    const db = dbFile.connect(createSilentLogContext());
     db.prepare(`CREATE TABLE "MigrationHistory" (event TEXT)`).run();
+    db.close();
   });
 
   afterEach(() => {
-    db.close();
     dbFile.delete();
   });
 
   for (const c of cases) {
     test(c.name, async () => {
       if (c.preSchema) {
+        const db = dbFile.connect(createSilentLogContext());
         getVersionHistory(db); // Ensures that the table is created.
         db.prepare(
           `
@@ -226,6 +224,7 @@ describe('db/migration-lite', () => {
           VALUES (@dataVersion, @schemaVersion, @minSafeVersion)
         `,
         ).run(c.preSchema);
+        db.close();
       }
 
       let err: string | undefined;
@@ -247,10 +246,12 @@ describe('db/migration-lite', () => {
       }
       expect(err).toBe(c.expectedErr);
 
+      const db = dbFile.connect(createSilentLogContext());
       expect(getVersionHistory(db)).toEqual(c.postSchema);
       expect(db.prepare(`SELECT * FROM "MigrationHistory"`).all()).toEqual(
         c.expectedMigrationHistory ?? [],
       );
+      db.close();
     });
   }
 });

@@ -1,8 +1,8 @@
 import {expect, expectTypeOf, test} from 'vitest';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {relationships} from './relationship-builder.ts';
-import {createSchema} from './schema-builder.ts';
-import {number, string, table} from './table-builder.ts';
+import {clientSchemaFrom, createSchema} from './schema-builder.ts';
+import {boolean, number, string, table} from './table-builder.ts';
 
 const mockQuery = {
   select() {
@@ -35,7 +35,7 @@ const mockQuery = {
   },
 };
 
-test('building a schema', () => {
+test('building a schema', async () => {
   const user = table('user')
     .columns({
       id: string(),
@@ -114,14 +114,14 @@ test('building a schema', () => {
     ),
   }));
 
-  const schema = createSchema(1, {
+  const schema = createSchema({
     tables: [user, issue, issueLabel, label],
     relationships: [userRelationships, issueRelationships, labelRelationships],
   });
 
   const q = mockQuery as unknown as Query<typeof schema, 'user'>;
   const iq = mockQuery as unknown as Query<typeof schema, 'issue'>;
-  const r = q
+  const r = await q
     .related('recruiter', q => q.related('recruiter', q => q.one()).one())
     .one()
     .run();
@@ -150,7 +150,7 @@ test('building a schema', () => {
   >({} as any);
 
   // recruiter is a singular relationship
-  expectTypeOf(q.related('recruiter').run()).toEqualTypeOf<
+  expectTypeOf(await q.related('recruiter').run()).toEqualTypeOf<
     {
       readonly id: string;
       readonly name: string;
@@ -166,7 +166,7 @@ test('building a schema', () => {
   >();
 
   // recruiter is a singular relationship
-  expectTypeOf(q.related('recruiter', q => q).run()).toEqualTypeOf<
+  expectTypeOf(await q.related('recruiter', q => q).run()).toEqualTypeOf<
     {
       readonly id: string;
       readonly name: string;
@@ -181,7 +181,7 @@ test('building a schema', () => {
     }[]
   >();
 
-  const id1 = iq
+  const id1 = await iq
     .related('owner', q => q.related('ownedIssues', q => q.where('id', '1')))
     .run();
   expectTypeOf(id1).toEqualTypeOf<
@@ -204,7 +204,7 @@ test('building a schema', () => {
     }[]
   >({} as never);
 
-  const id = iq.related('labels').run();
+  const id = await iq.related('labels').run();
   expectTypeOf(id).toEqualTypeOf<
     {
       readonly id: string;
@@ -218,7 +218,7 @@ test('building a schema', () => {
   >();
 
   const lq = mockQuery as unknown as Query<typeof schema, 'label'>;
-  const ld = lq.related('issues').run();
+  const ld = await lq.related('issues').run();
   expectTypeOf(ld).toEqualTypeOf<
     {
       readonly id: number;
@@ -269,7 +269,7 @@ test('too many relationships', () => {
   const y = makeTable('y');
   const z = makeTable('z');
 
-  const schema = createSchema(1, {
+  const schema = createSchema({
     tables: [
       a,
       b,
@@ -566,8 +566,94 @@ test('schema with conflicting table names', () => {
   const bar = table('bar').columns({a: string()}).primaryKey('a');
 
   expect(() =>
-    createSchema(1, {tables: [foo, bar]}),
+    createSchema({tables: [foo, bar]}),
   ).toThrowErrorMatchingInlineSnapshot(
     `[Error: Multiple tables reference the name "bar"]`,
   );
+});
+
+// Use JSON.stringify in expectations to preserve / verify key order.
+const stringify = (o: unknown) => JSON.stringify(o, null, 2);
+
+test('clientSchemaFrom', () => {
+  const schema = createSchema({
+    tables: [
+      table('issue')
+        .from('issues')
+        .columns({
+          id: string(),
+          title: string(),
+          description: string(),
+          closed: boolean(),
+          ownerId: string().from('owner_id').optional(),
+        })
+        .primaryKey('id'),
+      table('comment')
+        .from('comments')
+        .columns({
+          id: string().from('comment_id'),
+          issueId: string().from('the_issue_id'), // verify sorting by serverName
+          description: string(),
+        })
+        .primaryKey('id'),
+      table('noMappings')
+        .columns({
+          id: string(),
+          description: string(),
+        })
+        .primaryKey('id'),
+    ],
+  });
+
+  expect(stringify(clientSchemaFrom(schema))).toMatchInlineSnapshot(`
+    "{
+      "clientSchema": {
+        "tables": {
+          "comments": {
+            "columns": {
+              "comment_id": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "the_issue_id": {
+                "type": "string"
+              }
+            }
+          },
+          "issues": {
+            "columns": {
+              "closed": {
+                "type": "boolean"
+              },
+              "description": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "owner_id": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            }
+          },
+          "noMappings": {
+            "columns": {
+              "description": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "hash": "qw9u2r398f0z"
+    }"
+  `);
 });

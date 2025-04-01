@@ -1,6 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import sinon from 'sinon';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {
   assert,
   assertNotNull,
@@ -85,7 +84,7 @@ describe('persistDD31', () => {
   afterEach(async () => {
     await memdag.close();
     await perdag.close();
-    sinon.restore();
+    vi.restoreAllMocks();
   });
 
   async function setupSnapshots(options?: {
@@ -877,7 +876,7 @@ async function setupPersistTest() {
     hashFunction,
     assertHash,
   );
-  const chunksPersistedSpy = sinon.spy(LazyWrite.prototype, 'chunksPersisted');
+  const chunksPersistedSpy = vi.spyOn(LazyWrite.prototype, 'chunksPersisted');
 
   const mutatorNames = Array.from({length: 10}, (_, index) =>
     createMutatorName(index),
@@ -922,7 +921,7 @@ async function setupPersistTest() {
     persistedExpectation: PersistedExpectation,
     onGatherMemOnlyChunksForTest = () => promiseVoid,
   ) => {
-    chunksPersistedSpy.resetHistory();
+    chunksPersistedSpy.mockClear();
     const perdagChunkHashesPrePersist = perdag.chunkHashes();
     await persistDD31(
       new LogContext(),
@@ -932,6 +931,7 @@ async function setupPersistTest() {
       mutators,
       () => false,
       FormatVersion.Latest,
+      undefined,
       onGatherMemOnlyChunksForTest,
     );
     const persistedChunkHashes: Hash[] = [];
@@ -953,27 +953,27 @@ async function setupPersistTest() {
     switch (persistedExpectation) {
       case PersistedExpectation.Snapshot:
         expect(persistedChunkHashes.length).to.be.greaterThan(0);
-        expect(chunksPersistedSpy.callCount).to.equal(1);
-        expect(chunksPersistedSpy.firstCall.args[0]).to.deep.equal(
+        expect(chunksPersistedSpy).toHaveBeenCalledTimes(1);
+        expect(chunksPersistedSpy.mock.calls[0][0]).to.deep.equal(
           persistedChunkHashes,
         );
         break;
       case PersistedExpectation.SnapshotAndLocals:
         expect(persistedChunkHashes.length).to.be.greaterThan(0);
-        expect(chunksPersistedSpy.callCount).to.equal(1);
+        expect(chunksPersistedSpy).toHaveBeenCalledTimes(1);
         // Persisted chunks is a superset of chunks passed to
         // chunksPersisted
         expect([...persistedChunkHashes]).to.include.members(
-          chunksPersistedSpy.firstCall.args[0],
+          chunksPersistedSpy.mock.calls[0][0],
         );
         break;
       case PersistedExpectation.Locals:
         expect(persistedChunkHashes.length).to.be.greaterThan(0);
-        expect(chunksPersistedSpy.callCount).to.equal(0);
+        expect(chunksPersistedSpy).toHaveBeenCalledTimes(0);
         break;
       case PersistedExpectation.Nothing:
         expect(persistedChunkHashes.length).to.equal(0);
-        expect(chunksPersistedSpy.callCount).to.equal(0);
+        expect(chunksPersistedSpy).toHaveBeenCalledTimes(0);
         break;
     }
   };

@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {basename, dirname, join, relative, resolve} from 'node:path';
+import {basename, dirname, join, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tsImport} from 'tsx/esm/api';
 import * as v from '../../../shared/src/valita.ts';
@@ -8,7 +8,9 @@ import {
   type PermissionsConfig,
 } from '../../../zero-schema/src/compiled-permissions.ts';
 import {isSchemaConfig} from '../../../zero-schema/src/schema-config.ts';
-import {zeroOptions} from '../config/zero-config.ts';
+import {appOptions, shardOptions, zeroOptions} from '../config/zero-config.ts';
+import {logOptions} from '../../../otel/src/log-options.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 
 export const deployPermissionsOptions = {
   schema: {
@@ -33,6 +35,12 @@ export const deployPermissionsOptions = {
 
     type: zeroOptions.upstream.type,
   },
+
+  app: {id: appOptions.id},
+
+  shard: shardOptions,
+
+  log: logOptions,
 
   output: {
     file: {
@@ -65,18 +73,20 @@ export const deployPermissionsOptions = {
   },
 };
 
-export async function loadPermissions(
+export async function loadSchemaAndPermissions(
   lc: LogContext,
   schemaPath: string,
-): Promise<PermissionsConfig> {
+): Promise<{schema: Schema; permissions: PermissionsConfig}> {
   const typeModuleErrorMessage = () =>
     `\n\nYou may need to add \` "type": "module" \` to the package.json file for ${schemaPath}.\n`;
 
   lc.info?.(`Loading permissions from ${schemaPath}`);
   const dir = dirname(fileURLToPath(import.meta.url));
   const absoluteSchemaPath = resolve(schemaPath);
+  const relativeDir = relative(dir, dirname(absoluteSchemaPath));
   let relativePath = join(
-    relative(dir, dirname(absoluteSchemaPath)),
+    // tsImport expects the relativePath to be a path and not just a filename.
+    relativeDir.length ? relativeDir : `.${sep}`,
     basename(absoluteSchemaPath),
   );
 
@@ -106,7 +116,11 @@ export async function loadPermissions(
     const schemaConfig = module;
     const perms =
       await (schemaConfig.permissions as unknown as Promise<unknown>);
-    return v.parse(perms, permissionsConfigSchema);
+    const {schema} = schemaConfig;
+    return {
+      schema,
+      permissions: v.parse(perms, permissionsConfigSchema),
+    };
   } catch (e) {
     lc.error?.(`Failed to parse Permissions object`);
     throw e;

@@ -43,6 +43,11 @@ describe('replicator/incremental-sync', () => {
   };
 
   const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+  const full = new ReplicationMessages(
+    {full: ['id', 'bool', 'desc']},
+    'public',
+    'full',
+  );
   const orgIssues = new ReplicationMessages({
     issues: ['orgID', 'issueID', 'bool'],
   });
@@ -193,6 +198,64 @@ describe('replicator/incremental-sync', () => {
             table: 'issues',
             op: 's',
             rowKey: '{"bool":0,"issueID":234}',
+          },
+        ],
+      },
+    },
+    {
+      name: 'partial update rows',
+      setup: `
+      CREATE TABLE issues(
+        issueID INTEGER,
+        bool BOOL,
+        big INTEGER,
+        flt REAL,
+        description TEXT,
+        json JSON,
+        _0_version TEXT,
+        PRIMARY KEY(issueID, bool)
+      );
+      INSERT INTO issues (issueID, bool, big, flt, description, json, _0_version)
+        VALUES (123, true, 9223372036854775807, 123.456, 'hello', 'world', '06');
+      `,
+      downstream: [
+        ['begin', issues.begin(), {commitWatermark: '0a'}],
+        [
+          'data',
+          issues.update('issues', {
+            issueID: 123,
+            bool: true,
+            description: 'bello',
+          }),
+        ],
+        [
+          'data',
+          issues.update('issues', {
+            issueID: 123,
+            bool: true,
+            json: {wor: 'ld'},
+          }),
+        ],
+        ['commit', issues.commit(), {watermark: '0a'}],
+      ],
+      data: {
+        issues: [
+          {
+            issueID: 123n,
+            big: 9223372036854775807n,
+            flt: 123.456,
+            bool: 1n,
+            description: 'bello',
+            json: '{"wor":"ld"}',
+            ['_0_version']: '0a',
+          },
+        ],
+        ['_zero.changeLog']: [
+          {
+            stateVersion: '0a',
+            table: 'issues',
+            op: 's',
+            rowKey: '{"bool":1,"issueID":123}',
           },
         ],
       },
@@ -463,6 +526,202 @@ describe('replicator/incremental-sync', () => {
       },
     },
     {
+      name: 'replica identity full',
+      setup: `
+      CREATE TABLE full(
+        id "INTEGER|NOT_NULL",
+        bool BOOL,
+        desc TEXT,
+        _0_version TEXT
+      );
+      CREATE UNIQUE INDEX full_pk ON full (id ASC);
+      `,
+      downstream: [
+        ['begin', full.begin(), {commitWatermark: '06'}],
+        ['data', full.insert('full', {id: 123, bool: true, desc: null})],
+        ['data', full.insert('full', {id: 456, bool: false, desc: null})],
+        ['data', full.insert('full', {id: 789, bool: false, desc: null})],
+        ['commit', full.commit(), {watermark: '06'}],
+
+        ['begin', full.begin(), {commitWatermark: '0b'}],
+        [
+          'data',
+          full.update(
+            'full',
+            {id: 123, bool: false, desc: 'foobar'},
+            {id: 123, bool: true, desc: null},
+          ),
+        ],
+        [
+          'data',
+          full.update(
+            'full',
+            {id: 987, bool: true, desc: 'barfoo'},
+            {id: 456, bool: false, desc: null},
+          ),
+        ],
+        ['data', full.delete('full', {id: 789, bool: false, desc: null})],
+        ['commit', issues.commit(), {watermark: '0b'}],
+      ],
+      data: {
+        full: [
+          {id: 123n, bool: 0n, desc: 'foobar', ['_0_version']: '0b'},
+          {id: 987n, bool: 1n, desc: 'barfoo', ['_0_version']: '0b'},
+        ],
+        ['_zero.changeLog']: [
+          {
+            op: 's',
+            rowKey: '{"id":123}',
+            stateVersion: '0b',
+            table: 'full',
+          },
+          {
+            op: 'd',
+            rowKey: '{"id":456}',
+            stateVersion: '0b',
+            table: 'full',
+          },
+          {
+            op: 'd',
+            rowKey: '{"id":789}',
+            stateVersion: '0b',
+            table: 'full',
+          },
+          {
+            op: 's',
+            rowKey: '{"id":987}',
+            stateVersion: '0b',
+            table: 'full',
+          },
+        ],
+      },
+    },
+    {
+      name: 'upsert (resumptive replication)',
+      setup: `
+      CREATE TABLE foo(
+        id INT PRIMARY KEY,
+        desc TEXT,
+        _0_version TEXT
+      );
+      INSERT INTO foo (id, desc) VALUES (1, 'one');
+
+      CREATE TABLE full(
+        id INT PRIMARY KEY,
+        bool BOOL,
+        desc TEXT,
+        _0_version TEXT
+      );
+      INSERT INTO full (id, bool, desc) VALUES (2, 0, 'two');
+      `,
+      downstream: [
+        ['begin', full.begin(), {commitWatermark: '06'}],
+        ['data', fooBarBaz.insert('foo', {id: 1, desc: 'replaced one'})],
+        ['data', fooBarBaz.update('foo', {id: 789, desc: null})],
+        ['data', fooBarBaz.update('foo', {id: 234, desc: 'woo'}, {id: 999})],
+        ['data', fooBarBaz.delete('foo', {id: 1000})],
+        [
+          'data',
+          full.insert('full', {id: 2, bool: true, desc: 'replaced two'}),
+        ],
+        [
+          'data',
+          full.update(
+            'full',
+            {id: 321, bool: false, desc: 'voo'},
+            {id: 333, bool: true, desc: 'did not exist'},
+          ),
+        ],
+        [
+          'data',
+          full.update(
+            'full',
+            {id: 456, bool: false, desc: null},
+            {id: 456, bool: false, desc: 'did not exist'},
+          ),
+        ],
+        [
+          'data',
+          full.delete('full', {id: 2000, bool: false, desc: 'does not exist'}),
+        ],
+        ['commit', full.commit(), {watermark: '06'}],
+      ],
+      data: {
+        foo: [
+          {id: 1n, desc: 'replaced one', ['_0_version']: '06'},
+          {id: 789n, desc: null, ['_0_version']: '06'},
+          {id: 234n, desc: 'woo', ['_0_version']: '06'},
+        ],
+        full: [
+          {id: 2n, bool: 1n, desc: 'replaced two', ['_0_version']: '06'},
+          {id: 321n, bool: 0n, desc: 'voo', ['_0_version']: '06'},
+          {id: 456n, bool: 0n, desc: null, ['_0_version']: '06'},
+        ],
+        ['_zero.changeLog']: [
+          {
+            op: 's',
+            rowKey: '{"id":1}',
+            stateVersion: '06',
+            table: 'foo',
+          },
+          {
+            op: 's',
+            rowKey: '{"id":789}',
+            stateVersion: '06',
+            table: 'foo',
+          },
+          {
+            op: 'd',
+            rowKey: '{"id":999}',
+            stateVersion: '06',
+            table: 'foo',
+          },
+          {
+            op: 's',
+            rowKey: '{"id":234}',
+            stateVersion: '06',
+            table: 'foo',
+          },
+          {
+            op: 'd',
+            rowKey: '{"id":1000}',
+            stateVersion: '06',
+            table: 'foo',
+          },
+          {
+            op: 's',
+            rowKey: '{"id":2}',
+            stateVersion: '06',
+            table: 'full',
+          },
+          {
+            op: 'd',
+            rowKey: '{"id":333}',
+            stateVersion: '06',
+            table: 'full',
+          },
+          {
+            op: 's',
+            rowKey: '{"id":321}',
+            stateVersion: '06',
+            table: 'full',
+          },
+          {
+            op: 's',
+            rowKey: '{"id":456}',
+            stateVersion: '06',
+            table: 'full',
+          },
+          {
+            op: 'd',
+            rowKey: '{"id":2000}',
+            stateVersion: '06',
+            table: 'full',
+          },
+        ],
+      },
+    },
+    {
       name: 'reserved words in DML',
       setup: `
       CREATE TABLE "transaction" (
@@ -640,7 +899,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -726,13 +985,13 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'bar',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -845,7 +1104,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -926,7 +1185,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -963,6 +1222,7 @@ describe('replicator/incremental-sync', () => {
       name: 'rename column',
       setup: `
         CREATE TABLE foo(id INT8, renameMe TEXT, _0_version TEXT);
+        CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
         INSERT INTO foo(id, renameMe, _0_version) VALUES (1, 'hel', '00');
         INSERT INTO foo(id, renameMe, _0_version) VALUES (2, 'low', '00');
         INSERT INTO foo(id, renameMe, _0_version) VALUES (3, 'orl', '00');
@@ -993,156 +1253,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
-          },
-          {
-            stateVersion: '0e',
-            table: 'foo',
-            op: 's',
-            rowKey: '{"id":4}',
-          },
-        ],
-      },
-      tableSpecs: [
-        {
-          name: 'foo',
-          columns: {
-            id: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
-              dflt: null,
-              notNull: false,
-              pos: 1,
-            },
-            newName: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
-              dflt: null,
-              notNull: false,
-              pos: 2,
-            },
-            ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
-              dflt: null,
-              notNull: false,
-              pos: 3,
-            },
-          },
-        },
-      ],
-      indexSpecs: [],
-    },
-    {
-      name: 'change column nullability',
-      setup: `
-        CREATE TABLE foo(id INT8, nolz TEXT, _0_version TEXT);
-        INSERT INTO foo(id, nolz, _0_version) VALUES (1, 'hel', '00');
-        INSERT INTO foo(id, nolz, _0_version) VALUES (2, 'low', '00');
-        INSERT INTO foo(id, nolz, _0_version) VALUES (3, 'orl', '00');
-      `,
-      downstream: [
-        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
-        ['data', fooBarBaz.update('foo', {id: 3, nolz: 'olrd'})],
-        [
-          'data',
-          fooBarBaz.updateColumn(
-            'foo',
-            {name: 'nolz', spec: {pos: 1, dataType: 'TEXT'}},
-            {name: 'nolz', spec: {pos: 1, dataType: 'TEXT', notNull: true}},
-          ),
-        ],
-        ['data', fooBarBaz.insert('foo', {id: 4, nolz: 'yay'})],
-        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
-      ],
-      data: {
-        foo: [
-          {id: 1n, nolz: 'hel', ['_0_version']: '0e'},
-          {id: 2n, nolz: 'low', ['_0_version']: '0e'},
-          {id: 3n, nolz: 'olrd', ['_0_version']: '0e'},
-          {id: 4n, nolz: 'yay', ['_0_version']: '0e'},
-        ],
-        ['_zero.changeLog']: [
-          {
-            stateVersion: '0e',
-            table: 'foo',
-            op: 'r',
-            rowKey: null,
-          },
-          {
-            stateVersion: '0e',
-            table: 'foo',
-            op: 's',
-            rowKey: '{"id":4}',
-          },
-        ],
-      },
-      tableSpecs: [
-        {
-          name: 'foo',
-          columns: {
-            id: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
-              dflt: null,
-              notNull: false,
-              pos: 1,
-            },
-            nolz: {
-              characterMaximumLength: null,
-              dataType: 'TEXT|NOT_NULL',
-              dflt: null,
-              notNull: false,
-              pos: 3,
-            },
-            ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
-              dflt: null,
-              notNull: false,
-              pos: 2,
-            },
-          },
-        },
-      ],
-      indexSpecs: [],
-    },
-    {
-      name: 'rename indexed column',
-      setup: `
-        CREATE TABLE foo(id INT8, renameMe TEXT, _0_version TEXT);
-        CREATE UNIQUE INDEX foo_rename_me ON foo (renameMe);
-        INSERT INTO foo(id, renameMe, _0_version) VALUES (1, 'hel', '00');
-        INSERT INTO foo(id, renameMe, _0_version) VALUES (2, 'low', '00');
-        INSERT INTO foo(id, renameMe, _0_version) VALUES (3, 'orl', '00');
-      `,
-      downstream: [
-        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
-        ['data', fooBarBaz.update('foo', {id: 3, renameMe: 'olrd'})],
-        [
-          'data',
-          fooBarBaz.updateColumn(
-            'foo',
-            {name: 'renameMe', spec: {pos: 1, dataType: 'TEXT'}},
-            {name: 'newName', spec: {pos: 1, dataType: 'TEXT'}},
-          ),
-        ],
-        ['data', fooBarBaz.insert('foo', {id: 4, newName: 'yay'})],
-        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
-      ],
-      data: {
-        foo: [
-          {id: 1n, newName: 'hel', ['_0_version']: '0e'},
-          {id: 2n, newName: 'low', ['_0_version']: '0e'},
-          {id: 3n, newName: 'olrd', ['_0_version']: '0e'},
-          {id: 4n, newName: 'yay', ['_0_version']: '0e'},
-        ],
-        ['_zero.changeLog']: [
-          {
-            stateVersion: '0e',
-            table: 'foo',
-            op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1182,6 +1293,262 @@ describe('replicator/incremental-sync', () => {
       ],
       indexSpecs: [
         {
+          name: 'foo_pkey',
+          tableName: 'foo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+      ],
+    },
+    {
+      name: 'change column nullability',
+      setup: `
+        CREATE TABLE foo(id INT8, nolz TEXT, _0_version TEXT);
+        CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
+        INSERT INTO foo(id, nolz, _0_version) VALUES (1, 'hel', '00');
+        INSERT INTO foo(id, nolz, _0_version) VALUES (2, 'low', '00');
+        INSERT INTO foo(id, nolz, _0_version) VALUES (3, 'orl', '00');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
+        ['data', fooBarBaz.update('foo', {id: 3, nolz: 'olrd'})],
+        [
+          'data',
+          fooBarBaz.updateColumn(
+            'foo',
+            {name: 'nolz', spec: {pos: 1, dataType: 'TEXT'}},
+            {name: 'nolz', spec: {pos: 1, dataType: 'TEXT', notNull: true}},
+          ),
+        ],
+        ['data', fooBarBaz.insert('foo', {id: 4, nolz: 'yay'})],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        foo: [
+          {id: 1n, nolz: 'hel', ['_0_version']: '0e'},
+          {id: 2n, nolz: 'low', ['_0_version']: '0e'},
+          {id: 3n, nolz: 'olrd', ['_0_version']: '0e'},
+          {id: 4n, nolz: 'yay', ['_0_version']: '0e'},
+        ],
+        ['_zero.changeLog']: [
+          {
+            stateVersion: '0e',
+            table: 'foo',
+            op: 'r',
+            rowKey: '',
+          },
+          {
+            stateVersion: '0e',
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":4}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            nolz: {
+              characterMaximumLength: null,
+              dataType: 'TEXT|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+          },
+        },
+      ],
+      indexSpecs: [
+        {
+          name: 'foo_pkey',
+          tableName: 'foo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+      ],
+    },
+    {
+      name: 'change column default and nullability',
+      setup: `
+        CREATE TABLE foo(id INT8, nolz TEXT, _0_version TEXT);
+        CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
+        INSERT INTO foo(id, nolz, _0_version) VALUES (1, 'hel', '00');
+        INSERT INTO foo(id, nolz, _0_version) VALUES (2, 'low', '00');
+        INSERT INTO foo(id, nolz, _0_version) VALUES (3, 'orl', '00');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
+        ['data', fooBarBaz.update('foo', {id: 3, nolz: 'olrd'})],
+        [
+          'data',
+          fooBarBaz.updateColumn(
+            'foo',
+            {name: 'nolz', spec: {pos: 1, dataType: 'TEXT'}},
+            {
+              name: 'nolz',
+              spec: {pos: 1, dataType: 'TEXT', notNull: true, dflt: 'now()'},
+            },
+          ),
+        ],
+        ['data', fooBarBaz.insert('foo', {id: 4, nolz: 'yay'})],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        foo: [
+          {id: 1n, nolz: 'hel', ['_0_version']: '0e'},
+          {id: 2n, nolz: 'low', ['_0_version']: '0e'},
+          {id: 3n, nolz: 'olrd', ['_0_version']: '0e'},
+          {id: 4n, nolz: 'yay', ['_0_version']: '0e'},
+        ],
+        ['_zero.changeLog']: [
+          {
+            stateVersion: '0e',
+            table: 'foo',
+            op: 'r',
+            rowKey: '',
+          },
+          {
+            stateVersion: '0e',
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":4}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            nolz: {
+              characterMaximumLength: null,
+              dataType: 'TEXT|NOT_NULL',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+          },
+        },
+      ],
+      indexSpecs: [
+        {
+          name: 'foo_pkey',
+          tableName: 'foo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+      ],
+    },
+    {
+      name: 'rename indexed column',
+      setup: `
+        CREATE TABLE foo(id INT8, renameMe TEXT, _0_version TEXT);
+        CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
+        CREATE UNIQUE INDEX foo_rename_me ON foo (renameMe);
+        INSERT INTO foo(id, renameMe, _0_version) VALUES (1, 'hel', '00');
+        INSERT INTO foo(id, renameMe, _0_version) VALUES (2, 'low', '00');
+        INSERT INTO foo(id, renameMe, _0_version) VALUES (3, 'orl', '00');
+      `,
+      downstream: [
+        ['begin', fooBarBaz.begin(), {commitWatermark: '0e'}],
+        ['data', fooBarBaz.update('foo', {id: 3, renameMe: 'olrd'})],
+        [
+          'data',
+          fooBarBaz.updateColumn(
+            'foo',
+            {name: 'renameMe', spec: {pos: 1, dataType: 'TEXT'}},
+            {name: 'newName', spec: {pos: 1, dataType: 'TEXT'}},
+          ),
+        ],
+        ['data', fooBarBaz.insert('foo', {id: 4, newName: 'yay'})],
+        ['commit', fooBarBaz.commit(), {watermark: '0e'}],
+      ],
+      data: {
+        foo: [
+          {id: 1n, newName: 'hel', ['_0_version']: '0e'},
+          {id: 2n, newName: 'low', ['_0_version']: '0e'},
+          {id: 3n, newName: 'olrd', ['_0_version']: '0e'},
+          {id: 4n, newName: 'yay', ['_0_version']: '0e'},
+        ],
+        ['_zero.changeLog']: [
+          {
+            stateVersion: '0e',
+            table: 'foo',
+            op: 'r',
+            rowKey: '',
+          },
+          {
+            stateVersion: '0e',
+            table: 'foo',
+            op: 's',
+            rowKey: '{"id":4}',
+          },
+        ],
+      },
+      tableSpecs: [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'INT8',
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            newName: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+          },
+        },
+      ],
+      indexSpecs: [
+        {
+          name: 'foo_pkey',
+          tableName: 'foo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+        {
           name: 'foo_rename_me',
           tableName: 'foo',
           columns: {newName: 'ASC'},
@@ -1193,6 +1560,7 @@ describe('replicator/incremental-sync', () => {
       name: 'retype column',
       setup: `
         CREATE TABLE foo(id INT8, num TEXT, _0_version TEXT);
+        CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
         INSERT INTO foo(id, num, _0_version) VALUES (1, '3', '00');
         INSERT INTO foo(id, num, _0_version) VALUES (2, '2', '00');
         INSERT INTO foo(id, num, _0_version) VALUES (3, '3', '00');
@@ -1223,7 +1591,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1261,12 +1629,20 @@ describe('replicator/incremental-sync', () => {
           },
         },
       ],
-      indexSpecs: [],
+      indexSpecs: [
+        {
+          tableName: 'foo',
+          name: 'foo_pkey',
+          unique: true,
+          columns: {id: 'ASC'},
+        },
+      ],
     },
     {
       name: 'retype column with indexes',
       setup: `
         CREATE TABLE foo(id INT8, num TEXT, _0_version TEXT);
+        CREATE UNIQUE INDEX foo_pkey ON foo (id);
         CREATE UNIQUE INDEX foo_num ON foo (num);
         CREATE UNIQUE INDEX foo_id_num ON foo (id, num);
         INSERT INTO foo(id, num, _0_version) VALUES (1, '3', '00');
@@ -1299,7 +1675,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1350,12 +1726,19 @@ describe('replicator/incremental-sync', () => {
           columns: {num: 'ASC'},
           unique: true,
         },
+        {
+          name: 'foo_pkey',
+          tableName: 'foo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
       ],
     },
     {
       name: 'rename and retype column',
       setup: `
         CREATE TABLE foo(id INT8, numburr TEXT, _0_version TEXT);
+        CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
         INSERT INTO foo(id, numburr, _0_version) VALUES (1, '3', '00');
         INSERT INTO foo(id, numburr, _0_version) VALUES (2, '2', '00');
         INSERT INTO foo(id, numburr, _0_version) VALUES (3, '3', '00');
@@ -1386,7 +1769,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1424,7 +1807,14 @@ describe('replicator/incremental-sync', () => {
           },
         },
       ],
-      indexSpecs: [],
+      indexSpecs: [
+        {
+          tableName: 'foo',
+          name: 'foo_pkey',
+          unique: true,
+          columns: {id: 'ASC'},
+        },
+      ],
     },
     {
       name: 'drop table',
@@ -1446,7 +1836,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
         ],
       },
@@ -1480,7 +1870,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
         ],
       },
@@ -1582,7 +1972,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '07',
             table: 'transaction',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
         ],
       },
@@ -1637,7 +2027,6 @@ describe('replicator/incremental-sync', () => {
       if (c.indexSpecs) {
         expect(listIndexes(replica)).toEqual(c.indexSpecs);
       }
-      expectTables(replica, c.data, 'bigint');
     });
   }
 });

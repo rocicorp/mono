@@ -29,7 +29,7 @@ import * as Mode from '../../db/mode-enum.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema-versions.ts';
-import {unescapedSchema as schema} from '../change-source/pg/schema/shard.ts';
+import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.ts';
 import type {Service} from '../service.ts';
 
@@ -44,7 +44,8 @@ export interface Mutagen {
   processMutation(
     mutation: Mutation,
     authData: JWTPayload | undefined,
-    schemaVersion: number,
+    schemaVersion: number | undefined,
+    customMutatorsEnabled: boolean,
   ): Promise<MutationError | undefined>;
 }
 
@@ -52,7 +53,7 @@ export class MutagenService implements Mutagen, Service {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #upstream: PostgresDB;
-  readonly #shardID: string;
+  readonly #shard: ShardID;
   readonly #stopped = resolver();
   readonly #replica: Database;
   readonly #writeAuthorizer: WriteAuthorizerImpl;
@@ -60,7 +61,7 @@ export class MutagenService implements Mutagen, Service {
 
   constructor(
     lc: LogContext,
-    shardID: string,
+    shard: ShardID,
     clientGroupID: string,
     upstream: PostgresDB,
     config: ZeroConfig,
@@ -68,14 +69,15 @@ export class MutagenService implements Mutagen, Service {
     this.id = clientGroupID;
     this.#lc = lc;
     this.#upstream = upstream;
-    this.#shardID = shardID;
-    this.#replica = new Database(this.#lc, config.replicaFile, {
+    this.#shard = shard;
+    this.#replica = new Database(this.#lc, config.replica.file, {
       fileMustExist: true,
     });
     this.#writeAuthorizer = new WriteAuthorizerImpl(
       this.#lc,
       config,
       this.#replica,
+      shard.appID,
       clientGroupID,
     );
 
@@ -90,7 +92,8 @@ export class MutagenService implements Mutagen, Service {
   processMutation(
     mutation: Mutation,
     authData: JWTPayload | undefined,
-    schemaVersion: number,
+    schemaVersion: number | undefined,
+    customMutatorsEnabled = false,
   ): Promise<MutationError | undefined> {
     if (this.#limiter?.canDo() === false) {
       return Promise.resolve([
@@ -102,11 +105,13 @@ export class MutagenService implements Mutagen, Service {
       this.#lc,
       authData,
       this.#upstream,
-      this.#shardID,
+      this.#shard,
       this.id,
       mutation,
       this.#writeAuthorizer,
       schemaVersion,
+      undefined,
+      customMutatorsEnabled,
     );
   }
 
@@ -126,12 +131,13 @@ export async function processMutation(
   lc: LogContext,
   authData: JWTPayload | undefined,
   db: PostgresDB,
-  shardID: string,
+  shard: ShardID,
   clientGroupID: string,
   mutation: Mutation,
   writeAuthorizer: WriteAuthorizer,
-  schemaVersion: number,
+  schemaVersion: number | undefined,
   onTxStart?: () => void | Promise<void>, // for testing
+  customMutatorsEnabled = false,
 ): Promise<MutationError | undefined> {
   assert(
     mutation.type === MutationType.CRUD,
@@ -194,7 +200,7 @@ export async function processMutation(
               lc,
               tx,
               authData,
-              shardID,
+              shard,
               clientGroupID,
               schemaVersion,
               mutation,
@@ -214,6 +220,26 @@ export async function processMutation(
           lc.debug?.(e.message);
           return undefined;
         }
+        if (
+          e instanceof ErrorForClient &&
+          !errorMode &&
+          e.errorBody.kind === ErrorKind.InvalidPush &&
+          customMutatorsEnabled &&
+          i < 2
+        ) {
+          // We're temporarily supporting custom mutators AND CRUD mutators at the same time.
+          // This can create a lot of OOO mutation errors since we do not know when the API server
+          // has applied a custom mutation before moving on to process CRUD mutations.
+          // The temporary workaround (since CRUD is being deprecated) is to retry the mutation
+          // after a small delay. Users are not expected to be running both CRUD and Custom mutators.
+          // They should migrate completely to custom mutators.
+          lc.info?.(
+            'Both CRUD and Custom mutators are being used at once. This is supported for now but IS NOT RECOMMENDED. Migrate completely to custom mutators.',
+            e,
+          );
+          await new Promise(resolve => setTimeout(resolve, 100));
+          continue;
+        }
         if (e instanceof ErrorForClient || errorMode) {
           lc.error?.('Process mutation error', e);
           throw e;
@@ -230,7 +256,6 @@ export async function processMutation(
           break;
         }
         lc.error?.('Got error running mutation, re-running in error mode', e);
-        ``;
         errorMode = true;
         i--;
       }
@@ -241,13 +266,13 @@ export async function processMutation(
   return result;
 }
 
-async function processMutationWithTx(
+export async function processMutationWithTx(
   lc: LogContext,
   tx: PostgresTransaction,
   authData: JWTPayload | undefined,
-  shardID: string,
+  shard: ShardID,
   clientGroupID: string,
-  schemaVersion: number,
+  schemaVersion: number | undefined,
   mutation: CRUDMutation,
   errorMode: boolean,
   authorizer: WriteAuthorizer,
@@ -298,7 +323,7 @@ async function processMutationWithTx(
   tasks.unshift(() =>
     checkSchemaVersionAndIncrementLastMutationID(
       tx,
-      shardID,
+      shard,
       clientGroupID,
       schemaVersion,
       mutation.clientID,
@@ -365,28 +390,30 @@ function getDeleteSQL(
 
 async function checkSchemaVersionAndIncrementLastMutationID(
   tx: PostgresTransaction,
-  shardID: string,
+  shard: ShardID,
   clientGroupID: string,
-  schemaVersion: number,
+  schemaVersion: number | undefined,
   clientID: string,
   receivedMutationID: number,
 ) {
   const [[{lastMutationID}], supportedVersionRange] = await Promise.all([
     tx<{lastMutationID: bigint}[]>`
-    INSERT INTO ${tx(
-      schema(shardID),
-    )}.clients as current ("clientGroupID", "clientID", "lastMutationID")
-    VALUES (${clientGroupID}, ${clientID}, ${1})
-    ON CONFLICT ("clientGroupID", "clientID")
-    DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
-    RETURNING "lastMutationID"
+    INSERT INTO ${tx(upstreamSchema(shard))}.clients 
+      as current ("clientGroupID", "clientID", "lastMutationID")
+          VALUES (${clientGroupID}, ${clientID}, ${1})
+      ON CONFLICT ("clientGroupID", "clientID")
+      DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
+      RETURNING "lastMutationID"
   `,
-    tx<
-      {
-        minSupportedVersion: number;
-        maxSupportedVersion: number;
-      }[]
-    >`SELECT "minSupportedVersion", "maxSupportedVersion" FROM zero."schemaVersions"`,
+    schemaVersion === undefined
+      ? undefined
+      : tx<
+          {
+            minSupportedVersion: number;
+            maxSupportedVersion: number;
+          }[]
+        >`SELECT "minSupportedVersion", "maxSupportedVersion" 
+        FROM ${tx(appSchema(shard))}."schemaVersions"`,
   ]);
 
   // ABORT if the resulting lastMutationID is not equal to the receivedMutationID.
@@ -403,14 +430,16 @@ async function checkSchemaVersionAndIncrementLastMutationID(
     });
   }
 
-  assert(supportedVersionRange.length === 1);
-  throwErrorForClientIfSchemaVersionNotSupported(
-    schemaVersion,
-    supportedVersionRange[0],
-  );
+  if (schemaVersion !== undefined && supportedVersionRange !== undefined) {
+    assert(supportedVersionRange.length === 1);
+    throwErrorForClientIfSchemaVersionNotSupported(
+      schemaVersion,
+      supportedVersionRange[0],
+    );
+  }
 }
 
-class MutationAlreadyProcessedError extends Error {
+export class MutationAlreadyProcessedError extends Error {
   constructor(clientID: string, received: number, actual: bigint) {
     super(
       `Ignoring mutation from ${clientID} with ID ${received} as it was already processed. Expected: ${actual}`,

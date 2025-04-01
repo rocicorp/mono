@@ -23,7 +23,9 @@ import {
 import {setupCVRTables, type RowsRow} from './schema/cvr.ts';
 import type {CVRVersion} from './schema/types.ts';
 
-const SHARD_ID = 'sdf';
+const APP_ID = 'roze';
+const SHARD_NUM = 1;
+const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 
 describe('view-syncer/cvr-store', () => {
   const lc = createSilentLogContext();
@@ -42,40 +44,40 @@ describe('view-syncer/cvr-store', () => {
 
   beforeEach(async () => {
     db = await testDBs.create('view_syncer_cvr_schema');
-    await db.begin(tx => setupCVRTables(lc, tx, SHARD_ID));
+    await db.begin(tx => setupCVRTables(lc, tx, SHARD));
     await db.unsafe(`
-    INSERT INTO cvr_sdf.instances ("clientGroupID", version, "lastActive", "replicaVersion")
+    INSERT INTO "roze_1/cvr".instances ("clientGroupID", version, "lastActive", "replicaVersion")
       VALUES('${CVR_ID}', '03', '2024-09-04', '01');
-    INSERT INTO cvr_sdf.queries ("clientGroupID", "queryHash", "clientAST", 
+    INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", 
                              "patchVersion", "transformationHash", "transformationVersion")
       VALUES('${CVR_ID}', 'foo', '{"table":"issues"}', '01', 'foo-transformed', '01');
-    INSERT INTO cvr_sdf."rowsVersion" ("clientGroupID", version)
+    INSERT INTO "roze_1/cvr"."rowsVersion" ("clientGroupID", version)
       VALUES('${CVR_ID}', '03');
-    INSERT INTO cvr_sdf.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
+    INSERT INTO "roze_1/cvr".rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"1"}', '01', '01', NULL);
-    INSERT INTO cvr_sdf.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
+    INSERT INTO "roze_1/cvr".rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"2"}', '01', '01', '{"foo":1}');
-    INSERT INTO cvr_sdf.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
+    INSERT INTO "roze_1/cvr".rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"3"}', '01', '01', '{"bar":2}');
-    INSERT INTO cvr_sdf.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
+    INSERT INTO "roze_1/cvr".rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"4"}', '01', '01', '{"foo":2,"bar":3}');
 
-    INSERT INTO cvr_sdf.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
+    INSERT INTO "roze_1/cvr".rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"5"}', '01', '02', NULL);
-    INSERT INTO cvr_sdf.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
+    INSERT INTO "roze_1/cvr".rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"6"}', '01', '02', '{"foo":1}');
-    INSERT INTO cvr_sdf.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
+    INSERT INTO "roze_1/cvr".rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"7"}', '01', '02', '{"bar":2}');
-    INSERT INTO cvr_sdf.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
+    INSERT INTO "roze_1/cvr".rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"8"}', '01', '02', '{"foo":2,"bar":3}');
 
-    INSERT INTO cvr_sdf.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
+    INSERT INTO "roze_1/cvr".rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"9"}', '01', '03', NULL);
-    INSERT INTO cvr_sdf.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
+    INSERT INTO "roze_1/cvr".rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"10"}', '01', '03', '{"foo":1}');
-    INSERT INTO cvr_sdf.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
+    INSERT INTO "roze_1/cvr".rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"11"}', '01', '03', '{"bar":2}');
-    INSERT INTO cvr_sdf.rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
+    INSERT INTO "roze_1/cvr".rows ("clientGroupID", "schema", "table", "rowKey", "rowVersion", "patchVersion", "refCounts")
       VALUES('${CVR_ID}', '', 'issues', '{"id":"12"}', '01', '03', '{"foo":2,"bar":3}');
       `);
 
@@ -83,7 +85,7 @@ describe('view-syncer/cvr-store', () => {
     store = new CVRStore(
       lc,
       db,
-      SHARD_ID,
+      SHARD,
       TASK_ID,
       CVR_ID,
       ON_FAILURE,
@@ -100,7 +102,7 @@ describe('view-syncer/cvr-store', () => {
 
   test('wait for row catchup', async () => {
     // Simulate the CVR being ahead of the rows.
-    await db`UPDATE cvr_sdf.instances SET version = '04'`;
+    await db`UPDATE "roze_1/cvr".instances SET version = '04'`;
 
     // start a CVR load.
     const loading = store.load(lc, CONNECT_TIME);
@@ -109,8 +111,8 @@ describe('view-syncer/cvr-store', () => {
 
     // Simulate catching up.
     await db`
-    UPDATE cvr_sdf.instances SET version = '05:01';
-    UPDATE cvr_sdf."rowsVersion" SET version = '05:01';
+    UPDATE "roze_1/cvr".instances SET version = '05:01';
+    UPDATE "roze_1/cvr"."rowsVersion" SET version = '05:01';
     `.simple();
 
     const cvr = await loading;
@@ -122,7 +124,7 @@ describe('view-syncer/cvr-store', () => {
 
   test('fail after max attempts if rows behind', async () => {
     // Simulate the CVR being ahead of the rows.
-    await db`UPDATE cvr_sdf.instances SET version = '04'`;
+    await db`UPDATE "roze_1/cvr".instances SET version = '04'`;
 
     await expect(
       store.load(lc, CONNECT_TIME),
@@ -131,41 +133,45 @@ describe('view-syncer/cvr-store', () => {
     );
 
     // Verify that the store signaled an ownership change to 'my-task' at CONNECT_TIME.
-    expect(await db`SELECT * FROM cvr_sdf.instances`).toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "my-cvr",
-          "grantedAt": 1732233600000,
-          "lastActive": 1725408000000,
-          "owner": "my-task",
-          "replicaVersion": "01",
-          "version": "04",
-        },
-      ]
-    `);
+    expect(await db`SELECT * FROM "roze_1/cvr".instances`)
+      .toMatchInlineSnapshot(`
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600000,
+            "lastActive": 1725408000000,
+            "owner": "my-task",
+            "replicaVersion": "01",
+            "version": "04",
+          },
+        ]
+      `);
   });
 
   test('wrong owner', async () => {
     // Simulate the CVR being owned by someone else.
-    await db`UPDATE cvr_sdf.instances SET owner = 'other-task', "grantedAt" = ${
+    await db`UPDATE "roze_1/cvr".instances SET owner = 'other-task', "grantedAt" = ${
       CONNECT_TIME + 1
     }`;
 
     await expect(store.load(lc, CONNECT_TIME)).rejects.toThrow(OwnershipError);
 
     // Verify that no ownership change was signaled.
-    expect(await db`SELECT * FROM cvr_sdf.instances`).toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "my-cvr",
-          "grantedAt": 1732233600001,
-          "lastActive": 1725408000000,
-          "owner": "other-task",
-          "replicaVersion": "01",
-          "version": "03",
-        },
-      ]
-    `);
+    expect(await db`SELECT * FROM "roze_1/cvr".instances`)
+      .toMatchInlineSnapshot(`
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600001,
+            "lastActive": 1725408000000,
+            "owner": "other-task",
+            "replicaVersion": "01",
+            "version": "03",
+          },
+        ]
+      `);
   });
 
   async function catchupRows(
@@ -369,7 +375,9 @@ describe('view-syncer/cvr-store', () => {
     let cvr = await store.load(lc, CONNECT_TIME);
 
     // 12 rows set up in beforeEach().
-    expect(await db`SELECT COUNT(*) FROM cvr_sdf.rows`).toEqual([{count: 12n}]);
+    expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
+      {count: 12n},
+    ]);
 
     let updater = new CVRQueryDrivenUpdater(store, cvr, '04', '01');
     updater.trackQueries(
@@ -387,23 +395,25 @@ describe('view-syncer/cvr-store', () => {
       );
     }
     await updater.received(lc, rows);
-    cvr = (await updater.flush(lc, true, CONNECT_TIME, now)).cvr;
+    cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
 
-    expect(await db`SELECT * FROM cvr_sdf.instances`).toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "my-cvr",
-          "grantedAt": 1732233600000,
-          "lastActive": 1732320000000,
-          "owner": "my-task",
-          "replicaVersion": "01",
-          "version": "04",
-        },
-      ]
-    `);
+    expect(await db`SELECT * FROM "roze_1/cvr".instances`)
+      .toMatchInlineSnapshot(`
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600000,
+            "lastActive": 1732320000000,
+            "owner": "my-task",
+            "replicaVersion": "01",
+            "version": "04",
+          },
+        ]
+      `);
 
     // rowsVersion === '03' (flush deferred).
-    expect(await db`SELECT * FROM cvr_sdf."rowsVersion"`)
+    expect(await db`SELECT * FROM "roze_1/cvr"."rowsVersion"`)
       .toMatchInlineSnapshot(`
       Result [
         {
@@ -414,7 +424,9 @@ describe('view-syncer/cvr-store', () => {
     `);
 
     // Still only 12 rows.
-    expect(await db`SELECT COUNT(*) FROM cvr_sdf.rows`).toEqual([{count: 12n}]);
+    expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
+      {count: 12n},
+    ]);
 
     // Flush was scheduled.
     expect(setTimeoutFn).toHaveBeenCalledOnce();
@@ -438,23 +450,25 @@ describe('view-syncer/cvr-store', () => {
       );
     }
     await updater.received(lc, rows);
-    await updater.flush(lc, true, CONNECT_TIME, now);
+    await updater.flush(lc, CONNECT_TIME, now);
 
-    expect(await db`SELECT * FROM cvr_sdf.instances`).toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "my-cvr",
-          "grantedAt": 1732233600000,
-          "lastActive": 1732320000000,
-          "owner": "my-task",
-          "replicaVersion": "01",
-          "version": "05",
-        },
-      ]
-    `);
+    expect(await db`SELECT * FROM "roze_1/cvr".instances`)
+      .toMatchInlineSnapshot(`
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600000,
+            "lastActive": 1732320000000,
+            "owner": "my-task",
+            "replicaVersion": "01",
+            "version": "05",
+          },
+        ]
+      `);
 
     // rowsVersion === '03' (flush deferred).
-    expect(await db`SELECT * FROM cvr_sdf."rowsVersion"`)
+    expect(await db`SELECT * FROM "roze_1/cvr"."rowsVersion"`)
       .toMatchInlineSnapshot(`
       Result [
         {
@@ -465,13 +479,15 @@ describe('view-syncer/cvr-store', () => {
     `);
 
     // Still only 12 rows.
-    expect(await db`SELECT COUNT(*) FROM cvr_sdf.rows`).toEqual([{count: 12n}]);
+    expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
+      {count: 12n},
+    ]);
 
     // Now run the flush logic.
     await setTimeoutFn.mock.calls[0][0]();
 
     // rowsVersion === '05' (flushed).
-    expect(await db`SELECT * FROM cvr_sdf."rowsVersion"`)
+    expect(await db`SELECT * FROM "roze_1/cvr"."rowsVersion"`)
       .toMatchInlineSnapshot(`
       Result [
         {
@@ -482,7 +498,9 @@ describe('view-syncer/cvr-store', () => {
     `);
 
     // 12 + 6 + 4.
-    expect(await db`SELECT COUNT(*) FROM cvr_sdf.rows`).toEqual([{count: 22n}]);
+    expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
+      {count: 22n},
+    ]);
   });
 
   test('deferred row stress test', async () => {
@@ -493,7 +511,9 @@ describe('view-syncer/cvr-store', () => {
     setTimeoutFn.mockImplementation((cb, ms) => setTimeout(cb, ms));
 
     // 12 rows set up in beforeEach().
-    expect(await db`SELECT COUNT(*) FROM cvr_sdf.rows`).toEqual([{count: 12n}]);
+    expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
+      {count: 12n},
+    ]);
 
     // Commit 30 flushes of 10 rows each.
     for (let i = 20; i < 320; i += 10) {
@@ -514,31 +534,33 @@ describe('view-syncer/cvr-store', () => {
         );
       }
       await updater.received(lc, rows);
-      cvr = (await updater.flush(lc, true, CONNECT_TIME, now)).cvr;
+      cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
 
       // add a random sleep for varying the asynchronicity
       // between the CVR flush and the async row flush.
       await sleep(Math.random() * 1);
     }
 
-    expect(await db`SELECT * FROM cvr_sdf.instances`).toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "my-cvr",
-          "grantedAt": 1732233600000,
-          "lastActive": 1732320000000,
-          "owner": "my-task",
-          "replicaVersion": "01",
-          "version": "18m",
-        },
-      ]
-    `);
+    expect(await db`SELECT * FROM "roze_1/cvr".instances`)
+      .toMatchInlineSnapshot(`
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600000,
+            "lastActive": 1732320000000,
+            "owner": "my-task",
+            "replicaVersion": "01",
+            "version": "18m",
+          },
+        ]
+      `);
 
     // Should block until all pending rows are flushed.
     await store.flushed(lc);
 
-    // rowsVersion should match cvr_sdf.instances version
-    expect(await db`SELECT * FROM cvr_sdf."rowsVersion"`)
+    // rowsVersion should match "roze_1/cvr".instances version
+    expect(await db`SELECT * FROM "roze_1/cvr"."rowsVersion"`)
       .toMatchInlineSnapshot(`
             Result [
               {
@@ -549,7 +571,7 @@ describe('view-syncer/cvr-store', () => {
           `);
 
     // 12 + (30 * 10)
-    expect(await db`SELECT COUNT(*) FROM cvr_sdf.rows`).toEqual([
+    expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
       {count: 312n},
     ]);
   });
@@ -562,7 +584,9 @@ describe('view-syncer/cvr-store', () => {
     setTimeoutFn.mockImplementation((cb, ms) => setTimeout(cb, ms));
 
     // 12 rows set up in beforeEach().
-    expect(await db`SELECT COUNT(*) FROM cvr_sdf.rows`).toEqual([{count: 12n}]);
+    expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
+      {count: 12n},
+    ]);
 
     // Commit 30 flushes of 10 rows each.
     for (let i = 20; i < 320; i += 10) {
@@ -583,7 +607,7 @@ describe('view-syncer/cvr-store', () => {
         );
       }
       await updater.received(lc, rows);
-      cvr = (await updater.flush(lc, true, CONNECT_TIME, now)).cvr;
+      cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
 
       // add a random sleep for varying the asynchronicity
       // between the CVR flush and the async row flush.
@@ -604,37 +628,39 @@ describe('view-syncer/cvr-store', () => {
     // Empty rows.
     const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
     await updater.received(lc, rows);
-    await updater.flush(lc, true, CONNECT_TIME, now);
+    await updater.flush(lc, CONNECT_TIME, now);
 
-    expect(await db`SELECT * FROM cvr_sdf.instances`).toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientGroupID": "my-cvr",
-          "grantedAt": 1732233600000,
-          "lastActive": 1732320000000,
-          "owner": "my-task",
-          "replicaVersion": "01",
-          "version": "18w",
-        },
-      ]
-    `);
+    expect(await db`SELECT * FROM "roze_1/cvr".instances`)
+      .toMatchInlineSnapshot(`
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600000,
+            "lastActive": 1732320000000,
+            "owner": "my-task",
+            "replicaVersion": "01",
+            "version": "18m",
+          },
+        ]
+      `);
 
     // Should block until all pending rows are flushed.
     await store.flushed(lc);
 
-    // rowsVersion should match cvr_sdf.instances version
-    expect(await db`SELECT * FROM cvr_sdf."rowsVersion"`)
+    // rowsVersion should match "roze_1/cvr".instances version
+    expect(await db`SELECT * FROM "roze_1/cvr"."rowsVersion"`)
       .toMatchInlineSnapshot(`
             Result [
               {
                 "clientGroupID": "my-cvr",
-                "version": "18w",
+                "version": "18m",
               },
             ]
           `);
 
     // 12 + (30 * 10)
-    expect(await db`SELECT COUNT(*) FROM cvr_sdf.rows`).toEqual([
+    expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
       {count: 312n},
     ]);
   });
@@ -644,7 +670,9 @@ describe('view-syncer/cvr-store', () => {
     let cvr = await store.load(lc, CONNECT_TIME);
 
     // 12 rows set up in beforeEach().
-    expect(await db`SELECT COUNT(*) FROM cvr_sdf.rows`).toEqual([{count: 12n}]);
+    expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
+      {count: 12n},
+    ]);
 
     const updater = new CVRQueryDrivenUpdater(store, cvr, '04', '01');
     updater.trackQueries(
@@ -663,23 +691,25 @@ describe('view-syncer/cvr-store', () => {
       );
     }
     await updater.received(lc, rows);
-    cvr = (await updater.flush(lc, true, CONNECT_TIME, now)).cvr;
+    cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
 
-    expect(await db`SELECT * FROM cvr_sdf.instances`).toMatchInlineSnapshot(`
-    Result [
-      {
-        "clientGroupID": "my-cvr",
-        "grantedAt": 1732233600000,
-        "lastActive": 1732320000000,
-        "owner": "my-task",
-        "replicaVersion": "01",
-        "version": "04",
-      },
-    ]
-  `);
+    expect(await db`SELECT * FROM "roze_1/cvr".instances`)
+      .toMatchInlineSnapshot(`
+        Result [
+          {
+            "clientGroupID": "my-cvr",
+            "clientSchema": null,
+            "grantedAt": 1732233600000,
+            "lastActive": 1732320000000,
+            "owner": "my-task",
+            "replicaVersion": "01",
+            "version": "04",
+          },
+        ]
+      `);
 
     // rowsVersion === '03' (flush deferred).
-    expect(await db`SELECT * FROM cvr_sdf."rowsVersion"`)
+    expect(await db`SELECT * FROM "roze_1/cvr"."rowsVersion"`)
       .toMatchInlineSnapshot(`
     Result [
       {
@@ -690,7 +720,9 @@ describe('view-syncer/cvr-store', () => {
   `);
 
     // Still only 12 rows.
-    expect(await db`SELECT COUNT(*) FROM cvr_sdf.rows`).toEqual([{count: 12n}]);
+    expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
+      {count: 12n},
+    ]);
 
     // Flush was scheduled.
     expect(setTimeoutFn).toHaveBeenCalledOnce();
@@ -699,7 +731,7 @@ describe('view-syncer/cvr-store', () => {
     await setTimeoutFn.mock.calls[0][0]();
 
     // rowsVersion === '04' (flushed).
-    expect(await db`SELECT * FROM cvr_sdf."rowsVersion"`)
+    expect(await db`SELECT * FROM "roze_1/cvr"."rowsVersion"`)
       .toMatchInlineSnapshot(`
     Result [
       {
@@ -710,8 +742,220 @@ describe('view-syncer/cvr-store', () => {
   `);
 
     // 12 + 1023 = 1035
-    expect(await db`SELECT COUNT(*) FROM cvr_sdf.rows`).toEqual([
+    expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
       {count: 1035n},
     ]);
+  });
+
+  test('load with deleted client with remaining desires', async () => {
+    await db.unsafe(`
+      INSERT INTO "roze_1/cvr".clients ("clientGroupID", "clientID", "patchVersion", deleted)
+        VALUES('${CVR_ID}', 'client1', '01', false);
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion")
+        VALUES('${CVR_ID}', 'client1', 'foo', '01');
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "ttl", "inactivatedAt")
+        VALUES('${CVR_ID}', 'missing-client', 'foo', '01', '3600', '2025-03-10');
+    `);
+
+    const cvr = await store.load(lc, CONNECT_TIME);
+
+    expect(cvr).toMatchInlineSnapshot(`
+      {
+        "clientSchema": null,
+        "clients": {
+          "client1": {
+            "desiredQueryIDs": [
+              "foo",
+            ],
+            "id": "client1",
+          },
+        },
+        "id": "my-cvr",
+        "lastActive": 1725408000000,
+        "queries": {
+          "foo": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientState": {
+              "client1": {
+                "inactivatedAt": undefined,
+                "ttl": -1,
+                "version": {
+                  "stateVersion": "01",
+                },
+              },
+              "missing-client": {
+                "inactivatedAt": 1741564800000,
+                "ttl": 3600000,
+                "version": {
+                  "stateVersion": "01",
+                },
+              },
+            },
+            "id": "foo",
+            "patchVersion": {
+              "stateVersion": "01",
+            },
+            "transformationHash": "foo-transformed",
+            "transformationVersion": {
+              "stateVersion": "01",
+            },
+          },
+        },
+        "replicaVersion": "01",
+        "version": {
+          "stateVersion": "03",
+        },
+      }
+    `);
+  });
+
+  test('inspectQueries', async () => {
+    // Setup two clients with two desired queries each
+    await db.unsafe(`
+      -- Insert client1 and client2
+      INSERT INTO "roze_1/cvr".clients ("clientGroupID", "clientID", "patchVersion", deleted)
+        VALUES('${CVR_ID}', 'client1', '01', false);
+      INSERT INTO "roze_1/cvr".clients ("clientGroupID", "clientID", "patchVersion", deleted)
+        VALUES('${CVR_ID}', 'client2', '01', false);
+      
+      -- Insert query 'bar' (users table with AST)
+      INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", "patchVersion", "transformationHash", "transformationVersion")
+        VALUES('${CVR_ID}', 'bar', '{"table":"users"}', '02', 'bar-transformed', '01');
+      
+      -- Insert query 'baz' (tasks table with AST)
+      INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", "patchVersion", "transformationHash", "transformationVersion")
+        VALUES('${CVR_ID}', 'baz', '{"table":"tasks"}', '03', 'baz-transformed', '01');
+      
+      -- Client1 desires foo and bar
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion")
+        VALUES('${CVR_ID}', 'client1', 'foo', '01');
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion")
+        VALUES('${CVR_ID}', 'client1', 'bar', '02');
+      
+      -- Client2 desires baz with TTL and bar with inactivatedAt
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "ttl")
+        VALUES('${CVR_ID}', 'client2', 'baz', '03', INTERVAL '7200 milliseconds');
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAt")
+        VALUES('${CVR_ID}', 'client2', 'bar', '02', '2024-10-15');
+    `);
+
+    // Test inspectQueries with no clientID (should return all queries)
+    const allQueries = await store.inspectQueries(lc);
+    expect(allQueries).toMatchInlineSnapshot(`
+      Result [
+        {
+          "ast": {
+            "table": "users",
+          },
+          "clientID": "client1",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": null,
+          "queryID": "bar",
+          "rowCount": 6,
+          "ttl": -1,
+        },
+        {
+          "ast": {
+            "table": "issues",
+          },
+          "clientID": "client1",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": null,
+          "queryID": "foo",
+          "rowCount": 6,
+          "ttl": -1,
+        },
+        {
+          "ast": {
+            "table": "users",
+          },
+          "clientID": "client2",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": 1728950400000,
+          "queryID": "bar",
+          "rowCount": 6,
+          "ttl": -1,
+        },
+        {
+          "ast": {
+            "table": "tasks",
+          },
+          "clientID": "client2",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": null,
+          "queryID": "baz",
+          "rowCount": 0,
+          "ttl": 7200,
+        },
+      ]
+    `);
+
+    // Test inspectQueries for client1
+    const client1Queries = await store.inspectQueries(lc, 'client1');
+    expect(client1Queries).toMatchInlineSnapshot(`
+      Result [
+        {
+          "ast": {
+            "table": "users",
+          },
+          "clientID": "client1",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": null,
+          "queryID": "bar",
+          "rowCount": 6,
+          "ttl": -1,
+        },
+        {
+          "ast": {
+            "table": "issues",
+          },
+          "clientID": "client1",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": null,
+          "queryID": "foo",
+          "rowCount": 6,
+          "ttl": -1,
+        },
+      ]
+    `);
+
+    // Test inspectQueries for client2
+    const client2Queries = await store.inspectQueries(lc, 'client2');
+    expect(client2Queries).toMatchInlineSnapshot(`
+      Result [
+        {
+          "ast": {
+            "table": "users",
+          },
+          "clientID": "client2",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": 1728950400000,
+          "queryID": "bar",
+          "rowCount": 6,
+          "ttl": -1,
+        },
+        {
+          "ast": {
+            "table": "tasks",
+          },
+          "clientID": "client2",
+          "deleted": false,
+          "got": true,
+          "inactivatedAt": null,
+          "queryID": "baz",
+          "rowCount": 0,
+          "ttl": 7200,
+        },
+      ]
+    `);
   });
 });

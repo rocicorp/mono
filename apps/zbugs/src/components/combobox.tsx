@@ -136,7 +136,7 @@ function Combobox<T>({
   };
 
   const iconItem =
-    editable && isOpen ? defaultItem : selectedItem ?? defaultItem;
+    editable && isOpen ? defaultItem : (selectedItem ?? defaultItem);
 
   return (
     <div

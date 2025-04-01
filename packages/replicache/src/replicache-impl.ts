@@ -76,7 +76,11 @@ import {refresh} from './persist/refresh.ts';
 import {ProcessScheduler} from './process-scheduler.ts';
 import type {Puller} from './puller.ts';
 import {type Pusher, PushError} from './pusher.ts';
-import type {ReplicacheOptions} from './replicache-options.ts';
+import type {
+  MutationTrackingData,
+  ReplicacheOptions,
+  ZeroOption,
+} from './replicache-options.ts';
 import {
   getKVStoreProvider,
   httpStatusUnauthorized,
@@ -97,7 +101,6 @@ import {
 } from './subscriptions.ts';
 import * as HandlePullResponseResultEnum from './sync/handle-pull-response-result-type-enum.ts';
 import type {ClientGroupID, ClientID} from './sync/ids.ts';
-import type {Diff} from './sync/patch.ts';
 import {PullError} from './sync/pull-error.ts';
 import {beginPullV1, handlePullResponseV1, maybeEndPull} from './sync/pull.ts';
 import {push, PUSH_VERSION_DD31} from './sync/push.ts';
@@ -123,6 +126,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.ts';
+import type {DiffsMap} from './sync/diff.ts';
 
 declare const TESTING: boolean;
 
@@ -198,6 +202,13 @@ export interface ReplicacheImplOptions {
    * Callback for when Replicache has deleted clients.
    */
   onClientsDeleted?: OnClientsDeleted | undefined;
+
+  /**
+   * Internal option used by Zero.
+   * Replicache will call this to and, if zero is enabled, will
+   * invoke various hooks to allow Zero the keep IVM in sync with Replicache's b-trees.
+   */
+  zero?: ZeroOption | undefined;
 }
 
 // eslint-disable-next-line @typescript-eslint/ban-types
@@ -209,7 +220,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   pushURL: string;
 
   /** The authorization token used when doing a push request. */
-  auth: string;
+  #auth: string;
 
   /** The name of the Replicache database. Populated by {@link ReplicacheOptions#name}. */
   readonly name: string;
@@ -233,6 +244,18 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    */
   get idbName(): string {
     return makeIDBName(this.name, this.schemaVersion);
+  }
+
+  set auth(auth: string) {
+    if (this.#zero) {
+      this.#zero.auth = auth;
+    }
+
+    this.#auth = auth;
+  }
+
+  get auth() {
+    return this.#auth;
   }
 
   /** The schema version of the data understood by this application. */
@@ -295,6 +318,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   readonly perdag: Store;
   readonly #idbDatabases: IDBDatabasesStore;
   readonly #lc: LogContext;
+  readonly #zero: ZeroOption | undefined;
 
   readonly #closeAbortController = new AbortController();
 
@@ -416,7 +440,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       enableClientGroupForking = true,
       onClientsDeleted = () => {},
     } = implOptions;
-    this.auth = auth ?? '';
+    this.#zero = implOptions.zero;
+    this.#auth = auth ?? '';
     this.pullURL = pullURL;
     this.pushURL = pushURL;
     this.name = name;
@@ -554,6 +579,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     );
 
     // Now we have a profileID, a clientID, a clientGroupID and DB!
+    await this.#zero?.init(headHash, this.memdag);
     resolveReady();
 
     if (this.#enablePullAndPushInOpen) {
@@ -746,23 +772,26 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       const lc = this.#lc
         .withContext('maybeEndPull')
         .withContext('requestID', requestID);
-      const {replayMutations, diffs} = await maybeEndPull<LocalMeta>(
-        this.memdag,
-        lc,
-        syncHead,
-        clientID,
-        this.#subscriptions,
-        FormatVersion.Latest,
-      );
+      const {replayMutations, diffs, oldMainHead, mainHead} =
+        await maybeEndPull<LocalMeta>(
+          this.memdag,
+          lc,
+          syncHead,
+          clientID,
+          this.#subscriptions,
+          FormatVersion.Latest,
+        );
 
       if (!replayMutations || replayMutations.length === 0) {
         // All done.
+        this.#zero?.advance(oldMainHead, mainHead, diffs.get('') ?? []);
         await this.#subscriptions.fire(diffs);
         void this.#schedulePersist();
         return;
       }
 
       // Replay.
+      const zeroData = await this.#zero?.getTxData?.(syncHead);
       for (const mutation of replayMutations) {
         // TODO(greg): I'm not sure why this was in Replicache#_mutate...
         // Ensure that we run initial pending subscribe functions before starting a
@@ -781,6 +810,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
             lc,
             isLocalMetaDD31(meta) ? meta.clientID : clientID,
             FormatVersion.Latest,
+            zeroData,
           ),
         );
       }
@@ -1058,14 +1088,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
    *
    * @experimental This method is under development and its semantics will change.
    */
-  async poke(
-    poke: PokeInternal,
-    pullApplied: (
-      store: Store,
-      syncHead: Hash,
-      patches: readonly Diff[],
-    ) => Promise<void>,
-  ): Promise<void> {
+  async poke(poke: PokeInternal): Promise<void> {
     await this.#ready;
     // TODO(MP) Previously we created a request ID here and included it with the
     // PullRequest to the server so we could tie events across client and server
@@ -1102,7 +1125,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
     switch (result.type) {
       case HandlePullResponseResultEnum.Applied:
-        await pullApplied(this.memdag, result.syncHead, result.diffs);
         await this.maybeEndPull(result.syncHead, requestID);
         break;
       case HandlePullResponseResultEnum.CookieMismatch:
@@ -1176,6 +1198,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
           this.#mutatorRegistry,
           () => this.#closed,
           FormatVersion.Latest,
+          this.#zero?.getTxData,
         );
       } catch (e) {
         if (e instanceof ClientStateNotFoundError) {
@@ -1199,9 +1222,9 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     if (this.#closed) {
       return;
     }
-    let diffs;
+    let refreshResult: Awaited<ReturnType<typeof refresh>>;
     try {
-      diffs = await refresh(
+      refreshResult = await refresh(
         this.#lc,
         this.memdag,
         this.perdag,
@@ -1210,6 +1233,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         this.#subscriptions,
         () => this.closed,
         FormatVersion.Latest,
+        this.#zero,
       );
     } catch (e) {
       if (e instanceof ClientStateNotFoundError) {
@@ -1220,8 +1244,8 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         throw e;
       }
     }
-    if (diffs !== undefined) {
-      await this.#subscriptions.fire(diffs);
+    if (refreshResult !== undefined) {
+      await this.#subscriptions.fire(refreshResult.diffs);
     }
   }
 
@@ -1431,8 +1455,27 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       args: JSONValue | undefined,
     ) => Promise<void | JSONValue>;
 
-    return (args?: Args): Promise<Return> =>
-      this.#mutate(name, mutatorImpl, args, performance.now());
+    return (args?: Args): Promise<Return> => {
+      // DO NOT track CRUD mutations as they do not receive responses from
+      // the server.
+      const trackingData =
+        name === '_zero_crud' ? undefined : this.#zero?.trackMutation();
+
+      const result = this.#mutate(
+        trackingData,
+        name,
+        mutatorImpl,
+        args,
+        performance.now(),
+      );
+
+      if (trackingData) {
+        (result as unknown as Record<string, unknown>).server =
+          trackingData.serverPromise;
+      }
+
+      return result;
+    };
   }
 
   #registerMutators<
@@ -1455,6 +1498,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     R extends ReadonlyJSONValue | void,
     A extends ReadonlyJSONValue,
   >(
+    trackingData: MutationTrackingData | undefined,
     name: string,
     mutatorImpl: (tx: WriteTransaction, args?: A) => MaybePromise<R>,
     args: A | undefined,
@@ -1472,37 +1516,65 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     const {clientID} = this;
     return withWriteNoImplicitCommit(this.memdag, async dagWrite => {
       try {
-        const headHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite);
-        const originalHash = null;
+        let result: R;
+        let newHead: Hash;
+        let diffs: DiffsMap;
+        let headHash: Hash;
+        try {
+          headHash = await mustGetHeadHash(DEFAULT_HEAD_NAME, dagWrite);
+          const originalHash = null;
 
-        const dbWrite = await newWriteLocal(
-          headHash,
-          name,
-          frozenArgs,
-          originalHash,
-          dagWrite,
-          timestamp,
-          clientID,
-          FormatVersion.Latest,
-        );
+          const dbWrite = await newWriteLocal(
+            headHash,
+            name,
+            frozenArgs,
+            originalHash,
+            dagWrite,
+            timestamp,
+            clientID,
+            FormatVersion.Latest,
+          );
 
-        const tx = new WriteTransactionImpl(
-          clientID,
-          await dbWrite.getMutationID(),
-          'initial',
-          dbWrite,
-          this.#lc,
-        );
-        const result: R = await mutatorImpl(tx, args);
-        throwIfClosed(dbWrite);
-        const lastMutationID = await dbWrite.getMutationID();
-        const diffs = await dbWrite.commitWithDiffs(
-          DEFAULT_HEAD_NAME,
-          this.#subscriptions,
-        );
+          const mutationID = await dbWrite.getMutationID();
+          const tx = new WriteTransactionImpl(
+            clientID,
+            mutationID,
+            'initial',
+            await this.#zero?.getTxData(headHash, {
+              openLazyRead: dagWrite,
+            }),
+            dbWrite,
+            this.#lc,
+          );
 
-        // Update this after the commit in case the commit fails.
-        this.lastMutationID = lastMutationID;
+          if (trackingData) {
+            this.#zero?.mutationIDAssigned(
+              trackingData.ephemeralID,
+              mutationID,
+            );
+          }
+
+          result = await mutatorImpl(tx, args);
+
+          throwIfClosed(dbWrite);
+          const lastMutationID = await dbWrite.getMutationID();
+          [newHead, diffs] = await dbWrite.commitWithDiffs(
+            DEFAULT_HEAD_NAME,
+            this.#subscriptions,
+          );
+
+          // Update this after the commit in case the commit fails.
+          this.lastMutationID = lastMutationID;
+        } catch (e) {
+          // If we threw before we could persist the mutation
+          // then we need to reject the mutation.
+          if (trackingData) {
+            this.#zero?.rejectMutation(trackingData.ephemeralID, e);
+          }
+          throw e;
+        }
+
+        this.#zero?.advance(headHash, newHead, diffs.get('') ?? []);
 
         // Send is not supposed to reject
         this.#pushConnectionLoop.send(false).catch(() => void 0);

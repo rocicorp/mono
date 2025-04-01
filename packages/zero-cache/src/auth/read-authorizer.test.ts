@@ -114,7 +114,7 @@ const adminReadableRelationships = relationships(adminReadable, connect => ({
   }),
 }));
 
-const schema = createSchema(1, {
+const schema = createSchema({
   tables: [
     unreadable,
     unreadable2,

@@ -1,20 +1,24 @@
 import type {LogContext} from '@rocicorp/logger';
-import {compareUTF8} from 'compare-utf8';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {deepEqual} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {
   difference,
   intersection,
   union,
 } from '../../../../shared/src/set-utils.ts';
+import {stringCompare} from '../../../../shared/src/string-compare.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
+import {compareTTL} from '../../../../zql/src/query/ttl.ts';
 import {stringify, type JSONObject} from '../../types/bigint-json.ts';
+import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
-import {unescapedSchema as schema} from '../change-source/pg/schema/shard.ts';
+import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
-import type {CVRFlushStats, CVRStore} from './cvr-store.ts';
+import {type CVRFlushStats, type CVRStore} from './cvr-store.ts';
 import {KeyColumns} from './key-columns.ts';
 import {
   cmpVersions,
@@ -43,6 +47,7 @@ export type CVR = {
   replicaVersion: string | null;
   clients: Record<string, ClientRecord>;
   queries: Record<string, QueryRecord>;
+  clientSchema: ClientSchema | null;
 };
 
 /** Exported immutable CVR type. */
@@ -54,6 +59,7 @@ export type CVRSnapshot = {
   readonly replicaVersion: string | null;
   readonly clients: Readonly<Record<string, ClientRecord>>;
   readonly queries: Readonly<Record<string, QueryRecord>>;
+  readonly clientSchema: ClientSchema | null;
 };
 
 const CLIENT_LMID_QUERY_ID = 'lmids';
@@ -100,7 +106,6 @@ export class CVRUpdater {
   protected _setVersion(version: CVRVersion) {
     assert(cmpVersions(this._cvr.version, version) < 0);
     this._cvr.version = version;
-    this._cvrStore.putInstance(this._cvr);
     return version;
   }
 
@@ -118,7 +123,6 @@ export class CVRUpdater {
 
   async flush(
     lc: LogContext,
-    skipNoopFlushes: boolean,
     lastConnectTime: number,
     lastActive = Date.now(),
   ): Promise<{
@@ -127,12 +131,11 @@ export class CVRUpdater {
   }> {
     const start = Date.now();
 
+    this._cvr.lastActive = lastActive;
     const flushed = await this._cvrStore.flush(
       this._orig.version,
-      this._cvr.version,
-      skipNoopFlushes,
+      this._cvr,
       lastConnectTime,
-      lastActive,
     );
 
     if (!flushed) {
@@ -142,7 +145,6 @@ export class CVRUpdater {
       `flushed cvr@${versionString(this._cvr.version)} ` +
         `${JSON.stringify(flushed)} in (${Date.now() - start} ms)`,
     );
-    this._cvr.lastActive = lastActive;
     return {cvr: this._cvr, flushed};
   }
 }
@@ -153,14 +155,14 @@ export class CVRUpdater {
  * but the `stateVersion` of the CVR does not change.
  */
 export class CVRConfigDrivenUpdater extends CVRUpdater {
-  readonly #shardID;
+  readonly #shard: ShardID;
 
-  constructor(cvrStore: CVRStore, cvr: CVRSnapshot, shardID: string) {
+  constructor(cvrStore: CVRStore, cvr: CVRSnapshot, shard: ShardID) {
     super(cvrStore, cvr, cvr.replicaVersion);
-    this.#shardID = shardID;
+    this.#shard = shard;
   }
 
-  #ensureClient(id: string): ClientRecord {
+  ensureClient(id: string): ClientRecord {
     let client = this._cvr.clients[id];
     if (client) {
       return client;
@@ -177,7 +179,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         id: CLIENT_LMID_QUERY_ID,
         ast: {
           schema: '',
-          table: `${schema(this.#shardID)}.clients`,
+          table: `${upstreamSchema(this.#shard)}.clients`,
           where: {
             type: 'simple',
             left: {
@@ -203,31 +205,83 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     return client;
   }
 
+  setClientSchema(lc: LogContext, clientSchema: ClientSchema) {
+    if (this._cvr.clientSchema === null) {
+      this._cvr.clientSchema = clientSchema;
+      this._cvrStore.putInstance(this._cvr);
+    } else if (!deepEqual(this._cvr.clientSchema, clientSchema)) {
+      // This should not be possible with a correct Zero client, as clients
+      // of a CVR should all have the same schema (given that the schema hash
+      // is part of the idb key). In fact, clients joining an existing group
+      // (i.e. non-empty baseCookie) do not send the clientSchema message.
+      lc.warn?.(
+        `New schema ${JSON.stringify(
+          clientSchema,
+        )} does not match existing schema ${JSON.stringify(
+          this._cvr.clientSchema,
+        )}`,
+      );
+      throw new ErrorForClient({
+        kind: 'InvalidConnectionRequest',
+        message: `Provided schema does not match previous schema`,
+      });
+    }
+  }
+
   putDesiredQueries(
     clientID: string,
     queries: Readonly<{hash: string; ast: AST; ttl?: number | undefined}>[],
   ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
-    const client = this.#ensureClient(clientID);
+    const client = this.ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
-    const additional = new Set(queries.map(({hash}) => hash));
-    const needed = difference(additional, current);
+
+    // Find the new/changed desired queries.
+    const needed: Set<string> = new Set();
+    for (const {hash, ttl = -1} of queries) {
+      const query = this._cvr.queries[hash];
+      if (!query) {
+        needed.add(hash);
+        continue;
+      }
+      if (query.internal) {
+        continue;
+      }
+
+      const oldClientState = query.clientState[clientID];
+      // Old query was inactivated or never desired by this client.
+      if (!oldClientState || oldClientState.inactivatedAt !== undefined) {
+        needed.add(hash);
+        continue;
+      }
+
+      if (compareTTL(ttl, oldClientState.ttl) > 0) {
+        needed.add(hash);
+      }
+    }
+
     if (needed.size === 0) {
       return patches;
     }
     const newVersion = this._ensureNewVersion();
-    client.desiredQueryIDs = [...union(current, needed)].sort(compareUTF8);
+    client.desiredQueryIDs = [...union(current, needed)].sort(stringCompare);
 
     for (const id of needed) {
-      const {ast, ttl} = must(queries.find(({hash}) => hash === id));
-      const query = this._cvr.queries[id] ?? {id, ast, desiredBy: {}};
+      const {ast, ttl = -1} = must(queries.find(({hash}) => hash === id));
+      const query =
+        this._cvr.queries[id] ??
+        ({
+          id,
+          ast,
+          clientState: {},
+        } satisfies ClientQueryRecord);
       assertNotInternal(query);
 
       const inactivatedAt = undefined;
 
-      query.desiredBy[clientID] = {
+      query.clientState[clientID] = {
         inactivatedAt,
-        ttl,
+        ttl: normalizeTTL(ttl),
         version: newVersion,
       };
       this._cvr.queries[id] = query;
@@ -243,63 +297,56 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         client,
         false,
         inactivatedAt,
-        ttl,
+        normalizeTTL(ttl),
       );
     }
     return patches;
   }
 
-  markDesiredQueryAsInactive(
+  markDesiredQueriesAsInactive(
     clientID: string,
-    hash: string,
+    queryHashes: string[],
     now: number,
-  ): void {
-    const client = this.#ensureClient(clientID);
-    assert(client.desiredQueryIDs.includes(hash));
-    const newVersion = this._ensureNewVersion();
-
-    const query = this._cvr.queries[hash];
-    assert(query, `Query ${hash} not found`);
-    assertNotInternal(query);
-
-    const {inactivatedAt, ttl} = must(query.desiredBy[clientID]);
-    assert(inactivatedAt === undefined, `Query ${hash} is already inactivated`);
-
-    query.desiredBy[clientID] = {
-      inactivatedAt: now,
-      ttl: ttl ?? undefined,
-      version: newVersion,
-    };
-
-    // No need to put query... nothing changed.
-    this._cvrStore.putDesiredQuery(
-      newVersion,
-      query,
-      client,
-      false,
-      now,
-      ttl ?? undefined,
-    );
+  ): PatchToVersion[] {
+    return this.#deleteQueries(clientID, queryHashes, now);
   }
 
   /**
    * Returns non active queries in the order that we want to remove them.
    */
-  getInactiveDesiredQueries(clientID: string): string[] {
-    return getInactiveDesiredQueries(this._cvr, clientID);
+  getInactiveQueries(): {
+    hash: string;
+    inactivatedAt: number;
+    ttl: number | undefined;
+  }[] {
+    return getInactiveQueries(this._cvr);
   }
 
-  deleteDesiredQueries(clientID: string, queries: string[]): PatchToVersion[] {
+  deleteDesiredQueries(
+    clientID: string,
+    queryHashes: string[],
+  ): PatchToVersion[] {
+    return this.#deleteQueries(clientID, queryHashes, undefined);
+  }
+
+  #deleteQueries(
+    clientID: string,
+    queryHashes: string[],
+    inactivatedAt: number | undefined,
+  ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
-    const client = this.#ensureClient(clientID);
+    const client = this.ensureClient(clientID);
     const current = new Set(client.desiredQueryIDs);
-    const unwanted = new Set(queries);
+    const unwanted = new Set(queryHashes);
     const remove = intersection(unwanted, current);
     if (remove.size === 0) {
       return patches;
     }
+
     const newVersion = this._ensureNewVersion();
-    client.desiredQueryIDs = [...difference(current, remove)].sort(compareUTF8);
+    client.desiredQueryIDs = [...difference(current, remove)].sort(
+      stringCompare,
+    );
 
     for (const id of remove) {
       const query = this._cvr.queries[id];
@@ -308,15 +355,31 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       }
       assertNotInternal(query);
 
-      delete query.desiredBy[clientID];
+      let ttl = -1;
+      if (inactivatedAt === undefined) {
+        delete query.clientState[clientID];
+      } else {
+        const clientState = must(query.clientState[clientID]);
+        assert(
+          clientState.inactivatedAt === undefined,
+          `Query ${id} is already inactivated`,
+        );
+        ({ttl} = clientState);
+        query.clientState[clientID] = {
+          inactivatedAt,
+          ttl,
+          version: newVersion,
+        };
+      }
+
       this._cvrStore.putQuery(query);
       this._cvrStore.putDesiredQuery(
         newVersion,
         query,
         client,
         true,
-        undefined,
-        undefined,
+        inactivatedAt,
+        ttl,
       );
       patches.push({
         toVersion: newVersion,
@@ -327,8 +390,8 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   }
 
   clearDesiredQueries(clientID: string): PatchToVersion[] {
-    const client = this.#ensureClient(clientID);
-    return this.deleteDesiredQueries(clientID, client.desiredQueryIDs);
+    const client = this.ensureClient(clientID);
+    return this.#deleteQueries(clientID, client.desiredQueryIDs, undefined);
   }
 
   deleteClient(clientID: string): PatchToVersion[] {
@@ -344,8 +407,13 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       return [];
     }
 
-    // When a client is deleted we remove the desired queries and the client itself.
-    const patches = this.deleteDesiredQueries(clientID, client.desiredQueryIDs);
+    // When a client is deleted we mark all of its desired queries as inactive.
+    // They will then be removed when the queries expire.
+    const patches = this.markDesiredQueriesAsInactive(
+      clientID,
+      client.desiredQueryIDs,
+      Date.now(),
+    );
     delete this._cvr.clients[clientID];
     this._cvrStore.deleteClient(clientID);
 
@@ -356,14 +424,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     this._cvrStore.deleteClientGroup(clientGroupID);
   }
 
-  flush(
-    lc: LogContext,
-    skipNoopFlushes: boolean,
-    lastConnectTime: number,
-    lastActive = Date.now(),
-  ) {
+  flush(lc: LogContext, lastConnectTime: number, lastActive = Date.now()) {
     // TODO: Add cleanup of no-longer-desired got queries and constituent rows.
-    return super.flush(lc, skipNoopFlushes, lastConnectTime, lastActive);
+    return super.flush(lc, lastConnectTime, lastActive);
   }
 }
 
@@ -618,14 +681,21 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           ? existing.patchVersion
           : this.#assertNewVersion();
       const rowVersion = version ?? existing?.rowVersion;
-      assert(rowVersion, `Cannot delete a row that is not in the CVR`);
-
-      this._cvrStore.putRowRecord({
-        id,
-        rowVersion,
-        patchVersion,
-        refCounts: merged,
-      });
+      if (rowVersion) {
+        this._cvrStore.putRowRecord({
+          id,
+          rowVersion,
+          patchVersion,
+          refCounts: merged,
+        });
+      } else {
+        // This means that a row that was not in the CVR was added during
+        // this update, and then subsequently removed. Since there's no
+        // corresponding row in the CVR itself, cancel the previous put.
+        // Note that we still send a 'del' patch to the client in order to
+        // cancel the previous 'put' patch.
+        this._cvrStore.delRowRecord(id);
+      }
 
       if (merged === null) {
         // All refCounts have gone to zero, if row was previously synced
@@ -759,44 +829,82 @@ function mergeRefCounts(
   return Object.values(merged).some(v => v > 0) ? merged : null;
 }
 
-export function getInactiveDesiredQueries(
-  cvr: CVR,
-  clientID: string,
-): string[] {
-  const client = cvr.clients[clientID];
-  if (!client) {
-    return [];
-  }
-
-  const inactive: {
-    hash: string;
-    inactivatedAt: number;
-    ttl: number | undefined;
-  }[] = [];
-  for (const queryID of client.desiredQueryIDs) {
-    const query = must(cvr.queries[queryID], `Query ${queryID} not found`);
+export function getInactiveQueries(cvr: CVR): {
+  hash: string;
+  inactivatedAt: number;
+  ttl: number;
+}[] {
+  const inactive: Map<
+    string,
+    {
+      hash: string;
+      inactivatedAt: number;
+      ttl: number;
+    }
+  > = new Map();
+  for (const [queryID, query] of Object.entries(cvr.queries)) {
     if (query.internal) {
       continue;
     }
-    const {inactivatedAt, ttl} = must(query.desiredBy[clientID]);
-    // eslint-disable-next-line eqeqeq
-    if (inactivatedAt != null) {
-      inactive.push({hash: queryID, inactivatedAt, ttl: ttl ?? undefined});
+    for (const clientState of Object.values(query.clientState)) {
+      const {inactivatedAt, ttl} = clientState;
+      if (inactivatedAt !== undefined) {
+        const existing = inactive.get(queryID);
+        if (existing) {
+          // if one of them have no ttl, then we have no ttl
+          if (existing.ttl < 0 || ttl < 0) {
+            existing.ttl = -1;
+            existing.inactivatedAt = Math.max(
+              existing.inactivatedAt,
+              inactivatedAt,
+            );
+          } else {
+            // pick the one with the last expire
+            if (existing.inactivatedAt + existing.ttl < inactivatedAt + ttl) {
+              existing.inactivatedAt = inactivatedAt;
+              existing.ttl = ttl;
+            }
+          }
+        } else {
+          inactive.set(queryID, {
+            hash: queryID,
+            inactivatedAt,
+            ttl,
+          });
+        }
+      }
     }
   }
+
   // First sort all the queries that have TTL. Oldest first.
-  return inactive
-    .sort((a, b) => {
-      if (a.ttl === b.ttl) {
-        return a.inactivatedAt - b.inactivatedAt;
-      }
-      if (a.ttl === undefined) {
-        return 1;
-      }
-      if (b.ttl === undefined) {
-        return -1;
-      }
-      return a.inactivatedAt + a.ttl - b.inactivatedAt - b.ttl;
-    })
-    .map(({hash}) => hash);
+  return [...inactive.values()].sort((a, b) => {
+    if (a.ttl === b.ttl) {
+      return a.inactivatedAt - b.inactivatedAt;
+    }
+    if (a.ttl < 0) {
+      return 1;
+    }
+    if (b.ttl < 0) {
+      return -1;
+    }
+    return a.inactivatedAt + a.ttl - b.inactivatedAt - b.ttl;
+  });
+}
+
+export function nextEvictionTime(cvr: CVR): number | undefined {
+  let next: number | undefined;
+  for (const {inactivatedAt, ttl} of getInactiveQueries(cvr)) {
+    if (ttl < 0) {
+      continue;
+    }
+    const expire = inactivatedAt + ttl;
+    if (next === undefined || expire < next) {
+      next = expire;
+    }
+  }
+  return next;
+}
+
+function normalizeTTL(ttl: number): number {
+  return ttl < 0 ? -1 : ttl;
 }

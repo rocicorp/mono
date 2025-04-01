@@ -1,9 +1,15 @@
 import {batch} from 'solid-js';
-import type {ZeroAdvancedOptions} from '../../zero/src/advanced.ts';
-import {Zero, type Schema, type ZeroOptions} from '../../zero/src/zero.ts';
+import {
+  Zero,
+  type CustomMutatorDefs,
+  type Schema,
+  type ZeroOptions,
+} from '../../zero/src/zero.ts';
 
-export function createZero<S extends Schema>(options: ZeroOptions<S>): Zero<S> {
-  const opts: ZeroAdvancedOptions<S> = {
+export function createZero<S extends Schema, MD extends CustomMutatorDefs<S>>(
+  options: ZeroOptions<S, MD>,
+): Zero<S, MD> {
+  const opts = {
     ...options,
     batchViewUpdates: batch,
   };

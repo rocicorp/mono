@@ -14,7 +14,7 @@ import {
 } from '../../../zero-protocol/src/push.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import type {IVMSourceBranch} from './ivm-source-repo.ts';
+import type {IVMSourceBranch} from './ivm-branch.ts';
 import {toPrimaryKeyString} from './keys.ts';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.ts';
 import type {
@@ -302,7 +302,7 @@ export async function upsertImpl(
   await tx.set(key, val);
   if (ivmBranch) {
     must(ivmBranch.getSource(arg.tableName)).push({
-      type: 'add',
+      type: 'set',
       row: arg.value,
     });
   }

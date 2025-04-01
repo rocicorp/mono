@@ -51,15 +51,23 @@ function getRelativeTime(
   }
   // If 'absolute' is true or timestamp is older than 2 days, show the full date and time
   if (absolute || delta > 48 * ONE_HOUR) {
-    return timestampDate.toLocaleString('en-US', {
+    const datePart = timestampDate.toLocaleDateString('en-US', {
       year:
         format?.year ?? (timestampYear < currentYear ? 'numeric' : undefined),
       month: format?.month ?? 'short',
       day: format?.day ?? 'numeric',
+    });
+    const timePart = timestampDate.toLocaleTimeString('en-US', {
       hour: format?.hour ?? 'numeric',
       minute: format?.minute ?? 'numeric',
       hour12: true,
     });
+    return (
+      <>
+        {datePart}
+        <span className="hide-on-small">, {timePart}</span>
+      </>
+    );
   }
 
   if (delta < ONE_MINUTE) {
@@ -113,7 +121,14 @@ function formatLongAgo(timestamp: number) {
     longAgoFormatter,
     timestamp,
   );
-  return `${year}/${month}/${day}, ${hour}:${minute} ${dayPeriod}`;
+  return (
+    <>
+      {year}/{month}/{day}
+      <span className="hide-on-small">
+        , {hour}:{minute} {dayPeriod}
+      </span>
+    </>
+  );
 }
 
 const timers: Set<() => void> = new Set();

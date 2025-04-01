@@ -3,9 +3,9 @@ import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.t
 import {
   boolean,
   json,
-  number,
   string,
   table,
+  timestamp,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 import type {Row} from '../query.ts';
 
@@ -17,6 +17,7 @@ const issue = table('issue')
     description: string(),
     closed: boolean(),
     ownerId: string().from('owner_id').optional(),
+    createdAt: timestamp(),
   })
   .primaryKey('id');
 
@@ -40,7 +41,7 @@ const comment = table('comment')
     authorId: string(),
     issueId: string().from('issue_id'),
     text: string(),
-    createdAt: number(),
+    createdAt: timestamp(),
   })
   .primaryKey('id');
 
@@ -146,7 +147,7 @@ const labelRelationships = relationships(label, ({many}) => ({
   ),
 }));
 
-export const schema = createSchema(1, {
+export const schema = createSchema({
   tables: [issue, user, comment, revision, label, issueLabel],
   relationships: [
     issueRelationships,
@@ -170,3 +171,46 @@ export type IssueLabel = Row<typeof issueLabelSchema>;
 export type Label = Row<typeof labelSchema>;
 export type Revision = Row<typeof revisionSchema>;
 export type User = Row<typeof userSchema>;
+
+export const createTableSQL = /*sql*/ `
+CREATE TABLE IF NOT EXISTS "issues" (
+  "id" TEXT PRIMARY KEY,
+  "title" TEXT NOT NULL,
+  "description" TEXT NOT NULL,
+  "closed" BOOLEAN NOT NULL,
+  "owner_id" TEXT,
+  "createdAt" TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "users" (
+  "id" TEXT PRIMARY KEY,
+  "name" TEXT NOT NULL,
+  "metadata" JSONB
+);
+
+CREATE TABLE IF NOT EXISTS "comments" (
+  "id" TEXT PRIMARY KEY,
+  "authorId" TEXT NOT NULL,
+  "issue_id" TEXT NOT NULL,
+  "text" TEXT NOT NULL,
+  "createdAt" TIMESTAMP NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "issueLabel" (
+  "issueId" TEXT NOT NULL,
+  "labelId" TEXT NOT NULL,
+  PRIMARY KEY ("issueId", "labelId")
+);
+
+CREATE TABLE IF NOT EXISTS "label" (
+  "id" TEXT PRIMARY KEY,
+  "name" TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS "revision" (
+  "id" TEXT PRIMARY KEY,
+  "authorId" TEXT NOT NULL,
+  "commentId" TEXT NOT NULL,
+  "text" TEXT NOT NULL
+);
+`;

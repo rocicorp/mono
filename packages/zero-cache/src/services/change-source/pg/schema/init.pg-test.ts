@@ -7,14 +7,16 @@ import {
 } from '../../../../db/migration.ts';
 import {expectTablesToMatch, initDB, testDBs} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
-import {initShardSchema, updateShardSchema} from './init.ts';
+import {ensureShardSchema, updateShardSchema} from './init.ts';
+import {addReplica} from './shard.ts';
 
-const SHARD_ID = 'shard_schema_test_id';
+const APP_ID = 'zappz';
+const SHARD_NUM = 23;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 4,
-  schemaVersion: 4,
+  dataVersion: 8,
+  schemaVersion: 8,
   minSafeVersion: 1,
   lock: 'v',
 } as const;
@@ -36,6 +38,7 @@ describe('change-streamer/pg/schema/init', () => {
     name: string;
     upstreamSetup?: string;
     existingVersionHistory?: VersionHistory;
+    newReplica?: [slot: string, replicaVersion: string];
     requestedPublications?: string[];
     upstreamPreState?: Record<string, object[]>;
     upstreamPostState?: Record<string, object[]>;
@@ -44,21 +47,25 @@ describe('change-streamer/pg/schema/init', () => {
   const cases: Case[] = [
     {
       name: 'initial db',
+      newReplica: [`${APP_ID}_${SHARD_NUM}_1234`, '2dhf29ef'],
       upstreamPostState: {
-        [`zero_${SHARD_ID}.shardConfig`]: [
+        [`${APP_ID}_${SHARD_NUM}.shardConfig`]: [
           {
             lock: true,
-            publications: [
-              '_zero_metadata_shard_schema_test_id',
-              '_zero_public_shard_schema_test_id',
-            ],
+            publications: [`_${APP_ID}_metadata_23`, `_${APP_ID}_public_23`],
             ddlDetection: true,
-            initialSchema: null,
           },
         ],
-        [`zero_${SHARD_ID}.clients`]: [],
-        [`zero_${SHARD_ID}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
-        ['zero.schemaVersions']: [
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: [
+          {
+            slot: `${APP_ID}_${SHARD_NUM}_1234`,
+            version: '2dhf29ef',
+            initialSchema: {tables: [], indexes: []},
+          },
+        ],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
+        [`${APP_ID}.schemaVersions`]: [
           {minSupportedVersion: 1, maxSupportedVersion: 1},
         ],
       },
@@ -67,21 +74,28 @@ describe('change-streamer/pg/schema/init', () => {
       name: 'db with table and publication',
       upstreamSetup: `
         CREATE TABLE foo(id TEXT PRIMARY KEY);
-        CREATE PUBLICATION zero_foo FOR TABLE foo;
+        CREATE PUBLICATION ${APP_ID}_foo FOR TABLE foo;
       `,
-      requestedPublications: ['zero_foo'],
+      newReplica: [`${APP_ID}_${SHARD_NUM}_5678`, 's8dfh2d'],
+      requestedPublications: [`${APP_ID}_foo`],
       upstreamPostState: {
-        [`zero_${SHARD_ID}.shardConfig`]: [
+        [`${APP_ID}_${SHARD_NUM}.shardConfig`]: [
           {
             lock: true,
-            publications: ['_zero_metadata_shard_schema_test_id', 'zero_foo'],
+            publications: [`_${APP_ID}_metadata_23`, `${APP_ID}_foo`],
             ddlDetection: true,
-            initialSchema: null,
           },
         ],
-        [`zero_${SHARD_ID}.clients`]: [],
-        [`zero_${SHARD_ID}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
-        ['zero.schemaVersions']: [
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: [
+          {
+            slot: `${APP_ID}_${SHARD_NUM}_5678`,
+            version: 's8dfh2d',
+            initialSchema: {tables: [], indexes: []},
+          },
+        ],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
+        [`${APP_ID}.schemaVersions`]: [
           {minSupportedVersion: 1, maxSupportedVersion: 1},
         ],
       },
@@ -89,28 +103,68 @@ describe('change-streamer/pg/schema/init', () => {
     {
       name: 'db with existing schemaVersions',
       upstreamSetup: `
-          CREATE SCHEMA IF NOT EXISTS zero;
-          CREATE TABLE zero."schemaVersions" 
+          CREATE SCHEMA IF NOT EXISTS ${APP_ID};
+          CREATE TABLE ${APP_ID}."schemaVersions" 
             ("lock" BOOL PRIMARY KEY, "minSupportedVersion" INT4, "maxSupportedVersion" INT4);
-          INSERT INTO zero."schemaVersions" 
+          INSERT INTO ${APP_ID}."schemaVersions" 
             ("lock", "minSupportedVersion", "maxSupportedVersion") VALUES (true, 2, 3);
         `,
       upstreamPostState: {
-        [`zero_${SHARD_ID}.shardConfig`]: [
+        [`${APP_ID}_${SHARD_NUM}.shardConfig`]: [
           {
             lock: true,
-            publications: [
-              '_zero_metadata_shard_schema_test_id',
-              '_zero_public_shard_schema_test_id',
-            ],
+            publications: [`_${APP_ID}_metadata_23`, `_${APP_ID}_public_23`],
             ddlDetection: true,
-            initialSchema: null,
           },
         ],
-        [`zero_${SHARD_ID}.clients`]: [],
-        [`zero_${SHARD_ID}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
-        ['zero.schemaVersions']: [
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: [],
+        [`${APP_ID}_${SHARD_NUM}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
+        [`${APP_ID}.schemaVersions`]: [
           {minSupportedVersion: 2, maxSupportedVersion: 3},
+        ],
+      },
+    },
+    {
+      name: 'v5 to v7',
+      upstreamSetup: `
+        CREATE SCHEMA ${APP_ID}_${SHARD_NUM};
+        CREATE TABLE ${APP_ID}_${SHARD_NUM}."shardConfig" (
+          "publications"  TEXT[] NOT NULL,
+          "ddlDetection"  BOOL NOT NULL,
+          "initialSchema" JSON,
+
+          -- Ensure that there is only a single row in the table.
+          "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
+        );
+
+        INSERT INTO ${APP_ID}_${SHARD_NUM}."shardConfig" 
+          ("lock", "publications", "ddlDetection", "initialSchema")
+          VALUES (true, 
+            ARRAY['_${APP_ID}_metadata_23', '_${APP_ID}_public_23'], 
+            true,
+            '{"tables":[],"indexes":[]}'
+          );
+  `,
+      existingVersionHistory: {
+        schemaVersion: 5,
+        dataVersion: 5,
+        minSafeVersion: 1,
+      },
+      upstreamPostState: {
+        [`${APP_ID}_${SHARD_NUM}.shardConfig`]: [
+          {
+            lock: true,
+            publications: [`_${APP_ID}_metadata_23`, `_${APP_ID}_public_23`],
+            ddlDetection: true,
+          },
+        ],
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: [
+          {
+            slot: `${APP_ID}_${SHARD_NUM}`,
+            version: '123',
+            initialSchema: {tables: [], indexes: []},
+          },
         ],
       },
     },
@@ -121,19 +175,35 @@ describe('change-streamer/pg/schema/init', () => {
       await initDB(upstream, c.upstreamSetup, c.upstreamPreState);
 
       if (c.existingVersionHistory) {
-        const schema = `zero_${SHARD_ID}`;
+        const schema = `${APP_ID}_${SHARD_NUM}`;
         await createVersionHistoryTable(upstream, schema);
         await upstream`INSERT INTO ${upstream(schema)}."versionHistory"
           ${upstream(c.existingVersionHistory)}`;
-        await updateShardSchema(lc, upstream, {
-          id: SHARD_ID,
-          publications: c.requestedPublications ?? [],
-        });
+        await updateShardSchema(
+          lc,
+          upstream,
+          {
+            appID: APP_ID,
+            shardNum: SHARD_NUM,
+            publications: c.requestedPublications ?? [],
+          },
+          '123',
+        );
       } else {
-        await initShardSchema(lc, upstream, {
-          id: SHARD_ID,
+        await ensureShardSchema(lc, upstream, {
+          appID: APP_ID,
+          shardNum: SHARD_NUM,
           publications: c.requestedPublications ?? [],
         });
+        if (c.newReplica) {
+          await addReplica(
+            upstream,
+            {appID: APP_ID, shardNum: SHARD_NUM},
+            c.newReplica[0],
+            c.newReplica[1],
+            {tables: [], indexes: []},
+          );
+        }
       }
 
       await expectTablesToMatch(upstream, c.upstreamPostState);

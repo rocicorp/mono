@@ -2,47 +2,13 @@
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
-import {
-  boolean,
-  number,
-  string,
-  table,
-} from '../../zero-schema/src/builder/table-builder.ts';
-import type {DBTransaction} from './db.ts';
+
 import {makeSchemaCRUD} from './custom.ts';
 import {Transaction} from './test/util.ts';
-import type {SchemaCRUD} from '../../zql/src/mutate/custom.ts';
+import type {DBTransaction, SchemaCRUD} from '../../zql/src/mutate/custom.ts';
+import {schema, schemaSql} from './test/schema.ts';
 
-const schema = createSchema(1, {
-  tables: [
-    table('basic')
-      .columns({
-        id: string(),
-        a: number(),
-        b: string(),
-        c: boolean().optional(),
-      })
-      .primaryKey('id'),
-    table('names')
-      .from('divergent_names')
-      .columns({
-        id: string().from('divergent_id'),
-        a: number().from('divergent_a'),
-        b: string().from('divergent_b'),
-        c: boolean().from('divergent_c').optional(),
-      })
-      .primaryKey('id'),
-    table('compoundPk')
-      .columns({
-        a: string(),
-        b: number(),
-        c: string().optional(),
-      })
-      .primaryKey('a', 'b'),
-  ],
-  relationships: [],
-});
+// TODO: test a json column
 
 describe('makeSchemaCRUD', () => {
   let pg: PostgresDB;
@@ -50,39 +16,39 @@ describe('makeSchemaCRUD', () => {
 
   beforeEach(async () => {
     pg = await testDBs.create('makeSchemaCRUD-test');
-    await pg.unsafe(`
-      CREATE TABLE basic (
-        id TEXT PRIMARY KEY,
-        a INTEGER,
-        b TEXT,
-        C BOOLEAN
-      );
-
-      CREATE TABLE divergent_names (
-        divergent_id TEXT PRIMARY KEY,
-        divergent_a INTEGER,
-        divergent_b TEXT,
-        divergent_c BOOLEAN
-      );
-
-      CREATE TABLE "compoundPk" (
-        a TEXT,
-        b INTEGER,
-        c TEXT,
-        PRIMARY KEY (a, b)
-      );
-    `);
+    await pg.unsafe(schemaSql);
 
     crudProvider = makeSchemaCRUD(schema);
   });
 
+  const timeRow = {
+    ts: new Date('2025-05-05T00:00:00Z').getTime(),
+    tstz: new Date('2025-06-06T00:00:00Z').getTime(),
+    tswtz: new Date('2025-07-07T00:00:00Z').getTime(),
+    tswotz: new Date('2025-08-08T00:00:01Z').getTime(),
+    d: new Date('2025-09-09T00:00:00Z').getTime(),
+  };
+
+  const jsonRow = {
+    str: 'foo',
+    num: 1,
+    bool: true,
+    nil: null,
+    obj: {foo: 'bar'},
+    arr: ['a', 'b', 'c'],
+  };
+
   test('insert', async () => {
     await pg.begin(async tx => {
       const crud = crudProvider(new Transaction(tx));
+
       await Promise.all([
         crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
+        crud.dateTypes.insert(timeRow),
+        crud.jsonCases.insert(jsonRow),
+        crud.jsonbCases.insert(jsonRow),
       ]);
 
       await Promise.all([
@@ -96,6 +62,9 @@ describe('makeSchemaCRUD', () => {
           },
         ]),
         checkDb(tx, 'compoundPk', [{a: 'a', b: 1, c: 'c'}]),
+        checkDb(tx, 'dateTypes', [timeRow]),
+        checkDb(tx, 'jsonCases', [jsonRow]),
+        checkDb(tx, 'jsonbCases', [jsonRow]),
       ]);
     });
   });
@@ -116,6 +85,9 @@ describe('makeSchemaCRUD', () => {
         crud.basic.upsert({id: '1', a: 2, b: 'foo', c: true}),
         crud.names.upsert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.upsert({a: 'a', b: 1, c: 'c'}),
+        crud.dateTypes.upsert(timeRow),
+        crud.jsonCases.upsert(jsonRow),
+        crud.jsonbCases.upsert(jsonRow),
       ]);
 
       await Promise.all([
@@ -129,6 +101,9 @@ describe('makeSchemaCRUD', () => {
           },
         ]),
         checkDb(tx, 'compoundPk', [{a: 'a', b: 1, c: 'c'}]),
+        checkDb(tx, 'dateTypes', [timeRow]),
+        checkDb(tx, 'jsonCases', [jsonRow]),
+        checkDb(tx, 'jsonbCases', [jsonRow]),
       ]);
 
       // upsert all the existing rows to change non-primary key values
@@ -136,6 +111,24 @@ describe('makeSchemaCRUD', () => {
         crud.basic.upsert({id: '1', a: 3, b: 'baz', c: false}),
         crud.names.upsert({id: '2', a: 4, b: 'qux', c: true}),
         crud.compoundPk.upsert({a: 'a', b: 1, c: 'd'}),
+        crud.dateTypes.upsert({
+          ...timeRow,
+          tstz: new Date('2026-05-05T00:00:01Z').getTime(),
+        }),
+        crud.jsonCases.upsert({
+          ...jsonRow,
+          num: 2,
+          bool: false,
+          obj: {foo: 'baz'},
+          arr: ['d', 'e', 'f'],
+        }),
+        crud.jsonbCases.upsert({
+          ...jsonRow,
+          num: 2,
+          bool: false,
+          obj: {foo: 'baz'},
+          arr: ['d', 'e', 'f'],
+        }),
       ]);
 
       await Promise.all([
@@ -149,6 +142,30 @@ describe('makeSchemaCRUD', () => {
           },
         ]),
         checkDb(tx, 'compoundPk', [{a: 'a', b: 1, c: 'd'}]),
+        checkDb(tx, 'dateTypes', [
+          {
+            ...timeRow,
+            tstz: new Date('2026-05-05T00:00:01Z').getTime(),
+          },
+        ]),
+        checkDb(tx, 'jsonCases', [
+          {
+            ...jsonRow,
+            num: 2,
+            bool: false,
+            obj: {foo: 'baz'},
+            arr: ['d', 'e', 'f'],
+          },
+        ]),
+        checkDb(tx, 'jsonbCases', [
+          {
+            ...jsonRow,
+            num: 2,
+            bool: false,
+            obj: {foo: 'baz'},
+            arr: ['d', 'e', 'f'],
+          },
+        ]),
       ]);
     });
   });
@@ -160,12 +177,33 @@ describe('makeSchemaCRUD', () => {
         crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
+        crud.dateTypes.insert(timeRow),
+        crud.jsonCases.insert(jsonRow),
+        crud.jsonbCases.insert(jsonRow),
       ]);
 
       await Promise.all([
         crud.basic.update({id: '1', a: 3, b: 'baz'}),
         crud.names.update({id: '2', a: 4, b: 'qux'}),
         crud.compoundPk.update({a: 'a', b: 1, c: 'd'}),
+        crud.dateTypes.update({
+          ...timeRow,
+          tstz: new Date('2027-05-05T00:00:01Z').getTime(),
+        }),
+        crud.jsonCases.update({
+          ...jsonRow,
+          num: 2,
+          bool: false,
+          obj: {foo: 'baz'},
+          arr: ['d', 'e', 'f'],
+        }),
+        crud.jsonbCases.update({
+          ...jsonRow,
+          num: 2,
+          bool: false,
+          obj: {foo: 'baz'},
+          arr: ['d', 'e', 'f'],
+        }),
       ]);
 
       await Promise.all([
@@ -179,6 +217,30 @@ describe('makeSchemaCRUD', () => {
           },
         ]),
         checkDb(tx, 'compoundPk', [{a: 'a', b: 1, c: 'd'}]),
+        checkDb(tx, 'dateTypes', [
+          {
+            ...timeRow,
+            tstz: new Date('2027-05-05T00:00:01Z').getTime(),
+          },
+        ]),
+        checkDb(tx, 'jsonCases', [
+          {
+            ...jsonRow,
+            num: 2,
+            bool: false,
+            obj: {foo: 'baz'},
+            arr: ['d', 'e', 'f'],
+          },
+        ]),
+        checkDb(tx, 'jsonbCases', [
+          {
+            ...jsonRow,
+            num: 2,
+            bool: false,
+            obj: {foo: 'baz'},
+            arr: ['d', 'e', 'f'],
+          },
+        ]),
       ]);
     });
   });
@@ -190,18 +252,27 @@ describe('makeSchemaCRUD', () => {
         crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
+        crud.dateTypes.insert(timeRow),
+        crud.jsonCases.insert(jsonRow),
+        crud.jsonbCases.insert(jsonRow),
       ]);
 
       await Promise.all([
         crud.basic.delete({id: '1'}),
         crud.names.delete({id: '2'}),
         crud.compoundPk.delete({a: 'a', b: 1}),
+        crud.dateTypes.delete({ts: timeRow.ts}),
+        crud.jsonCases.delete({str: jsonRow.str}),
+        crud.jsonbCases.delete({str: jsonRow.str}),
       ]);
 
       await Promise.all([
         checkDb(tx, 'basic', []),
         checkDb(tx, 'divergent_names', []),
         checkDb(tx, 'compoundPk', []),
+        checkDb(tx, 'dateTypes', []),
+        checkDb(tx, 'jsonCases', []),
+        checkDb(tx, 'jsonbCases', []),
       ]);
     });
   });
