@@ -20,7 +20,7 @@ export class OPSQLiteTransaction extends SQLiteTransaction {
   }
 
   // op-sqlite doesn't support readonly
-  async start() {
+  async begin() {
     await new Promise<void>((resolve, reject) => {
       let didResolve = false;
       try {

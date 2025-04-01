@@ -1,31 +1,28 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {deepFreeze} from '../frozen-json.ts';
-import type {Store as KVStore} from './store.ts';
+import type {Store as KVStore, Read, Write} from './store.ts';
 
 export interface SQLResultSetRowList {
   length: number;
   item(index: number): {value: string}; // TODO: confirm this is correct, this was typed as `any` in the original code
 }
-
-export abstract class SQLiteTransaction {
-  abstract start(readonly?: boolean): Promise<void>;
-
-  abstract execute(
+export interface SQLiteTransaction {
+  begin(readonly?: boolean): Promise<void>;
+  execute(
     sqlStatement: string,
     args?: (string | number | null)[] | undefined,
   ): Promise<SQLResultSetRowList>;
-
-  abstract commit(): Promise<void>;
+  commit(): Promise<void>;
 }
 
 export interface SQLDatabase {
-  transaction: () => SQLiteTransaction;
-  destroy: () => Promise<void>;
-  close: () => Promise<void>;
+  transaction(): SQLiteTransaction;
+  destroy(): Promise<void>;
+  close(): Promise<void>;
 }
 
 export interface GenericSQLiteDatabaseManager {
-  open: (name: string) => Promise<SQLDatabase>;
+  open(name: string): Promise<SQLDatabase>;
 }
 
 /**
@@ -39,7 +36,7 @@ export interface GenericSQLiteDatabaseManager {
  * transaction support. Read transactions use SQLite's READ mode while write
  * transactions use the default mode.
  */
-export class ReplicacheGenericStore implements KVStore {
+export class SQLiteStore implements KVStore {
   readonly #name: string;
   readonly #dbm: SQLiteDatabaseManager;
   #closed = false;
@@ -50,39 +47,17 @@ export class ReplicacheGenericStore implements KVStore {
   }
 
   async read() {
-    const db = await this._getDb();
+    const db = await this.#getDb();
     const tx = db.transaction();
-    await tx.start(true);
+    await tx.begin(true);
     return new SQLiteStoreRead(tx);
   }
 
-  async withRead<R>(
-    fn: (read: Awaited<ReturnType<KVStore['read']>>) => R | Promise<R>,
-  ): Promise<R> {
-    const read = await this.read();
-    try {
-      return await fn(read);
-    } finally {
-      await read.release();
-    }
-  }
-
-  async write(): Promise<Awaited<ReturnType<KVStore['write']>>> {
-    const db = await this._getDb();
+  async write(): Promise<Write> {
+    const db = await this.#getDb();
     const tx = db.transaction();
-    await tx.start(false);
+    await tx.begin(false);
     return new SQLiteStoreWrite(tx);
-  }
-
-  async withWrite<R>(
-    fn: (write: Awaited<ReturnType<KVStore['write']>>) => R | Promise<R>,
-  ): Promise<R> {
-    const write = await this.write();
-    try {
-      return await fn(write);
-    } finally {
-      write.release();
-    }
   }
 
   async close() {
@@ -94,7 +69,7 @@ export class ReplicacheGenericStore implements KVStore {
     return this.#closed;
   }
 
-  private _getDb() {
+  #getDb() {
     return this.#dbm.open(this.#name);
   }
 }
@@ -106,15 +81,15 @@ export class ReplicacheGenericStore implements KVStore {
  * @param db The SQLite database manager implementation
  * @returns A function that creates new store instances
  */
-export function getCreateReplicacheSQLiteKVStore(db: SQLiteDatabaseManager) {
-  return (name: string) => new ReplicacheGenericStore(name, db);
+export function getCreateSQLiteStore(db: SQLiteDatabaseManager) {
+  return (name: string) => new SQLiteStore(name, db);
 }
 
 /**
  * Implementation of the Read interface for SQLite stores.
  * Provides read-only access to the underlying SQLite database.
  */
-export class SQLiteStoreRead implements Awaited<ReturnType<KVStore['read']>> {
+export class SQLiteStoreRead implements Read {
   protected _tx: SQLiteTransaction | null;
 
   constructor(tx: SQLiteTransaction) {
@@ -165,10 +140,7 @@ export class SQLiteStoreRead implements Awaited<ReturnType<KVStore['read']>> {
  * Implementation of the Write interface for SQLite stores.
  * Extends SQLiteStoreRead to provide write capabilities.
  */
-export class SQLiteStoreWrite
-  extends SQLiteStoreRead
-  implements Awaited<ReturnType<KVStore['write']>>
-{
+export class SQLiteStoreWrite extends SQLiteStoreRead implements Write {
   async put(key: string, value: ReadonlyJSONValue) {
     const jsonValueString = JSON.stringify(value);
     await this._assertTx().execute(
@@ -192,7 +164,10 @@ export class SQLiteStoreWrite
  */
 export class SQLiteDatabaseManager {
   readonly #dbm: GenericSQLiteDatabaseManager;
-  #dbInstances = new Map<string, {db: SQLDatabase; state: 'open' | 'closed'}>();
+  readonly #dbInstances = new Map<
+    string,
+    {db: SQLDatabase; state: 'open' | 'closed'}
+  >();
 
   constructor(dbm: GenericSQLiteDatabaseManager) {
     this.#dbm = dbm;
@@ -224,7 +199,7 @@ export class SQLiteDatabaseManager {
   async truncate(name: string) {
     const db = await this.open(name);
     const tx = db.transaction();
-    await tx.start(false);
+    await tx.begin(false);
     await tx.execute('DELETE FROM entry', []);
     await tx.commit();
   }
@@ -239,7 +214,7 @@ export class SQLiteDatabaseManager {
 
   async #setupSchema(db: SQLDatabase) {
     const tx = db.transaction();
-    await tx.start(false);
+    await tx.begin(false);
     await tx.execute(
       'CREATE TABLE IF NOT EXISTS entry (key TEXT PRIMARY KEY, value TEXT)',
       [],

@@ -1,6 +1,6 @@
 import * as OPSQLite from '@op-engineering/op-sqlite';
 import {
-  getCreateReplicacheSQLiteKVStore,
+  getCreateSQLiteStore,
   SQLiteDatabaseManager,
   type GenericSQLiteDatabaseManager,
 } from '../../replicache/src/kv/sqlite-store.ts';
@@ -21,6 +21,6 @@ const genericDatabase: GenericSQLiteDatabaseManager = {
 const opSqliteDbManagerInstance = new SQLiteDatabaseManager(genericDatabase);
 
 export const createOPSQLiteStore: StoreProvider = {
-  create: getCreateReplicacheSQLiteKVStore(opSqliteDbManagerInstance),
+  create: getCreateSQLiteStore(opSqliteDbManagerInstance),
   drop: (name: string) => opSqliteDbManagerInstance.destroy(name),
 };

@@ -14,9 +14,17 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "peerDependencies": {
-    "expo": "*",
-    "expo-sqlite": ">=15.0.0",
-    "react": "*",
-    "react-native": "*"
-  }
+    "expo-sqlite": ">=14.0.0"
+  },
+  "dependencies": {
+    "@rocicorp/resolver": "^1.0.2"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.7.0",
+    "@rocicorp/prettier-config": "^0.3.0"
+  },
+  "eslintConfig": {
+    "extends": "../../eslint-config.json"
+  },
+  "prettier": "@rocicorp/prettier-config"
 }

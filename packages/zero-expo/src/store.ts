@@ -1,6 +1,6 @@
-import * as SQLite from 'expo-sqlite';
+import {openDatabaseAsync, deleteDatabaseAsync} from 'expo-sqlite';
 import {
-  getCreateReplicacheSQLiteKVStore,
+  getCreateSQLiteStore,
   SQLiteDatabaseManager,
   type GenericSQLiteDatabaseManager,
   type SQLDatabase,
@@ -10,13 +10,13 @@ import {ExpoSQLiteTransaction} from './transaction.ts';
 
 const genericDatabase: GenericSQLiteDatabaseManager = {
   open: async (name: string) => {
-    const db = await SQLite.openDatabaseAsync(name);
+    const db = await openDatabaseAsync(name);
 
     const genericDb: SQLDatabase = {
       transaction: () => new ExpoSQLiteTransaction(db),
       destroy: async () => {
         await db.closeAsync();
-        await SQLite.deleteDatabaseAsync(name);
+        await deleteDatabaseAsync(name);
       },
       close: () => db.closeAsync(),
     };
@@ -28,6 +28,6 @@ const genericDatabase: GenericSQLiteDatabaseManager = {
 const expoDbManagerInstance = new SQLiteDatabaseManager(genericDatabase);
 
 export const createExpoSQLiteStore: StoreProvider = {
-  create: getCreateReplicacheSQLiteKVStore(expoDbManagerInstance),
+  create: getCreateSQLiteStore(expoDbManagerInstance),
   drop: (name: string) => expoDbManagerInstance.destroy(name),
 };

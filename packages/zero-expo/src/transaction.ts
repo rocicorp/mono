@@ -1,60 +1,61 @@
-import * as SQLite from 'expo-sqlite';
-import {SQLiteTransaction} from '../../replicache/src/kv/sqlite-store.ts';
+import {SQLiteDatabase, type SQLiteExecuteAsyncResult} from 'expo-sqlite';
+import {type SQLiteTransaction} from '../../replicache/src/kv/sqlite-store.ts';
+import {resolver, type Resolver} from '@rocicorp/resolver';
 
-export class ExpoSQLiteTransaction extends SQLiteTransaction {
-  #tx:
-    | Parameters<
-        Parameters<SQLite.SQLiteDatabase['withExclusiveTransactionAsync']>[0]
-      >[0]
-    | null = null;
-  #transactionCommittedSubscriptions = new Set<() => void>();
+type Transaction = Parameters<
+  Parameters<SQLiteDatabase['withExclusiveTransactionAsync']>[0]
+>[0];
+
+export class ExpoSQLiteTransaction implements SQLiteTransaction {
+  #tx: Transaction | null = null;
+  #transactionCommittedSubscriptions = new Set<Resolver<void>>();
   #txCommitted = false;
-  #transactionEndedSubscriptions = new Set<{
-    resolve: () => void;
-    reject: () => void;
-  }>();
+  #transactionEndedSubscriptions = new Set<Resolver<void>>();
   #txEnded = false;
+  private readonly _db: SQLiteDatabase;
 
-  // eslint-disable-next-line @typescript-eslint/parameter-properties
-  constructor(private readonly _db: SQLite.SQLiteDatabase) {
-    super();
+  constructor(db: SQLiteDatabase) {
+    this._db = db;
   }
+
   // expo-sqlite doesn't support readonly
-  start() {
-    return new Promise<void>((resolve, reject) => {
-      let didResolve = false;
-      try {
-        void this._db.withExclusiveTransactionAsync(async tx => {
-          didResolve = true;
-          this.#tx = tx;
-          resolve();
+  begin() {
+    const beginResolver = resolver<void>();
 
-          try {
-            // expo-sqlite auto-commits our transaction when this callback ends.
-            // Lets artificially keep it open until we commit.
-            await this.#waitForTransactionCommitted();
-            this.#setTransactionEnded(false);
-          } catch {
-            this.#setTransactionEnded(true);
-          }
-        });
-      } catch {
-        if (!didResolve) {
-          reject(new Error('Did not resolve'));
+    let didResolve = false;
+    try {
+      void this._db.withExclusiveTransactionAsync(async tx => {
+        didResolve = true;
+        this.#tx = tx;
+        beginResolver.resolve();
+
+        try {
+          // expo-sqlite auto-commits our transaction when this callback ends.
+          // Lets artificially keep it open until we commit.
+          await this.#waitForTransactionCommitted();
+          this.#setTransactionEnded(false);
+        } catch {
+          this.#setTransactionEnded(true);
         }
+      });
+    } catch {
+      if (!didResolve) {
+        beginResolver.reject(new Error('Did not resolve'));
       }
-    });
+    }
+
+    return beginResolver.promise;
   }
 
-  async execute(
+  async execute<T>(
     sqlStatement: string,
     args?: (string | number | null)[] | undefined,
   ) {
     const tx = this.#assertTransactionReady();
 
     const statement = await tx.prepareAsync(sqlStatement);
-    let allRows: any;
-    let result: any;
+    let allRows: T[];
+    let result: SQLiteExecuteAsyncResult<T>;
     try {
       result = await statement.executeAsync(...(args ?? []));
       allRows = await result.getAllAsync();
@@ -68,8 +69,8 @@ export class ExpoSQLiteTransaction extends SQLiteTransaction {
   commit(): Promise<void> {
     // Transaction is committed automatically.
     this.#txCommitted = true;
-    for (const resolver of this.#transactionCommittedSubscriptions) {
-      resolver();
+    for (const r of this.#transactionCommittedSubscriptions) {
+      r.resolve();
     }
     this.#transactionCommittedSubscriptions.clear();
     return Promise.resolve();
@@ -77,9 +78,9 @@ export class ExpoSQLiteTransaction extends SQLiteTransaction {
 
   waitForTransactionEnded() {
     if (this.#txEnded) return;
-    return new Promise<void>((resolve, reject) => {
-      this.#transactionEndedSubscriptions.add({resolve, reject});
-    });
+    const endedResolver = resolver<void>();
+    this.#transactionEndedSubscriptions.add(endedResolver);
+    return endedResolver.promise;
   }
 
   #assertTransactionReady() {
@@ -91,18 +92,18 @@ export class ExpoSQLiteTransaction extends SQLiteTransaction {
 
   #waitForTransactionCommitted() {
     if (this.#txCommitted) return;
-    return new Promise<void>(resolve => {
-      this.#transactionCommittedSubscriptions.add(resolve);
-    });
+    const committedResolver = resolver<void>();
+    this.#transactionCommittedSubscriptions.add(committedResolver);
+    return committedResolver.promise;
   }
 
   #setTransactionEnded(errored = false) {
     this.#txEnded = true;
-    for (const {resolve, reject} of this.#transactionEndedSubscriptions) {
+    for (const r of this.#transactionEndedSubscriptions) {
       if (errored) {
-        reject();
+        r.reject(new Error('Transaction ended with error'));
       } else {
-        resolve();
+        r.resolve();
       }
     }
     this.#transactionEndedSubscriptions.clear();
