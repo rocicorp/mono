@@ -358,6 +358,7 @@ describe('kitchen sink query', () => {
                 },
                 "subquery": {
                   "alias": "owner",
+                  "limit": 1,
                   "orderBy": [
                     [
                       "id",
