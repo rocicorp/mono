@@ -2,46 +2,46 @@
 import chalk from 'chalk';
 import '@dotenvx/dotenvx/config';
 
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {parseOptions} from '../../../shared/src/options.ts';
-import * as v from '../../../shared/src/valita.ts';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {parseOptions} from '../../shared/src/options.ts';
+import * as v from '../../shared/src/valita.ts';
 import {
   mapAST,
   type AST,
   type CompoundKey,
-} from '../../../zero-protocol/src/ast.ts';
-import {buildPipeline} from '../../../zql/src/builder/builder.ts';
-import {Catch} from '../../../zql/src/ivm/catch.ts';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
-import type {Input} from '../../../zql/src/ivm/operator.ts';
-import {
-  newQuery,
-  type QueryDelegate,
-} from '../../../zql/src/query/query-impl.ts';
-import {Database} from '../../../zqlite/src/db.ts';
+} from '../../zero-protocol/src/ast.ts';
+import {buildPipeline} from '../../zql/src/builder/builder.ts';
+import {Catch} from '../../zql/src/ivm/catch.ts';
+import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
+import type {Input} from '../../zql/src/ivm/operator.ts';
+import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
+import {Database} from '../../zqlite/src/db.ts';
 import {
   runtimeDebugFlags,
   runtimeDebugStats,
-} from '../../../zqlite/src/runtime-debug.ts';
-import {TableSource} from '../../../zqlite/src/table-source.ts';
-import {ZERO_ENV_VAR_PREFIX, zeroOptions} from '../config/zero-config.ts';
-import {loadSchemaAndPermissions} from './permissions.ts';
+} from '../../zqlite/src/runtime-debug.ts';
+import {TableSource} from '../../zqlite/src/table-source.ts';
+import {
+  ZERO_ENV_VAR_PREFIX,
+  zeroOptions,
+} from '../../zero-cache/src/config/zero-config.ts';
+import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
 import {
   clientToServer,
   serverToClient,
-} from '../../../zero-schema/src/name-mapper.ts';
+} from '../../zero-schema/src/name-mapper.ts';
 
 const options = {
   replicaFile: zeroOptions.replica.file,
   ast: {
     type: v.string().optional(),
-    desc: ['AST for the query to be transformed or timed.'],
+    desc: ['AST for the query to be analyzed.'],
   },
   query: {
     type: v.string().optional(),
     desc: [
-      `Query to be timed in the form of: z.query.table.where(...).related(...).etc`,
+      `Query to be analyzed in the form of: z.query.table.where(...).related(...).etc`,
     ],
   },
   schema: {
@@ -153,7 +153,7 @@ function runQuery(queryString: string): [number, number] {
   suppressError.q = q;
   suppressError.z = z;
 
-  eval(`q = ${queryString};`);
+  eval(`q = z.query.${queryString};`);
 
   const start = performance.now();
   q.run();
