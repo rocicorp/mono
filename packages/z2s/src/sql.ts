@@ -114,6 +114,9 @@ function stringify(arg: SqlConvertArg): string | null {
   if (arg.value === null) {
     return null;
   }
+  if (arg.plural) {
+    return JSON.stringify(arg.value);
+  }
   if (arg[sqlConvert] === 'literal' && arg.type === 'string') {
     return arg.value as string;
   }
