@@ -1,2 +1,2 @@
 export {createZero} from './create-zero.ts';
-export {useQuery} from './use-query.ts';
+export {useQuery, type UseQueryOptions} from './use-query.ts';

@@ -12,5 +12,6 @@ export {
   useQuery,
   type QueryResult,
   type QueryResultDetails,
+  type UseQueryOptions,
 } from './use-query.tsx';
 export {createUseZero, useZero, ZeroProvider} from './use-zero.tsx';
