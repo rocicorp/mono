@@ -3,7 +3,7 @@ import * as m from '@rocicorp/logger';
 import {readFile} from 'node:fs/promises';
 import process from 'node:process';
 import {createInterface} from 'node:readline';
-import {format, resolveConfig} from 'prettier';
+
 import {parseOptions} from '../../shared/src/options.ts';
 import * as v from '../../shared/src/valita.ts';
 import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
@@ -11,6 +11,7 @@ import {mapAST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {serverToClient} from '../../zero-schema/src/name-mapper.ts';
 import {astToZQL} from './ast-to-zql.ts';
+import {formatOutput} from './format.ts';
 
 const options = {
   schema: {
@@ -50,20 +51,6 @@ function readFromStdin(): Promise<string> {
       resolve(data);
     });
   });
-}
-
-async function formatOutput(content: string): Promise<string> {
-  try {
-    const options = (await resolveConfig(new URL(import.meta.url))) ?? {};
-    return await format(content, {
-      ...options,
-      parser: 'typescript',
-      semi: false,
-    });
-  } catch (error) {
-    console.warn('Warning: Unable to format output with prettier:', error);
-    return content;
-  }
 }
 
 async function main(): Promise<void> {
