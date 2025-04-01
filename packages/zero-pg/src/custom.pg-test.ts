@@ -55,7 +55,7 @@ describe('makeSchemaCRUD', () => {
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
         crud.dateTypes.insert(timeRow),
         crud.jsonCases.insert(jsonRow),
-        //crud.jsonbCases.insert(jsonRow),
+        crud.jsonbCases.insert(jsonRow),
       ]);
 
       await Promise.all([
@@ -71,7 +71,7 @@ describe('makeSchemaCRUD', () => {
         checkDb(tx, 'compoundPk', [{a: 'a', b: 1, c: 'c'}]),
         checkDb(tx, 'dateTypes', [timeRow]),
         checkDb(tx, 'jsonCases', [jsonRow]),
-        // checkDb(tx, 'jsonbCases', [jsonRow]),
+        checkDb(tx, 'jsonbCases', [jsonRow]),
       ]);
     });
   });
@@ -104,7 +104,7 @@ describe('makeSchemaCRUD', () => {
         crud.compoundPk.upsert({a: 'a', b: 1, c: 'c'}),
         crud.dateTypes.upsert(timeRow),
         crud.jsonCases.upsert(jsonRow),
-        //crud.jsonbCases.upsert(jsonRow),
+        crud.jsonbCases.upsert(jsonRow),
       ]);
 
       await Promise.all([
@@ -120,7 +120,7 @@ describe('makeSchemaCRUD', () => {
         checkDb(tx, 'compoundPk', [{a: 'a', b: 1, c: 'c'}]),
         checkDb(tx, 'dateTypes', [timeRow]),
         checkDb(tx, 'jsonCases', [jsonRow]),
-        // checkDb(tx, 'jsonbCases', [jsonRow]),
+        checkDb(tx, 'jsonbCases', [jsonRow]),
       ]);
 
       // upsert all the existing rows to change non-primary key values
@@ -139,13 +139,13 @@ describe('makeSchemaCRUD', () => {
           obj: {foo: 'baz'},
           arr: ['d', 'e', 'f'],
         }),
-        // crud.jsonbCases.upsert({
-        //   ...jsonRow,
-        //   num: 2,
-        //   bool: false,
-        //   obj: {foo: 'baz'},
-        //   arr: ['d', 'e', 'f'],
-        // }),
+        crud.jsonbCases.upsert({
+          ...jsonRow,
+          num: 2,
+          bool: false,
+          obj: {foo: 'baz'},
+          arr: ['d', 'e', 'f'],
+        }),
       ]);
 
       await Promise.all([
@@ -174,15 +174,15 @@ describe('makeSchemaCRUD', () => {
             arr: ['d', 'e', 'f'],
           },
         ]),
-        // checkDb(tx, 'jsonbCases', [
-        //   {
-        //     ...jsonRow,
-        //     num: 2,
-        //     bool: false,
-        //     obj: {foo: 'baz'},
-        //     arr: ['d', 'e', 'f'],
-        //   },
-        // ]),
+        checkDb(tx, 'jsonbCases', [
+          {
+            ...jsonRow,
+            num: 2,
+            bool: false,
+            obj: {foo: 'baz'},
+            arr: ['d', 'e', 'f'],
+          },
+        ]),
       ]);
     });
   });
@@ -200,7 +200,7 @@ describe('makeSchemaCRUD', () => {
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
         crud.dateTypes.insert(timeRow),
         crud.jsonCases.insert(jsonRow),
-        // crud.jsonbCases.insert(jsonRow),
+        crud.jsonbCases.insert(jsonRow),
       ]);
 
       await Promise.all([
@@ -218,13 +218,13 @@ describe('makeSchemaCRUD', () => {
           obj: {foo: 'baz'},
           arr: ['d', 'e', 'f'],
         }),
-        // crud.jsonbCases.update({
-        //   ...jsonRow,
-        //   num: 2,
-        //   bool: false,
-        //   obj: {foo: 'baz'},
-        //   arr: ['d', 'e', 'f'],
-        // }),
+        crud.jsonbCases.update({
+          ...jsonRow,
+          num: 2,
+          bool: false,
+          obj: {foo: 'baz'},
+          arr: ['d', 'e', 'f'],
+        }),
       ]);
 
       await Promise.all([
@@ -253,15 +253,15 @@ describe('makeSchemaCRUD', () => {
             arr: ['d', 'e', 'f'],
           },
         ]),
-        // checkDb(tx, 'jsonbCases', [
-        //   {
-        //     ...jsonRow,
-        //     num: 2,
-        //     bool: false,
-        //     obj: {foo: 'baz'},
-        //     arr: ['d', 'e', 'f'],
-        //   },
-        // ]),
+        checkDb(tx, 'jsonbCases', [
+          {
+            ...jsonRow,
+            num: 2,
+            bool: false,
+            obj: {foo: 'baz'},
+            arr: ['d', 'e', 'f'],
+          },
+        ]),
       ]);
     });
   });
@@ -280,7 +280,7 @@ describe('makeSchemaCRUD', () => {
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
         crud.dateTypes.insert(timeRow),
         crud.jsonCases.insert(jsonRow),
-        // crud.jsonbCases.insert(jsonRow),
+        crud.jsonbCases.insert(jsonRow),
       ]);
 
       await Promise.all([
@@ -289,7 +289,7 @@ describe('makeSchemaCRUD', () => {
         crud.compoundPk.delete({a: 'a', b: 1}),
         crud.dateTypes.delete({ts: timeRow.ts}),
         crud.jsonCases.delete({str: jsonRow.str}),
-        // crud.jsonbCases.delete({str: jsonRow.str}),
+        crud.jsonbCases.delete({str: jsonRow.str}),
       ]);
 
       await Promise.all([
@@ -298,7 +298,7 @@ describe('makeSchemaCRUD', () => {
         checkDb(tx, 'compoundPk', []),
         checkDb(tx, 'dateTypes', []),
         checkDb(tx, 'jsonCases', []),
-        // checkDb(tx, 'jsonbCases', []),
+        checkDb(tx, 'jsonbCases', []),
       ]);
     });
   });

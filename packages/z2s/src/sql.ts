@@ -114,8 +114,14 @@ function stringify(arg: SqlConvertArg): string | null {
   if (arg.value === null) {
     return null;
   }
-  if (typeof arg.value === 'string') {
-    return arg.value;
+  if (arg[sqlConvert] === 'literal' && arg.type === 'string') {
+    return arg.value as string;
+  }
+  if (
+    arg[sqlConvert] === 'column' &&
+    (arg.type === 'text' || arg.type === 'char' || arg.type === 'varchar')
+  ) {
+    return arg.value as string;
   }
   return JSON.stringify(arg.value);
 }
