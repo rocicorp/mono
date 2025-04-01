@@ -81,7 +81,7 @@ async function connect(
       // hydration), so it is fine for it to be empty at startup.
       replica.prepare('DELETE FROM "_zero.changeLog"').run();
       const t1 = performance.now();
-      lc.info?.(`Cleared _zero.changeeLog (${t1 - t0} ms)`);
+      lc.info?.(`Cleared _zero.changeLog (${t1 - t0} ms)`);
       replica.exec('VACUUM');
       recordEvent(replica, 'vacuum');
       replica.unsafeMode(false);
