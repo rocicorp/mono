@@ -176,21 +176,22 @@ export abstract class AbstractQuery<
     assert(related, 'Invalid relationship');
     if (isOneHop(related)) {
       const {destSchema, destField, sourceField, cardinality} = related[0];
-      const sq = cb(
-        this._newQuery(
-          this.#schema,
-          destSchema,
-          {
-            table: destSchema,
-            alias: relationship,
-          },
-          {
-            relationships: {},
-            singular: cardinality === 'one',
-          },
-        ),
-      ) as unknown as QueryImpl<any, any>;
-
+      let q: AnyQuery = this._newQuery(
+        this.#schema,
+        destSchema,
+        {
+          table: destSchema,
+          alias: relationship,
+        },
+        {
+          relationships: {},
+          singular: cardinality === 'one',
+        },
+      );
+      if (cardinality === 'one') {
+        q = q.one();
+      }
+      const sq = cb(q) as AbstractQuery<Schema, string>;
       assert(
         isCompoundKey(sourceField),
         'The source of a relationship must specify at last 1 field',
@@ -235,7 +236,6 @@ export abstract class AbstractQuery<
     }
 
     if (isTwoHop(related)) {
-      assert(related.length === 2, 'Invalid relationship');
       const [firstRelation, secondRelation] = related;
       const {destSchema} = secondRelation;
       const junctionSchema = firstRelation.destSchema;
@@ -438,7 +438,6 @@ export abstract class AbstractQuery<
     }
 
     if (isTwoHop(related)) {
-      assert(related.length === 2, 'Invalid relationship');
       const [firstRelation, secondRelation] = related;
       assert(isCompoundKey(firstRelation.sourceField), 'Invalid relationship');
       assert(isCompoundKey(firstRelation.destField), 'Invalid relationship');
