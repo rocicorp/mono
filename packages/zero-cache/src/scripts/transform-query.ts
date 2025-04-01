@@ -6,16 +6,25 @@ import {must} from '../../../shared/src/must.ts';
 import {parseOptions} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {transformAndHashQuery} from '../auth/read-authorizer.ts';
-import {ZERO_ENV_VAR_PREFIX} from '../config/zero-config.ts';
+import {
+  appOptions,
+  shardOptions,
+  ZERO_ENV_VAR_PREFIX,
+} from '../config/zero-config.ts';
 import {pgClient} from '../types/pg.ts';
 import {
   deployPermissionsOptions,
   loadSchemaAndPermissions,
 } from './permissions.ts';
+import {getShardID, upstreamSchema} from '../types/shards.ts';
+import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
+import {formatOutput} from '../../../ast-to-zql/src/format.ts';
 
 const options = {
   cvr: {db: v.string()},
   schema: deployPermissionsOptions.schema,
+  app: appOptions,
+  shard: shardOptions,
   debug: {
     hash: {
       type: v.string().optional(),
@@ -33,26 +42,24 @@ const config = parseOptions(
 const lc = new LogContext('debug', {}, consoleLogSink);
 const {permissions} = await loadSchemaAndPermissions(lc, config.schema.path);
 
-const cvrDB = pgClient(
-  new LogContext('debug', undefined, consoleLogSink),
-  config.cvr.db,
-);
+const cvrDB = pgClient(lc, config.cvr.db);
 
 const rows =
-  await cvrDB`select "clientAST", "internal" from "cvr"."queries" where "queryHash" = ${must(
+  await cvrDB`select "clientAST", "internal" from ${cvrDB(upstreamSchema(getShardID(config)) + '/cvr')}."queries" where "queryHash" = ${must(
     config.debug.hash,
   )} limit 1;`;
 
-lc.info?.(
-  JSON.stringify(
-    transformAndHashQuery(
-      lc,
-      rows[0].clientAST,
-      permissions,
-      {},
-      rows[0].internal,
-    ).query,
-  ),
-);
+const queryAst = transformAndHashQuery(
+  lc,
+  rows[0].clientAST,
+  permissions,
+  {},
+  rows[0].internal,
+).query;
+
+console.log('\n=== AST ===\n');
+console.log(JSON.stringify(queryAst, null, 2));
+console.log('\n=== ZQL ===\n');
+console.log(await formatOutput(queryAst.table + astToZQL(queryAst)));
 
 await cvrDB.end();
