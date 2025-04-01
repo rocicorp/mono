@@ -16,7 +16,7 @@
   "scripts": {
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && npx tsx tool/build.js",
-    "build-server": "tsc -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js out/zero/src/deploy-permissions.js out/zero/src/zero-cache-dev.js out/zero/src/ast-to-zql.js",
+    "build-server": "tsc -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js out/zero/src/deploy-permissions.js out/zero/src/zero-cache-dev.js out/zero/src/ast-to-zql.js out/zero/src/analyze-query.js",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
@@ -111,7 +111,8 @@
     "zero-cache": "./out/zero/src/cli.js",
     "zero-cache-dev": "./out/zero/src/zero-cache-dev.js",
     "zero-deploy-permissions": "./out/zero/src/deploy-permissions.js",
-    "ast-to-zql": "./out/zero/src/ast-to-zql.js"
+    "ast-to-zql": "./out/zero/src/ast-to-zql.js",
+    "analyze-query": "./out/zero/src/analyze-query.js"
   },
   "engines": {
     "node": ">=20"
