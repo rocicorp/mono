@@ -13,7 +13,7 @@ import {
   TransactionImpl,
   type CustomMutatorDefs,
 } from './custom.ts';
-import {LogContext} from '@rocicorp/logger';
+import {LogContext, type LogLevel} from '@rocicorp/logger';
 import {createLogContext} from './logging.ts';
 import {
   splitMutatorKey,
@@ -43,9 +43,10 @@ export class PushProcessor<
   constructor(
     schema: S,
     dbConnectionProvider: ConnectionProvider<TDBTransaction>,
+    logLevel: LogLevel = 'info',
   ) {
     this.#dbConnectionProvider = dbConnectionProvider;
-    this.#lc = createLogContext('info');
+    this.#lc = createLogContext(logLevel).withContext('PushProcessor');
     this.#mutate = makeSchemaCRUD(schema);
     this.#query = makeSchemaQuery(schema);
   }
@@ -60,6 +61,9 @@ export class PushProcessor<
     const connection = await this.#dbConnectionProvider();
 
     if (req.pushVersion !== 1) {
+      this.#lc.error?.(
+        `Unsupported push version ${req.pushVersion} for clientGroupID ${req.clientGroupID}`,
+      );
       return {
         error: 'unsupportedPushVersion',
       };
@@ -103,6 +107,7 @@ export class PushProcessor<
       );
     } catch (e) {
       if (e instanceof OutOfOrderMutation) {
+        this.#lc.error?.(e);
         return {
           id: {
             clientID: m.clientID,
@@ -116,7 +121,7 @@ export class PushProcessor<
       }
 
       if (e instanceof MutationAlreadyProcessedError) {
-        this.#lc.warn?.(e.message);
+        this.#lc.warn?.(e);
         return {
           id: {
             clientID: m.clientID,
@@ -135,6 +140,9 @@ export class PushProcessor<
         true,
       );
       if ('error' in ret.result) {
+        this.#lc.error?.(
+          `Error ${ret.result.error} processing mutation ${m.id} for client ${m.clientID}: ${ret.result.details}`,
+        );
         return ret;
       }
       return {
@@ -166,6 +174,7 @@ export class PushProcessor<
 
     return dbConnection.transaction(async (dbTx): Promise<MutationResponse> => {
       await checkAndIncrementLastMutationID(
+        this.#lc,
         dbTx,
         params.schema,
         req.clientGroupID,
@@ -206,12 +215,14 @@ export class PushProcessor<
 }
 
 async function checkAndIncrementLastMutationID(
+  lc: LogContext,
   tx: DBTransaction<unknown>,
   schema: string,
   clientGroupID: string,
   clientID: string,
   receivedMutationID: number,
 ) {
+  lc.debug?.(`Incrementing LMID. Received: ${receivedMutationID}`);
   const formatted = formatPg(
     sql`INSERT INTO ${sql.ident(schema)}.clients 
     as current ("clientGroupID", "clientID", "lastMutationID")
@@ -235,6 +246,9 @@ async function checkAndIncrementLastMutationID(
   } else if (receivedMutationID > lastMutationID) {
     throw new OutOfOrderMutation(clientID, receivedMutationID, lastMutationID);
   }
+  lc.debug?.(
+    `Incremented LMID. Received: ${receivedMutationID}. New: ${lastMutationID}`,
+  );
 }
 
 class OutOfOrderMutation extends Error {
