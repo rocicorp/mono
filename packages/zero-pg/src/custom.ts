@@ -243,5 +243,5 @@ function serverNameFor(originalName: string, schema: TableSchema): string {
 }
 
 function sqlValue(value: unknown, serverColumnSchema: ServerColumnSchema) {
-  return sqlConvertColumnArg(serverColumnSchema, value);
+  return sqlConvertColumnArg(serverColumnSchema, value, false, true);
 }

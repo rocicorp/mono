@@ -26,6 +26,7 @@ import {string, table} from '../../zero-schema/src/builder/table-builder.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
 import {fillPgAndSync} from './test/setup.ts';
+import type {ServerSchema} from './schema.ts';
 
 const lc = createSilentLogContext();
 
@@ -55,6 +56,13 @@ const schema = createSchema({
   tables: [item],
 });
 type Schema = typeof schema;
+
+const serverSchema: ServerSchema = {
+  item: {
+    id: {type: 'text', isEnum: false},
+    name: {type: 'text', isEnum: false},
+  },
+} as const;
 
 let itemQuery: Query<Schema, 'item'>;
 
@@ -217,7 +225,7 @@ async function runAsSQL(
   q: Query<Schema, 'item'>,
   runPgQuery: (query: string, args: unknown[]) => Promise<unknown>,
 ) {
-  const c = compile(ast(q), schema.tables);
+  const c = compile(ast(q), schema.tables, serverSchema);
   const sqlQuery = formatPgInternalConvert(c);
   return extractZqlResult(
     await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),

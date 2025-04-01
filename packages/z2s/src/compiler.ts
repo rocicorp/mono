@@ -32,7 +32,7 @@ import {
   parse as parseBigIntJson,
 } from '../../zero-cache/src/types/bigint-json.ts';
 import {hasOwn} from '../../shared/src/has-own.ts';
-import type {ServerSchema} from './schema.ts';
+import type {ServerColumnSchema, ServerSchema} from './schema.ts';
 
 type Tables = Record<string, TableSchema>;
 
@@ -160,22 +160,33 @@ export class Compiler {
       return sql``;
     }
     return sql`ORDER BY ${sql.join(
-      orderBy.map(([col, dir]) =>
-        dir === 'asc'
+      orderBy.map(([col, dir]) => {
+        const serverColumnSchema =
+          this.#serverSchema[this.#nameMapper.tableName(table)][
+            this.#nameMapper.columnName(table, col)
+          ];
+        return dir === 'asc'
           ? // Oh postgres. The table must be referred to be client name but the column by server name.
             // E.g., `SELECT server_col as client_col FROM server_table as client_table ORDER BY client_Table.server_col`
-            sql`${sql.ident(table)}.${this.#mapColumnNoAlias(table, col)} ${this.#maybeCollate(table, col)} ASC`
-          : sql`${sql.ident(table)}.${this.#mapColumnNoAlias(table, col)} ${this.#maybeCollate(table, col)} DESC`,
-      ),
+            sql`${sql.ident(table)}.${this.#mapColumnNoAlias(table, col)}${this.#maybeCollate(serverColumnSchema)} ASC`
+          : sql`${sql.ident(table)}.${this.#mapColumnNoAlias(table, col)}${this.#maybeCollate(serverColumnSchema)} DESC`;
+      }),
       ', ',
     )}`;
   }
 
-  #maybeCollate(table: string, column: string) {
-    const columnSchema = this.#tables[table].columns[column];
-    if (columnSchema.type === 'string') {
-      return sql`COLLATE ${sql.ident(Z2S_COLLATION)}`;
+  #maybeCollate(serverColumnSchema: ServerColumnSchema) {
+    if (
+      serverColumnSchema.type === 'text' ||
+      serverColumnSchema.type === 'char' ||
+      serverColumnSchema.type === 'varchar'
+    ) {
+      return sql` COLLATE ${sql.ident(Z2S_COLLATION)}`;
     }
+    if (serverColumnSchema.type === 'uuid' || serverColumnSchema.isEnum) {
+      return sql`::text COLLATE ${sql.ident(Z2S_COLLATION)}`;
+    }
+
     return sql``;
   }
 
@@ -409,7 +420,7 @@ export class Compiler {
       case 'column':
         return this.#mapColumnNoAlias(table, valuePos.name);
       case 'literal':
-        return this.#literalValuePosition(
+        return this.#literalValueComparison(
           valuePos,
           table,
           otherValuePos,
@@ -425,7 +436,7 @@ export class Compiler {
     }
   }
 
-  #literalValuePosition(
+  #literalValueComparison(
     valuePos: LiteralReference,
     table: string,
     otherValuePos: ValuePosition,
@@ -441,6 +452,7 @@ export class Compiler {
             ],
             valuePos.value,
             plural,
+            true,
           );
         case 'literal': {
           assert(plural === Array.isArray(valuePos.value));
@@ -570,13 +582,6 @@ export class Compiler {
   }
 
   #selectCol(table: string, column: string) {
-    // throw new Error(
-    //   JSON.stringify(this.#serverSchema) +
-    //     '\n' +
-    //     this.#nameMapper.tableName(table) +
-    //     '\n' +
-    //     this.#nameMapper.columnName(table, column),
-    // );
     const serverColumnSchema =
       this.#serverSchema[this.#nameMapper.tableName(table)][
         this.#nameMapper.columnName(table, column)

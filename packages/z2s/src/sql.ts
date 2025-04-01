@@ -33,8 +33,10 @@ type SqlConvertArg =
   | {
       [sqlConvert]: 'column';
       type: string;
+      isEnum: boolean;
       value: unknown;
       plural: boolean;
+      isComparison: boolean;
     }
   | {
       [sqlConvert]: 'literal';
@@ -75,13 +77,16 @@ export function sqlConvertPluralLiteralArg(
 export function sqlConvertColumnArg(
   serverColumnSchema: ServerColumnSchema,
   value: unknown,
-  plural?: boolean,
+  plural: boolean,
+  isComparison: boolean,
 ): SQLQuery {
   return sql.value({
     [sqlConvert]: 'column',
     type: serverColumnSchema.type,
+    isEnum: serverColumnSchema.isEnum,
     value,
     plural,
+    isComparison,
   });
 }
 
@@ -147,24 +152,30 @@ class SQLConvertFormat implements FormatConfig {
     // being bool/json/numeric/whatever and the bindings try to coerce
     // the inputs to those types.
     if (arg.type === 'null') {
-      if (arg.type === 'null') {
-        assert(arg.value === null, "Args of type 'null' must have value null");
-      }
+      assert(arg.value === null, "Args of type 'null' must have value null");
+      assert(!arg.plural, "Args of type 'null' must not be plural");
       return `$${index}`;
     }
 
     if (arg[sqlConvert] === 'literal') {
+      const collate =
+        arg.type === 'string' ? ` COLLATE "${Z2S_COLLATION}"` : '';
       const {value} = arg;
       if (Array.isArray(value)) {
         const elType = pgTypeForLiteralType(arg.type);
-        return `ARRAY(
-        SELECT value::${elType} FROM jsonb_array_elements_text($${index}::text::jsonb)
-        )`;
+        return formatPlural(index, `value::${elType}${collate}`);
       }
-      return `$${index}::text::${pgTypeForLiteralType(arg.type)}`;
+      return `$${index}::text::${pgTypeForLiteralType(arg.type)}${collate}`;
     }
 
+    const collate = arg.isComparison ? ` COLLATE "${Z2S_COLLATION}"` : '';
     if (!arg.plural) {
+      if (arg.isEnum) {
+        if (arg.isComparison) {
+          return `$${index}::text ${collate}`;
+        }
+        return `$${index}::text::${arg.type}`;
+      }
       switch (arg.type) {
         case 'date':
         case 'timestamp':
@@ -173,26 +184,53 @@ class SQLConvertFormat implements FormatConfig {
         case 'timestamp without time zone':
           return `to_timestamp($${index}::text::bigint / 1000.0) AT TIME ZONE 'UTC'`;
         case 'text':
-          return `$${index}::text`;
+          return `$${index}::text${collate}`;
+        case 'char':
+        case 'varchar':
+          return `$${index}::text::${arg.type}${collate}`;
+        // uuid doesn't support collation, so we compare as text
+        case 'uuid':
+          return arg.isComparison
+            ? `$${index}::text ${collate}`
+            : `$${index}::text::uuid`;
         default:
           return `$${index}::text::${arg.type}`;
       }
     }
 
+    if (arg.isEnum && arg.isComparison) {
+      if (arg.isComparison) {
+        return formatPlural(index, `value::text${collate}`);
+      }
+      return formatPlural(index, `value::${arg.type}`);
+    }
+
     switch (arg.type) {
+      case 'date':
       case 'timestamp':
-        return `ARRAY(
-          SELECT to_timestamp(value::bigint / 1000.0)
-          FROM jsonb_array_elements_text($${index}::text::jsonb)
-        )::timestamp[]`;
-      case 'null':
-        throw new Error('unsupported null');
+      case 'timestamptz':
+      case 'timestamp with time zone':
+      case 'timestamp without time zone':
+        return formatPlural(index, `to_timestamp(value::bigint / 1000.0)`);
+      case 'text':
+      case 'char':
+      case 'varchar':
+        return formatPlural(index, `value::${arg.type}${collate}`);
+      // uuid doesn't support collation, so we compare as text
+      case 'uuid':
+        return arg.isComparison
+          ? formatPlural(index, `value::text${collate}`)
+          : formatPlural(index, `value::${arg.type}`);
       default:
-        return `ARRAY(
-          SELECT value::${arg.type} FROM jsonb_array_elements_text($${index}::text::jsonb)
-        )`;
+        return formatPlural(index, `value::${arg.type}`);
     }
   }
+}
+
+function formatPlural(index: number, select: string) {
+  return `ARRAY(
+          SELECT ${select} FROM jsonb_array_elements_text($${index}::text::jsonb)
+        )`;
 }
 
 function pgTypeForLiteralType(type: Exclude<LiteralType, 'null'>) {

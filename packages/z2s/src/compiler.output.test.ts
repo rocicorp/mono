@@ -189,8 +189,8 @@ test('any', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": ""name" = ANY (ARRAY(
-                SELECT value  COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
-              ))",
+              SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
+            ))",
       "values": [
         "[1,2,3]",
       ],
@@ -212,8 +212,8 @@ test('any', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": ""name" != ANY (ARRAY(
-                SELECT value  COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
-              ))",
+              SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
+            ))",
       "values": [
         "[1,2,3]",
       ],
@@ -289,7 +289,7 @@ test('distinctFrom', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" IS NOT DISTINCT FROM $1::text  COLLATE "ucs_basic"",
+      "text": ""name" IS NOT DISTINCT FROM $1::text COLLATE "ucs_basic"",
       "values": [
         null,
       ],
@@ -310,7 +310,7 @@ test('distinctFrom', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" IS DISTINCT FROM $1::text  COLLATE "ucs_basic"",
+      "text": ""name" IS DISTINCT FROM $1::text COLLATE "ucs_basic"",
       "values": [
         null,
       ],
@@ -404,7 +404,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" = $1::text  COLLATE "ucs_basic"",
+      "text": ""name" = $1::text COLLATE "ucs_basic"",
       "values": [
         "test",
       ],
@@ -425,7 +425,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" != $1::text  COLLATE "ucs_basic"",
+      "text": ""name" != $1::text COLLATE "ucs_basic"",
       "values": [
         "test",
       ],
@@ -530,7 +530,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" LIKE $1::text  COLLATE "ucs_basic"",
+      "text": ""name" LIKE $1::text COLLATE "ucs_basic"",
       "values": [
         "%test%",
       ],
@@ -551,7 +551,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" NOT LIKE $1::text  COLLATE "ucs_basic"",
+      "text": ""name" NOT LIKE $1::text COLLATE "ucs_basic"",
       "values": [
         "%test%",
       ],
@@ -572,7 +572,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" ILIKE $1::text  COLLATE "ucs_basic"",
+      "text": ""name" ILIKE $1::text COLLATE "ucs_basic"",
       "values": [
         "%test%",
       ],
@@ -593,7 +593,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" NOT ILIKE $1::text  COLLATE "ucs_basic"",
+      "text": ""name" NOT ILIKE $1::text COLLATE "ucs_basic"",
       "values": [
         "%test%",
       ],
@@ -615,8 +615,8 @@ test('simple', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": ""id" = ANY (ARRAY(
-                SELECT value  COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
-              ))",
+              SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
+            ))",
       "values": [
         "[1,2,3]",
       ],
@@ -638,8 +638,8 @@ test('simple', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": ""id" != ANY (ARRAY(
-                SELECT value  COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
-              ))",
+              SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
+            ))",
       "values": [
         "[1,2,3]",
       ],
@@ -660,7 +660,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" IS NOT DISTINCT FROM $1::text  COLLATE "ucs_basic"",
+      "text": ""name" IS NOT DISTINCT FROM $1::text COLLATE "ucs_basic"",
       "values": [
         null,
       ],
@@ -681,7 +681,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""name" IS DISTINCT FROM $1::text  COLLATE "ucs_basic"",
+      "text": ""name" IS DISTINCT FROM $1::text COLLATE "ucs_basic"",
       "values": [
         null,
       ],

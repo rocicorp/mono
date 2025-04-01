@@ -80,15 +80,6 @@ let issueQuery: Query<Schema, 'issue'>;
  * These test will likely be deprecated.
  */
 beforeAll(async () => {
-  pg = await testDBs.create(DB_NAME, undefined, false);
-  await pg.unsafe(createTableSQL);
-
-  // await pg.begin(async tx => {
-  //   throw new Error(
-  //     JSON.stringify(await getServerSchema(new Transaction(tx), schema)),
-  //   );
-  // });
-
   sqlite = new Database(lc, ':memory:');
   const testData = {
     issue: Array.from({length: 3}, (_, i) => ({
