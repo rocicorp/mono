@@ -22,11 +22,51 @@ import {formatPgInternalConvert} from './sql.ts';
 import {Client} from 'pg';
 import './test/comparePg.ts';
 import {fillPgAndSync} from './test/setup.ts';
+import type {ServerSchema} from './schema.ts';
 
 const lc = createSilentLogContext();
 
 const BASE_TIMESTAMP = 1743127752952;
 const DB_NAME = 'compiler';
+
+const serverSchema: ServerSchema = {
+  issues: {
+    id: {type: 'text', isEnum: false},
+    title: {type: 'text', isEnum: false},
+    description: {type: 'text', isEnum: false},
+    closed: {type: 'boolean', isEnum: false},
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    owner_id: {type: 'text', isEnum: false},
+    createdAt: {type: 'timestamp without time zone', isEnum: false},
+  },
+  users: {
+    id: {type: 'text', isEnum: false},
+    name: {type: 'text', isEnum: false},
+    metadata: {type: 'jsonb', isEnum: false},
+  },
+  comments: {
+    id: {type: 'text', isEnum: false},
+    authorId: {type: 'text', isEnum: false},
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    issue_id: {type: 'text', isEnum: false},
+    text: {type: 'text', isEnum: false},
+    createdAt: {type: 'timestamp without time zone', isEnum: false},
+  },
+  issueLabel: {
+    issueId: {type: 'text', isEnum: false},
+    labelId: {type: 'text', isEnum: false},
+  },
+  label: {
+    id: {type: 'text', isEnum: false},
+    name: {type: 'text', isEnum: false},
+  },
+  revision: {
+    id: {type: 'text', isEnum: false},
+    authorId: {type: 'text', isEnum: false},
+    commentId: {type: 'text', isEnum: false},
+    text: {type: 'text', isEnum: false},
+  },
+} as const;
 
 let pg: PostgresDB;
 let nodePostgres: Client;
@@ -40,6 +80,16 @@ let issueQuery: Query<Schema, 'issue'>;
  * These test will likely be deprecated.
  */
 beforeAll(async () => {
+  pg = await testDBs.create(DB_NAME, undefined, false);
+  await pg.unsafe(createTableSQL);
+
+  // await pg.begin(async tx => {
+  //   throw new Error(
+  //     JSON.stringify(await getServerSchema(new Transaction(tx), schema)),
+  //   );
+  // });
+
+  sqlite = new Database(lc, ':memory:');
   const testData = {
     issue: Array.from({length: 3}, (_, i) => ({
       id: `issue${i + 1}`,
@@ -224,7 +274,7 @@ describe('compiling ZQL to SQL', () => {
   function t(runPgQuery: (query: string, args: unknown[]) => Promise<unknown>) {
     test('basic where clause', async () => {
       const query = issueQuery.where('title', '=', 'Test Issue 1');
-      const c = compile(ast(query), schema.tables);
+      const c = compile(ast(query), schema.tables, serverSchema);
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
@@ -254,7 +304,7 @@ describe('compiling ZQL to SQL', () => {
         .where('closed', '=', false)
         .where('ownerId', 'IS NOT', null);
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables),
+        compile(ast(query), schema.tables, serverSchema),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
@@ -284,7 +334,7 @@ describe('compiling ZQL to SQL', () => {
         q.where('name', '=', 'bug'),
       );
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables),
+        compile(ast(query), schema.tables, serverSchema),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
@@ -301,7 +351,7 @@ describe('compiling ZQL to SQL', () => {
     test('order by and limit', async () => {
       const query = issueQuery.orderBy('title', 'desc').limit(5);
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables),
+        compile(ast(query), schema.tables, serverSchema),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
@@ -345,7 +395,7 @@ describe('compiling ZQL to SQL', () => {
     test('1 to 1 foreign key relationship', async () => {
       const query = issueQuery.related('owner');
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables, query.format),
+        compile(ast(query), schema.tables, serverSchema, query.format),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
@@ -406,7 +456,7 @@ describe('compiling ZQL to SQL', () => {
     test('1 to many foreign key relationship', async () => {
       const query = issueQuery.related('comments');
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables, query.format),
+        compile(ast(query), schema.tables, serverSchema, query.format),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
@@ -498,7 +548,7 @@ describe('compiling ZQL to SQL', () => {
     test('junction relationship', async () => {
       const query = issueQuery.related('labels');
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables, query.format),
+        compile(ast(query), schema.tables, serverSchema, query.format),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
@@ -571,7 +621,7 @@ describe('compiling ZQL to SQL', () => {
             .related('author'),
         );
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables, query.format),
+        compile(ast(query), schema.tables, serverSchema, query.format),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
@@ -628,7 +678,7 @@ describe('compiling ZQL to SQL', () => {
         )
         .orderBy('title', 'asc');
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables, query.format),
+        compile(ast(query), schema.tables, serverSchema, query.format),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),

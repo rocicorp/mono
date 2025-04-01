@@ -7,12 +7,15 @@ import {makeSchemaCRUD} from './custom.ts';
 import {Transaction} from './test/util.ts';
 import type {DBTransaction, SchemaCRUD} from '../../zql/src/mutate/custom.ts';
 import {schema, schemaSql} from './test/schema.ts';
-
-// TODO: test a json column
+import {getServerSchema} from './schema.ts';
+import type {ServerSchema} from '../../z2s/src/schema.ts';
 
 describe('makeSchemaCRUD', () => {
   let pg: PostgresDB;
-  let crudProvider: (tx: DBTransaction<unknown>) => SchemaCRUD<typeof schema>;
+  let crudProvider: (
+    tx: DBTransaction<unknown>,
+    serverSchema: ServerSchema,
+  ) => SchemaCRUD<typeof schema>;
 
   beforeEach(async () => {
     pg = await testDBs.create('makeSchemaCRUD-test');
@@ -40,7 +43,11 @@ describe('makeSchemaCRUD', () => {
 
   test('insert', async () => {
     await pg.begin(async tx => {
-      const crud = crudProvider(new Transaction(tx));
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
 
       await Promise.all([
         crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
@@ -71,7 +78,12 @@ describe('makeSchemaCRUD', () => {
 
   test('insert with missing columns', async () => {
     await pg.begin(async tx => {
-      const crud = crudProvider(new Transaction(tx));
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
+
       await crud.basic.insert({id: '1', a: 2, b: 'foo'});
 
       await checkDb(tx, 'basic', [{id: '1', a: 2, b: 'foo', c: null}]);
@@ -80,7 +92,12 @@ describe('makeSchemaCRUD', () => {
 
   test('upsert', async () => {
     await pg.begin(async tx => {
-      const crud = crudProvider(new Transaction(tx));
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
+
       await Promise.all([
         crud.basic.upsert({id: '1', a: 2, b: 'foo', c: true}),
         crud.names.upsert({id: '2', a: 3, b: 'bar', c: false}),
@@ -172,7 +189,11 @@ describe('makeSchemaCRUD', () => {
 
   test('update', async () => {
     await pg.begin(async tx => {
-      const crud = crudProvider(new Transaction(tx));
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
       await Promise.all([
         crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),
@@ -247,7 +268,12 @@ describe('makeSchemaCRUD', () => {
 
   test('delete', async () => {
     await pg.begin(async tx => {
-      const crud = crudProvider(new Transaction(tx));
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
+
       await Promise.all([
         crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),

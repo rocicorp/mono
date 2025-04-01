@@ -55,9 +55,20 @@ import '../comparePg.ts';
 import {writeChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 import {formatPgInternalConvert} from '../../sql.ts';
+import type {ServerSchema} from '../../schema.ts';
+import {
+  StaticQuery,
+  staticQuery,
+} from '../../../../zql/src/query/static-query.ts';
+
+// TODO: Ideally z2s wouldn't depend on zero-pg (even in tests).  These
+// chinook tests should move to their own package.
+import {Transaction} from '../../../../zero-pg/src/test/util.ts';
+import {getServerSchema} from '../../../../zero-pg/src/schema.ts';
 
 let pg: PostgresDB;
 let sqlite: Database;
+let serverSchema: ServerSchema;
 let zqliteQueryDelegate: QueryDelegate;
 let memoryQueryDelegate: QueryDelegate;
 type AnyQuery = Query<any, any, any>;
@@ -115,6 +126,10 @@ beforeEach(async () => {
   const memorySources = makeMemorySources();
   await writeChinook(pg, sqlite);
 
+  serverSchema = await pg.begin(tx =>
+    getServerSchema(new Transaction(tx), schema),
+  );
+
   zqliteQueryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
   memoryQueryDelegate = new TestMemoryQueryDelegate(memorySources);
 
@@ -139,6 +154,27 @@ beforeEach(async () => {
       }
     }),
   );
+});
+
+test('limited junction edge', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-explicit-any
+  function getSQL(q: Query<any, any, any>) {
+    return formatPgInternalConvert(
+      compile(
+        (q as StaticQuery<Schema, keyof Schema['tables']>).ast,
+        schema.tables,
+        serverSchema,
+        q.format,
+      ),
+    ).text;
+  }
+
+  const q = staticQuery(schema, 'playlist').related('tracks', q => q.limit(10));
+  expect(getSQL(q)).toMatchInlineSnapshot(`
+    "SELECT COALESCE(json_agg(row_to_json("root")) , '[]'::json)::TEXT as "zql_result" FROM (SELECT (
+            SELECT COALESCE(json_agg(row_to_json("inner_tracks")) , '[]'::json) FROM (SELECT "table_1"."track_id" as "id","table_1"."name","table_1"."album_id" as "albumId","table_1"."media_type_id" as "mediaTypeId","table_1"."genre_id" as "genreId","table_1"."composer","table_1"."milliseconds","table_1"."bytes","table_1"."unit_price" as "unitPrice" FROM "playlist_track" as "playlistTrack" JOIN "track" as "table_1" ON "playlistTrack"."track_id" = "table_1"."track_id" WHERE ("playlist"."playlist_id" = "playlistTrack"."playlist_id")  ORDER BY "playlistTrack"."playlist_id"  ASC, "playlistTrack"."track_id"  ASC LIMIT $1::text::numeric ) "inner_tracks"
+          ) as "tracks","playlist"."playlist_id" as "id","playlist"."name" FROM "playlist"   ORDER BY "playlist"."playlist_id"  ASC )"root""
+  `);
 });
 
 describe('basic select', () => {
@@ -765,7 +801,7 @@ async function runZqlAsSql(
   query: Query<Schema, keyof Schema['tables']>,
 ) {
   const sqlQuery = formatPgInternalConvert(
-    compile(ast(query), schema.tables, query.format),
+    compile(ast(query), schema.tables, serverSchema, query.format),
   );
   return extractZqlResult(
     await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),

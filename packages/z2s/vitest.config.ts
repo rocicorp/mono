@@ -9,8 +9,8 @@ const {url} = import.meta;
 
 export const workspace = [
   configForNoPg(url),
-  configForVersion(15, url),
-  configForVersion(16, url),
+  // configForVersion(15, url),
+  // configForVersion(16, url),
   configForVersion(17, url),
   ...configForCustomPg(url),
 ].map(c =>

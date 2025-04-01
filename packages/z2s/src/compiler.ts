@@ -6,6 +6,7 @@ import {must} from '../../shared/src/must.ts';
 import type {
   CorrelatedSubqueryCondition,
   Correlation,
+  LiteralReference,
   Ordering,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
@@ -16,22 +17,26 @@ import {
   type SimpleCondition,
 } from '../../zero-protocol/src/ast.ts';
 import {clientToServer, NameMapper} from '../../zero-schema/src/name-mapper.ts';
-import type {
-  TableSchema,
-  ValueType,
-} from '../../zero-schema/src/table-schema.ts';
+import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
-import {sql, sqlConvertArg, sqlConvertArgUnsafe} from './sql.ts';
+import {
+  sql,
+  sqlConvertColumnArg,
+  type PluralLiteralType,
+  sqlConvertSingularLiteralArg,
+  sqlConvertPluralLiteralArg,
+  Z2S_COLLATION,
+} from './sql.ts';
 import {
   type JSONValue as BigIntJSONValue,
   parse as parseBigIntJson,
 } from '../../zero-cache/src/types/bigint-json.ts';
 import {hasOwn} from '../../shared/src/has-own.ts';
+import type {ServerSchema} from './schema.ts';
 
 type Tables = Record<string, TableSchema>;
 
 const ZQL_RESULT_KEY = 'zql_result';
-const COLLATION = 'ucs_basic';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractZqlResult(pgResult: any): JSONValue {
@@ -98,18 +103,21 @@ function findPathToBigInt(v: BigIntJSONValue): string | undefined {
 export function compile(
   ast: AST,
   tables: Tables,
+  serverSchema: ServerSchema,
   format?: Format | undefined,
 ): SQLQuery {
-  const compiler = new Compiler(tables);
+  const compiler = new Compiler(tables, serverSchema);
   return compiler.compile(ast, format);
 }
 
 export class Compiler {
   readonly #tables: Tables;
+  readonly #serverSchema: ServerSchema;
   readonly #nameMapper: NameMapper;
 
-  constructor(tables: Tables) {
+  constructor(tables: Tables, serverSchema: ServerSchema) {
     this.#tables = tables;
+    this.#serverSchema = serverSchema;
     this.#nameMapper = clientToServer(tables);
   }
 
@@ -133,8 +141,8 @@ export class Compiler {
   ): SQLQuery {
     const selectionSet = this.related(ast.related ?? [], format, ast.table);
     const tableSchema = this.#tables[ast.table];
-    for (const [column, columnSchema] of Object.entries(tableSchema.columns)) {
-      selectionSet.push(this.#selectCol(ast.table, column, columnSchema.type));
+    for (const column of Object.keys(tableSchema.columns)) {
+      selectionSet.push(this.#selectCol(ast.table, column));
     }
     return sql`SELECT ${sql.join(selectionSet, ',')} FROM ${this.#mapTable(
       ast.table,
@@ -166,7 +174,7 @@ export class Compiler {
   #maybeCollate(table: string, column: string) {
     const columnSchema = this.#tables[table].columns[column];
     if (columnSchema.type === 'string') {
-      return sql`COLLATE ${sql.ident(COLLATION)}`;
+      return sql`COLLATE ${sql.ident(Z2S_COLLATION)}`;
     }
     return sql``;
   }
@@ -175,7 +183,7 @@ export class Compiler {
     if (!limit) {
       return sql``;
     }
-    return sql`LIMIT ${sqlConvertArg('number', limit)}`;
+    return sql`LIMIT ${sqlConvertSingularLiteralArg(limit)}`;
   }
 
   related(
@@ -361,12 +369,12 @@ export class Compiler {
         return sql`${this.valueComparison(
           condition.left,
           table,
-          this.#extractType(table, condition.left, condition.right),
+          condition.right,
           false,
         )} ${sql.__dangerous__rawValue(condition.op)} ${this.valueComparison(
           condition.right,
           table,
-          this.#extractType(table, condition.right, condition.left),
+          condition.left,
           false,
         )}`;
       case 'NOT IN':
@@ -379,37 +387,103 @@ export class Compiler {
   }
 
   distinctFrom(condition: SimpleCondition, table: string): SQLQuery {
-    return sql`${this.valueComparison(condition.left, table, this.#extractType(table, condition.left, condition.right), false)} ${
+    return sql`${this.valueComparison(condition.left, table, condition.right, false)} ${
       condition.op === 'IS' ? sql`IS NOT DISTINCT FROM` : sql`IS DISTINCT FROM`
-    } ${this.valueComparison(condition.right, table, this.#extractType(table, condition.right, condition.left), false)}`;
+    } ${this.valueComparison(condition.right, table, condition.left, false)}`;
   }
 
   any(condition: SimpleCondition, table: string): SQLQuery {
-    return sql`${this.valueComparison(condition.left, table, this.#extractType(table, condition.left, condition.right), false)} ${
+    return sql`${this.valueComparison(condition.left, table, condition.right, false)} ${
       condition.op === 'IN' ? sql`= ANY` : sql`!= ANY`
-    } (${this.valueComparison(condition.right, table, this.#extractType(table, condition.right, condition.left), true)})`;
+    } (${this.valueComparison(condition.right, table, condition.left, true)})`;
   }
 
   valueComparison(
-    value: ValuePosition,
+    valuePos: ValuePosition,
     table: string,
-    valueType: ValueType,
+    otherValuePos: ValuePosition,
     plural: boolean,
   ): SQLQuery {
-    switch (value.type) {
+    const valuePosType = valuePos.type;
+    switch (valuePosType) {
       case 'column':
-        return this.#mapColumnNoAlias(table, value.name);
+        return this.#mapColumnNoAlias(table, valuePos.name);
       case 'literal':
-        return sqlConvertArgUnsafe(
-          valueType,
-          value.value,
+        return this.#literalValuePosition(
+          valuePos,
+          table,
+          otherValuePos,
           plural,
-          valueType === 'string' ? COLLATION : undefined,
         );
       case 'static':
         throw new Error(
           'Static parameters must be bound to a value before compiling to SQL',
         );
+      default:
+        unreachable(valuePosType);
+        break;
+    }
+  }
+
+  #literalValuePosition(
+    valuePos: LiteralReference,
+    table: string,
+    otherValuePos: ValuePosition,
+    plural: boolean,
+  ) {
+    {
+      const otherType = otherValuePos.type;
+      switch (otherType) {
+        case 'column':
+          return sqlConvertColumnArg(
+            this.#serverSchema[this.#nameMapper.tableName(table)][
+              this.#nameMapper.columnName(table, otherValuePos.name)
+            ],
+            valuePos.value,
+            plural,
+          );
+        case 'literal': {
+          assert(plural === Array.isArray(valuePos.value));
+          if (Array.isArray(valuePos.value)) {
+            if (valuePos.value.length > 0) {
+              // If the array is non-empty base its type on its first
+              // element
+              return sqlConvertPluralLiteralArg(
+                typeof valuePos.value[0] as PluralLiteralType,
+                valuePos.value as PluralLiteralType[],
+              );
+            }
+            // If the array is empty, base its type on the other value
+            // position's type (as long as the other value position is non-null,
+            // cannot have a null[]).
+            if (otherValuePos.value !== null) {
+              return sqlConvertPluralLiteralArg(
+                typeof otherValuePos.value as PluralLiteralType,
+                [],
+              );
+            }
+            // If the other value position is null, it can be compared to any
+            // type of empty array, chose 'string' arbitrarily.
+            return sqlConvertPluralLiteralArg('string', []);
+          }
+          if (
+            typeof valuePos.value === 'string' ||
+            typeof valuePos.value === 'number' ||
+            typeof valuePos.value === 'boolean'
+          ) {
+            return sqlConvertSingularLiteralArg(valuePos.value);
+          }
+          throw new Error(
+            `Literal of unexpected type. ${valuePos.value} of type ${typeof valuePos.value}`,
+          );
+        }
+        case 'static':
+          throw new Error(
+            'Static parameters must be bound to a value before compiling to SQL',
+          );
+        default:
+          unreachable(otherType);
+      }
     }
   }
 
@@ -495,8 +569,27 @@ export class Compiler {
     return sql.ident(mapped);
   }
 
-  #selectCol(table: string, column: string, type: ValueType) {
-    if (type === 'date' || type === 'timestamp') {
+  #selectCol(table: string, column: string) {
+    // throw new Error(
+    //   JSON.stringify(this.#serverSchema) +
+    //     '\n' +
+    //     this.#nameMapper.tableName(table) +
+    //     '\n' +
+    //     this.#nameMapper.columnName(table, column),
+    // );
+    const serverColumnSchema =
+      this.#serverSchema[this.#nameMapper.tableName(table)][
+        this.#nameMapper.columnName(table, column)
+      ];
+    const serverType = serverColumnSchema.type;
+    if (
+      !serverColumnSchema.isEnum &&
+      (serverType === 'date' ||
+        serverType === 'timestamp' ||
+        serverType === 'timestamptz' ||
+        serverType === 'timestamp with time zone' ||
+        serverType === 'timestamp without time zone')
+    ) {
       return sql`EXTRACT(EPOCH FROM ${sql.ident(
         table,
       )}.${this.#mapColumnNoAlias(
@@ -513,53 +606,5 @@ export class Compiler {
     }(row_to_json(${sql.ident(table)})) ${
       singular ? sql`` : sql`, '[]'::json)`
     }`;
-  }
-
-  #extractType(
-    table: string,
-    // first takes precedence over second in terms of type discovery
-    first: ValuePosition,
-    second: ValuePosition,
-  ): ValueType {
-    // Derive the type from the table schema first if able
-    const column =
-      first.type === 'column'
-        ? first.name
-        : second.type === 'column'
-          ? second.name
-          : undefined;
-    if (column) {
-      return this.#tables[table].columns[column].type;
-    }
-
-    // We're comparing two literals? Derive the type from the JS type itself.
-    const literalValue =
-      first.type === 'literal'
-        ? first.value
-        : second.type === 'literal'
-          ? second.value
-          : undefined;
-
-    assert(literalValue, 'Literal value not found');
-
-    if (literalValue === null) {
-      return 'null';
-    }
-
-    const jsType = typeof literalValue;
-    switch (jsType) {
-      case 'boolean':
-      case 'number':
-      case 'string':
-        return jsType;
-      case 'object':
-      case 'bigint':
-      case 'function':
-      case 'symbol':
-      case 'undefined':
-        throw new Error('Unsupported type: ' + jsType);
-      default:
-        unreachable(jsType);
-    }
   }
 }

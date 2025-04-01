@@ -12,6 +12,7 @@ import {
   TIMESTAMP,
   TIMESTAMPTZ,
 } from './pg-types.ts';
+import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
 
 const WITH_HH_MM_TIMEZONE = /[+-]\d\d:\d\d$/;
 const WITH_HH_TIMEZONE = /[+-]\d\d$/;
@@ -192,3 +193,65 @@ export const typeNameByOID: Record<number, string> = Object.fromEntries(
 );
 
 Object.freeze(typeNameByOID);
+
+export function dataTypeToZqlValueType(
+  pgType: string,
+  isEnum: boolean,
+): ValueType | undefined {
+  switch (pgType.toLowerCase()) {
+    case 'smallint':
+    case 'integer':
+    case 'int':
+    case 'int2':
+    case 'int4':
+    case 'int8':
+    case 'bigint':
+    case 'smallserial':
+    case 'serial':
+    case 'serial2':
+    case 'serial4':
+    case 'serial8':
+    case 'bigserial':
+    case 'decimal':
+    case 'numeric':
+    case 'real':
+    case 'double precision':
+    case 'float':
+    case 'float4':
+    case 'float8':
+      return 'number';
+
+    // Timestamps are represented as epoch milliseconds (at microsecond resolution using floating point),
+    // and DATEs are represented as epoch milliseconds of UTC midnight of the date.
+    case 'date':
+    case 'timestamp':
+    case 'timestamptz':
+    case 'timestamp with time zone':
+    case 'timestamp without time zone':
+      return 'number';
+
+    case 'bpchar':
+    case 'character':
+    case 'character varying':
+    case 'text':
+    case 'uuid':
+    case 'varchar':
+      return 'string';
+
+    case 'bool':
+    case 'boolean':
+      return 'boolean';
+
+    case 'json':
+    case 'jsonb':
+      return 'json';
+
+    // TODO: Add support for these.
+    // case 'bytea':
+    default:
+      if (isEnum) {
+        return 'string';
+      }
+      return undefined;
+  }
+}

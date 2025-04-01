@@ -55,8 +55,6 @@ export type TypeNameToTypeMap = {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   json: any;
-  timestamp: number;
-  date: number;
 };
 
 export type ColumnTypeName<T extends SchemaValue | ValueType> =

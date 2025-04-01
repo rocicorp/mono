@@ -27,6 +27,8 @@ import {makeSchemaQuery} from './query.ts';
 import {formatPg} from '../../z2s/src/sql.ts';
 import {sql} from '../../z2s/src/sql.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
+import type {ServerSchema} from '../../z2s/src/schema.ts';
+import {getServerSchema} from './schema.ts';
 
 export type Params = v.Infer<typeof pushParamsSchema>;
 
@@ -37,8 +39,15 @@ export class PushProcessor<
 > {
   readonly #dbConnectionProvider: ConnectionProvider<TDBTransaction>;
   readonly #lc: LogContext;
-  readonly #mutate: (dbTransaction: DBTransaction<unknown>) => SchemaCRUD<S>;
-  readonly #query: (dbTransaction: DBTransaction<unknown>) => SchemaQuery<S>;
+  readonly #mutate: (
+    dbTransaction: DBTransaction<unknown>,
+    serverSchema: ServerSchema,
+  ) => SchemaCRUD<S>;
+  readonly #query: (
+    dbTransaction: DBTransaction<unknown>,
+    serverSchema: ServerSchema,
+  ) => SchemaQuery<S>;
+  readonly #schema: S;
 
   constructor(
     schema: S,
@@ -49,6 +58,7 @@ export class PushProcessor<
     this.#lc = createLogContext(logLevel).withContext('PushProcessor');
     this.#mutate = makeSchemaCRUD(schema);
     this.#query = makeSchemaQuery(schema);
+    this.#schema = schema;
   }
 
   async process(
@@ -183,7 +193,8 @@ export class PushProcessor<
       );
 
       if (!errorMode) {
-        await this.#dispatchMutation(dbTx, mutators, m);
+        const serverSchema = await getServerSchema(dbTx, this.#schema);
+        await this.#dispatchMutation(dbTx, serverSchema, mutators, m);
       }
 
       return {
@@ -198,6 +209,7 @@ export class PushProcessor<
 
   #dispatchMutation(
     dbTx: DBTransaction<TDBTransaction>,
+    serverSchema: ServerSchema,
     mutators: MD,
     m: Mutation,
   ): Promise<void> {
@@ -205,8 +217,8 @@ export class PushProcessor<
       dbTx,
       m.clientID,
       m.id,
-      this.#mutate(dbTx),
-      this.#query(dbTx),
+      this.#mutate(dbTx, serverSchema),
+      this.#query(dbTx, serverSchema),
     );
 
     const [namespace, name] = splitMutatorKey(m.name);

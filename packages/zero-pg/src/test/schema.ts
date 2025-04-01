@@ -1,12 +1,10 @@
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
-  date,
   json,
   number,
   string,
   table,
-  timestamp,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 
 const jsonCols = {
@@ -46,11 +44,11 @@ export const schema = createSchema({
       .primaryKey('a', 'b'),
     table('dateTypes')
       .columns({
-        ts: timestamp(),
-        tstz: timestamp(),
-        tswtz: timestamp(),
-        tswotz: timestamp(),
-        d: date(),
+        ts: number(),
+        tstz: number(),
+        tswtz: number(),
+        tswotz: number(),
+        d: number(),
       })
       .primaryKey('ts'),
     table('jsonCases')
