@@ -19,7 +19,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- Version 8 drops support for Version 5 (0.18).
 // -- Version 11 adds inspect queries. (0.18)
 // -- Version 12 adds 'timestamp' and 'date' types to the ClientSchema ValueType. (0.18)
-export const PROTOCOL_VERSION = 13;
+// -- Version 14 removes 'timestamp' and 'date' types from the ClientSchema ValueType. (0.18)
+export const PROTOCOL_VERSION = 14;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version
