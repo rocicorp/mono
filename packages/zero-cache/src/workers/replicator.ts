@@ -79,7 +79,7 @@ async function connect(
       // Clear the changeLog to reclaim as much space as possible. The
       // changeLog is only used for IVM advancements (i.e. from an initial
       // hydration), so it is fine for it to be empty at startup.
-      replica.prepare('DELETE FROM "_zero.changeLog"').run();
+      replica.exec('DELETE FROM "_zero.changeLog"');
       const t1 = performance.now();
       lc.info?.(`Cleared _zero.changeLog (${t1 - t0} ms)`);
       replica.exec('VACUUM');
