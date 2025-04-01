@@ -118,11 +118,15 @@ function stringify(arg: SqlConvertArg): string | null {
     return JSON.stringify(arg.value);
   }
   if (arg[sqlConvert] === 'literal' && arg.type === 'string') {
-    return arg.value as string;
+    return arg.value as unknown as string;
   }
   if (
     arg[sqlConvert] === 'column' &&
-    (arg.type === 'text' || arg.type === 'char' || arg.type === 'varchar')
+    (arg.type === 'bpchar' ||
+      arg.type === 'character' ||
+      arg.type === 'text' ||
+      arg.type === 'character varying' ||
+      arg.type === 'varchar')
   ) {
     return arg.value as string;
   }
@@ -194,7 +198,9 @@ class SQLConvertFormat implements FormatConfig {
           return `to_timestamp($${index}::text::bigint / 1000.0) AT TIME ZONE 'UTC'`;
         case 'text':
           return `$${index}::text${collate}`;
-        case 'char':
+        case 'bpchar':
+        case 'character':
+        case 'character varying':
         case 'varchar':
           return `$${index}::text::${arg.type}${collate}`;
         // uuid doesn't support collation, so we compare as text
@@ -221,8 +227,10 @@ class SQLConvertFormat implements FormatConfig {
       case 'timestamp with time zone':
       case 'timestamp without time zone':
         return formatPlural(index, `to_timestamp(value::bigint / 1000.0)`);
+      case 'bpchar':
+      case 'character':
+      case 'character varying':
       case 'text':
-      case 'char':
       case 'varchar':
         return formatPlural(index, `value::${arg.type}${collate}`);
       // uuid doesn't support collation, so we compare as text
