@@ -45,6 +45,21 @@ export function initDB(
   });
 }
 
+export function expectTableExact(
+  db: Database,
+  table: string,
+  expectedRows: unknown[],
+  numberType: 'number' | 'bigint' = 'number',
+  ...orderBy: string[]
+) {
+  const ordering = orderBy.map(c => id(c)).join(', ');
+  const actual = db
+    .prepare(`SELECT * FROM ${id(table)} ORDER BY ${ordering}`)
+    .safeIntegers(numberType === 'bigint')
+    .all();
+  expect(actual).toEqual(expectedRows);
+}
+
 export function expectTables(
   db: Database,
   tables?: Record<string, unknown[]>,
