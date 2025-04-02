@@ -22,7 +22,11 @@ import {formatPgInternalConvert} from './sql.ts';
 import {Client} from 'pg';
 import './test/comparePg.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
-import {string, table} from '../../zero-schema/src/builder/table-builder.ts';
+import {
+  enumeration,
+  string,
+  table,
+} from '../../zero-schema/src/builder/table-builder.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
 import {fillPgAndSync} from './test/setup.ts';
@@ -35,13 +39,17 @@ const DB_NAME = 'collate-test';
 let pg: PostgresDB;
 let nodePostgres: Client;
 let sqlite: Database;
+let queryDelegate: QueryDelegate;
 let memoryQueryDelegate: QueryDelegate;
-let memoryItemQuery: Query<Schema, 'item'>;
 
 export const createTableSQL = /*sql*/ `
+CREATE TYPE size AS ENUM('s', 'm', 'l', 'xl'); 
+
 CREATE TABLE "item" (
   "id" TEXT PRIMARY KEY,
-  "name" TEXT COLLATE "es-x-icu" NOT NULL
+  "name" TEXT COLLATE "es-x-icu" NOT NULL,
+  "uuid" UUID NOT NULL,
+  "size" size NOT NULL
 );
 `;
 
@@ -49,6 +57,8 @@ const item = table('item')
   .columns({
     id: string(),
     name: string(),
+    uuid: string(),
+    size: enumeration(),
   })
   .primaryKey('id');
 
@@ -61,10 +71,10 @@ const serverSchema: ServerSchema = {
   item: {
     id: {type: 'text', isEnum: false},
     name: {type: 'text', isEnum: false},
+    uuid: {type: 'uuid', isEnum: false},
+    size: {type: 'size', isEnum: true},
   },
 } as const;
-
-let itemQuery: Query<Schema, 'item'>;
 
 function makeMemorySources() {
   return Object.fromEntries(
@@ -84,11 +94,36 @@ beforeAll(async () => {
   // then our desired collation.
   const testData = {
     item: [
-      {id: '1', name: 'a'},
-      {id: '2', name: 'ä'},
-      {id: '3', name: 'ñ'},
-      {id: '4', name: 'z'},
-      {id: '5', name: 'Ω'},
+      {
+        id: '1',
+        name: 'a',
+        uuid: '10000000-0000-0000-0000-000000000000',
+        size: 's',
+      },
+      {
+        id: '2',
+        name: 'ä',
+        uuid: '20000000-0000-0000-0000-000000000000',
+        size: 'm',
+      },
+      {
+        id: '3',
+        name: 'ñ',
+        uuid: 'a0000000-0000-0000-0000-000000000000',
+        size: 'l',
+      },
+      {
+        id: '4',
+        name: 'z',
+        uuid: '30000000-0000-0000-0000-000000000000',
+        size: 's',
+      },
+      {
+        id: '5',
+        name: 'Ω',
+        uuid: 'f0000000-0000-0000-0000-000000000000',
+        size: 'xl',
+      },
     ],
   };
 
@@ -96,13 +131,11 @@ beforeAll(async () => {
   pg = setup.pg;
   sqlite = setup.sqlite;
 
-  const queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
-  itemQuery = newQuery(queryDelegate, schema, 'item');
+  queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
 
   // Set up memory query
   const memorySources = makeMemorySources();
   memoryQueryDelegate = new TestMemoryQueryDelegate(memorySources);
-  memoryItemQuery = newQuery(memoryQueryDelegate, schema, 'item');
 
   // Initialize memory sources with test data
   for (const row of testData.item) {
@@ -161,62 +194,153 @@ describe('collation behavior', () => {
     );
   });
   function t(runPgQuery: (query: string, args: unknown[]) => Promise<unknown>) {
-    test('zql matches pg', async () => {
-      const query = itemQuery.orderBy('name', 'asc');
+    async function testColumn(col: 'name' | 'size' | 'uuid') {
+      const itemQuery = newQuery(queryDelegate, schema, 'item');
+      const query = itemQuery.orderBy(col, 'asc');
       const pgResult = await runAsSQL(query, runPgQuery);
       const zqlResult = mapResultToClientNames(
         await query.run(),
         schema,
         'item',
       );
-      const memoryResult = await memoryItemQuery.orderBy('name', 'asc').run();
+      const memoryItemQuery = newQuery(memoryQueryDelegate, schema, 'item');
+      const memoryResult = await memoryItemQuery.orderBy(col, 'asc').run();
       expect(zqlResult).toEqualPg(pgResult);
       expect(memoryResult).toEqualPg(pgResult);
-      expect(zqlResult).toMatchInlineSnapshot(`
-        [
-          {
-            "id": "1",
-            "name": "a",
-          },
-          {
-            "id": "4",
-            "name": "z",
-          },
-          {
-            "id": "2",
-            "name": "ä",
-          },
-          {
-            "id": "3",
-            "name": "ñ",
-          },
-          {
-            "id": "5",
-            "name": "Ω",
-          },
-        ]
-      `);
 
       function makeQuery(
         query: Query<Schema, 'item'>,
         i: number,
       ): Query<Schema, 'item'> {
         return query
-          .where('name', '>', memoryResult[i].name)
+          .where(col, '>', memoryResult[i].name)
           .limit(1)
-          .orderBy('name', 'asc');
+          .orderBy(col, 'asc');
       }
-      for (let i = 1; i < memoryResult.length - 1; i++) {
+      for (let i = 0; i < memoryResult.length - 1; i++) {
         const memResult = await makeQuery(memoryItemQuery, i).run();
         const zqlResult = mapResultToClientNames(
           await makeQuery(itemQuery, i).run(),
           schema,
           'item',
         );
-        const pgResult = await runAsSQL(makeQuery(query, i), runPgQuery);
+        const pgResult = await runAsSQL(makeQuery(itemQuery, i), runPgQuery);
         expect(zqlResult).toEqualPg(pgResult);
         expect(memResult).toEqualPg(pgResult);
       }
+
+      return zqlResult;
+    }
+
+    test('zql matches pg, text column', async () => {
+      expect(await testColumn('name')).toMatchInlineSnapshot(`
+        [
+          {
+            "id": "1",
+            "name": "a",
+            "size": "s",
+            "uuid": "10000000-0000-0000-0000-000000000000",
+          },
+          {
+            "id": "4",
+            "name": "z",
+            "size": "s",
+            "uuid": "30000000-0000-0000-0000-000000000000",
+          },
+          {
+            "id": "2",
+            "name": "ä",
+            "size": "m",
+            "uuid": "20000000-0000-0000-0000-000000000000",
+          },
+          {
+            "id": "3",
+            "name": "ñ",
+            "size": "l",
+            "uuid": "a0000000-0000-0000-0000-000000000000",
+          },
+          {
+            "id": "5",
+            "name": "Ω",
+            "size": "xl",
+            "uuid": "f0000000-0000-0000-0000-000000000000",
+          },
+        ]
+      `);
+    });
+
+    test('zql matches pg, enum column', async () => {
+      expect(await testColumn('size')).toMatchInlineSnapshot(`
+        [
+          {
+            "id": "3",
+            "name": "ñ",
+            "size": "l",
+            "uuid": "a0000000-0000-0000-0000-000000000000",
+          },
+          {
+            "id": "2",
+            "name": "ä",
+            "size": "m",
+            "uuid": "20000000-0000-0000-0000-000000000000",
+          },
+          {
+            "id": "1",
+            "name": "a",
+            "size": "s",
+            "uuid": "10000000-0000-0000-0000-000000000000",
+          },
+          {
+            "id": "4",
+            "name": "z",
+            "size": "s",
+            "uuid": "30000000-0000-0000-0000-000000000000",
+          },
+          {
+            "id": "5",
+            "name": "Ω",
+            "size": "xl",
+            "uuid": "f0000000-0000-0000-0000-000000000000",
+          },
+        ]
+      `);
+    });
+
+    test('zql matches pg, uuid column', async () => {
+      expect(await testColumn('uuid')).toMatchInlineSnapshot(`
+        [
+          {
+            "id": "1",
+            "name": "a",
+            "size": "s",
+            "uuid": "10000000-0000-0000-0000-000000000000",
+          },
+          {
+            "id": "2",
+            "name": "ä",
+            "size": "m",
+            "uuid": "20000000-0000-0000-0000-000000000000",
+          },
+          {
+            "id": "4",
+            "name": "z",
+            "size": "s",
+            "uuid": "30000000-0000-0000-0000-000000000000",
+          },
+          {
+            "id": "3",
+            "name": "ñ",
+            "size": "l",
+            "uuid": "a0000000-0000-0000-0000-000000000000",
+          },
+          {
+            "id": "5",
+            "name": "Ω",
+            "size": "xl",
+            "uuid": "f0000000-0000-0000-0000-000000000000",
+          },
+        ]
+      `);
     });
   }
 });

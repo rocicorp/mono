@@ -125,7 +125,7 @@ export class Compiler {
     return sql`SELECT ${this.#toJSON(
       `root`,
       format?.singular,
-    )}::TEXT as ${sql.ident(ZQL_RESULT_KEY)} FROM (${this.select(
+    )}::text as ${sql.ident(ZQL_RESULT_KEY)} FROM (${this.select(
       ast,
       format,
       undefined,
@@ -417,8 +417,16 @@ export class Compiler {
   ): SQLQuery {
     const valuePosType = valuePos.type;
     switch (valuePosType) {
-      case 'column':
+      case 'column': {
+        const serverColumnSchema =
+          this.#serverSchema[this.#nameMapper.tableName(table)][
+            this.#nameMapper.columnName(table, valuePos.name)
+          ];
+        if (serverColumnSchema.type === 'uuid' || serverColumnSchema.isEnum) {
+          return sql`${this.#mapColumnNoAlias(table, valuePos.name)}::text`;
+        }
         return this.#mapColumnNoAlias(table, valuePos.name);
+      }
       case 'literal':
         return this.#literalValueComparison(
           valuePos,
@@ -608,7 +616,7 @@ export class Compiler {
   #toJSON(table: string, singular = false): SQLQuery {
     return sql`${
       singular ? sql`` : sql`COALESCE(json_agg`
-    }(row_to_json(${sql.ident(table)})) ${
+    }(row_to_json(${sql.ident(table)}))${
       singular ? sql`` : sql`, '[]'::json)`
     }`;
   }
