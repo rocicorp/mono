@@ -8,6 +8,7 @@ import {IssuePage} from './pages/issue/issue-page.tsx';
 import {ListPage} from './pages/list/list-page.tsx';
 import {routes} from './routes.ts';
 import {zeroRef} from './zero-setup.ts';
+import {OnboardingModal} from './components/onboarding-modal.tsx';
 
 export function Root() {
   const z = useSyncExternalStore(
@@ -16,6 +17,7 @@ export function Root() {
   );
 
   const [contentReady, setContentReady] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(true);
 
   useSoftNav();
 
@@ -49,6 +51,10 @@ export function Root() {
           </Switch>
         </div>
       </div>
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onDismiss={() => setShowOnboarding(false)}
+      />
     </ZeroProvider>
   );
 }
