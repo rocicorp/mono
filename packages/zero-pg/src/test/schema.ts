@@ -1,6 +1,7 @@
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
+  enumeration,
   json,
   number,
   string,
@@ -58,6 +59,15 @@ export const schema = createSchema({
       })
       .primaryKey('str'),
     table('jsonbCases').columns(jsonCols).primaryKey('str'),
+    table('uuidAndEnum')
+      .columns({
+        id: string(),
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        reference_id: string(),
+        status: enumeration<'active' | 'inactive' | 'pending'>(),
+        type: enumeration<'user' | 'system' | 'admin'>(),
+      })
+      .primaryKey('id'),
   ],
   relationships: [],
 });
@@ -110,6 +120,16 @@ CREATE TABLE "jsonCases" (
   "obj" JSON,
   "arr" JSON,
   PRIMARY KEY ("str")
+);
+
+CREATE TYPE status_enum AS ENUM ('active', 'inactive', 'pending');
+CREATE TYPE type_enum AS ENUM ('user', 'system', 'admin');
+
+CREATE TABLE "uuidAndEnum" (
+  "id" UUID PRIMARY KEY,
+  "reference_id" UUID NOT NULL,
+  "status" status_enum NOT NULL,
+  "type" type_enum NOT NULL
 );
 `;
 
