@@ -11,9 +11,18 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  "dependencies": {
+    "prettier": "^3.5.3"
+  },
   "devDependencies": {
+    "@faker-js/faker": "^9.6.0",
     "@rocicorp/eslint-config": "^0.7.0",
-    "@rocicorp/prettier-config": "^0.3.0"
+    "@rocicorp/prettier-config": "^0.3.0",
+    "shared": "0.0.0",
+    "zero-cache": "0.0.0",
+    "zero-protocol": "0.0.0",
+    "zero-schema": "0.0.0",
+    "zql": "0.0.0"
   },
   "prettier": "@rocicorp/prettier-config",
   "eslintConfig": {

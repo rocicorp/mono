@@ -3,7 +3,6 @@ import * as m from '@rocicorp/logger';
 import {readFile} from 'node:fs/promises';
 import process from 'node:process';
 import {createInterface} from 'node:readline';
-
 import {parseOptions} from '../../shared/src/options.ts';
 import * as v from '../../shared/src/valita.ts';
 import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';

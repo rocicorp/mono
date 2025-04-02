@@ -48,18 +48,25 @@ async function getExternal(includePeerDeps: boolean): Promise<string[]> {
   //
   // Instead we list the internal packages here.
   for (const dep of [
-    'btree',
+    'analyze-query',
+    'ast-to-zql',
     'datadog',
+    'otel',
     'replicache',
     'shared',
+    'z2s',
+    'zero',
     'zero-advanced',
     'zero-cache',
     'zero-client',
+    'zero-op-sqlite',
     'zero-pg',
     'zero-protocol',
     'zero-react',
+    'zero-schema',
     'zero-solid',
     'zql',
+    'zql-to-sql',
     'zqlite',
   ]) {
     await addExternalDepsFor(dep);

@@ -58,6 +58,7 @@
     "nanoid": "^5.1.2",
     "pg-format": "npm:pg-format-fix@^1.0.5",
     "postgres": "^3.4.4",
+    "prettier": "^3.5.3",
     "semver": "^7.5.4",
     "tsx": "^4.19.1",
     "url-pattern": "^1.0.3",
