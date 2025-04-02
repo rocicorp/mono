@@ -194,64 +194,64 @@ export const typeNameByOID: Record<number, string> = Object.fromEntries(
 
 Object.freeze(typeNameByOID);
 
+export const pgToZqlTypeMap = Object.freeze({
+  // Numeric types
+  'smallint': 'number',
+  'integer': 'number',
+  'int': 'number',
+  'int2': 'number',
+  'int4': 'number',
+  'int8': 'number',
+  'bigint': 'number',
+  'smallserial': 'number',
+  'serial': 'number',
+  'serial2': 'number',
+  'serial4': 'number',
+  'serial8': 'number',
+  'bigserial': 'number',
+  'decimal': 'number',
+  'numeric': 'number',
+  'real': 'number',
+  'double precision': 'number',
+  'float': 'number',
+  'float4': 'number',
+  'float8': 'number',
+
+  // Date/Time types
+  'date': 'number',
+  'timestamp': 'number',
+  'timestamptz': 'number',
+  'timestamp with time zone': 'number',
+  'timestamp without time zone': 'number',
+
+  // String types
+  'bpchar': 'string',
+  'character': 'string',
+  'character varying': 'string',
+  'text': 'string',
+  'uuid': 'string',
+  'varchar': 'string',
+
+  // Boolean types
+  'bool': 'boolean',
+  'boolean': 'boolean',
+
+  'json': 'json',
+  'jsonb': 'json',
+
+  // TODO: Add support for these.
+  // 'bytea':
+});
+
 export function dataTypeToZqlValueType(
   pgType: string,
   isEnum: boolean,
 ): ValueType | undefined {
-  switch (pgType.toLowerCase()) {
-    case 'smallint':
-    case 'integer':
-    case 'int':
-    case 'int2':
-    case 'int4':
-    case 'int8':
-    case 'bigint':
-    case 'smallserial':
-    case 'serial':
-    case 'serial2':
-    case 'serial4':
-    case 'serial8':
-    case 'bigserial':
-    case 'decimal':
-    case 'numeric':
-    case 'real':
-    case 'double precision':
-    case 'float':
-    case 'float4':
-    case 'float8':
-      return 'number';
-
-    // Timestamps are represented as epoch milliseconds (at microsecond resolution using floating point),
-    // and DATEs are represented as epoch milliseconds of UTC midnight of the date.
-    case 'date':
-    case 'timestamp':
-    case 'timestamptz':
-    case 'timestamp with time zone':
-    case 'timestamp without time zone':
-      return 'number';
-
-    case 'bpchar':
-    case 'character':
-    case 'character varying':
-    case 'text':
-    case 'uuid':
-    case 'varchar':
-      return 'string';
-
-    case 'bool':
-    case 'boolean':
-      return 'boolean';
-
-    case 'json':
-    case 'jsonb':
-      return 'json';
-
-    // TODO: Add support for these.
-    // case 'bytea':
-    default:
-      if (isEnum) {
-        return 'string';
-      }
-      return undefined;
+  const valueType = (pgToZqlTypeMap as Record<string, ValueType>)[
+    pgType.toLocaleLowerCase()
+  ];
+  if (valueType === undefined && isEnum) {
+    return 'string';
   }
+  return valueType;
 }

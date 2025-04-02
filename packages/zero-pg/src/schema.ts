@@ -1,5 +1,7 @@
+import {assert} from '../../shared/src/asserts.ts';
 import type {ServerSchema} from '../../z2s/src/schema.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
+import {dataTypeToZqlValueType} from '../../zero-cache/src/types/pg.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {DBTransaction} from '../../zql/src/mutate/custom.ts';
 
@@ -84,8 +86,116 @@ export async function getServerSchema<S extends Schema>(
     };
   }
 
-  // Validate that schema.ts is a valid subset of serverSchema and
-  // types are compatible.
+  const errors = checkSchemasAreCompatible(schema, serverSchema);
+  assert(errors.length === 0, () => makeSchemaIncompatibleErrorMessage(errors));
 
   return serverSchema;
+}
+
+function makeSchemaIncompatibleErrorMessage(
+  errors: SchemaIncompatibilityError[],
+) {
+  if (errors.length === 0) {
+    return 'No schema incompatibilities found.';
+  }
+
+  const messages: string[] = [];
+
+  for (const error of errors) {
+    switch (error.type) {
+      case 'missingTable':
+        messages.push(
+          `Table "${error.table}" is defined in your zero schema but does not exist in the database.`,
+        );
+        break;
+      case 'missingColumn':
+        messages.push(
+          `Column "${error.column}" in table "${error.table}" is defined in your zero schema but does not exist in the database.`,
+        );
+        break;
+      case 'typeError':
+        messages.push(
+          `Type mismatch for column "${error.column}" in table "${error.table}": ${error.requiredType === undefined ? `${error.pgType} is currently unsupported in Zero. Please file a bug at https://bugs.rocicorp.dev/` : `${error.pgType} should be mapped to ${error.requiredType} in Zero not ${error.declaredType}.`}`,
+        );
+        break;
+    }
+  }
+
+  return [
+    'Schema incompatibility detected between your zero schema definition and the database:',
+    '',
+    ...messages.map(msg => `  - ${msg}`),
+    '',
+    'Please update your schema definition to match the database or migrate your database to match the schema.',
+  ].join('\n');
+}
+
+export type SchemaIncompatibilityError =
+  | {
+      type: 'typeError';
+      table: string;
+      column: string;
+      pgType: string;
+      declaredType: string;
+      requiredType: string | undefined;
+    }
+  | {
+      type: 'missingColumn';
+      table: string;
+      column: string;
+    }
+  | {
+      type: 'missingTable';
+      table: string;
+    };
+
+export function checkSchemasAreCompatible(
+  schema: Schema,
+  serverSchema: ServerSchema,
+): SchemaIncompatibilityError[] {
+  const errors: SchemaIncompatibilityError[] = [];
+  // Check that all tables in schema exist in serverSchema
+  for (const table of Object.values(schema.tables)) {
+    const serverTableName = table.serverName ?? table.name;
+
+    if (!serverSchema[serverTableName]) {
+      errors.push({
+        type: 'missingTable',
+        table: serverTableName,
+      });
+      continue;
+    }
+
+    // Check that all columns in the table exist in serverSchema
+    for (const [columnName, column] of Object.entries(table.columns)) {
+      const serverColumnName = column.serverName ?? columnName;
+
+      if (!serverSchema[serverTableName][serverColumnName]) {
+        errors.push({
+          type: 'missingColumn',
+          table: serverTableName,
+          column: serverColumnName,
+        });
+        continue;
+      }
+
+      // Check type compatibility
+      const serverColumn = serverSchema[serverTableName][serverColumnName];
+      const declaredType = column.type;
+      const pgType = serverColumn.type;
+      const requiredType = dataTypeToZqlValueType(pgType, serverColumn.isEnum);
+      if (requiredType !== declaredType) {
+        errors.push({
+          type: 'typeError',
+          table: serverTableName,
+          column: serverColumnName,
+          pgType,
+          declaredType,
+          requiredType,
+        });
+      }
+    }
+  }
+
+  return errors;
 }
