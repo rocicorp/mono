@@ -1,16 +1,24 @@
 /* eslint-disable no-console */
-import chalk from 'chalk';
 import '@dotenvx/dotenvx/config';
-
+import chalk from 'chalk';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {parseOptions} from '../../shared/src/options.ts';
 import * as v from '../../shared/src/valita.ts';
 import {
+  ZERO_ENV_VAR_PREFIX,
+  zeroOptions,
+} from '../../zero-cache/src/config/zero-config.ts';
+import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
+import {
   mapAST,
   type AST,
   type CompoundKey,
 } from '../../zero-protocol/src/ast.ts';
+import {
+  clientToServer,
+  serverToClient,
+} from '../../zero-schema/src/name-mapper.ts';
 import {buildPipeline} from '../../zql/src/builder/builder.ts';
 import {Catch} from '../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
@@ -22,15 +30,6 @@ import {
   runtimeDebugStats,
 } from '../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
-import {
-  ZERO_ENV_VAR_PREFIX,
-  zeroOptions,
-} from '../../zero-cache/src/config/zero-config.ts';
-import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
-import {
-  clientToServer,
-  serverToClient,
-} from '../../zero-schema/src/name-mapper.ts';
 
 const options = {
   replicaFile: zeroOptions.replica.file,

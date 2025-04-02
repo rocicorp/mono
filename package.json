@@ -29,7 +29,7 @@
     "@rocicorp/prettier-config": "^0.3.0",
     "@vitest/coverage-v8": "3.0.8",
     "@vitest/runner": "3.0.8",
-    "prettier": "^3.0.3",
+    "prettier": "^3.5.3",
     "syncpack": "^12.3.2",
     "tsx": "^4.19.1",
     "turbo": "^2.4.4",
