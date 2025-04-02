@@ -187,7 +187,7 @@ class SQLConvertFormat implements FormatConfig {
     if (!arg.plural) {
       if (arg.isEnum) {
         if (arg.isComparison) {
-          return `$${index}::text ${collate}`;
+          return `$${index}::text${collate}`;
         }
         return `$${index}::text::${arg.type}`;
       }
@@ -208,7 +208,7 @@ class SQLConvertFormat implements FormatConfig {
         // uuid doesn't support collation, so we compare as text
         case 'uuid':
           return arg.isComparison
-            ? `$${index}::text ${collate}`
+            ? `$${index}::text${collate}`
             : `$${index}::text::uuid`;
         default:
           return `$${index}::text::${arg.type}`;
