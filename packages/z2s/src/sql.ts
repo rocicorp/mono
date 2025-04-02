@@ -122,7 +122,9 @@ function stringify(arg: SqlConvertArg): string | null {
   }
   if (
     arg[sqlConvert] === 'column' &&
-    (arg.type === 'bpchar' ||
+    (arg.isEnum ||
+      arg.type === 'uuid' ||
+      arg.type === 'bpchar' ||
       arg.type === 'character' ||
       arg.type === 'text' ||
       arg.type === 'character varying' ||
