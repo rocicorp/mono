@@ -41,6 +41,13 @@ describe('makeSchemaCRUD', () => {
     arr: ['a', 'b', 'c'],
   };
 
+  const uuidAndEnumRow = {
+    id: '123e4567-e89b-12d3-a456-426614174000',
+    reference_id: '987fcdeb-a89b-12d3-a456-426614174000',
+    status: 'active' as const,
+    type: 'user' as const,
+  };
+
   test('insert', async () => {
     await pg.begin(async tx => {
       const transaction = new Transaction(tx);
@@ -56,6 +63,7 @@ describe('makeSchemaCRUD', () => {
         crud.dateTypes.insert(timeRow),
         crud.jsonCases.insert(jsonRow),
         crud.jsonbCases.insert(jsonRow),
+        crud.uuidAndEnum.insert(uuidAndEnumRow),
       ]);
 
       await Promise.all([
@@ -72,6 +80,7 @@ describe('makeSchemaCRUD', () => {
         checkDb(tx, 'dateTypes', [timeRow]),
         checkDb(tx, 'jsonCases', [jsonRow]),
         checkDb(tx, 'jsonbCases', [jsonRow]),
+        checkDb(tx, 'uuidAndEnum', [uuidAndEnumRow]),
       ]);
     });
   });
@@ -105,6 +114,12 @@ describe('makeSchemaCRUD', () => {
         crud.dateTypes.upsert(timeRow),
         crud.jsonCases.upsert(jsonRow),
         crud.jsonbCases.upsert(jsonRow),
+        crud.uuidAndEnum.upsert({
+          ...uuidAndEnumRow,
+          status: 'inactive',
+          type: 'system',
+          reference_id: '987fcdeb-a89b-12d3-a456-426614174001',
+        }),
       ]);
 
       await Promise.all([
@@ -121,6 +136,7 @@ describe('makeSchemaCRUD', () => {
         checkDb(tx, 'dateTypes', [timeRow]),
         checkDb(tx, 'jsonCases', [jsonRow]),
         checkDb(tx, 'jsonbCases', [jsonRow]),
+        checkDb(tx, 'uuidAndEnum', [uuidAndEnumRow]),
       ]);
 
       // upsert all the existing rows to change non-primary key values
@@ -145,6 +161,12 @@ describe('makeSchemaCRUD', () => {
           bool: false,
           obj: {foo: 'baz'},
           arr: ['d', 'e', 'f'],
+        }),
+        crud.uuidAndEnum.upsert({
+          ...uuidAndEnumRow,
+          status: 'inactive',
+          type: 'system',
+          reference_id: '987fcdeb-a89b-12d3-a456-426614174002',
         }),
       ]);
 
@@ -183,6 +205,14 @@ describe('makeSchemaCRUD', () => {
             arr: ['d', 'e', 'f'],
           },
         ]),
+        checkDb(tx, 'uuidAndEnum', [
+          {
+            ...uuidAndEnumRow,
+            status: 'inactive',
+            type: 'system',
+            reference_id: '987fcdeb-a89b-12d3-a456-426614174002',
+          },
+        ]),
       ]);
     });
   });
@@ -201,6 +231,7 @@ describe('makeSchemaCRUD', () => {
         crud.dateTypes.insert(timeRow),
         crud.jsonCases.insert(jsonRow),
         crud.jsonbCases.insert(jsonRow),
+        crud.uuidAndEnum.insert(uuidAndEnumRow),
       ]);
 
       await Promise.all([
@@ -224,6 +255,12 @@ describe('makeSchemaCRUD', () => {
           bool: false,
           obj: {foo: 'baz'},
           arr: ['d', 'e', 'f'],
+        }),
+        crud.uuidAndEnum.update({
+          id: uuidAndEnumRow.id,
+          status: 'pending',
+          type: 'admin',
+          reference_id: '987fcdeb-a89b-12d3-a456-426614174002',
         }),
       ]);
 
@@ -262,6 +299,14 @@ describe('makeSchemaCRUD', () => {
             arr: ['d', 'e', 'f'],
           },
         ]),
+        checkDb(tx, 'uuidAndEnum', [
+          {
+            ...uuidAndEnumRow,
+            status: 'pending',
+            type: 'admin',
+            reference_id: '987fcdeb-a89b-12d3-a456-426614174002',
+          },
+        ]),
       ]);
     });
   });
@@ -281,6 +326,7 @@ describe('makeSchemaCRUD', () => {
         crud.dateTypes.insert(timeRow),
         crud.jsonCases.insert(jsonRow),
         crud.jsonbCases.insert(jsonRow),
+        crud.uuidAndEnum.insert(uuidAndEnumRow),
       ]);
 
       await Promise.all([
@@ -290,6 +336,7 @@ describe('makeSchemaCRUD', () => {
         crud.dateTypes.delete({ts: timeRow.ts}),
         crud.jsonCases.delete({str: jsonRow.str}),
         crud.jsonbCases.delete({str: jsonRow.str}),
+        crud.uuidAndEnum.delete({id: uuidAndEnumRow.id}),
       ]);
 
       await Promise.all([
@@ -299,6 +346,7 @@ describe('makeSchemaCRUD', () => {
         checkDb(tx, 'dateTypes', []),
         checkDb(tx, 'jsonCases', []),
         checkDb(tx, 'jsonbCases', []),
+        checkDb(tx, 'uuidAndEnum', []),
       ]);
     });
   });
