@@ -141,7 +141,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
           ',',
         )}) VALUES (${sql.join(
           Object.entries(value).map(([col, v]) =>
-            sqlValue(v, serverTableSchema[serverNameFor(col, schema)]),
+            sqlInsertValue(v, serverTableSchema[serverNameFor(col, schema)]),
           ),
           ', ',
         )})`,
@@ -162,7 +162,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
           ',',
         )}) VALUES (${sql.join(
           Object.entries(value).map(([col, val]) =>
-            sqlValue(val, serverTableSchema[serverNameFor(col, schema)]),
+            sqlInsertValue(val, serverTableSchema[serverNameFor(col, schema)]),
           ),
           ', ',
         )}) ON CONFLICT (${sql.join(
@@ -173,7 +173,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
             ([col, val]) =>
               sql`${sql.ident(
                 schema.columns[col].serverName ?? col,
-              )} = ${sqlValue(val, serverTableSchema[serverNameFor(col, schema)])}`,
+              )} = ${sqlInsertValue(val, serverTableSchema[serverNameFor(col, schema)])}`,
           ),
           ', ',
         )}`,
@@ -188,7 +188,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
         sql`UPDATE ${sql.ident(serverName(schema))} SET ${sql.join(
           targetedColumns.map(
             ([origName, serverName]) =>
-              sql`${sql.ident(serverName)} = ${sqlValue(value[origName], serverTableSchema[serverName])}`,
+              sql`${sql.ident(serverName)} = ${sqlInsertValue(value[origName], serverTableSchema[serverName])}`,
           ),
           ', ',
         )} WHERE ${primaryKeyClause(schema, serverTableSchema, value)}`,
@@ -222,10 +222,17 @@ function primaryKeyClause(
   return sql`${sql.join(
     primaryKey.map(
       ([origName, serverName]) =>
-        sql`${sql.ident(serverName)} = ${sqlValue(row[origName], serverTableSchema[serverName])}`,
+        sql`${sql.ident(serverName)}${maybeCastColumn(serverTableSchema[serverName])} = ${sqlValue(row[origName], serverTableSchema[serverName])}`,
     ),
     ' AND ',
   )}`;
+}
+
+function maybeCastColumn(col: ServerColumnSchema) {
+  if (col.type === 'uuid' || col.isEnum) {
+    return sql`::text`;
+  }
+  return sql``;
 }
 
 function origAndServerNamesFor(
@@ -244,4 +251,11 @@ function serverNameFor(originalName: string, schema: TableSchema): string {
 
 function sqlValue(value: unknown, serverColumnSchema: ServerColumnSchema) {
   return sqlConvertColumnArg(serverColumnSchema, value, false, true);
+}
+
+function sqlInsertValue(
+  value: unknown,
+  serverColumnSchema: ServerColumnSchema,
+) {
+  return sqlConvertColumnArg(serverColumnSchema, value, false, false);
 }
