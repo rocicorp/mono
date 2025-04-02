@@ -37,7 +37,6 @@ export interface Query {
   readonly id: string;
   readonly inactivatedAt: Date | null;
   readonly rowCount: number;
-  readonly sql: string;
   readonly ttl: TTL;
   readonly zql: string;
 }

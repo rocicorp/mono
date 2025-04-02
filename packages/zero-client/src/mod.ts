@@ -54,13 +54,11 @@ export {
 } from '../../zero-schema/src/builder/schema-builder.ts';
 export {
   boolean,
-  date,
   enumeration,
   json,
   number,
   string,
   table,
-  timestamp,
   type ColumnBuilder,
   type TableBuilderWithColumns,
 } from '../../zero-schema/src/builder/table-builder.ts';

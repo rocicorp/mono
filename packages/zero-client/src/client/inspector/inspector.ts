@@ -14,8 +14,6 @@ import {withRead} from '../../../../replicache/src/with-transactions.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import * as valita from '../../../../shared/src/valita.ts';
-import {compile} from '../../../../z2s/src/compiler.ts';
-import {formatPg} from '../../../../z2s/src/sql.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {
@@ -29,7 +27,6 @@ import type {
   InspectUpMessage,
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
-import type {Format} from '../../../../zql/src/ivm/view.ts';
 import {normalizeTTL, type TTL} from '../../../../zql/src/query/ttl.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import {ENTITIES_KEY_PREFIX} from '../keys.ts';
@@ -294,11 +291,10 @@ class Query implements QueryInterface {
   readonly rowCount: number;
   readonly deleted: boolean;
   readonly id: string;
-  readonly sql: string;
   readonly zql: string;
   readonly clientID: string;
 
-  constructor(row: InspectQueryRow, schema: Schema) {
+  constructor(row: InspectQueryRow, _schema: Schema) {
     // Use own properties to make this more useful in dev tools. For example, in
     // Chrome dev tools, if you do console.table(queries) you'll see the
     // properties in the table, if these were getters you would not see them in the table.
@@ -311,13 +307,6 @@ class Query implements QueryInterface {
     this.got = row.got;
     this.rowCount = row.rowCount;
     this.deleted = row.deleted;
-
-    const format: Format = {
-      singular: false,
-      relationships: {},
-    };
-    const sqlQuery = formatPg(compile(this.ast, schema.tables, format));
-    this.sql = sqlQuery.text;
     this.zql = this.ast.table + astToZQL(this.ast);
   }
 }

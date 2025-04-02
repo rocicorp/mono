@@ -1,4 +1,5 @@
 import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
+import type {ServerSchema} from '../../z2s/src/schema.ts';
 import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
@@ -11,11 +12,19 @@ import type {TypedView} from '../../zql/src/query/typed-view.ts';
 
 export function makeSchemaQuery<S extends Schema>(
   schema: S,
-): (dbTransaction: DBTransaction<unknown>) => SchemaQuery<S> {
+): (
+  dbTransaction: DBTransaction<unknown>,
+  serverSchema: ServerSchema,
+) => SchemaQuery<S> {
   class SchemaQueryHandler {
     readonly #dbTransaction: DBTransaction<unknown>;
-    constructor(dbTransaction: DBTransaction<unknown>) {
+    readonly #serverSchema: ServerSchema;
+    constructor(
+      dbTransaction: DBTransaction<unknown>,
+      serverSchema: ServerSchema,
+    ) {
       this.#dbTransaction = dbTransaction;
+      this.#serverSchema = serverSchema;
     }
 
     get(
@@ -32,6 +41,7 @@ export function makeSchemaQuery<S extends Schema>(
 
       const q = new Z2SQuery(
         schema,
+        this.#serverSchema,
         prop,
         this.#dbTransaction,
         {table: prop},
@@ -42,8 +52,11 @@ export function makeSchemaQuery<S extends Schema>(
     }
   }
 
-  return (dbTransaction: DBTransaction<unknown>) =>
-    new Proxy({}, new SchemaQueryHandler(dbTransaction)) as SchemaQuery<S>;
+  return (dbTransaction: DBTransaction<unknown>, serverSchema: ServerSchema) =>
+    new Proxy(
+      {},
+      new SchemaQueryHandler(dbTransaction, serverSchema),
+    ) as SchemaQuery<S>;
 }
 
 export class Z2SQuery<
@@ -53,6 +66,7 @@ export class Z2SQuery<
 > extends AbstractQuery<TSchema, TTable, TReturn> {
   readonly #dbTransaction: DBTransaction<unknown>;
   readonly #schema: TSchema;
+  readonly #serverSchema: ServerSchema;
   #query:
     | {
         text: string;
@@ -62,6 +76,7 @@ export class Z2SQuery<
 
   constructor(
     schema: TSchema,
+    serverSchema: ServerSchema,
     tableName: TTable,
     dbTransaction: DBTransaction<unknown>,
     ast: AST,
@@ -70,6 +85,7 @@ export class Z2SQuery<
     super(schema, tableName, ast, format);
     this.#dbTransaction = dbTransaction;
     this.#schema = schema;
+    this.#serverSchema = serverSchema;
   }
 
   protected readonly _system = 'permissions';
@@ -84,14 +100,26 @@ export class Z2SQuery<
     ast: AST,
     format: Format,
   ): Z2SQuery<TSchema, TTable, TReturn> {
-    return new Z2SQuery(schema, tableName, this.#dbTransaction, ast, format);
+    return new Z2SQuery(
+      schema,
+      this.#serverSchema,
+      tableName,
+      this.#dbTransaction,
+      ast,
+      format,
+    );
   }
 
   async run(): Promise<HumanReadable<TReturn>> {
     const sqlQuery =
       this.#query ??
       formatPgInternalConvert(
-        compile(this._completeAst(), this.#schema.tables, this.format),
+        compile(
+          this._completeAst(),
+          this.#schema.tables,
+          this.#serverSchema,
+          this.format,
+        ),
       );
     this.#query = sqlQuery;
     const result = extractZqlResult(

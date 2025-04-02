@@ -58,10 +58,6 @@ export function randomValueForType(
     case 'json':
       // TODO: generate random JSON
       return {};
-    case 'timestamp':
-      return faker.number.float();
-    case 'date':
-      return faker.number.float();
     case 'null':
       return null;
   }

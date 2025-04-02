@@ -3,9 +3,9 @@ import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.t
 import {
   boolean,
   json,
+  number,
   string,
   table,
-  timestamp,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 import type {Row} from '../query.ts';
 
@@ -17,7 +17,7 @@ const issue = table('issue')
     description: string(),
     closed: boolean(),
     ownerId: string().from('owner_id').optional(),
-    createdAt: timestamp(),
+    createdAt: number(),
   })
   .primaryKey('id');
 
@@ -41,7 +41,7 @@ const comment = table('comment')
     authorId: string(),
     issueId: string().from('issue_id'),
     text: string(),
-    createdAt: timestamp(),
+    createdAt: number(),
   })
   .primaryKey('id');
 
