@@ -33,7 +33,6 @@ export class Transaction implements DBTransaction<PostgresTransaction> {
   }
 
   query(sql: string, params: unknown[]): Promise<Row[]> {
-    console.log(sql, params);
     return this.wrappedTransaction.unsafe(sql, params as JSONValue[]);
   }
 }
