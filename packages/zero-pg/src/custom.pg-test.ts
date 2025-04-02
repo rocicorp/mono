@@ -114,12 +114,7 @@ describe('makeSchemaCRUD', () => {
         crud.dateTypes.upsert(timeRow),
         crud.jsonCases.upsert(jsonRow),
         crud.jsonbCases.upsert(jsonRow),
-        crud.uuidAndEnum.upsert({
-          ...uuidAndEnumRow,
-          status: 'inactive',
-          type: 'system',
-          reference_id: '987fcdeb-a89b-12d3-a456-426614174001',
-        }),
+        crud.uuidAndEnum.upsert(uuidAndEnumRow),
       ]);
 
       await Promise.all([

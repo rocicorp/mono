@@ -9,6 +9,7 @@ export type ServerSchemaRow = {
   column: string;
   type: string;
   enum: string;
+  enumtype: string;
 };
 
 export async function getServerSchema<S extends Schema>(
@@ -49,7 +50,8 @@ export async function getServerSchema<S extends Schema>(
           c.table_name::text AS table,
           c.column_name::text AS column,
           c.data_type::text AS type,
-          (t.typtype = 'e')::text AS enum 
+          (t.typtype = 'e')::text AS enum,
+          t.typname::text AS enumtype
       FROM
           information_schema.columns c
       JOIN
@@ -75,9 +77,10 @@ export async function getServerSchema<S extends Schema>(
       tableSchema = {};
       serverSchema[tableName] = tableSchema;
     }
+    const isEnum = row.enum.toLowerCase().startsWith('t');
     tableSchema[row.column] = {
-      type: row.type,
-      isEnum: row.enum.toLowerCase().startsWith('t'),
+      type: isEnum ? row.enumtype : row.type,
+      isEnum,
     };
   }
 
