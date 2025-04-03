@@ -27,13 +27,11 @@ interface ServerTransaction<S extends Schema, TWrappedTransaction>
 }
 
 export type CustomMutatorDefs<S extends Schema, TDBTransaction> = {
-  readonly [Table in keyof S['tables']]?: {
-    readonly [key: string]: CustomMutatorImpl<S, TDBTransaction>;
-  };
-} & {
-  [namespace: string]: {
-    [key: string]: CustomMutatorImpl<S, TDBTransaction>;
-  };
+  [namespaceOrKey: string]:
+    | {
+        [key: string]: CustomMutatorImpl<S, TDBTransaction>;
+      }
+    | CustomMutatorImpl<S, TDBTransaction>;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

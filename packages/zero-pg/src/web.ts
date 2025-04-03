@@ -29,6 +29,7 @@ import {sql} from '../../z2s/src/sql.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
 import type {ServerSchema} from '../../z2s/src/schema.ts';
 import {getServerSchema} from './schema.ts';
+import {assert} from '../../shared/src/asserts.ts';
 
 export type Params = v.Infer<typeof pushParamsSchema>;
 
@@ -222,7 +223,26 @@ export class PushProcessor<
     );
 
     const [namespace, name] = splitMutatorKey(m.name);
-    return mutators[namespace][name](zeroTx, m.args[0]);
+    if (name === undefined) {
+      const mutator = mutators[namespace];
+      assert(
+        typeof mutator === 'function',
+        () => `could not find mutator ${m.name}`,
+      );
+      return mutator(zeroTx, m.args[0]);
+    }
+
+    const mutatorGroup = mutators[namespace];
+    assert(
+      typeof mutatorGroup === 'object',
+      () => `could not find mutators for namespace ${namespace}`,
+    );
+    const mutator = mutatorGroup[name];
+    assert(
+      typeof mutator === 'function',
+      () => `could not find mutator ${m.name}`,
+    );
+    return mutator(zeroTx, m.args[0]);
   }
 }
 
