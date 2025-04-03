@@ -886,7 +886,9 @@ describe('change-source/pg', {timeout: 30000}, () => {
     `);
     expect(replicas2).toEqual(replicas1.slice(1));
 
-    // Verify that only one slot remains
+    // Verify that only one slot remains. (Add a sleep to reduce
+    // flakiness because the drop is non-transactional.)
+    await sleep(100);
     const slots2 = await upstream<{slot: string}[]>`
       SELECT slot_name as slot FROM pg_replication_slots
     `.values();
