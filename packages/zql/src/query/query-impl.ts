@@ -140,7 +140,7 @@ export abstract class AbstractQuery<
     schema: TSchema,
     table: TTable,
     ast: AST,
-    format: Format | undefined,
+    format: Format,
   ): AbstractQuery<TSchema, TTable, TReturn>;
 
   one(): Query<TSchema, TTable, TReturn | undefined> {
@@ -417,7 +417,7 @@ export abstract class AbstractQuery<
             table: destSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
-          undefined,
+          defaultFormat,
         ),
       ) as unknown as QueryImpl<any, any>;
       return {
@@ -453,7 +453,7 @@ export abstract class AbstractQuery<
             table: destSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
-          undefined,
+          defaultFormat,
         ),
       );
 
