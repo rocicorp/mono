@@ -880,17 +880,17 @@ describe('change-source/pg', {timeout: 30000}, () => {
 
     changes2.cancel();
 
+    // Verify that the replica rows have been cleaned up.
+    const replicas2 = await upstream.unsafe(`
+      SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas
+    `);
+    expect(replicas2).toEqual(replicas1.slice(1));
+
     // Verify that only one slot remains
     const slots2 = await upstream<{slot: string}[]>`
       SELECT slot_name as slot FROM pg_replication_slots
     `.values();
     expect(slots2).toEqual(slots1.slice(1));
-
-    // Verify that the replica rows have also been cleaned up.
-    const replicas2 = await upstream.unsafe(`
-      SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas
-    `);
-    expect(replicas2).toEqual(replicas1.slice(1));
 
     anotherReplicaFile.delete();
   });
