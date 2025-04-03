@@ -15,6 +15,7 @@ import {
   type AST,
   type CompoundKey,
 } from '../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,
   serverToClient,
@@ -24,6 +25,7 @@ import {Catch} from '../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../zql/src/ivm/operator.ts';
 import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
+import type {PullRow, Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {
   runtimeDebugFlags,
@@ -119,11 +121,11 @@ const host: QueryDelegate = {
 
 let start: number;
 let end: number;
-const suppressError: Record<string, unknown> = {};
+
 if (config.ast) {
   [start, end] = runAst(JSON.parse(config.ast) as AST);
 } else if (config.query) {
-  [start, end] = runQuery(config.query);
+  [start, end] = await runQuery(config.query);
 } else {
   throw new Error('No query or AST provided');
 }
@@ -138,9 +140,7 @@ function runAst(ast: AST): [number, number] {
   return [start, end];
 }
 
-function runQuery(queryString: string): [number, number] {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let q: any;
+async function runQuery(queryString: string): Promise<[number, number]> {
   const z = {
     query: Object.fromEntries(
       Object.entries(schema.tables).map(([name]) => [
@@ -149,13 +149,12 @@ function runQuery(queryString: string): [number, number] {
       ]),
     ),
   };
-  suppressError.q = q;
-  suppressError.z = z;
 
-  eval(`q = z.query.${queryString};`);
+  const f = new Function('z', `return z.query.${queryString};`);
+  const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
 
   const start = performance.now();
-  q.run();
+  await q.run();
   const end = performance.now();
   return [start, end];
 }
