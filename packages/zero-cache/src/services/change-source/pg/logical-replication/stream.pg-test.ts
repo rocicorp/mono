@@ -319,6 +319,7 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
       await queue2.dequeue();
       await tx`INSERT INTO foo(id) VALUES ('22');`;
       queue3.enqueue(true);
+      await tx1;
     });
 
     await queue3.dequeue();
@@ -330,6 +331,7 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
       await queue3.dequeue();
       await tx`INSERT INTO foo(id) VALUES ('33');`;
       queue1.enqueue(true);
+      await tx2;
     });
 
     await Promise.all([tx1, tx2, tx3]);
