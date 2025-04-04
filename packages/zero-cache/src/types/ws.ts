@@ -22,3 +22,59 @@ export function closeWithError(
   // https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close#reason
   ws.close(code, elide(errMsg, 123));
 }
+
+export function sendPingsForLiveness(
+  lc: LogContext,
+  ws: WebSocket,
+  intervalMs: number,
+) {
+  let alive = true;
+  ws.on('pong', () => (alive = true));
+
+  let heartbeatTimer: NodeJS.Timeout | undefined;
+  function startHeartBeats() {
+    heartbeatTimer = setInterval(() => {
+      if (!alive) {
+        lc.warn?.(
+          `socket@${ws.url} did not respond to heartbeat. Terminating...`,
+        );
+        ws.terminate();
+        return;
+      }
+
+      alive = false;
+      ws.ping();
+    }, intervalMs);
+  }
+
+  if (ws.readyState === ws.CONNECTING) {
+    ws.on('open', () => startHeartBeats());
+  } else if (ws.readyState === ws.OPEN) {
+    startHeartBeats();
+  }
+
+  ws.once('close', () => clearInterval(heartbeatTimer));
+}
+
+export function expectPingsForLiveness(
+  lc: LogContext,
+  ws: WebSocket,
+  intervalMs: number,
+  timeoutBufferMs = 3_000,
+) {
+  let missedPingTimer: NodeJS.Timeout | undefined;
+
+  function expectNextPing() {
+    clearTimeout(missedPingTimer);
+
+    missedPingTimer = setTimeout(() => {
+      lc.warn?.(`socket@${ws.url} did not send heartbeat. Terminating...`);
+      ws.terminate();
+    }, intervalMs + timeoutBufferMs);
+  }
+
+  ws.on('ping', expectNextPing);
+  ws.on('close', () => clearTimeout(missedPingTimer));
+
+  expectNextPing();
+}
