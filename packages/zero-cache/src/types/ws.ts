@@ -48,7 +48,7 @@ export function sendPingsForLiveness(
   }
 
   if (ws.readyState === ws.CONNECTING) {
-    ws.on('open', () => startHeartBeats());
+    ws.once('open', () => startHeartBeats());
   } else if (ws.readyState === ws.OPEN) {
     startHeartBeats();
   }
@@ -74,7 +74,7 @@ export function expectPingsForLiveness(
   }
 
   ws.on('ping', expectNextPing);
-  ws.on('close', () => clearTimeout(missedPingTimer));
+  ws.once('close', () => clearTimeout(missedPingTimer));
 
   expectNextPing();
 }
