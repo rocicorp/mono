@@ -31,6 +31,7 @@ import {
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {initializeStreamer} from './change-streamer-service.ts';
 import {
+  PROTOCOL_VERSION,
   type ChangeStreamerService,
   type Downstream,
 } from './change-streamer.ts';
@@ -121,6 +122,7 @@ describe('change-streamer/service', () => {
 
   test('immediate forwarding, transaction storage', async () => {
     const sub = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '01',
@@ -140,6 +142,7 @@ describe('change-streamer/service', () => {
 
     changes.push(['status', {}, {watermark: '0b'}]);
 
+    expect(await nextChange(downstream)).toMatchObject({tag: 'status'});
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({
       tag: 'insert',
@@ -186,6 +189,7 @@ describe('change-streamer/service', () => {
 
     // Subscribe to the original watermark.
     const sub = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '01',
@@ -208,6 +212,7 @@ describe('change-streamer/service', () => {
 
     // Verify that all changes were sent to the subscriber ...
     const downstream = drainToQueue(sub);
+    expect(await nextChange(downstream)).toMatchObject({tag: 'status'});
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({
       tag: 'insert',
@@ -266,6 +271,7 @@ describe('change-streamer/service', () => {
 
     // Subscribe to the original watermark.
     const sub = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '01',
@@ -282,6 +288,7 @@ describe('change-streamer/service', () => {
 
     // Verify that all changes were sent to the subscriber ...
     const downstream = drainToQueue(sub);
+    expect(await nextChange(downstream)).toMatchObject({tag: 'status'});
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({
       tag: 'insert',
@@ -335,6 +342,7 @@ describe('change-streamer/service', () => {
 
     // Subscribe to a watermark from "the future".
     const sub = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '0b',
@@ -362,6 +370,7 @@ describe('change-streamer/service', () => {
 
     // The subscriber should only see what's new to it.
     const downstream = drainToQueue(sub);
+    expect(await nextChange(downstream)).toMatchObject({tag: 'status'});
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({
       tag: 'insert',
@@ -399,6 +408,7 @@ describe('change-streamer/service', () => {
 
   test('data types (forwarded and catchup)', async () => {
     const sub = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '01',
@@ -424,6 +434,7 @@ describe('change-streamer/service', () => {
       {watermark: '09'},
     ]);
 
+    expect(await nextChange(downstream)).toMatchObject({tag: 'status'});
     expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
     expect(await nextChange(downstream)).toMatchObject({
       tag: 'insert',
@@ -462,6 +473,7 @@ describe('change-streamer/service', () => {
 
     // Also verify when loading from the Store as opposed to direct forwarding.
     const catchupSub = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid2',
       mode: 'serving',
       watermark: '01',
@@ -469,6 +481,7 @@ describe('change-streamer/service', () => {
       initial: true,
     });
     const catchup = drainToQueue(catchupSub);
+    expect(await nextChange(catchup)).toMatchObject({tag: 'status'});
     expect(await nextChange(catchup)).toMatchObject({tag: 'begin'});
     expect(await nextChange(catchup)).toMatchObject({
       tag: 'insert',
@@ -491,6 +504,61 @@ describe('change-streamer/service', () => {
     });
   });
 
+  test('immediate subscription status', async () => {
+    // Initialize the change log with entries that will be purged.
+    await changeDB`
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 1, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('06', 1, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('08', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('08', 1, '{"tag":"commit"}'::json);
+      UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '08';
+    `.simple();
+
+    const sub04 = drainToQueue(
+      await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        id: 'myid1',
+        mode: 'serving',
+        watermark: '04',
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+      }),
+    );
+    expect(await nextChange(sub04)).toMatchObject({tag: 'status'});
+
+    const sub08 = drainToQueue(
+      await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        id: 'myid1',
+        mode: 'serving',
+        watermark: '08',
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+      }),
+    );
+    expect(await nextChange(sub08)).toMatchObject({tag: 'status'});
+
+    const sub02 = drainToQueue(
+      await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        id: 'myid1',
+        mode: 'serving',
+        watermark: '02',
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+      }),
+    );
+    expect(await sub02.dequeue()).toEqual([
+      'error',
+      {
+        type: ErrorType.WatermarkTooOld,
+        message: 'earliest supported watermark is 04 (requested 02)',
+      },
+    ]);
+  });
+
   test('change log cleanup', async () => {
     // Initialize the change log with entries that will be purged.
     await changeDB`
@@ -505,6 +573,7 @@ describe('change-streamer/service', () => {
 
     // Start two subscribers: one at 06 and one at 04
     await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid1',
       mode: 'serving',
       watermark: '06',
@@ -513,6 +582,7 @@ describe('change-streamer/service', () => {
     });
 
     const sub2 = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid2',
       mode: 'serving',
       watermark: '04',
@@ -568,6 +638,7 @@ describe('change-streamer/service', () => {
 
     // New connections earlier than 06 should now be rejected.
     const sub3 = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid2',
       mode: 'serving',
       watermark: '04',
@@ -587,6 +658,7 @@ describe('change-streamer/service', () => {
 
   test('wrong replica version', async () => {
     const sub = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid1',
       mode: 'serving',
       watermark: '06',
@@ -628,6 +700,7 @@ describe('change-streamer/service', () => {
 
     // Kick off the initial stream with a serving request.
     void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '06',
@@ -659,6 +732,7 @@ describe('change-streamer/service', () => {
 
     // Kick off the initial stream with a serving request.
     void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '06',
@@ -687,6 +761,7 @@ describe('change-streamer/service', () => {
 
     // Kick off the initial stream with a serving request.
     void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '06',
@@ -727,6 +802,7 @@ describe('change-streamer/service', () => {
 
     // Kick off the initial stream with a serving request.
     void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '06',
@@ -769,6 +845,7 @@ describe('change-streamer/service', () => {
 
     // Kick off the initial stream with a serving request.
     void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '01',
@@ -809,6 +886,7 @@ describe('change-streamer/service', () => {
   test('ownership takeover before tx begins', async () => {
     // Kick off the initial stream with a serving request.
     void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '06',
@@ -852,6 +930,7 @@ describe('change-streamer/service', () => {
   test('ownership takeover during tx', async () => {
     // Kick off the initial stream with a serving request.
     void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '06',
@@ -899,6 +978,7 @@ describe('change-streamer/service', () => {
   test('reset required', async () => {
     // Kick off the initial stream with a serving request.
     void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '06',
@@ -920,6 +1000,7 @@ describe('change-streamer/service', () => {
 
     // Kick off the initial stream with a serving request.
     void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '06',
@@ -928,6 +1009,7 @@ describe('change-streamer/service', () => {
     });
 
     void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'backup-id',
       mode: 'backup',
       watermark: '02', // Too early
@@ -944,6 +1026,7 @@ describe('change-streamer/service', () => {
   test('shutdown on AbortError', async () => {
     // Kick off the initial stream with a serving request.
     void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '06',
@@ -957,6 +1040,7 @@ describe('change-streamer/service', () => {
 
   test('shutdown on unexpected invalid stream', async () => {
     await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '01',
@@ -977,6 +1061,7 @@ describe('change-streamer/service', () => {
 
   test('shutdown on unexpected storage error', async () => {
     await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'myid',
       mode: 'serving',
       watermark: '01',

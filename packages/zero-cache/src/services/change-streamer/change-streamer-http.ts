@@ -2,6 +2,7 @@ import websocket from '@fastify/websocket';
 import {LogContext} from '@rocicorp/logger';
 import {IncomingMessage} from 'node:http';
 import WebSocket from 'ws';
+import {assert} from '../../../../shared/src/asserts.ts';
 import {type Worker} from '../../types/processes.ts';
 import {streamIn, streamOut, type Source} from '../../types/streams.ts';
 import {URLParams} from '../../types/url-params.ts';
@@ -10,13 +11,12 @@ import {installWebSocketReceiver} from '../dispatcher/websocket-handoff.ts';
 import {HttpService, type Options} from '../http-service.ts';
 import {
   downstreamSchema,
+  PROTOCOL_VERSION,
   type ChangeStreamer,
   type Downstream,
   type SubscriberContext,
 } from './change-streamer.ts';
 
-// v1: Client-side support for JSON_FORMAT. Introduced in 0.18.
-export const PROTOCOL_VERSION = 1;
 const MIN_SUPPORTED_PROTOCOL_VERSION = 0;
 
 const DIRECT_PATH_PATTERN = '/replication/:version/changes';
@@ -101,10 +101,11 @@ type RequestHeaders = Pick<IncomingMessage, 'url' | 'headers'>;
 
 export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
   const url = new URL(req.url ?? '', req.headers.origin ?? 'http://localhost');
-  checkPath(url.pathname);
+  const protocolVersion = checkPath(url.pathname);
   const params = new URLParams(url);
 
   return {
+    protocolVersion,
     id: params.get('id', true),
     mode: params.get('mode', false) === 'backup' ? 'backup' : 'serving',
     replicaVersion: params.get('replicaVersion', true),
@@ -113,7 +114,7 @@ export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
   };
 }
 
-function checkPath(pathname: string) {
+function checkPath(pathname: string): number {
   const match = PATH_REGEX.exec(pathname);
   if (!match) {
     throw new Error(`invalid path: ${pathname}`);
@@ -129,11 +130,19 @@ function checkPath(pathname: string) {
         `Supported protocols: [v${MIN_SUPPORTED_PROTOCOL_VERSION} ... v${PROTOCOL_VERSION}]`,
     );
   }
+  return v;
 }
 
+// This is called from the client-side (i.e. the replicator).
 function getParams(ctx: SubscriberContext): URLSearchParams {
+  // The protocolVersion is hard-coded into the CHANGES_PATH.
+  const {protocolVersion, ...stringParams} = ctx;
+  assert(
+    protocolVersion === PROTOCOL_VERSION,
+    `replicator should be setting protocolVersion to ${PROTOCOL_VERSION}`,
+  );
   return new URLSearchParams({
-    ...ctx,
+    ...stringParams,
     initial: ctx.initial ? 'true' : 'false',
   });
 }

@@ -27,6 +27,12 @@ describe('change-streamer/subscriber', () => {
     expect(stream).toMatchInlineSnapshot(`
       [
         [
+          "status",
+          {
+            "tag": "status",
+          },
+        ],
+        [
           "begin",
           {
             "tag": "begin",
@@ -109,6 +115,12 @@ describe('change-streamer/subscriber', () => {
     sub.close();
     expect(stream).toMatchInlineSnapshot(`
       [
+        [
+          "status",
+          {
+            "tag": "status",
+          },
+        ],
         [
           "begin",
           {

@@ -152,6 +152,12 @@ describe('change-streamer/storer', () => {
     expect(await drain(stream, '08')).toMatchInlineSnapshot(`
       [
         [
+          "status",
+          {
+            "tag": "status",
+          },
+        ],
+        [
           "begin",
           {
             "foo": "bar",
@@ -286,6 +292,12 @@ describe('change-streamer/storer', () => {
     expect(await drain(stream1, '0a')).toMatchInlineSnapshot(`
       [
         [
+          "status",
+          {
+            "tag": "status",
+          },
+        ],
+        [
           "begin",
           {
             "boo": "dar",
@@ -355,47 +367,53 @@ describe('change-streamer/storer', () => {
     // Catchup should wait for the transaction to complete before querying
     // the database, and start after watermark '06'.
     expect(await drain(stream2, '0a')).toMatchInlineSnapshot(`
-      [
-        [
-          "begin",
-          {
-            "tag": "begin",
-          },
-          {
-            "commitWatermark": "07",
-          },
-        ],
-        [
-          "commit",
-          {
-            "extra": "stuff",
-            "tag": "commit",
-          },
-          {
-            "watermark": "08",
-          },
-        ],
-        [
-          "begin",
-          {
-            "tag": "begin",
-          },
-          {
-            "commitWatermark": "0a",
-          },
-        ],
-        [
-          "commit",
-          {
-            "buffer": "me",
-            "tag": "commit",
-          },
-          {
-            "watermark": "0a",
-          },
-        ],
-      ]
-    `);
+              [
+                [
+                  "status",
+                  {
+                    "tag": "status",
+                  },
+                ],
+                [
+                  "begin",
+                  {
+                    "tag": "begin",
+                  },
+                  {
+                    "commitWatermark": "07",
+                  },
+                ],
+                [
+                  "commit",
+                  {
+                    "extra": "stuff",
+                    "tag": "commit",
+                  },
+                  {
+                    "watermark": "08",
+                  },
+                ],
+                [
+                  "begin",
+                  {
+                    "tag": "begin",
+                  },
+                  {
+                    "commitWatermark": "0a",
+                  },
+                ],
+                [
+                  "commit",
+                  {
+                    "buffer": "me",
+                    "tag": "commit",
+                  },
+                  {
+                    "watermark": "0a",
+                  },
+                ],
+              ]
+            `);
 
     expect(
       await db`SELECT * FROM "xero_5/cdc"."changeLog" ORDER BY watermark, pos`,
@@ -507,80 +525,92 @@ describe('change-streamer/storer', () => {
     // Catchup should wait for the transaction to complete before querying
     // the database, and start after watermark '03'.
     expect(await drain(stream1, '0a')).toMatchInlineSnapshot(`
-      [
         [
-          "begin",
-          {
-            "boo": "dar",
-            "tag": "begin",
-          },
-          {
-            "commitWatermark": "06",
-          },
-        ],
-        [
-          "data",
-          {
-            "tag": "update",
-          },
-        ],
-        [
-          "commit",
-          {
-            "boo": "far",
-            "tag": "commit",
-          },
-          {
-            "watermark": "06",
-          },
-        ],
-        [
-          "begin",
-          {
-            "tag": "begin",
-          },
-          {
-            "commitWatermark": "0a",
-          },
-        ],
-        [
-          "commit",
-          {
-            "buffer": "me",
-            "tag": "commit",
-          },
-          {
-            "watermark": "0a",
-          },
-        ],
-      ]
-    `);
+          [
+            "status",
+            {
+              "tag": "status",
+            },
+          ],
+          [
+            "begin",
+            {
+              "boo": "dar",
+              "tag": "begin",
+            },
+            {
+              "commitWatermark": "06",
+            },
+          ],
+          [
+            "data",
+            {
+              "tag": "update",
+            },
+          ],
+          [
+            "commit",
+            {
+              "boo": "far",
+              "tag": "commit",
+            },
+            {
+              "watermark": "06",
+            },
+          ],
+          [
+            "begin",
+            {
+              "tag": "begin",
+            },
+            {
+              "commitWatermark": "0a",
+            },
+          ],
+          [
+            "commit",
+            {
+              "buffer": "me",
+              "tag": "commit",
+            },
+            {
+              "watermark": "0a",
+            },
+          ],
+        ]
+      `);
 
     // Catchup should wait for the transaction to complete before querying
     // the database, and start after watermark '06'.
     expect(await drain(stream2, '0a')).toMatchInlineSnapshot(`
-      [
-        [
-          "begin",
-          {
-            "tag": "begin",
-          },
-          {
-            "commitWatermark": "0a",
-          },
-        ],
-        [
-          "commit",
-          {
-            "buffer": "me",
-            "tag": "commit",
-          },
-          {
-            "watermark": "0a",
-          },
-        ],
-      ]
-    `);
+            [
+              [
+                "status",
+                {
+                  "tag": "status",
+                },
+              ],
+              [
+                "begin",
+                {
+                  "tag": "begin",
+                },
+                {
+                  "commitWatermark": "0a",
+                },
+              ],
+              [
+                "commit",
+                {
+                  "buffer": "me",
+                  "tag": "commit",
+                },
+                {
+                  "watermark": "0a",
+                },
+              ],
+            ]
+          `);
 
     expect(
       await db`SELECT * FROM "xero_5/cdc"."changeLog" ORDER BY watermark, pos`,
@@ -689,6 +719,12 @@ describe('change-streamer/storer', () => {
     // message and ensuring that that was sent.
     expect(await drain(stream, '0c')).toMatchInlineSnapshot(`
       [
+        [
+          "status",
+          {
+            "tag": "status",
+          },
+        ],
         [
           "begin",
           {

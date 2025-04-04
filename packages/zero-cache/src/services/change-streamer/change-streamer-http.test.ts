@@ -21,9 +21,9 @@ import {
   ChangeStreamerHttpClient,
   ChangeStreamerHttpServer,
   getSubscriberContext,
-  PROTOCOL_VERSION,
 } from './change-streamer-http.ts';
 import type {Downstream, SubscriberContext} from './change-streamer.ts';
+import {PROTOCOL_VERSION} from './change-streamer.ts';
 
 describe('change-streamer/http', () => {
   let lc: LogContext;
@@ -103,7 +103,7 @@ describe('change-streamer/http', () => {
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v2. Supported protocols: [v0 ... v1]`,
+        `Cannot service client at protocol v3. Supported protocols: [v0 ... v2]`,
         `/api/replication/v${PROTOCOL_VERSION + 1}/changes` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
@@ -151,6 +151,7 @@ describe('change-streamer/http', () => {
     ],
   ])('basic messages streamed over websocket: %s', async (_name, client) => {
     const ctx = {
+      protocolVersion: PROTOCOL_VERSION,
       id: 'foo',
       mode: 'serving',
       replicaVersion: 'abc',
@@ -177,6 +178,7 @@ describe('change-streamer/http', () => {
 
   test('bigint fields', async () => {
     const sub = await new ChangeStreamerHttpClient(lc, serverURL).subscribe({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'foo',
       mode: 'serving',
       replicaVersion: 'abc',

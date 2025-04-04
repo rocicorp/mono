@@ -37,6 +37,12 @@ describe('change-streamer/forwarder', () => {
     expect(stream1).toMatchInlineSnapshot(`
       [
         [
+          "status",
+          {
+            "tag": "status",
+          },
+        ],
+        [
           "begin",
           {
             "tag": "begin",
@@ -88,6 +94,12 @@ describe('change-streamer/forwarder', () => {
     expect(stream2).toMatchInlineSnapshot(`
       [
         [
+          "status",
+          {
+            "tag": "status",
+          },
+        ],
+        [
           "begin",
           {
             "tag": "begin",
@@ -101,6 +113,12 @@ describe('change-streamer/forwarder', () => {
     expect(stream3).toMatchInlineSnapshot(`
       [
         [
+          "status",
+          {
+            "tag": "status",
+          },
+        ],
+        [
           "begin",
           {
             "tag": "begin",
@@ -113,7 +131,16 @@ describe('change-streamer/forwarder', () => {
     `);
 
     // sub4 was added in during the second transaction. It gets nothing.
-    expect(stream4).toMatchInlineSnapshot(`[]`);
+    expect(stream4).toMatchInlineSnapshot(`
+      [
+        [
+          "status",
+          {
+            "tag": "status",
+          },
+        ],
+      ]
+    `);
   });
 
   test('in transaction queueing, rolled back', () => {
@@ -146,6 +173,12 @@ describe('change-streamer/forwarder', () => {
     // sub1 gets all of the messages, as it was not added in a transaction.
     expect(stream1).toMatchInlineSnapshot(`
       [
+        [
+          "status",
+          {
+            "tag": "status",
+          },
+        ],
         [
           "begin",
           {
@@ -195,6 +228,12 @@ describe('change-streamer/forwarder', () => {
     expect(stream2).toMatchInlineSnapshot(`
       [
         [
+          "status",
+          {
+            "tag": "status",
+          },
+        ],
+        [
           "begin",
           {
             "tag": "begin",
@@ -208,6 +247,12 @@ describe('change-streamer/forwarder', () => {
     expect(stream3).toMatchInlineSnapshot(`
       [
         [
+          "status",
+          {
+            "tag": "status",
+          },
+        ],
+        [
           "begin",
           {
             "tag": "begin",
@@ -220,6 +265,15 @@ describe('change-streamer/forwarder', () => {
     `);
 
     // sub4 was added in during the second transaction. It gets nothing.
-    expect(stream4).toMatchInlineSnapshot(`[]`);
+    expect(stream4).toMatchInlineSnapshot(`
+      [
+        [
+          "status",
+          {
+            "tag": "status",
+          },
+        ],
+      ]
+    `);
   });
 });

@@ -48,7 +48,19 @@ export interface ChangeStreamer {
   subscribe(ctx: SubscriberContext): Promise<Source<Downstream>>;
 }
 
+// v1: Client-side support for JSON_FORMAT. Introduced in 0.18.
+// v2: Adds the "status" message which is initially used to signal that the
+//     subscription is valid (i.e. starting at the requested watermark).
+//     Introduced in 0.19.
+
+export const PROTOCOL_VERSION = 2;
+
 export type SubscriberContext = {
+  /**
+   * The supported change-streamer protocol version.
+   */
+  protocolVersion: number;
+
   /**
    * Subscriber id. This is only used for debugging.
    */
@@ -94,6 +106,24 @@ export type ChangeEntry = {
   watermark: string;
 };
 
+/**
+ * The StatusMessage payload for now is empty, but can be extended to
+ * include meta-level information in the future.
+ */
+export const statusSchema = v.object({
+  tag: v.literal('status'),
+});
+
+export const statusMessageSchema = v.tuple([v.literal('status'), statusSchema]);
+
+/**
+ * A StatusMessage will be immediately sent on a (v2+) subscription to
+ * indicate that the subscription is valid (i.e. starting at the requested
+ * watermark). Invalid subscriptions will instead result in a
+ * SubscriptionError as the first message.
+ */
+export type StatusMessage = v.Infer<typeof statusMessageSchema>;
+
 const subscriptionErrorSchema = v.object({
   type: v.number(), // ErrorType
   message: v.string().optional(),
@@ -101,11 +131,15 @@ const subscriptionErrorSchema = v.object({
 
 export type SubscriptionError = v.Infer<typeof subscriptionErrorSchema>;
 
-const error = v.tuple([v.literal('error'), subscriptionErrorSchema]);
+const errorSchema = v.tuple([v.literal('error'), subscriptionErrorSchema]);
 
-export const downstreamSchema = v.union(changeStreamDataSchema, error);
+export const downstreamSchema = v.union(
+  statusMessageSchema,
+  changeStreamDataSchema,
+  errorSchema,
+);
 
-export type Error = v.Infer<typeof error>;
+export type Error = v.Infer<typeof errorSchema>;
 
 /**
  * A stream of transactions, each starting with a {@link Begin} message,

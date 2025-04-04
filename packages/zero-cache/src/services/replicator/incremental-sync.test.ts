@@ -5,18 +5,19 @@ import {
   beforeEach,
   describe,
   expect,
-  type MockedFunction,
   test,
   vi,
+  type MockedFunction,
 } from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
 import type {JSONObject} from '../../types/bigint-json.ts';
 import {Subscription} from '../../types/subscription.ts';
-import type {
-  Downstream,
-  SubscriberContext,
+import {
+  PROTOCOL_VERSION,
+  type Downstream,
+  type SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
 import {initChangeLog} from './schema/change-log.ts';
@@ -82,6 +83,7 @@ describe('replicator/incremental-sync', () => {
     const versionReady = notifications[Symbol.asyncIterator]();
     await versionReady.next(); // Get the initial nextStateVersion.
     expect(subscribeFn.mock.calls[0][0]).toEqual({
+      protocolVersion: PROTOCOL_VERSION,
       id: 'incremental_sync_test_id',
       mode: 'serving',
       replicaVersion: '02',
@@ -90,6 +92,7 @@ describe('replicator/incremental-sync', () => {
     });
 
     for (const change of [
+      ['status', {tag: 'status'}],
       ['begin', issues.begin(), {commitWatermark: '06'}],
       ['data', issues.insert('issues', {issueID: 123, bool: true})],
       ['data', issues.insert('issues', {issueID: 456, bool: false})],

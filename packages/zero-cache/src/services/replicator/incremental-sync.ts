@@ -2,9 +2,10 @@ import type {LogContext} from '@rocicorp/logger';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import type {Source} from '../../types/streams.ts';
-import type {
-  ChangeStreamer,
-  Downstream,
+import {
+  PROTOCOL_VERSION,
+  type ChangeStreamer,
+  type Downstream,
 } from '../change-streamer/change-streamer.ts';
 import {RunningState} from '../running-state.ts';
 import {ChangeProcessor, type TransactionMode} from './change-processor.ts';
@@ -63,6 +64,7 @@ export class IncrementalSyncer {
 
       try {
         downstream = await this.#changeStreamer.subscribe({
+          protocolVersion: PROTOCOL_VERSION,
           id: this.#id,
           mode: this.#mode,
           watermark,
@@ -73,13 +75,20 @@ export class IncrementalSyncer {
         unregister = this.#state.cancelOnStop(downstream);
 
         for await (const message of downstream) {
-          if (message[0] === 'error') {
-            // Unrecoverable error. Stop the service.
-            this.stop(lc, message[1]);
-            break;
-          }
-          if (processor.processMessage(lc, message)) {
-            this.#notifier.notifySubscribers({state: 'version-ready'});
+          switch (message[0]) {
+            case 'status':
+              // Used for checking if a replica can be caught up. Not
+              // relevant here.
+              lc.debug?.(`Received initial status`, message[1]);
+              break;
+            case 'error':
+              // Unrecoverable error. Stop the service.
+              this.stop(lc, message[1]);
+              break;
+            default:
+              if (processor.processMessage(lc, message)) {
+                this.#notifier.notifySubscribers({state: 'version-ready'});
+              }
           }
         }
         processor.abort(lc);
