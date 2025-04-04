@@ -5,23 +5,6 @@
 
 declare module "sst" {
   export interface Resource {
-    "replication-bucket": {
-      "name": string
-      "type": "sst.aws.Bucket"
-    }
-    "replication-manager": {
-      "service": string
-      "type": "sst.aws.Service"
-      "url": string
-    }
-    "view-syncer": {
-      "service": string
-      "type": "sst.aws.Service"
-      "url": string
-    }
-    "vpc": {
-      "type": "sst.aws.Vpc"
-    }
   }
 }
 /// <reference path="sst-env.d.ts" />

@@ -130,7 +130,7 @@ export const createAlb = (
   if (privateSubnets && privateSubnets.length > 0) {
     // Create a Security Group for the internal ALB
     internalAlbSecurityGroup = new aws.ec2.SecurityGroup(
-      `${prefix}-InternalALBSecurityGroup`,
+      `${prefix}-IALBSecurityGroup`,
       {
         vpcId,
         description: 'Allow VPC HTTP inbound traffic',
@@ -154,7 +154,7 @@ export const createAlb = (
     );
 
     // Create the internal ALB
-    internalAlb = new aws.lb.LoadBalancer(`${prefix}-InternalALB`, {
+    internalAlb = new aws.lb.LoadBalancer(`${prefix}-IALB`, {
       internal: true, // This is the key difference for an internal load balancer
       securityGroups: [internalAlbSecurityGroup.id],
       subnets: privateSubnets,
@@ -165,7 +165,7 @@ export const createAlb = (
 
     // Create internal target group for the replication manager
     internalTargetGroup = new aws.lb.TargetGroup(
-      `${prefix}-InternalTargetGroup`,
+      `${prefix}-ITG`,
       {
         port: 4849, // Port matching the replication-manager service
         protocol: 'HTTP',
@@ -185,7 +185,7 @@ export const createAlb = (
     );
 
     // Create HTTP Listener for internal ALB
-    internalHttpListener = new aws.lb.Listener(`${prefix}-InternalHTTPListener`, {
+    internalHttpListener = new aws.lb.Listener(`${prefix}-IHTTPListener`, {
       loadBalancerArn: internalAlb.arn,
       port: 80,
       protocol: 'HTTP',
