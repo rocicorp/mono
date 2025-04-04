@@ -828,6 +828,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
     // Initial sync should have created a second replication slot.
     const slots1 = await upstream<{slot: string}[]>`
       SELECT slot_name as slot FROM pg_replication_slots
+        WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
     `.values();
     expect(slots1).toHaveLength(2);
 
@@ -891,6 +892,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
     await sleep(100);
     const slots2 = await upstream<{slot: string}[]>`
       SELECT slot_name as slot FROM pg_replication_slots
+        WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
     `.values();
     expect(slots2).toEqual(slots1.slice(1));
 
