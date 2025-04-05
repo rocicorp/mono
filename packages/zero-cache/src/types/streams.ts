@@ -28,6 +28,8 @@ import {
 // commonly used default idle timeout of 1 minute.
 const PING_INTERVAL_MS = 30_000;
 
+const heartbeatInterval = 3_000;
+
 export type Source<T> = AsyncIterable<T> & {
   /**
    * Immediately terminates all current iterations (i.e. {@link AsyncIterator.next next()})
@@ -220,6 +222,23 @@ export async function streamOut<T extends JSONValue>(
     }
   });
 
+  let alive = true;
+
+  sink.on('pong', () => (alive = true));
+
+  const heartbeatTimer = setInterval(() => {
+    if (!alive) {
+      lc.warn?.('socket did not respond to heartbeat. Terminating...');
+      sink.terminate();
+      return;
+    }
+
+    alive = false;
+    sink.ping();
+  }, heartbeatInterval);
+
+  sink.once('close', () => clearInterval(heartbeatTimer));
+
   try {
     let nextID = 0;
     const {pipeline} = source;
@@ -283,6 +302,23 @@ export async function streamIn<T extends JSONValue>(
   );
 
   const closer = new WebSocketCloser(lc, source, sink, handleMessage);
+
+  let missedPingTimer: NodeJS.Timeout | null = null;
+
+  source.on('ping', () => {
+    if (missedPingTimer) clearTimeout(missedPingTimer);
+
+    missedPingTimer = setTimeout(() => {
+      lc.warn?.(
+        `socket@${source.url} did not respond to heartbeat. Terminating...`,
+      );
+      source.terminate();
+    }, heartbeatInterval + 3_000);
+  });
+
+  source.on('close', () => {
+    if (missedPingTimer) clearTimeout(missedPingTimer);
+  });
 
   function handleMessage(event: MessageEvent) {
     const data = event.data.toString();

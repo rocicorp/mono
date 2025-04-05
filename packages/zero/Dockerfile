@@ -1,4 +1,4 @@
-FROM litestream/litestream:0.3.13 as litestream
+FROM litestream/litestream:0.3.13 AS litestream
 FROM node:22.11.0-alpine3.20
 
 ARG ZERO_VERSION
