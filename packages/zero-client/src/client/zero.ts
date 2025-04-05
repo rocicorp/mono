@@ -1557,7 +1557,8 @@ export class Zero<
         }
       } catch (ex) {
         if (this.#connectionState !== ConnectionState.Connected) {
-          lc.error?.('Failed to connect', ex, {
+          const level = isAuthError(ex) ? 'warn' : 'error';
+          lc[level]?.('Failed to connect', ex, {
             lmid: this.#lastMutationIDReceived,
             baseCookie: this.#connectCookie,
           });
