@@ -30,6 +30,7 @@ import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutag
 import type {ServerSchema} from '../../z2s/src/schema.ts';
 import {getServerSchema} from './schema.ts';
 import {assert} from '../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 
 export type Params = v.Infer<typeof pushParamsSchema>;
 
@@ -62,12 +63,27 @@ export class PushProcessor<
     this.#schema = schema;
   }
 
+  /**
+   * Processes a push request from zero-cache.
+   * This function will parse the request, check the protocol version, and process each mutation in the request.
+   * - If a mutation is out of order: processing will stop and an error will be returned. The zero client will retry the mutation.
+   * - If a mutation has already been processed: it will be skipped and the processing will continue.
+   * - If a mutation receives an application error: it will be skipped, the error will be returned to the client, and processing will continue.
+   *
+   * @param mutators the custom mutators for the application
+   * @param queryString the query string from the request sent by zero-cache. This will include zero's postgres schema name and appID.
+   * @param body the body of the request sent by zero-cache as a JSON object.
+   * @returns
+   */
   async process(
     mutators: MD,
-    queryString: unknown,
-    body: unknown,
+    queryString: URLSearchParams | Record<string, string>,
+    body: ReadonlyJSONValue,
   ): Promise<PushResponse> {
     const req = v.parse(body, pushBodySchema);
+    if (queryString instanceof URLSearchParams) {
+      queryString = Object.fromEntries(queryString.entries());
+    }
     const params = v.parse(queryString, pushParamsSchema);
     const connection = await this.#dbConnectionProvider();
 
