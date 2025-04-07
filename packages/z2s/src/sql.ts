@@ -189,7 +189,7 @@ class SQLConvertFormat implements FormatConfig {
         if (arg.isComparison) {
           return `$${index}::text${collate}`;
         }
-        return `$${index}::text::${arg.type}`;
+        return `$${index}::text::"${arg.type}"`;
       }
       switch (arg.type) {
         case 'date':
