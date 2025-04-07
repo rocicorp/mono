@@ -17,7 +17,7 @@ import {
 
 // v1: Client-side support for JSON_FORMAT. Introduced in 0.18.
 export const PROTOCOL_VERSION = 1;
-const MIN_SUPPORTED_PROTOCOL_VERSION = 0;
+const MIN_SUPPORTED_PROTOCOL_VERSION = 1;
 
 const DIRECT_PATH_PATTERN = '/replication/:version/changes';
 const TENANT_PATH_PATTERN = '/:tenant' + DIRECT_PATH_PATTERN;
