@@ -197,7 +197,7 @@ class PostgresChangeSource implements ChangeSource {
   }
 
   async startStream(clientWatermark: string): Promise<ChangeStream> {
-    const db = pgClient(this.#lc, this.#upstreamUri);
+    const db = pgClient(this.#lc, this.#upstreamUri, {}, 'json-as-string');
     const {slot} = this.#replica;
 
     let cleanup = promiseVoid;
@@ -465,7 +465,11 @@ class ChangeMaker {
     switch (msg.tag) {
       case 'begin':
         return [
-          ['begin', msg, {commitWatermark: toLexiVersion(must(msg.commitLsn))}],
+          [
+            'begin',
+            {...msg, json: 's'},
+            {commitWatermark: toLexiVersion(must(msg.commitLsn))},
+          ],
         ];
 
       case 'delete': {

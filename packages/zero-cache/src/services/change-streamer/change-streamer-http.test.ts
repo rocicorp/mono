@@ -96,14 +96,17 @@ describe('change-streamer/http', () => {
 
   describe('request bad requests', () => {
     test.each([
-      ['invalid querystring - missing id', `/api/replication/v0/changes`],
+      [
+        'invalid querystring - missing id',
+        `/api/replication/v${PROTOCOL_VERSION}/changes`,
+      ],
       [
         'invalid querystring - missing watermark',
-        `/api/replication/v0/changes?id=foo&replicaVersion=bar&initial=true`,
+        `/api/replication/v${PROTOCOL_VERSION}/changes?id=foo&replicaVersion=bar&initial=true`,
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v2. Supported protocols: [v0 ... v1]`,
+        `Cannot service client at protocol v2. Supported protocols: [v1 ... v1]`,
         `/api/replication/v${PROTOCOL_VERSION + 1}/changes` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
