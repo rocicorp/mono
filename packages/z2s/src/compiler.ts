@@ -39,7 +39,7 @@ type Tables = Record<string, TableSchema>;
 const ZQL_RESULT_KEY = 'zql_result';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function extractZqlResult(pgResult: any): JSONValue {
+export function extractZqlResult(pgResult: Array<any>): JSONValue {
   const bigIntJson: BigIntJSONValue = parseBigIntJson(
     pgResult[0][ZQL_RESULT_KEY],
   );

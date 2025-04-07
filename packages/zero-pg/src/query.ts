@@ -122,10 +122,19 @@ export class Z2SQuery<
         ),
       );
     this.#query = sqlQuery;
-    const result = extractZqlResult(
-      await this.#dbTransaction.query(sqlQuery.text, sqlQuery.values),
+    const pgIterableResult = await this.#dbTransaction.query(
+      sqlQuery.text,
+      sqlQuery.values,
     );
-    return result as HumanReadable<TReturn>;
+
+    const pgArrayResult = Array.isArray(pgIterableResult)
+      ? pgIterableResult
+      : [...pgIterableResult];
+    if (pgArrayResult.length === 0 && this.format.singular) {
+      return undefined as unknown as HumanReadable<TReturn>;
+    }
+
+    return extractZqlResult(pgArrayResult) as HumanReadable<TReturn>;
   }
 
   preload(): {
