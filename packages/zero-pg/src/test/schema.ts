@@ -122,13 +122,13 @@ CREATE TABLE "jsonCases" (
   PRIMARY KEY ("str")
 );
 
-CREATE TYPE status_enum AS ENUM ('active', 'inactive', 'pending');
+CREATE TYPE "statusEnum" AS ENUM ('active', 'inactive', 'pending');
 CREATE TYPE type_enum AS ENUM ('user', 'system', 'admin');
 
 CREATE TABLE "uuidAndEnum" (
   "id" UUID PRIMARY KEY,
   "reference_id" UUID NOT NULL,
-  "status" status_enum NOT NULL,
+  "status" "statusEnum" NOT NULL,
   "type" type_enum NOT NULL
 );
 `;

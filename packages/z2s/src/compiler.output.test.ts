@@ -4,6 +4,7 @@ import {Compiler} from './compiler.ts';
 import {formatPgInternalConvert} from './sql.ts';
 import {
   boolean,
+  enumeration,
   number,
   string,
   table,
@@ -65,8 +66,15 @@ const childTable = table('child_table')
   })
   .primaryKey('id');
 
+const enumTable = table('enumTable')
+  .columns({
+    id: string(),
+    status: enumeration<'active' | 'inactive'>(),
+  })
+  .primaryKey('id');
+
 const schema = createSchema({
-  tables: [user, issue, issueLabel, label, parentTable, childTable],
+  tables: [user, issue, issueLabel, label, parentTable, childTable, enumTable],
 });
 
 const serverSchema: ServerSchema = {
@@ -99,6 +107,10 @@ const serverSchema: ServerSchema = {
     id: {type: 'text', isEnum: false},
     parent_id: {type: 'text', isEnum: false},
     parent_other_id: {type: 'text', isEnum: false},
+  },
+  enumTable: {
+    id: {type: 'text', isEnum: false},
+    status: {type: 'statusEnum', isEnum: true},
   },
 };
 
@@ -168,6 +180,31 @@ test('orderBy', () => {
     {
       "text": "",
       "values": [],
+    }
+  `);
+});
+
+test('compile with enum', () => {
+  const compiler = new Compiler(schema.tables, serverSchema);
+  expect(
+    formatPgInternalConvert(
+      compiler.compile({
+        table: 'enumTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'status'},
+          right: {type: 'literal', value: 'active'},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "enumTable"."id","enumTable"."status" FROM "enumTable" WHERE "status"::text = $1::text COLLATE "ucs_basic"   )"root"",
+      "values": [
+        "active",
+      ],
     }
   `);
 });
