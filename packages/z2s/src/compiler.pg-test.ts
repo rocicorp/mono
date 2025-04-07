@@ -236,7 +236,8 @@ afterAll(async () => {
   await nodePostgres.end();
 });
 
-function ast(q: Query<Schema, keyof Schema['tables']>) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ast(q: Query<Schema, keyof Schema['tables'], any>) {
   return (q as QueryImpl<Schema, keyof Schema['tables']>)[completedAstSymbol];
 }
 
@@ -262,7 +263,9 @@ describe('compiling ZQL to SQL', () => {
         (await nodePostgres.query(query, args as JSONValue[])).rows,
     );
   });
-  function t(runPgQuery: (query: string, args: unknown[]) => Promise<unknown>) {
+  function t(
+    runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
+  ) {
     test('basic where clause', async () => {
       const query = issueQuery.where('title', '=', 'Test Issue 1');
       const c = compile(ast(query), schema.tables, serverSchema);

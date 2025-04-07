@@ -214,7 +214,9 @@ describe('compiling ZQL to SQL', () => {
         (await nodePostgres.query(query, args as JSONValue[])).rows,
     );
   });
-  function t(runPgQuery: (query: string, args: unknown[]) => Promise<unknown>) {
+  function t(
+    runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
+  ) {
     test('All bigints in safe Number range', async () => {
       const query = issueQuery.related('comments').limit(2);
       const c = compile(ast(query), schema.tables, serverSchema);

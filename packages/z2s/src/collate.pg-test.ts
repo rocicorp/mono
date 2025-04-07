@@ -193,7 +193,9 @@ describe('collation behavior', () => {
         (await nodePostgres.query(query, args as JSONValue[])).rows,
     );
   });
-  function t(runPgQuery: (query: string, args: unknown[]) => Promise<unknown>) {
+  function t(
+    runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
+  ) {
     async function testColumn(col: 'name' | 'size' | 'uuid') {
       const itemQuery = newQuery(queryDelegate, schema, 'item');
       const query = itemQuery.orderBy(col, 'asc');
@@ -347,7 +349,7 @@ describe('collation behavior', () => {
 
 async function runAsSQL(
   q: Query<Schema, 'item'>,
-  runPgQuery: (query: string, args: unknown[]) => Promise<unknown>,
+  runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
 ) {
   const c = compile(ast(q), schema.tables, serverSchema);
   const sqlQuery = formatPgInternalConvert(c);

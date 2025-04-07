@@ -52,4 +52,16 @@ describe('makeSchemaQuery', () => {
       expect(result).toEqual({id: '1', a: 2, b: 'foo', c: true});
     });
   });
+
+  test('select singular with no results', async () => {
+    await pg.begin(async tx => {
+      const transaciton = new Transaction(tx);
+      const query = queryProvider(
+        transaciton,
+        await getServerSchema(transaciton, schema),
+      );
+      const result = await query.basic.where('id', 'non-existent').one().run();
+      expect(result).toEqual(undefined);
+    });
+  });
 });
