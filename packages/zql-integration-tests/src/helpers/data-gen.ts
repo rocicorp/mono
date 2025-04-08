@@ -33,7 +33,7 @@ type ColumnInfo = {
  *
  * Generates data that matches a ZQL schema.
  * Also takes in the serverSchema given that provides
- * the actual types of the columns.
+ * more narrow types for columns.
  *
  * The output data is compatible with the server
  * schema but typed as zql data types.

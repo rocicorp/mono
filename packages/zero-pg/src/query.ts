@@ -67,6 +67,7 @@ export class ZPGQuery<
   readonly #dbTransaction: DBTransaction<unknown>;
   readonly #schema: TSchema;
   readonly #serverSchema: ServerSchema;
+
   #query:
     | {
         text: string;
