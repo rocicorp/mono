@@ -146,11 +146,10 @@ test('zero-cache --help', () => {
                                                                                                                                                                   
                                                                 CREATE PUBLICATION _{app-id}_public_0 FOR TABLES IN SCHEMA public;                                
                                                                                                                                                                   
-                                                                Note that once an app has begun syncing data, this list of publications                           
-                                                                cannot be changed, and zero-cache will refuse to start if a specified                             
-                                                                value differs from what was originally synced.                                                    
-                                                                                                                                                                  
-                                                                To use a different set of publications, a new app should be created.                              
+                                                                Note that changing the set of publications will result in resyncing the replica,                  
+                                                                which may involve downtime (replication lag) while the new replica is initializing.               
+                                                                To change the set of publications without disrupting an existing app, a new app                   
+                                                                should be created.                                                                                
                                                                                                                                                                   
      --auth-jwk string                                          optional                                                                                          
        ZERO_AUTH_JWK env                                                                                                                                          

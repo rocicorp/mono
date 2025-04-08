@@ -21,6 +21,7 @@ import type {
   ChangeSource,
   ChangeStream,
 } from '../../change-streamer/change-streamer-service.ts';
+import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.ts';
 import type {
   Begin,
@@ -899,7 +900,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
     anotherReplicaFile.delete();
   });
 
-  test('error on wrong publications', async () => {
+  test('AutoReset on changed publications', async () => {
     await startReplication();
     let err;
     try {
@@ -917,8 +918,9 @@ describe('change-source/pg', {timeout: 30000}, () => {
     } catch (e) {
       err = e;
     }
+    expect(err).toBeInstanceOf(AutoResetSignal);
     expect(err).toMatchInlineSnapshot(
-      `[Error: Invalid ShardConfig. Requested publications [zero_different_publication] do not match synced publications: [zero_foo,zero_zero]]`,
+      `[AutoResetSignal: Requested publications [zero_different_publication] do not match configured publications: [zero_foo,zero_zero]]`,
     );
   });
 });

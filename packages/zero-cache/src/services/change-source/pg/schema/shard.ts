@@ -172,20 +172,20 @@ export function dropShard(appID: string, shardID: string | number): string {
   `;
 }
 
-const replicaSchema = v.object({
-  slot: v.string(),
-  version: v.string(),
-  initialSchema: publishedSchema,
-});
-
-export type Replica = v.Infer<typeof replicaSchema>;
-
 const internalShardConfigSchema = v.object({
   publications: v.array(v.string()),
   ddlDetection: v.boolean(),
 });
 
 export type InternalShardConfig = v.Infer<typeof internalShardConfigSchema>;
+
+const replicaSchema = internalShardConfigSchema.extend({
+  slot: v.string(),
+  version: v.string(),
+  initialSchema: publishedSchema,
+});
+
+export type Replica = v.Infer<typeof replicaSchema>;
 
 // triggerSetup is run separately in a sub-transaction (i.e. SAVEPOINT) so
 // that a failure (e.g. due to lack of superuser permissions) can be handled
@@ -218,8 +218,9 @@ export async function getReplicaAtVersion(
   shard: ShardID,
   replicaVersion: string,
 ): Promise<Replica | null> {
+  const schema = db(upstreamSchema(shard));
   const result = await db`
-    SELECT * FROM ${db(upstreamSchema(shard))}.replicas 
+    SELECT * FROM ${schema}.replicas JOIN ${schema}."shardConfig" ON true
       WHERE version = ${replicaVersion};
   `;
   if (result.length === 0) {
