@@ -95,6 +95,24 @@ export const networkConfig = (namePrefix) => {
     ],
   });
 
+  
+  // const fckNatAmi = aws.ec2.getAmiOutput(
+  //   {
+  //     owners: ["568608671756"], // AWS account ID for fck-nat AMI
+  //     filters: [
+  //       {
+  //         name: "name",
+  //         // The AMI has the SSM agent pre-installed
+  //         values: ["fck-nat-al2023-*"],
+  //       },
+  //       {
+  //         name: "architecture",
+  //         values: ["arm64"],
+  //       },
+  //     ],
+  //     mostRecent: true,
+  //   }
+  // ).id;
   // Create a NAT Instance
   const natInstance = new aws.ec2.Instance(`${namePrefix}NatInstance22`, {
     instanceType: "t2.nano",

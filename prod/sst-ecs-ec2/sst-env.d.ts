@@ -5,6 +5,10 @@
 
 declare module "sst" {
   export interface Resource {
+    "replication-bucket": {
+      "name": string
+      "type": "sst.aws.Bucket"
+    }
   }
 }
 /// <reference path="sst-env.d.ts" />
