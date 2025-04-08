@@ -2,6 +2,7 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
 
+
 export default $config({
   app(input) {
     return {
@@ -17,7 +18,8 @@ export default $config({
     const { networkConfig } = await import( './infra/network');
     const { createAlb } = await import( './infra/alb');
     const {join} = await import('node:path');
-
+    const { capacityProvider } = await import( './infra/capacity-provider');
+    
     const defu = createDefu((obj, key, value) => {
       // Don't merge functions, just use the last one
       if (typeof obj[key] === 'function' || typeof value === 'function') {
@@ -39,6 +41,16 @@ export default $config({
       vpcId: network.vpcId,
       publicSubnets: network.albPublicSunets,
       privateSubnets: network.privateSubnets,
+    });
+
+    const cluster = new aws.ecs.Cluster(`${$app.name}-${$app.stage}-cluster`, {
+      name: `${$app.name}-${$app.stage}-cluster`,
+    });
+
+    const provider = await capacityProvider(`${$app.name}-${$app.stage}`,{
+      vpcId: network.vpcId,
+      privateSubnets: network.privateSubnets,
+      cluster,
     });
 
     // Common environment variables
