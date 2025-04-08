@@ -11,7 +11,7 @@ export function publishedTableQuery(publications: readonly string[]) {
   //   column values are not be included in the replication stream).
   //   The WHERE condition `attgenerated = ''` fixes this by explicitly excluding
   //   generated columns from the list.
-  return `
+  return /* sql */ `
 WITH published_columns AS (SELECT 
   pc.oid::int8 AS "oid",
   nspname AS "schema", 
@@ -101,7 +101,7 @@ export function indexDefinitionsQuery(publications: readonly string[]) {
   // * The additional check fo attgenerated is required for the aforementioned
   //   (in publishedTableQuery) bug in PG15 in which generated columns are
   //   incorrectly included in pg_publication_tables.attnames
-  return `
+  return /* sql */ `
   WITH indexed_columns AS (SELECT
       pg_indexes.schemaname as "schema",
       pg_indexes.tablename as "tableName",
@@ -190,7 +190,7 @@ export async function getPublicationInfo(
   sql: postgres.Sql,
   publications: string[],
 ): Promise<PublicationInfo> {
-  const result = await sql.unsafe(`
+  const result = await sql.unsafe(/* sql */ `
   SELECT 
     schemaname AS "schema",
     tablename AS "table", 
