@@ -291,13 +291,13 @@ class PostgresChangeSource implements ChangeSource {
    * `slotToKeep`.
    */
   async #stopExistingReplicationSlotSubscribers(
-    db: PostgresDB,
+    sql: PostgresDB,
     slotToKeep: string,
   ): Promise<{cleanup: Promise<void>}> {
     const slotExpression = replicationSlotExpression(this.#shard);
     const legacySlotName = legacyReplicationSlot(this.#shard);
 
-    const result = await db<{slot: string; pid: string | null}[]>`
+    const result = await sql<{slot: string; pid: string | null}[]>`
     SELECT slot_name as slot, pg_terminate_backend(active_pid), active_pid as pid
       FROM pg_replication_slots 
       WHERE slot_name LIKE ${slotExpression} OR slot_name = ${legacySlotName}`;
@@ -311,7 +311,7 @@ class PostgresChangeSource implements ChangeSource {
     }
     // Clean up the replicas table.
     const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
-    await db`DELETE FROM ${db(replicasTable)} WHERE slot != ${slotToKeep}`;
+    await sql`DELETE FROM ${sql(replicasTable)} WHERE slot != ${slotToKeep}`;
 
     const pids = result.filter(({pid}) => pid !== null).map(({pid}) => pid);
     if (pids.length) {
@@ -322,18 +322,18 @@ class PostgresChangeSource implements ChangeSource {
       .map(({slot}) => slot);
     return {
       cleanup: otherSlots.length
-        ? this.#dropReplicationSlots(db, otherSlots)
+        ? this.#dropReplicationSlots(sql, otherSlots)
         : promiseVoid,
     };
   }
 
-  async #dropReplicationSlots(db: PostgresDB, slots: string[]) {
+  async #dropReplicationSlots(sql: PostgresDB, slots: string[]) {
     this.#lc.info?.(`dropping other replication slot(s) ${slots}`);
     for (let i = 0; i < 5; i++) {
       try {
-        await db`
+        await sql`
           SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
-            WHERE slot_name IN ${db(slots)}
+            WHERE slot_name IN ${sql(slots)}
         `;
         this.#lc.info?.(`successfully dropped ${slots}`);
         return;
