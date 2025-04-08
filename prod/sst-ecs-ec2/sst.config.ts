@@ -37,15 +37,7 @@ export default $config({
     const {join} = await import('node:path');
     const { capacityProvider } = await import( './infra/capacity-provider');
     const { createService } = await import( './infra/service');
-    
-    const defu = createDefu((obj, key, value) => {
-      // Don't merge functions, just use the last one
-      if (typeof obj[key] === 'function' || typeof value === 'function') {
-        obj[key] = value;
-        return true;
-      }
-      return false;
-    });
+
 
     const replicationBucket = new sst.aws.Bucket(`replication-bucket`, {
       public: false,
@@ -63,6 +55,12 @@ export default $config({
 
     const cluster = new aws.ecs.Cluster(`${$app.name}-${$app.stage}-cluster`, {
       name: `${$app.name}-${$app.stage}-cluster`,
+      settings: [
+        {
+          name: "containerInsights",
+          value: "enabled"
+        }
+      ]
     });
 
     const provider = await capacityProvider(`${$app.name}-${$app.stage}`,{
@@ -119,6 +117,8 @@ export default $config({
       },
       port: 4849, // Port for replication-manager
     });
+
+ 
 
     // new command.local.Command('zero-deploy-permissions', {
     //   // Pulumi operates with cwd at the package root.

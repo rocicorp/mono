@@ -32,6 +32,14 @@ export const createService = (
 
   // Define the container name consistently
   const containerName = 'zero-cache-image';
+  
+  // Create the log group explicitly to ensure it exists
+  const logGroupName = `/ecs/${prefix}`;
+  const logGroup = new aws.cloudwatch.LogGroup(`${prefix}LogGroup`, {
+    name: logGroupName,
+    retentionInDays: 30, // Set an appropriate retention period
+  });
+  
   // Use Pulumi's Output.all to properly unwrap all Output values
   return $util.all(
     // Collect all potential Output values from commonEnv
@@ -69,12 +77,10 @@ export const createService = (
         name,
         value,
       })),
-      // Add logging configuration
       logConfiguration: {
         logDriver: "awslogs",
         options: {
-          "awslogs-create-group": "true",
-          "awslogs-group": `/ecs/${prefix}`,
+          "awslogs-group": logGroupName,
           "awslogs-region": process.env.AWS_REGION || "us-east-1",
           "awslogs-stream-prefix": "ecs"
         }
@@ -168,7 +174,8 @@ export const createService = (
       dependsOn: [
         capacityProvider,
         cluster,
-        taskDef
+        taskDef,
+        logGroup  // Add the log group as a dependency
       ]
     });
   });
