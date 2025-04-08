@@ -70,6 +70,7 @@ import {replicationEventSchema, type DdlUpdateEvent} from './schema/ddl.ts';
 import {updateShardSchema} from './schema/init.ts';
 import {getPublicationInfo, type PublishedSchema} from './schema/published.ts';
 import {
+  dropShard,
   getInternalShardConfig,
   getReplicaAtVersion,
   internalPublicationPrefix,
@@ -107,19 +108,6 @@ export async function initializePostgresChangeSource(
   const subscriptionState = getSubscriptionState(new StatementRunner(replica));
   replica.close();
 
-  if (shard.publications.length) {
-    // Verify that the publications match what has been synced.
-    const requested = [...shard.publications].sort();
-    const replicated = subscriptionState.publications
-      .filter(p => !p.startsWith(internalPublicationPrefix(shard)))
-      .sort();
-    if (!deepEqual(requested, replicated)) {
-      throw new Error(
-        `Invalid ShardConfig. Requested publications [${requested}] do not match synced publications: [${replicated}]`,
-      );
-    }
-  }
-
   // Check that upstream is properly setup, and throw an AutoReset to re-run
   // initial sync if not.
   const db = pgClient(lc, upstreamURI);
@@ -128,7 +116,7 @@ export async function initializePostgresChangeSource(
       lc,
       db,
       shard,
-      subscriptionState.replicaVersion,
+      subscriptionState,
     );
 
     const changeSource = new PostgresChangeSource(
@@ -148,7 +136,7 @@ async function checkAndUpdateUpstream(
   lc: LogContext,
   db: PostgresDB,
   shard: ShardConfig,
-  replicaVersion: string,
+  {replicaVersion, publications: subscribed}: SubscriptionState,
 ) {
   // Perform any shard schema updates
   await updateShardSchema(lc, db, shard, replicaVersion);
@@ -159,6 +147,31 @@ async function checkAndUpdateUpstream(
       `No replication slot for replica at version ${replicaVersion}`,
     );
   }
+
+  // Verify that the publications match what is being replicated.
+  const requested = [...shard.publications].sort();
+  const replicated = upstreamReplica.publications
+    .filter(p => !p.startsWith(internalPublicationPrefix(shard)))
+    .sort();
+  if (!deepEqual(requested, replicated)) {
+    lc.warn?.(`Dropping shard to change publications to: [${requested}]`);
+    await db.unsafe(dropShard(shard.appID, shard.shardNum));
+    throw new AutoResetSignal(
+      `Requested publications [${requested}] do not match configured ` +
+        `publications: [${replicated}]`,
+    );
+  }
+
+  // Sanity check: The subscription state on the replica should have the
+  // same publications. This should be guaranteed by the equivalence of the
+  // replicaVersion, but it doesn't hurt to verify.
+  if (!deepEqual(upstreamReplica.publications, subscribed)) {
+    throw new AutoResetSignal(
+      `Upstream publications [${upstreamReplica.publications}] do not ` +
+        `match subscribed publications [${subscribed}]`,
+    );
+  }
+
   const {slot} = upstreamReplica;
   const result = await db<{restartLSN: LSN | null}[]>`
   SELECT restart_lsn as "restartLSN" FROM pg_replication_slots WHERE slot_name = ${slot}`;
