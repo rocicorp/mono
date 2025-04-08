@@ -73,17 +73,35 @@ const enumTable = table('enumTable')
   })
   .primaryKey('id');
 
+const alternateUser = table('alternate_user')
+  .from('alternate_schema.user')
+  .columns({
+    id: string(),
+    name: string(),
+    age: number(),
+  })
+  .primaryKey('id');
+
 const schema = createSchema({
-  tables: [user, issue, issueLabel, label, parentTable, childTable, enumTable],
+  tables: [
+    user,
+    issue,
+    issueLabel,
+    label,
+    parentTable,
+    childTable,
+    enumTable,
+    alternateUser,
+  ],
 });
 
 const serverSchema: ServerSchema = {
-  user: {
+  'user': {
     id: {type: 'text', isEnum: false},
     name: {type: 'text', isEnum: false},
     age: {type: 'numeric', isEnum: false},
   },
-  issue: {
+  'issue': {
     id: {type: 'text', isEnum: false},
     title: {type: 'text', isEnum: false},
     description: {type: 'text', isEnum: false},
@@ -91,26 +109,31 @@ const serverSchema: ServerSchema = {
     ownerId: {type: 'text', isEnum: false},
     created: {type: 'timestamp', isEnum: false},
   },
-  issueLabel: {
+  'issueLabel': {
     issue_id: {type: 'text', isEnum: false},
     label_id: {type: 'text', isEnum: false},
   },
-  label: {
+  'label': {
     id: {type: 'text', isEnum: false},
     name: {type: 'text', isEnum: false},
   },
-  parentTable: {
+  'parentTable': {
     id: {type: 'text', isEnum: false},
     other_id: {type: 'text', isEnum: false},
   },
-  childTable: {
+  'childTable': {
     id: {type: 'text', isEnum: false},
     parent_id: {type: 'text', isEnum: false},
     parent_other_id: {type: 'text', isEnum: false},
   },
-  enumTable: {
+  'enumTable': {
     id: {type: 'text', isEnum: false},
     status: {type: 'statusEnum', isEnum: true},
+  },
+  'alternate_schema.user': {
+    id: {type: 'text', isEnum: false},
+    name: {type: 'text', isEnum: false},
+    age: {type: 'numeric', isEnum: false},
   },
 };
 
@@ -128,6 +151,23 @@ test('limit', () => {
     .toMatchInlineSnapshot(`
     {
       "text": "",
+      "values": [],
+    }
+  `);
+});
+
+test('select from different schema', () => {
+  const compiler = new Compiler(schema.tables, serverSchema);
+  expect(
+    formatPgInternalConvert(
+      compiler.compile({
+        table: 'alternate_user',
+        related: [],
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "alternate_user"."id","alternate_user"."name","alternate_user"."age" FROM "alternate_schema"."user" as "alternate_user"    )"root"",
       "values": [],
     }
   `);

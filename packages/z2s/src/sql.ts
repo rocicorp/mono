@@ -304,7 +304,18 @@ function formatFn(
       // If we got an identifier type, escape the strings and get a local
       // identifier for non-string identifiers.
       case SQLItemType.IDENTIFIER: {
-        text += item.names
+        // This is a specific addition for Zero as Zero
+        // does not support dots in identifiers.
+        // If a dot is found, we assume it is a namespace
+        // and split the identifier into its parts.
+        const names =
+          item.names.length === 1 &&
+          typeof item.names[0] === 'string' &&
+          item.names[0].includes('.')
+            ? item.names[0].split('.')
+            : item.names;
+
+        text += names
           .map((name): string => {
             if (typeof name === 'string') return escapeIdentifier(name);
 

@@ -41,6 +41,8 @@ describe('makeSchemaCRUD', () => {
     arr: ['a', 'b', 'c'],
   };
 
+  const basicRow = {id: '1', a: 2, b: 'foo', c: true};
+
   const uuidAndEnumRow = {
     id: '123e4567-e89b-12d3-a456-426614174000',
     reference_id: '987fcdeb-a89b-12d3-a456-426614174000',
@@ -57,17 +59,18 @@ describe('makeSchemaCRUD', () => {
       );
 
       await Promise.all([
-        crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
+        crud.basic.insert(basicRow),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
         crud.dateTypes.insert(timeRow),
         crud.jsonCases.insert(jsonRow),
         crud.jsonbCases.insert(jsonRow),
         crud.uuidAndEnum.insert(uuidAndEnumRow),
+        crud.alternate_basic.insert(basicRow),
       ]);
 
       await Promise.all([
-        checkDb(tx, 'basic', [{id: '1', a: 2, b: 'foo', c: true}]),
+        checkDb(tx, 'basic', [basicRow]),
         checkDb(tx, 'divergent_names', [
           {
             divergent_id: '2',
@@ -81,6 +84,7 @@ describe('makeSchemaCRUD', () => {
         checkDb(tx, 'jsonCases', [jsonRow]),
         checkDb(tx, 'jsonbCases', [jsonRow]),
         checkDb(tx, 'uuidAndEnum', [uuidAndEnumRow]),
+        checkDb(tx, 'alternate_schema.basic', [basicRow]),
       ]);
     });
   });
@@ -108,17 +112,18 @@ describe('makeSchemaCRUD', () => {
       );
 
       await Promise.all([
-        crud.basic.upsert({id: '1', a: 2, b: 'foo', c: true}),
+        crud.basic.upsert(basicRow),
         crud.names.upsert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.upsert({a: 'a', b: 1, c: 'c'}),
         crud.dateTypes.upsert(timeRow),
         crud.jsonCases.upsert(jsonRow),
         crud.jsonbCases.upsert(jsonRow),
         crud.uuidAndEnum.upsert(uuidAndEnumRow),
+        crud.alternate_basic.upsert(basicRow),
       ]);
 
       await Promise.all([
-        checkDb(tx, 'basic', [{id: '1', a: 2, b: 'foo', c: true}]),
+        checkDb(tx, 'basic', [basicRow]),
         checkDb(tx, 'divergent_names', [
           {
             divergent_id: '2',
@@ -132,6 +137,7 @@ describe('makeSchemaCRUD', () => {
         checkDb(tx, 'jsonCases', [jsonRow]),
         checkDb(tx, 'jsonbCases', [jsonRow]),
         checkDb(tx, 'uuidAndEnum', [uuidAndEnumRow]),
+        checkDb(tx, 'alternate_schema.basic', [basicRow]),
       ]);
 
       // upsert all the existing rows to change non-primary key values
@@ -162,6 +168,12 @@ describe('makeSchemaCRUD', () => {
           status: 'inactive',
           type: 'system',
           reference_id: '987fcdeb-a89b-12d3-a456-426614174002',
+        }),
+        crud.alternate_basic.upsert({
+          id: '1',
+          a: 3,
+          b: 'baz',
+          c: false,
         }),
       ]);
 
@@ -208,6 +220,9 @@ describe('makeSchemaCRUD', () => {
             reference_id: '987fcdeb-a89b-12d3-a456-426614174002',
           },
         ]),
+        checkDb(tx, 'alternate_schema.basic', [
+          {id: '1', a: 3, b: 'baz', c: false},
+        ]),
       ]);
     });
   });
@@ -220,13 +235,14 @@ describe('makeSchemaCRUD', () => {
         await getServerSchema(transaction, schema),
       );
       await Promise.all([
-        crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
+        crud.basic.insert(basicRow),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
         crud.dateTypes.insert(timeRow),
         crud.jsonCases.insert(jsonRow),
         crud.jsonbCases.insert(jsonRow),
         crud.uuidAndEnum.insert(uuidAndEnumRow),
+        crud.alternate_basic.insert(basicRow),
       ]);
 
       await Promise.all([
@@ -256,6 +272,11 @@ describe('makeSchemaCRUD', () => {
           status: 'pending',
           type: 'admin',
           reference_id: '987fcdeb-a89b-12d3-a456-426614174002',
+        }),
+        crud.alternate_basic.update({
+          id: '1',
+          a: 3,
+          b: 'baz',
         }),
       ]);
 
@@ -302,6 +323,9 @@ describe('makeSchemaCRUD', () => {
             reference_id: '987fcdeb-a89b-12d3-a456-426614174002',
           },
         ]),
+        checkDb(tx, 'alternate_schema.basic', [
+          {id: '1', a: 3, b: 'baz', c: true},
+        ]),
       ]);
     });
   });
@@ -315,13 +339,14 @@ describe('makeSchemaCRUD', () => {
       );
 
       await Promise.all([
-        crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
+        crud.basic.insert(basicRow),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
         crud.dateTypes.insert(timeRow),
         crud.jsonCases.insert(jsonRow),
         crud.jsonbCases.insert(jsonRow),
         crud.uuidAndEnum.insert(uuidAndEnumRow),
+        crud.alternate_basic.insert(basicRow),
       ]);
 
       await Promise.all([
@@ -332,6 +357,7 @@ describe('makeSchemaCRUD', () => {
         crud.jsonCases.delete({str: jsonRow.str}),
         crud.jsonbCases.delete({str: jsonRow.str}),
         crud.uuidAndEnum.delete({id: uuidAndEnumRow.id}),
+        crud.alternate_basic.delete({id: '1'}),
       ]);
 
       await Promise.all([
@@ -342,12 +368,13 @@ describe('makeSchemaCRUD', () => {
         checkDb(tx, 'jsonCases', []),
         checkDb(tx, 'jsonbCases', []),
         checkDb(tx, 'uuidAndEnum', []),
+        checkDb(tx, 'alternate_schema.basic', []),
       ]);
     });
   });
 });
 
 async function checkDb(pg: PostgresDB, table: string, expected: unknown[]) {
-  const rows = await pg.unsafe(`SELECT * FROM "${table}"`);
+  const rows = await pg`SELECT * FROM ${pg(table)}`;
   expect(rows).toEqual(expected);
 }
