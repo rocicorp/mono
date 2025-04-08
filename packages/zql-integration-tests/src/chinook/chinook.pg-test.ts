@@ -53,12 +53,13 @@ import {writeChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
 import type {ServerSchema} from '../../../z2s/src/schema.ts';
-import {StaticQuery, staticQuery} from '../../../zql/src/query/static-query.ts';
+import {ZPGQuery} from '../../../zero-pg/src/query.ts';
 
 // TODO: Ideally z2s wouldn't depend on zero-pg (even in tests).  These
 // chinook tests should move to their own package.
 import {Transaction} from '../../../zero-pg/src/test/util.ts';
 import {getServerSchema} from '../../../zero-pg/src/schema.ts';
+import {defaultFormat} from '../../../zql/src/query/query-impl.ts';
 
 let pg: PostgresDB;
 let sqlite: Database;
@@ -94,7 +95,8 @@ const zqliteQueries: Queries = {
   invoiceLine: null,
   track: null,
 } as any;
-const memoryQueries: Queries = {...zqliteQueries} as any;
+const zqlQueries: Queries = {...zqliteQueries} as any;
+const zpgQueries: Queries = {...zqliteQueries} as any;
 const tables = Object.keys(zqliteQueries) as (keyof typeof zqliteQueries)[];
 
 const lc = createSilentLogContext();
@@ -129,7 +131,20 @@ beforeEach(async () => {
 
   tables.forEach(table => {
     zqliteQueries[table] = newQuery(zqliteQueryDelegate, schema, table) as any;
-    memoryQueries[table] = newQuery(memoryQueryDelegate, schema, table) as any;
+    zqlQueries[table] = newQuery(memoryQueryDelegate, schema, table) as any;
+    zpgQueries[table] = new ZPGQuery(
+      schema,
+      serverSchema,
+      table,
+      {
+        query(query, args) {
+          return pg.unsafe(query, args as JSONValue[]);
+        },
+        wrappedTransaction: pg,
+      },
+      {table},
+      defaultFormat,
+    ) as any;
   });
 
   await Promise.all(
@@ -150,32 +165,15 @@ beforeEach(async () => {
   );
 });
 
-test('limited junction edge', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-explicit-any
-  function getSQL(q: Query<any, any, any>) {
-    return formatPgInternalConvert(
-      compile(
-        (q as StaticQuery<Schema, keyof Schema['tables']>).ast,
-        schema.tables,
-        serverSchema,
-        q.format,
-      ),
-    ).text;
-  }
-
-  const q = staticQuery(schema, 'playlist').related('tracks', q => q.limit(10));
-  expect(getSQL(q)).toMatchInlineSnapshot(`
-    "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT (
-            SELECT COALESCE(json_agg(row_to_json("inner_tracks")), '[]'::json) FROM (SELECT "table_1"."track_id" as "id","table_1"."name","table_1"."album_id" as "albumId","table_1"."media_type_id" as "mediaTypeId","table_1"."genre_id" as "genreId","table_1"."composer","table_1"."milliseconds","table_1"."bytes","table_1"."unit_price" as "unitPrice" FROM "playlist_track" as "playlistTrack" JOIN "track" as "table_1" ON "playlistTrack"."track_id" = "table_1"."track_id" WHERE ("playlist"."playlist_id" = "playlistTrack"."playlist_id")  ORDER BY "playlistTrack"."playlist_id" ASC, "playlistTrack"."track_id" ASC LIMIT $1::text::numeric ) "inner_tracks"
-          ) as "tracks","playlist"."playlist_id" as "id","playlist"."name" FROM "playlist"   ORDER BY "playlist"."playlist_id" ASC )"root""
-  `);
-});
-
 describe('basic select', () => {
   test.each(tables.map(table => [table]))(
     'select * from %s',
     async table => {
-      await checkZqlAndSql(pg, zqliteQueries[table], memoryQueries[table]);
+      await checkZqls(
+        zpgQueries[table],
+        zqliteQueries[table],
+        zqlQueries[table],
+      );
     },
     20_000,
   );
@@ -183,10 +181,10 @@ describe('basic select', () => {
   test.each(tables.map(table => [table]))(
     'select * from %s limit 100',
     async table => {
-      await checkZqlAndSql(
-        pg,
+      await checkZqls(
+        zpgQueries[table].limit(100),
         zqliteQueries[table].limit(100),
-        memoryQueries[table].limit(100),
+        zqlQueries[table].limit(100),
       );
     },
   );
@@ -200,26 +198,27 @@ describe('1 level related', () => {
     'reportsTo',
   ];
   function getQueriesAndRelationships(table: keyof Schema['tables']) {
+    const zpgQuery = zpgQueries[table] as AnyQuery;
     const zqliteQuery = zqliteQueries[table] as AnyQuery;
-    const memoryQuery = memoryQueries[table] as AnyQuery;
+    const memoryQuery = zqlQueries[table] as AnyQuery;
     const relationships = Object.keys(
       (schema.relationships as Record<string, Record<string, unknown>>)[
         table
       ] ?? {},
     );
-    return {zqliteQuery, memoryQuery, relationships};
+    return {zpgQuery, zqliteQuery, memoryQuery, relationships};
   }
 
   test.each(tables.map(table => [table]))('%s w/ related', async table => {
-    const {zqliteQuery, memoryQuery, relationships} =
+    const {zqliteQuery, zpgQuery, memoryQuery, relationships} =
       getQueriesAndRelationships(table);
 
     for (const r of relationships) {
       if (brokenRelationships.includes(r)) {
         continue;
       }
-      await checkZqlAndSql(
-        pg,
+      await checkZqls(
+        zpgQuery.related(r),
         zqliteQuery.related(r),
         memoryQuery.related(r),
         false,
@@ -230,7 +229,7 @@ describe('1 level related', () => {
   test.each(tables.map(table => [table]))(
     '%s w/ related limit 100',
     async table => {
-      const {zqliteQuery, memoryQuery, relationships} =
+      const {zqliteQuery, zpgQuery, memoryQuery, relationships} =
         getQueriesAndRelationships(table);
 
       // Junction edges do not correctly handle limits
@@ -240,8 +239,8 @@ describe('1 level related', () => {
         if (brokenRelationships.includes(r) || brokenLimits.includes(r)) {
           continue;
         }
-        await checkZqlAndSql(
-          pg,
+        await checkZqls(
+          zpgQuery.related(r, q => q.limit(100)).limit(100),
           zqliteQuery.related(r, q => q.limit(100)).limit(100),
           memoryQuery.related(r, q => q.limit(100)).limit(100),
         );
@@ -276,12 +275,14 @@ describe('or', () => {
 
   test.each(tables.map(table => [table]))('1-branch %s', async table => {
     const {randomRow, randomColumn} = randomRowAndColumn(table);
-    await checkZqlAndSql(
-      pg,
+    await checkZqls(
+      (zpgQueries[table] as AnyQuery).where(({or, cmp}) =>
+        or(cmp(randomColumn as any, '=', randomRow[randomColumn])),
+      ),
       (zqliteQueries[table] as AnyQuery).where(({or, cmp}) =>
         or(cmp(randomColumn as any, '=', randomRow[randomColumn])),
       ),
-      (memoryQueries[table] as AnyQuery).where(({or, cmp}) =>
+      (zqlQueries[table] as AnyQuery).where(({or, cmp}) =>
         or(cmp(randomColumn as any, '=', randomRow[randomColumn])),
       ),
     );
@@ -300,10 +301,10 @@ describe('or', () => {
         ),
       );
     }
-    await checkZqlAndSql(
-      pg,
+    await checkZqls(
+      (zpgQueries[table] as AnyQuery).where(q),
       (zqliteQueries[table] as AnyQuery).where(q),
-      (memoryQueries[table] as AnyQuery).where(q),
+      (zqlQueries[table] as AnyQuery).where(q),
     );
   });
 
@@ -319,10 +320,10 @@ describe('or', () => {
           cmp(randomColumn as any, '!=', randomRow[randomColumn]),
         );
       }
-      await checkZqlAndSql(
-        pg,
+      await checkZqls(
+        (zpgQueries[table] as AnyQuery).where(q),
         (zqliteQueries[table] as AnyQuery).where(q),
-        (memoryQueries[table] as AnyQuery).where(q),
+        (zqlQueries[table] as AnyQuery).where(q),
         true,
         [[table, randomRow]],
       );
@@ -337,10 +338,10 @@ describe('or', () => {
           cmp('customerId', '=', randomRow.customerId as number),
           exists('lines'),
         );
-      await checkZqlAndSql(
-        pg,
+      await checkZqls(
+        zpgQueries.invoice.where(q),
         zqliteQueries.invoice.where(q),
-        memoryQueries.invoice.where(q),
+        zqlQueries.invoice.where(q),
         true,
         [['invoice', randomRow]],
       );
@@ -348,8 +349,8 @@ describe('or', () => {
   });
 });
 
-async function checkZqlAndSql(
-  pg: PostgresDB,
+async function checkZqls(
+  zpgQuery: Query<Schema, keyof Schema['tables']>,
   zqliteQuery: Query<Schema, keyof Schema['tables']>,
   memoryQuery: Query<Schema, keyof Schema['tables']>,
   // flag to disable push checking.
@@ -358,7 +359,7 @@ async function checkZqlAndSql(
   shouldCheckPush = true,
   mustEditRows?: [table: string, row: Row][],
 ) {
-  const pgResult = await runZqlAsSql(pg, zqliteQuery);
+  const pgResult = await zpgQuery;
   const zqliteResult = await zqliteQuery;
   const zqlMemResult = await memoryQuery;
   const ast = (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol];
