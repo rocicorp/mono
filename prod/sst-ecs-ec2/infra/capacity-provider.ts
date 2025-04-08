@@ -90,21 +90,29 @@ export const capacityProvider = (
     roles: [instanceRole.name],
   });
 
-  const instanceProfile = new aws.iam.InstanceProfile(`${prefix}InstanceProfile`, {
-    name: `${prefix}-instance-profile`,
-    role: instanceRole.name,
-  });
+  const instanceProfile = new aws.iam.InstanceProfile(
+    `${prefix}InstanceProfile`,
+    {
+      name: `${prefix}-instance-profile`,
+      role: instanceRole.name,
+    },
+  );
 
+  // Make the userData more explicit with an export path for ECS agent logs for debugging
   const userData = cluster.name.apply(
-    name => `#!/bin/bash 
-  echo ECS_CLUSTER=${name} >> /etc/ecs/ecs.config`,
+    name => `#!/bin/bash
+echo ECS_CLUSTER=${name} >> /etc/ecs/ecs.config
+echo ECS_LOGLEVEL=debug >> /etc/ecs/ecs.config
+echo ECS_AVAILABLE_LOGGING_DRIVERS='["json-file","awslogs"]' >> /etc/ecs/ecs.config
+systemctl restart ecs
+`,
   );
 
   const ec2Template = new aws.ec2.LaunchTemplate(
     `${prefix}LaunchTemplateECS`,
     {
       namePrefix: `${prefix}-instance-`,
-      imageId: 'ami-00a929b66ed6e0de6', // env
+      imageId: 'ami-00a929b66ed6e0de6',
       instanceType: 't2.small', // env
       vpcSecurityGroupIds: [ec2Sg.id],
       iamInstanceProfile: {
@@ -129,6 +137,14 @@ export const capacityProvider = (
     },
     vpcZoneIdentifiers: privateSubnets,
     defaultCooldown: 20,
+    // Add tags to help with ECS cluster discovery
+    tags: [
+      {
+        key: 'AmazonECSManaged',
+        value: '',
+        propagateAtLaunch: true,
+      },
+    ],
   });
 
   const capacityProvider = new aws.ecs.CapacityProvider(
@@ -143,24 +159,35 @@ export const capacityProvider = (
           status: 'ENABLED',
           targetCapacity: 30,
         },
+        managedTerminationProtection: 'DISABLED', // To allow scale-in during development
       },
+    },
+    {
+      dependsOn: [asg, cluster],
     },
   );
 
-  new aws.ecs.ClusterCapacityProviders(`${prefix}ClusterCapacityProviderAssoc`, {
-    clusterName: cluster.name,
-    capacityProviders: [capacityProvider.name],
-    defaultCapacityProviderStrategies: [
-      {
-        capacityProvider: capacityProvider.name,
-        weight: 1,
-        base: 1,
-      },
-    ],
-  });
+  const clusterCapacityProviders = new aws.ecs.ClusterCapacityProviders(
+    `${prefix}ClusterCapacityProviderAssoc`,
+    {
+      clusterName: cluster.name,
+      capacityProviders: [capacityProvider.name],
+      defaultCapacityProviderStrategies: [
+        {
+          capacityProvider: capacityProvider.name,
+          weight: 1,
+          base: 1,
+        },
+      ],
+    },
+    {
+      dependsOn: [capacityProvider, cluster],
+    },
+  );
 
   return {
     ec2Sg,
     capacityProvider,
+    clusterCapacityProviders,
   };
 };
