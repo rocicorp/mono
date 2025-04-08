@@ -68,6 +68,15 @@ export const schema = createSchema({
         type: enumeration<'user' | 'system' | 'admin'>(),
       })
       .primaryKey('id'),
+    table('alternate_basic')
+      .from('alternate_schema.basic')
+      .columns({
+        id: string(),
+        a: number(),
+        b: string(),
+        c: boolean().optional(),
+      })
+      .primaryKey('id'),
   ],
   relationships: [],
 });
@@ -130,6 +139,15 @@ CREATE TABLE "uuidAndEnum" (
   "reference_id" UUID NOT NULL,
   "status" "statusEnum" NOT NULL,
   "type" type_enum NOT NULL
+);
+
+CREATE SCHEMA alternate_schema;
+
+CREATE TABLE alternate_schema.basic (
+  id TEXT PRIMARY KEY,
+  a INTEGER,
+  b TEXT,
+  C BOOLEAN
 );
 `;
 
