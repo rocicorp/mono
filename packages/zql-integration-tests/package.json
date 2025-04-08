@@ -1,0 +1,31 @@
+{
+  "name": "zql-integration-tests",
+  "description": "Integration tests of ZQL, ZQLite, ZPG",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
+    "build:bin": "tsc -p tsconfig.bin.json",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "bench": "vitest bench",
+    "test-types": "vitest run --typecheck.only --no-browser.enabled",
+    "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.7.0",
+    "@rocicorp/prettier-config": "^0.3.0",
+    "shared": "0.0.0",
+    "typescript": "~5.8.2"
+  },
+  "eslintConfig": {
+    "extends": "../../eslint-config.json"
+  },
+  "prettier": "@rocicorp/prettier-config",
+  "dependencies": {}
+}

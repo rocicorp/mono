@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   number,
   string,
   table,
-} from '../../../../zero-schema/src/builder/table-builder.ts';
+} from '../../../zero-schema/src/builder/table-builder.ts';
 
 // auto-generated from `Chinook_PostgreSql.sql` by Claude
 // Table definitions

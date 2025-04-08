@@ -12,59 +12,53 @@
  */
 
 import {beforeEach, describe, expect, test} from 'vitest';
-import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
-import {wrapIterable} from '../../../../shared/src/iterables.ts';
-import type {
-  JSONValue,
-  ReadonlyJSONValue,
-} from '../../../../shared/src/json.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {must} from '../../../../shared/src/must.ts';
-import type {Writable} from '../../../../shared/src/writable.ts';
-import {testDBs} from '../../../../zero-cache/src/test/db.ts';
-import type {PostgresDB} from '../../../../zero-cache/src/types/pg.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {wrapIterable} from '../../../shared/src/iterables.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
+import {testDBs} from '../../../zero-cache/src/test/db.ts';
+import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import {
   clientToServer,
   NameMapper,
-} from '../../../../zero-schema/src/name-mapper.ts';
-import type {TableSchema} from '../../../../zero-schema/src/table-schema.ts';
-import type {Change} from '../../../../zql/src/ivm/change.ts';
-import type {Node} from '../../../../zql/src/ivm/data.ts';
-import {MemorySource} from '../../../../zql/src/ivm/memory-source.ts';
-import type {Input} from '../../../../zql/src/ivm/operator.ts';
-import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
-import type {Format} from '../../../../zql/src/ivm/view.ts';
-import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
+} from '../../../zero-schema/src/name-mapper.ts';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import type {Change} from '../../../zql/src/ivm/change.ts';
+import type {Node} from '../../../zql/src/ivm/data.ts';
+import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
+import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
+import type {Format} from '../../../zql/src/ivm/view.ts';
+import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {
   astForTestingSymbol,
   completedAstSymbol,
   newQuery,
   QueryImpl,
   type QueryDelegate,
-} from '../../../../zql/src/query/query-impl.ts';
-import type {Operator, Query} from '../../../../zql/src/query/query.ts';
-import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../../zql/src/query/test/query-delegate.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
+} from '../../../zql/src/query/query-impl.ts';
+import type {Operator, Query} from '../../../zql/src/query/query.ts';
+import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
+import {Database} from '../../../zqlite/src/db.ts';
 import {
   mapResultToClientNames,
   newQueryDelegate,
-} from '../../../../zqlite/src/test/source-factory.ts';
-import {compile, extractZqlResult} from '../../compiler.ts';
-import '../comparePg.ts';
+} from '../../../zqlite/src/test/source-factory.ts';
+import {compile, extractZqlResult} from '../../../z2s/src/compiler.ts';
+import '../helpers/comparePg.ts';
 import {writeChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
-import {formatPgInternalConvert} from '../../sql.ts';
-import type {ServerSchema} from '../../schema.ts';
-import {
-  StaticQuery,
-  staticQuery,
-} from '../../../../zql/src/query/static-query.ts';
+import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
+import type {ServerSchema} from '../../../z2s/src/schema.ts';
+import {StaticQuery, staticQuery} from '../../../zql/src/query/static-query.ts';
 
 // TODO: Ideally z2s wouldn't depend on zero-pg (even in tests).  These
 // chinook tests should move to their own package.
-import {Transaction} from '../../../../zero-pg/src/test/util.ts';
-import {getServerSchema} from '../../../../zero-pg/src/schema.ts';
+import {Transaction} from '../../../zero-pg/src/test/util.ts';
+import {getServerSchema} from '../../../zero-pg/src/schema.ts';
 
 let pg: PostgresDB;
 let sqlite: Database;

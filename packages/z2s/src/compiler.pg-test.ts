@@ -20,8 +20,8 @@ import {
 import {compile, extractZqlResult} from './compiler.ts';
 import {formatPgInternalConvert} from './sql.ts';
 import {Client} from 'pg';
-import './test/comparePg.ts';
-import {fillPgAndSync} from './test/setup.ts';
+import '../../zql-integration-tests/src/helpers/comparePg.ts';
+import {fillPgAndSync} from '../../zql-integration-tests/src/helpers/setup.ts';
 import type {ServerSchema} from './schema.ts';
 
 const lc = createSilentLogContext();
