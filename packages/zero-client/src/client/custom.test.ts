@@ -431,7 +431,7 @@ describe('server results and keeping read queries', () => {
 
     await z.close();
 
-    await expect(close.server).rejects.toEqual({error: 'app'});
+    expect(await close.server).toEqual({error: 'app'});
   });
 
   test('changeDesiredQueries:remove is not sent while there are pending mutations', async () => {
@@ -540,6 +540,6 @@ describe('server results and keeping read queries', () => {
     messages.length = 0;
 
     await z.close();
-    await expect(close.server).rejects.toEqual({error: 'app'});
+    expect(await close.server).toEqual({error: 'app'});
   });
 });

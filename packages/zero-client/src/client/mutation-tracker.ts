@@ -3,7 +3,6 @@ import type {
   MutationError,
   MutationID,
   MutationOk,
-  MutationResult,
   PushError,
   PushOk,
   PushResponse,
@@ -15,6 +14,7 @@ import type {
   EphemeralID,
   MutationTrackingData,
 } from '../../../replicache/src/replicache-options.ts';
+import type {MutationResult} from '../../../zero-protocol/src/push.ts';
 
 const transientPushErrorTypes: PushError['error'][] = [
   'zeroPusher',
@@ -31,6 +31,10 @@ function nextEphemeralID(): EphemeralID {
   return ++currentEphemeralID as EphemeralID;
 }
 
+type MutationResultOrPushError =
+  | MutationResult
+  | Omit<PushError, 'mutationIDs'>;
+
 /**
  * Tracks what pushes are in-flight and resolves promises when they're acked.
  */
@@ -39,7 +43,7 @@ export class MutationTracker {
     EphemeralID,
     {
       mutationID?: number | undefined;
-      resolver: Resolver<MutationResult>;
+      resolver: Resolver<MutationResultOrPushError>;
     }
   >;
   readonly #ephemeralIDsByMutationID: Map<number, EphemeralID>;
@@ -60,7 +64,7 @@ export class MutationTracker {
 
   trackMutation(): MutationTrackingData {
     const id = nextEphemeralID();
-    const mutationResolver = resolver<MutationResult>();
+    const mutationResolver = resolver<MutationResultOrPushError>();
 
     this.#outstandingMutations.set(id, {
       resolver: mutationResolver,
@@ -76,13 +80,14 @@ export class MutationTracker {
     }
   }
 
+  /**
+   * Reject the mutation due to an unhandled exception on the client.
+   * The mutation must not have been persisted to the client store.
+   */
   rejectMutation(id: EphemeralID, e: unknown): void {
     const entry = this.#outstandingMutations.get(id);
     if (entry) {
-      this.#settleMutation(id, entry, 'reject', {
-        error: 'app',
-        details: e instanceof Error ? e.message : String(e),
-      });
+      this.#settleMutation(id, entry, 'reject', e);
     }
   }
 
@@ -186,7 +191,9 @@ export class MutationTracker {
     );
     const entry = this.#outstandingMutations.get(ephemeralID);
     assert(entry && entry.mutationID === mid.id);
-    this.#settleMutation(ephemeralID, entry, 'reject', error);
+    // Resolving the promise with an error was an intentional API decision
+    // so the user receives typed errors.
+    this.#settleMutation(ephemeralID, entry, 'resolve', error);
   }
 
   #processMutationOk(result: MutationOk, mid: MutationID): void {
@@ -206,22 +213,20 @@ export class MutationTracker {
     this.#settleMutation(ephemeralID, entry, 'resolve', result);
   }
 
-  #settleMutation(
+  #settleMutation<Type extends 'resolve' | 'reject'>(
     ephemeralID: EphemeralID,
     entry: {
       mutationID?: number | undefined;
-      resolver: Resolver<MutationResult>;
+      resolver: Resolver<MutationResultOrPushError>;
     },
-    type: 'resolve' | 'reject',
-    result: MutationOk | MutationError | Omit<PushError, 'mutationIDs'>,
+    type: Type,
+    result: 'resolve' extends Type ? MutationResultOrPushError : unknown,
   ): void {
     switch (type) {
       case 'resolve':
-        assert(!('error' in result));
-        entry.resolver.resolve(result);
+        entry.resolver.resolve(result as MutationResultOrPushError);
         break;
       case 'reject':
-        assert('error' in result);
         entry.resolver.reject(result);
         break;
     }

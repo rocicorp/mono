@@ -31,7 +31,7 @@ describe('MutationTracker', () => {
     expect(result).toEqual({});
   });
 
-  test('tracks a mutation and rejects on error', async () => {
+  test('tracks a mutation and resolves with error on error', async () => {
     const tracker = new MutationTracker(lc);
     tracker.clientID = CLIENT_ID;
     const {serverPromise, ephemeralID} = tracker.trackMutation();
@@ -50,7 +50,7 @@ describe('MutationTracker', () => {
     };
 
     tracker.processPushResponse(response);
-    await expect(serverPromise).rejects.toEqual({
+    expect(await serverPromise).toEqual({
       error: 'app',
       details: '',
     });
@@ -146,10 +146,6 @@ describe('MutationTracker', () => {
 
     const mutation2 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation2.ephemeralID, 2);
-
-    mutation2.serverPromise.catch(() => {
-      // expected
-    });
 
     const response: PushResponse = {
       mutations: [
@@ -265,9 +261,6 @@ describe('MutationTracker', () => {
     tracker.mutationIDAssigned(mutation3.ephemeralID, 3);
     const mutation4 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation4.ephemeralID, 4);
-    mutation4.serverPromise.catch(() => {
-      // expected
-    });
 
     tracker.processPushResponse({
       mutations: [
@@ -329,7 +322,7 @@ describe('MutationTracker', () => {
       caught = e;
     }
 
-    expect((caught as Record<string, string>).details).toBe('test error');
+    expect(caught).toMatchInlineSnapshot(`[Error: test error]`);
     expect(tracker.size).toBe(0);
   });
 
