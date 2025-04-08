@@ -99,6 +99,7 @@ function findPathToBigInt(v: BigIntJSONValue): string | undefined {
  *   `IS DISTINCT FROM` and `IS NOT DISTINCT FROM` instead
  * - IN is changed to ANY to allow binding array literals
  * - subqueries are aggregated using PG's `array_agg` and `row_to_json` functions
+ * - AST must be in client name format
  */
 export function compile(
   ast: AST,
