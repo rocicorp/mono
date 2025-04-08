@@ -532,6 +532,13 @@ export abstract class AbstractQuery<
     return this.#completedAST;
   }
 
+  then<T1, T2 = never>(
+    onFulfilled?: (value: HumanReadable<TReturn>) => T1,
+    onRejected?: (reason: unknown) => T2,
+  ): Promise<T1 | T2> {
+    return this.run().then(onFulfilled, onRejected);
+  }
+
   abstract materialize(): TypedView<HumanReadable<TReturn>>;
   abstract materialize<T>(factory: ViewFactory<TSchema, TTable, TReturn, T>): T;
   abstract run(): Promise<HumanReadable<TReturn>>;
