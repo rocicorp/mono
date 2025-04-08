@@ -200,13 +200,9 @@ describe('collation behavior', () => {
       const itemQuery = newQuery(queryDelegate, schema, 'item');
       const query = itemQuery.orderBy(col, 'asc');
       const pgResult = await runAsSQL(query, runPgQuery);
-      const zqlResult = mapResultToClientNames(
-        await query.run(),
-        schema,
-        'item',
-      );
+      const zqlResult = mapResultToClientNames(await query, schema, 'item');
       const memoryItemQuery = newQuery(memoryQueryDelegate, schema, 'item');
-      const memoryResult = await memoryItemQuery.orderBy(col, 'asc').run();
+      const memoryResult = await memoryItemQuery.orderBy(col, 'asc');
       expect(zqlResult).toEqualPg(pgResult);
       expect(memoryResult).toEqualPg(pgResult);
 
@@ -220,9 +216,9 @@ describe('collation behavior', () => {
           .orderBy(col, 'asc');
       }
       for (let i = 0; i < memoryResult.length - 1; i++) {
-        const memResult = await makeQuery(memoryItemQuery, i).run();
+        const memResult = await makeQuery(memoryItemQuery, i);
         const zqlResult = mapResultToClientNames(
-          await makeQuery(itemQuery, i).run(),
+          await makeQuery(itemQuery, i),
           schema,
           'item',
         );

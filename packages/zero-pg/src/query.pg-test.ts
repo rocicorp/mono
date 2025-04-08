@@ -30,13 +30,13 @@ describe('makeSchemaQuery', () => {
         transaciton,
         await getServerSchema(transaciton, schema),
       );
-      const result = await query.basic.run();
+      const result = await query.basic;
       expect(result).toEqual([{id: '1', a: 2, b: 'foo', c: true}]);
 
-      const result2 = await query.names.run();
+      const result2 = await query.names;
       expect(result2).toEqual([{id: '2', a: 3, b: 'bar', c: false}]);
 
-      const result3 = await query.compoundPk.run();
+      const result3 = await query.compoundPk;
       expect(result3).toEqual([{a: 'a', b: 1, c: 'c'}]);
     });
   });
@@ -48,7 +48,7 @@ describe('makeSchemaQuery', () => {
         transaciton,
         await getServerSchema(transaciton, schema),
       );
-      const result = await query.basic.one().run();
+      const result = await query.basic.one();
       expect(result).toEqual({id: '1', a: 2, b: 'foo', c: true});
     });
   });
@@ -60,7 +60,7 @@ describe('makeSchemaQuery', () => {
         transaciton,
         await getServerSchema(transaciton, schema),
       );
-      const result = await query.basic.where('id', 'non-existent').one().run();
+      const result = await query.basic.where('id', 'non-existent').one();
       expect(result).toEqual(undefined);
     });
   });

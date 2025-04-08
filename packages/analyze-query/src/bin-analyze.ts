@@ -154,7 +154,7 @@ async function runQuery(queryString: string): Promise<[number, number]> {
   const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
 
   const start = performance.now();
-  await q.run();
+  await q;
   const end = performance.now();
   return [start, end];
 }

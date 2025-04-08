@@ -135,7 +135,7 @@ beforeEach(async () => {
   await Promise.all(
     tables.map(async table => {
       const rows = mapResultToClientNames<Row[], typeof schema>(
-        await zqliteQueries[table].run(),
+        await zqliteQueries[table],
         schema,
         table,
       );
@@ -359,8 +359,8 @@ async function checkZqlAndSql(
   mustEditRows?: [table: string, row: Row][],
 ) {
   const pgResult = await runZqlAsSql(pg, zqliteQuery);
-  const zqliteResult = await zqliteQuery.run();
-  const zqlMemResult = await memoryQuery.run();
+  const zqliteResult = await zqliteQuery;
+  const zqlMemResult = await memoryQuery;
   const ast = (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol];
   // In failure output:
   // `-` is PG

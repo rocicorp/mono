@@ -104,11 +104,39 @@ export type Row<T extends TableSchema | Query<ZeroSchema, string, any>> =
       ? TReturn
       : never;
 
+/**
+ * A hybrid query that runs on both client and server.
+ * Results are returned immediately from the client followed by authoritative
+ * results from the server.
+ *
+ * Queries are transactional in that all queries update at once when a new transaction
+ * has been committed on the client or server. No query results will reflect stale state.
+ *
+ * A query can be:
+ * - materialized
+ * - run
+ * - preloaded
+ *
+ * The normal way to use a query would be through your UI framework's bindings (e.g., useQuery(q))
+ * or within a custom mutator.
+ *
+ * `materialize` and `run/then` are provided for more advanced use cases.
+ * Remember that any `view` returned by `materialize` must be destroyed.
+ *
+ * A query can be run as a 1-shot query by awaiting it. E.g.,
+ * ```ts
+ * const result = await z.query.issue.limit(10);
+ * ```
+ *
+ * For more information on how to use queries, see the documentation:
+ * https://zero.rocicorp.dev/docs/reading-data
+ *
+ */
 export interface Query<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
-> {
+> extends PromiseLike<HumanReadable<TReturn>> {
   readonly format: Format;
   hash(): string;
   updateTTL(ttl: TTL): void;
@@ -199,11 +227,6 @@ export interface Query<
   ): T;
 
   run(): Promise<HumanReadable<TReturn>>;
-
-  then<T1, T2 = never>(
-    onFulfilled?: (value: HumanReadable<TReturn>) => T1,
-    onRejected?: (reason: unknown) => T2,
-  ): Promise<T1 | T2>;
 
   preload(options?: PreloadOptions): {
     cleanup: () => void;
