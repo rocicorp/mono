@@ -200,6 +200,11 @@ export interface Query<
 
   run(): Promise<HumanReadable<TReturn>>;
 
+  then<T1, T2 = never>(
+    onFulfilled?: (value: HumanReadable<TReturn>) => T1,
+    onRejected?: (reason: unknown) => T2,
+  ): Promise<T1 | T2>;
+
   preload(options?: PreloadOptions): {
     cleanup: () => void;
     complete: Promise<void>;
