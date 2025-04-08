@@ -106,7 +106,7 @@ test('supports mutators without a namespace', async () => {
     createdAt: 1743018138477,
   });
 
-  const issues = await z.query.issue.run();
+  const issues = await z.query.issue;
   expect(issues[0].title).toEqual('no-namespace');
 });
 
@@ -173,15 +173,15 @@ test('custom mutators write to the local store', async () => {
     createdAt: 1743018138477,
   });
 
-  let issues = await z.query.issue.run();
+  let issues = await z.query.issue;
   expect(issues[0].title).toEqual('foo');
 
   await z.mutate.issue.setTitle({id: '1', title: 'bar'});
-  issues = await z.query.issue.run();
+  issues = await z.query.issue;
   expect(issues[0].title).toEqual('bar');
 
   await z.mutate.customNamespace.clown('1');
-  issues = await z.query.issue.run();
+  issues = await z.query.issue;
   expect(issues[0].title).toEqual('🤡');
 
   await z.mutate.issue.create({
@@ -192,11 +192,11 @@ test('custom mutators write to the local store', async () => {
     description: '',
     createdAt: 1743018138477,
   });
-  issues = await z.query.issue.run();
+  issues = await z.query.issue;
   expect(issues.length).toEqual(2);
 
   await z.mutate.issue.deleteTwoIssues({id1: issues[0].id, id2: issues[1].id});
-  issues = await z.query.issue.run();
+  issues = await z.query.issue;
   expect(issues.length).toEqual(0);
 });
 
@@ -209,7 +209,7 @@ test('custom mutators can query the local store during an optimistic mutation', 
           await tx.mutate.issue.insert(args);
         },
         closeAll: async tx => {
-          const issues = await tx.query.issue.run();
+          const issues = await tx.query.issue;
           await Promise.all(
             issues.map(issue =>
               tx.mutate.issue.update({id: issue.id, closed: true}),
@@ -232,12 +232,12 @@ test('custom mutators can query the local store during an optimistic mutation', 
       });
     }),
   );
-  let issues = await z.query.issue.where('closed', false).run();
+  let issues = await z.query.issue.where('closed', false);
   expect(issues.length).toEqual(10);
 
   await z.mutate.issue.closeAll();
 
-  issues = await z.query.issue.where('closed', false).run();
+  issues = await z.query.issue.where('closed', false);
   expect(issues.length).toEqual(0);
 });
 
@@ -305,7 +305,7 @@ describe('rebasing custom mutators', () => {
           ) => {
             await tx.mutate.issue.insert(args);
             const readIssue = must(
-              await tx.query.issue.where('id', args.id).one().run(),
+              await tx.query.issue.where('id', args.id).one(),
             );
             await tx.mutate.issue.update({
               ...readIssue,
@@ -325,7 +325,7 @@ describe('rebasing custom mutators', () => {
       createdAt: 1743018138477,
     });
 
-    const issue = must(await z.query.issue.where('id', '1').one().run());
+    const issue = must(await z.query.issue.where('id', '1').one());
     expect(issue.title).toEqual('foo updated');
     expect(issue.description).toEqual('updated');
   });
@@ -339,9 +339,9 @@ describe('rebasing custom mutators', () => {
           create: async (tx, args: InsertValue<typeof schema.tables.issue>) => {
             await tx.mutate.issue.insert(args);
             // query main. The issue should not be there yet.
-            expect(await z.query.issue.run()).length(0);
+            expect(await z.query.issue).length(0);
             // but it is in this tx
-            expect(await tx.query.issue.run()).length(1);
+            expect(await tx.query.issue).length(1);
 
             mutationRun = true;
           },
@@ -447,11 +447,11 @@ describe('server results and keeping read queries', () => {
             tx,
             _args: InsertValue<typeof schema.tables.issue>,
           ) => {
-            await tx.query.issue.run();
+            await tx.query.issue;
           },
 
           close: async (tx, _args: object) => {
-            await tx.query.issue.limit(1).run();
+            await tx.query.issue.limit(1);
           },
         },
       } as const satisfies CustomMutatorDefs<Schema>,
