@@ -59,6 +59,18 @@ export const capacityProvider = (
       'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role',
   });
 
+  // Attach CloudWatch agent policy for Container Insights
+  new aws.iam.RolePolicyAttachment(`${prefix}CloudWatchAgentPolicyAttachment`, {
+    role: instanceRole.name,
+    policyArn: 'arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy',
+  });
+
+  // Attach SSM policy to allow EC2 instance management
+  new aws.iam.RolePolicyAttachment(`${prefix}SSMPolicyAttachment`, {
+    role: instanceRole.name,
+    policyArn: 'arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore',
+  });
+
   // Attach custom policy for terminating instances in Auto Scaling Group
   const terminatePolicy = new aws.iam.Policy(
     `${prefix}InstanceTerminatePolicy`,
@@ -101,11 +113,11 @@ export const capacityProvider = (
   // Make the userData more explicit with an export path for ECS agent logs for debugging
   const userData = cluster.name.apply(
     name => `#!/bin/bash
-echo ECS_CLUSTER=${name} >> /etc/ecs/ecs.config
-echo ECS_LOGLEVEL=debug >> /etc/ecs/ecs.config
-echo ECS_AVAILABLE_LOGGING_DRIVERS='["json-file","awslogs"]' >> /etc/ecs/ecs.config
-systemctl restart ecs
-`,
+            echo ECS_CLUSTER=${name} >> /etc/ecs/ecs.config
+            echo ECS_LOGLEVEL=debug >> /etc/ecs/ecs.config
+            echo ECS_AVAILABLE_LOGGING_DRIVERS='["json-file","awslogs"]' >> /etc/ecs/ecs.config
+            systemctl restart ecs
+            `,
   );
 
   const ec2Template = new aws.ec2.LaunchTemplate(
