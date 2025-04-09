@@ -89,7 +89,7 @@ describe('makeSchemaCRUD', () => {
     });
   });
 
-  test('insert with missing columns', async () => {
+  test('insert/update/upsert with missing columns', async () => {
     await pg.begin(async tx => {
       const transaction = new Transaction(tx);
       const crud = crudProvider(
@@ -100,6 +100,40 @@ describe('makeSchemaCRUD', () => {
       await crud.basic.insert({id: '1', a: 2, b: 'foo'});
 
       await checkDb(tx, 'basic', [{id: '1', a: 2, b: 'foo', c: null}]);
+
+      // undefined should be allowed too.
+      await crud.basic.insert({id: '2', a: 2, b: 'foo', c: undefined});
+      await checkDb(tx, 'basic', [
+        {id: '1', a: 2, b: 'foo', c: null},
+        {id: '2', a: 2, b: 'foo', c: null},
+      ]);
+      await crud.basic.delete({id: '2'});
+
+      await crud.basic.update({id: '1', a: 3, b: 'bar', c: true});
+      await crud.basic.update({id: '1', a: 3, b: 'bar'});
+      await checkDb(tx, 'basic', [{id: '1', a: 3, b: 'bar', c: true}]);
+      await crud.basic.update({id: '1', a: 3, b: 'bar', c: undefined});
+      await checkDb(tx, 'basic', [{id: '1', a: 3, b: 'bar', c: true}]);
+
+      await crud.basic.upsert({id: '1', a: 3, b: 'bar'});
+      await checkDb(tx, 'basic', [{id: '1', a: 3, b: 'bar', c: true}]);
+      await crud.basic.upsert({id: '1', a: 3, b: 'bar', c: undefined});
+      await checkDb(tx, 'basic', [{id: '1', a: 3, b: 'bar', c: true}]);
+
+      // zero out the column
+      const row = {id: '1', a: 3, b: 'bar', c: null};
+      await crud.basic.upsert(row);
+      await checkDb(tx, 'basic', [row]);
+      await crud.basic.update({
+        ...row,
+        c: true,
+      });
+      await checkDb(tx, 'basic', [{...row, c: true}]);
+      await crud.basic.update({
+        ...row,
+        c: null,
+      });
+      await checkDb(tx, 'basic', [row]);
     });
   });
 
