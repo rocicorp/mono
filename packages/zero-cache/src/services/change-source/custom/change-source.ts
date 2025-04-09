@@ -185,6 +185,7 @@ export async function initialSync(
 
       case 'status':
         break; // Ignored
+      // @ts-expect-error: falls through if the tag is not 'reset-required
       case 'control': {
         const {tag, message} = change[1];
         if (tag === 'reset-required') {
@@ -192,10 +193,8 @@ export async function initialSync(
             message ?? 'auto-reset signaled by change source',
           );
         }
-        throw new Error(
-          `unexpected message during initial-sync: ${stringify(change)}`,
-        );
       }
+      // falls through
       case 'rollback':
         throw new Error(
           `unexpected message during initial-sync: ${stringify(change)}`,
