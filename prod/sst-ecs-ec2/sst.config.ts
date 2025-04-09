@@ -19,7 +19,6 @@ interface ZeroEnvironmentVars {
   ZERO_COMMAND?: string; // Optional for service-specific command
   [key: string]: string | $util.Output<string> | undefined; // Allow for any additional environment variables
 }
-
 export default $config({
   app(input) {
     return {
@@ -32,12 +31,11 @@ export default $config({
   },
   async run() {
     const {createDefu} = await import('defu');
-    const { networkConfig } = await import( './infra/network');
-    const { createAlb } = await import( './infra/alb');
+    const {networkConfig} = await import('./infra/network');
+    const {createAlb} = await import('./infra/alb');
     const {join} = await import('node:path');
-    const { capacityProvider } = await import( './infra/capacity-provider');
-    const { createService } = await import( './infra/service');
-
+    const {capacityProvider} = await import('./infra/capacity-provider');
+    const {createService} = await import('./infra/service');
 
     const replicationBucket = new sst.aws.Bucket(`replication-bucket`, {
       public: false,
@@ -57,13 +55,13 @@ export default $config({
       name: `${$app.name}-${$app.stage}-cluster`,
       settings: [
         {
-          name: "containerInsights",
-          value: "enabled"
-        }
-      ]
+          name: 'containerInsights',
+          value: 'enabled',
+        },
+      ],
     });
 
-    const provider = await capacityProvider(`${$app.name}-${$app.stage}`,{
+    const provider = await capacityProvider(`${$app.name}-${$app.stage}`, {
       vpcId: network.vpcId,
       privateSubnets: network.privateSubnets,
       cluster,
@@ -81,44 +79,55 @@ export default $config({
       AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
       ZERO_LOG_FORMAT: 'json',
       ZERO_REPLICA_FILE: 'sync-replica.db',
-      ZERO_LITESTREAM_BACKUP_URL: replicationBucket.name.apply(name => 
-        `s3://${name}/backup/20250319-00`
+      ZERO_LITESTREAM_BACKUP_URL: replicationBucket.name.apply(
+        name => `s3://${name}/backup/20250319-00`,
       ),
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
       ZERO_APP_ID: process.env.ZERO_APP_ID || 'zero',
     };
 
-    // Create the view-syncer service - ensure it depends on the capacity provider
-    const viewSyncerService = createService(`${$app.name}-${$app.stage}-view-syncer`, {
-      vpcId: network.vpcId,
-      privateSubnets: network.privateSubnets,
-      cluster,
-      capacityProvider: provider.capacityProvider,
-      targetGroup: alb.targetGroup,
-      albSecurityGroup: alb.albSecurityGroup,
-      commonEnv: {
-        ...commonEnv,
-        ZERO_COMMAND: 'view-syncer',
-      },
-      port: 4848, // Default port in service.ts is already 4848
-    });
-
     // Create the replication manager service - ensure it depends on the capacity provider
-    const replicationManagerService = createService(`${$app.name}-${$app.stage}-replication-manager`, {
-      vpcId: network.vpcId,
-      privateSubnets: network.privateSubnets,
-      cluster,
-      capacityProvider: provider.capacityProvider,
-      targetGroup: alb.internalTargetGroup,
-      albSecurityGroup: alb.internalAlbSecurityGroup || alb.albSecurityGroup,
-      commonEnv: {
-        ...commonEnv,
-        ZERO_COMMAND: 'replication-manager',
+    const replicationManagerService = createService(
+      `${$app.name}-${$app.stage}-replication-manager`,
+      {
+        vpcId: network.vpcId,
+        privateSubnets: network.privateSubnets,
+        cluster,
+        capacityProvider: provider.capacityProvider,
+        targetGroup: alb.internalTargetGroup,
+        albSecurityGroup: alb.internalAlbSecurityGroup || alb.albSecurityGroup,
+        commonEnv: {
+          ...commonEnv,
+          ZERO_CHANGE_MAX_CONNS: '3',
+          ZERO_NUM_SYNC_WORKERS: '0',
+          ZERO_COMMAND: 'replication-manager',
+        },
+        port: 4849, // Port for replication-manager
+        alb: alb.alb,
       },
-      port: 4849, // Port for replication-manager
-    });
+    );
 
- 
+    // Create the view-syncer service - ensure it depends on the capacity provider
+    const viewSyncerService = createService(
+      `${$app.name}-${$app.stage}-view-syncer`,
+      {
+        vpcId: network.vpcId,
+        privateSubnets: network.privateSubnets,
+        cluster,
+        capacityProvider: provider.capacityProvider,
+        targetGroup: alb.targetGroup,
+        albSecurityGroup: alb.albSecurityGroup,
+        commonEnv: {
+          ...commonEnv,
+          ZERO_COMMAND: 'view-syncer',
+          ZERO_CHANGE_STREAMER_URI: replicationManagerService.serviceUrl,
+          ZERO_UPSTREAM_MAX_CONNS: '15',
+          ZERO_CVR_MAX_CONNS: '160',
+        },
+        port: 4848, 
+        alb: alb.alb,
+      },
+    );
 
     // new command.local.Command('zero-deploy-permissions', {
     //   // Pulumi operates with cwd at the package root.
