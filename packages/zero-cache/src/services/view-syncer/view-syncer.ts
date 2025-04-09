@@ -931,6 +931,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#pipelines.removeQuery(hash);
       }
 
+      let totalProcessTime = 0;
       const timer = new Timer();
       const pipelines = this.#pipelines;
       function* generateRowChanges(slowHydrateThreshold: number) {
@@ -939,10 +940,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('hash', q.id)
             .withContext('transformationHash', q.transformationHash);
           lc.debug?.(`adding pipeline for query`, q.ast);
+
           timer.start();
           yield* pipelines.addQuery(q.transformationHash, q.ast);
           const elapsed = timer.stop();
+
           pipelines.setHydrationTime(q.transformationHash, elapsed);
+          totalProcessTime += elapsed;
           if (elapsed > slowHydrateThreshold) {
             lc.warn?.('Slow query materialization', elapsed, q.ast);
           }
@@ -962,7 +966,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         pokers,
         hashToIDs,
       );
-      const processTime = timer.totalElapsed();
 
       for (const patch of await updater.deleteUnreferencedRows(lc)) {
         await pokers.addPatch(patch);
@@ -986,7 +989,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       const wallTime = Date.now() - start;
       lc.info?.(
-        `finished processing queries (process: ${processTime} ms, wall: ${wallTime} ms)`,
+        `finished processing queries (process: ${totalProcessTime} ms, wall: ${wallTime} ms)`,
       );
     });
   }
