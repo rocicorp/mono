@@ -15,7 +15,7 @@ export interface Input {
 
   /**
    * Fetch data. May modify the data in place.
-   * Returns nodes sorted in order of {@linkcode SourceSchema.compareRows}.
+   * Returns nodes sorted in order of `SourceSchema.compareRows`.
    */
   fetch(req: FetchRequest): Stream<Node>;
 
