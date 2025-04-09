@@ -39,7 +39,7 @@ export function makeSchemaQuery<S extends Schema>(
         return target[prop];
       }
 
-      const q = new Z2SQuery(
+      const q = new ZPGQuery(
         schema,
         this.#serverSchema,
         prop,
@@ -59,7 +59,7 @@ export function makeSchemaQuery<S extends Schema>(
     ) as SchemaQuery<S>;
 }
 
-export class Z2SQuery<
+export class ZPGQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
@@ -67,6 +67,7 @@ export class Z2SQuery<
   readonly #dbTransaction: DBTransaction<unknown>;
   readonly #schema: TSchema;
   readonly #serverSchema: ServerSchema;
+
   #query:
     | {
         text: string;
@@ -99,8 +100,8 @@ export class Z2SQuery<
     tableName: TTable,
     ast: AST,
     format: Format,
-  ): Z2SQuery<TSchema, TTable, TReturn> {
-    return new Z2SQuery(
+  ): ZPGQuery<TSchema, TTable, TReturn> {
+    return new ZPGQuery(
       schema,
       this.#serverSchema,
       tableName,

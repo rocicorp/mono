@@ -85,3 +85,5 @@ debug-scratch.md
 repro/
 packages/zero/docs
 packages/zero-client/docs
+
+Chinook_PostgreSql.sql
