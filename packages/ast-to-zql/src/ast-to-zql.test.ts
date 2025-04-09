@@ -471,7 +471,7 @@ test('EXISTS with order', () => {
   };
 
   expect(astToZQL(ast)).toMatchInlineSnapshot(
-    `".whereExists('recruiter', q => q.where('y', '>', 0))).orderBy('id', 'asc')"`,
+    `".whereExists('recruiter', q => q.where('y', '>', 0)).orderBy('id', 'asc')"`,
   );
 });
 

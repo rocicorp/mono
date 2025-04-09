@@ -166,7 +166,7 @@ function transformExistsCondition(
     if (prefix === '.where') {
       return `.whereExists('${relationship}', q => q${astToZQL(
         related.subquery,
-      )}))`;
+      )})`;
     }
     prefix satisfies 'cmp';
     args.add('exists');
