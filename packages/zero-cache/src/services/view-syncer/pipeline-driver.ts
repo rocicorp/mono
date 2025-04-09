@@ -1,9 +1,11 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {deepEqual, type JSONValue} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
 import {buildPipeline} from '../../../../zql/src/builder/builder.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
@@ -353,18 +355,33 @@ export class PipelineDriver {
   }
 
   *#advance(diff: SnapshotDiff): Iterable<RowChange> {
-    for (const {table, prevValue, nextValue} of diff) {
-      if (prevValue) {
-        if (nextValue) {
+    for (const {table, prevValue, nextValue, rowKey} of diff) {
+      if (prevValue && nextValue) {
+        // Rows are ultimately referred to by the union key (in #streamNodes())
+        // so an update is represented as an `edit` if and only if the
+        // unionKey-based row keys are the same in prevValue and nextValue.
+        const {unionKey} = must(this.#tableSpecs.get(table)).tableSpec;
+        if (
+          Object.keys(rowKey).length === unionKey.length ||
+          deepEqual(
+            getRowKey(unionKey, prevValue as Row) as JSONValue,
+            getRowKey(unionKey, nextValue as Row) as JSONValue,
+          )
+        ) {
           yield* this.#push(table, {
             type: 'edit',
             row: nextValue as Row,
             oldRow: prevValue as Row,
           });
-        } else {
-          yield* this.#push(table, {type: 'remove', row: prevValue as Row});
+          continue;
         }
-      } else if (nextValue) {
+        // If the unionKey-based row keys differed, they will be
+        // represented as a remove of the old key and an add of the new key.
+      }
+      if (prevValue) {
+        yield* this.#push(table, {type: 'remove', row: prevValue as Row});
+      }
+      if (nextValue) {
         yield* this.#push(table, {type: 'add', row: nextValue as Row});
       }
     }
@@ -533,7 +550,7 @@ class Streamer {
 
     for (const node of nodes) {
       const {relationships, row} = node;
-      const rowKey = Object.fromEntries(primaryKey.map(col => [col, row[col]]));
+      const rowKey = getRowKey(primaryKey, row);
 
       yield {
         type: op,
@@ -555,4 +572,8 @@ function* toAdds(nodes: Iterable<Node>): Iterable<Change> {
   for (const node of nodes) {
     yield {type: 'add', node};
   }
+}
+
+function getRowKey(cols: PrimaryKey, row: Row): RowKey {
+  return Object.fromEntries(cols.map(col => [col, must(row[col])]));
 }

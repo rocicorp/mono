@@ -187,6 +187,7 @@ export type Change = {
   readonly table: string;
   readonly prevValue: Readonly<RowValue> | null;
   readonly nextValue: Readonly<RowValue> | null;
+  readonly rowKey: RowKey;
 };
 
 /**
@@ -423,7 +424,9 @@ class Diff implements SnapshotDiff {
             if (nextValue) {
               nextValue = fromSQLiteTypes(zqlSpec, nextValue);
             }
-            return {value: {table, prevValue, nextValue} satisfies Change};
+            return {
+              value: {table, prevValue, nextValue, rowKey} satisfies Change,
+            };
           }
         } catch (e) {
           // This control flow path is not covered by the return() method (i.e. `break`).
