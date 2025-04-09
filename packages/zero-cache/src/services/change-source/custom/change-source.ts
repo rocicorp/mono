@@ -13,7 +13,10 @@ import type {
   ChangeSource,
   ChangeStream,
 } from '../../change-streamer/change-streamer-service.ts';
-import {type ReplicationConfig} from '../../change-streamer/schema/tables.ts';
+import {
+  AutoResetSignal,
+  type ReplicationConfig,
+} from '../../change-streamer/schema/tables.ts';
 import {ChangeProcessor} from '../../replicator/change-processor.ts';
 import {initChangeLog} from '../../replicator/schema/change-log.ts';
 import {
@@ -182,7 +185,16 @@ export async function initialSync(
 
       case 'status':
         break; // Ignored
-      case 'control':
+      // @ts-expect-error: falls through if the tag is not 'reset-required
+      case 'control': {
+        const {tag, message} = change[1];
+        if (tag === 'reset-required') {
+          throw new AutoResetSignal(
+            message ?? 'auto-reset signaled by change source',
+          );
+        }
+      }
+      // falls through
       case 'rollback':
         throw new Error(
           `unexpected message during initial-sync: ${stringify(change)}`,
