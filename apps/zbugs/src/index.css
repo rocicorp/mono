@@ -908,6 +908,7 @@ textarea.autoResize {
   max-width: 40rem;
   gap: 2rem;
   width: 100%;
+  padding: 0;
 
   a {
     color: var(--color-primary-cta);
