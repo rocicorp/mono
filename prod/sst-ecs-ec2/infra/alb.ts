@@ -65,7 +65,8 @@ export const createAlb = (
       targetType: 'ip',
       healthCheck: {
         enabled: true,
-        path: '/keepalive', // Matches BASE_TRANSFORM.target.healthCheck.path
+        path: '/keepalive',
+        port: '4848', // Explicitly set port for view-syncer
         protocol: 'HTTP',
         interval: 5, // Matches BASE_TRANSFORM.target.healthCheck.interval
         healthyThreshold: 2, // Matches BASE_TRANSFORM.target.healthCheck.healthyThreshold
@@ -174,6 +175,7 @@ export const createAlb = (
         healthCheck: {
           enabled: true,
           path: '/keepalive',
+          port: '4849', // Explicitly set port for replication-manager
           protocol: 'HTTP',
           interval: 5,
           healthyThreshold: 2,
