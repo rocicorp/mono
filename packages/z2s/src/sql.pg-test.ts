@@ -2,7 +2,8 @@ import {testDBs} from '../../zero-cache/src/test/db.ts';
 import {beforeAll, describe, expect, test} from 'vitest';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import type {JSONValue} from 'postgres';
-import {formatPgInternalConvert, sqlConvertArg, sql} from './sql.ts';
+import {formatPgInternalConvert, sqlConvertColumnArg, sql} from './sql.ts';
+import type {SQLQuery} from '@databases/sql';
 
 const DB_NAME = 'sql-test';
 
@@ -52,12 +53,12 @@ describe('SQL builder with PostgreSQL', () => {
           INSERT INTO test_items (
             name, value, metadata, "isActive", "createdAt", tags
           ) VALUES (
-            ${sqlConvertArg('string', item.name)},
-            ${sqlConvertArg('number', item.value)},
+            ${sqlConvertArg('text', item.name)},
+            ${sqlConvertArg('numeric', item.value)},
             ${sqlConvertArg('json', item.metadata)},
             ${sqlConvertArg('boolean', item.isActive)},
             ${sqlConvertArg('timestamp', item.createdAt)},
-            ${sqlConvertArg('string', item.tags, true)}
+            ${sqlConvertArg('text', item.tags, plural)}
           )
         `,
       );
@@ -80,10 +81,10 @@ describe('SQL builder with PostgreSQL', () => {
           tags
         FROM test_items
         WHERE
-          value = ANY (${sqlConvertArg('number', values, true)})
-          AND "createdAt" = ANY (${sqlConvertArg('timestamp', timestamps, true)})
-          AND "isActive" = ${sqlConvertArg('boolean', true)}
-          AND metadata->>'key' = ${sqlConvertArg('string', 'value1')}
+          value = ANY (${sqlConvertArg('numeric', values, pluralComparison)})
+          AND "createdAt" = ANY (${sqlConvertArg('timestamp', timestamps, pluralComparison)})
+          AND "isActive" = ${sqlConvertArg('boolean', true, singularComparison)}
+          AND metadata->>'key' = ${sqlConvertArg('text', 'value1', singularComparison)}
           AND 'tag1' = ANY(tags)
         ORDER BY id
       `,
@@ -100,3 +101,32 @@ describe('SQL builder with PostgreSQL', () => {
     });
   });
 });
+
+const pluralComparison = {
+  plural: true,
+  comparison: true,
+};
+
+const singularComparison = {
+  comparison: true,
+};
+
+const plural = {
+  plural: true,
+};
+
+function sqlConvertArg(
+  type: string,
+  value: unknown,
+  {plural, comparison}: {plural?: boolean; comparison?: boolean} = {},
+): SQLQuery {
+  return sqlConvertColumnArg(
+    {
+      isEnum: false,
+      type,
+    },
+    value,
+    !!plural,
+    !!comparison,
+  );
+}

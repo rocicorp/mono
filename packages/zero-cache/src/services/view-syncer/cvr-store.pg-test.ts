@@ -640,7 +640,7 @@ describe('view-syncer/cvr-store', () => {
             "lastActive": 1732320000000,
             "owner": "my-task",
             "replicaVersion": "01",
-            "version": "18w",
+            "version": "18m",
           },
         ]
       `);
@@ -654,7 +654,7 @@ describe('view-syncer/cvr-store', () => {
             Result [
               {
                 "clientGroupID": "my-cvr",
-                "version": "18w",
+                "version": "18m",
               },
             ]
           `);

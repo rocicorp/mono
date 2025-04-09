@@ -1,0 +1,82 @@
+import {describe, expect, test, vi} from 'vitest';
+import {PushProcessor} from './web.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {CustomMutatorDefs} from './custom.ts';
+import type {DBConnection, DBTransaction} from '../../zql/src/mutate/custom.ts';
+import {type PushBody} from '../../zero-protocol/src/push.ts';
+import * as v from '../../shared/src/valita.ts';
+
+describe('PushProcessor', () => {
+  const body = {
+    pushVersion: 1,
+    requestID: 'test_request_id',
+    timestamp: 1234567890,
+    schemaVersion: 1,
+    clientGroupID: 'test_client_group',
+    mutations: [],
+  } satisfies PushBody;
+
+  const mockSchema = {
+    tables: {},
+    relationships: {},
+  } satisfies Schema;
+
+  const mockConnectionProvider = vi.fn().mockResolvedValue({
+    transaction: vi.fn().mockImplementation(callback => {
+      const mockTx = {} as DBTransaction<unknown>;
+      return callback(mockTx);
+    }),
+  } as unknown as DBConnection<unknown>);
+
+  // Mock mutators
+  const mockMutators = {} as CustomMutatorDefs<Schema, unknown>;
+
+  test('should accept Record<string, string> as params', async () => {
+    const processor = new PushProcessor(mockSchema, mockConnectionProvider);
+
+    const params: Record<string, string> = {
+      schema: 'test_schema',
+      appID: 'test_client_group',
+    };
+
+    const spy = vi.spyOn(v, 'parse');
+    await processor.process(mockMutators, params, body);
+
+    expect(spy.mock.calls[1][0]).toMatchInlineSnapshot(`
+      {
+        "appID": "test_client_group",
+        "schema": "test_schema",
+      }
+    `);
+  });
+
+  test('should accept URLSearchParams as params', async () => {
+    const processor = new PushProcessor(mockSchema, mockConnectionProvider);
+
+    const urlParams = new URLSearchParams();
+    urlParams.append('schema', 'test_schema');
+    urlParams.append('appID', 'test_client_group');
+
+    const spy = vi.spyOn(v, 'parse');
+    await processor.process(mockMutators, urlParams, body);
+
+    expect(spy.mock.calls[1][0]).toMatchInlineSnapshot(`
+      {
+        "appID": "test_client_group",
+        "schema": "test_schema",
+      }
+    `);
+  });
+
+  test('invalid params throw', async () => {
+    const processor = new PushProcessor(mockSchema, mockConnectionProvider);
+
+    const invalidParams: Record<string, string> = {
+      // Missing schema and clientGroupID
+    };
+
+    await expect(
+      processor.process(mockMutators, invalidParams, body),
+    ).rejects.toThrow('Missing property schema');
+  });
+});

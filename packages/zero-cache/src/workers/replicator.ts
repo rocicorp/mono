@@ -38,7 +38,6 @@ async function connect(
   mode: ReplicaFileMode,
 ): Promise<Database> {
   const replica = new Database(lc, file);
-  const start = Date.now();
 
   // Perform any upgrades to the replica in case the backup is an
   // earlier version.
@@ -73,13 +72,21 @@ async function connect(
     const millisSinceLastEvent =
       Date.now() - (events.at(-1)?.timestamp.getTime() ?? 0);
     if (millisSinceLastEvent / MILLIS_PER_HOUR > vacuumIntervalHours) {
-      lc.info?.(`Performing maintenance VACUUM on ${file}`);
+      lc.info?.(`Performing maintenance cleanup on ${file}`);
+      const t0 = performance.now();
       replica.unsafeMode(true);
       replica.pragma('journal_mode = OFF');
+      // Clear the changeLog to reclaim as much space as possible. The
+      // changeLog is only used for IVM advancements (i.e. from an initial
+      // hydration), so it is fine for it to be empty at startup.
+      replica.exec('DELETE FROM "_zero.changeLog"');
+      const t1 = performance.now();
+      lc.info?.(`Cleared _zero.changeLog (${t1 - t0} ms)`);
       replica.exec('VACUUM');
       recordEvent(replica, 'vacuum');
       replica.unsafeMode(false);
-      lc.info?.(`VACUUM completed (${Date.now() - start} ms)`);
+      const t2 = performance.now();
+      lc.info?.(`VACUUM completed (${t2 - t1} ms)`);
     }
   }
 
@@ -92,6 +99,10 @@ async function connect(
   replica.pragma('busy_timeout = 30000');
 
   replica.pragma('optimize = 0x10002');
+  // Cap the running time of `PRAGMA optimize` calls that happen
+  // after replicating schema changes. 1000 is the limit recommended
+  // in https://sqlite.org/lang_analyze.html#approx
+  replica.pragma('analysis_limit = 1000');
   lc.info?.(`optimized ${file}`);
   return replica;
 }

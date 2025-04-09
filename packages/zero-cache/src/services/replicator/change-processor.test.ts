@@ -899,7 +899,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -985,13 +985,13 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'bar',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1104,7 +1104,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1185,7 +1185,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1253,7 +1253,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1335,7 +1335,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1420,7 +1420,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1503,7 +1503,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1591,7 +1591,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1675,7 +1675,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1769,7 +1769,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
           {
             stateVersion: '0e',
@@ -1836,7 +1836,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
         ],
       },
@@ -1870,7 +1870,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '0e',
             table: 'foo',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
         ],
       },
@@ -1972,7 +1972,7 @@ describe('replicator/incremental-sync', () => {
             stateVersion: '07',
             table: 'transaction',
             op: 'r',
-            rowKey: null,
+            rowKey: '',
           },
         ],
       },

@@ -1,12 +1,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   number,
   string,
   table,
-  timestamp,
-} from '../../../../zero-schema/src/builder/table-builder.ts';
+} from '../../../zero-schema/src/builder/table-builder.ts';
 
 // auto-generated from `Chinook_PostgreSql.sql` by Claude
 // Table definitions
@@ -50,8 +49,8 @@ const employee = table('employee')
     firstName: string().from('first_name'),
     title: string().optional(),
     reportsTo: number().optional().from('reports_to'),
-    birthDate: timestamp().optional().from('birth_date'),
-    hireDate: timestamp().optional().from('hire_date'),
+    birthDate: number().optional().from('birth_date'),
+    hireDate: number().optional().from('hire_date'),
     address: string().optional(),
     city: string().optional(),
     state: string().optional(),
@@ -74,7 +73,7 @@ const invoice = table('invoice')
   .columns({
     id: number().from('invoice_id'),
     customerId: number().from('customer_id'),
-    invoiceDate: timestamp().from('invoice_date'),
+    invoiceDate: number().from('invoice_date'),
     billingAddress: string().optional().from('billing_address'),
     billingCity: string().optional().from('billing_city'),
     billingState: string().optional().from('billing_state'),

@@ -2,11 +2,8 @@ import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
-import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {type Row} from '../../zero-protocol/src/data.ts';
-import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import {
   completedAstSymbol,
   newQuery,
@@ -20,15 +17,56 @@ import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
-import {compile, extractZqlResult} from './compiler.ts';
-import {formatPgInternalConvert} from './sql.ts';
+import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
+import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import {Client} from 'pg';
-import './test/comparePg.ts';
+import './helpers/comparePg.ts';
+import {fillPgAndSync} from './helpers/setup.ts';
+import type {ServerSchema} from '../../z2s/src/schema.ts';
 
 const lc = createSilentLogContext();
 
 const BASE_TIMESTAMP = 1743127752952;
 const DB_NAME = 'compiler';
+
+const serverSchema: ServerSchema = {
+  issues: {
+    id: {type: 'text', isEnum: false},
+    title: {type: 'text', isEnum: false},
+    description: {type: 'text', isEnum: false},
+    closed: {type: 'boolean', isEnum: false},
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    owner_id: {type: 'text', isEnum: false},
+    createdAt: {type: 'timestamp without time zone', isEnum: false},
+  },
+  users: {
+    id: {type: 'text', isEnum: false},
+    name: {type: 'text', isEnum: false},
+    metadata: {type: 'jsonb', isEnum: false},
+  },
+  comments: {
+    id: {type: 'text', isEnum: false},
+    authorId: {type: 'text', isEnum: false},
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    issue_id: {type: 'text', isEnum: false},
+    text: {type: 'text', isEnum: false},
+    createdAt: {type: 'timestamp without time zone', isEnum: false},
+  },
+  issueLabel: {
+    issueId: {type: 'text', isEnum: false},
+    labelId: {type: 'text', isEnum: false},
+  },
+  label: {
+    id: {type: 'text', isEnum: false},
+    name: {type: 'text', isEnum: false},
+  },
+  revision: {
+    id: {type: 'text', isEnum: false},
+    authorId: {type: 'text', isEnum: false},
+    commentId: {type: 'text', isEnum: false},
+    text: {type: 'text', isEnum: false},
+  },
+} as const;
 
 let pg: PostgresDB;
 let nodePostgres: Client;
@@ -42,8 +80,6 @@ let issueQuery: Query<Schema, 'issue'>;
  * These test will likely be deprecated.
  */
 beforeAll(async () => {
-  pg = await testDBs.create(DB_NAME, undefined, false);
-  await pg.unsafe(createTableSQL);
   sqlite = new Database(lc, ':memory:');
   const testData = {
     issue: Array.from({length: 3}, (_, i) => ({
@@ -89,30 +125,11 @@ beforeAll(async () => {
     })),
   };
 
-  const mapper = clientToServer(schema.tables);
-  for (const [table, rows] of Object.entries(testData)) {
-    const columns = Object.keys(rows[0]);
-    const forPg = rows.map(row =>
-      columns.reduce(
-        (acc, c) => ({
-          ...acc,
-          [mapper.columnName(table, c)]: row[c as keyof typeof row],
-        }),
-        {} as Record<string, unknown>,
-      ),
-    );
-    await pg`INSERT INTO ${pg(mapper.tableName(table))} ${pg(forPg)}`;
-  }
-  await initialSync(
-    lc,
-    {appID: 'compiler_pg_test', shardNum: 0, publications: []},
-    sqlite,
-    getConnectionURI(pg),
-    {tableCopyWorkers: 1, rowBatchSize: 10000},
-  );
+  const setup = await fillPgAndSync(schema, createTableSQL, testData, DB_NAME);
+  pg = setup.pg;
+  sqlite = setup.sqlite;
 
   const queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
-
   issueQuery = newQuery(queryDelegate, schema, 'issue');
 
   // Check that PG, SQLite, and test data are in sync
@@ -219,7 +236,8 @@ afterAll(async () => {
   await nodePostgres.end();
 });
 
-function ast(q: Query<Schema, keyof Schema['tables']>) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ast(q: Query<Schema, keyof Schema['tables'], any>) {
   return (q as QueryImpl<Schema, keyof Schema['tables']>)[completedAstSymbol];
 }
 
@@ -245,19 +263,17 @@ describe('compiling ZQL to SQL', () => {
         (await nodePostgres.query(query, args as JSONValue[])).rows,
     );
   });
-  function t(runPgQuery: (query: string, args: unknown[]) => Promise<unknown>) {
+  function t(
+    runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
+  ) {
     test('basic where clause', async () => {
       const query = issueQuery.where('title', '=', 'Test Issue 1');
-      const c = compile(ast(query), schema.tables);
+      const c = compile(ast(query), schema.tables, serverSchema);
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
-      const zqlResult = mapResultToClientNames(
-        await query.run(),
-        schema,
-        'issue',
-      );
+      const zqlResult = mapResultToClientNames(await query, schema, 'issue');
       expect(zqlResult).toEqualPg(pgResult);
       expect(zqlResult).toMatchInlineSnapshot(`
         [
@@ -278,16 +294,12 @@ describe('compiling ZQL to SQL', () => {
         .where('closed', '=', false)
         .where('ownerId', 'IS NOT', null);
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables),
+        compile(ast(query), schema.tables, serverSchema),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
-      const zqlResult = mapResultToClientNames(
-        await query.run(),
-        schema,
-        'issue',
-      );
+      const zqlResult = mapResultToClientNames(await query, schema, 'issue');
       expect(zqlResult).toEqualPg(pgResult);
       expect(zqlResult).toMatchInlineSnapshot(`
       [
@@ -308,16 +320,12 @@ describe('compiling ZQL to SQL', () => {
         q.where('name', '=', 'bug'),
       );
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables),
+        compile(ast(query), schema.tables, serverSchema),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
-      const zqlResult = mapResultToClientNames(
-        await query.run(),
-        schema,
-        'issue',
-      );
+      const zqlResult = mapResultToClientNames(await query, schema, 'issue');
       expect(zqlResult).toEqualPg(pgResult);
       expect(zqlResult).toMatchInlineSnapshot(`[]`);
     });
@@ -325,16 +333,12 @@ describe('compiling ZQL to SQL', () => {
     test('order by and limit', async () => {
       const query = issueQuery.orderBy('title', 'desc').limit(5);
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables),
+        compile(ast(query), schema.tables, serverSchema),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
-      const zqlResult = mapResultToClientNames(
-        await query.run(),
-        schema,
-        'issue',
-      );
+      const zqlResult = mapResultToClientNames(await query, schema, 'issue');
       expect(zqlResult).toEqualPg(pgResult);
       expect(zqlResult).toMatchInlineSnapshot(`
         [
@@ -369,16 +373,12 @@ describe('compiling ZQL to SQL', () => {
     test('1 to 1 foreign key relationship', async () => {
       const query = issueQuery.related('owner');
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables, query.format),
+        compile(ast(query), schema.tables, serverSchema, query.format),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
-      const zqlResult = mapResultToClientNames(
-        await query.run(),
-        schema,
-        'issue',
-      );
+      const zqlResult = mapResultToClientNames(await query, schema, 'issue');
       expect(zqlResult).toEqualPg(pgResult);
       expect(zqlResult).toMatchInlineSnapshot(`
         [
@@ -430,16 +430,12 @@ describe('compiling ZQL to SQL', () => {
     test('1 to many foreign key relationship', async () => {
       const query = issueQuery.related('comments');
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables, query.format),
+        compile(ast(query), schema.tables, serverSchema, query.format),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
-      const zqlResult = mapResultToClientNames(
-        await query.run(),
-        schema,
-        'issue',
-      );
+      const zqlResult = mapResultToClientNames(await query, schema, 'issue');
       expect(zqlResult).toEqualPg(pgResult);
       expect(zqlResult).toMatchInlineSnapshot(`
               [
@@ -522,16 +518,12 @@ describe('compiling ZQL to SQL', () => {
     test('junction relationship', async () => {
       const query = issueQuery.related('labels');
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables, query.format),
+        compile(ast(query), schema.tables, serverSchema, query.format),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
-      const zqlResult = mapResultToClientNames(
-        await query.run(),
-        schema,
-        'issue',
-      );
+      const zqlResult = mapResultToClientNames(await query, schema, 'issue');
       expect(zqlResult).toEqualPg(pgResult);
       expect(zqlResult).toMatchInlineSnapshot(`
                         [
@@ -595,16 +587,12 @@ describe('compiling ZQL to SQL', () => {
             .related('author'),
         );
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables, query.format),
+        compile(ast(query), schema.tables, serverSchema, query.format),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
-      const zqlResult = mapResultToClientNames(
-        await query.run(),
-        schema,
-        'issue',
-      );
+      const zqlResult = mapResultToClientNames(await query, schema, 'issue');
       expect(zqlResult).toEqualPg(pgResult);
       expect(zqlResult).toMatchInlineSnapshot(`
         [
@@ -652,16 +640,12 @@ describe('compiling ZQL to SQL', () => {
         )
         .orderBy('title', 'asc');
       const sqlQuery = formatPgInternalConvert(
-        compile(ast(query), schema.tables, query.format),
+        compile(ast(query), schema.tables, serverSchema, query.format),
       );
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values),
       );
-      const zqlResult = mapResultToClientNames(
-        await query.run(),
-        schema,
-        'issue',
-      );
+      const zqlResult = mapResultToClientNames(await query, schema, 'issue');
       expect(zqlResult).toEqualPg(pgResult);
       expect(zqlResult).toMatchInlineSnapshot(`
         [

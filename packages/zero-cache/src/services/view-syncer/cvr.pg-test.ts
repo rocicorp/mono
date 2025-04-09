@@ -931,11 +931,11 @@ describe('view-syncer/cvr', () => {
       {
         "clients": 2,
         "desires": 6,
-        "instances": 2,
+        "instances": 1,
         "queries": 7,
         "rows": 0,
         "rowsDeferred": 0,
-        "statements": 18,
+        "statements": 17,
       }
     `);
     expect(updated).toEqual({
@@ -1615,16 +1615,16 @@ describe('view-syncer/cvr', () => {
       Date.UTC(2024, 3, 23, 1),
     );
     expect(flushed).toMatchInlineSnapshot(`
-        {
-          "clients": 0,
-          "desires": 0,
-          "instances": 2,
-          "queries": 1,
-          "rows": 3,
-          "rowsDeferred": 0,
-          "statements": 5,
-        }
-      `);
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 1,
+        "queries": 1,
+        "rows": 3,
+        "rowsDeferred": 0,
+        "statements": 4,
+      }
+    `);
 
     expect(
       await cvrStore.catchupConfigPatches(
@@ -2045,16 +2045,16 @@ describe('view-syncer/cvr', () => {
       Date.UTC(2024, 3, 23, 1),
     );
     expect(flushed).toMatchInlineSnapshot(`
-        {
-          "clients": 0,
-          "desires": 0,
-          "instances": 2,
-          "queries": 1,
-          "rows": 2,
-          "rowsDeferred": 0,
-          "statements": 5,
-        }
-      `);
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 1,
+        "queries": 1,
+        "rows": 2,
+        "rowsDeferred": 0,
+        "statements": 4,
+      }
+    `);
 
     expect(
       await cvrStore.catchupConfigPatches(
@@ -2289,11 +2289,11 @@ describe('view-syncer/cvr', () => {
       {
         "clients": 0,
         "desires": 0,
-        "instances": 2,
+        "instances": 1,
         "queries": 1,
         "rows": 0,
         "rowsDeferred": 0,
-        "statements": 4,
+        "statements": 3,
       }
     `);
 
@@ -2612,11 +2612,11 @@ describe('view-syncer/cvr', () => {
       {
         "clients": 0,
         "desires": 0,
-        "instances": 2,
+        "instances": 1,
         "queries": 2,
         "rows": 2,
         "rowsDeferred": 0,
-        "statements": 6,
+        "statements": 5,
       }
     `);
 
@@ -3058,11 +3058,11 @@ describe('view-syncer/cvr', () => {
       {
         "clients": 0,
         "desires": 0,
-        "instances": 2,
+        "instances": 1,
         "queries": 1,
         "rows": 2,
         "rowsDeferred": 0,
-        "statements": 5,
+        "statements": 4,
       }
     `);
 
@@ -3917,11 +3917,11 @@ describe('view-syncer/cvr', () => {
       {
         "clients": 0,
         "desires": 0,
-        "instances": 2,
+        "instances": 1,
         "queries": 0,
         "rows": 6,
         "rowsDeferred": 0,
-        "statements": 6,
+        "statements": 5,
       }
     `);
 
@@ -4145,11 +4145,11 @@ describe('view-syncer/cvr', () => {
       {
         "clients": 0,
         "desires": 0,
-        "instances": 2,
+        "instances": 1,
         "queries": 0,
         "rows": 1,
         "rowsDeferred": 0,
-        "statements": 4,
+        "statements": 3,
       }
     `);
 
@@ -4354,22 +4354,12 @@ describe('view-syncer/cvr', () => {
     ] satisfies PatchToVersion[]);
 
     // Same last active day (no index change), but different hour.
-    const {cvr: updated, flushed} = await updater.flush(
+    const {flushed} = await updater.flush(
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
     );
-    expect(flushed).toMatchInlineSnapshot(`
-      {
-        "clients": 0,
-        "desires": 0,
-        "instances": 2,
-        "queries": 0,
-        "rows": 0,
-        "rowsDeferred": 0,
-        "statements": 3,
-      }
-    `);
+    expect(flushed).toBe(false);
 
     // Verify round tripping.
     const cvrStore2 = new CVRStore(
@@ -4381,19 +4371,15 @@ describe('view-syncer/cvr', () => {
       ON_FAILURE,
     );
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
-    expect(reloaded).toEqual(updated);
+    expect(reloaded).toEqual(cvr);
 
     await expectState(db, {
       ...initialState,
       instances: [
         {
-          clientGroupID: 'abc123',
-          version: '1ba',
-          replicaVersion: '120',
-          lastActive: Date.UTC(2024, 3, 23, 1),
+          ...initialState.instances[0],
           owner: 'my-task',
           grantedAt: 1709251200000,
-          clientSchema: null,
         },
       ],
     });
@@ -5188,11 +5174,11 @@ describe('view-syncer/cvr', () => {
       {
         "clients": 1,
         "desires": 1,
-        "instances": 2,
+        "instances": 1,
         "queries": 1,
         "rows": 0,
         "rowsDeferred": 0,
-        "statements": 6,
+        "statements": 5,
       }
     `);
 

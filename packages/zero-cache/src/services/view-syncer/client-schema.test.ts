@@ -68,7 +68,7 @@ describe('client schemas', () => {
             },
           },
         },
-      },
+      } satisfies ClientSchema,
     ],
     [
       {
@@ -86,29 +86,7 @@ describe('client schemas', () => {
             },
           },
         },
-      },
-    ],
-    [
-      {
-        tables: {
-          bar: {
-            columns: {
-              e: {type: 'boolean'},
-              id: {type: 'string'},
-              f: {type: 'json'},
-              d: {type: 'number'},
-            },
-          },
-          foo: {
-            columns: {
-              c: {type: 'json'},
-              id: {type: 'string'},
-              a: {type: 'number'},
-              b: {type: 'boolean'},
-            },
-          },
-        },
-      },
+      } satisfies ClientSchema,
     ],
     [
       {
@@ -127,13 +105,35 @@ describe('client schemas', () => {
               id: {type: 'string'},
               a: {type: 'number'},
               b: {type: 'boolean'},
-              d: {type: 'timestamp'},
-              e: {type: 'timestamp'},
-              f: {type: 'date'},
             },
           },
         },
-      },
+      } satisfies ClientSchema,
+    ],
+    [
+      {
+        tables: {
+          bar: {
+            columns: {
+              e: {type: 'boolean'},
+              id: {type: 'string'},
+              f: {type: 'json'},
+              d: {type: 'number'},
+            },
+          },
+          foo: {
+            columns: {
+              c: {type: 'json'},
+              id: {type: 'string'},
+              a: {type: 'number'},
+              b: {type: 'boolean'},
+              d: {type: 'number'},
+              e: {type: 'number'},
+              f: {type: 'number'},
+            },
+          },
+        },
+      } satisfies ClientSchema,
     ],
   ] as [ClientSchema][])('subset okay: %o', clientSchema => {
     checkClientSchema(SHARD_ID, clientSchema, tableSpecs, fullTables);

@@ -497,6 +497,12 @@ describe('integration', {timeout: 30000}, () => {
     }
   }
 
+  async function expectNoPokes(client: Queue<unknown>) {
+    // Use the dequeue() API that cancels the dequeue() request after a timeout.
+    const timedOut = 'nothing';
+    expect(await client.dequeue(timedOut, 500)).toBe(timedOut);
+  }
+
   afterEach(async () => {
     try {
       zeros.forEach(zero => zero.kill('SIGTERM')); // initiate and await graceful shutdown
@@ -924,18 +930,12 @@ describe('integration', {timeout: 30000}, () => {
         ]);
       }
 
-      // A rare case of a no-op poke happens when the advancement resets the
-      // pipelines, bumping the CVR to the current state version. This conveniently
-      // allows the integration test to correctly wait for the schema change to
-      // take effect.
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokeStart',
-        {pokeID: WATERMARK_REGEX},
-      ]);
-      expect(await downstream.dequeue()).toMatchObject([
-        'pokeEnd',
-        {pokeID: WATERMARK_REGEX},
-      ]);
+      // The schema change should result in resetting the pipelines but no
+      // poke will result. expectNoPoke() verifies that nothing arrives for
+      // a short interval of time, which also allows the schema change to
+      // take effect (which is necessary for the subsequent
+      // "changeDesiredQueries" to succeed).
+      await expectNoPokes(downstream);
 
       // Now that nopk has a unique index, add a query to retrieve the data.
       ws.send(

@@ -73,10 +73,10 @@ describe('streams with flow control', () => {
   });
 
   test.each([
-    // With the default 16k buffer, sending 4 ~8k messages should result in 2 drains.
-    [{}, 2],
+    // With a 16k buffer, sending 4 ~8k messages should result in 2 drains.
+    [{highWaterMark: 16_384}, 2],
     // With a 64k buffer, sending 4 ~8k messages should not block for any drains.
-    [{highWaterMark: 64_000}, 0],
+    [{highWaterMark: 65_536}, 0],
   ])('stream out with back pressure: %o', async (streamOptions, numDrains) => {
     const out = [
       {

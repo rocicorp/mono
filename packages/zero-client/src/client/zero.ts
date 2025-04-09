@@ -24,6 +24,7 @@ import {
   getBrowserGlobal,
   mustGetBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
+import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -133,7 +134,6 @@ import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
-import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -1557,7 +1557,8 @@ export class Zero<
         }
       } catch (ex) {
         if (this.#connectionState !== ConnectionState.Connected) {
-          lc.error?.('Failed to connect', ex, {
+          const level = isAuthError(ex) ? 'warn' : 'error';
+          lc[level]?.('Failed to connect', ex, {
             lmid: this.#lastMutationIDReceived,
             baseCookie: this.#connectCookie,
           });
@@ -1730,7 +1731,7 @@ export class Zero<
    * Starts a ping and waits for a pong.
    *
    * If it takes too long to get a pong we disconnect and this returns
-   * {@code PingResult.TimedOut}.
+   * {@linkcode PingResult.TimedOut}.
    */
   async #ping(
     l: LogContext,

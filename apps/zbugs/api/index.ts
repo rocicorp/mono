@@ -11,6 +11,7 @@ import {handlePush} from '../server/push-handler.ts';
 import {must} from '../../../packages/shared/src/must.ts';
 import assert from 'assert';
 import {authDataSchema, type AuthData} from '../shared/auth.ts';
+import type {ReadonlyJSONValue} from '@rocicorp/zero';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -110,7 +111,10 @@ fastify.get<{
     );
 });
 
-fastify.post('/api/push', async function (request, reply) {
+fastify.post<{
+  Querystring: Record<string, string>;
+  Body: ReadonlyJSONValue;
+}>('/api/push', async function (request, reply) {
   let {authorization} = request.headers;
   if (authorization !== undefined) {
     assert(authorization.toLowerCase().startsWith('bearer '));

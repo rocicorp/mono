@@ -21,6 +21,7 @@ import type {
   ChangeSource,
   ChangeStream,
 } from '../../change-streamer/change-streamer-service.ts';
+import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {getSubscriptionState} from '../../replicator/schema/replication-state.ts';
 import type {
   Begin,
@@ -828,6 +829,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
     // Initial sync should have created a second replication slot.
     const slots1 = await upstream<{slot: string}[]>`
       SELECT slot_name as slot FROM pg_replication_slots
+        WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
     `.values();
     expect(slots1).toHaveLength(2);
 
@@ -880,22 +882,25 @@ describe('change-source/pg', {timeout: 30000}, () => {
 
     changes2.cancel();
 
-    // Verify that only one slot remains
-    const slots2 = await upstream<{slot: string}[]>`
-      SELECT slot_name as slot FROM pg_replication_slots
-    `.values();
-    expect(slots2).toEqual(slots1.slice(1));
-
-    // Verify that the replica rows have also been cleaned up.
+    // Verify that the replica rows have been cleaned up.
     const replicas2 = await upstream.unsafe(`
       SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas
     `);
     expect(replicas2).toEqual(replicas1.slice(1));
 
+    // Verify that only one slot remains. (Add a sleep to reduce
+    // flakiness because the drop is non-transactional.)
+    await sleep(100);
+    const slots2 = await upstream<{slot: string}[]>`
+      SELECT slot_name as slot FROM pg_replication_slots
+        WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
+    `.values();
+    expect(slots2).toEqual(slots1.slice(1));
+
     anotherReplicaFile.delete();
   });
 
-  test('error on wrong publications', async () => {
+  test('AutoReset on changed publications', async () => {
     await startReplication();
     let err;
     try {
@@ -913,8 +918,9 @@ describe('change-source/pg', {timeout: 30000}, () => {
     } catch (e) {
       err = e;
     }
+    expect(err).toBeInstanceOf(AutoResetSignal);
     expect(err).toMatchInlineSnapshot(
-      `[Error: Invalid ShardConfig. Requested publications [zero_different_publication] do not match synced publications: [zero_foo,zero_zero]]`,
+      `[AutoResetSignal: Requested publications [zero_different_publication] do not match configured publications: [zero_foo,zero_zero]]`,
     );
   });
 });

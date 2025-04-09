@@ -195,6 +195,7 @@ describe('building the AST', () => {
             },
             "subquery": {
               "alias": "owner",
+              "limit": 1,
               "orderBy": [
                 [
                   "id",
@@ -291,6 +292,7 @@ describe('building the AST', () => {
             },
             "subquery": {
               "alias": "owner",
+              "limit": 1,
               "orderBy": [
                 [
                   "id",
@@ -401,6 +403,7 @@ describe('building the AST', () => {
             },
             "subquery": {
               "alias": "owner",
+              "limit": 1,
               "orderBy": [
                 [
                   "id",
@@ -2052,5 +2055,28 @@ describe('exists', () => {
         },
       }
     `);
+  });
+});
+
+test('one in schema should imply limit 1 in the ast', () => {
+  const issueQuery = newQuery(mockDelegate, schema, 'issue');
+  const q1 = issueQuery.related('owner');
+  const q2 = issueQuery.related('comments');
+
+  expect(ast(q1)).toMatchObject({
+    table: 'issue',
+    related: [
+      {
+        subquery: {limit: 1, table: 'user'},
+      },
+    ],
+  });
+  expect(ast(q2)).toMatchObject({
+    table: 'issue',
+    related: [
+      {
+        subquery: expect.toSatisfy(sq => !('limit' in sq)),
+      },
+    ],
   });
 });

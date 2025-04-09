@@ -82,20 +82,10 @@ export function checkClientSchema(
       const clientType = clientSpec.columns[column].type;
       const serverType = serverSpec.zqlSpec[column].type;
       if (clientSpec.columns[column].type !== serverSpec.zqlSpec[column].type) {
-        // 'timestamp' and 'date' schema types were introduced in
-        //  0.18, prior to this these types were typed as 'number'.
-        // Accept number for at least one release for backwards compat.
-        if (
-          !(
-            (serverType === 'timestamp' || serverType === 'date') &&
-            clientType === 'number'
-          )
-        ) {
-          errors.push(
-            `The "${table}"."${column}" column's upstream type "${serverType}" ` +
-              `does not match the client type "${clientType}"`,
-          );
-        }
+        errors.push(
+          `The "${table}"."${column}" column's upstream type "${serverType}" ` +
+            `does not match the client type "${clientType}"`,
+        );
       }
     }
   }

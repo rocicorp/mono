@@ -1,5 +1,12 @@
 import {describe, expect, test} from 'vitest';
-import {formatPg, formatPgInternalConvert, sqlConvertArg, sql} from './sql.ts';
+import {
+  formatPg,
+  formatPgInternalConvert,
+  sqlConvertSingularLiteralArg,
+  sql,
+  sqlConvertColumnArg,
+} from './sql.ts';
+import type {ServerColumnSchema} from './schema.ts';
 
 test('identical values result in a single placeholder', () => {
   const userId = 1;
@@ -33,11 +40,19 @@ test('identical values result in a single placeholder', () => {
   `);
 });
 
-describe('json arg packing', () => {
+describe('string arg packing', () => {
   test('single arg', () => {
     expect(
       formatPgInternalConvert(
-        sql`SELECT * FROM "user" WHERE "id" = ${sqlConvertArg('number', 1)} `,
+        sql`SELECT * FROM "user" WHERE "id" = ${sqlConvertColumnArg(
+          {
+            isEnum: false,
+            type: 'numeric',
+          },
+          1,
+          false,
+          true,
+        )} `,
       ),
     ).toMatchInlineSnapshot(`
       {
@@ -53,7 +68,23 @@ describe('json arg packing', () => {
   test('many equivalent args', () => {
     expect(
       formatPgInternalConvert(
-        sql`SELECT * FROM "user" WHERE "id" = ${sqlConvertArg('number', 1)} OR "other_id" = ${sqlConvertArg('number', 1)}`,
+        sql`SELECT * FROM "user" WHERE "id" = ${sqlConvertColumnArg(
+          {
+            isEnum: false,
+            type: 'numeric',
+          },
+          1,
+          false,
+          true,
+        )} OR "other_id" = ${sqlConvertColumnArg(
+          {
+            isEnum: false,
+            type: 'numeric',
+          },
+          1,
+          false,
+          true,
+        )}`,
       ),
     ).toMatchInlineSnapshot(`
       {
@@ -65,40 +96,148 @@ describe('json arg packing', () => {
     `);
   });
 
-  test('all types', () => {
+  test('many types', () => {
     expect(
       formatPgInternalConvert(
-        sql`SELECT * FROM "foo" WHERE "a" = ${sqlConvertArg('json', {})} OR "b" = ${sqlConvertArg('number', 1)} OR "c" = ${sqlConvertArg('string', 'str')} OR "d" = ${sqlConvertArg('boolean', true)}`,
+        sql`SELECT * FROM "foo" WHERE "jsonb" = ${sqlConvertColumnArg(
+          {
+            isEnum: false,
+            type: 'jsonb',
+          },
+          {},
+          false,
+          true,
+        )} OR "numeric" = ${sqlConvertColumnArg(
+          {
+            isEnum: false,
+            type: 'numeric',
+          },
+          1,
+          false,
+          true,
+        )}
+        OR "str" = ${sqlConvertColumnArg(
+          {
+            isEnum: false,
+            type: 'text',
+          },
+          'str',
+          false,
+          true,
+        )} OR "boolean" = ${sqlConvertColumnArg(
+          {
+            isEnum: false,
+            type: 'boolean',
+          },
+          true,
+          false,
+          true,
+        )} OR "uuid"::text = ${sqlConvertColumnArg(
+          {
+            isEnum: false,
+            type: 'uuid',
+          },
+          '8f1dceb2-b3dd-46cf-9deb-460e9d87541c',
+          false,
+          true,
+        )} OR "enum"::text = ${sqlConvertColumnArg(
+          {
+            isEnum: true,
+            type: 'some_enum',
+          },
+          'ENUM_KEY',
+          false,
+          true,
+        )}`,
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "foo" WHERE "a" = $1::text::jsonb OR "b" = $2::text::numeric OR "c" = $3::text OR "d" = $4::text::boolean",
+        "text": "SELECT * FROM "foo" WHERE "jsonb" = $1::text::jsonb OR "numeric" = $2::text::numeric
+              OR "str" = $3::text COLLATE "ucs_basic" OR "boolean" = $4::text::boolean OR "uuid"::text = $5::text COLLATE "ucs_basic" OR "enum"::text = $6::text COLLATE "ucs_basic"",
         "values": [
           "{}",
           "1",
           "str",
           "true",
+          "8f1dceb2-b3dd-46cf-9deb-460e9d87541c",
+          "ENUM_KEY",
         ],
       }
     `);
   });
 
   test('mapped and joined', () => {
-    const values = [1, 2, 3];
+    const values = [1, 1.1, 'two', true, null];
     expect(
       formatPgInternalConvert(
-        sql`SELECT * FROM "foo" WHERE "a" ${sql.join(
-          values.map(v => sqlConvertArg('number', v)),
+        sql`SELECT * FROM "foo" WHERE ${sql.join(
+          values.map(v => sqlConvertSingularLiteralArg(v)),
           ' AND ',
         )} `,
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "foo" WHERE "a" $1::text::numeric AND $2::text::numeric AND $3::text::numeric",
+        "text": "SELECT * FROM "foo" WHERE $1::text::numeric AND $2::text::numeric AND $3::text::text COLLATE "ucs_basic" AND $4::text::boolean AND $5",
         "values": [
           "1",
-          "2",
-          "3",
+          "1.1",
+          "two",
+          "true",
+          null,
+        ],
+      }
+    `);
+  });
+
+  test('insert', () => {
+    const values: [ServerColumnSchema, unknown][] = [
+      [
+        {
+          isEnum: false,
+          type: 'numeric',
+        },
+        1,
+      ],
+      [
+        {
+          isEnum: false,
+          type: 'numeric',
+        },
+        1.1,
+      ],
+      // This MUST NOT insert with a COLLATION
+      [
+        {
+          isEnum: false,
+          type: 'text',
+        },
+        'two',
+      ],
+      [
+        {
+          isEnum: false,
+          type: 'boolean',
+        },
+        true,
+      ],
+    ];
+    expect(
+      formatPgInternalConvert(
+        sql`INSERT INTO "foo" VALUES (${sql.join(
+          values.map(([schema, v]) =>
+            sqlConvertColumnArg(schema, v, false, false),
+          ),
+          ', ',
+        )})`,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "INSERT INTO "foo" VALUES ($1::text::numeric, $2::text::numeric, $3::text, $4::text::boolean)",
+        "values": [
+          "1",
+          "1.1",
+          "two",
+          "true",
         ],
       }
     `);

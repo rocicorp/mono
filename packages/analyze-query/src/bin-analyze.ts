@@ -1,47 +1,48 @@
 /* eslint-disable no-console */
-import chalk from 'chalk';
 import '@dotenvx/dotenvx/config';
-
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {parseOptions} from '../../../shared/src/options.ts';
-import * as v from '../../../shared/src/valita.ts';
+import chalk from 'chalk';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {parseOptions} from '../../shared/src/options.ts';
+import * as v from '../../shared/src/valita.ts';
+import {
+  ZERO_ENV_VAR_PREFIX,
+  zeroOptions,
+} from '../../zero-cache/src/config/zero-config.ts';
+import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
 import {
   mapAST,
   type AST,
   type CompoundKey,
-} from '../../../zero-protocol/src/ast.ts';
-import {buildPipeline} from '../../../zql/src/builder/builder.ts';
-import {Catch} from '../../../zql/src/ivm/catch.ts';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
-import type {Input} from '../../../zql/src/ivm/operator.ts';
-import {
-  newQuery,
-  type QueryDelegate,
-} from '../../../zql/src/query/query-impl.ts';
-import {Database} from '../../../zqlite/src/db.ts';
-import {
-  runtimeDebugFlags,
-  runtimeDebugStats,
-} from '../../../zqlite/src/runtime-debug.ts';
-import {TableSource} from '../../../zqlite/src/table-source.ts';
-import {ZERO_ENV_VAR_PREFIX, zeroOptions} from '../config/zero-config.ts';
-import {loadSchemaAndPermissions} from './permissions.ts';
+} from '../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,
   serverToClient,
-} from '../../../zero-schema/src/name-mapper.ts';
+} from '../../zero-schema/src/name-mapper.ts';
+import {buildPipeline} from '../../zql/src/builder/builder.ts';
+import {Catch} from '../../zql/src/ivm/catch.ts';
+import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
+import type {Input} from '../../zql/src/ivm/operator.ts';
+import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
+import type {PullRow, Query} from '../../zql/src/query/query.ts';
+import {Database} from '../../zqlite/src/db.ts';
+import {
+  runtimeDebugFlags,
+  runtimeDebugStats,
+} from '../../zqlite/src/runtime-debug.ts';
+import {TableSource} from '../../zqlite/src/table-source.ts';
 
 const options = {
   replicaFile: zeroOptions.replica.file,
   ast: {
     type: v.string().optional(),
-    desc: ['AST for the query to be transformed or timed.'],
+    desc: ['AST for the query to be analyzed.'],
   },
   query: {
     type: v.string().optional(),
     desc: [
-      `Query to be timed in the form of: z.query.table.where(...).related(...).etc`,
+      `Query to be analyzed in the form of: z.query.table.where(...).related(...).etc`,
     ],
   },
   schema: {
@@ -120,11 +121,11 @@ const host: QueryDelegate = {
 
 let start: number;
 let end: number;
-const suppressError: Record<string, unknown> = {};
+
 if (config.ast) {
   [start, end] = runAst(JSON.parse(config.ast) as AST);
 } else if (config.query) {
-  [start, end] = runQuery(config.query);
+  [start, end] = await runQuery(config.query);
 } else {
   throw new Error('No query or AST provided');
 }
@@ -139,9 +140,7 @@ function runAst(ast: AST): [number, number] {
   return [start, end];
 }
 
-function runQuery(queryString: string): [number, number] {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let q: any;
+async function runQuery(queryString: string): Promise<[number, number]> {
   const z = {
     query: Object.fromEntries(
       Object.entries(schema.tables).map(([name]) => [
@@ -150,13 +149,12 @@ function runQuery(queryString: string): [number, number] {
       ]),
     ),
   };
-  suppressError.q = q;
-  suppressError.z = z;
 
-  eval(`q = ${queryString};`);
+  const f = new Function('z', `return z.query.${queryString};`);
+  const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
 
   const start = performance.now();
-  q.run();
+  await q;
   const end = performance.now();
   return [start, end];
 }

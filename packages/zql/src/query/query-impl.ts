@@ -140,7 +140,7 @@ export abstract class AbstractQuery<
     schema: TSchema,
     table: TTable,
     ast: AST,
-    format: Format | undefined,
+    format: Format,
   ): AbstractQuery<TSchema, TTable, TReturn>;
 
   one(): Query<TSchema, TTable, TReturn | undefined> {
@@ -176,21 +176,22 @@ export abstract class AbstractQuery<
     assert(related, 'Invalid relationship');
     if (isOneHop(related)) {
       const {destSchema, destField, sourceField, cardinality} = related[0];
-      const sq = cb(
-        this._newQuery(
-          this.#schema,
-          destSchema,
-          {
-            table: destSchema,
-            alias: relationship,
-          },
-          {
-            relationships: {},
-            singular: cardinality === 'one',
-          },
-        ),
-      ) as unknown as QueryImpl<any, any>;
-
+      let q: AnyQuery = this._newQuery(
+        this.#schema,
+        destSchema,
+        {
+          table: destSchema,
+          alias: relationship,
+        },
+        {
+          relationships: {},
+          singular: cardinality === 'one',
+        },
+      );
+      if (cardinality === 'one') {
+        q = q.one();
+      }
+      const sq = cb(q) as AbstractQuery<Schema, string>;
       assert(
         isCompoundKey(sourceField),
         'The source of a relationship must specify at last 1 field',
@@ -235,7 +236,6 @@ export abstract class AbstractQuery<
     }
 
     if (isTwoHop(related)) {
-      assert(related.length === 2, 'Invalid relationship');
       const [firstRelation, secondRelation] = related;
       const {destSchema} = secondRelation;
       const junctionSchema = firstRelation.destSchema;
@@ -417,7 +417,7 @@ export abstract class AbstractQuery<
             table: destSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
-          undefined,
+          defaultFormat,
         ),
       ) as unknown as QueryImpl<any, any>;
       return {
@@ -438,7 +438,6 @@ export abstract class AbstractQuery<
     }
 
     if (isTwoHop(related)) {
-      assert(related.length === 2, 'Invalid relationship');
       const [firstRelation, secondRelation] = related;
       assert(isCompoundKey(firstRelation.sourceField), 'Invalid relationship');
       assert(isCompoundKey(firstRelation.destField), 'Invalid relationship');
@@ -454,7 +453,7 @@ export abstract class AbstractQuery<
             table: destSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
-          undefined,
+          defaultFormat,
         ),
       );
 
@@ -531,6 +530,19 @@ export abstract class AbstractQuery<
       }
     }
     return this.#completedAST;
+  }
+
+  then<TResult1 = HumanReadable<TReturn>, TResult2 = never>(
+    onFulfilled?:
+      | ((value: HumanReadable<TReturn>) => TResult1 | PromiseLike<TResult1>)
+      | undefined
+      | null,
+    onRejected?:
+      | ((reason: any) => TResult2 | PromiseLike<TResult2>)
+      | undefined
+      | null,
+  ): PromiseLike<TResult1 | TResult2> {
+    return this.run().then(onFulfilled, onRejected);
   }
 
   abstract materialize(): TypedView<HumanReadable<TReturn>>;
