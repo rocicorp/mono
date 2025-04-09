@@ -17,12 +17,12 @@ import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
-import {compile, extractZqlResult} from './compiler.ts';
-import {formatPgInternalConvert} from './sql.ts';
+import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
+import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import {Client} from 'pg';
-import '../../zql-integration-tests/src/helpers/comparePg.ts';
-import {fillPgAndSync} from '../../zql-integration-tests/src/helpers/setup.ts';
-import type {ServerSchema} from './schema.ts';
+import './helpers/comparePg.ts';
+import {fillPgAndSync} from './helpers/setup.ts';
+import type {ServerSchema} from '../../z2s/src/schema.ts';
 
 const lc = createSilentLogContext();
 
