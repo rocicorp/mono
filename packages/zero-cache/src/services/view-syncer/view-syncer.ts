@@ -780,12 +780,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         span.setAttribute('queryHash', hash);
         span.setAttribute('transformationHash', transformationHash);
         span.setAttribute('table', ast.table);
+        const timer = new Timer().start();
         for (const _ of this.#pipelines.addQuery(
           transformationHash,
           transformedAst,
         )) {
+          // TODO: Add IVM time slicing here too.
           count++;
         }
+        this.#pipelines.setHydrationTime(transformationHash, timer.stop());
       });
       const elapsed = Date.now() - start;
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
@@ -928,6 +931,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#pipelines.removeQuery(hash);
       }
 
+      const timer = new Timer();
       const pipelines = this.#pipelines;
       function* generateRowChanges(slowHydrateThreshold: number) {
         for (const q of addQueries) {
@@ -935,13 +939,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('hash', q.id)
             .withContext('transformationHash', q.transformationHash);
           lc.debug?.(`adding pipeline for query`, q.ast);
-          const start = performance.now();
+          timer.start();
           yield* pipelines.addQuery(q.transformationHash, q.ast);
-          const end = performance.now();
-          if (end - start > slowHydrateThreshold) {
-            lc.warn?.('Slow query materialization', end - start, q.ast);
+          const elapsed = timer.stop();
+          pipelines.setHydrationTime(q.transformationHash, elapsed);
+          if (elapsed > slowHydrateThreshold) {
+            lc.warn?.('Slow query materialization', elapsed, q.ast);
           }
-          manualSpan(tracer, 'vs.addAndConsumeQuery', end - start, {
+          manualSpan(tracer, 'vs.addAndConsumeQuery', elapsed, {
             hash: q.id,
             transformationHash: q.transformationHash,
           });
@@ -949,13 +954,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       // #processChanges does batched de-duping of rows. Wrap all pipelines in
       // a single generator in order to maximize de-duping.
-      const processTime = await this.#processChanges(
+      await this.#processChanges(
         lc,
+        timer,
         generateRowChanges(this.#slowHydrateThreshold),
         updater,
         pokers,
         hashToIDs,
       );
+      const processTime = timer.totalElapsed();
 
       for (const patch of await updater.deleteUnreferencedRows(lc)) {
         await pokers.addPatch(patch);
@@ -1087,6 +1094,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   /** Returns the time spent processing rows (i.e. excludes yielded time) */
   #processChanges(
     lc: LogContext,
+    timer: Timer,
     changes: Iterable<RowChange>,
     updater: CVRQueryDrivenUpdater,
     pokers: PokeHandler,
@@ -1094,18 +1102,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ) {
     return startAsyncSpan(tracer, 'vs.#processChanges', async () => {
       const start = Date.now();
-      let lapStart = start;
-      let totalProcessingTime = 0;
 
       const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
       let total = 0;
 
       const processBatch = () =>
         startAsyncSpan(tracer, 'processBatch', async () => {
-          const elapsed = Date.now() - start;
+          const wallElapsed = Date.now() - start;
           total += rows.size;
           lc.debug?.(
-            `processing ${rows.size} (of ${total}) rows (${elapsed} ms)`,
+            `processing ${rows.size} (of ${total}) rows (${wallElapsed} ms)`,
           );
           const patches = await updater.received(lc, rows);
 
@@ -1165,11 +1171,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
 
           if (rows.size % TIME_SLICE_CHECK_SIZE === 0) {
-            const elapsed = Date.now() - lapStart;
-            if (elapsed > TIME_SLICE_MS) {
-              totalProcessingTime += elapsed;
+            if (timer.elapsedLap() > TIME_SLICE_MS) {
+              timer.stopLap();
               await yieldProcess(this.#setTimeout);
-              lapStart = Date.now();
+              timer.startLap();
             }
           }
         }
@@ -1178,10 +1183,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
         span.setAttribute('totalRows', total);
       });
-
-      // Add the time for the last lap.
-      totalProcessingTime += Date.now() - lapStart;
-      return totalProcessingTime;
     });
   }
 
@@ -1223,7 +1224,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const hashToIDs = createHashToIDs(cvr);
 
       try {
-        await this.#processChanges(lc, changes, updater, pokers, hashToIDs);
+        await this.#processChanges(
+          lc,
+          new Timer().start(),
+          changes,
+          updater,
+          pokers,
+          hashToIDs,
+        );
       } catch (e) {
         if (e instanceof ResetPipelinesSignal) {
           await pokers.cancel();
@@ -1505,4 +1513,47 @@ function hasExpiredQueries(cvr: CVRSnapshot): boolean {
     }
   }
   return false;
+}
+
+class Timer {
+  #total = 0;
+  #start = 0;
+
+  start() {
+    this.#total = 0;
+    this.startLap();
+    return this;
+  }
+
+  startLap() {
+    assert(this.#start === 0, 'already running');
+    this.#start = performance.now();
+  }
+
+  elapsedLap() {
+    assert(this.#start !== 0, 'not running');
+    return performance.now() - this.#start;
+  }
+
+  stopLap() {
+    assert(this.#start !== 0, 'not running');
+    this.#total += performance.now() - this.#start;
+    this.#start = 0;
+  }
+
+  /** @returns the total elapsed time */
+  stop(): number {
+    this.stopLap();
+    return this.#total;
+  }
+
+  /**
+   * @returns the elapsed time. This can be called while the Timer is running
+   *          or after it has been stopped.
+   */
+  totalElapsed(): number {
+    return this.#start === 0
+      ? this.#total
+      : this.#total + performance.now() - this.#start;
+  }
 }
