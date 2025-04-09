@@ -750,4 +750,91 @@ describe('computeZqlSpec', () => {
       ]
     `);
   });
+
+  test('unique constraints', () => {
+    expect(
+      t(/*sql*/ `
+      CREATE TABLE "funk" (
+          "id" "text|NOT_NULL",
+          "name" "varchar|NOT_NULL",
+          "order" "integer|NOT_NULL",
+          "createdAt" "timestamp|NOT_NULL",
+          "updatedAt" "timestamp|NOT_NULL"
+      );
+      CREATE UNIQUE INDEX funk_name_unique ON funk (name ASC);
+      CREATE UNIQUE INDEX funk_order_unique ON funk ("order" ASC);
+      CREATE UNIQUE INDEX funk_pkey ON funk (id ASC);
+    `),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "tableSpec": {
+            "columns": {
+              "createdAt": {
+                "characterMaximumLength": null,
+                "dataType": "timestamp|NOT_NULL",
+                "dflt": null,
+                "notNull": false,
+                "pos": 4,
+              },
+              "id": {
+                "characterMaximumLength": null,
+                "dataType": "text|NOT_NULL",
+                "dflt": null,
+                "notNull": false,
+                "pos": 1,
+              },
+              "name": {
+                "characterMaximumLength": null,
+                "dataType": "varchar|NOT_NULL",
+                "dflt": null,
+                "notNull": false,
+                "pos": 2,
+              },
+              "order": {
+                "characterMaximumLength": null,
+                "dataType": "integer|NOT_NULL",
+                "dflt": null,
+                "notNull": false,
+                "pos": 3,
+              },
+              "updatedAt": {
+                "characterMaximumLength": null,
+                "dataType": "timestamp|NOT_NULL",
+                "dflt": null,
+                "notNull": false,
+                "pos": 5,
+              },
+            },
+            "name": "funk",
+            "primaryKey": [
+              "id",
+            ],
+            "unionKey": [
+              "id",
+              "name",
+              "order",
+            ],
+          },
+          "zqlSpec": {
+            "createdAt": {
+              "type": "number",
+            },
+            "id": {
+              "type": "string",
+            },
+            "name": {
+              "type": "string",
+            },
+            "order": {
+              "type": "number",
+            },
+            "updatedAt": {
+              "type": "number",
+            },
+          },
+        },
+      ]
+    `);
+  });
 });
