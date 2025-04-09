@@ -1103,7 +1103,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
-  /** Returns the time spent processing rows (i.e. excludes yielded time) */
   #processChanges(
     lc: LogContext,
     timer: Timer,
