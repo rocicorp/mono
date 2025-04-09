@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Database as DB} from '../../../../zqlite/src/db.ts';
@@ -15,7 +16,6 @@ import {
 import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
-import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 
 describe('view-syncer/pipeline-driver', () => {
   let dbFile: DbFile;
@@ -90,6 +90,17 @@ describe('view-syncer/pipeline-driver', () => {
 
       INSERT INTO "issueLabels" (issueID, labelID, legacyID, _0_version) VALUES ('1', '1', '1-1', '123');
       INSERT INTO "labels" (id, name, _0_version) VALUES ('1', 'bug', '123');
+
+      CREATE TABLE uniques (
+        id "TEXT|NOT_NULL",
+        name "TEXT|NOT_NULL",
+        _0_version TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX uniques_id ON uniques (id);
+      CREATE UNIQUE INDEX uniques_name ON uniques (name);
+
+      INSERT INTO "uniques" (id, name, _0_version) VALUES ('foo', 'bar', '123');
+      INSERT INTO "uniques" (id, name, _0_version) VALUES ('boo', 'dar', '123');
       `);
     replicator = fakeReplicator(lc, db);
   });
@@ -273,10 +284,16 @@ describe('view-syncer/pipeline-driver', () => {
     },
   };
 
+  const UNIQUES_QUERY: AST = {
+    table: 'uniques',
+    orderBy: [['id', 'desc']],
+  };
+
   const messages = new ReplicationMessages({
     issues: 'id',
     comments: 'id',
     issueLabels: ['issueID', 'labelID'],
+    uniques: 'id',
   });
   const zeroMessages = new ReplicationMessages(
     {schemaVersions: 'lock'},
@@ -695,6 +712,82 @@ describe('view-syncer/pipeline-driver', () => {
           },
         ]
       `);
+  });
+
+  test('update unique non-primary key', () => {
+    pipelines.init(null);
+    expect([...pipelines.addQuery('hash1', UNIQUES_QUERY)])
+      .toMatchInlineSnapshot(`
+        [
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "123",
+              "id": "foo",
+              "name": "bar",
+            },
+            "rowKey": {
+              "id": "foo",
+              "name": "bar",
+            },
+            "table": "uniques",
+            "type": "add",
+          },
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "123",
+              "id": "boo",
+              "name": "dar",
+            },
+            "rowKey": {
+              "id": "boo",
+              "name": "dar",
+            },
+            "table": "uniques",
+            "type": "add",
+          },
+        ]
+      `);
+
+    replicator.processTransaction(
+      '134',
+      messages.update('uniques', {id: 'boo', name: 'far'}),
+    );
+
+    // Although this can be considered an edit of a row keyed by {id: 'boo'},
+    // rows are ultimately referred to by their union key ['id', 'name'],
+    // in which case this update must be represented as:
+    // - `remove{id: 'boo', name: 'dar'}`
+    // - `add{id: 'boo', name: 'far'}`
+    expect([...pipelines.advance().changes]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
+            "id": "boo",
+            "name": "dar",
+          },
+          "table": "uniques",
+          "type": "remove",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "134",
+            "id": "boo",
+            "name": "far",
+          },
+          "rowKey": {
+            "id": "boo",
+            "name": "far",
+          },
+          "table": "uniques",
+          "type": "add",
+        },
+      ]
+    `);
   });
 
   test('whereExists query', () => {
