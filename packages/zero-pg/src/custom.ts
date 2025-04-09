@@ -128,10 +128,22 @@ export function makeSchemaCRUD<S extends Schema>(
     ) as SchemaCRUD<S>;
 }
 
+function removeUndefined<T extends Record<string, unknown>>(value: T): T {
+  const valueWithoutUndefined: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value)) {
+    if (val !== undefined) {
+      valueWithoutUndefined[key] = val;
+    }
+  }
+  return valueWithoutUndefined as T;
+}
+
 function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
   return {
     async insert(this: WithHiddenTxAndSchema, value) {
+      value = removeUndefined(value);
       const serverTableSchema = this[serverSchemaSymbol][serverName(schema)];
+
       const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
       const stmt = formatPgInternalConvert(
         sql`INSERT INTO ${sql.ident(serverName(schema))} (${sql.join(
@@ -148,6 +160,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       await tx.query(stmt.text, stmt.values);
     },
     async upsert(this: WithHiddenTxAndSchema, value) {
+      value = removeUndefined(value);
       const serverTableSchema = this[serverSchemaSymbol][serverName(schema)];
       const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
       const primaryKeyColumns = origAndServerNamesFor(
@@ -180,6 +193,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       await tx.query(stmt.text, stmt.values);
     },
     async update(this: WithHiddenTxAndSchema, value) {
+      value = removeUndefined(value);
       const serverTableSchema = this[serverSchemaSymbol][serverName(schema)];
       const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
       const stmt = formatPgInternalConvert(
@@ -195,6 +209,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       await tx.query(stmt.text, stmt.values);
     },
     async delete(this: WithHiddenTxAndSchema, value) {
+      value = removeUndefined(value);
       const serverTableSchema = this[serverSchemaSymbol][serverName(schema)];
       const stmt = formatPgInternalConvert(
         sql`DELETE FROM ${sql.ident(
