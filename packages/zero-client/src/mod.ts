@@ -15,7 +15,6 @@ export {
 export {makeIDBName} from '../../replicache/src/replicache.ts';
 export type {ClientGroupID, ClientID} from '../../replicache/src/sync/ids.ts';
 export {TransactionClosedError} from '../../replicache/src/transaction-closed-error.ts';
-export type {UpdateNeededReason} from '../../replicache/src/types.ts';
 export type {
   JSONObject,
   JSONValue,
@@ -111,7 +110,19 @@ export type {
 export type {HumanReadable, Query, Row} from '../../zql/src/query/query.ts';
 export {DEFAULT_TTL, type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
-export type {DBMutator, TableMutator} from './client/crud.ts';
-export type {CustomMutatorDefs, CustomMutatorImpl} from './client/custom.ts';
-export type {ZeroOptions} from './client/options.ts';
-export {Zero} from './client/zero.ts';
+export type {BatchMutator, DBMutator, TableMutator} from './client/crud.ts';
+export type {
+  CustomMutatorDefs,
+  CustomMutatorImpl,
+  MakeCustomMutatorInterface,
+  MakeCustomMutatorInterfaces,
+  PromiseWithServerResult,
+} from './client/custom.ts';
+export type {
+  Inspector,
+  Client as InspectorClient,
+  ClientGroup as InspectorClientGroup,
+  Query as InspectorQuery,
+} from './client/inspector/types.ts';
+export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
+export {Zero, type MakeEntityQueriesFromSchema} from './client/zero.ts';

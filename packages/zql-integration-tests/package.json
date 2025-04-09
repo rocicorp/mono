@@ -26,6 +26,5 @@
   "eslintConfig": {
     "extends": "../../eslint-config.json"
   },
-  "prettier": "@rocicorp/prettier-config",
-  "dependencies": {}
+  "prettier": "@rocicorp/prettier-config"
 }
