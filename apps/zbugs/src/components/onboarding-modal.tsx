@@ -24,8 +24,12 @@ export function OnboardingModal({
       </p>
       <p>Some things to try:</p>
 
-      <h2>Opening issues</h2>
+      <h2>Create an issue</h2>
       <p>Click on New Issue in the sidebar to open a new issue.</p>
+      <p className="aside">
+        Please note that this is our place of work so we'd appreciate if you add
+        test content, to just delete afterwards.
+      </p>
 
       <h2>Quickly navigate between issues</h2>
       <p>
@@ -34,16 +38,14 @@ export function OnboardingModal({
         🏎️💨)
       </p>
 
-      <h2>Filter searches</h2>
-      <p>Use the filter picker at the top of the list view.</p>
+      <h2>Search &amp; filter</h2>
+      <p>
+        In the list view, press <span className="keyboard-keys">/</span> search
+        or use the filter picker.
+      </p>
 
       <h2>Test live syncing</h2>
       <p>Open two windows and watch changes sync live.</p>
-
-      <p>
-        Please note that this is our place of work so we'd appreciate if you add
-        test content, to just delete afterwards.
-      </p>
 
       <Button
         className="onboarding-modal-accept"

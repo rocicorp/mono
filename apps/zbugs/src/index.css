@@ -924,6 +924,23 @@ textarea.autoResize {
     margin: 1rem 0 1rem;
   }
 
+  .aside {
+    position: relative;
+    font-size: var(--typo-label-size);
+    color: var(--color-primary-cta);
+    padding: 0.75rem 0.75rem 0.75rem 4rem;
+    border: 1px solid var(--color-primary-cta);
+    border-radius: 0.5rem;
+  }
+
+  .aside::before {
+    content: '👨🏻‍💻';
+    position: absolute;
+    font-size: 2rem;
+    left: 1rem;
+    top: 0.5rem;
+  }
+
   .keyboard-keys {
     border-radius: 4px;
     height: 1.6rem;
@@ -1408,9 +1425,10 @@ textarea.autoResize {
   #root-modal {
     .onboarding-modal {
       margin: 0;
-      padding: 2rem;
+      padding: 0;
 
       .modal-container {
+        padding: 2rem;
         overflow-y: scroll;
       }
 

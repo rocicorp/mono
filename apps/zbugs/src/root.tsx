@@ -1,3 +1,4 @@
+import Cookies from 'js-cookie';
 import {ZeroProvider} from '@rocicorp/zero/react';
 import {useCallback, useState, useSyncExternalStore} from 'react';
 import {Route, Switch} from 'wouter';
@@ -17,7 +18,9 @@ export function Root() {
   );
 
   const [contentReady, setContentReady] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => !Cookies.get('onboardingDismissed'),
+  );
 
   useSoftNav();
 
@@ -53,7 +56,10 @@ export function Root() {
       </div>
       <OnboardingModal
         isOpen={showOnboarding}
-        onDismiss={() => setShowOnboarding(false)}
+        onDismiss={() => {
+          Cookies.set('onboardingDismissed', 'true', {expires: 365});
+          setShowOnboarding(false);
+        }}
       />
     </ZeroProvider>
   );
