@@ -280,7 +280,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
           // stateVersion is at or beyond CVR version for the first time.
           lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
-          this.#hydrateUnchangedQueries(lc, cvr);
+          await this.#hydrateUnchangedQueries(lc, cvr);
           await this.#syncQueryPipelineSet(lc, cvr);
           this.#pipelinesSynced = true;
         });
@@ -733,7 +733,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *
    * This must be called from within the #lock.
    */
-  #hydrateUnchangedQueries(lc: LogContext, cvr: CVRSnapshot) {
+  async #hydrateUnchangedQueries(lc: LogContext, cvr: CVRSnapshot) {
     assert(this.#pipelines.initialized());
 
     const dbVersion = this.#pipelines.currentVersion();
@@ -776,20 +776,29 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       const start = Date.now();
       let count = 0;
-      startSpan(tracer, 'vs.#hydrateUnchangedQueries.addQuery', span => {
-        span.setAttribute('queryHash', hash);
-        span.setAttribute('transformationHash', transformationHash);
-        span.setAttribute('table', ast.table);
-        const timer = new Timer().start();
-        for (const _ of this.#pipelines.addQuery(
-          transformationHash,
-          transformedAst,
-        )) {
-          // TODO: Add IVM time slicing here too.
-          count++;
-        }
-        this.#pipelines.setHydrationTime(transformationHash, timer.stop());
-      });
+      await startAsyncSpan(
+        tracer,
+        'vs.#hydrateUnchangedQueries.addQuery',
+        async span => {
+          span.setAttribute('queryHash', hash);
+          span.setAttribute('transformationHash', transformationHash);
+          span.setAttribute('table', ast.table);
+          const timer = new Timer().start();
+          for (const _ of this.#pipelines.addQuery(
+            transformationHash,
+            transformedAst,
+          )) {
+            if (++count % TIME_SLICE_CHECK_SIZE === 0) {
+              if (timer.elapsedLap() > TIME_SLICE_MS) {
+                timer.stopLap();
+                await yieldProcess(this.#setTimeout);
+                timer.startLap();
+              }
+            }
+          }
+          this.#pipelines.setHydrationTime(transformationHash, timer.stop());
+        },
+      );
       const elapsed = Date.now() - start;
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
     }
@@ -1094,7 +1103,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
-  /** Returns the time spent processing rows (i.e. excludes yielded time) */
   #processChanges(
     lc: LogContext,
     timer: Timer,
