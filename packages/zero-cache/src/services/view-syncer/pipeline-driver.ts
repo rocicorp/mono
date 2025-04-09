@@ -304,7 +304,17 @@ export class PipelineDriver {
       runtimeDebugStats.resetRowsVended(this.#clientGroupID);
     }
 
+    // Note: This hydrationTime is a wall-clock overestimate, as it does
+    // not take time slicing into account. The view-syncer resets this
+    // to a more precise processing-time measurement with setHydrationTime().
     this.#pipelines.set(hash, {input, hydrationTimeMs});
+  }
+
+  setHydrationTime(hash: string, hydrationTimeMs: number) {
+    const p = this.#pipelines.get(hash);
+    if (p) {
+      this.#pipelines.set(hash, {...p, hydrationTimeMs});
+    }
   }
 
   /**
