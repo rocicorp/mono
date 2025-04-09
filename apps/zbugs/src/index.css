@@ -906,9 +906,9 @@ textarea.autoResize {
 
 #root-modal .onboarding-modal {
   max-width: 40rem;
-  padding: 3rem;
   gap: 2rem;
   width: 100%;
+  padding: 0;
 
   a {
     color: var(--color-primary-cta);
@@ -984,7 +984,8 @@ textarea.autoResize {
   }
 
   .modal-container {
-    padding: 0;
+    padding: 3rem;
+    overflow-y: scroll;
   }
 }
 
