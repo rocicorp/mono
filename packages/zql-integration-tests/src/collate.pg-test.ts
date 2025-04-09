@@ -1,26 +1,13 @@
+import {Client} from 'pg';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
+import type {ServerSchema} from '../../z2s/src/schema.ts';
+import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {type Row} from '../../zero-protocol/src/data.ts';
-import {
-  completedAstSymbol,
-  newQuery,
-  QueryImpl,
-  type QueryDelegate,
-} from '../../zql/src/query/query-impl.ts';
-import {type Query} from '../../zql/src/query/query.ts';
-import {Database} from '../../zqlite/src/db.ts';
-import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
-import {
-  mapResultToClientNames,
-  newQueryDelegate,
-} from '../../zqlite/src/test/source-factory.ts';
-import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
-import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
-import {Client} from 'pg';
-import './helpers/comparePg.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   enumeration,
@@ -28,9 +15,21 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import {
+  completedAST,
+  newQuery,
+  type QueryDelegate,
+} from '../../zql/src/query/query-impl.ts';
+import {type Query} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
+import {Database} from '../../zqlite/src/db.ts';
+import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
+import {
+  mapResultToClientNames,
+  newQueryDelegate,
+} from '../../zqlite/src/test/source-factory.ts';
+import './helpers/comparePg.ts';
 import {fillPgAndSync} from './helpers/setup.ts';
-import type {ServerSchema} from '../../z2s/src/schema.ts';
 
 const lc = createSilentLogContext();
 
@@ -176,10 +175,6 @@ beforeAll(async () => {
 afterAll(async () => {
   await nodePostgres.end();
 });
-
-function ast(q: Query<Schema, keyof Schema['tables']>) {
-  return (q as QueryImpl<Schema, keyof Schema['tables']>)[completedAstSymbol];
-}
 
 describe('collation behavior', () => {
   describe('postgres.js', () => {
@@ -347,7 +342,7 @@ async function runAsSQL(
   q: Query<Schema, 'item'>,
   runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
 ) {
-  const c = compile(ast(q), schema.tables, serverSchema);
+  const c = compile(completedAST(q), schema.tables, serverSchema);
   const sqlQuery = formatPgInternalConvert(c);
   return extractZqlResult(
     await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),

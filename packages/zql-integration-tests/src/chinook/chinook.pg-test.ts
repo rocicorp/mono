@@ -18,8 +18,13 @@ import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
+import {compile, extractZqlResult} from '../../../z2s/src/compiler.ts';
+import type {ServerSchema} from '../../../z2s/src/schema.ts';
+import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
 import {testDBs} from '../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
+import {ZPGQuery} from '../../../zero-pg/src/query.ts';
+import {Transaction} from '../../../zero-pg/src/test/util.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {
   clientToServer,
@@ -34,10 +39,9 @@ import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
 import type {Format} from '../../../zql/src/ivm/view.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {
-  astForTestingSymbol,
-  completedAstSymbol,
+  completedAST,
+  defaultFormat,
   newQuery,
-  QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
 import type {Operator, Query} from '../../../zql/src/query/query.ts';
@@ -47,19 +51,13 @@ import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../../zqlite/src/test/source-factory.ts';
-import {compile, extractZqlResult} from '../../../z2s/src/compiler.ts';
 import '../helpers/comparePg.ts';
 import {writeChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
-import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
-import type {ServerSchema} from '../../../z2s/src/schema.ts';
-import {ZPGQuery} from '../../../zero-pg/src/query.ts';
 
 // TODO: Ideally z2s wouldn't depend on zero-pg (even in tests).  These
 // chinook tests should move to their own package.
-import {Transaction} from '../../../zero-pg/src/test/util.ts';
 import {getServerSchema} from '../../../zero-pg/src/schema.ts';
-import {defaultFormat} from '../../../zql/src/query/query-impl.ts';
 
 let pg: PostgresDB;
 let sqlite: Database;
@@ -362,7 +360,7 @@ async function checkZqls(
   const pgResult = await zpgQuery;
   const zqliteResult = await zqliteQuery;
   const zqlMemResult = await memoryQuery;
-  const ast = (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol];
+
   // In failure output:
   // `-` is PG
   // `+` is ZQL
@@ -370,7 +368,7 @@ async function checkZqls(
     mapResultToClientNames(
       zqliteResult,
       schema,
-      ast.table as keyof Schema['tables'],
+      completedAST(zqliteQuery).table as keyof Schema['tables'],
     ),
   ).toEqualPg(pgResult);
   expect(zqlMemResult).toEqualPg(pgResult);
@@ -502,8 +500,7 @@ async function checkRemove(
       mapResultToClientNames(
         zqliteMaterialized.data,
         schema,
-        (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol]
-          .table as keyof Schema['tables'],
+        completedAST(zqliteQuery).table as keyof Schema['tables'],
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -550,8 +547,7 @@ async function checkAddBack(
       mapResultToClientNames(
         zqliteMaterialized.data,
         schema,
-        (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol]
-          .table as keyof Schema['tables'],
+        completedAST(zqliteQuery).table as keyof Schema['tables'],
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -641,8 +637,7 @@ async function checkEditToRandom(
       mapResultToClientNames(
         zqliteMaterialized.data,
         schema,
-        (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol]
-          .table as keyof Schema['tables'],
+        completedAST(zqliteQuery).table as keyof Schema['tables'],
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -724,8 +719,7 @@ async function checkEditToMatch(
       mapResultToClientNames(
         zqliteMaterialized.data,
         schema,
-        (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol]
-          .table as keyof Schema['tables'],
+        completedAST(zqliteQuery).table as keyof Schema['tables'],
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -796,15 +790,11 @@ async function runZqlAsSql(
   query: Query<Schema, keyof Schema['tables']>,
 ) {
   const sqlQuery = formatPgInternalConvert(
-    compile(ast(query), schema.tables, serverSchema, query.format),
+    compile(completedAST(query), schema.tables, serverSchema, query.format),
   );
   return extractZqlResult(
     await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
   );
-}
-
-function ast(q: Query<Schema, keyof Schema['tables']>) {
-  return (q as QueryImpl<Schema, keyof Schema['tables']>)[completedAstSymbol];
 }
 
 function mapRow(row: Row, table: string, mapper: NameMapper): Row {

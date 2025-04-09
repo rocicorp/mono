@@ -1,10 +1,10 @@
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {type AST} from '../../zero-protocol/src/ast.ts';
+import {ast} from '../../zql/src/query/query-impl.ts';
 import {staticQuery} from '../../zql/src/query/static-query.ts';
 import {generateQuery} from '../../zql/src/query/test/query-gen.ts';
 import {generateSchema} from '../../zql/src/query/test/schema-gen.ts';
-import {ast} from '../../zql/src/query/test/util.ts';
 import {astToZQL} from './ast-to-zql.ts';
 
 test('simple table selection', () => {

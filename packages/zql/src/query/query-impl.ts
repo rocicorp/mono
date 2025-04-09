@@ -42,7 +42,12 @@ import {DEFAULT_TTL, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 type AnyQuery = Query<Schema, string, any>;
-export const astForTestingSymbol = Symbol();
+
+const astSymbol = Symbol();
+
+export function ast(query: Query<Schema, string, any>): AST {
+  return (query as AbstractQuery<Schema, string>)[astSymbol];
+}
 
 export function newQuery<
   TSchema extends Schema,
@@ -118,8 +123,7 @@ export abstract class AbstractQuery<
     this.format = format;
   }
 
-  // Not part of Query or QueryInternal interface
-  get [astForTestingSymbol](): AST {
+  get [astSymbol](): AST {
     return this.#ast;
   }
 
@@ -552,10 +556,13 @@ export abstract class AbstractQuery<
     cleanup: () => void;
     complete: Promise<void>;
   };
-  abstract updateTTL(ttl: TTL): void;
 }
 
-export const completedAstSymbol = Symbol();
+const completedAstSymbol = Symbol();
+
+export function completedAST(q: Query<Schema, string, any>) {
+  return (q as QueryImpl<Schema, string>)[completedAstSymbol];
+}
 
 export class QueryImpl<
   TSchema extends Schema,
@@ -613,6 +620,10 @@ export class QueryImpl<
       }
     });
 
+    const updateTTL = (newTTL: TTL) => {
+      this.#delegate.updateServerQuery(ast, newTTL);
+    };
+
     const input = buildPipeline(ast, this.#delegate);
     let removeCommitObserver: (() => void) | undefined;
 
@@ -632,14 +643,11 @@ export class QueryImpl<
           removeCommitObserver = this.#delegate.onTransactionCommit(cb);
         },
         queryGot || queryCompleteResolver.promise,
+        updateTTL,
       ),
     );
 
     return view as T;
-  }
-
-  override updateTTL(ttl: TTL): void {
-    this.#delegate.updateServerQuery(this._completeAst(), ttl);
   }
 
   run(): Promise<HumanReadable<TReturn>> {
@@ -705,14 +713,20 @@ function arrayViewFactory<
   TTable extends string,
   TReturn,
 >(
-  _query: Query<TSchema, TTable, TReturn>,
+  _query: AbstractQuery<TSchema, TTable, TReturn>,
   input: Input,
   format: Format,
   onDestroy: () => void,
   onTransactionCommit: (cb: () => void) => void,
   queryComplete: true | Promise<true>,
+  updateTTL: (ttl: TTL) => void,
 ): TypedView<HumanReadable<TReturn>> {
-  const v = new ArrayView<HumanReadable<TReturn>>(input, format, queryComplete);
+  const v = new ArrayView<HumanReadable<TReturn>>(
+    input,
+    format,
+    queryComplete,
+    updateTTL,
+  );
   v.onDestroy = onDestroy;
   onTransactionCommit(() => {
     v.flush();

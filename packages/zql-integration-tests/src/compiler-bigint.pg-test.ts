@@ -1,17 +1,24 @@
+import {Client} from 'pg';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
+import type {ServerSchema} from '../../z2s/src/schema.ts';
+import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {type Row} from '../../zero-protocol/src/data.ts';
-import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
-  completedAstSymbol,
-  newQuery,
-  QueryImpl,
-} from '../../zql/src/query/query-impl.ts';
+  number,
+  string,
+  table,
+} from '../../zero-schema/src/builder/table-builder.ts';
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
@@ -19,18 +26,7 @@ import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
-import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
-import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import './helpers/comparePg.ts';
-import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
-import {
-  number,
-  string,
-  table,
-} from '../../zero-schema/src/builder/table-builder.ts';
-import {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
-import {Client} from 'pg';
-import type {ServerSchema} from '../../z2s/src/schema.ts';
 
 const lc = createSilentLogContext();
 
@@ -198,10 +194,6 @@ function mapHash(commentRow: Record<string, unknown>) {
   return commentRow;
 }
 
-function ast(q: Query<Schema, keyof Schema['tables']>) {
-  return (q as QueryImpl<Schema, keyof Schema['tables']>)[completedAstSymbol];
-}
-
 describe('compiling ZQL to SQL', () => {
   describe('postgres.js', () => {
     t((query: string, args: unknown[]) =>
@@ -219,7 +211,7 @@ describe('compiling ZQL to SQL', () => {
   ) {
     test('All bigints in safe Number range', async () => {
       const query = issueQuery.related('comments').limit(2);
-      const c = compile(ast(query), schema.tables, serverSchema);
+      const c = compile(completedAST(query), schema.tables, serverSchema);
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
@@ -266,7 +258,7 @@ describe('compiling ZQL to SQL', () => {
 
     test('bigint exceeds safe range', async () => {
       const query = issueQuery.related('comments');
-      const c = compile(ast(query), schema.tables, serverSchema);
+      const c = compile(completedAST(query), schema.tables, serverSchema);
       const sqlQuery = formatPgInternalConvert(c);
       const result = await runPgQuery(
         sqlQuery.text,
@@ -284,7 +276,7 @@ describe('compiling ZQL to SQL', () => {
           .where('hash', '<', Number(Number.MAX_SAFE_INTEGER))
           .where('hash', '!=', Number(Number.MAX_SAFE_INTEGER - 3)),
       );
-      const c = compile(ast(query), schema.tables, serverSchema);
+      const c = compile(completedAST(query), schema.tables, serverSchema);
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
@@ -331,7 +323,7 @@ describe('compiling ZQL to SQL', () => {
       const q2 = issueQuery.related('comments', q =>
         q.where('hash', '=', Number.MAX_SAFE_INTEGER - 3),
       );
-      const c2 = compile(ast(q2), schema.tables, serverSchema);
+      const c2 = compile(completedAST(q2), schema.tables, serverSchema);
       const sqlQuery2 = formatPgInternalConvert(c2);
       const pgResult2 = extractZqlResult(
         await runPgQuery(sqlQuery2.text, sqlQuery2.values as JSONValue[]),
