@@ -1,5 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Immutable} from '../../../shared/src/immutable.ts';
+import type {TTL} from '../query/ttl.ts';
 import type {Listener, TypedView} from '../query/typed-view.ts';
 import type {Change} from './change.ts';
 import type {Input, Output} from './operator.ts';
@@ -32,15 +33,18 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   #dirty = false;
   #complete = false;
+  readonly #updateTTL: (ttl: TTL) => void;
 
   constructor(
     input: Input,
-    format: Format = {singular: false, relationships: {}},
-    queryComplete: true | Promise<true> = true,
+    format: Format, // = {singular: false, relationships: {}},
+    queryComplete: true | Promise<true>, // = true,
+    updateTTL: (ttl: TTL) => void,
   ) {
     this.#input = input;
     this.#schema = input.getSchema();
     this.#format = format;
+    this.#updateTTL = updateTTL;
     this.#root = {'': format.singular ? undefined : []};
     input.setOutput(this);
 
@@ -112,5 +116,9 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     }
     this.#dirty = false;
     this.#fireListeners();
+  }
+
+  updateTTL(ttl: TTL) {
+    this.#updateTTL(ttl);
   }
 }

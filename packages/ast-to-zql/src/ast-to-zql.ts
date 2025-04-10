@@ -21,7 +21,7 @@ import {SUBQ_PREFIX} from '../../zql/src/query/query-impl.ts';
  *
  * @example
  * ```
- * const ast = query.issue.where('id', '=', 123)[astForTestingSymbol];
+ * const ast = query.issue.where('id', '=', 123)[astSymbol];
  * console.log(astToZQL(ast)); // outputs: .where('id', '=', 123)
  * ```
  */

@@ -17,6 +17,7 @@ import {
   type ResultType,
   type Schema,
   type Stream,
+  type TTL,
   type ViewChange,
   type ViewFactory,
 } from '../../zero-client/src/mod.js';
@@ -48,6 +49,7 @@ export class SolidView<V> implements Output {
   // optimization reduced #applyChanges time from 743ms to 133ms.
   #builderRoot: Entry | undefined;
   #pendingChanges: ViewChange[] = [];
+  readonly #updateTTL: (ttl: TTL) => void;
 
   constructor(
     input: Input,
@@ -55,11 +57,14 @@ export class SolidView<V> implements Output {
     format: Format,
     onDestroy: () => void,
     queryComplete: true | Promise<true>,
+    updateTTL: (ttl: TTL) => void,
   ) {
     this.#input = input;
     onTransactionCommit(this.#onTransactionCommit);
     this.#format = format;
     this.#onDestroy = onDestroy;
+    this.#updateTTL = updateTTL;
+
     input.setOutput(this);
 
     const initialRoot = this.#createEmptyRoot();
@@ -155,6 +160,10 @@ export class SolidView<V> implements Output {
       '': this.#format.singular ? undefined : [],
     };
   }
+
+  updateTTL(ttl: TTL): void {
+    this.#updateTTL(ttl);
+  }
 }
 
 function materializeRelationships(change: Change): ViewChange {
@@ -212,6 +221,7 @@ export function solidViewFactory<
   onDestroy: () => void,
   onTransactionCommit: (cb: () => void) => void,
   queryComplete: true | Promise<true>,
+  updateTTL: (ttl: TTL) => void,
 ) {
   return new SolidView<HumanReadable<TReturn>>(
     input,
@@ -219,6 +229,7 @@ export function solidViewFactory<
     format,
     onDestroy,
     queryComplete,
+    updateTTL,
   );
 }
 

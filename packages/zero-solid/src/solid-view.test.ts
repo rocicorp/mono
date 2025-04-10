@@ -45,6 +45,7 @@ test('basics', () => {
     format,
     onDestroy,
     queryComplete,
+    () => {},
   );
 
   const state0 = [
@@ -105,6 +106,7 @@ test('single-format', () => {
     {singular: true, relationships: {}},
     () => {},
     true,
+    () => {},
   );
 
   const state0 = {a: 1, b: 'a', [refCountSymbol]: 1};
@@ -151,6 +153,7 @@ test('hydrate-empty', () => {
     format,
     onDestroy,
     queryComplete,
+    () => {},
   );
 
   expect(view.data).toEqual([]);
@@ -212,6 +215,7 @@ test('tree', () => {
     },
     () => {},
     true,
+    () => {},
   );
 
   const state0 = [
@@ -528,6 +532,7 @@ test('tree-single', () => {
     },
     () => {},
     true,
+    () => {},
   );
 
   const state0 = {
@@ -646,6 +651,7 @@ test('collapse', () => {
     },
     () => {},
     true,
+    () => {},
   );
 
   const state0: unknown[] = [];
@@ -1141,6 +1147,7 @@ test('collapse-single', () => {
     },
     () => {},
     true,
+    () => {},
   );
 
   const state0: unknown[] = [];
@@ -1220,6 +1227,7 @@ test('basic with edit pushes', () => {
     {singular: false, relationships: {}},
     () => {},
     true,
+    () => {},
   );
 
   const state0 = [
@@ -1302,6 +1310,7 @@ test('tree edit', () => {
     },
     () => {},
     true,
+    () => {},
   );
 
   const state0 = [
@@ -1520,6 +1529,7 @@ test('edit to change the order', () => {
     {singular: false, relationships: {}},
     () => {},
     true,
+    () => {},
   );
 
   const state0 = [
@@ -1631,6 +1641,7 @@ test('edit to preserve relationships', () => {
     },
     () => {},
     true,
+    () => {},
   );
 
   const state0: unknown[] = [];
@@ -1835,6 +1846,7 @@ test('edit leaf', () => {
     },
     () => {},
     true,
+    () => {},
   );
 
   const state0: unknown[] = [];
@@ -2086,6 +2098,7 @@ test('queryComplete promise', async () => {
     {singular: false, relationships: {}},
     () => {},
     queryCompleteResolver.promise,
+    () => {},
   );
 
   expect(view.data).toMatchInlineSnapshot(`
@@ -2148,6 +2161,7 @@ test('factory', () => {
     onDestroy,
     onTransactionCommit,
     true,
+    () => {},
   );
 
   expect(onTransactionCommit).toHaveBeenCalledTimes(1);
