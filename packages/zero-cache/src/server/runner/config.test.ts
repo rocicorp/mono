@@ -555,6 +555,7 @@ test('zero-cache --help', () => {
                                                                 the replication-manager (to know where to continue replication from). If the                      
                                                                 replication-manager has never run, there will be no replica file to restore, and                  
                                                                 the view-syncer will fail to start up, never connecting to the replication-manager.               
+                                                                                                                                                                  
                                                                 As such, it is not recommended to run a replication-manager lazily.                               
                                                                                                                                                                   
      --server-version string                                    optional                                                                                          
