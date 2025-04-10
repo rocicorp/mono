@@ -104,14 +104,13 @@ export type Group = Record<string, Option>;
 export type Options = Record<string, Group | Option>;
 
 /** Unwrap the Value type from an Option<V>. */
-type ValueOf<T extends Option> =
-  T extends v.Optional<infer V>
-    ? V | undefined
-    : T extends v.Type<infer V>
-      ? V
-      : T extends WrappedOptionType
-        ? ValueOf<T['type']>
-        : never;
+type ValueOf<T extends Option> = T extends v.Optional<infer V>
+  ? V | undefined
+  : T extends v.Type<infer V>
+  ? V
+  : T extends WrappedOptionType
+  ? ValueOf<T['type']>
+  : never;
 
 type Required =
   | RequiredOptionType
@@ -154,8 +153,8 @@ export type Config<O extends Options> = {
     : never]: O[P] extends Required
     ? ValueOf<O[P]>
     : O[P] extends Group
-      ? ConfigGroup<O[P]>
-      : never;
+    ? ConfigGroup<O[P]>
+    : never;
 } & {
   // Values for optional options are in optional fields.
   [P in keyof O as O[P] extends Optional ? P : never]?: O[P] extends Optional
@@ -342,8 +341,8 @@ export function parseOptionsAdvanced<T extends Options>(
       (required
         ? '{italic required}'
         : defaultValue !== undefined
-          ? `default: ${JSON.stringify(defaultValue)}`
-          : 'optional') + '\n',
+        ? `default: ${JSON.stringify(defaultValue)}`
+        : 'optional') + '\n',
     ];
     if (desc) {
       spec.push(...desc);
@@ -353,8 +352,8 @@ export function parseOptionsAdvanced<T extends Options>(
       literals.size
         ? String([...literals].map(l => `{underline ${l}}`))
         : multiple
-          ? `{underline ${terminalType}[]}`
-          : `{underline ${terminalType}}`,
+        ? `{underline ${terminalType}[]}`
+        : `{underline ${terminalType}}`,
       `  ${env} env`,
     ];
 
@@ -441,15 +440,8 @@ function valueParser(flagName: string, typeName: string) {
     switch (typeName) {
       case 'string':
         return input;
-      case 'boolean': {
-        const bool = input.toLowerCase();
-        if (['true', '1'].includes(bool)) {
-          return true;
-        } else if (['false', '0'].includes(bool)) {
-          return false;
-        }
-        throw new TypeError(`Invalid input for --${flagName}: "${input}"`);
-      }
+      case 'boolean':
+        return parseBoolean(flagName, input);
       case 'number': {
         const val = Number(input);
         if (Number.isNaN(val)) {
@@ -520,6 +512,16 @@ function parseArgs(
   }
 
   return [result, envObj, unknown] as const;
+}
+
+export function parseBoolean(flagName: string, input: string) {
+  const bool = input.toLowerCase();
+  if (['true', '1'].includes(bool)) {
+    return true;
+  } else if (['false', '0'].includes(bool)) {
+    return false;
+  }
+  throw new TypeError(`Invalid input for --${flagName}: "${input}"`);
 }
 
 function showUsage(

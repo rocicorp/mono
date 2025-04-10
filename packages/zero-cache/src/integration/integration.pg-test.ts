@@ -527,6 +527,12 @@ describe('integration', {timeout: 30000}, () => {
     ['single-node standalone', 'pg', () => [env], undefined],
     ['replica identity full', 'pg', () => [env], 'FULL'],
     [
+      'lazy single-node standalone',
+      'pg',
+      () => [{...env, ['ZERO_RUN_LAZILY']: 'true'}],
+      undefined,
+    ],
+    [
       'single-node multi-tenant direct-dispatch',
       'pg',
       () => [
@@ -561,6 +567,27 @@ describe('integration', {timeout: 30000}, () => {
       undefined,
     ],
     [
+      'lazy single-node multi-tenant, double-dispatch',
+      'pg',
+      () => [
+        {
+          ['ZERO_PORT']: String(port),
+          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
+          ['ZERO_TENANTS_JSON']: JSON.stringify({
+            tenants: [
+              {
+                id: 'tenant',
+                path: '/zero',
+                env: {...env, ['ZERO_PORT']: String(port + 3)},
+              },
+            ],
+          }),
+          ['ZERO_RUN_LAZILY']: 'true',
+        },
+      ],
+      undefined,
+    ],
+    [
       'multi-node standalone',
       'pg',
       () => [
@@ -575,6 +602,26 @@ describe('integration', {timeout: 30000}, () => {
           ...env,
           ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
           ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
+        },
+      ],
+      undefined,
+    ],
+    [
+      'lazy view-syncer multi-node standalone',
+      'pg',
+      () => [
+        // The replication-manager must be started first for initial-sync
+        {
+          ...env,
+          ['ZERO_PORT']: `${port2}`,
+          ['ZERO_NUM_SYNC_WORKERS']: '0',
+        },
+        // startZero() will then copy to replicaDbFile2 for the view-syncer
+        {
+          ...env,
+          ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
+          ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
+          ['ZERO_RUN_LAZILY']: 'true',
         },
       ],
       undefined,

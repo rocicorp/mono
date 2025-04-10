@@ -467,6 +467,23 @@ export const zeroOptions = {
       'rows than the limit.',
     ],
   },
+
+  run: {
+    lazily: {
+      type: v.boolean().default(false),
+      desc: [
+        'Delay starting the zero-cache processes until the first request.',
+        '',
+        'Note: This works as expected in single-node mode. While it is technically usable',
+        'in a multi-node setup, there is a bootstrapping complication in that the',
+        'view-syncer must first restore the replica from litestream before connecting to',
+        'the replication-manager (to know where to continue replication from). If the',
+        'replication-manager has never run, there will be no replica file to restore, and',
+        'the view-syncer will fail to start up, never connecting to the replication-manager.',
+        'As such, it is not recommended to run a replication-manager lazily.',
+      ],
+    },
+  },
 };
 
 export type ZeroConfig = Config<typeof zeroOptions>;

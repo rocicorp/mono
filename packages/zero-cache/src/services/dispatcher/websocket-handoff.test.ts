@@ -64,6 +64,40 @@ describe('dispatcher/websocket-handoff', () => {
     );
   });
 
+  test('handoff callback', async () => {
+    const [parent, child] = inProcChannel();
+
+    installWebSocketHandoff(
+      createSilentLogContext(),
+      (_, callback) =>
+        callback({
+          payload: {foo: 'boo'},
+          receiver: child,
+        }),
+      server,
+    );
+
+    installWebSocketReceiver(
+      wss,
+      (ws, payload) => {
+        ws.on('message', msg => {
+          ws.send(`Received "${msg}" and payload ${JSON.stringify(payload)}`);
+          ws.close();
+        });
+      },
+      parent,
+    );
+
+    const {promise: reply, resolve} = resolver<RawData>();
+    const ws = new WebSocket(`ws://localhost:${port}/`);
+    ws.on('open', () => ws.send('hello'));
+    ws.on('message', msg => resolve(msg));
+
+    expect(String(await reply)).toBe(
+      'Received "hello" and payload {"foo":"boo"}',
+    );
+  });
+
   test('double handoff', async () => {
     const [grandParent, parent1] = inProcChannel();
     const [parent2, child] = inProcChannel();
