@@ -10,6 +10,7 @@ export const createService = (
     commonEnv,
     port, // Default to the view-syncer port, but allow override
     alb, // Add ALB parameter to access its DNS name
+    internalLoadBalancer, // Add internal load balancer parameter
   }: {
     vpcId: $util.Output<string>;
     privateSubnets: $util.Output<string>[];
@@ -20,6 +21,7 @@ export const createService = (
     commonEnv: Record<string, string | $util.Output<string>>;
     port: number;
     alb: aws.lb.LoadBalancer;
+    internalLoadBalancer?: aws.lb.LoadBalancer; // Make internal LB optional
   },
 ) => {
   const taskDefExecutionRole = new aws.iam.Role(`${prefix}TaskDefExecRole`, {
@@ -201,10 +203,16 @@ export const createService = (
         return `${protocol}://${dnsName}`;
       });
 
+      // Create internal service URL if internal load balancer exists
+      const internalServiceUrl = internalLoadBalancer 
+        ? internalLoadBalancer.dnsName.apply(dnsName => `http://${dnsName}`)
+        : undefined;
+
       // Return both the service and the URL
       return {
         service,
         serviceUrl,
+        internalServiceUrl
       };
     });
 };

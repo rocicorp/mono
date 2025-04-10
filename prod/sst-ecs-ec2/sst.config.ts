@@ -104,6 +104,7 @@ export default $config({
         },
         port: 4849, // Port for replication-manager
         alb: alb.alb,
+        internalLoadBalancer: alb.internalAlb,
       },
     );
 
@@ -120,12 +121,14 @@ export default $config({
         commonEnv: {
           ...commonEnv,
           ZERO_COMMAND: 'view-syncer',
-          ZERO_CHANGE_STREAMER_URI: replicationManagerService.serviceUrl,
+          ZERO_CHANGE_STREAMER_URI:
+            replicationManagerService.internalServiceUrl,
           ZERO_UPSTREAM_MAX_CONNS: '15',
           ZERO_CVR_MAX_CONNS: '160',
         },
-        port: 4848, 
+        port: 4848,
         alb: alb.alb,
+        internalLoadBalancer: alb.internalAlb,
       },
     );
 
