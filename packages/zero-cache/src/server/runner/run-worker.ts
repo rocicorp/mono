@@ -1,5 +1,7 @@
 import '@dotenvx/dotenvx/config'; // Imports ENV variables from .env
+import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {parseBoolean} from '../../../../shared/src/options.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';
 import {childWorker, type Worker} from '../../types/processes.ts';
@@ -70,11 +72,35 @@ export async function runWorker(
         ? tenant.id
         : `/${tenant.id}`;
     }
-    return {...tenant, worker: childWorker('./server/main.ts', mergedEnv)};
+
+    let worker: Resolver<Worker> | undefined;
+
+    function getWorker(): Promise<Worker> {
+      if (worker === undefined) {
+        lc.info?.(
+          'starting zero-cache' + (tenant.id ? ` for ${tenant.id}` : ''),
+        );
+        const r = (worker = resolver<Worker>());
+        const w = childWorker('./server/main.ts', mergedEnv)
+          .once('message', () => r.resolve(w))
+          .once('error', r.reject);
+        processes.addWorker(w, 'user-facing', tenant.id);
+      }
+      return worker.promise;
+    }
+
+    return {...tenant, env: mergedEnv, getWorker};
   });
 
+  // Eagerly start zero-caches that are not configured to --run-lazily.
   for (const tenant of tenants) {
-    processes.addWorker(tenant.worker, 'user-facing', tenant.id);
+    const lazy = parseBoolean(
+      'ZERO_RUN_LAZILY',
+      tenant.env['ZERO_RUN_LAZILY'] ?? 'false',
+    );
+    if (!lazy) {
+      void tenant.getWorker();
+    }
   }
 
   const s = tenants.length > 1 ? 's' : '';

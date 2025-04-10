@@ -1,6 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
-import {installWebSocketHandoff} from '../../services/dispatcher/websocket-handoff.ts';
+import {
+  installWebSocketHandoff,
+  type HandoffSpec,
+} from '../../services/dispatcher/websocket-handoff.ts';
 import {HttpService, type Options} from '../../services/http-service.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
 import type {Worker} from '../../types/processes.ts';
@@ -12,7 +15,7 @@ type Tenant = {
   id: string;
   host?: string | undefined;
   path?: string | undefined;
-  worker: Worker;
+  getWorker: () => Promise<Worker>;
 };
 
 export class ZeroDispatcher extends HttpService {
@@ -27,7 +30,7 @@ export class ZeroDispatcher extends HttpService {
     opts: Options,
   ) {
     super('zero-dispatcher', lc, opts, fastify => {
-      installWebSocketHandoff(lc, req => this.#handoff(req), fastify.server);
+      installWebSocketHandoff(lc, this.#handoff, fastify.server);
     });
 
     this.#runAsReplicationManager = runAsReplicationManager;
@@ -39,7 +42,18 @@ export class ZeroDispatcher extends HttpService {
     );
   }
 
-  #handoff(req: IncomingMessageSubset) {
+  readonly #handoff = (
+    req: IncomingMessageSubset,
+    dispatch: (h: HandoffSpec<string>) => void,
+    onError: (error: unknown) => void,
+  ) => {
+    const t = this.#getTenant(req);
+    void t
+      .getWorker()
+      .then(receiver => dispatch({payload: t.id, receiver}), onError);
+  };
+
+  #getTenant(req: IncomingMessageSubset): Tenant {
     const {headers, url: u} = req;
     const host = headers.host?.toLowerCase();
     const {pathname} = new URL(u ?? '', `http://${host}/`);
@@ -48,13 +62,13 @@ export class ZeroDispatcher extends HttpService {
       if (t.id.length === 0) {
         // sole tenant
         assert(this.#tenants.length === 1);
-        return {payload: t.id, receiver: t.worker};
+        return t;
       }
       if (this.#runAsReplicationManager) {
         // The replication-manager dispatches internally using the
         // tenant ID as the first path component
         if (pathname.startsWith('/' + t.id + '/')) {
-          return {payload: t.id, receiver: t.worker};
+          return t;
         }
         continue;
       }
@@ -66,7 +80,7 @@ export class ZeroDispatcher extends HttpService {
       }
       this._lc.debug?.(`connecting ${host}${pathname} to ${t.id}`);
 
-      return {payload: t.id, receiver: t.worker};
+      return t;
     }
     throw new Error(`no matching tenant for: ${host}${pathname}`);
   }

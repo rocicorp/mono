@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {IncomingMessage, Server} from 'node:http';
 import {Socket} from 'node:net';
 import {WebSocketServer, type WebSocket} from 'ws';
+import {assert} from '../../../../shared/src/asserts.ts';
 import {
   serializableSubset,
   type IncomingMessageSubset,
@@ -14,10 +15,24 @@ import {
 } from '../../types/processes.ts';
 import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
 
-export type WebSocketHandoff<P> = (message: IncomingMessageSubset) => {
+export type HandoffSpec<P> = {
   payload: P;
   receiver: Receiver;
 };
+
+/**
+ * The WebSocketHandoff is a function that either returns the payload and
+ * receiver, or invokes the specified `callback` with the payload and
+ * receiver. It must not do both.
+ *
+ * Similarly, an error can be handled by throwing synchronously from the
+ * function, or invoking the `onerror` callback.
+ */
+export type WebSocketHandoff<P> = (
+  message: IncomingMessageSubset,
+  callback: (h: HandoffSpec<P>) => void,
+  onerror: (reason: unknown) => void,
+) => HandoffSpec<P> | void;
 
 export type WebSocketReceiver<P> = (ws: WebSocket, payload: P) => void;
 
@@ -37,8 +52,12 @@ export function installWebSocketHandoff<P>(
     socket: Socket,
     head: Buffer,
   ) => {
-    try {
-      const {payload, receiver} = handoff(message);
+    let sent = false;
+
+    function send({payload, receiver}: HandoffSpec<P>) {
+      assert(!sent, 'Handoff callback already invoked');
+      sent = true;
+
       const data = [
         'handoff',
         {
@@ -51,13 +70,24 @@ export function installWebSocketHandoff<P>(
       // "This event is guaranteed to be passed an instance of the <net.Socket> class"
       // https://nodejs.org/api/http.html#event-upgrade
       receiver.send(data, socket as Socket);
-    } catch (error) {
+    }
+
+    function onError(error: unknown) {
       // Returning an error on the HTTP handshake looks like a hanging connection
       // (at least from Chrome) and doesn't report any meaningful error in the browser.
       // Instead, finish the upgrade to a websocket and then close it with an error.
       wss.handleUpgrade(message as IncomingMessage, socket, head, ws =>
         closeWithError(lc, ws, error, PROTOCOL_ERROR),
       );
+    }
+
+    try {
+      const spec = handoff(message, send, onError);
+      if (spec) {
+        send(spec);
+      }
+    } catch (error) {
+      onError(error);
     }
   };
 
