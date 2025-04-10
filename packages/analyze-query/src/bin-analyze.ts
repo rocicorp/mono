@@ -6,6 +6,8 @@ import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {parseOptions} from '../../shared/src/options.ts';
 import * as v from '../../shared/src/valita.ts';
 import {
+  appOptions,
+  shardOptions,
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
 } from '../../zero-cache/src/config/zero-config.ts';
@@ -24,7 +26,11 @@ import {buildPipeline} from '../../zql/src/builder/builder.ts';
 import {Catch} from '../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../zql/src/ivm/operator.ts';
-import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
+import {
+  completedAST,
+  newQuery,
+  type QueryDelegate,
+} from '../../zql/src/query/query-impl.ts';
 import type {PullRow, Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {
@@ -32,23 +38,64 @@ import {
   runtimeDebugStats,
 } from '../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
+import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
+import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
+import {pgClient} from '../../zero-cache/src/types/pg.ts';
+import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
+import {must} from '../../shared/src/must.ts';
+import {formatOutput} from '../../ast-to-zql/src/format.ts';
 
 const options = {
   replicaFile: zeroOptions.replica.file,
   ast: {
     type: v.string().optional(),
-    desc: ['AST for the query to be analyzed.'],
+    desc: [
+      'AST for the query to be analyzed.  Only one of ast/query/hash should be provided.',
+    ],
   },
   query: {
     type: v.string().optional(),
     desc: [
-      `Query to be analyzed in the form of: z.query.table.where(...).related(...).etc`,
+      `Query to be analyzed in the form of: table.where(...).related(...).etc. `,
+      `Only one of ast/query/hash should be provided.`,
+    ],
+  },
+  hash: {
+    type: v.string().optional(),
+    desc: [
+      `Hash of the query to be analyzed. This is used to look up the query in the database. `,
+      `Only one of ast/query/hash should be provided.`,
+      `You should run this script from the directory containing your .env file to reduce the amount of`,
+      `configuration required. The .env file should contain the connection URL to the CVR database.`,
     ],
   },
   schema: {
     type: v.string().default('./schema.ts'),
     desc: ['Path to the schema file.'],
   },
+  applyPermissions: {
+    type: v.boolean().default(false),
+    desc: [
+      'Whether to apply permissions (from your schema file) to the provided query.',
+    ],
+  },
+  authData: {
+    type: v.string().optional(),
+    desc: [
+      'JSON encoded payload of the auth data.',
+      'This will be used to fill permission variables if the "applyPermissions" option is set',
+    ],
+  },
+  cvr: {
+    db: {
+      type: v.string().optional(),
+      desc: [
+        'Connection URL to the CVR database. Required if using a query hash.',
+      ],
+    },
+  },
+  app: appOptions,
+  shard: shardOptions,
 };
 
 const config = parseOptions(
@@ -62,7 +109,7 @@ runtimeDebugFlags.trackRowsVended = true;
 const lc = createSilentLogContext();
 
 const db = new Database(lc, config.replicaFile);
-const {schema} = await loadSchemaAndPermissions(lc, config.schema);
+const {schema, permissions} = await loadSchemaAndPermissions(lc, config.schema);
 const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const serverToClientMapper = serverToClient(schema.tables);
@@ -123,14 +170,30 @@ let start: number;
 let end: number;
 
 if (config.ast) {
-  [start, end] = runAst(JSON.parse(config.ast) as AST);
+  [start, end] = await runAst(JSON.parse(config.ast));
 } else if (config.query) {
   [start, end] = await runQuery(config.query);
+} else if (config.hash) {
+  [start, end] = await runHash(config.hash);
 } else {
-  throw new Error('No query or AST provided');
+  throw new Error('No query or AST or hash provided');
 }
 
-function runAst(ast: AST): [number, number] {
+async function runAst(ast: AST): Promise<[number, number]> {
+  if (config.applyPermissions) {
+    const authData = config.authData ? JSON.parse(config.authData) : {};
+    if (!config.authData) {
+      console.warn(
+        chalk.yellow(
+          'No auth data provided. Permission rules will compare to `NULL` wherever an auth data field is referenced.',
+        ),
+      );
+    }
+    ast = transformAndHashQuery(lc, ast, permissions, authData, false).query;
+    console.log(chalk.blue.bold('\n\n=== Query After Permissions: ===\n'));
+    console.log(await formatOutput(ast.table + astToZQL(ast)));
+  }
+
   const pipeline = buildPipeline(ast, host);
   const output = new Catch(pipeline);
 
@@ -140,7 +203,7 @@ function runAst(ast: AST): [number, number] {
   return [start, end];
 }
 
-async function runQuery(queryString: string): Promise<[number, number]> {
+function runQuery(queryString: string): Promise<[number, number]> {
   const z = {
     query: Object.fromEntries(
       Object.entries(schema.tables).map(([name]) => [
@@ -153,10 +216,27 @@ async function runQuery(queryString: string): Promise<[number, number]> {
   const f = new Function('z', `return z.query.${queryString};`);
   const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
 
-  const start = performance.now();
-  await q;
-  const end = performance.now();
-  return [start, end];
+  const ast = completedAST(q);
+  return runAst(ast);
+}
+
+async function runHash(hash: string) {
+  const cvrDB = pgClient(
+    lc,
+    must(config.cvr.db, 'CVR DB must be provided when using the hash option'),
+  );
+
+  const rows =
+    await cvrDB`select "clientAST", "internal" from ${cvrDB(upstreamSchema(getShardID(config)) + '/cvr')}."queries" where "queryHash" = ${must(
+      hash,
+    )} limit 1;`;
+  await cvrDB.end();
+
+  console.log('ZQL from Hash:');
+  const ast = rows[0].clientAST as AST;
+  console.log(await formatOutput(ast.table + astToZQL(ast)));
+
+  return runAst(ast);
 }
 
 console.log(chalk.blue.bold('=== Query Stats: ===\n'));
