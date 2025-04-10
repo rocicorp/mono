@@ -132,16 +132,16 @@ export default $config({
       },
     );
 
-    // new command.local.Command('zero-deploy-permissions', {
-    //   // Pulumi operates with cwd at the package root.
-    //   dir: join(process.cwd(), '../../packages/zero/'),
-    //   create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/shared/schema.ts`,
-    //   environment: {
-    //     ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
-    //     ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
-    //   },
-    //   // Run the Command on every deploy.
-    //   triggers: [Date.now()],
-    // });
+    new command.local.Command('zero-deploy-permissions', {
+      // Pulumi operates with cwd at the package root.
+      dir: join(process.cwd(), '../../packages/zero/'),
+      create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/shared/schema.ts`,
+      environment: {
+        ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
+        ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
+      },
+      // Run the Command on every deploy.
+      triggers: [Date.now()],
+    });
   },
 });
