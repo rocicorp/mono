@@ -489,7 +489,7 @@ describe('integration', {timeout: 30000}, () => {
 
       zerosExited.push(done);
 
-      const zero = childWorker('./server/multi/main.ts', env);
+      const zero = childWorker('./server/runner/main.ts', env);
       zero.onMessageType('ready', onReady);
       zero.on('close', onClose);
       zeros.push(zero);

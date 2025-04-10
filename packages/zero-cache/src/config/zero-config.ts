@@ -453,7 +453,7 @@ export const zeroOptions = {
 
   tenantID: {
     type: v.string().optional(),
-    desc: ['Passed by multi/main.ts to tag the LogContext of zero-caches'],
+    desc: ['Passed by runner/main.ts to tag the LogContext of zero-caches'],
     hidden: true,
   },
 
