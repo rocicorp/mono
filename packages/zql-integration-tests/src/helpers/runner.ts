@@ -1,36 +1,35 @@
+import {expect} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {compile, extractZqlResult} from '../../../z2s/src/compiler.ts';
+import type {ServerSchema} from '../../../z2s/src/schema.ts';
+import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
+import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
+import {makeSchemaCRUD} from '../../../zero-pg/src/custom.ts';
+import {ZPGQuery} from '../../../zero-pg/src/query.ts';
+import {getServerSchema} from '../../../zero-pg/src/schema.ts';
+import {Transaction} from '../../../zero-pg/src/test/util.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
 import {
-  astForTestingSymbol,
+  ast,
   defaultFormat,
   newQuery,
-  QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
+import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../../zqlite/src/test/source-factory.ts';
-import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
-import {ZPGQuery} from '../../../zero-pg/src/query.ts';
-import type {JSONValue} from '../../../shared/src/json.ts';
-import {Transaction} from '../../../zero-pg/src/test/util.ts';
-import {getServerSchema} from '../../../zero-pg/src/schema.ts';
-import type {ServerSchema} from '../../../z2s/src/schema.ts';
-import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
-import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
-import {expect} from 'vitest';
 import '../helpers/comparePg.ts';
-import {compile, extractZqlResult} from '../../../z2s/src/compiler.ts';
-import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
-import {makeSchemaCRUD} from '../../../zero-pg/src/custom.ts';
 
 const lc = createSilentLogContext();
 
@@ -246,16 +245,12 @@ function makeTest<TSchema extends Schema>(
       memory: createQuery(queryBuilders.memory),
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ast = (queries.sqlite as unknown as QueryImpl<Schema, string>)[
-      astForTestingSymbol
-    ];
     const pgResult = await queries.pg;
     // Might we worth being able to configure ZQLite to return client vs server names
     const sqliteResult = mapResultToClientNames(
       await queries.sqlite,
       zqlSchema,
-      ast.table,
+      ast(queries.sqlite).table,
     );
     const memoryResult = await queries.memory;
 

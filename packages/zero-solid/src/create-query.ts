@@ -89,7 +89,7 @@ function getView<
     view = query.materialize(solidViewFactory, ttl);
     views.set(query, view);
   } else {
-    query.updateTTL(ttl);
+    view.updateTTL(ttl);
   }
   viewRefCount.inc(view);
   return view as SolidView<HumanReadable<TReturn>>;

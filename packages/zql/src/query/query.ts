@@ -141,8 +141,11 @@ export interface Query<
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
 > extends PromiseLike<HumanReadable<TReturn>> {
-  // TODO(arv): This does not really belong here. It is used by materialize to
-  // determine the format of the view. Maybe make it part of materialize?
+  /**
+   * Format is used to specify the shape of the query results. This is used by
+   * {@linkcode one} and it also describes the shape when using
+   * {@linkcode related}.
+   */
   readonly format: Format;
 
   /**
@@ -150,11 +153,6 @@ export interface Query<
    * if two queries are the same.
    */
   hash(): string;
-
-  // TODO(arv): This API sucks! Everything else is either read only or returns a new query... this one on the other hand
-  // finds the underlying query manager and tells the server about the new TTL.
-  // A better API would be to have a way to get the QueryManager and then call a method on it to update the TTL.
-  updateTTL(ttl: TTL): void;
 
   /**
    * Related is used to add a related query to the current query. This is used
