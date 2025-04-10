@@ -92,6 +92,7 @@ test('parse options', () => {
         "shard": {
           "num": 0,
         },
+        "targetClientRowCount": 20000,
         "tenants": [
           {
             "env": {
@@ -154,6 +155,7 @@ test('parse options', () => {
         "ZERO_PER_USER_MUTATION_LIMIT_WINDOW_MS": "60000",
         "ZERO_PORT": "4848",
         "ZERO_SHARD_NUM": "0",
+        "ZERO_TARGET_CLIENT_ROW_COUNT": "20000",
         "ZERO_TENANTS_JSON": "{"tenants":[{"id":"ten-boo","host":"Normalize.ME","path":"tenboo","env":{"ZERO_REPLICA_FILE":"tenboo.db","ZERO_CVR_DB":"foo","ZERO_CHANGE_DB":"foo","ZERO_APP_ID":"foo"}},{"id":"ten_bar","path":"/tenbar","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_CVR_DB":"bar","ZERO_CHANGE_DB":"bar","ZERO_APP_ID":"bar"}},{"id":"tenbaz-123","path":"/tenbaz","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_UPSTREAM_DB":"overridden","ZERO_CVR_DB":"baz","ZERO_CHANGE_DB":"baz","ZERO_APP_ID":"foo"}}]}",
         "ZERO_UPSTREAM_DB": "foo",
         "ZERO_UPSTREAM_MAX_CONNS": "20",
@@ -531,7 +533,7 @@ test('zero-cache --help', () => {
                                                                 to reduce the amount of heap memory used during initial sync (e.g. for tables                     
                                                                 with large rows).                                                                                 
                                                                                                                                                                   
-     --target-client-row-count number                           optional                                                                                          
+     --target-client-row-count number                           default: 20000                                                                                    
        ZERO_TARGET_CLIENT_ROW_COUNT env                                                                                                                           
                                                                 The target number of rows to keep per client in the client side cache.                            
                                                                 This limit is a soft limit. When the number of rows in the cache exceeds                          

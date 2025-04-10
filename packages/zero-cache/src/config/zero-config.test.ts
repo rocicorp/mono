@@ -288,7 +288,7 @@ test('zero-cache --help', () => {
                                                                 to reduce the amount of heap memory used during initial sync (e.g. for tables                     
                                                                 with large rows).                                                                                 
                                                                                                                                                                   
-     --target-client-row-count number                           optional                                                                                          
+     --target-client-row-count number                           default: 20000                                                                                    
        ZERO_TARGET_CLIENT_ROW_COUNT env                                                                                                                           
                                                                 The target number of rows to keep per client in the client side cache.                            
                                                                 This limit is a soft limit. When the number of rows in the cache exceeds                          

@@ -441,7 +441,7 @@ export const zeroOptions = {
     },
 
     rowBatchSize: {
-      type: v.number().default(10000),
+      type: v.number().default(10_000),
       desc: [
         `The number of rows each table copy worker fetches at a time during`,
         `initial sync. This can be increased to speed up initial sync, or decreased`,
@@ -458,7 +458,7 @@ export const zeroOptions = {
   },
 
   targetClientRowCount: {
-    type: v.number().optional(),
+    type: v.number().default(20_000),
     desc: [
       'The target number of rows to keep per client in the client side cache.',
       'This limit is a soft limit. When the number of rows in the cache exceeds',
@@ -466,7 +466,6 @@ export const zeroOptions = {
       'Active queries, on the other hand, are never evicted and are allowed to use more',
       'rows than the limit.',
     ],
-    default: 20_000,
   },
 };
 
