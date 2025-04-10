@@ -103,7 +103,7 @@ test('parse options', () => {
             },
             "host": "normalize.me",
             "id": "ten-boo",
-            "path": "/tenboo",
+            "path": "/tenboo/",
           },
           {
             "env": {
@@ -113,7 +113,7 @@ test('parse options', () => {
               "ZERO_REPLICA_FILE": "tenbar.db",
             },
             "id": "ten_bar",
-            "path": "/tenbar",
+            "path": "/tenbar/",
           },
           {
             "env": {
@@ -124,7 +124,7 @@ test('parse options', () => {
               "ZERO_UPSTREAM_DB": "overridden",
             },
             "id": "tenbaz-123",
-            "path": "/tenbaz",
+            "path": "/tenbaz/",
           },
         ],
         "upstream": {
