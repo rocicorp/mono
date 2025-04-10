@@ -62,8 +62,8 @@ export const createService = (
       const containerDefinition = {
         name: containerName,
         image: resolvedEnv.ZERO_IMAGE_URL,
-        cpu: 800,
-        memory: 800,
+        cpu: 2000,
+        memory: 2000,
         essential: true,
         portMappings: [
           {
@@ -98,7 +98,7 @@ export const createService = (
       };
 
       const taskDef = new aws.ecs.TaskDefinition(`${prefix}TD`, {
-        family: `${prefix.toLowerCase()}-web-task`,
+        family: `${prefix.toLowerCase()}-task`,
         networkMode: 'awsvpc',
         requiresCompatibilities: ['EC2'],
         runtimePlatform: {
