@@ -1,4 +1,5 @@
 /* eslint-disable no-console */
+import '@dotenvx/dotenvx/config';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {parseOptions} from '../../shared/src/options.ts';
@@ -10,7 +11,8 @@ import {
 } from '../../zero-cache/src/config/zero-config.ts';
 import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
-import type {AST} from '../../zero-protocol/src/ast.ts';
+import {BigIntJSON} from '../../zero-cache/src/types/bigint-json.ts';
+import chalk from 'chalk';
 
 const options = {
   upstream: {
@@ -19,11 +21,12 @@ const options = {
   cvr: {
     db: v.string(),
   },
-  cdc: {
+  change: {
     db: v.string(),
   },
   app: appOptions,
   shard: shardOptions,
+  dumpZql: v.boolean().optional(),
 };
 
 const config = parseOptions(
@@ -52,6 +55,8 @@ async function upstreamStats() {
       sql`SELECT SUM("lastMutationID") as "c" FROM ${sql(schema)}."clients"`,
     ],
   ]);
+
+  await sql.end();
 }
 
 async function cvrStats() {
@@ -59,11 +64,11 @@ async function cvrStats() {
   const sql = pgClient(lc, config.cvr.db);
 
   function numQueriesPerClientAndClientGroup(
-    onlyFresh: boolean,
+    active: boolean,
   ): ReturnType<ReturnType<typeof pgClient>> {
-    const filter = onlyFresh
-      ? sql`WHERE "expiresAt" IS NULL OR "expiresAt" < NOW()`
-      : sql``;
+    const filter = active
+      ? sql`WHERE "inactivatedAt" IS NULL`
+      : sql`WHERE "inactivatedAt" IS NOT NULL AND "deleted" = false`;
     return sql`WITH 
     -- Count rows per clientID
     client_counts AS (
@@ -100,34 +105,13 @@ async function cvrStats() {
       g.num_queries,
       json_agg(json_build_object(
         'clientID', c."clientID",
-        'rows_count', c.num_queries
+        'num_queries', c.num_queries
       )) AS client_details
     FROM client_counts c
     JOIN group_counts g ON c."clientGroupID" = g."clientGroupID"
     JOIN client_per_group_counts cpg ON c."clientGroupID" = cpg."clientGroupID"
     GROUP BY c."clientGroupID", cpg.num_clients, g.num_queries
-    ORDER BY c."clientGroupID";`;
-  }
-
-  function rowsPerClientID(
-    inactive: boolean,
-  ): ReturnType<ReturnType<typeof pgClient>> {
-    const filter = inactive ? sql`WHERE "inactivedAt" IS NOT NULL` : sql``;
-    return sql`WITH desire_client_mapping AS (
-      SELECT 
-        "queryHash",
-        "clientID"
-      FROM ${sql(schema)}."desires"
-      ${filter}
-    )
-    SELECT 
-      d."clientID",
-      COUNT(DISTINCT r."rowKey") AS total_rows
-    FROM ${sql(schema)}."rows" r,
-    LATERAL jsonb_each(r."refCounts") k
-    JOIN desire_client_mapping d ON k.key = d."queryHash"
-    GROUP BY d."clientID"
-    ORDER BY total_rows DESC;`;
+    ORDER BY cpg.num_queries DESC;`;
   }
 
   await printStats([
@@ -143,24 +127,29 @@ async function cvrStats() {
     ],
     [
       'num active queries',
-      sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires" WHERE "inactivedAt" IS NULL`,
+      sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires" WHERE "inactivatedAt" IS NULL`,
     ],
     [
-      'num fresh queries',
-      sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires"
-          WHERE "inactivatedAt" < NOW() AND "expiresAt" > NOW()`,
+      'num inactive queries',
+      sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires" WHERE "inactivatedAt" IS NOT NULL AND "deleted" = false`,
     ],
     [
       'num deleted queries',
       sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires" WHERE "deleted" = true`,
     ],
     [
-      'total num queries per client and client group',
+      'total active queries per client and client group',
+      numQueriesPerClientAndClientGroup(true),
+    ],
+    [
+      'total inactive queries per client and client group',
       numQueriesPerClientAndClientGroup(false),
     ],
     [
-      'num fresh queries per client and client group',
-      numQueriesPerClientAndClientGroup(true),
+      'total rows per client group',
+      sql`SELECT "clientGroupID", COUNT(*) as "c" FROM ${sql(
+        schema,
+      )}."rows" GROUP BY "clientGroupID" ORDER BY "c" DESC`,
     ],
     [
       'num rows per query',
@@ -172,54 +161,50 @@ async function cvrStats() {
     GROUP BY k.key
     ORDER BY row_count DESC;`,
     ],
-    ['total rows per client', rowsPerClientID(false)],
-    ['total active rows per client', rowsPerClientID(true)],
-    [
-      'rows per client group',
-      sql`SELECT 
-      r."clientGroupID",
-      COUNT(*) AS total_rows
-    FROM ${sql(schema)}."rows" r
-    GROUP BY r."clientGroupID"
-    ORDER BY total_rows DESC;`,
-    ],
   ]);
 
-  const queryAsts =
-    await sql`SELECT "queryHash", "clientAST" FROM ${sql(schema)}."queries"`;
+  if (config.dumpZql) {
+    console.log(chalk.blue.bold('ZQL (without permissions) for each query:'));
+    const queryAsts =
+      await sql`SELECT "queryHash", "clientAST" FROM ${sql(schema)}."queries"`;
 
-  const seenQueries = new Set<string>();
-  const parseFailures: string[] = [];
-  for (const row of queryAsts) {
-    const {queryHash, clientAST} = row.queryHash;
-    if (seenQueries.has(queryHash)) {
-      continue;
+    const seenQueries = new Set<string>();
+    const parseFailures: string[] = [];
+    for (const row of queryAsts) {
+      const {queryHash, clientAST} = row;
+      if (seenQueries.has(queryHash)) {
+        continue;
+      }
+      seenQueries.add(queryHash);
+
+      try {
+        const zql = clientAST.table + astToZQL(clientAST);
+        console.log(chalk.red.bold('HASH:'), queryHash);
+        console.log(chalk.red.bold('ZQL:'), zql, '\n');
+      } catch (e) {
+        console.log(e);
+        parseFailures.push(queryHash);
+      }
     }
-    seenQueries.add(queryHash);
-
-    try {
-      const ast = JSON.parse(clientAST) as AST;
-      const zql = ast.table + astToZQL(ast);
-      console.log('HASH:', queryHash, 'ZQL:', zql);
-    } catch (e) {
-      parseFailures.push(queryHash);
+    if (parseFailures.length > 0) {
+      console.log('Failed to parse the following hashes:', parseFailures);
     }
   }
-  if (parseFailures.length > 0) {
-    console.log('Failed to parse the following hashes:', parseFailures);
-  }
+
+  await sql.end();
 }
 
 async function changelogStats() {
   const schema = upstreamSchema(getShardID(config)) + '/cdc';
-  const sql = pgClient(lc, config.cdc.db);
+  const sql = pgClient(lc, config.change.db);
 
   await printStats([
     [
       'change log size',
-      sql`SELECT COUNT(*) as "change_log_size" FROM ${sql(schema)}."change_log"`,
+      sql`SELECT COUNT(*) as "change_log_size" FROM ${sql(schema)}."changeLog"`,
     ],
   ]);
+  await sql.end();
 }
 
 async function printStats(
@@ -228,9 +213,12 @@ async function printStats(
     query: ReturnType<ReturnType<typeof pgClient>>,
   ][],
 ) {
-  const results = await Promise.all(pendingQueries);
+  const results = await Promise.all(
+    pendingQueries.map(async ([name, query]) => [name, await query]),
+  );
   for (const result of results) {
-    console.log(result[0]);
+    console.log('\n', chalk.blue.bold(result[0]), '\n');
+    console.log(BigIntJSON.stringify(result[1], null, 2));
   }
 }
 
