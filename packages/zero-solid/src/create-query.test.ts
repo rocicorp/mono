@@ -14,8 +14,8 @@ import type {SourceInput} from '../../zql/src/ivm/source.ts';
 import {refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
+import {createQuery} from './create-query.ts';
 import {solidViewFactory} from './solid-view.ts';
-import {useQuery} from './use-query.ts';
 
 function setupTestEnvironment() {
   const schema = createSchema({
@@ -42,10 +42,10 @@ function setupTestEnvironment() {
   return {ms, tableQuery, queryDelegate};
 }
 
-test('useQuery', async () => {
+test('createQuery', async () => {
   const {ms, tableQuery, queryDelegate} = setupTestEnvironment();
 
-  const [rows, resultType] = useQuery(() => tableQuery);
+  const [rows, resultType] = createQuery(() => tableQuery);
   expect(rows()).toEqual([
     {a: 1, b: 'a', [refCountSymbol]: 1},
     {a: 2, b: 'b', [refCountSymbol]: 1},
@@ -66,7 +66,7 @@ test('useQuery', async () => {
   expect(resultType()).toEqual({type: 'complete'});
 });
 
-test('useQuery with ttl', () => {
+test('createQuery with ttl', () => {
   const {tableQuery, queryDelegate} = setupTestEnvironment();
   const [ttl, setTTL] = createSignal<TTL>('1m');
 
@@ -76,7 +76,7 @@ test('useQuery with ttl', () => {
 
   const querySignal = vi.fn(() => tableQuery);
 
-  renderHook(useQuery, {
+  renderHook(createQuery, {
     initialProps: [querySignal, () => ({ttl: ttl()})],
   });
 
@@ -102,12 +102,12 @@ test('useQuery with ttl', () => {
   expect(materializeSpy).toHaveBeenCalledTimes(0);
 });
 
-test('useQuery deps change', async () => {
+test('createQuery deps change', async () => {
   const {tableQuery, queryDelegate} = setupTestEnvironment();
 
   const [a, setA] = createSignal(1);
 
-  const [rows, resultDetails] = useQuery(() => tableQuery.where('a', a()));
+  const [rows, resultDetails] = createQuery(() => tableQuery.where('a', a()));
 
   const rowLog: unknown[] = [];
   const resultDetailsLog: unknown[] = [];
@@ -147,10 +147,10 @@ test('useQuery deps change', async () => {
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
 });
 
-test('useQuery deps change testEffect', () => {
+test('createQuery deps change testEffect', () => {
   const {ms, tableQuery, queryDelegate} = setupTestEnvironment();
   const [a, setA] = createSignal(1);
-  const [rows] = useQuery(() => tableQuery.where('a', a()));
+  const [rows] = createQuery(() => tableQuery.where('a', a()));
   return testEffect(done =>
     createEffect((run: number = 0) => {
       if (run === 0) {
@@ -169,7 +169,7 @@ test('useQuery deps change testEffect', () => {
   );
 });
 
-test('useQuery shared view should only be destroyed once', async () => {
+test('createQuery shared view should only be destroyed once', async () => {
   const {ms, tableQuery} = setupTestEnvironment();
   const query = tableQuery.where('a', 1);
   const connectSpy = vi.spyOn(ms, 'connect');
@@ -177,8 +177,8 @@ test('useQuery shared view should only be destroyed once', async () => {
 
   for (let i = 0; i < 2; i++) {
     createRoot(dispose => {
-      const [rows1] = useQuery(() => query);
-      const [rows2] = useQuery(() => query);
+      const [rows1] = createQuery(() => query);
+      const [rows2] = createQuery(() => query);
 
       expect(connectSpy).toHaveBeenCalledTimes(1);
 
