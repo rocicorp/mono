@@ -18,17 +18,25 @@ export type QueryResult<TReturn> = readonly [
   Accessor<QueryResultDetails>,
 ];
 
+export type CreateQueryOptions = {
+  ttl?: TTL | undefined;
+};
+
+// Deprecated in 0.19
+/**
+ * @deprecated Use {@linkcode CreateQueryOptions} instead.
+ */
 export type UseQueryOptions = {
   ttl?: TTL | undefined;
 };
 
-export function useQuery<
+export function createQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
   querySignal: () => Query<TSchema, TTable, TReturn>,
-  options?: UseQueryOptions | Accessor<UseQueryOptions>,
+  options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
 ): QueryResult<TReturn> {
   // Wrap in in createMemo to ensure a new view is created if the querySignal changes.
   const view = createMemo(() => {
@@ -43,6 +51,21 @@ export function useQuery<
   });
 
   return [() => view().data, () => view().resultDetails];
+}
+
+// Deprecated in 0.19
+/**
+ * @deprecated Use {@linkcode createQuery} instead.
+ */
+export function useQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+>(
+  querySignal: () => Query<TSchema, TTable, TReturn>,
+  options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
+): QueryResult<TReturn> {
+  return createQuery(querySignal, options);
 }
 
 type UnknownSolidView = SolidView<HumanReadable<unknown>>;

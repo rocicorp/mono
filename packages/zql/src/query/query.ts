@@ -113,9 +113,9 @@ export type Row<T extends TableSchema | Query<ZeroSchema, string, any>> =
  * has been committed on the client or server. No query results will reflect stale state.
  *
  * A query can be:
- * - materialized
- * - run
- * - preloaded
+ * - {@linkcode materialize | materialize}
+ * - awaited (`then`/{@linkcode run})
+ * - {@linkcode preload | preloaded}
  *
  * The normal way to use a query would be through your UI framework's bindings (e.g., useQuery(q))
  * or within a custom mutator.
@@ -135,7 +135,6 @@ export type Row<T extends TableSchema | Query<ZeroSchema, string, any>> =
  * @typeParam TSchema The database schema type extending ZeroSchema
  * @typeParam TTable The name of the table being queried, must be a key of TSchema['tables']
  * @typeParam TReturn The return type of the query, defaults to PullRow<TTable, TSchema>
- *
  */
 export interface Query<
   TSchema extends ZeroSchema,

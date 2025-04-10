@@ -13,9 +13,7 @@
     "bench": "vitest bench --run",
     "bench:watch": "vitest bench --watch",
     "check-types": "tsc",
-    "check-types:watch": "tsc --watch",
-    "docs": "node --experimental-strip-types --no-warnings scripts/generate-docs.ts",
-    "docs:server": "node --experimental-strip-types --no-warnings scripts/generate-docs.ts --server"
+    "check-types:watch": "tsc --watch"
   },
   "dependencies": {
     "@rocicorp/lock": "^1.0.4",
@@ -31,11 +29,7 @@
     "replicache": "15.2.1",
     "shared": "0.0.0",
     "typescript": "~5.8.2",
-    "zero-protocol": "0.0.0",
-    "typedoc": "^0.28.2",
-    "typedoc-plugin-markdown": "^4.6.1",
-    "chokidar": "^4.0.1",
-    "ws": "^8.18.1"
+    "zero-protocol": "0.0.0"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"

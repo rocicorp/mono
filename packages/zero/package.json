@@ -22,7 +22,9 @@
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "prepack": "cp ../zero-cache/src/services/litestream/config.yml ./out/zero-cache/src/services/litestream/"
+    "prepack": "cp ../zero-cache/src/services/litestream/config.yml ./out/zero-cache/src/services/litestream/",
+    "docs": "node --experimental-strip-types --no-warnings tool/generate-docs.ts",
+    "docs:server": "node --watch --experimental-strip-types --no-warnings tool/generate-docs.ts --server"
   },
   "dependencies": {
     "@badrap/valita": "0.3.11",
@@ -61,6 +63,8 @@
     "prettier": "^3.5.3",
     "semver": "^7.5.4",
     "tsx": "^4.19.1",
+    "typedoc": "^0.28.2",
+    "typedoc-plugin-markdown": "^4.6.1",
     "url-pattern": "^1.0.3",
     "ws": "^8.18.1"
   },
