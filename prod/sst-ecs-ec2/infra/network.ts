@@ -94,29 +94,29 @@ export const networkConfig = (namePrefix) => {
       },
     ],
   });
+  
+  //fckNat
+  const amiId = aws.ec2.getAmi({
+    filters: [
+      {
+        name: "name",
+        // The AMI has the SSM agent pre-installed
+        values: ["fck-nat-al2023-*"],
+      },
+      {
+        name: "architecture",
+        values: ["arm64"],
+      },
+    ],
+    mostRecent: true,
+    owners: ["568608671756"],
+}, { async: true }).then(ami => ami.id)
 
   
-  // const fckNatAmi = aws.ec2.getAmiOutput(
-  //   {
-  //     owners: ["568608671756"], // AWS account ID for fck-nat AMI
-  //     filters: [
-  //       {
-  //         name: "name",
-  //         // The AMI has the SSM agent pre-installed
-  //         values: ["fck-nat-al2023-*"],
-  //       },
-  //       {
-  //         name: "architecture",
-  //         values: ["arm64"],
-  //       },
-  //     ],
-  //     mostRecent: true,
-  //   }
-  // ).id;
   // Create a NAT Instance
-  const natInstance = new aws.ec2.Instance(`${namePrefix}NatInstance22`, {
-    instanceType: "t2.nano",
-    ami: "ami-08138fe6bc6cecb00", // Amazon Linux 2 AMI
+  const natInstance = new aws.ec2.Instance(`${namePrefix}NatInstance`, {
+    instanceType: "t4g.nano",
+    ami: amiId, // Amazon Linux 2 AMI
     subnetId: publicSubnetNat.id,
     associatePublicIpAddress: true,
     vpcSecurityGroupIds: [natSecurityGroup.id],

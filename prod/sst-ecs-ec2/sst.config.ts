@@ -86,7 +86,7 @@ export default $config({
       ZERO_APP_ID: process.env.ZERO_APP_ID || 'zero',
     };
 
-    // Create the replication manager service - ensure it depends on the capacity provider
+    //Create the replication manager service - ensure it depends on the capacity provider
     const replicationManagerService = createService(
       `${$app.name}-${$app.stage}-replication-manager`,
       {
