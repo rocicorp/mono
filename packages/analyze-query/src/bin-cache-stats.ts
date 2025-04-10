@@ -27,6 +27,7 @@ const options = {
   app: appOptions,
   shard: shardOptions,
   dumpZql: v.boolean().optional(),
+  detailed: v.boolean().optional(),
 };
 
 const config = parseOptions(
@@ -63,24 +64,13 @@ async function cvrStats() {
   const schema = upstreamSchema(getShardID(config)) + '/cvr';
   const sql = pgClient(lc, config.cvr.db);
 
-  function numQueriesPerClientAndClientGroup(
+  function numQueriesPerClientGroup(
     active: boolean,
   ): ReturnType<ReturnType<typeof pgClient>> {
     const filter = active
-      ? sql`WHERE "inactivatedAt" IS NULL`
-      : sql`WHERE "inactivatedAt" IS NOT NULL AND "deleted" = false`;
+      ? sql`WHERE "inactivatedAt" IS NULL AND deleted = false`
+      : sql`WHERE "inactivatedAt" IS NOT NULL AND ("inactivatedAt" + "ttl") > NOW()`;
     return sql`WITH 
-    -- Count rows per clientID
-    client_counts AS (
-      SELECT 
-        "clientGroupID",
-        "clientID",
-        COUNT(*) AS num_queries
-      FROM ${sql(schema)}."desires"
-      ${filter}
-      GROUP BY "clientGroupID", "clientID"
-    ),
-    -- Count total rows per clientGroupID
     group_counts AS (
       SELECT 
         "clientGroupID",
@@ -100,18 +90,12 @@ async function cvrStats() {
     )
     -- Combine all the information
     SELECT 
-      c."clientGroupID",
+      g."clientGroupID",
       cpg.num_clients,
-      g.num_queries,
-      json_agg(json_build_object(
-        'clientID', c."clientID",
-        'num_queries', c.num_queries
-      )) AS client_details
-    FROM client_counts c
-    JOIN group_counts g ON c."clientGroupID" = g."clientGroupID"
-    JOIN client_per_group_counts cpg ON c."clientGroupID" = cpg."clientGroupID"
-    GROUP BY c."clientGroupID", cpg.num_clients, g.num_queries
-    ORDER BY cpg.num_queries DESC;`;
+      g.num_queries
+    FROM group_counts g
+    JOIN client_per_group_counts cpg ON g."clientGroupID" = cpg."clientGroupID"
+    ORDER BY g.num_queries DESC;`;
   }
 
   await printStats([
@@ -127,40 +111,94 @@ async function cvrStats() {
     ],
     [
       'num active queries',
-      sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires" WHERE "inactivatedAt" IS NULL`,
+      sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires" WHERE "inactivatedAt" IS NULL AND "deleted" = false`,
     ],
     [
       'num inactive queries',
-      sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires" WHERE "inactivatedAt" IS NOT NULL AND "deleted" = false`,
+      sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires" WHERE "inactivatedAt" IS NOT NULL AND ("inactivatedAt" + "ttl") > NOW()`,
     ],
     [
       'num deleted queries',
       sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires" WHERE "deleted" = true`,
     ],
     [
-      'total active queries per client and client group',
-      numQueriesPerClientAndClientGroup(true),
+      'fresh queries percentiles',
+      sql`WITH client_group_counts AS (
+        -- Count inactive desires per clientGroupID
+        SELECT
+          "clientGroupID",
+          COUNT(*) AS fresh_count
+        FROM ${sql(schema)}."desires"
+        WHERE 
+          ("inactivatedAt" IS NOT NULL 
+          AND ("inactivatedAt" + "ttl") > NOW()) OR ("inactivatedAt" IS NULL
+          AND deleted = false)
+        GROUP BY "clientGroupID"
+      )
+      
+      SELECT
+        percentile_cont(0.50) WITHIN GROUP (ORDER BY fresh_count) AS "p50",
+        percentile_cont(0.75) WITHIN GROUP (ORDER BY fresh_count) AS "p75",
+        percentile_cont(0.90) WITHIN GROUP (ORDER BY fresh_count) AS "p90",
+        percentile_cont(0.95) WITHIN GROUP (ORDER BY fresh_count) AS "p95",
+        percentile_cont(0.99) WITHIN GROUP (ORDER BY fresh_count) AS "p99",
+        MIN(fresh_count) AS "min",
+        MAX(fresh_count) AS "max",
+        AVG(fresh_count) AS "avg"
+      FROM client_group_counts;`,
     ],
     [
-      'total inactive queries per client and client group',
-      numQueriesPerClientAndClientGroup(false),
+      'rows per client group percentiles',
+      sql`WITH client_group_counts AS (
+        -- Count inactive desires per clientGroupID
+        SELECT
+          "clientGroupID",
+          COUNT(*) AS row_count
+        FROM ${sql(schema)}."rows"
+        GROUP BY "clientGroupID"
+      )
+      SELECT
+        percentile_cont(0.50) WITHIN GROUP (ORDER BY row_count) AS "p50",
+        percentile_cont(0.75) WITHIN GROUP (ORDER BY row_count) AS "p75",
+        percentile_cont(0.90) WITHIN GROUP (ORDER BY row_count) AS "p90",
+        percentile_cont(0.95) WITHIN GROUP (ORDER BY row_count) AS "p95",
+        percentile_cont(0.99) WITHIN GROUP (ORDER BY row_count) AS "p99",
+        MIN(row_count) AS "min",
+        MAX(row_count) AS "max",
+        AVG(row_count) AS "avg"
+      FROM client_group_counts;`,
     ],
-    [
-      'total rows per client group',
-      sql`SELECT "clientGroupID", COUNT(*) as "c" FROM ${sql(
-        schema,
-      )}."rows" GROUP BY "clientGroupID" ORDER BY "c" DESC`,
-    ],
-    [
-      'num rows per query',
-      sql`SELECT 
-      k.key AS "queryHash",
-      COUNT(*) AS row_count
-    FROM ${sql(schema)}."rows" r,
-    LATERAL jsonb_each(r."refCounts") k
-    GROUP BY k.key
-    ORDER BY row_count DESC;`,
-    ],
+    ...((config.detailed
+      ? [
+          [
+            'total active queries per client and client group',
+            numQueriesPerClientGroup(true),
+          ],
+          [
+            'total inactive queries per client and client group',
+            numQueriesPerClientGroup(false),
+          ],
+          [
+            'total rows per client group',
+            sql`SELECT "clientGroupID", COUNT(*) as "c" FROM ${sql(
+              schema,
+            )}."rows" GROUP BY "clientGroupID" ORDER BY "c" DESC`,
+          ],
+          [
+            'num rows per query',
+            sql`SELECT 
+        k.key AS "queryHash",
+        COUNT(*) AS row_count
+      FROM ${sql(schema)}."rows" r,
+      LATERAL jsonb_each(r."refCounts") k
+      GROUP BY k.key
+      ORDER BY row_count DESC;`,
+          ],
+        ]
+      : []) satisfies [
+      name: string,
+      query: ReturnType<ReturnType<typeof pgClient>>,
+    ][]),
   ]);
 
   if (config.dumpZql) {
