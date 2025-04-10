@@ -111,24 +111,48 @@ export const capacityProvider = (
   );
 
   // Update the userData script to ensure proper ECS agent configuration and add logging
-  const userData = cluster.name.apply(
-    name => `#!/bin/bash
-            echo "Starting ECS configuration..."
-            echo ECS_CLUSTER=${name} >> /etc/ecs/ecs.config
-            echo ECS_LOGLEVEL=debug >> /etc/ecs/ecs.config
-            echo ECS_ENABLE_CONTAINER_METADATA=true >> /etc/ecs/ecs.config
-            echo ECS_ENABLE_TASK_IAM_ROLE=true >> /etc/ecs/ecs.config
-            echo ECS_AVAILABLE_LOGGING_DRIVERS='["json-file","awslogs"]' >> /etc/ecs/ecs.config
-        `,
+  // const userData = cluster.name.apply(
+  //   name => `#!/bin/bash
+  //           echo "Starting ECS configuration..."
+  //           echo ECS_CLUSTER=${name} >> /etc/ecs/ecs.config
+  //           echo ECS_LOGLEVEL=debug >> /etc/ecs/ecs.config
+  //           echo ECS_ENABLE_CONTAINER_METADATA=true >> /etc/ecs/ecs.config
+  //           echo ECS_ENABLE_TASK_IAM_ROLE=true >> /etc/ecs/ecs.config
+  //           echo ECS_AVAILABLE_LOGGING_DRIVERS='["json-file","awslogs"]' >> /etc/ecs/ecs.config
+  //       `,
+  // );
+
+  const userDataBottlerocket = cluster.name.apply(
+    name => 
+      `[settings.ecs]
+cluster = "${name}"
+loglevel = "debug"
+`,
   );
 
-  const amiId = aws.ec2
+  // const amiId = aws.ec2
+  //   .getAmi(
+  //     {
+  //       filters: [
+  //         {
+  //           name: 'name',
+  //           values: ['amzn2-ami-ecs-hvm-*-arm64-ebs'], // Use ECS-optimized AMI instead
+  //         },
+  //       ],
+  //       mostRecent: true,
+  //       owners: ['amazon'],
+  //     },
+  //     {async: true},
+  //   )
+  //   .then(ami => ami.id);
+
+  const bottleRocketAmiId = aws.ec2
     .getAmi(
       {
         filters: [
           {
             name: 'name',
-            values: ['amzn2-ami-ecs-hvm-*-x86_64-ebs'], // Use ECS-optimized AMI instead
+            values: ['bottlerocket-aws-ecs-2-aarch64*'], // Use ECS-optimized AMI instead
           },
         ],
         mostRecent: true,
@@ -142,14 +166,16 @@ export const capacityProvider = (
     `${prefix}LaunchTemplateECS`,
     {
       namePrefix: `${prefix}-instance-`,
-      imageId: amiId,
-      instanceType: 't2.medium', // env
+      imageId: bottleRocketAmiId,
+      instanceType: 't4g.medium', // env
       vpcSecurityGroupIds: [ec2Sg.id],
       updateDefaultVersion: true,
       iamInstanceProfile: {
         arn: instanceProfile.arn,
       },
-      userData: userData.apply(v => Buffer.from(v).toString('base64')),
+      userData: userDataBottlerocket.apply(v =>
+        Buffer.from(v).toString('base64'),
+      ),
     },
     {
       dependsOn: [cluster],

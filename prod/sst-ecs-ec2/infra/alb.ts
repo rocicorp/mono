@@ -126,7 +126,8 @@ export const createAlb = (
   }
 
   // Create an internal load balancer if private subnets are provided
-  let internalAlb, internalAlbSecurityGroup, internalTargetGroup, internalHttpListener;
+  let internalAlbSecurityGroup, internalTargetGroup, internalHttpListener;
+  let internalAlb: aws.lb.LoadBalancer | undefined;
   
   if (privateSubnets && privateSubnets.length > 0) {
     // Create a Security Group for the internal ALB

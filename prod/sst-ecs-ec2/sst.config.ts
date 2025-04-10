@@ -103,8 +103,7 @@ export default $config({
           ZERO_COMMAND: 'replication-manager',
         },
         port: 4849, // Port for replication-manager
-        alb: alb.alb,
-        internalLoadBalancer: alb.internalAlb,
+        alb
       },
     );
 
@@ -127,8 +126,7 @@ export default $config({
           ZERO_CVR_MAX_CONNS: '160',
         },
         port: 4848,
-        alb: alb.alb,
-        internalLoadBalancer: alb.internalAlb,
+        alb
       },
     );
 

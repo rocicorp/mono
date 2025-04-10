@@ -10,7 +10,6 @@ export const createService = (
     commonEnv,
     port, // Default to the view-syncer port, but allow override
     alb, // Add ALB parameter to access its DNS name
-    internalLoadBalancer, // Add internal load balancer parameter
   }: {
     vpcId: $util.Output<string>;
     privateSubnets: $util.Output<string>[];
@@ -20,8 +19,7 @@ export const createService = (
     targetGroup: aws.lb.TargetGroup;
     commonEnv: Record<string, string | $util.Output<string>>;
     port: number;
-    alb: aws.lb.LoadBalancer;
-    internalLoadBalancer?: aws.lb.LoadBalancer; // Make internal LB optional
+    alb: {alb: aws.lb.LoadBalancer, internalLoadBalancer?: aws.lb.LoadBalancer, };
   },
 ) => {
   const taskDefExecutionRole = new aws.iam.Role(`${prefix}TaskDefExecRole`, {
@@ -64,6 +62,7 @@ export const createService = (
       const containerDefinition = {
         name: containerName,
         image: resolvedEnv.ZERO_IMAGE_URL,
+        architecture: 'arm64',
         cpu: 2000,
         memory: 2000,
         essential: true,
@@ -104,7 +103,7 @@ export const createService = (
         networkMode: 'awsvpc',
         requiresCompatibilities: ['EC2'],
         runtimePlatform: {
-          cpuArchitecture: 'X86_64',
+          cpuArchitecture: 'ARM64',
         },
         executionRoleArn: taskDefExecutionRole.arn,
         containerDefinitions: JSON.stringify([containerDefinition]),
@@ -196,7 +195,7 @@ export const createService = (
       );
 
       // Create the service URL using the ALB's DNS name
-      const serviceUrl = alb.dnsName.apply(dnsName => {
+      const serviceUrl = alb.alb.dnsName.apply(dnsName => {
         // Use HTTPS if a domain and cert are configured, otherwise HTTP
         const protocol =
           process.env.DOMAIN_NAME && process.env.DOMAIN_CERT ? 'https' : 'http';
@@ -204,8 +203,8 @@ export const createService = (
       });
 
       // Create internal service URL if internal load balancer exists
-      const internalServiceUrl = internalLoadBalancer 
-        ? internalLoadBalancer.dnsName.apply(dnsName => `http://${dnsName}`)
+      const internalServiceUrl = alb.internalLoadBalancer
+        ? alb.internalLoadBalancer.dnsName.apply(dnsName => `http://${dnsName}`)
         : undefined;
 
       // Return both the service and the URL
