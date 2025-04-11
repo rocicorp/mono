@@ -617,7 +617,7 @@ export class Compiler {
         )}.${this.#mapColumnNoAlias(
           table,
           column,
-        )}::timestamp) * 1000 as ${sql.ident(column)}`;
+        )}) * 1000 as ${sql.ident(column)}`;
       }
     }
     return sql`${sql.ident(table)}.${this.#mapColumn(table, column)}`;
