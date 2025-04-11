@@ -77,7 +77,27 @@ export interface ZeroOptions<
    */
   schema: S;
 
-  mutators?: MD;
+  /**
+   * `mutators` is a map of custom mutator definitions. The keys are
+   * namespaces or names of the mutators. The values are the mutator
+   * implementations. Client side mutators must be idempotent as a
+   * mutation can be rebased multiple times when folding in authoritative
+   * changes from the server to the client.
+   */
+  mutators?: MD | undefined;
+
+  /**
+   * Custom mutations are pushed to zero-cache and then to
+   * your API server. If you would like specific headers to be available
+   * to your API server when it receives a custom mutation, you can
+   * specify them here.
+   */
+  pushParams?:
+    | {
+        headers?: Record<string, string> | undefined;
+        queryParams?: Record<string, string> | undefined;
+      }
+    | undefined;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
