@@ -36,7 +36,7 @@ export const createAlb = (
       ],
       egress: [
         {
-          protocol: '-1', // All traffic
+          protocol: '-1', 
           fromPort: 0,
           toPort: 0,
           cidrBlocks: ['0.0.0.0/0'],
@@ -51,8 +51,8 @@ export const createAlb = (
     securityGroups: [albSecurityGroup.id],
     subnets: publicSubnets,
     loadBalancerType: 'application',
-    idleTimeout: 3600, // Matches the BASE_TRANSFORM.loadBalancer.idleTimeout in SST config
-    enableCrossZoneLoadBalancing: true, // Added based on SST's implementation
+    idleTimeout: 3600, 
+    enableCrossZoneLoadBalancing: true, 
   });
 
   // Create Target Groups with health check configurations that mirror SST config
@@ -66,14 +66,14 @@ export const createAlb = (
       healthCheck: {
         enabled: true,
         path: '/keepalive',
-        port: '4848', // Explicitly set port for view-syncer
+        port: '4848', 
         protocol: 'HTTP',
-        interval: 5, // Matches BASE_TRANSFORM.target.healthCheck.interval
-        healthyThreshold: 2, // Matches BASE_TRANSFORM.target.healthCheck.healthyThreshold
+        interval: 5, 
+        healthyThreshold: 2, 
         unhealthyThreshold: 2,
-        timeout: 3, // Matches BASE_TRANSFORM.target.healthCheck.timeout
+        timeout: 3,
       },
-      deregistrationDelay: 1, // Matches BASE_TRANSFORM.target.deregistrationDelay
+      deregistrationDelay: 1,
       stickiness: {
         enabled: true,
         type: 'lb_cookie',
@@ -169,14 +169,14 @@ export const createAlb = (
     internalTargetGroup = new aws.lb.TargetGroup(
       `${prefix}-ITG`,
       {
-        port: 4849, // Port matching the replication-manager service
+        port: 4849,
         protocol: 'HTTP',
         vpcId,
         targetType: 'ip',
         healthCheck: {
           enabled: true,
           path: '/keepalive',
-          port: '4849', // Explicitly set port for replication-manager
+          port: '4849',
           protocol: 'HTTP',
           interval: 5,
           healthyThreshold: 2,

@@ -8,8 +8,8 @@ export const createService = (
     targetGroup,
     albSecurityGroup,
     commonEnv,
-    port, // Default to the view-syncer port, but allow override
-    alb, // Add ALB parameter to access its DNS name
+    port,
+    alb,
   }: {
     vpcId: $util.Output<string>;
     privateSubnets: $util.Output<string>[];
@@ -19,7 +19,7 @@ export const createService = (
     targetGroup: aws.lb.TargetGroup;
     commonEnv: Record<string, string | $util.Output<string>>;
     port: number;
-    alb: {alb: aws.lb.LoadBalancer, internalLoadBalancer?: aws.lb.LoadBalancer, };
+    alb: {alb: aws.lb.LoadBalancer; internalLoadBalancer?: aws.lb.LoadBalancer};
   },
 ) => {
   const taskDefExecutionRole = new aws.iam.Role(`${prefix}TaskDefExecRole`, {
@@ -32,20 +32,17 @@ export const createService = (
     ],
   });
 
-  // Define the container name consistently
   const containerName = 'zero-cache-image';
 
-  // Create the log group explicitly to ensure it exists
   const logGroupName = `/ecs/${prefix}`;
   const logGroup = new aws.cloudwatch.LogGroup(`${prefix}LogGroup`, {
     name: logGroupName,
-    retentionInDays: 30, // Set an appropriate retention period
+    retentionInDays: 30,
   });
 
   // Use Pulumi's Output.all to properly unwrap all Output values
   return $util
     .all(
-      // Collect all potential Output values from commonEnv
       Object.entries(commonEnv).map(([_name, value]) =>
         typeof value === 'string' ? value : value,
       ),
@@ -62,7 +59,6 @@ export const createService = (
       const containerDefinition = {
         name: containerName,
         image: resolvedEnv.ZERO_IMAGE_URL,
-        architecture: 'arm64',
         cpu: 2000,
         memory: 2000,
         essential: true,
@@ -73,7 +69,6 @@ export const createService = (
             protocol: 'tcp',
           },
         ],
-        // Add health check configuration with correct port
         healthCheck: {
           command: [
             `CMD-SHELL`,
@@ -103,7 +98,7 @@ export const createService = (
         networkMode: 'awsvpc',
         requiresCompatibilities: ['EC2'],
         runtimePlatform: {
-          cpuArchitecture: 'ARM64',
+          cpuArchitecture: 'X86_64',
         },
         executionRoleArn: taskDefExecutionRole.arn,
         containerDefinitions: JSON.stringify([containerDefinition]),
@@ -134,10 +129,10 @@ export const createService = (
         ],
         egress: [
           {
-            protocol: '-1', // All protocols
+            protocol: '-1',
             fromPort: 0,
             toPort: 0,
-            cidrBlocks: ['0.0.0.0/0'], // Allow outbound internet access
+            cidrBlocks: ['0.0.0.0/0'],
           },
         ],
       });
@@ -157,7 +152,7 @@ export const createService = (
             {
               targetGroupArn: targetGroup.arn,
               containerName,
-              containerPort: port, // Use the correct port
+              containerPort: port,
             },
           ],
           capacityProviderStrategies: [
@@ -194,24 +189,20 @@ export const createService = (
         },
       );
 
-      // Create the service URL using the ALB's DNS name
       const serviceUrl = alb.alb.dnsName.apply(dnsName => {
-        // Use HTTPS if a domain and cert are configured, otherwise HTTP
         const protocol =
           process.env.DOMAIN_NAME && process.env.DOMAIN_CERT ? 'https' : 'http';
         return `${protocol}://${dnsName}`;
       });
 
-      // Create internal service URL if internal load balancer exists
       const internalServiceUrl = alb.internalLoadBalancer
         ? alb.internalLoadBalancer.dnsName.apply(dnsName => `http://${dnsName}`)
         : undefined;
 
-      // Return both the service and the URL
       return {
         service,
         serviceUrl,
-        internalServiceUrl
+        internalServiceUrl,
       };
     });
 };

@@ -74,7 +74,6 @@ export const networkConfig = (namePrefix) => {
     availabilityZone: "us-east-1b",
   });
 
-  // Create a Security Group for the NAT instance
   const natSecurityGroup = new aws.ec2.SecurityGroup(`${namePrefix}NATSecurityGroup`, {
     vpcId: vpc.id,
     ingress: [
