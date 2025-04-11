@@ -20,7 +20,7 @@ const config = {
 };
 
 const clientID = 'test-cid';
-const wsID = 'test-wsid';
+// const wsID = 'test-wsid';
 describe('combine pushes', () => {
   test('empty array', () => {
     const [pushes, terminate] = combinePushes([]);
@@ -33,14 +33,17 @@ describe('combine pushes', () => {
       {
         push: makePush(1),
         jwt: 'a',
+        clientID,
       },
       {
         push: makePush(1),
         jwt: 'a',
+        clientID,
       },
       {
         push: makePush(1),
         jwt: 'a',
+        clientID,
       },
     ]);
     expect(pushes).toHaveLength(1);
@@ -53,26 +56,32 @@ describe('combine pushes', () => {
       {
         push: makePush(1),
         jwt: 'a',
+        clientID,
       },
       {
         push: makePush(1),
         jwt: 'a',
+        clientID,
       },
       {
         push: makePush(1),
         jwt: 'c',
+        clientID,
       },
       {
         push: makePush(1),
         jwt: 'b',
+        clientID,
       },
       {
         push: makePush(1),
         jwt: 'b',
+        clientID,
       },
       {
         push: makePush(1),
         jwt: 'c',
+        clientID,
       },
     ]);
     expect(pushes).toHaveLength(4);
@@ -98,10 +107,12 @@ describe('combine pushes', () => {
       {
         push: makePush(1),
         jwt: 'a',
+        clientID,
       },
       {
         push: makePush(1),
         jwt: 'a',
+        clientID,
       },
       undefined,
     ]);
@@ -114,11 +125,13 @@ describe('combine pushes', () => {
       {
         push: makePush(1),
         jwt: 'a',
+        clientID,
       },
       undefined,
       {
         push: makePush(1),
         jwt: 'a',
+        clientID,
       },
     ]);
     expect(pushes).toHaveLength(1);
@@ -159,7 +172,7 @@ describe('pusher service', () => {
     );
     void pusher.run();
 
-    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt');
 
     await pusher.stop();
 
@@ -188,7 +201,7 @@ describe('pusher service', () => {
     );
     void pusher.run();
 
-    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt');
 
     await pusher.stop();
 
@@ -215,7 +228,7 @@ describe('pusher service', () => {
     );
 
     void pusher.run();
-    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt');
     // release control of the loop so the push can be sent
     await Promise.resolve();
 
@@ -224,11 +237,11 @@ describe('pusher service', () => {
     expect(JSON.parse(fetch.mock.calls[0][1].body).mutations).toHaveLength(1);
 
     // We have not resolved the API server yet so these should stack up
-    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt');
     await Promise.resolve();
-    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt');
     await Promise.resolve();
-    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt');
     await Promise.resolve();
 
     // no new pushes sent yet since we are still waiting on the user's API server
@@ -262,7 +275,7 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result = pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
+    const result = pusher.enqueuePush(clientID, makePush(1), 'jwt');
     expect(result.type).toBe('stream');
   });
 
@@ -276,8 +289,8 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
-    const result = pusher.enqueuePush(clientID, wsID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    const result = pusher.enqueuePush(clientID, makePush(1), 'jwt');
     expect(result.type).toBe('ok');
   });
 
@@ -315,7 +328,6 @@ describe('pusher streaming', () => {
     });
     const result1 = pusher.enqueuePush(
       'client1',
-      wsID,
       makePush(1, 'client1'),
       'jwt',
     );
@@ -327,7 +339,6 @@ describe('pusher streaming', () => {
     });
     const result2 = pusher.enqueuePush(
       'client2',
-      wsID,
       makePush(2, 'client2'),
       'jwt',
     );
@@ -405,13 +416,11 @@ describe('pusher streaming', () => {
 
     const result1 = pusher.enqueuePush(
       'client1',
-      wsID,
       makePush(1, 'client1'),
       'jwt',
     );
     const result2 = pusher.enqueuePush(
       'client2',
-      wsID,
       makePush(1, 'client2'),
       'jwt',
     );
@@ -473,12 +482,7 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result = pusher.enqueuePush(
-      clientID,
-      wsID,
-      makePush(1, clientID),
-      'jwt',
-    );
+    const result = pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
     expect(result.type).toBe('stream');
 
     if (result.type === 'stream') {
@@ -511,12 +515,7 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result1 = pusher.enqueuePush(
-      clientID,
-      wsID,
-      makePush(1, clientID),
-      'jwt',
-    );
+    const result1 = pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
     expect(result1.type).toBe('stream');
 
     if (result1.type === 'stream') {
@@ -525,7 +524,6 @@ describe('pusher streaming', () => {
       // After cleanup, should get a new stream
       const result2 = pusher.enqueuePush(
         clientID,
-        wsID,
         makePush(1, clientID),
         'jwt',
       );
@@ -543,19 +541,9 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result1 = pusher.enqueuePush(
-      clientID,
-      wsID,
-      makePush(1, clientID),
-      'jwt',
-    );
+    const result1 = pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
     expect(result1.type).toBe('stream');
-    const result2 = pusher.enqueuePush(
-      clientID,
-      'new-ws-id',
-      makePush(1, clientID),
-      'jwt',
-    );
+    const result2 = pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
     expect(result2.type).toBe('stream');
     if (result1.type === 'stream') {
       // should not be iterable anymore as it is closed
@@ -596,12 +584,7 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result = pusher.enqueuePush(
-      clientID,
-      wsID,
-      makePush(2, clientID),
-      'jwt',
-    );
+    const result = pusher.enqueuePush(clientID, makePush(2, clientID), 'jwt');
     expect(result.type).toBe('stream');
 
     if (result.type === 'stream') {
@@ -659,12 +642,7 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result = pusher.enqueuePush(
-      clientID,
-      wsID,
-      makePush(1, clientID),
-      'jwt',
-    );
+    const result = pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
     expect(result.type).toBe('stream');
 
     if (result.type === 'stream') {

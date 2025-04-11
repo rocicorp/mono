@@ -379,6 +379,7 @@ describe('createSocket', () => {
         'wsidx',
         debugPerf,
         new LogContext('error', undefined, new TestLogSink()),
+        undefined,
         1048 * 8,
         additionalConnectParams,
       );
@@ -414,6 +415,7 @@ describe('createSocket', () => {
         'wsidx',
         debugPerf,
         new LogContext('error', undefined, new TestLogSink()),
+        undefined,
         0, // do not put any extra information into headers
         additionalConnectParams,
       );
