@@ -36,7 +36,7 @@ export const createAlb = (
       ],
       egress: [
         {
-          protocol: '-1', 
+          protocol: '-1',
           fromPort: 0,
           toPort: 0,
           cidrBlocks: ['0.0.0.0/0'],
@@ -51,60 +51,58 @@ export const createAlb = (
     securityGroups: [albSecurityGroup.id],
     subnets: publicSubnets,
     loadBalancerType: 'application',
-    idleTimeout: 3600, 
-    enableCrossZoneLoadBalancing: true, 
+    idleTimeout: 3600,
+    enableCrossZoneLoadBalancing: true,
   });
 
   // Create Target Groups with health check configurations that mirror SST config
-  const targetGroup = new aws.lb.TargetGroup(
-    `${prefix}-TargetGroup`,
-    {
-      port: 80,
+  const targetGroup = new aws.lb.TargetGroup(`${prefix}-TargetGroup`, {
+    port: 80,
+    protocol: 'HTTP',
+    vpcId,
+    targetType: 'ip',
+    healthCheck: {
+      enabled: true,
+      path: '/keepalive',
+      port: '4848',
       protocol: 'HTTP',
-      vpcId,
-      targetType: 'ip',
-      healthCheck: {
-        enabled: true,
-        path: '/keepalive',
-        port: '4848', 
-        protocol: 'HTTP',
-        interval: 5, 
-        healthyThreshold: 2, 
-        unhealthyThreshold: 2,
-        timeout: 3,
-      },
-      deregistrationDelay: 1,
-      stickiness: {
-        enabled: true,
-        type: 'lb_cookie',
-        cookieDuration: 120,
-      },
-      loadBalancingAlgorithmType: 'least_outstanding_requests',
+      interval: 5,
+      healthyThreshold: 2,
+      unhealthyThreshold: 2,
+      timeout: 3,
     },
-  );
+    deregistrationDelay: 1,
+    stickiness: {
+      enabled: true,
+      type: 'lb_cookie',
+      cookieDuration: 120,
+    },
+    loadBalancingAlgorithmType: 'least_outstanding_requests',
+  });
 
   // Create HTTP Listener (port 80)
   const httpListener = new aws.lb.Listener(`${prefix}-HTTPListener`, {
     loadBalancerArn: alb.arn,
     port: 80,
     protocol: 'HTTP',
-    defaultActions: domainName && domainCertArn
-      ? [
-          {
-            type: 'redirect',
-            redirect: {
-              port: '443',
-              protocol: 'HTTPS',
-              statusCode: 'HTTP_301',
+    defaultActions:
+      domainName && domainCertArn
+        ? [
+            {
+              type: 'redirect',
+              redirect: {
+                port: '443',
+                protocol: 'HTTPS',
+                statusCode: 'HTTP_301',
+              },
             },
-          },
-        ]
-      : [
-          {
-            type: 'forward',
-            targetGroupArn: targetGroup.arn,
-          },
-        ],
+          ]
+        : [
+            {
+              type: 'forward',
+              targetGroupArn: targetGroup.arn,
+            },
+          ],
   });
 
   // Create HTTPS Listener (port 443) if domain and cert are provided
@@ -128,7 +126,7 @@ export const createAlb = (
   // Create an internal load balancer if private subnets are provided
   let internalAlbSecurityGroup, internalTargetGroup, internalHttpListener;
   let internalAlb: aws.lb.LoadBalancer | undefined;
-  
+
   if (privateSubnets && privateSubnets.length > 0) {
     // Create a Security Group for the internal ALB
     internalAlbSecurityGroup = new aws.ec2.SecurityGroup(
@@ -166,26 +164,23 @@ export const createAlb = (
     });
 
     // Create internal target group for the replication manager
-    internalTargetGroup = new aws.lb.TargetGroup(
-      `${prefix}-ITG`,
-      {
-        port: 4849,
+    internalTargetGroup = new aws.lb.TargetGroup(`${prefix}-ITG`, {
+      port: 4849,
+      protocol: 'HTTP',
+      vpcId,
+      targetType: 'ip',
+      healthCheck: {
+        enabled: true,
+        path: '/keepalive',
+        port: '4849',
         protocol: 'HTTP',
-        vpcId,
-        targetType: 'ip',
-        healthCheck: {
-          enabled: true,
-          path: '/keepalive',
-          port: '4849',
-          protocol: 'HTTP',
-          interval: 5,
-          healthyThreshold: 2,
-          unhealthyThreshold: 2,
-          timeout: 3,
-        },
-        deregistrationDelay: 1,
+        interval: 5,
+        healthyThreshold: 2,
+        unhealthyThreshold: 2,
+        timeout: 3,
       },
-    );
+      deregistrationDelay: 1,
+    });
 
     // Create HTTP Listener for internal ALB
     internalHttpListener = new aws.lb.Listener(`${prefix}-IHTTPListener`, {
@@ -207,7 +202,7 @@ export const createAlb = (
     targetGroup,
     httpListener,
     httpsListener,
-    
+
     // Internal ALB resources (may be undefined if privateSubnets not provided)
     internalAlb,
     internalAlbSecurityGroup,

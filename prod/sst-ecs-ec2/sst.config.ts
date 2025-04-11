@@ -1,7 +1,6 @@
 /* eslint-disable */
 /// <reference path="./.sst/platform/config.d.ts" />
 
-// Define type for environment variables
 interface ZeroEnvironmentVars {
   AWS_REGION: string;
   ZERO_UPSTREAM_DB: string;
@@ -16,8 +15,8 @@ interface ZeroEnvironmentVars {
   ZERO_LITESTREAM_BACKUP_URL: string | $util.Output<string>;
   ZERO_IMAGE_URL: string;
   ZERO_APP_ID: string;
-  ZERO_COMMAND?: string; // Optional for service-specific command
-  [key: string]: string | $util.Output<string> | undefined; // Allow for any additional environment variables
+  ZERO_COMMAND?: string;
+  [key: string]: string | $util.Output<string> | undefined;
 }
 export default $config({
   app(input) {
@@ -85,7 +84,7 @@ export default $config({
       ZERO_APP_ID: process.env.ZERO_APP_ID || 'zero',
     };
 
-    //Create the replication manager service - ensure it depends on the capacity provider
+    //Create the replication manager service
     const replicationManagerService = createService(
       `${$app.name}-${$app.stage}-replication-manager`,
       {
@@ -101,12 +100,12 @@ export default $config({
           ZERO_NUM_SYNC_WORKERS: '0',
           ZERO_COMMAND: 'replication-manager',
         },
-        port: 4849, // Port for replication-manager
-        alb
+        port: 4849,
+        alb,
       },
     );
 
-    // Create the view-syncer service - ensure it depends on the capacity provider
+    // Create the view-syncer service
     const viewSyncerService = createService(
       `${$app.name}-${$app.stage}-view-syncer`,
       {
@@ -119,13 +118,14 @@ export default $config({
         commonEnv: {
           ...commonEnv,
           ZERO_COMMAND: 'view-syncer',
-          ZERO_CHANGE_STREAMER_URI:
-            alb.internalAlb.dnsName.apply(dnsName => `http://${dnsName}`),
+          ZERO_CHANGE_STREAMER_URI: alb.internalAlb.dnsName.apply(
+            dnsName => `http://${dnsName}`,
+          ),
           ZERO_UPSTREAM_MAX_CONNS: '15',
           ZERO_CVR_MAX_CONNS: '160',
         },
         port: 4848,
-        alb
+        alb,
       },
     );
 

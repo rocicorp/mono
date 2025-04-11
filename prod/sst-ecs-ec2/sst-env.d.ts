@@ -3,15 +3,15 @@
 /* eslint-disable */
 /* deno-fmt-ignore-file */
 
-declare module "sst" {
+declare module 'sst' {
   export interface Resource {
-    "replication-bucket": {
-      "name": string
-      "type": "sst.aws.Bucket"
-    }
+    'replication-bucket': {
+      name: string;
+      type: 'sst.aws.Bucket';
+    };
   }
 }
 /// <reference path="sst-env.d.ts" />
 
-import "sst"
-export {}
+import 'sst';
+export {};
