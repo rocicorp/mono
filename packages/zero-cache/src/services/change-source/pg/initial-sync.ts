@@ -36,6 +36,7 @@ import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo, type PublicationInfo} from './schema/published.ts';
 import {
   addReplica,
+  dropShard,
   getInternalShardConfig,
   newReplicationSlot,
   validatePublications,
@@ -190,15 +191,30 @@ async function checkUpstreamConfig(sql: PostgresDB) {
 
 async function ensurePublishedTables(
   lc: LogContext,
-  upstreamDB: PostgresDB,
+  sql: PostgresDB,
   shard: ShardConfig,
+  validate = true,
 ): Promise<{publications: string[]}> {
-  const {database, host} = upstreamDB.options;
+  const {database, host} = sql.options;
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
 
-  await ensureShardSchema(lc, upstreamDB, shard);
+  await ensureShardSchema(lc, sql, shard);
+  const {publications} = await getInternalShardConfig(sql, shard);
 
-  return getInternalShardConfig(upstreamDB, shard);
+  if (validate) {
+    const exists = await sql`
+      SELECT pubname FROM pg_publication WHERE pubname IN ${sql(publications)}
+      `.values();
+    if (exists.length !== publications.length) {
+      lc.warn?.(
+        `some configured publications [${publications}] are missing: ` +
+          `[${exists.flat()}]. resyncing`,
+      );
+      await sql.unsafe(dropShard(shard.appID, shard.shardNum));
+      return ensurePublishedTables(lc, sql, shard, false);
+    }
+  }
+  return {publications};
 }
 
 /* eslint-disable @typescript-eslint/naming-convention */

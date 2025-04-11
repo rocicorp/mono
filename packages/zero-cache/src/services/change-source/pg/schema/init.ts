@@ -19,8 +19,7 @@ import {
 } from './shard.ts';
 
 /**
- * Initializes a shard for initial sync.
- * This will drop any existing shard setup.
+ * Ensures that a shard is set up for initial sync.
  */
 export async function ensureShardSchema(
   lc: LogContext,
