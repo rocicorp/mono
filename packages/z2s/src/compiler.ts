@@ -596,7 +596,7 @@ export class Compiler {
         this.#nameMapper.columnName(table, column)
       ];
     const serverType = serverColumnSchema.type;
-    if (serverColumnSchema.isEnum) {
+    if (!serverColumnSchema.isEnum) {
       if (
         serverType === 'date' ||
         serverType === 'timestamp' ||
