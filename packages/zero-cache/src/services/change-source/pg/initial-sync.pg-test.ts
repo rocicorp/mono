@@ -1813,6 +1813,43 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
   });
 
   test.each([
+    [
+      'missing default publication',
+      `DROP PUBLICATION "_${APP_ID}_public_${SHARD_NUM}"`,
+    ],
+    [
+      'missing metadata publication',
+      `DROP PUBLICATION "_${APP_ID}_metadata_${SHARD_NUM}"`,
+    ],
+  ])('recover from corrupted state: %s', async (_name, corruption) => {
+    const lc = createSilentLogContext();
+    const sql = upstream;
+    await sql`CREATE TABLE foo(id int4 PRIMARY KEY);`;
+    await sql`INSERT INTO foo(id) VALUES (1);`;
+
+    const replica = new Database(lc, ':memory:');
+    const shardConfig = {
+      appID: APP_ID,
+      shardNum: SHARD_NUM,
+      publications: [],
+    };
+
+    await ensureShardSchema(lc, upstream, shardConfig);
+
+    await sql.unsafe(corruption);
+
+    await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
+      tableCopyWorkers: 5,
+      rowBatchSize: 10000,
+    });
+
+    expectMatchingObjectsInTables(replica, {
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [],
+      foo: [{id: 1}],
+    });
+  });
+
+  test.each([
     'UPPERCASE',
     'dashes-not-allowed',
     'spaces not allowed',

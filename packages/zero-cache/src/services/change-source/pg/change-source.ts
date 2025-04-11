@@ -134,14 +134,14 @@ export async function initializePostgresChangeSource(
 
 async function checkAndUpdateUpstream(
   lc: LogContext,
-  db: PostgresDB,
+  sql: PostgresDB,
   shard: ShardConfig,
   {replicaVersion, publications: subscribed}: SubscriptionState,
 ) {
   // Perform any shard schema updates
-  await updateShardSchema(lc, db, shard, replicaVersion);
+  await updateShardSchema(lc, sql, shard, replicaVersion);
 
-  const upstreamReplica = await getReplicaAtVersion(db, shard, replicaVersion);
+  const upstreamReplica = await getReplicaAtVersion(sql, shard, replicaVersion);
   if (!upstreamReplica) {
     throw new AutoResetSignal(
       `No replication slot for replica at version ${replicaVersion}`,
@@ -155,7 +155,7 @@ async function checkAndUpdateUpstream(
     .sort();
   if (!deepEqual(requested, replicated)) {
     lc.warn?.(`Dropping shard to change publications to: [${requested}]`);
-    await db.unsafe(dropShard(shard.appID, shard.shardNum));
+    await sql.unsafe(dropShard(shard.appID, shard.shardNum));
     throw new AutoResetSignal(
       `Requested publications [${requested}] do not match configured ` +
         `publications: [${replicated}]`,
@@ -172,9 +172,21 @@ async function checkAndUpdateUpstream(
     );
   }
 
+  // Verify that the publications exist.
+  const exists = await sql`
+    SELECT pubname FROM pg_publication WHERE pubname IN ${sql(subscribed)};
+  `.values();
+  if (exists.length !== subscribed.length) {
+    throw new AutoResetSignal(
+      `Upstream publications [${exists.flat()}] do not contain ` +
+        `all subscribed publications [${subscribed}]`,
+    );
+  }
+
   const {slot} = upstreamReplica;
-  const result = await db<{restartLSN: LSN | null}[]>`
-  SELECT restart_lsn as "restartLSN" FROM pg_replication_slots WHERE slot_name = ${slot}`;
+  const result = await sql<{restartLSN: LSN | null}[]>`
+    SELECT restart_lsn as "restartLSN" FROM pg_replication_slots
+      WHERE slot_name = ${slot}`;
   if (result.length === 0) {
     throw new AutoResetSignal(`replication slot ${slot} is missing`);
   }

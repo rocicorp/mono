@@ -923,4 +923,20 @@ describe('change-source/pg', {timeout: 30000}, () => {
       `[AutoResetSignal: Requested publications [zero_different_publication] do not match configured publications: [zero_foo,zero_zero]]`,
     );
   });
+
+  test('AutoReset on missing publications', async () => {
+    await startReplication();
+    await upstream`DROP PUBLICATION zero_foo`;
+
+    let err;
+    try {
+      await startReplication();
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(AutoResetSignal);
+    expect(err).toMatchInlineSnapshot(
+      `[AutoResetSignal: Upstream publications [zero_zero,_23_metadata_1] do not contain all subscribed publications [_23_metadata_1,zero_foo,zero_zero]]`,
+    );
+  });
 });
