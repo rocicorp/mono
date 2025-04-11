@@ -119,7 +119,6 @@ export class SyncerWsMessageHandler implements MessageHandler {
               return [
                 this.#pusher.enqueuePush(
                   this.#syncContext.clientID,
-                  this.#syncContext.wsID,
                   msg[1],
                   this.#token,
                 ),
@@ -162,19 +161,29 @@ export class SyncerWsMessageHandler implements MessageHandler {
         );
         break;
       case 'initConnection': {
-        // TODO (mlaw): tell mutagens about the new token too
-        const stream = await startSpan(
-          tracer,
-          'connection.initConnection',
-          () => viewSyncer.initConnection(this.#syncContext, msg),
-        );
-        return [
+        const ret: HandlerResult[] = [
           {
             type: 'stream',
             source: 'viewSyncer',
-            stream,
+            stream: await startSpan(tracer, 'connection.initConnection', () =>
+              viewSyncer.initConnection(this.#syncContext, msg),
+            ),
           },
         ];
+
+        if (this.#pusher) {
+          ret.push({
+            type: 'stream',
+            source: 'pusher',
+            stream: this.#pusher.initConnection(
+              this.#syncContext.clientID,
+              this.#syncContext.wsID,
+              msg[1].userPushParams,
+            ),
+          });
+        }
+
+        return ret;
       }
       case 'closeConnection':
         await startAsyncSpan(tracer, 'connection.closeConnection', () =>
