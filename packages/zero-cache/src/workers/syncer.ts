@@ -82,7 +82,12 @@ export class Syncer implements SingletonService {
     this.#parent = parent;
     this.#wss = new WebSocketServer({noServer: true});
 
-    installWebSocketReceiver(this.#wss, this.#createConnection, this.#parent);
+    installWebSocketReceiver(
+      lc,
+      this.#wss,
+      this.#createConnection,
+      this.#parent,
+    );
   }
 
   readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {
