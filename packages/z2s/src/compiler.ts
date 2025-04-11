@@ -596,20 +596,29 @@ export class Compiler {
         this.#nameMapper.columnName(table, column)
       ];
     const serverType = serverColumnSchema.type;
-    if (
-      !serverColumnSchema.isEnum &&
-      (serverType === 'date' ||
+    if (serverColumnSchema.isEnum) {
+      if (
+        serverType === 'date' ||
         serverType === 'timestamp' ||
+        serverType === 'timestamp without time zone'
+      ) {
+        return sql`EXTRACT(EPOCH FROM ${sql.ident(
+          table,
+        )}.${this.#mapColumnNoAlias(
+          table,
+          column,
+        )}::timestamp AT TIME ZONE 'UTC') * 1000 as ${sql.ident(column)}`;
+      } else if (
         serverType === 'timestamptz' ||
-        serverType === 'timestamp with time zone' ||
-        serverType === 'timestamp without time zone')
-    ) {
-      return sql`EXTRACT(EPOCH FROM ${sql.ident(
-        table,
-      )}.${this.#mapColumnNoAlias(
-        table,
-        column,
-      )}::timestamp AT TIME ZONE 'UTC') * 1000 as ${sql.ident(column)}`;
+        serverType === 'timestamp with time zone'
+      ) {
+        return sql`EXTRACT(EPOCH FROM ${sql.ident(
+          table,
+        )}.${this.#mapColumnNoAlias(
+          table,
+          column,
+        )}::timestamp) * 1000 as ${sql.ident(column)}`;
+      }
     }
     return sql`${sql.ident(table)}.${this.#mapColumn(table, column)}`;
   }

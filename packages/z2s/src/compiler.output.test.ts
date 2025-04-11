@@ -73,6 +73,14 @@ const enumTable = table('enumTable')
   })
   .primaryKey('id');
 
+const timestampsTable = table('timestampsTable')
+  .columns({
+    id: string(),
+    timestampWithTz: number(),
+    timestampWithoutTz: number(),
+  })
+  .primaryKey('id');
+
 const alternateUser = table('alternate_user')
   .from('alternate_schema.user')
   .columns({
@@ -91,6 +99,7 @@ const schema = createSchema({
     parentTable,
     childTable,
     enumTable,
+    timestampsTable,
     alternateUser,
   ],
 });
@@ -129,6 +138,11 @@ const serverSchema: ServerSchema = {
   'enumTable': {
     id: {type: 'text', isEnum: false},
     status: {type: 'statusEnum', isEnum: true},
+  },
+  'timestampsTable': {
+    id: {type: 'text', isEnum: false},
+    timestampWithoutTz: {type: 'timestamp', isEnum: false},
+    timestampWithTz: {type: 'timestampz', isEnum: false},
   },
   'alternate_schema.user': {
     id: {type: 'text', isEnum: false},
@@ -244,6 +258,56 @@ test('compile with enum', () => {
       "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "enumTable"."id","enumTable"."status" FROM "enumTable" WHERE "status"::text = $1::text COLLATE "ucs_basic"   )"root"",
       "values": [
         "active",
+      ],
+    }
+  `);
+});
+
+test('compile with timestamp (with timezone)', () => {
+  const compiler = new Compiler(schema.tables, serverSchema);
+  expect(
+    formatPgInternalConvert(
+      compiler.compile({
+        table: 'timestampsTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'timestampWithTz'},
+          right: {type: 'literal', value: 'abc'},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "timestampsTable"."id","timestampsTable"."timestampWithTz","timestampsTable"."timestampWithoutTz" FROM "timestampsTable" WHERE "timestampWithTz" = $1::text::timestampz   )"root"",
+      "values": [
+        ""abc"",
+      ],
+    }
+  `);
+});
+
+test('compile with timestamp (without timezone)', () => {
+  const compiler = new Compiler(schema.tables, serverSchema);
+  expect(
+    formatPgInternalConvert(
+      compiler.compile({
+        table: 'timestampsTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'timestampWithoutTz'},
+          right: {type: 'literal', value: 'abc'},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "timestampsTable"."id","timestampsTable"."timestampWithTz","timestampsTable"."timestampWithoutTz" FROM "timestampsTable" WHERE "timestampWithoutTz" = to_timestamp($1::text::bigint / 1000.0) AT TIME ZONE 'UTC'   )"root"",
+      "values": [
+        ""abc"",
       ],
     }
   `);
@@ -893,7 +957,7 @@ test('related thru junction edge', () => {
     {
       "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT (
             SELECT COALESCE(json_agg(row_to_json("inner_labels")), '[]'::json) FROM (SELECT "table_1"."id","table_1"."name" FROM "issue_label" as "issueLabel" JOIN "label" as "table_1" ON "issueLabel"."label_id" = "table_1"."id" WHERE ("issue"."id" = "issueLabel"."issue_id")    ) "inner_labels"
-          ) as "labels","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId",EXTRACT(EPOCH FROM "issue"."created"::timestamp AT TIME ZONE 'UTC') * 1000 as "created" FROM "issue"    )"root"",
+          ) as "labels","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId","issue"."created" FROM "issue"    )"root"",
       "values": [],
     }
   `);
@@ -923,7 +987,7 @@ test('related w/o junction edge', () => {
     {
       "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT (
           SELECT COALESCE(json_agg(row_to_json("inner_owner")) , '[]'::json) FROM (SELECT "user"."id","user"."name","user"."age" FROM "user"  WHERE ("issue"."ownerId" = "user"."id")  ) "inner_owner"
-        ) as "owner","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId",EXTRACT(EPOCH FROM "issue"."created"::timestamp AT TIME ZONE 'UTC') * 1000 as "created" FROM "issue"    )"root"",
+        ) as "owner","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId","issue"."created" FROM "issue"    )"root"",
       "values": [],
     }
   `);
