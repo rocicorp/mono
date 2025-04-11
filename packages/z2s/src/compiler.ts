@@ -600,16 +600,16 @@ export class Compiler {
       !serverColumnSchema.isEnum &&
       (serverType === 'date' ||
         serverType === 'timestamp' ||
+        serverType === 'timestamp without time zone' ||
         serverType === 'timestamptz' ||
-        serverType === 'timestamp with time zone' ||
-        serverType === 'timestamp without time zone')
+        serverType === 'timestamp with time zone')
     ) {
       return sql`EXTRACT(EPOCH FROM ${sql.ident(
         table,
       )}.${this.#mapColumnNoAlias(
         table,
         column,
-      )}::timestamp AT TIME ZONE 'UTC') * 1000 as ${sql.ident(column)}`;
+      )}) * 1000 as ${sql.ident(column)}`;
     }
     return sql`${sql.ident(table)}.${this.#mapColumn(table, column)}`;
   }

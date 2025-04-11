@@ -148,12 +148,28 @@ describe('string arg packing', () => {
           'ENUM_KEY',
           false,
           true,
+        )} OR "timestamp" = ${sqlConvertColumnArg(
+          {
+            isEnum: false,
+            type: 'timestamp',
+          },
+          'abc',
+          false,
+          true,
+        )} OR "timestampz" = ${sqlConvertColumnArg(
+          {
+            isEnum: false,
+            type: 'timestamptz',
+          },
+          'abc',
+          false,
+          true,
         )}`,
       ),
     ).toMatchInlineSnapshot(`
       {
         "text": "SELECT * FROM "foo" WHERE "jsonb" = $1::text::jsonb OR "numeric" = $2::text::numeric
-              OR "str" = $3::text COLLATE "ucs_basic" OR "boolean" = $4::text::boolean OR "uuid"::text = $5::text COLLATE "ucs_basic" OR "enum"::text = $6::text COLLATE "ucs_basic"",
+              OR "str" = $3::text COLLATE "ucs_basic" OR "boolean" = $4::text::boolean OR "uuid"::text = $5::text COLLATE "ucs_basic" OR "enum"::text = $6::text COLLATE "ucs_basic" OR "timestamp" = to_timestamp($7::text::bigint / 1000.0) AT TIME ZONE 'UTC' OR "timestampz" = to_timestamp($7::text::bigint / 1000.0)",
         "values": [
           "{}",
           "1",
@@ -161,6 +177,7 @@ describe('string arg packing', () => {
           "true",
           "8f1dceb2-b3dd-46cf-9deb-460e9d87541c",
           "ENUM_KEY",
+          ""abc"",
         ],
       }
     `);
