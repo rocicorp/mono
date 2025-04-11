@@ -10,6 +10,7 @@ import type {
   Condition,
   Ordering,
   Parameter,
+  SimpleOperator,
   System,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
@@ -33,7 +34,6 @@ import {
 import {
   type GetFilterType,
   type HumanReadable,
-  type Operator,
   type PreloadOptions,
   type PullRow,
   type Query,
@@ -316,7 +316,7 @@ export abstract class AbstractQuery<
 
   where(
     fieldOrExpressionFactory: string | ExpressionFactory<TSchema, TTable>,
-    opOrValue?: Operator | GetFilterType<any, any, any> | Parameter,
+    opOrValue?: SimpleOperator | GetFilterType<any, any, any> | Parameter,
     value?: GetFilterType<any, any, any> | Parameter,
   ): Query<TSchema, TTable, TReturn> {
     let cond: Condition;
