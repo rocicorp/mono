@@ -194,10 +194,11 @@ class SQLConvertFormat implements FormatConfig {
       switch (arg.type) {
         case 'date':
         case 'timestamp':
-        case 'timestamptz':
-        case 'timestamp with time zone':
         case 'timestamp without time zone':
           return `to_timestamp($${index}::text::bigint / 1000.0) AT TIME ZONE 'UTC'`;
+        case 'timestamptz':
+        case 'timestamp with time zone':
+          return `to_timestamp($${index}::text::bigint / 1000.0)`;
         case 'text':
           return `$${index}::text${collate}`;
         case 'bpchar':
