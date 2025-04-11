@@ -142,7 +142,7 @@ const serverSchema: ServerSchema = {
   'timestampsTable': {
     id: {type: 'text', isEnum: false},
     timestampWithoutTz: {type: 'timestamp', isEnum: false},
-    timestampWithTz: {type: 'timestampz', isEnum: false},
+    timestampWithTz: {type: 'timestamptz', isEnum: false},
   },
   'alternate_schema.user': {
     id: {type: 'text', isEnum: false},
@@ -280,7 +280,7 @@ test('compile with timestamp (with timezone)', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "timestampsTable"."id","timestampsTable"."timestampWithTz",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithoutTz") * 1000 as "timestampWithoutTz" FROM "timestampsTable" WHERE "timestampWithTz" = $1::text::timestampz   )"root"",
+      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "timestampsTable"."id",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithTz") * 1000 as "timestampWithTz",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithoutTz") * 1000 as "timestampWithoutTz" FROM "timestampsTable" WHERE "timestampWithTz" = to_timestamp($1::text::bigint / 1000.0)   )"root"",
       "values": [
         ""abc"",
       ],
@@ -305,7 +305,7 @@ test('compile with timestamp (without timezone)', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "timestampsTable"."id","timestampsTable"."timestampWithTz",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithoutTz") * 1000 as "timestampWithoutTz" FROM "timestampsTable" WHERE "timestampWithoutTz" = to_timestamp($1::text::bigint / 1000.0) AT TIME ZONE 'UTC'   )"root"",
+      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "timestampsTable"."id",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithTz") * 1000 as "timestampWithTz",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithoutTz") * 1000 as "timestampWithoutTz" FROM "timestampsTable" WHERE "timestampWithoutTz" = to_timestamp($1::text::bigint / 1000.0) AT TIME ZONE 'UTC'   )"root"",
       "values": [
         ""abc"",
       ],
