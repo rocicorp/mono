@@ -607,7 +607,7 @@ export class Compiler {
         )}.${this.#mapColumnNoAlias(
           table,
           column,
-        )}::timestamp AT TIME ZONE 'UTC') * 1000 as ${sql.ident(column)}`;
+        )}) * 1000 as ${sql.ident(column)}`;
       } else if (
         serverType === 'timestamptz' ||
         serverType === 'timestamp with time zone'
