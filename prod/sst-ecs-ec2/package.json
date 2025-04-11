@@ -1,22 +1,21 @@
 {
-    "name": "zero-sst-ecs-ec2",
-    "version": "1.0.0",
-    "main": "index.ts",
-    "scripts": {
-      "format": "prettier --write .",
-      "check-format": "prettier --check ."
-    },
-    "keywords": [],
-    "author": "",
-    "license": "ISC",
-    "description": "",
-    "dependencies": {
-      "sst": "3.12.3"
-    },
-    "devDependencies": {
-      "@rocicorp/prettier-config": "^0.3.0",
-      "@types/aws-lambda": "8.10.147"
-    },
-    "prettier": "@rocicorp/prettier-config"
-  }
-  
+  "name": "zero-sst-ecs-ec2",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "format": "prettier --write .",
+    "check-format": "prettier --check ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "sst": "3.12.3"
+  },
+  "devDependencies": {
+    "@rocicorp/prettier-config": "^0.3.0",
+    "@types/aws-lambda": "8.10.147"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}

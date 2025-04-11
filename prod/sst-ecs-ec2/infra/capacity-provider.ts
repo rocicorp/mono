@@ -123,7 +123,7 @@ export const capacityProvider = (
   // );
 
   const userDataBottlerocket = cluster.name.apply(
-    name => 
+    name =>
       `[settings.ecs]
 cluster = "${name}"
 loglevel = "debug"
