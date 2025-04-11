@@ -44,7 +44,7 @@ import {
   newQuery,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
-import type {Operator, Query} from '../../../zql/src/query/query.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {
@@ -58,6 +58,7 @@ import {schema} from './schema.ts';
 // TODO: Ideally z2s wouldn't depend on zero-pg (even in tests).  These
 // chinook tests should move to their own package.
 import {getServerSchema} from '../../../zero-pg/src/schema.ts';
+import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 
 let pg: PostgresDB;
 let sqlite: Database;
@@ -256,7 +257,7 @@ function randomRowAndColumn(table: string) {
   return {randomRow, randomColumn};
 }
 
-function randomOperator(): Operator {
+function randomOperator(): SimpleOperator {
   const operators = ['=', '!=', '>', '>=', '<', '<='] as const;
   return operators[Math.floor(Math.random() * operators.length)];
 }
