@@ -30,7 +30,6 @@ export default $config({
     };
   },
   async run() {
-    const {createDefu} = await import('defu');
     const {networkConfig} = await import('./infra/network');
     const {createAlb} = await import('./infra/alb');
     const {join} = await import('node:path');
@@ -121,7 +120,7 @@ export default $config({
           ...commonEnv,
           ZERO_COMMAND: 'view-syncer',
           ZERO_CHANGE_STREAMER_URI:
-            replicationManagerService.internalServiceUrl,
+            alb.internalAlb.dnsName.apply(dnsName => `http://${dnsName}`),
           ZERO_UPSTREAM_MAX_CONNS: '15',
           ZERO_CVR_MAX_CONNS: '160',
         },

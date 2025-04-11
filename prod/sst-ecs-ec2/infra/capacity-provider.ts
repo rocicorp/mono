@@ -152,7 +152,7 @@ loglevel = "debug"
         filters: [
           {
             name: 'name',
-            values: ['bottlerocket-aws-ecs-2-aarch64*'], // Use ECS-optimized AMI instead
+            values: ['bottlerocket-aws-ecs-2-x86_64*'], // Use ECS-optimized AMI instead
           },
         ],
         mostRecent: true,
@@ -167,7 +167,7 @@ loglevel = "debug"
     {
       namePrefix: `${prefix}-instance-`,
       imageId: bottleRocketAmiId,
-      instanceType: 't4g.medium', // env
+      instanceType: 't3a.medium', // env
       vpcSecurityGroupIds: [ec2Sg.id],
       updateDefaultVersion: true,
       iamInstanceProfile: {
