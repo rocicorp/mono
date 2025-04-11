@@ -35,7 +35,10 @@ import type {Writable} from '../../../shared/src/writable.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {CloseConnectionMessage} from '../../../zero-protocol/src/close-connection.ts';
-import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
+import type {
+  ConnectedMessage,
+  UserPushParams,
+} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
 import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
@@ -1074,6 +1077,7 @@ export class Zero<
           // The clientSchema only needs to be sent for the very first request.
           // Henceforth it is stored with the CVR and verified automatically.
           ...(this.#connectCookie === null ? {clientSchema} : {}),
+          userPushParams: this.#options.pushParams,
         },
       ]);
       this.#deletedClients = undefined;
@@ -1167,6 +1171,7 @@ export class Zero<
       wsid,
       this.#options.logLevel === 'debug',
       l,
+      this.#options.pushParams,
       this.#options.maxHeaderLength,
       additionalConnectParams,
     );
@@ -1859,6 +1864,7 @@ export async function createSocket(
   wsid: string,
   debugPerf: boolean,
   lc: LogContext,
+  pushParams: UserPushParams | undefined,
   maxHeaderLength = 1024 * 8,
   additionalConnectParams?: Record<string, string> | undefined,
 ): Promise<
@@ -1915,6 +1921,7 @@ export async function createSocket(
         // The clientSchema only needs to be sent for the very first request.
         // Henceforth it is stored with the CVR and verified automatically.
         ...(baseCookie === null ? {clientSchema} : {}),
+        userPushParams: pushParams,
       },
     ],
     auth,
