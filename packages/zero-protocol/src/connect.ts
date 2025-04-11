@@ -21,10 +21,16 @@ export const connectedMessageSchema = v.tuple([
   connectedBodySchema,
 ]);
 
+const userPushParamsSchema = v.object({
+  headers: v.record(v.string()).optional(),
+  queryParams: v.record(v.string()).optional(),
+});
+
 const initConnectionBodySchema = v.object({
   desiredQueriesPatch: queriesPatchSchema,
   clientSchema: clientSchemaSchema.optional(),
   deleted: deleteClientsBodySchema.optional(),
+  userPushParams: userPushParamsSchema.optional(),
 });
 
 export const initConnectionMessageSchema = v.tuple([
@@ -34,6 +40,7 @@ export const initConnectionMessageSchema = v.tuple([
 
 export type ConnectedBody = v.Infer<typeof connectedBodySchema>;
 export type ConnectedMessage = v.Infer<typeof connectedMessageSchema>;
+export type UserPushParams = v.Infer<typeof userPushParamsSchema>;
 
 export type InitConnectionBody = v.Infer<typeof initConnectionBodySchema>;
 export type InitConnectionMessage = v.Infer<typeof initConnectionMessageSchema>;
