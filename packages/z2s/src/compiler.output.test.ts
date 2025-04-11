@@ -280,7 +280,7 @@ test('compile with timestamp (with timezone)', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "timestampsTable"."id","timestampsTable"."timestampWithTz",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithoutTz"::timestamp AT TIME ZONE 'UTC') * 1000 as "timestampWithoutTz" FROM "timestampsTable" WHERE "timestampWithTz" = $1::text::timestampz   )"root"",
+      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "timestampsTable"."id","timestampsTable"."timestampWithTz",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithoutTz") * 1000 as "timestampWithoutTz" FROM "timestampsTable" WHERE "timestampWithTz" = $1::text::timestampz   )"root"",
       "values": [
         ""abc"",
       ],
@@ -305,7 +305,7 @@ test('compile with timestamp (without timezone)', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "timestampsTable"."id","timestampsTable"."timestampWithTz",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithoutTz"::timestamp AT TIME ZONE 'UTC') * 1000 as "timestampWithoutTz" FROM "timestampsTable" WHERE "timestampWithoutTz" = to_timestamp($1::text::bigint / 1000.0) AT TIME ZONE 'UTC'   )"root"",
+      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "timestampsTable"."id","timestampsTable"."timestampWithTz",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithoutTz") * 1000 as "timestampWithoutTz" FROM "timestampsTable" WHERE "timestampWithoutTz" = to_timestamp($1::text::bigint / 1000.0) AT TIME ZONE 'UTC'   )"root"",
       "values": [
         ""abc"",
       ],
@@ -957,7 +957,7 @@ test('related thru junction edge', () => {
     {
       "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT (
             SELECT COALESCE(json_agg(row_to_json("inner_labels")), '[]'::json) FROM (SELECT "table_1"."id","table_1"."name" FROM "issue_label" as "issueLabel" JOIN "label" as "table_1" ON "issueLabel"."label_id" = "table_1"."id" WHERE ("issue"."id" = "issueLabel"."issue_id")    ) "inner_labels"
-          ) as "labels","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId",EXTRACT(EPOCH FROM "issue"."created"::timestamp AT TIME ZONE 'UTC') * 1000 as "created" FROM "issue"    )"root"",
+          ) as "labels","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId",EXTRACT(EPOCH FROM "issue"."created") * 1000 as "created" FROM "issue"    )"root"",
       "values": [],
     }
   `);
@@ -987,7 +987,7 @@ test('related w/o junction edge', () => {
     {
       "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT (
           SELECT COALESCE(json_agg(row_to_json("inner_owner")) , '[]'::json) FROM (SELECT "user"."id","user"."name","user"."age" FROM "user"  WHERE ("issue"."ownerId" = "user"."id")  ) "inner_owner"
-        ) as "owner","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId",EXTRACT(EPOCH FROM "issue"."created"::timestamp AT TIME ZONE 'UTC') * 1000 as "created" FROM "issue"    )"root"",
+        ) as "owner","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId",EXTRACT(EPOCH FROM "issue"."created") * 1000 as "created" FROM "issue"    )"root"",
       "values": [],
     }
   `);
