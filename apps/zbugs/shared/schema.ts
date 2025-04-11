@@ -297,105 +297,41 @@ export const permissions: ReturnType<typeof definePermissions> =
       user: {
         // Only the authentication system can write to the user table.
         row: {
-          insert: NOBODY_CAN,
-          update: {
-            preMutation: NOBODY_CAN,
-          },
-          delete: NOBODY_CAN,
           select: ANYONE_CAN,
         },
       },
       issue: {
         row: {
-          insert: [
-            // prevents setting the creatorID of an issue to someone
-            // other than the user doing the creating
-            loggedInUserIsCreator,
-          ],
-          update: {
-            preMutation: [loggedInUserIsCreator, loggedInUserIsAdmin],
-            postMutation: [loggedInUserIsCreator, loggedInUserIsAdmin],
-          },
-          delete: [loggedInUserIsCreator, loggedInUserIsAdmin],
           select: [canSeeIssue],
         },
       },
       comment: {
         row: {
-          insert: [
-            loggedInUserIsAdmin,
-            and(loggedInUserIsCreator, canSeeComment),
-          ],
-          update: {
-            preMutation: [
-              loggedInUserIsAdmin,
-              and(loggedInUserIsCreator, canSeeComment),
-            ],
-            postMutation: [
-              loggedInUserIsAdmin,
-              and(loggedInUserIsCreator, canSeeComment),
-            ],
-          },
-          delete: [
-            loggedInUserIsAdmin,
-            and(canSeeComment, loggedInUserIsCreator),
-          ],
           select: ANYONE_CAN,
         },
       },
       label: {
         row: {
-          insert: [loggedInUserIsAdmin],
-          update: {
-            preMutation: [loggedInUserIsAdmin],
-          },
-          delete: [loggedInUserIsAdmin],
           select: ANYONE_CAN,
         },
       },
       viewState: {
         row: {
-          insert: [allowIfUserIDMatchesLoggedInUser],
-          update: {
-            preMutation: [allowIfUserIDMatchesLoggedInUser],
-            postMutation: [allowIfUserIDMatchesLoggedInUser],
-          },
-          delete: NOBODY_CAN,
           select: ANYONE_CAN,
         },
       },
       issueLabel: {
         row: {
-          insert: [and(canSeeIssueLabel, allowIfAdminOrIssueCreator)],
-          update: {
-            preMutation: NOBODY_CAN,
-          },
-          delete: [and(canSeeIssueLabel, allowIfAdminOrIssueCreator)],
           select: ANYONE_CAN,
         },
       },
       emoji: {
         row: {
-          // Can only insert emoji if the can see the issue.
-          insert: [and(canSeeEmoji, loggedInUserIsCreator)],
-
-          // Can only update their own emoji.
-          update: {
-            preMutation: [and(canSeeEmoji, loggedInUserIsCreator)],
-            postMutation: [and(canSeeEmoji, loggedInUserIsCreator)],
-          },
-          delete: [and(canSeeEmoji, loggedInUserIsCreator)],
           select: ANYONE_CAN,
         },
       },
       userPref: {
         row: {
-          insert: [allowIfUserIDMatchesLoggedInUser],
-          update: {
-            preMutation: [allowIfUserIDMatchesLoggedInUser],
-            postMutation: [allowIfUserIDMatchesLoggedInUser],
-          },
-          delete: [allowIfUserIDMatchesLoggedInUser],
           select: [allowIfUserIDMatchesLoggedInUser],
         },
       },
