@@ -1,36 +1,35 @@
+import {LogContext, type LogLevel} from '@rocicorp/logger';
+import {assert} from '../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import * as v from '../../shared/src/valita.ts';
+import type {ServerSchema} from '../../z2s/src/schema.ts';
+import {formatPg, sql} from '../../z2s/src/sql.ts';
+import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
 import {
+  pushBodySchema,
+  pushParamsSchema,
   type Mutation,
   type MutationResponse,
   type PushBody,
-  pushBodySchema,
-  pushParamsSchema,
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import * as v from '../../shared/src/valita.ts';
+import {
+  splitMutatorKey,
+  type ConnectionProvider,
+  type DBConnection,
+  type DBTransaction,
+  type SchemaCRUD,
+  type SchemaQuery,
+} from '../../zql/src/mutate/custom.ts';
 import {
   makeSchemaCRUD,
   TransactionImpl,
   type CustomMutatorDefs,
 } from './custom.ts';
-import {LogContext, type LogLevel} from '@rocicorp/logger';
 import {createLogContext} from './logging.ts';
-import {
-  splitMutatorKey,
-  type SchemaCRUD,
-  type SchemaQuery,
-  type ConnectionProvider,
-  type DBConnection,
-  type DBTransaction,
-} from '../../zql/src/mutate/custom.ts';
 import {makeSchemaQuery} from './query.ts';
-import {formatPg} from '../../z2s/src/sql.ts';
-import {sql} from '../../z2s/src/sql.ts';
-import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
-import type {ServerSchema} from '../../z2s/src/schema.ts';
 import {getServerSchema} from './schema.ts';
-import {assert} from '../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 
 export type Params = v.Infer<typeof pushParamsSchema>;
 
@@ -73,18 +72,38 @@ export class PushProcessor<
    * @param mutators the custom mutators for the application
    * @param queryString the query string from the request sent by zero-cache. This will include zero's postgres schema name and appID.
    * @param body the body of the request sent by zero-cache as a JSON object.
-   * @returns
    */
   async process(
     mutators: MD,
     queryString: URLSearchParams | Record<string, string>,
     body: ReadonlyJSONValue,
+  ): Promise<PushResponse>;
+
+  /**
+   * This override gets the query string and the body from a Request object.
+   *
+   * @param mutators the custom mutators for the application
+   * @param request A `Request` object.
+   */
+  async process(mutators: MD, request: Request): Promise<PushResponse>;
+  async process(
+    mutators: MD,
+    queryOrQueryString: Request | URLSearchParams | Record<string, string>,
+    body?: ReadonlyJSONValue,
   ): Promise<PushResponse> {
+    let queryString: URLSearchParams | Record<string, string>;
+    if (queryOrQueryString instanceof Request) {
+      const url = new URL(queryOrQueryString.url);
+      queryString = url.searchParams;
+      body = await queryOrQueryString.json();
+    } else {
+      queryString = queryOrQueryString;
+    }
     const req = v.parse(body, pushBodySchema);
     if (queryString instanceof URLSearchParams) {
-      queryString = Object.fromEntries(queryString.entries());
+      queryString = Object.fromEntries(queryString);
     }
-    const params = v.parse(queryString, pushParamsSchema);
+    const queryParams = v.parse(queryString, pushParamsSchema);
     const connection = await this.#dbConnectionProvider();
 
     if (req.pushVersion !== 1) {
@@ -101,7 +120,7 @@ export class PushProcessor<
       const res = await this.#processMutation(
         connection,
         mutators,
-        params,
+        queryParams,
         req,
         m,
       );
