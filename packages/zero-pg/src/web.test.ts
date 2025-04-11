@@ -1,10 +1,10 @@
 import {describe, expect, test, vi} from 'vitest';
-import {PushProcessor} from './web.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {CustomMutatorDefs} from './custom.ts';
-import type {DBConnection, DBTransaction} from '../../zql/src/mutate/custom.ts';
-import {type PushBody} from '../../zero-protocol/src/push.ts';
 import * as v from '../../shared/src/valita.ts';
+import {type PushBody} from '../../zero-protocol/src/push.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {DBConnection, DBTransaction} from '../../zql/src/mutate/custom.ts';
+import type {CustomMutatorDefs} from './custom.ts';
+import {PushProcessor} from './web.ts';
 
 describe('PushProcessor', () => {
   const body = {
@@ -59,6 +59,28 @@ describe('PushProcessor', () => {
 
     const spy = vi.spyOn(v, 'parse');
     await processor.process(mockMutators, urlParams, body);
+
+    expect(spy.mock.calls[1][0]).toMatchInlineSnapshot(`
+      {
+        "appID": "test_client_group",
+        "schema": "test_schema",
+      }
+    `);
+  });
+
+  test('should accept Request as a param', async () => {
+    const processor = new PushProcessor(mockSchema, mockConnectionProvider);
+
+    const req = new Request(
+      'https://example.com?schema=test_schema&appID=test_client_group',
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+    );
+
+    const spy = vi.spyOn(v, 'parse');
+    await processor.process(mockMutators, req);
 
     expect(spy.mock.calls[1][0]).toMatchInlineSnapshot(`
       {
