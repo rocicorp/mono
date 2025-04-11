@@ -69,7 +69,7 @@ export function installWebSocketHandoff<P>(
 
       // "This event is guaranteed to be passed an instance of the <net.Socket> class"
       // https://nodejs.org/api/http.html#event-upgrade
-      receiver.send(data, socket as Socket);
+      receiver.send(data, socket);
     }
 
     function onError(error: unknown) {
@@ -104,11 +104,21 @@ export function installWebSocketHandoff<P>(
 }
 
 export function installWebSocketReceiver<P>(
+  lc: LogContext,
   server: WebSocketServer,
   receive: WebSocketReceiver<P>,
   sender: Sender,
 ) {
   sender.onMessageType<Handoff<P>>('handoff', (msg, socket) => {
+    // Per https://nodejs.org/api/child_process.html#subprocesssendmessage-sendhandle-options-callback
+    //
+    // > Any 'message' handlers in the subprocess should verify that socket
+    // > exists, as the connection may have been closed during the time it
+    // > takes to send the connection to the child.
+    if (!socket) {
+      lc.warn?.('websocket closed during handoff');
+      return;
+    }
     const {message, head, payload} = msg;
     server.handleUpgrade(
       message as IncomingMessage,

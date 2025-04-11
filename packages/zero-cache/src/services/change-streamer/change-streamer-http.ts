@@ -45,6 +45,7 @@ export class ChangeStreamerHttpServer extends HttpService {
       fastify.get(TENANT_PATH_PATTERN, {websocket: true}, this.#subscribe);
 
       installWebSocketReceiver<SubscriberContext>(
+        lc,
         fastify.websocketServer,
         this.#handleSubscription,
         parent,
