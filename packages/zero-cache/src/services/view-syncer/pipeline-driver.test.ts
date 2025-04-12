@@ -596,6 +596,25 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
+  test('timeout on slow advancement', () => {
+    pipelines.init(null);
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+    pipelines.setHydrationTime('hash1', 10);
+
+    replicator.processTransaction(
+      '134',
+      // Timeout only kicks in at 20 changes.
+      ...Array.from({length: 20}, (_, i) =>
+        messages.insert('issues', {id: String(30 + i)}),
+      ),
+    );
+
+    // 6ms is larger than half of the hydration time.
+    expect(() => [
+      ...pipelines.advance({totalElapsed: () => 6}).changes,
+    ]).toThrow(ResetPipelinesSignal);
+  });
+
   test('reset', () => {
     pipelines.init(null);
     [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];

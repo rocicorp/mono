@@ -356,7 +356,7 @@ export class PipelineDriver {
    *         `changes` must be iterated over in their entirety in order to
    *         advance the database snapshot.
    */
-  advance(timer: Timer): {
+  advance(timer: {totalElapsed: () => number}): {
     version: string;
     numChanges: number;
     changes: Iterable<RowChange>;
@@ -381,7 +381,7 @@ export class PipelineDriver {
       // Check every 10 changes
       if (pos % 10 === 0) {
         const elapsed = timer.totalElapsed();
-        if (elapsed > totalHydrationTimeMs / 2 && pos < changes / 2) {
+        if (elapsed > totalHydrationTimeMs / 2 && pos <= changes / 2) {
           throw new ResetPipelinesSignal(
             `advancement exceeded timeout at ${pos} of ${changes} changes (${elapsed} ms)`,
           );
@@ -394,9 +394,9 @@ export class PipelineDriver {
       numChanges: changes,
       changes: this.#advance(
         diff,
-        // Somewhat arbitrary: only check progress if there are at least 10
-        // changes.
-        changes >= 10 ? checkProgress : () => {},
+        // Somewhat arbitrary: only check progress if there are at least 20
+        // changes (Note that the first check doesn't happen until 10 changes).
+        changes >= 20 ? checkProgress : () => {},
       ),
     };
   }
