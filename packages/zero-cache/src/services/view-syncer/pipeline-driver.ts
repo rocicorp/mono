@@ -350,8 +350,8 @@ export class PipelineDriver {
    *
    * @param timer The caller-controlled {@link Timer} that will be used to
    *        measure the progress of the advancement and abort with a
-   *        ResetPipelinesSignal if it is estimated to take longer than
-   *        a hydration at `curr`.
+   *        {@link ResetPipelinesSignal} if it is estimated to take longer
+   *        than a hydration.
    * @return The resulting row changes for all added queries. Note that the
    *         `changes` must be iterated over in their entirety in order to
    *         advance the database snapshot.
@@ -368,6 +368,15 @@ export class PipelineDriver {
 
     const totalHydrationTimeMs = this.totalHydrationTimeMs();
 
+    // Cancel the advancement processing if it takes longer than half the
+    // total hydration time to make it through half of the advancement.
+    // This serves as both a circuit breaker for very large transactions,
+    // as well as a bound on the amount of time the previous connection locks
+    // the inactive WAL file (which prevents WAL2 from switching back to it
+    // when the current WAL is over the size limit).
+    //
+    // Note: 1/2 is a conservative estimate policy. A lower proportion would
+    // flag slowness sooner, at the expense of larger estimation error.
     function checkProgress(pos: number) {
       // Check every 10 changes
       if (pos % 10 === 0) {
