@@ -789,7 +789,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             transformedAst,
           )) {
             if (++count % TIME_SLICE_CHECK_SIZE === 0) {
-              if (timer.elapsed().lap > TIME_SLICE_MS) {
+              if (timer.elapsedLap() > TIME_SLICE_MS) {
                 timer.stopLap();
                 await yieldProcess(this.#setTimeout);
                 timer.startLap();
@@ -1110,7 +1110,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     updater: CVRQueryDrivenUpdater,
     pokers: PokeHandler,
     hashToIDs: Map<string, string[]>,
-    progress?: ProgressTimeout,
   ) {
     return startAsyncSpan(tracer, 'vs.#processChanges', async () => {
       const start = Date.now();
@@ -1183,17 +1182,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
 
           if (rows.size % TIME_SLICE_CHECK_SIZE === 0) {
-            const {lap, total} = timer.elapsed();
-            if (
-              progress !== undefined &&
-              total > progress.timeoutMs &&
-              rows.size < progress.minRows
-            ) {
-              throw new ResetPipelinesSignal(
-                `advancement exceeded timeout at ${rows.size} rows (${total} ms)`,
-              );
-            }
-            if (lap > TIME_SLICE_MS) {
+            if (timer.elapsedLap() > TIME_SLICE_MS) {
               timer.stopLap();
               await yieldProcess(this.#setTimeout);
               timer.startLap();
@@ -1224,7 +1213,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       assert(this.#pipelines.initialized());
       const start = Date.now();
 
-      const {version, numChanges, changes} = this.#pipelines.advance();
+      const timer = new Timer();
+      const {version, numChanges, changes} = this.#pipelines.advance(timer);
       lc = lc.withContext('newVersion', version);
 
       // Probably need a new updater type. CVRAdvancementUpdater?
@@ -1246,27 +1236,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const hashToIDs = createHashToIDs(cvr);
 
       try {
-        // Cancel the advancement processing if it takes longer than half the
-        // total hydration time to make it through half of the advancement.
-        // This serves as both a circuit breaker for very large transactions,
-        // as well as a bound on the amount of time an old connection can lock
-        // the inactive WAL file (which prevents WAL2 from switching back to it
-        // when the current WAL is over the size limit).
-        const progressCheck =
-          numChanges < 20
-            ? undefined
-            : {
-                minRows: numChanges / 2,
-                timeoutMs: this.#totalHydrationTimeMs() / 2,
-              };
         await this.#processChanges(
           lc,
-          new Timer().start(),
+          timer.start(),
           changes,
           updater,
           pokers,
           hashToIDs,
-          progressCheck,
         );
       } catch (e) {
         if (e instanceof ResetPipelinesSignal) {
@@ -1414,8 +1390,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
 // Update CVR after every 10000 rows.
 const CURSOR_PAGE_SIZE = 10000;
-// Check the elapsed time every 10 rows.
-const TIME_SLICE_CHECK_SIZE = 10;
+// Check the elapsed time every 100 rows.
+const TIME_SLICE_CHECK_SIZE = 100;
 // Yield the process after churning for > 500ms.
 const TIME_SLICE_MS = 500;
 
@@ -1553,13 +1529,7 @@ function hasExpiredQueries(cvr: CVRSnapshot): boolean {
   return false;
 }
 
-/** Bounds the time it takes to process `minRows`. */
-type ProgressTimeout = {
-  timeoutMs: number;
-  minRows: number;
-};
-
-class Timer {
+export class Timer {
   #total = 0;
   #start = 0;
 
@@ -1574,13 +1544,9 @@ class Timer {
     this.#start = performance.now();
   }
 
-  /**
-   * @returns the total elapsed time, and the current lap time if
-   *          the Timer is running.
-   */
-  elapsed(): {lap: number; total: number} {
-    const lap = this.#start === 0 ? 0 : performance.now() - this.#start;
-    return {lap, total: lap + this.#total};
+  elapsedLap() {
+    assert(this.#start !== 0, 'not running');
+    return performance.now() - this.#start;
   }
 
   stopLap() {
@@ -1593,5 +1559,15 @@ class Timer {
   stop(): number {
     this.stopLap();
     return this.#total;
+  }
+
+  /**
+   * @returns the elapsed time. This can be called while the Timer is running
+   *          or after it has been stopped.
+   */
+  totalElapsed(): number {
+    return this.#start === 0
+      ? this.#total
+      : this.#total + performance.now() - this.#start;
   }
 }

@@ -30,7 +30,12 @@ import type {ShardID} from '../../types/shards.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
 import type {ClientGroupStorage} from './database-storage.ts';
-import {Snapshotter, type SnapshotDiff} from './snapshotter.ts';
+import {
+  ResetPipelinesSignal,
+  Snapshotter,
+  type SnapshotDiff,
+} from './snapshotter.ts';
+import type {Timer} from './view-syncer.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -343,11 +348,15 @@ export class PipelineDriver {
   /**
    * Advances to the new head of the database.
    *
+   * @param timer The caller-controlled {@link Timer} that will be used to
+   *        measure the progress of the advancement and abort with a
+   *        ResetPipelinesSignal if it is estimated to take longer than
+   *        a hydration at `curr`.
    * @return The resulting row changes for all added queries. Note that the
    *         `changes` must be iterated over in their entirety in order to
    *         advance the database snapshot.
    */
-  advance(): {
+  advance(timer: Timer): {
     version: string;
     numChanges: number;
     changes: Iterable<RowChange>;
@@ -357,42 +366,69 @@ export class PipelineDriver {
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(`${prev.version} => ${curr.version}: ${changes} changes`);
 
+    const totalHydrationTimeMs = this.totalHydrationTimeMs();
+
+    function checkProgress(pos: number) {
+      // Check every 10 changes
+      if (pos % 10 === 0) {
+        const elapsed = timer.totalElapsed();
+        if (elapsed > totalHydrationTimeMs / 2 && pos < changes / 2) {
+          throw new ResetPipelinesSignal(
+            `advancement exceeded timeout at ${pos} of ${changes} changes (${elapsed} ms)`,
+          );
+        }
+      }
+    }
+
     return {
       version: curr.version,
       numChanges: changes,
-      changes: this.#advance(diff),
+      changes: this.#advance(
+        diff,
+        // Somewhat arbitrary: only check progress if there are at least 10
+        // changes.
+        changes >= 10 ? checkProgress : () => {},
+      ),
     };
   }
 
-  *#advance(diff: SnapshotDiff): Iterable<RowChange> {
+  *#advance(
+    diff: SnapshotDiff,
+    onChange: (pos: number) => void,
+  ): Iterable<RowChange> {
+    let pos = 0;
     for (const {table, prevValue, nextValue, rowKey} of diff) {
-      if (prevValue && nextValue) {
-        // Rows are ultimately referred to by the union key (in #streamNodes())
-        // so an update is represented as an `edit` if and only if the
-        // unionKey-based row keys are the same in prevValue and nextValue.
-        const {unionKey} = must(this.#tableSpecs.get(table)).tableSpec;
-        if (
-          Object.keys(rowKey).length === unionKey.length ||
-          deepEqual(
-            getRowKey(unionKey, prevValue as Row) as JSONValue,
-            getRowKey(unionKey, nextValue as Row) as JSONValue,
-          )
-        ) {
-          yield* this.#push(table, {
-            type: 'edit',
-            row: nextValue as Row,
-            oldRow: prevValue as Row,
-          });
-          continue;
+      try {
+        if (prevValue && nextValue) {
+          // Rows are ultimately referred to by the union key (in #streamNodes())
+          // so an update is represented as an `edit` if and only if the
+          // unionKey-based row keys are the same in prevValue and nextValue.
+          const {unionKey} = must(this.#tableSpecs.get(table)).tableSpec;
+          if (
+            Object.keys(rowKey).length === unionKey.length ||
+            deepEqual(
+              getRowKey(unionKey, prevValue as Row) as JSONValue,
+              getRowKey(unionKey, nextValue as Row) as JSONValue,
+            )
+          ) {
+            yield* this.#push(table, {
+              type: 'edit',
+              row: nextValue as Row,
+              oldRow: prevValue as Row,
+            });
+            continue;
+          }
+          // If the unionKey-based row keys differed, they will be
+          // represented as a remove of the old key and an add of the new key.
         }
-        // If the unionKey-based row keys differed, they will be
-        // represented as a remove of the old key and an add of the new key.
-      }
-      if (prevValue) {
-        yield* this.#push(table, {type: 'remove', row: prevValue as Row});
-      }
-      if (nextValue) {
-        yield* this.#push(table, {type: 'add', row: nextValue as Row});
+        if (prevValue) {
+          yield* this.#push(table, {type: 'remove', row: prevValue as Row});
+        }
+        if (nextValue) {
+          yield* this.#push(table, {type: 'add', row: nextValue as Row});
+        }
+      } finally {
+        onChange(++pos);
       }
     }
 
