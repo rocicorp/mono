@@ -14,7 +14,7 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "peerDependencies": {
-    "@op-engineering/op-sqlite": ">=6.0.0"
+    "@op-engineering/op-sqlite": ">=9.0.0"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
