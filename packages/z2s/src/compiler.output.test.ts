@@ -986,7 +986,7 @@ test('related w/o junction edge', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT (
-          SELECT COALESCE(json_agg(row_to_json("inner_owner")) , '[]'::json) FROM (SELECT "user"."id","user"."name","user"."age" FROM "user"  WHERE ("issue"."ownerId" = "user"."id")  ) "inner_owner"
+          SELECT COALESCE(json_agg(row_to_json("inner_owner")), '[]'::json) FROM (SELECT "user"."id","user"."name","user"."age" FROM "user"  WHERE ("issue"."ownerId" = "user"."id")  ) "inner_owner"
         ) as "owner","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId",EXTRACT(EPOCH FROM "issue"."created") * 1000 as "created" FROM "issue"    )"root"",
       "values": [],
     }

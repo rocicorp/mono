@@ -69,6 +69,137 @@ test.each(
         ],
       },
       {
+        name: 'related nested in junction related',
+        createQuery: q => q.label.related('issues', q => q.related('owner')),
+        manualVerification: [
+          {
+            id: 'label1',
+            issues: [
+              {
+                closed: true,
+                createdAt: 1743127752952,
+                description: 'Description for issue 1',
+                id: 'issue1',
+                owner: null,
+                ownerId: null,
+                title: 'Test Issue 1',
+              },
+              {
+                closed: true,
+                createdAt: 1742954952952,
+                description: 'Description for issue 3',
+                id: 'issue3',
+                owner: {
+                  id: 'user2',
+                  metadata: {
+                    altContacts: ['alt2@example.com'],
+                    email: 'user2@example.com',
+                    registrar: 'google',
+                  },
+                  name: 'User 2',
+                },
+                ownerId: 'user2',
+                title: 'Test Issue 3',
+              },
+            ],
+            name: 'Label 1',
+          },
+          {
+            id: 'label2',
+            issues: [
+              {
+                closed: true,
+                createdAt: 1743127752952,
+                description: 'Description for issue 1',
+                id: 'issue1',
+                owner: null,
+                ownerId: null,
+                title: 'Test Issue 1',
+              },
+              {
+                closed: false,
+                createdAt: 1743041352952,
+                description: 'Description for issue 2',
+                id: 'issue2',
+                owner: {
+                  id: 'user1',
+                  metadata: null,
+                  name: 'User 1',
+                },
+                ownerId: 'user1',
+                title: 'Test Issue 2',
+              },
+            ],
+            name: 'Label 2',
+          },
+        ],
+      },
+      {
+        name: 'related with filter nested in junction related',
+        createQuery: q =>
+          q.label.related('issues', q =>
+            q.related('comments', q => q.where('text', 'LIKE', '%2%')),
+          ),
+        manualVerification: [
+          {
+            id: 'label1',
+            issues: [
+              {
+                closed: true,
+                comments: [],
+                createdAt: 1743127752952,
+                description: 'Description for issue 1',
+                id: 'issue1',
+                ownerId: null,
+                title: 'Test Issue 1',
+              },
+              {
+                closed: true,
+                comments: [],
+                createdAt: 1742954952952,
+                description: 'Description for issue 3',
+                id: 'issue3',
+                ownerId: 'user2',
+                title: 'Test Issue 3',
+              },
+            ],
+            name: 'Label 1',
+          },
+          {
+            id: 'label2',
+            issues: [
+              {
+                closed: true,
+                comments: [],
+                createdAt: 1743127752952,
+                description: 'Description for issue 1',
+                id: 'issue1',
+                ownerId: null,
+                title: 'Test Issue 1',
+              },
+              {
+                closed: false,
+                comments: [
+                  {
+                    authorId: 'user2',
+                    createdAt: 1743041352952,
+                    id: 'comment2',
+                    issueId: 'issue2',
+                    text: 'Comment 2 text',
+                  },
+                ],
+                createdAt: 1743041352952,
+                description: 'Description for issue 2',
+                id: 'issue2',
+                ownerId: 'user1',
+                title: 'Test Issue 2',
+              },
+            ],
+            name: 'Label 2',
+          },
+        ],
+      },
+      {
         name: 'multiple where clauses',
         createQuery: q =>
           q.issue.where('closed', '=', false).where('ownerId', 'IS NOT', null),
