@@ -372,8 +372,9 @@ export class PipelineDriver {
     // total hydration time to make it through half of the advancement.
     // This serves as both a circuit breaker for very large transactions,
     // as well as a bound on the amount of time the previous connection locks
-    // the inactive WAL file (which prevents WAL2 from switching back to it
-    // when the current WAL is over the size limit).
+    // the inactive WAL file (as the lock prevents WAL2 from switching to the
+    // free WAL when the current one is over the size limit, which can make
+    // the WAL grow continuously and compound slowness).
     //
     // Note: 1/2 is a conservative estimate policy. A lower proportion would
     // flag slowness sooner, at the expense of larger estimation error.
