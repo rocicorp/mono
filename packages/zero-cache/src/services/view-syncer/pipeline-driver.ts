@@ -35,7 +35,6 @@ import {
   Snapshotter,
   type SnapshotDiff,
 } from './snapshotter.ts';
-import type {Timer} from './view-syncer.ts';
 
 export type RowAdd = {
   readonly type: 'add';
