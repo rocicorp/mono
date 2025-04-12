@@ -2,16 +2,12 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {deepFreeze} from '../frozen-json.ts';
 import type {Store as KVStore, Read, Write} from './store.ts';
 
-export interface SQLResultSetRowList {
-  length: number;
-  item(index: number): {value: string}; // TODO: confirm this is correct, this was typed as `any` in the original code
-}
 export interface SQLiteTransaction {
   begin(readonly?: boolean): Promise<void>;
-  execute(
+  execute<T>(
     sqlStatement: string,
     args?: (string | number | null)[] | undefined,
-  ): Promise<SQLResultSetRowList>;
+  ): Promise<T[]>;
   commit(): Promise<void>;
 }
 
@@ -120,14 +116,14 @@ export class SQLiteStoreRead implements Read {
   }
 
   async #getSql(key: string) {
-    const rows = await this._assertTx().execute(
+    const rows = await this._assertTx().execute<{value: string}>(
       'SELECT value FROM entry WHERE key = ?',
       [key],
     );
 
     if (rows.length === 0) return undefined;
 
-    return rows.item(0).value;
+    return rows[0].value;
   }
 
   protected _assertTx() {

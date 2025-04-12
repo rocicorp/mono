@@ -1,4 +1,4 @@
-import * as OPSQLite from '@op-engineering/op-sqlite';
+import {open} from '@op-engineering/op-sqlite';
 import {
   getCreateSQLiteStore,
   SQLiteDatabaseManager,
@@ -9,7 +9,7 @@ import {OPSQLiteTransaction} from './transaction.js';
 
 const genericDatabase: GenericSQLiteDatabaseManager = {
   open: (name: string) => {
-    const db = OPSQLite.open({name});
+    const db = open({name});
     return Promise.resolve({
       transaction: () => new OPSQLiteTransaction(db),
       destroy: () => Promise.resolve(db.delete()),

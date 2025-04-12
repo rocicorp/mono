@@ -1,18 +1,19 @@
 import {SQLiteDatabase, type SQLiteExecuteAsyncResult} from 'expo-sqlite';
 import {type SQLiteTransaction} from '../../replicache/src/kv/sqlite-store.ts';
 import {resolver, type Resolver} from '@rocicorp/resolver';
+import {assert} from '../../shared/src/asserts.ts';
 
 type Transaction = Parameters<
   Parameters<SQLiteDatabase['withExclusiveTransactionAsync']>[0]
 >[0];
 
 export class ExpoSQLiteTransaction implements SQLiteTransaction {
+  private readonly _db: SQLiteDatabase;
   #tx: Transaction | null = null;
   #transactionCommittedSubscriptions = new Set<Resolver<void>>();
   #txCommitted = false;
   #transactionEndedSubscriptions = new Set<Resolver<void>>();
   #txEnded = false;
-  private readonly _db: SQLiteDatabase;
 
   constructor(db: SQLiteDatabase) {
     this._db = db;
@@ -63,7 +64,7 @@ export class ExpoSQLiteTransaction implements SQLiteTransaction {
       await statement.finalizeAsync();
     }
 
-    return {item: (idx: number) => allRows[idx], length: allRows.length};
+    return allRows;
   }
 
   commit(): Promise<void> {
@@ -84,9 +85,9 @@ export class ExpoSQLiteTransaction implements SQLiteTransaction {
   }
 
   #assertTransactionReady() {
-    if (this.#tx === null) throw new Error('Transaction is not ready.');
-    if (this.#txCommitted) throw new Error('Transaction already committed.');
-    if (this.#txEnded) throw new Error('Transaction already ended.');
+    assert(this.#tx !== null, 'Transaction is not ready.');
+    assert(!this.#txCommitted, 'Transaction already committed.');
+    assert(!this.#txEnded, 'Transaction already ended.');
     return this.#tx;
   }
 

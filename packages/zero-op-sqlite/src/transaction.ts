@@ -1,22 +1,19 @@
-import * as OPSQLite from '@op-engineering/op-sqlite';
-import {
-  SQLiteTransaction,
-  type SQLResultSetRowList,
-} from '../../replicache/src/kv/sqlite-store.ts';
+import type {DB, Transaction} from '@op-engineering/op-sqlite';
+import {type SQLiteTransaction} from '../../replicache/src/kv/sqlite-store.ts';
 
-export class OPSQLiteTransaction extends SQLiteTransaction {
-  #tx: OPSQLite.Transaction | null = null;
+export class OPSQLiteTransaction implements SQLiteTransaction {
+  private readonly _db: DB;
+  #tx: Transaction | null = null;
   #transactionCommittedSubscriptions = new Set<() => void>();
   #txCommitted = false;
   #transactionEndedSubscriptions = new Set<{
     resolve: () => void;
-    reject: () => void;
+    reject: (reason?: unknown) => void;
   }>();
   #txEnded = false;
 
-  // eslint-disable-next-line @typescript-eslint/parameter-properties
-  constructor(private readonly _db: ReturnType<typeof OPSQLite.open>) {
-    super();
+  constructor(db: DB) {
+    this._db = db;
   }
 
   // op-sqlite doesn't support readonly
@@ -35,7 +32,7 @@ export class OPSQLiteTransaction extends SQLiteTransaction {
             await this.#waitForTransactionCommitted();
             this.#setTransactionEnded(false);
           } catch (error) {
-            this.#setTransactionEnded(true);
+            this.#setTransactionEnded(true, error);
           }
         });
       } catch {
@@ -46,19 +43,14 @@ export class OPSQLiteTransaction extends SQLiteTransaction {
     });
   }
 
-  async execute(
+  async execute<T>(
     sqlStatement: string,
     args?: (string | number | null)[] | undefined,
-  ): Promise<SQLResultSetRowList> {
+  ) {
     const tx = this.#assertTransactionReady();
     const {rows} = await tx.execute(sqlStatement, args);
 
-    return {
-      item: (idx: number) => ({
-        value: String(rows?.[idx]?.value ?? ''),
-      }),
-      length: rows?.length ?? 0,
-    };
+    return rows as T[];
   }
 
   async commit() {
@@ -92,11 +84,11 @@ export class OPSQLiteTransaction extends SQLiteTransaction {
     });
   }
 
-  #setTransactionEnded(errored = false) {
+  #setTransactionEnded(errored: boolean, error?: unknown) {
     this.#txEnded = true;
     for (const {resolve, reject} of this.#transactionEndedSubscriptions) {
       if (errored) {
-        reject();
+        reject(error);
       } else {
         resolve();
       }
