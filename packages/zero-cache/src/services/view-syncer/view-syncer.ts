@@ -1213,7 +1213,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       assert(this.#pipelines.initialized());
       const start = Date.now();
 
-      const {version, numChanges, changes} = this.#pipelines.advance();
+      const timer = new Timer();
+      const {version, numChanges, changes} = this.#pipelines.advance(timer);
       lc = lc.withContext('newVersion', version);
 
       // Probably need a new updater type. CVRAdvancementUpdater?
@@ -1237,7 +1238,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       try {
         await this.#processChanges(
           lc,
-          new Timer().start(),
+          timer.start(),
           changes,
           updater,
           pokers,
@@ -1260,7 +1261,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       await this.#evictInactiveQueries(lc, this.#cvr);
 
-      lc.info?.(`finished processing advancement (${Date.now() - start} ms)`);
+      lc.info?.(
+        `finished processing advancement of ${numChanges} changes (${Date.now() - start} ms)`,
+      );
       return 'success';
     });
   }
@@ -1387,8 +1390,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
 // Update CVR after every 10000 rows.
 const CURSOR_PAGE_SIZE = 10000;
-// Check the elapsed time every 500 rows.
-const TIME_SLICE_CHECK_SIZE = 500;
+// Check the elapsed time every 100 rows.
+const TIME_SLICE_CHECK_SIZE = 100;
 // Yield the process after churning for > 500ms.
 const TIME_SLICE_MS = 500;
 
@@ -1526,7 +1529,7 @@ function hasExpiredQueries(cvr: CVRSnapshot): boolean {
   return false;
 }
 
-class Timer {
+export class Timer {
   #total = 0;
   #start = 0;
 
