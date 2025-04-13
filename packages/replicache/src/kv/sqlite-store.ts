@@ -94,7 +94,7 @@ export class SQLiteStoreRead implements Read {
 
   async has(key: string) {
     const unsafeValue = await this.#getSql(key);
-    return unsafeValue === undefined;
+    return unsafeValue !== undefined;
   }
 
   async get(key: string) {
