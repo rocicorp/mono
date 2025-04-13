@@ -301,8 +301,12 @@ describe('view-syncer/pipeline-driver', () => {
     'zeroz',
   );
 
+  function startTimer() {
+    return new Timer().start();
+  }
+
   function changes() {
-    return [...pipelines.advance(new Timer().start()).changes];
+    return [...pipelines.advance(startTimer()).changes];
   }
 
   test('replica version', () => {
@@ -313,7 +317,7 @@ describe('view-syncer/pipeline-driver', () => {
   test('add query', () => {
     pipelines.init(null);
 
-    expect([...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)])
+    expect([...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, startTimer())])
       .toMatchInlineSnapshot(`
         [
           {
@@ -416,13 +420,13 @@ describe('view-syncer/pipeline-driver', () => {
 
     // Adding a query with the same hash should be a noop.
     expect([
-      ...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS),
+      ...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, startTimer()),
     ]).toMatchInlineSnapshot(`[]`);
   });
 
   test('insert', () => {
     pipelines.init(null);
-    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, startTimer())];
 
     replicator.processTransaction(
       '134',
@@ -484,7 +488,7 @@ describe('view-syncer/pipeline-driver', () => {
 
   test('delete', () => {
     pipelines.init(null);
-    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, startTimer())];
 
     replicator.processTransaction(
       '134',
@@ -527,7 +531,7 @@ describe('view-syncer/pipeline-driver', () => {
 
   test('truncate', () => {
     pipelines.init(null);
-    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, startTimer())];
 
     replicator.processTransaction('134', messages.truncate('comments'));
 
@@ -536,7 +540,7 @@ describe('view-syncer/pipeline-driver', () => {
 
   test('update', () => {
     pipelines.init(null);
-    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, startTimer())];
 
     replicator.processTransaction(
       '134',
@@ -598,8 +602,11 @@ describe('view-syncer/pipeline-driver', () => {
 
   test('timeout on slow advancement', () => {
     pipelines.init(null);
-    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
-    pipelines.setHydrationTime('hash1', 10);
+    [
+      ...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, {
+        totalElapsed: () => 10,
+      }),
+    ];
 
     replicator.processTransaction(
       '134',
@@ -617,7 +624,7 @@ describe('view-syncer/pipeline-driver', () => {
 
   test('reset', () => {
     pipelines.init(null);
-    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, startTimer())];
     expect(pipelines.addedQueries()).toEqual(new Set(['hash1']));
 
     replicator.processTransaction(
@@ -631,7 +638,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(pipelines.addedQueries()).toEqual(new Set());
 
     // The newColumn should be reflected after a reset.
-    expect([...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)])
+    expect([...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, startTimer())])
       .toMatchInlineSnapshot(`
         [
           {
@@ -738,7 +745,7 @@ describe('view-syncer/pipeline-driver', () => {
 
   test('update unique non-primary key', () => {
     pipelines.init(null);
-    expect([...pipelines.addQuery('hash1', UNIQUES_QUERY)])
+    expect([...pipelines.addQuery('hash1', UNIQUES_QUERY, startTimer())])
       .toMatchInlineSnapshot(`
         [
           {
@@ -814,7 +821,7 @@ describe('view-syncer/pipeline-driver', () => {
 
   test('whereExists query', () => {
     pipelines.init(null);
-    [...pipelines.addQuery('hash1', ISSUES_QUERY_WITH_EXISTS)];
+    [...pipelines.addQuery('hash1', ISSUES_QUERY_WITH_EXISTS, startTimer())];
 
     replicator.processTransaction(
       '134',
@@ -863,7 +870,11 @@ describe('view-syncer/pipeline-driver', () => {
   test('whereExists added by permissions return no rows', () => {
     pipelines.init(null);
     expect([
-      ...pipelines.addQuery('hash1', ISSUES_QUERY_WITH_EXISTS_FROM_PERMISSIONS),
+      ...pipelines.addQuery(
+        'hash1',
+        ISSUES_QUERY_WITH_EXISTS_FROM_PERMISSIONS,
+        startTimer(),
+      ),
     ]).toMatchInlineSnapshot(`
       [
         {
@@ -886,6 +897,7 @@ describe('view-syncer/pipeline-driver', () => {
       ...pipelines.addQuery(
         'hash2',
         ISSUES_QUERY_WITH_EXISTS_FROM_PERMISSIONS2,
+        startTimer(),
       ),
     ]).toMatchInlineSnapshot(`
       [
@@ -1025,7 +1037,7 @@ describe('view-syncer/pipeline-driver', () => {
     };
 
     pipelines.init(null);
-    [...pipelines.addQuery('hash1', query)];
+    [...pipelines.addQuery('hash1', query, startTimer())];
 
     replicator.processTransaction(
       '134',
@@ -1179,7 +1191,7 @@ describe('view-syncer/pipeline-driver', () => {
   test('getRow', () => {
     pipelines.init(null);
 
-    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, startTimer())];
 
     // Post-hydration
     expect(pipelines.getRow('issues', {id: '1'})).toEqual({
@@ -1209,7 +1221,7 @@ describe('view-syncer/pipeline-driver', () => {
       ['_0_version']: '134',
     });
 
-    [...pipelines.addQuery('hash2', ISSUES_QUERY_WITH_EXISTS)];
+    [...pipelines.addQuery('hash2', ISSUES_QUERY_WITH_EXISTS, startTimer())];
 
     // getRow should work with any row key
     expect(
@@ -1231,7 +1243,7 @@ describe('view-syncer/pipeline-driver', () => {
 
   test('schemaVersions change and insert', () => {
     pipelines.init(null);
-    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, startTimer())];
 
     replicator.processTransaction(
       '134',
@@ -1274,7 +1286,7 @@ describe('view-syncer/pipeline-driver', () => {
 
   test('multiple advancements', () => {
     pipelines.init(null);
-    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, startTimer())];
 
     replicator.processTransaction(
       '134',
@@ -1351,7 +1363,7 @@ describe('view-syncer/pipeline-driver', () => {
 
   test('remove query', () => {
     pipelines.init(null);
-    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, startTimer())];
 
     expect([...pipelines.addedQueries()]).toEqual(['hash1']);
     pipelines.removeQuery('hash1');
@@ -1371,7 +1383,7 @@ describe('view-syncer/pipeline-driver', () => {
 
   test('push fails on out of bounds numbers', () => {
     pipelines.init(null);
-    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS)];
+    [...pipelines.addQuery('hash1', ISSUES_AND_COMMENTS, startTimer())];
 
     replicator.processTransaction(
       '134',

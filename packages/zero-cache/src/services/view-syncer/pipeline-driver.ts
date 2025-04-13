@@ -246,9 +246,16 @@ export class PipelineDriver {
    * If a query with an identical hash has already been added, this method
    * is a no-op and no RowChanges are generated.
    *
+   * @param timer The caller-controlled {@link Timer} used to determine the
+   *        final hydration time. (The caller may pause and resume the timer
+   *        in order to yield the thread for time-slicing).
    * @return The rows from the initial hydration of the query.
    */
-  *addQuery(hash: string, query: AST): Iterable<RowChange> {
+  *addQuery(
+    hash: string,
+    query: AST,
+    timer: {totalElapsed: () => number},
+  ): Iterable<RowChange> {
     assert(this.initialized());
     if (this.#pipelines.has(hash)) {
       this.#lc.info?.(`query ${hash} already added`, query);
@@ -269,8 +276,6 @@ export class PipelineDriver {
       },
     });
 
-    const start = Date.now();
-
     if (runtimeDebugFlags.trackRowsVended) {
       runtimeDebugStats.resetRowsVended(this.#clientGroupID);
     }
@@ -283,7 +288,7 @@ export class PipelineDriver {
     );
     yield* streamer.stream();
 
-    const hydrationTimeMs = Date.now() - start;
+    const hydrationTimeMs = timer.totalElapsed();
     if (runtimeDebugFlags.trackRowsVended) {
       if (hydrationTimeMs > 200) {
         let totalRowsConsidered = 0;
@@ -312,13 +317,6 @@ export class PipelineDriver {
     // not take time slicing into account. The view-syncer resets this
     // to a more precise processing-time measurement with setHydrationTime().
     this.#pipelines.set(hash, {input, hydrationTimeMs});
-  }
-
-  setHydrationTime(hash: string, hydrationTimeMs: number) {
-    const p = this.#pipelines.get(hash);
-    if (p) {
-      this.#pipelines.set(hash, {...p, hydrationTimeMs});
-    }
   }
 
   /**

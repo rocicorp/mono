@@ -783,10 +783,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           span.setAttribute('queryHash', hash);
           span.setAttribute('transformationHash', transformationHash);
           span.setAttribute('table', ast.table);
-          const timer = new Timer().start();
+          const timer = new Timer();
           for (const _ of this.#pipelines.addQuery(
             transformationHash,
             transformedAst,
+            timer.start(),
           )) {
             if (++count % TIME_SLICE_CHECK_SIZE === 0) {
               if (timer.elapsedLap() > TIME_SLICE_MS) {
@@ -796,7 +797,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               }
             }
           }
-          this.#pipelines.setHydrationTime(transformationHash, timer.stop());
         },
       );
       const elapsed = Date.now() - start;
@@ -950,11 +950,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('transformationHash', q.transformationHash);
           lc.debug?.(`adding pipeline for query`, q.ast);
 
-          timer.start();
-          yield* pipelines.addQuery(q.transformationHash, q.ast);
+          yield* pipelines.addQuery(q.transformationHash, q.ast, timer.start());
           const elapsed = timer.stop();
 
-          pipelines.setHydrationTime(q.transformationHash, elapsed);
           totalProcessTime += elapsed;
           if (elapsed > slowHydrateThreshold) {
             lc.warn?.('Slow query materialization', elapsed, q.ast);
