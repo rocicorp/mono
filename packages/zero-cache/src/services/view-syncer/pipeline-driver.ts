@@ -248,7 +248,7 @@ export class PipelineDriver {
    *
    * @param timer The caller-controlled {@link Timer} used to determine the
    *        final hydration time. (The caller may pause and resume the timer
-   *        in order to yield the thread for time-slicing).
+   *        when yielding the thread for time-slicing).
    * @return The rows from the initial hydration of the query.
    */
   *addQuery(
