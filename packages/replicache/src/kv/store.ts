@@ -1,5 +1,4 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-
 /**
  * Store defines a transactional key/value store that Replicache stores all data
  * within.
@@ -26,7 +25,7 @@ export interface Store {
  *
  * The name is used to identify the store. If the same name is used for multiple
  * stores, they should share the same data. It is also desirable to have these
- * stores share an {@link RWLock}.
+ * stores share an `RWLock`.
  *
  */
 export type CreateStore = (name: string) => Store;

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-floating-promises */
 /* eslint-disable @typescript-eslint/ban-types */
 import {describe, expectTypeOf, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
@@ -170,6 +171,25 @@ const testWithMoreRelationshipsRelationships = relationships(
   }),
 );
 
+const testWithOneRelationships = table('testWithOneRelationships')
+  .columns({
+    s: string(),
+    a: string(),
+    b: boolean(),
+  })
+  .primaryKey('s');
+
+const testWithOneRelationshipsRelationships = relationships(
+  testWithOneRelationships,
+  connect => ({
+    testWithRelationships: connect.one({
+      sourceField: ['a'],
+      destField: ['a'],
+      destSchema: testWithRelationships,
+    }),
+  }),
+);
+
 const schema = createSchema({
   tables: [
     testSchema,
@@ -179,12 +199,14 @@ const schema = createSchema({
     schemaWithAdvancedTypes,
     testWithRelationships,
     testWithMoreRelationships,
+    testWithOneRelationships,
   ],
   relationships: [
     testWithRelationshipsRelationships,
     testWithMoreRelationshipsRelationships,
     withAdvancedTypesRelationships,
     schemaWithEnumsRelationships,
+    testWithOneRelationshipsRelationships,
   ],
 });
 
@@ -206,7 +228,7 @@ describe('types', () => {
 
   test('simple select with enums', () => {
     const query = mockQuery as unknown as Query<Schema, 'testWithEnums'>;
-    expectTypeOf(query.run()).toMatchTypeOf<
+    expectTypeOf(query.run()).toExtend<
       Promise<
         ReadonlyArray<{
           s: string;
@@ -934,4 +956,54 @@ describe('Where expression factory and builder', () => {
     const q2 = q.where(f);
     expectTypeOf(q2).toMatchTypeOf(q);
   });
+});
+
+test('one', async () => {
+  const q = mockQuery as unknown as Query<Schema, 'test'>;
+  const q1 = q;
+  const q2 = q.one();
+  expectTypeOf(q2).not.toEqualTypeOf(q1);
+
+  const r1 = await q1.run();
+  const r2 = await q2.run();
+
+  expectTypeOf(r1).not.toEqualTypeOf(r2);
+
+  expectTypeOf(r1).toEqualTypeOf<
+    {
+      readonly s: string;
+      readonly b: boolean;
+      readonly n: number;
+    }[]
+  >();
+
+  expectTypeOf(r2).toEqualTypeOf<
+    | {
+        readonly s: string;
+        readonly b: boolean;
+        readonly n: number;
+      }
+    | undefined
+  >();
+});
+
+test('one in related subquery', async () => {
+  const q = mockQuery as unknown as Query<Schema, 'testWithOneRelationships'>;
+  const q1 = q.related('testWithRelationships');
+  const r1 = await q1.run();
+
+  expectTypeOf(r1).toEqualTypeOf<
+    {
+      readonly s: string;
+      readonly a: string;
+      readonly b: boolean;
+      readonly testWithRelationships:
+        | {
+            readonly s: string;
+            readonly b: boolean;
+            readonly a: string;
+          }
+        | undefined;
+    }[]
+  >();
 });

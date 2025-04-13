@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
+import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   LastInTuple,
@@ -20,24 +21,10 @@ type JsonSelectors<E extends TableSchema> = {
   [K in keyof E['columns']]: E['columns'][K] extends {type: 'json'} ? K : never;
 }[keyof E['columns']];
 
-export type Operator =
-  | '='
-  | '!='
-  | '<'
-  | '<='
-  | '>'
-  | '>='
-  | 'IN'
-  | 'NOT IN'
-  | 'LIKE'
-  | 'ILIKE'
-  | 'IS'
-  | 'IS NOT';
-
 export type GetFilterType<
   TSchema extends TableSchema,
   TColumn extends keyof TSchema['columns'],
-  TOperator extends Operator,
+  TOperator extends SimpleOperator,
 > = TOperator extends 'IS' | 'IS NOT'
   ? // SchemaValueToTSType adds null if the type is optional, but we add null
     // no matter what for dx reasons. See:
@@ -104,15 +91,89 @@ export type Row<T extends TableSchema | Query<ZeroSchema, string, any>> =
       ? TReturn
       : never;
 
+/**
+ * A hybrid query that runs on both client and server.
+ * Results are returned immediately from the client followed by authoritative
+ * results from the server.
+ *
+ * Queries are transactional in that all queries update at once when a new transaction
+ * has been committed on the client or server. No query results will reflect stale state.
+ *
+ * A query can be:
+ * - {@linkcode materialize | materialize}
+ * - awaited (`then`/{@linkcode run})
+ * - {@linkcode preload | preloaded}
+ *
+ * The normal way to use a query would be through your UI framework's bindings (e.g., useQuery(q))
+ * or within a custom mutator.
+ *
+ * `materialize` and `run/then` are provided for more advanced use cases.
+ * Remember that any `view` returned by `materialize` must be destroyed.
+ *
+ * A query can be run as a 1-shot query by awaiting it. E.g.,
+ *
+ * ```ts
+ * const result = await z.query.issue.limit(10);
+ * ```
+ *
+ * For more information on how to use queries, see the documentation:
+ * https://zero.rocicorp.dev/docs/reading-data
+ *
+ * @typeParam TSchema The database schema type extending ZeroSchema
+ * @typeParam TTable The name of the table being queried, must be a key of TSchema['tables']
+ * @typeParam TReturn The return type of the query, defaults to PullRow<TTable, TSchema>
+ */
 export interface Query<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
-> {
+> extends PromiseLike<HumanReadable<TReturn>> {
+  /**
+   * Format is used to specify the shape of the query results. This is used by
+   * {@linkcode one} and it also describes the shape when using
+   * {@linkcode related}.
+   */
   readonly format: Format;
-  hash(): string;
-  updateTTL(ttl: TTL): void;
 
+  /**
+   * A string that uniquely identifies this query. This can be used to determine
+   * if two queries are the same.
+   */
+  hash(): string;
+
+  /**
+   * Related is used to add a related query to the current query. This is used
+   * for subqueries and joins. These relationships are defined in the
+   * relationships section of the schema. The result of the query will
+   * include the related rows in the result set as a sub object of the row.
+   *
+   * ```typescript
+   * const row = await z.query.users
+   *   .related('posts');
+   * // {
+   * //   id: '1',
+   * //   posts: [
+   * //     ...
+   * //   ]
+   * // }
+   * ```
+   * If you want to add a subquery to the related query, you can do so by
+   * providing a callback function that receives the related query as an argument.
+   *
+   * ```typescript
+   * const row = await z.query.users
+   *   .related('posts', q => q.where('published', true));
+   * // {
+   * //   id: '1',
+   * //   posts: [
+   * //     {published: true, ...},
+   * //     ...
+   * //   ]
+   * // }
+   * ```
+   *
+   * @param relationship The name of the relationship
+   */
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
   ): Query<
@@ -148,9 +209,26 @@ export interface Query<
     >
   >;
 
+  /**
+   * Represents a condition to filter the query results.
+   *
+   * @param field The column name to filter on.
+   * @param op The operator to use for filtering.
+   * @param value The value to compare against.
+   *
+   * @returns A new query instance with the applied filter.
+   *
+   * @example
+   *
+   * ```typescript
+   * const query = db.query('users')
+   *   .where('age', '>', 18)
+   *   .where('name', 'LIKE', '%John%');
+   * ```
+   */
   where<
     TSelector extends NoJsonSelector<PullTableSchema<TTable, TSchema>>,
-    TOperator extends Operator,
+    TOperator extends SimpleOperator,
   >(
     field: TSelector,
     op: TOperator,
@@ -158,12 +236,42 @@ export interface Query<
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
       | ParameterReference,
   ): Query<TSchema, TTable, TReturn>;
+  /**
+   * Represents a condition to filter the query results.
+   *
+   * This overload is used when the operator is '='.
+   *
+   * @param field The column name to filter on.
+   * @param value The value to compare against.
+   *
+   * @returns A new query instance with the applied filter.
+   *
+   * @example
+   * ```typescript
+   * const query = db.query('users')
+   *  .where('age', 18)
+   * ```
+   */
   where<TSelector extends NoJsonSelector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
       | ParameterReference,
   ): Query<TSchema, TTable, TReturn>;
+
+  /**
+   * Represents a condition to filter the query results.
+   *
+   * @param expressionFactory A function that takes a query builder and returns an expression.
+   *
+   * @returns A new query instance with the applied filter.
+   *
+   * @example
+   * ```typescript
+   * const query = db.query('users')
+   *   .where(({cmp, or}) => or(cmp('age', '>', 18), cmp('name', 'LIKE', '%John%')));
+   * ```
+   */
   where(
     expressionFactory: ExpressionFactory<TSchema, TTable>,
   ): Query<TSchema, TTable, TReturn>;
@@ -178,28 +286,107 @@ export interface Query<
     ) => Query<TSchema, string>,
   ): Query<TSchema, TTable, TReturn>;
 
+  /**
+   * Skips the rows of the query until row matches the given row. If opts is
+   * provided, it determines whether the match is inclusive.
+   *
+   * @param row The row to start from. This is a partial row object and only the provided
+   *            fields will be used for the comparison.
+   * @param opts Optional options object that specifies whether the match is inclusive.
+   *             If `inclusive` is true, the row will be included in the result.
+   *             If `inclusive` is false, the row will be excluded from the result and the result
+   *             will start from the next row.
+   *
+   * @returns A new query instance with the applied start condition.
+   */
   start(
     row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean} | undefined,
   ): Query<TSchema, TTable, TReturn>;
 
+  /**
+   * Limits the number of rows returned by the query.
+   * @param limit The maximum number of rows to return.
+   *
+   * @returns A new query instance with the applied limit.
+   */
   limit(limit: number): Query<TSchema, TTable, TReturn>;
 
+  /**
+   * Orders the results by a specified column. If multiple orderings are
+   * specified, the results will be ordered by the first column, then the
+   * second column, and so on.
+   *
+   * @param field The column name to order by.
+   * @param direction The direction to order the results (ascending or descending).
+   *
+   * @returns A new query instance with the applied order.
+   */
   orderBy<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
     direction: 'asc' | 'desc',
   ): Query<TSchema, TTable, TReturn>;
 
+  /**
+   * Limits the number of rows returned by the query to a single row and then
+   * unpacks the result so that you do not get an array of rows but a single
+   * row. This is useful when you expect only one row to be returned and want to
+   * work with the row directly.
+   *
+   * If the query returns no rows, the result will be `undefined`.
+   *
+   * @returns A new query instance with the applied limit to one row.
+   */
   one(): Query<TSchema, TTable, TReturn | undefined>;
 
+  /**
+   * Creates a materialized view of the query. This is a view that will be kept
+   * in memory and updated as the query results change.
+   *
+   * Most of the time you will want to use the `useQuery` hook or the
+   * `run`/`then` method to get the results of a query. This method is only
+   * needed if you want to access to lower level APIs of the view.
+   *
+   * @param ttl Time To Live. This is the amount of time to keep the rows
+   *            associated with this query after {@linkcode TypedView.destroy}
+   *            has been called.
+   */
   materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
+  /**
+   * Creates a custom materialized view using a provided factory function. This
+   * allows framework-specific bindings (like SolidJS, Vue, etc.) to create
+   * optimized views.
+   *
+   * @param factory A function that creates a custom view implementation
+   * @param ttl Optional Time To Live for the view's data after destruction
+   * @returns A custom view instance of type {@linkcode T}
+   *
+   * @example
+   * ```ts
+   * const view = query.materialize(createSolidView, '1m');
+   * ```
+   */
   materialize<T>(
     factory: ViewFactory<TSchema, TTable, TReturn, T>,
     ttl?: TTL,
   ): T;
 
+  /**
+   * Executes the query and returns the results. This is a 1-shot query that
+   * returns the results immediately. It is equivalent to calling `then` on the
+   * query.
+   */
   run(): Promise<HumanReadable<TReturn>>;
 
+  /**
+   * Preload loads the data into the clients cache without keeping it in memory.
+   * This is useful for preloading data that will be used later.
+   *
+   * @param options Options for preloading the query.
+   * @param options.ttl Time To Live. This is the amount of time to keep the rows
+   *                  associated with this query after {@linkcode cleanup} has
+   *                  been called.
+   */
   preload(options?: PreloadOptions): {
     cleanup: () => void;
     complete: Promise<void>;
@@ -214,7 +401,14 @@ export type PreloadOptions = {
   ttl?: TTL | undefined;
 };
 
+/**
+ * A helper type that tries to make the type more readable.
+ */
 export type HumanReadable<T> = undefined extends T ? Expand<T> : Expand<T>[];
+
+/**
+ * A helper type that tries to make the type more readable.
+ */
 // Note: opaque types expand incorrectly.
 export type HumanReadableRecursive<T> = undefined extends T
   ? ExpandRecursive<T>

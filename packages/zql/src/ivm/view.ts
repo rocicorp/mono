@@ -1,6 +1,7 @@
 import type {Value} from '../../../zero-protocol/src/data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Query} from '../query/query.ts';
+import type {TTL} from '../query/ttl.ts';
 import type {Input} from './operator.ts';
 
 export type View = EntryList | Entry | undefined;
@@ -24,4 +25,5 @@ export type ViewFactory<
   onDestroy: () => void,
   onTransactionCommit: (cb: () => void) => void,
   queryComplete: true | Promise<true>,
+  updateTTL: (ttl: TTL) => void,
 ) => T;

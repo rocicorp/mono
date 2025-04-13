@@ -10,6 +10,7 @@ import type {
   Condition,
   Ordering,
   Parameter,
+  SimpleOperator,
   System,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
@@ -33,7 +34,6 @@ import {
 import {
   type GetFilterType,
   type HumanReadable,
-  type Operator,
   type PreloadOptions,
   type PullRow,
   type Query,
@@ -42,7 +42,12 @@ import {DEFAULT_TTL, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 type AnyQuery = Query<Schema, string, any>;
-export const astForTestingSymbol = Symbol();
+
+const astSymbol = Symbol();
+
+export function ast(query: Query<Schema, string, any>): AST {
+  return (query as AbstractQuery<Schema, string>)[astSymbol];
+}
 
 export function newQuery<
   TSchema extends Schema,
@@ -118,8 +123,7 @@ export abstract class AbstractQuery<
     this.format = format;
   }
 
-  // Not part of Query or QueryInternal interface
-  get [astForTestingSymbol](): AST {
+  get [astSymbol](): AST {
     return this.#ast;
   }
 
@@ -140,7 +144,7 @@ export abstract class AbstractQuery<
     schema: TSchema,
     table: TTable,
     ast: AST,
-    format: Format | undefined,
+    format: Format,
   ): AbstractQuery<TSchema, TTable, TReturn>;
 
   one(): Query<TSchema, TTable, TReturn | undefined> {
@@ -176,21 +180,22 @@ export abstract class AbstractQuery<
     assert(related, 'Invalid relationship');
     if (isOneHop(related)) {
       const {destSchema, destField, sourceField, cardinality} = related[0];
-      const sq = cb(
-        this._newQuery(
-          this.#schema,
-          destSchema,
-          {
-            table: destSchema,
-            alias: relationship,
-          },
-          {
-            relationships: {},
-            singular: cardinality === 'one',
-          },
-        ),
-      ) as unknown as QueryImpl<any, any>;
-
+      let q: AnyQuery = this._newQuery(
+        this.#schema,
+        destSchema,
+        {
+          table: destSchema,
+          alias: relationship,
+        },
+        {
+          relationships: {},
+          singular: cardinality === 'one',
+        },
+      );
+      if (cardinality === 'one') {
+        q = q.one();
+      }
+      const sq = cb(q) as AbstractQuery<Schema, string>;
       assert(
         isCompoundKey(sourceField),
         'The source of a relationship must specify at last 1 field',
@@ -235,7 +240,6 @@ export abstract class AbstractQuery<
     }
 
     if (isTwoHop(related)) {
-      assert(related.length === 2, 'Invalid relationship');
       const [firstRelation, secondRelation] = related;
       const {destSchema} = secondRelation;
       const junctionSchema = firstRelation.destSchema;
@@ -312,7 +316,7 @@ export abstract class AbstractQuery<
 
   where(
     fieldOrExpressionFactory: string | ExpressionFactory<TSchema, TTable>,
-    opOrValue?: Operator | GetFilterType<any, any, any> | Parameter,
+    opOrValue?: SimpleOperator | GetFilterType<any, any, any> | Parameter,
     value?: GetFilterType<any, any, any> | Parameter,
   ): Query<TSchema, TTable, TReturn> {
     let cond: Condition;
@@ -417,7 +421,7 @@ export abstract class AbstractQuery<
             table: destSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
-          undefined,
+          defaultFormat,
         ),
       ) as unknown as QueryImpl<any, any>;
       return {
@@ -438,7 +442,6 @@ export abstract class AbstractQuery<
     }
 
     if (isTwoHop(related)) {
-      assert(related.length === 2, 'Invalid relationship');
       const [firstRelation, secondRelation] = related;
       assert(isCompoundKey(firstRelation.sourceField), 'Invalid relationship');
       assert(isCompoundKey(firstRelation.destField), 'Invalid relationship');
@@ -454,7 +457,7 @@ export abstract class AbstractQuery<
             table: destSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
-          undefined,
+          defaultFormat,
         ),
       );
 
@@ -533,6 +536,19 @@ export abstract class AbstractQuery<
     return this.#completedAST;
   }
 
+  then<TResult1 = HumanReadable<TReturn>, TResult2 = never>(
+    onFulfilled?:
+      | ((value: HumanReadable<TReturn>) => TResult1 | PromiseLike<TResult1>)
+      | undefined
+      | null,
+    onRejected?:
+      | ((reason: any) => TResult2 | PromiseLike<TResult2>)
+      | undefined
+      | null,
+  ): PromiseLike<TResult1 | TResult2> {
+    return this.run().then(onFulfilled, onRejected);
+  }
+
   abstract materialize(): TypedView<HumanReadable<TReturn>>;
   abstract materialize<T>(factory: ViewFactory<TSchema, TTable, TReturn, T>): T;
   abstract run(): Promise<HumanReadable<TReturn>>;
@@ -540,10 +556,13 @@ export abstract class AbstractQuery<
     cleanup: () => void;
     complete: Promise<void>;
   };
-  abstract updateTTL(ttl: TTL): void;
 }
 
-export const completedAstSymbol = Symbol();
+const completedAstSymbol = Symbol();
+
+export function completedAST(q: Query<Schema, string, any>) {
+  return (q as QueryImpl<Schema, string>)[completedAstSymbol];
+}
 
 export class QueryImpl<
   TSchema extends Schema,
@@ -601,6 +620,10 @@ export class QueryImpl<
       }
     });
 
+    const updateTTL = (newTTL: TTL) => {
+      this.#delegate.updateServerQuery(ast, newTTL);
+    };
+
     const input = buildPipeline(ast, this.#delegate);
     let removeCommitObserver: (() => void) | undefined;
 
@@ -620,14 +643,11 @@ export class QueryImpl<
           removeCommitObserver = this.#delegate.onTransactionCommit(cb);
         },
         queryGot || queryCompleteResolver.promise,
+        updateTTL,
       ),
     );
 
     return view as T;
-  }
-
-  override updateTTL(ttl: TTL): void {
-    this.#delegate.updateServerQuery(this._completeAst(), ttl);
   }
 
   run(): Promise<HumanReadable<TReturn>> {
@@ -693,14 +713,20 @@ function arrayViewFactory<
   TTable extends string,
   TReturn,
 >(
-  _query: Query<TSchema, TTable, TReturn>,
+  _query: AbstractQuery<TSchema, TTable, TReturn>,
   input: Input,
   format: Format,
   onDestroy: () => void,
   onTransactionCommit: (cb: () => void) => void,
   queryComplete: true | Promise<true>,
+  updateTTL: (ttl: TTL) => void,
 ): TypedView<HumanReadable<TReturn>> {
-  const v = new ArrayView<HumanReadable<TReturn>>(input, format, queryComplete);
+  const v = new ArrayView<HumanReadable<TReturn>>(
+    input,
+    format,
+    queryComplete,
+    updateTTL,
+  );
   v.onDestroy = onDestroy;
   onTransactionCommit(() => {
     v.flush();

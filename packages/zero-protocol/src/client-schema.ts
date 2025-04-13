@@ -1,14 +1,7 @@
 import {mapAllEntries} from '../../shared/src/objects.ts';
 import * as v from '../../shared/src/valita.ts';
 
-export type ValueType =
-  | 'string'
-  | 'number'
-  | 'boolean'
-  | 'null'
-  | 'json'
-  | 'date'
-  | 'timestamp';
+export type ValueType = 'string' | 'number' | 'boolean' | 'null' | 'json';
 
 export const valueTypeSchema: v.Type<ValueType> = v.union(
   v.literal('string'),
@@ -16,8 +9,6 @@ export const valueTypeSchema: v.Type<ValueType> = v.union(
   v.literal('boolean'),
   v.literal('null'),
   v.literal('json'),
-  v.literal('date'),
-  v.literal('timestamp'),
 );
 
 export const columnSchemaSchema = v.object({

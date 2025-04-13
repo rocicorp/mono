@@ -36,7 +36,7 @@ export async function assertIsCreatorOrAdmin(
     return;
   }
   const creatorID = must(
-    await query.where('id', id).one().run(),
+    await query.where('id', id).one(),
     `entity ${id} does not exist`,
   ).creatorID;
   assert(
@@ -50,7 +50,7 @@ export async function assertUserCanSeeIssue(
   authData: AuthData,
   issueID: string,
 ) {
-  const issue = must(await tx.query.issue.where('id', issueID).one().run());
+  const issue = must(await tx.query.issue.where('id', issueID).one());
 
   assert(
     issue.visibility === 'public' ||
@@ -65,9 +65,7 @@ export async function assertUserCanSeeComment(
   authData: AuthData,
   commentID: string,
 ) {
-  const comment = must(
-    await tx.query.comment.where('id', commentID).one().run(),
-  );
+  const comment = must(await tx.query.comment.where('id', commentID).one());
 
   await assertUserCanSeeIssue(tx, authData, comment.issueID);
 }

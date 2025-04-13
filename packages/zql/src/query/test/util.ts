@@ -1,17 +1,11 @@
 import type {Faker} from '@faker-js/faker';
 import type {ValueType} from '../../../../zero-schema/src/table-schema.ts';
-import {AbstractQuery, astForTestingSymbol} from '../query-impl.ts';
 import type {Query} from '../query.ts';
 
 export type Rng = () => number;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyQuery = Query<any, any, any>;
-
-export function ast(query: AnyQuery) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (query as AbstractQuery<any, any>)[astForTestingSymbol];
-}
 
 export function selectRandom<T>(rng: Rng, values: readonly T[]): T {
   return values[Math.floor(rng() * values.length)];
@@ -58,10 +52,6 @@ export function randomValueForType(
     case 'json':
       // TODO: generate random JSON
       return {};
-    case 'timestamp':
-      return faker.number.float();
-    case 'date':
-      return faker.number.float();
     case 'null':
       return null;
   }

@@ -3,6 +3,8 @@ import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {Format} from '../../zql/src/ivm/view.ts';
+import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
@@ -44,7 +46,12 @@ export function useQuery<
   }
 
   const z = useZero();
-  const view = viewStore.getView(z.clientID, query, enabled, ttl);
+  const view = viewStore.getView(
+    z.clientID,
+    query as AbstractQuery<TSchema, TTable, TReturn>,
+    enabled,
+    ttl,
+  );
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
     view.subscribeReactInternals,
@@ -176,17 +183,20 @@ export class ViewStore {
     TReturn,
   >(
     clientID: string,
-    query: Query<TSchema, TTable, TReturn>,
+    query: AbstractQuery<TSchema, TTable, TReturn>,
     enabled: boolean,
     ttl: TTL,
   ): {
     getSnapshot: () => QueryResult<TReturn>;
     subscribeReactInternals: (internals: () => void) => () => void;
+    updateTTL: (ttl: TTL) => void;
   } {
+    const {format} = query;
     if (!enabled) {
       return {
-        getSnapshot: () => getDefaultSnapshot(query.format.singular),
+        getSnapshot: () => getDefaultSnapshot(format.singular),
         subscribeReactInternals: disabledSubscriber,
+        updateTTL: () => {},
       };
     }
 
@@ -195,6 +205,7 @@ export class ViewStore {
     if (!existing) {
       existing = new ViewWrapper(
         query,
+        format,
         ttl,
         view => {
           const lastView = this.#views.get(hash);
@@ -254,21 +265,24 @@ class ViewWrapper<
   readonly #onDematerialized;
   readonly #onMaterialized;
   readonly #query: Query<TSchema, TTable, TReturn>;
+  readonly #format: Format;
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
   #ttl: TTL;
 
   constructor(
-    query: Query<TSchema, TTable, TReturn>,
+    query: AbstractQuery<TSchema, TTable, TReturn>,
+    format: Format,
     ttl: TTL,
     onMaterialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
     onDematerialized: () => void,
   ) {
     this.#query = query;
+    this.#format = format;
     this.#ttl = ttl;
     this.#onMaterialized = onMaterialized;
     this.#onDematerialized = onDematerialized;
-    this.#snapshot = getDefaultSnapshot(query.format.singular);
+    this.#snapshot = getDefaultSnapshot(format.singular);
     this.#reactInternals = new Set();
     this.#materializeIfNeeded();
   }
@@ -281,7 +295,7 @@ class ViewWrapper<
       snap === undefined
         ? snap
         : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
-    this.#snapshot = getSnapshot(this.#query.format.singular, data, resultType);
+    this.#snapshot = getSnapshot(this.#format.singular, data, resultType);
     for (const internals of this.#reactInternals) {
       internals();
     }
@@ -329,6 +343,6 @@ class ViewWrapper<
 
   updateTTL(ttl: TTL): void {
     this.#ttl = ttl;
-    this.#query.updateTTL(ttl);
+    this.#view?.updateTTL(ttl);
   }
 }

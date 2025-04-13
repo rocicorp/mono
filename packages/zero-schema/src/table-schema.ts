@@ -55,8 +55,6 @@ export type TypeNameToTypeMap = {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   json: any;
-  timestamp: number;
-  date: number;
 };
 
 export type ColumnTypeName<T extends SchemaValue | ValueType> =
@@ -114,16 +112,14 @@ export function atLeastOne<T>(arr: readonly T[]): AtLeastOne<T> {
   return arr as AtLeastOne<T>;
 }
 
-export function isOneHop(r: Relationship) {
+export function isOneHop(r: Relationship): r is readonly [Connection] {
   return r.length === 1;
 }
 
-export function isTwoHop(r: Relationship) {
+export function isTwoHop(
+  r: Relationship,
+): r is readonly [Connection, Connection] {
   return r.length === 2;
-}
-
-export function isManyHop(r: Relationship) {
-  return !isOneHop(r);
 }
 
 export type Opaque<BaseType, BrandType = unknown> = BaseType & {

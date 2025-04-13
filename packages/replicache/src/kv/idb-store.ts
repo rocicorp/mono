@@ -202,9 +202,9 @@ function openDatabase(name: string): Promise<IDBDatabase> {
 }
 
 /**
- * This {@link Error} is thrown when we detect that the IndexedDB has been
- * removed. This does not normally happen but can happen during development if
- * the user has DevTools open and deletes the IndexedDB from there.
+ * This error is thrown when we detect that the IndexedDB has been removed. This
+ * does not normally happen but can happen during development if the user has
+ * DevTools open and deletes the IndexedDB from there.
  */
 export class IDBNotFoundError extends Error {
   name = 'IDBNotFoundError';

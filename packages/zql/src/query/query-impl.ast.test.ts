@@ -1,20 +1,9 @@
 import {describe, expect, test} from 'vitest';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {ExpressionFactory} from './expression.ts';
-import {
-  astForTestingSymbol,
-  newQuery,
-  QueryImpl,
-  type QueryDelegate,
-} from './query-impl.ts';
-import type {Query} from './query.ts';
+import {ast, newQuery, type QueryDelegate} from './query-impl.ts';
 import {schema} from './test/test-schemas.ts';
 
 const mockDelegate = {} as QueryDelegate;
-
-function ast(q: Query<Schema, string>) {
-  return (q as QueryImpl<Schema, string>)[astForTestingSymbol];
-}
 
 describe('building the AST', () => {
   test('creates a new query', () => {
@@ -195,6 +184,7 @@ describe('building the AST', () => {
             },
             "subquery": {
               "alias": "owner",
+              "limit": 1,
               "orderBy": [
                 [
                   "id",
@@ -291,6 +281,7 @@ describe('building the AST', () => {
             },
             "subquery": {
               "alias": "owner",
+              "limit": 1,
               "orderBy": [
                 [
                   "id",
@@ -401,6 +392,7 @@ describe('building the AST', () => {
             },
             "subquery": {
               "alias": "owner",
+              "limit": 1,
               "orderBy": [
                 [
                   "id",
@@ -2052,5 +2044,28 @@ describe('exists', () => {
         },
       }
     `);
+  });
+});
+
+test('one in schema should imply limit 1 in the ast', () => {
+  const issueQuery = newQuery(mockDelegate, schema, 'issue');
+  const q1 = issueQuery.related('owner');
+  const q2 = issueQuery.related('comments');
+
+  expect(ast(q1)).toMatchObject({
+    table: 'issue',
+    related: [
+      {
+        subquery: {limit: 1, table: 'user'},
+      },
+    ],
+  });
+  expect(ast(q2)).toMatchObject({
+    table: 'issue',
+    related: [
+      {
+        subquery: expect.toSatisfy(sq => !('limit' in sq)),
+      },
+    ],
   });
 });

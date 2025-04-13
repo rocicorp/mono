@@ -36,6 +36,7 @@ import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo, type PublicationInfo} from './schema/published.ts';
 import {
   addReplica,
+  dropShard,
   getInternalShardConfig,
   newReplicationSlot,
   validatePublications,
@@ -59,7 +60,7 @@ export async function initialSync(
     );
   }
   const {tableCopyWorkers: numWorkers, rowBatchSize} = syncOptions;
-  const upstreamDB = pgClient(lc, upstreamURI);
+  const sql = pgClient(lc, upstreamURI);
   const copyPool = pgClient(
     lc,
     upstreamURI,
@@ -72,12 +73,12 @@ export async function initialSync(
   });
   const slotName = newReplicationSlot(shard);
   try {
-    await checkUpstreamConfig(upstreamDB);
+    await checkUpstreamConfig(sql);
 
-    const {publications} = await ensurePublishedTables(lc, upstreamDB, shard);
+    const {publications} = await ensurePublishedTables(lc, sql, shard);
     lc.info?.(`Upstream is setup with publications [${publications}]`);
 
-    const {database, host} = upstreamDB.options;
+    const {database, host} = sql.options;
     lc.info?.(`opening replication session to ${database}@${host}`);
 
     let slot: ReplicationSlot;
@@ -95,7 +96,7 @@ export async function initialSync(
           // the user have the REPLICATION role in order to create a slot.
           // Note that this must be done by the upstreamDB connection, and
           // does not work in the replicationSession itself.
-          await upstreamDB`ALTER ROLE current_user WITH REPLICATION`;
+          await sql`ALTER ROLE current_user WITH REPLICATION`;
           lc.info?.(`Added the REPLICATION role to database user`);
           continue;
         }
@@ -113,9 +114,9 @@ export async function initialSync(
     let published: PublicationInfo;
     try {
       // Retrieve the published schema at the consistent_point.
-      published = await upstreamDB.begin(Mode.READONLY, async db => {
-        await db.unsafe(`SET TRANSACTION SNAPSHOT '${snapshot}'`);
-        return getPublicationInfo(db, publications);
+      published = await sql.begin(Mode.READONLY, async tx => {
+        await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
+        return getPublicationInfo(tx, publications);
       });
       // Note: If this throws, initial-sync is aborted.
       validatePublications(lc, published);
@@ -142,7 +143,7 @@ export async function initialSync(
       await copiers.done();
     }
 
-    await addReplica(upstreamDB, shard, slotName, initialVersion, published);
+    await addReplica(sql, shard, slotName, initialVersion, published);
 
     initReplicationState(tx, publications, initialVersion);
     initChangeLog(tx);
@@ -156,21 +157,21 @@ export async function initialSync(
     // orphaned replication slot to avoid running out of slots in
     // pathological cases that result in repeated failures.
     lc.warn?.(`dropping replication slot ${slotName}`, e);
-    await upstreamDB`
+    await sql`
       SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
         WHERE slot_name = ${slotName};
     `;
     throw e;
   } finally {
     await replicationSession.end();
-    await upstreamDB.end();
+    await sql.end();
     await copyPool.end();
   }
 }
 
-async function checkUpstreamConfig(upstreamDB: PostgresDB) {
+async function checkUpstreamConfig(sql: PostgresDB) {
   const {walLevel, version} = (
-    await upstreamDB<{walLevel: string; version: number}[]>`
+    await sql<{walLevel: string; version: number}[]>`
       SELECT current_setting('wal_level') as "walLevel", 
              current_setting('server_version_num') as "version";
   `
@@ -190,15 +191,30 @@ async function checkUpstreamConfig(upstreamDB: PostgresDB) {
 
 async function ensurePublishedTables(
   lc: LogContext,
-  upstreamDB: PostgresDB,
+  sql: PostgresDB,
   shard: ShardConfig,
+  validate = true,
 ): Promise<{publications: string[]}> {
-  const {database, host} = upstreamDB.options;
+  const {database, host} = sql.options;
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
 
-  await ensureShardSchema(lc, upstreamDB, shard);
+  await ensureShardSchema(lc, sql, shard);
+  const {publications} = await getInternalShardConfig(sql, shard);
 
-  return getInternalShardConfig(upstreamDB, shard);
+  if (validate) {
+    const exists = await sql`
+      SELECT pubname FROM pg_publication WHERE pubname IN ${sql(publications)}
+      `.values();
+    if (exists.length !== publications.length) {
+      lc.warn?.(
+        `some configured publications [${publications}] are missing: ` +
+          `[${exists.flat()}]. resyncing`,
+      );
+      await sql.unsafe(dropShard(shard.appID, shard.shardNum));
+      return ensurePublishedTables(lc, sql, shard, false);
+    }
+  }
+  return {publications};
 }
 
 /* eslint-disable @typescript-eslint/naming-convention */
@@ -221,7 +237,7 @@ async function createReplicationSlot(
 ): Promise<ReplicationSlot> {
   const slot = (
     await session.unsafe<ReplicationSlot[]>(
-      `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput`,
+      /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput`,
     )
   )[0];
   lc.info?.(`Created replication slot ${slotName}`, slot);
@@ -287,7 +303,8 @@ async function copy(
 
   // (?,?,?,?,?)
   const valuesSql = `(${new Array(insertColumns.length).fill('?').join(',')})`;
-  const insertSql = `INSERT INTO "${tableName}" (${insertColumnList}) VALUES ${valuesSql}`;
+  const insertSql = /*sql*/ `
+    INSERT INTO "${tableName}" (${insertColumnList}) VALUES ${valuesSql}`;
   const insertStmt = to.prepare(insertSql);
   // INSERT VALUES (?,?,?,?,?),... x INSERT_BATCH_SIZE
   const insertBatchStmt = to.prepare(
@@ -298,10 +315,11 @@ async function copy(
     .map(({rowFilter}) => rowFilter)
     .filter(f => !!f); // remove nulls
   const selectStmt =
-    `SELECT ${selectColumns} FROM ${id(table.schema)}.${id(table.name)}` +
+    /*sql*/ `
+    SELECT ${selectColumns} FROM ${id(table.schema)}.${id(table.name)}` +
     (filterConditions.length === 0
       ? ''
-      : ` WHERE ${filterConditions.join(' OR ')}`);
+      : /*sql*/ ` WHERE ${filterConditions.join(' OR ')}`);
 
   lc.info?.(`Starting copy of ${tableName}:`, selectStmt);
 

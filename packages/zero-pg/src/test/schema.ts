@@ -1,12 +1,11 @@
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
-  date,
+  enumeration,
   json,
   number,
   string,
   table,
-  timestamp,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 
 const jsonCols = {
@@ -46,11 +45,11 @@ export const schema = createSchema({
       .primaryKey('a', 'b'),
     table('dateTypes')
       .columns({
-        ts: timestamp(),
-        tstz: timestamp(),
-        tswtz: timestamp(),
-        tswotz: timestamp(),
-        d: date(),
+        ts: number(),
+        tstz: number(),
+        tswtz: number(),
+        tswotz: number(),
+        d: number(),
       })
       .primaryKey('ts'),
     table('jsonCases')
@@ -60,6 +59,24 @@ export const schema = createSchema({
       })
       .primaryKey('str'),
     table('jsonbCases').columns(jsonCols).primaryKey('str'),
+    table('uuidAndEnum')
+      .columns({
+        id: string(),
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        reference_id: string(),
+        status: enumeration<'active' | 'inactive' | 'pending'>(),
+        type: enumeration<'user' | 'system' | 'admin'>(),
+      })
+      .primaryKey('id'),
+    table('alternate_basic')
+      .from('alternate_schema.basic')
+      .columns({
+        id: string(),
+        a: number(),
+        b: string(),
+        c: boolean().optional(),
+      })
+      .primaryKey('id'),
   ],
   relationships: [],
 });
@@ -112,6 +129,25 @@ CREATE TABLE "jsonCases" (
   "obj" JSON,
   "arr" JSON,
   PRIMARY KEY ("str")
+);
+
+CREATE TYPE "statusEnum" AS ENUM ('active', 'inactive', 'pending');
+CREATE TYPE type_enum AS ENUM ('user', 'system', 'admin');
+
+CREATE TABLE "uuidAndEnum" (
+  "id" UUID PRIMARY KEY,
+  "reference_id" UUID NOT NULL,
+  "status" "statusEnum" NOT NULL,
+  "type" type_enum NOT NULL
+);
+
+CREATE SCHEMA alternate_schema;
+
+CREATE TABLE alternate_schema.basic (
+  id TEXT PRIMARY KEY,
+  a INTEGER,
+  b TEXT,
+  C BOOLEAN
 );
 `;
 

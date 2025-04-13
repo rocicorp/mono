@@ -4,9 +4,11 @@ import {
   escapePostgresIdentifier,
   escapeSQLiteIdentifier,
 } from '@databases/escape-identifier';
-import type {ValueType} from '../../zero-protocol/src/client-schema.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
-import type {TypeNameToTypeMap} from '../../zero-schema/src/table-schema.ts';
+import type {ServerColumnSchema} from './schema.ts';
+import type {LiteralValue} from '../../zero-protocol/src/ast.ts';
+
+export const Z2S_COLLATION = 'ucs_basic';
 
 export function formatPg(sql: SQLQuery) {
   const format = new ReusingFormat(escapePostgresIdentifier);
@@ -24,43 +26,68 @@ export function formatSqlite(sql: SQLQuery) {
 }
 
 const sqlConvert = Symbol('fromJson');
-type SqlConvertArg = {
-  [sqlConvert]: true;
-  type: ValueType;
-  value: unknown;
-  plural?: boolean | undefined;
+export type LiteralType = 'boolean' | 'number' | 'string' | 'null';
+export type PluralLiteralType = Exclude<LiteralType, 'null'>;
 
-  // collation is passed down given we need to apply it to each element of a plural argument
-  collation?: 'ucs_basic' | undefined;
-};
+type SqlConvertArg =
+  | {
+      [sqlConvert]: 'column';
+      type: string;
+      isEnum: boolean;
+      value: unknown;
+      plural: boolean;
+      isComparison: boolean;
+    }
+  | {
+      [sqlConvert]: 'literal';
+      type: LiteralType;
+      value: LiteralValue;
+      plural: boolean;
+    };
+
 function isSqlConvert(value: unknown): value is SqlConvertArg {
   return value !== null && typeof value === 'object' && sqlConvert in value;
 }
 
-export function sqlConvertArg<T extends ValueType, P extends boolean = false>(
-  type: T,
-  value: true extends P ? TypeNameToTypeMap[T][] : TypeNameToTypeMap[T],
-  // plural is an explicit argument so we do not get confused by a singular JSON array vs
-  // an array of JSON.
-  plural?: P,
-  collation?: 'ucs_basic',
+export function sqlConvertSingularLiteralArg(
+  value: string | boolean | number | null,
 ): SQLQuery {
-  return sql.value({
-    [sqlConvert]: true,
-    type,
+  const arg: SqlConvertArg = {
+    [sqlConvert]: 'literal',
+    type: value === null ? 'null' : (typeof value as LiteralType),
     value,
-    plural,
-    collation,
-  } satisfies SqlConvertArg);
+    plural: false,
+  };
+  return sql.value(arg);
 }
 
-export function sqlConvertArgUnsafe(
-  type: ValueType,
-  value: unknown,
-  plural?: boolean,
-  collation?: 'ucs_basic',
+export function sqlConvertPluralLiteralArg(
+  type: PluralLiteralType,
+  value: PluralLiteralType[],
 ): SQLQuery {
-  return sqlConvertArg(type, value as never, plural, collation);
+  const arg: SqlConvertArg = {
+    [sqlConvert]: 'literal',
+    type,
+    value,
+    plural: true,
+  };
+  return sql.value(arg);
+}
+
+export function sqlConvertColumnArg(
+  serverColumnSchema: ServerColumnSchema,
+  value: unknown,
+  plural: boolean,
+  isComparison: boolean,
+): SQLQuery {
+  return sql.value({
+    [sqlConvert]: 'column',
+    type: serverColumnSchema.type,
+    isEnum: serverColumnSchema.isEnum,
+    value,
+    plural,
+    isComparison,
+  });
 }
 
 class ReusingFormat implements FormatConfig {
@@ -83,27 +110,29 @@ class ReusingFormat implements FormatConfig {
   };
 }
 
-function stringify(arg: SqlConvertArg): string {
+function stringify(arg: SqlConvertArg): string | null {
+  if (arg.value === null) {
+    return null;
+  }
   if (arg.plural) {
     return JSON.stringify(arg.value);
   }
-
-  switch (arg.type) {
-    case 'json':
-      return JSON.stringify(arg.value);
-    case 'boolean':
-      return arg.value ? 'true' : 'false';
-    case 'number':
-    case 'date':
-    case 'timestamp':
-      return (arg.value as number).toString();
-    case 'string':
-      return arg.value as string;
-    case 'null':
-      return 'null';
-    default:
-      unreachable(arg.type);
+  if (arg[sqlConvert] === 'literal' && arg.type === 'string') {
+    return arg.value as unknown as string;
   }
+  if (
+    arg[sqlConvert] === 'column' &&
+    (arg.isEnum ||
+      arg.type === 'uuid' ||
+      arg.type === 'bpchar' ||
+      arg.type === 'character' ||
+      arg.type === 'text' ||
+      arg.type === 'character varying' ||
+      arg.type === 'varchar')
+  ) {
+    return arg.value as string;
+  }
+  return JSON.stringify(arg.value);
 }
 
 class SQLConvertFormat implements FormatConfig {
@@ -130,79 +159,108 @@ class SQLConvertFormat implements FormatConfig {
     };
   };
 
-  #createPlaceholder(index: number, value: SqlConvertArg) {
+  #createPlaceholder(index: number, arg: SqlConvertArg) {
     // Ok, so what is with all the `::text` casts
     // before the final cast?
     // This is to force the statement to describe its arguments
     // as being text. Without the text cast the args are described as
     // being bool/json/numeric/whatever and the bindings try to coerce
     // the inputs to those types.
+    if (arg.type === 'null') {
+      assert(arg.value === null, "Args of type 'null' must have value null");
+      assert(!arg.plural, "Args of type 'null' must not be plural");
+      return `$${index}`;
+    }
 
-    const sqlType = pgType(value.type);
-    const collate = value.collation ? ` COLLATE "${value.collation}"` : '';
+    if (arg[sqlConvert] === 'literal') {
+      const collate =
+        arg.type === 'string' ? ` COLLATE "${Z2S_COLLATION}"` : '';
+      const {value} = arg;
+      if (Array.isArray(value)) {
+        const elType = pgTypeForLiteralType(arg.type);
+        return formatPlural(index, `value::${elType}${collate}`);
+      }
+      return `$${index}::text::${pgTypeForLiteralType(arg.type)}${collate}`;
+    }
 
-    if (!value.plural) {
-      switch (value.type) {
-        case 'json':
-          // We use JSONB since that can be used as a primary key type
-          // whereas JSON cannot. So JSONB covers more cases.
-          return `$${index}::text::${sqlType}`;
-        case 'boolean':
-          return `$${index}::text::${sqlType}`;
-        case 'number':
-          return `$${index}::text::${sqlType}`;
-        case 'string':
-          return `$${index}::text ${collate}`;
+    const collate = arg.isComparison ? ` COLLATE "${Z2S_COLLATION}"` : '';
+    if (!arg.plural) {
+      if (arg.isEnum) {
+        if (arg.isComparison) {
+          return `$${index}::text${collate}`;
+        }
+        return `$${index}::text::"${arg.type}"`;
+      }
+      switch (arg.type) {
         case 'date':
         case 'timestamp':
-          return `to_timestamp($${index}::text::${sqlType} / 1000.0) AT TIME ZONE 'UTC'`;
-        case 'null':
-          return 'NULL';
+        case 'timestamp without time zone':
+          return `to_timestamp($${index}::text::bigint / 1000.0) AT TIME ZONE 'UTC'`;
+        case 'timestamptz':
+        case 'timestamp with time zone':
+          return `to_timestamp($${index}::text::bigint / 1000.0)`;
+        case 'text':
+          return `$${index}::text${collate}`;
+        case 'bpchar':
+        case 'character':
+        case 'character varying':
+        case 'varchar':
+          return `$${index}::text::${arg.type}${collate}`;
+        // uuid doesn't support collation, so we compare as text
+        case 'uuid':
+          return arg.isComparison
+            ? `$${index}::text${collate}`
+            : `$${index}::text::uuid`;
         default:
-          unreachable(value.type);
+          return `$${index}::text::${arg.type}`;
       }
     }
 
-    switch (value.type) {
-      case 'json':
-      case 'boolean':
-      case 'number':
-        return `ARRAY(
-          SELECT value::${sqlType} FROM jsonb_array_elements_text($${index}::text::jsonb)
-        )`;
-      case 'string':
-        return `ARRAY(
-            SELECT value ${collate} FROM jsonb_array_elements_text($${index}::text::jsonb)
-          )`;
+    if (arg.isEnum && arg.isComparison) {
+      if (arg.isComparison) {
+        return formatPlural(index, `value::text${collate}`);
+      }
+      return formatPlural(index, `value::${arg.type}`);
+    }
+
+    switch (arg.type) {
       case 'date':
       case 'timestamp':
-        return `ARRAY(
-          SELECT to_timestamp(value::bigint / 1000.0)
-          FROM jsonb_array_elements_text($${index}::text::jsonb)
-        )::timestamp[]`;
-      case 'null':
-        throw new Error('unsupported null');
+      case 'timestamptz':
+      case 'timestamp with time zone':
+      case 'timestamp without time zone':
+        return formatPlural(index, `to_timestamp(value::bigint / 1000.0)`);
+      case 'bpchar':
+      case 'character':
+      case 'character varying':
+      case 'text':
+      case 'varchar':
+        return formatPlural(index, `value::${arg.type}${collate}`);
+      // uuid doesn't support collation, so we compare as text
+      case 'uuid':
+        return arg.isComparison
+          ? formatPlural(index, `value::text${collate}`)
+          : formatPlural(index, `value::${arg.type}`);
       default:
-        unreachable(value.type);
+        return formatPlural(index, `value::${arg.type}`);
     }
   }
 }
 
-function pgType(type: ValueType) {
+function formatPlural(index: number, select: string) {
+  return `ARRAY(
+          SELECT ${select} FROM jsonb_array_elements_text($${index}::text::jsonb)
+        )`;
+}
+
+function pgTypeForLiteralType(type: Exclude<LiteralType, 'null'>) {
   switch (type) {
-    case 'json':
-      return 'jsonb';
     case 'boolean':
       return 'boolean';
     case 'number':
       return 'numeric';
     case 'string':
       return 'text';
-    case 'date':
-    case 'timestamp':
-      return 'bigint';
-    case 'null':
-      return 'null';
     default:
       unreachable(type);
   }
@@ -247,7 +305,18 @@ function formatFn(
       // If we got an identifier type, escape the strings and get a local
       // identifier for non-string identifiers.
       case SQLItemType.IDENTIFIER: {
-        text += item.names
+        // This is a specific addition for Zero as Zero
+        // does not support dots in identifiers.
+        // If a dot is found, we assume it is a namespace
+        // and split the identifier into its parts.
+        const names =
+          item.names.length === 1 &&
+          typeof item.names[0] === 'string' &&
+          item.names[0].includes('.')
+            ? item.names[0].split('.')
+            : item.names;
+
+        text += names
           .map((name): string => {
             if (typeof name === 'string') return escapeIdentifier(name);
 

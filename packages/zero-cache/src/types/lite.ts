@@ -5,7 +5,10 @@ import type {
 } from '../../../zero-schema/src/table-schema.ts';
 import type {LiteTableSpec} from '../db/specs.ts';
 import {stringify, type JSONValue} from './bigint-json.ts';
-import type {PostgresValueType} from './pg.ts';
+import {
+  type PostgresValueType,
+  dataTypeToZqlValueType as upstreamDataTypeToZqlValueType,
+} from './pg.ts';
 import type {RowValue} from './row-key.ts';
 
 /** Javascript value types supported by better-sqlite3. */
@@ -198,61 +201,8 @@ export function nullableUpstream(liteTypeString: LiteTypeString) {
 export function dataTypeToZqlValueType(
   liteTypeString: LiteTypeString,
 ): ValueType | undefined {
-  switch (upstreamDataType(liteTypeString).toLowerCase()) {
-    case 'smallint':
-    case 'integer':
-    case 'int':
-    case 'int2':
-    case 'int4':
-    case 'int8':
-    case 'bigint':
-    case 'smallserial':
-    case 'serial':
-    case 'serial2':
-    case 'serial4':
-    case 'serial8':
-    case 'bigserial':
-    case 'decimal':
-    case 'numeric':
-    case 'real':
-    case 'double precision':
-    case 'float':
-    case 'float4':
-    case 'float8':
-      return 'number';
-
-    // Timestamps are represented as epoch milliseconds (at microsecond resolution using floating point),
-    // and DATEs are represented as epoch milliseconds of UTC midnight of the date.
-    case 'date':
-      return 'date';
-    case 'timestamp':
-    case 'timestamptz':
-    case 'timestamp with time zone':
-    case 'timestamp without time zone':
-      return 'timestamp';
-
-    case 'bpchar':
-    case 'character':
-    case 'character varying':
-    case 'text':
-    case 'uuid':
-    case 'varchar':
-      return 'string';
-
-    case 'bool':
-    case 'boolean':
-      return 'boolean';
-
-    case 'json':
-    case 'jsonb':
-      return 'json';
-
-    // TODO: Add support for these.
-    // case 'bytea':
-    default:
-      if (liteTypeString.includes(TEXT_ENUM_ATTRIBUTE)) {
-        return 'string';
-      }
-      return undefined;
-  }
+  return upstreamDataTypeToZqlValueType(
+    upstreamDataType(liteTypeString).toLowerCase(),
+    liteTypeString.includes(TEXT_ENUM_ATTRIBUTE),
+  );
 }

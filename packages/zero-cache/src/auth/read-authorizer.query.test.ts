@@ -39,9 +39,8 @@ import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {
-  completedAstSymbol,
+  completedAST,
   newQuery,
-  QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
 import type {Query, Row} from '../../../zql/src/query/query.ts';
@@ -915,16 +914,17 @@ describe('issue permissions', () => {
   });
 });
 
-function ast(q: Query<ZeroSchema, string>) {
-  return (q as QueryImpl<ZeroSchema, string>)[completedAstSymbol];
-}
-
 function runReadQueryWithPermissions(
   authData: AuthData,
   query: Query<ZeroSchema, string>,
 ) {
   const updatedAst = bindStaticParameters(
-    transformQuery(new LogContext('debug'), ast(query), permissions, authData),
+    transformQuery(
+      new LogContext('debug'),
+      completedAST(query),
+      permissions,
+      authData,
+    ),
     {
       authData,
       preMutationRow: undefined,

@@ -210,6 +210,101 @@ test('lmid still moves forward if the mutator implementation throws', async () =
   await checkClientsTable(pg, 3);
 });
 
+test('mutators with and without namespaces', async () => {
+  const processor = new PushProcessor(
+    {
+      tables: {},
+      relationships: {},
+      version: 1,
+    },
+    () => new Connection(pg),
+  );
+  const mutators = {
+    namespaced: {
+      pass: () => Promise.resolve(),
+      reject: () => Promise.reject(new Error('application error')),
+    },
+    topPass: () => Promise.resolve(),
+    topReject: () => Promise.reject(new Error('application error')),
+  };
+
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush(1, customMutatorKey('namespaced', 'pass')),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "mutations": [
+        {
+          "id": {
+            "clientID": "cid",
+            "id": 1,
+          },
+          "result": {},
+        },
+      ],
+    }
+  `);
+  expect(await processor.process(mutators, params, makePush(2, 'topPass')))
+    .toMatchInlineSnapshot(`
+          {
+            "mutations": [
+              {
+                "id": {
+                  "clientID": "cid",
+                  "id": 2,
+                },
+                "result": {},
+              },
+            ],
+          }
+        `);
+
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush(3, customMutatorKey('namespaced', 'reject')),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "mutations": [
+        {
+          "id": {
+            "clientID": "cid",
+            "id": 3,
+          },
+          "result": {
+            "details": "application error",
+            "error": "app",
+          },
+        },
+      ],
+    }
+  `);
+  expect(await processor.process(mutators, params, makePush(4, 'topReject')))
+    .toMatchInlineSnapshot(`
+          {
+            "mutations": [
+              {
+                "id": {
+                  "clientID": "cid",
+                  "id": 4,
+                },
+                "result": {
+                  "details": "application error",
+                  "error": "app",
+                },
+              },
+            ],
+          }
+        `);
+
+  await checkClientsTable(pg, 4);
+});
+
 async function checkClientsTable(
   pg: PostgresDB,
   expectedLmid: number | undefined,

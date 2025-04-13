@@ -111,7 +111,7 @@ test('row type', () => {
 
 test('basic query', async () => {
   const query = newQuery(queryDelegate, schema, 'issue');
-  const data = mapResultToClientNames(await query.run(), schema, 'issue');
+  const data = mapResultToClientNames(await query, schema, 'issue');
   expect(data).toMatchInlineSnapshot(`
     [
       {
@@ -143,10 +143,11 @@ test('basic query', async () => {
 });
 
 test('null compare', async () => {
-  let rows = await newQuery(queryDelegate, schema, 'issue')
-    .where('ownerId', 'IS', null)
-    .run();
-
+  let rows = await newQuery(queryDelegate, schema, 'issue').where(
+    'ownerId',
+    'IS',
+    null,
+  );
   expect(mapResultToClientNames(rows, schema, 'issue')).toMatchInlineSnapshot(`
     [
       {
@@ -160,9 +161,11 @@ test('null compare', async () => {
     ]
   `);
 
-  rows = await newQuery(queryDelegate, schema, 'issue')
-    .where('ownerId', 'IS NOT', null)
-    .run();
+  rows = await newQuery(queryDelegate, schema, 'issue').where(
+    'ownerId',
+    'IS NOT',
+    null,
+  );
 
   expect(rows).toMatchInlineSnapshot(`
     [
@@ -192,7 +195,7 @@ test('or', async () => {
   const query = newQuery(queryDelegate, schema, 'issue').where(({or, cmp}) =>
     or(cmp('ownerId', '=', '0001'), cmp('ownerId', '=', '0002')),
   );
-  const data = mapResultToClientNames(await query.run(), schema, 'issue');
+  const data = mapResultToClientNames(await query, schema, 'issue');
   expect(data).toMatchInlineSnapshot(`
     [
       {
@@ -301,7 +304,7 @@ test('schema applied `one`', async () => {
     .related('owner')
     .related('comments', q => q.related('author').related('revisions'))
     .where('id', '=', '0001');
-  const data = mapResultToClientNames(await query.run(), schema, 'issue');
+  const data = mapResultToClientNames(await query, schema, 'issue');
   expect(data).toMatchInlineSnapshot(`
     [
       {

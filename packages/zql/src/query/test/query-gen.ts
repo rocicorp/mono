@@ -1,15 +1,18 @@
 import type {Faker} from '@faker-js/faker';
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {ast} from '../query-impl.ts';
 import {staticQuery} from '../static-query.ts';
-import type {Dataset} from './data-gen.ts';
+import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {
-  ast,
   randomValueForType,
   selectRandom,
   shuffle,
   type AnyQuery,
   type Rng,
 } from './util.ts';
+export type Dataset = {
+  [table: string]: Row[];
+};
 
 export function generateQuery(
   schema: Schema,

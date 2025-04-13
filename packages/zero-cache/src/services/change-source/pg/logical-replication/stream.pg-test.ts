@@ -65,10 +65,21 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
     return queue;
   }
 
-  async function expectMessages(queue: Queue<StreamMessage[1]>, count: number) {
+  async function expectNonRelationMessages(
+    queue: Queue<StreamMessage[1]>,
+    count: number,
+  ) {
     const msgs: StreamMessage[1][] = [];
     for (let i = 0; i < count; i++) {
-      msgs.push(await queue.dequeue());
+      const msg = await queue.dequeue();
+      // PG may over-send relation messages if it forgot that it already
+      // sent one (presumably due to some state being reset). Ignore them
+      // to eliminate the variablility.
+      if (msg.tag === 'relation') {
+        i--;
+      } else {
+        msgs.push(msg);
+      }
     }
     return msgs;
   }
@@ -254,7 +265,6 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
 
     const [
       begin1,
-      relation1,
       insert1,
       commit1,
       begin2,
@@ -263,10 +273,9 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
       begin3,
       insert3,
       commit3,
-    ] = await expectMessages(msgs, 10);
+    ] = await expectNonRelationMessages(msgs, 9);
 
     expect(begin1.tag).toBe('begin');
-    expect(relation1.tag).toBe('relation');
     expect(insert1.tag).toBe('insert');
     expect(commit1.tag).toBe('commit');
 
@@ -310,6 +319,7 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
       await queue2.dequeue();
       await tx`INSERT INTO foo(id) VALUES ('22');`;
       queue3.enqueue(true);
+      await tx1;
     });
 
     await queue3.dequeue();
@@ -321,32 +331,35 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
       await queue3.dequeue();
       await tx`INSERT INTO foo(id) VALUES ('33');`;
       queue1.enqueue(true);
+      await tx2;
     });
 
     await Promise.all([tx1, tx2, tx3]);
 
     const sub1 = await subscribe(lc, db, SLOT, ['foo_pub', 'my_pub'], 0n);
 
-    const msgs1 = await expectMessages(drainToQueue(sub1.messages), 13);
+    const msgs1 = await expectNonRelationMessages(
+      drainToQueue(sub1.messages),
+      12,
+    );
     expect(msgs1.map(({tag}) => tag)).toEqual([
       'begin', // 0
-      'relation', // 1
+      'insert', // 1
       'insert', // 2
-      'insert', // 3
-      'commit', // 4
+      'commit', // 3
 
-      'begin', // 5
+      'begin', // 4
+      'insert', // 5
       'insert', // 6
-      'insert', // 7
-      'commit', // 8
+      'commit', // 7
 
-      'begin', // 9
+      'begin', // 8
+      'insert', // 9
       'insert', // 10
-      'insert', // 11
-      'commit', // 12
+      'commit', // 11
     ]);
 
-    expect(msgs1[2]).toMatchObject({
+    expect(msgs1[1]).toMatchObject({
       tag: 'insert',
       new: {id: '1'},
       relation: {
@@ -354,7 +367,7 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
         name: 'foo',
       },
     });
-    expect(msgs1[3]).toMatchObject({
+    expect(msgs1[2]).toMatchObject({
       tag: 'insert',
       new: {id: '11'},
       relation: {
@@ -362,7 +375,7 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
         name: 'foo',
       },
     });
-    const commit1 = msgs1[4] as MessageCommit;
+    const commit1 = msgs1[3] as MessageCommit;
     const commit1Lsn = toBigInt(must(commit1.commitEndLsn));
     sub1.acks.push(commit1Lsn);
     sub1.messages.cancel();
@@ -370,20 +383,22 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
 
     // Sub2 should resume from the second transaction.
     const sub2 = await subscribe(lc, db, SLOT, ['foo_pub', 'my_pub'], 0n);
-    const msgs2 = await expectMessages(drainToQueue(sub2.messages), 9);
+    const msgs2 = await expectNonRelationMessages(
+      drainToQueue(sub2.messages),
+      8,
+    );
     expect(msgs2.map(({tag}) => tag)).toEqual([
       'begin', // 0
-      'relation', // 1
+      'insert', // 1
       'insert', // 2
-      'insert', // 3
-      'commit', // 4
+      'commit', // 3
 
-      'begin', // 5
+      'begin', // 4
+      'insert', // 5
       'insert', // 6
-      'insert', // 7
-      'commit', // 8
+      'commit', // 7
     ]);
-    expect(msgs2[2]).toMatchObject({
+    expect(msgs2[1]).toMatchObject({
       tag: 'insert',
       new: {id: '2'},
       relation: {
@@ -391,7 +406,7 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
         name: 'foo',
       },
     });
-    expect(msgs2[3]).toMatchObject({
+    expect(msgs2[2]).toMatchObject({
       tag: 'insert',
       new: {id: '22'},
       relation: {
@@ -399,7 +414,7 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
         name: 'foo',
       },
     });
-    const commit2 = msgs2[4] as MessageCommit;
+    const commit2 = msgs2[3] as MessageCommit;
     const commit2Lsn = toBigInt(must(commit2.commitEndLsn));
     sub2.acks.push(commit2Lsn);
     sub2.messages.cancel();
@@ -407,15 +422,17 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
 
     // Sub3 should resume from the third transaction.
     const sub3 = await subscribe(lc, db, SLOT, ['foo_pub', 'my_pub'], 0n);
-    const msgs3 = await expectMessages(drainToQueue(sub3.messages), 5);
+    const msgs3 = await expectNonRelationMessages(
+      drainToQueue(sub3.messages),
+      4,
+    );
     expect(msgs3.map(({tag}) => tag)).toEqual([
       'begin', // 0
-      'relation', // 1
+      'insert', // 1
       'insert', // 2
-      'insert', // 3
-      'commit', // 4
+      'commit', // 3
     ]);
-    expect(msgs3[2]).toMatchObject({
+    expect(msgs3[1]).toMatchObject({
       tag: 'insert',
       new: {id: '3'},
       relation: {
@@ -423,7 +440,7 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
         name: 'foo',
       },
     });
-    expect(msgs3[3]).toMatchObject({
+    expect(msgs3[2]).toMatchObject({
       tag: 'insert',
       new: {id: '33'},
       relation: {
@@ -431,7 +448,7 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
         name: 'foo',
       },
     });
-    const commit3 = msgs3[4] as MessageCommit;
+    const commit3 = msgs3[3] as MessageCommit;
     const commit3Lsn = toBigInt(must(commit3.commitEndLsn));
     sub3.acks.push(commit3Lsn);
     sub3.messages.cancel();

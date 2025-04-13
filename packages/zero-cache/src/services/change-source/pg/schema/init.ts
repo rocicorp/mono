@@ -19,8 +19,7 @@ import {
 } from './shard.ts';
 
 /**
- * Initializes a shard for initial sync.
- * This will drop any existing shard setup.
+ * Ensures that a shard is set up for initial sync.
  */
 export async function ensureShardSchema(
   lc: LogContext,
@@ -99,16 +98,16 @@ function getIncrementalMigrations(
     5: {},
 
     6: {
-      migrateSchema: async (lc, tx) => {
+      migrateSchema: async (lc, sql) => {
         assert(
           replicaVersion,
           `replicaVersion is always passed for incremental migrations`,
         );
         await Promise.all([
-          tx`
-          ALTER TABLE ${tx(shardConfigTable)} ADD "replicaVersion" TEXT`,
-          tx`
-          UPDATE ${tx(shardConfigTable)} SET ${tx({replicaVersion})}`,
+          sql`
+          ALTER TABLE ${sql(shardConfigTable)} ADD "replicaVersion" TEXT`,
+          sql`
+          UPDATE ${sql(shardConfigTable)} SET ${sql({replicaVersion})}`,
         ]);
         lc.info?.(
           `Recorded replicaVersion ${replicaVersion} in upstream shardConfig`,
@@ -119,10 +118,10 @@ function getIncrementalMigrations(
     // Updates the DDL event trigger protocol to v2, and adds support for
     // ALTER SCHEMA x RENAME TO y
     7: {
-      migrateSchema: async (lc, tx) => {
-        const [{publications}] = await tx<{publications: string[]}[]>`
-          SELECT publications FROM ${tx(shardConfigTable)}`;
-        await setupTriggers(lc, tx, {...shard, publications});
+      migrateSchema: async (lc, sql) => {
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(lc, sql, {...shard, publications});
         lc.info?.(`Upgraded to v2 event triggers`);
       },
     },
@@ -130,13 +129,13 @@ function getIncrementalMigrations(
     // Adds support for non-disruptive resyncs, which tracks multiple
     // replicas with different slot names.
     8: {
-      migrateSchema: async (lc, tx) => {
+      migrateSchema: async (lc, sql) => {
         const legacyShardConfigSchema = v.object({
           replicaVersion: v.string().nullable(),
           initialSchema: publishedSchema.nullable(),
         });
-        const result = await tx`
-          SELECT "replicaVersion", "initialSchema" FROM ${tx(shardConfigTable)}`;
+        const result = await sql`
+          SELECT "replicaVersion", "initialSchema" FROM ${sql(shardConfigTable)}`;
         assert(result.length === 1);
         const {replicaVersion, initialSchema} = v.parse(
           result[0],
@@ -145,22 +144,22 @@ function getIncrementalMigrations(
         );
 
         await Promise.all([
-          tx`
-          CREATE TABLE ${tx(upstreamSchema(shard))}.replicas (
+          sql`
+          CREATE TABLE ${sql(upstreamSchema(shard))}.replicas (
             "slot"          TEXT PRIMARY KEY,
             "version"       TEXT NOT NULL,
             "initialSchema" JSON NOT NULL
           );
           `,
-          tx`
-          INSERT INTO ${tx(upstreamSchema(shard))}.replicas ${tx({
+          sql`
+          INSERT INTO ${sql(upstreamSchema(shard))}.replicas ${sql({
             slot: legacyReplicationSlot(shard),
             version: replicaVersion,
             initialSchema,
           })}
           `,
-          tx`
-          ALTER TABLE ${tx(shardConfigTable)} DROP "replicaVersion", DROP "initialSchema"
+          sql`
+          ALTER TABLE ${sql(shardConfigTable)} DROP "replicaVersion", DROP "initialSchema"
           `,
         ]);
         lc.info?.(`Upgraded schema to support non-disruptive resyncs`);

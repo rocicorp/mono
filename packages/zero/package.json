@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.18.2025032900",
+  "version": "0.19.2025041201",
   "description": "Zero is a web framework for serverless web development.",
   "author": "Rocicorp, Inc.",
   "repository": {
@@ -16,13 +16,15 @@
   "scripts": {
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && npx tsx tool/build.js",
-    "build-server": "tsc -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js out/zero/src/deploy-permissions.js out/zero/src/zero-cache-dev.js out/zero/src/ast-to-zql.js",
+    "build-server": "tsc -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js out/zero/src/deploy-permissions.js out/zero/src/zero-cache-dev.js out/zero/src/ast-to-zql.js out/zero/src/analyze-query.js out/zero/src/transform-query.js out/zero/src/cache-stats.js",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
-    "prepack": "cp ../zero-cache/src/services/litestream/config.yml ./out/zero-cache/src/services/litestream/"
+    "prepack": "cp ../zero-cache/src/services/litestream/config.yml ./out/zero-cache/src/services/litestream/",
+    "docs": "node --experimental-strip-types --no-warnings tool/generate-docs.ts",
+    "docs:server": "node --watch --experimental-strip-types --no-warnings tool/generate-docs.ts --server"
   },
   "dependencies": {
     "@badrap/valita": "0.3.11",
@@ -58,8 +60,11 @@
     "nanoid": "^5.1.2",
     "pg-format": "npm:pg-format-fix@^1.0.5",
     "postgres": "^3.4.4",
+    "prettier": "^3.5.3",
     "semver": "^7.5.4",
     "tsx": "^4.19.1",
+    "typedoc": "^0.28.2",
+    "typedoc-plugin-markdown": "^4.6.1",
     "url-pattern": "^1.0.3",
     "ws": "^8.18.1"
   },
@@ -111,7 +116,10 @@
     "zero-cache": "./out/zero/src/cli.js",
     "zero-cache-dev": "./out/zero/src/zero-cache-dev.js",
     "zero-deploy-permissions": "./out/zero/src/deploy-permissions.js",
-    "ast-to-zql": "./out/zero/src/ast-to-zql.js"
+    "ast-to-zql": "./out/zero/src/ast-to-zql.js",
+    "analyze-query": "./out/zero/src/analyze-query.js",
+    "transform-query": "./out/zero/src/transform-query.js",
+    "cache-stats": "./out/zero/src/cache-stats.js"
   },
   "engines": {
     "node": ">=20"

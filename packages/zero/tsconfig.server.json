@@ -11,6 +11,9 @@
     "src/deploy-permissions.ts",
     "src/change-protocol/*",
     "src/pg.ts",
-    "src/ast-to-zql.ts"
+    "src/ast-to-zql.ts",
+    "src/analyze-query.ts",
+    "src/transform-query.ts",
+    "src/cache-stats.ts"
   ]
 }

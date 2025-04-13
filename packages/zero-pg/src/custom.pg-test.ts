@@ -7,12 +7,15 @@ import {makeSchemaCRUD} from './custom.ts';
 import {Transaction} from './test/util.ts';
 import type {DBTransaction, SchemaCRUD} from '../../zql/src/mutate/custom.ts';
 import {schema, schemaSql} from './test/schema.ts';
-
-// TODO: test a json column
+import {getServerSchema} from './schema.ts';
+import type {ServerSchema} from '../../z2s/src/schema.ts';
 
 describe('makeSchemaCRUD', () => {
   let pg: PostgresDB;
-  let crudProvider: (tx: DBTransaction<unknown>) => SchemaCRUD<typeof schema>;
+  let crudProvider: (
+    tx: DBTransaction<unknown>,
+    serverSchema: ServerSchema,
+  ) => SchemaCRUD<typeof schema>;
 
   beforeEach(async () => {
     pg = await testDBs.create('makeSchemaCRUD-test');
@@ -38,21 +41,36 @@ describe('makeSchemaCRUD', () => {
     arr: ['a', 'b', 'c'],
   };
 
+  const basicRow = {id: '1', a: 2, b: 'foo', c: true};
+
+  const uuidAndEnumRow = {
+    id: '123e4567-e89b-12d3-a456-426614174000',
+    reference_id: '987fcdeb-a89b-12d3-a456-426614174000',
+    status: 'active' as const,
+    type: 'user' as const,
+  };
+
   test('insert', async () => {
     await pg.begin(async tx => {
-      const crud = crudProvider(new Transaction(tx));
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
 
       await Promise.all([
-        crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
+        crud.basic.insert(basicRow),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
         crud.dateTypes.insert(timeRow),
         crud.jsonCases.insert(jsonRow),
         crud.jsonbCases.insert(jsonRow),
+        crud.uuidAndEnum.insert(uuidAndEnumRow),
+        crud.alternate_basic.insert(basicRow),
       ]);
 
       await Promise.all([
-        checkDb(tx, 'basic', [{id: '1', a: 2, b: 'foo', c: true}]),
+        checkDb(tx, 'basic', [basicRow]),
         checkDb(tx, 'divergent_names', [
           {
             divergent_id: '2',
@@ -65,33 +83,81 @@ describe('makeSchemaCRUD', () => {
         checkDb(tx, 'dateTypes', [timeRow]),
         checkDb(tx, 'jsonCases', [jsonRow]),
         checkDb(tx, 'jsonbCases', [jsonRow]),
+        checkDb(tx, 'uuidAndEnum', [uuidAndEnumRow]),
+        checkDb(tx, 'alternate_schema.basic', [basicRow]),
       ]);
     });
   });
 
-  test('insert with missing columns', async () => {
+  test('insert/update/upsert with missing columns', async () => {
     await pg.begin(async tx => {
-      const crud = crudProvider(new Transaction(tx));
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
+
       await crud.basic.insert({id: '1', a: 2, b: 'foo'});
 
       await checkDb(tx, 'basic', [{id: '1', a: 2, b: 'foo', c: null}]);
+
+      // undefined should be allowed too.
+      await crud.basic.insert({id: '2', a: 2, b: 'foo', c: undefined});
+      await checkDb(tx, 'basic', [
+        {id: '1', a: 2, b: 'foo', c: null},
+        {id: '2', a: 2, b: 'foo', c: null},
+      ]);
+      await crud.basic.delete({id: '2'});
+
+      await crud.basic.update({id: '1', a: 3, b: 'bar', c: true});
+      await crud.basic.update({id: '1', a: 3, b: 'bar'});
+      await checkDb(tx, 'basic', [{id: '1', a: 3, b: 'bar', c: true}]);
+      await crud.basic.update({id: '1', a: 3, b: 'bar', c: undefined});
+      await checkDb(tx, 'basic', [{id: '1', a: 3, b: 'bar', c: true}]);
+
+      await crud.basic.upsert({id: '1', a: 3, b: 'bar'});
+      await checkDb(tx, 'basic', [{id: '1', a: 3, b: 'bar', c: true}]);
+      await crud.basic.upsert({id: '1', a: 3, b: 'bar', c: undefined});
+      await checkDb(tx, 'basic', [{id: '1', a: 3, b: 'bar', c: true}]);
+
+      // zero out the column
+      const row = {id: '1', a: 3, b: 'bar', c: null};
+      await crud.basic.upsert(row);
+      await checkDb(tx, 'basic', [row]);
+      await crud.basic.update({
+        ...row,
+        c: true,
+      });
+      await checkDb(tx, 'basic', [{...row, c: true}]);
+      await crud.basic.update({
+        ...row,
+        c: null,
+      });
+      await checkDb(tx, 'basic', [row]);
     });
   });
 
   test('upsert', async () => {
     await pg.begin(async tx => {
-      const crud = crudProvider(new Transaction(tx));
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
+
       await Promise.all([
-        crud.basic.upsert({id: '1', a: 2, b: 'foo', c: true}),
+        crud.basic.upsert(basicRow),
         crud.names.upsert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.upsert({a: 'a', b: 1, c: 'c'}),
         crud.dateTypes.upsert(timeRow),
         crud.jsonCases.upsert(jsonRow),
         crud.jsonbCases.upsert(jsonRow),
+        crud.uuidAndEnum.upsert(uuidAndEnumRow),
+        crud.alternate_basic.upsert(basicRow),
       ]);
 
       await Promise.all([
-        checkDb(tx, 'basic', [{id: '1', a: 2, b: 'foo', c: true}]),
+        checkDb(tx, 'basic', [basicRow]),
         checkDb(tx, 'divergent_names', [
           {
             divergent_id: '2',
@@ -104,6 +170,8 @@ describe('makeSchemaCRUD', () => {
         checkDb(tx, 'dateTypes', [timeRow]),
         checkDb(tx, 'jsonCases', [jsonRow]),
         checkDb(tx, 'jsonbCases', [jsonRow]),
+        checkDb(tx, 'uuidAndEnum', [uuidAndEnumRow]),
+        checkDb(tx, 'alternate_schema.basic', [basicRow]),
       ]);
 
       // upsert all the existing rows to change non-primary key values
@@ -128,6 +196,18 @@ describe('makeSchemaCRUD', () => {
           bool: false,
           obj: {foo: 'baz'},
           arr: ['d', 'e', 'f'],
+        }),
+        crud.uuidAndEnum.upsert({
+          ...uuidAndEnumRow,
+          status: 'inactive',
+          type: 'system',
+          reference_id: '987fcdeb-a89b-12d3-a456-426614174002',
+        }),
+        crud.alternate_basic.upsert({
+          id: '1',
+          a: 3,
+          b: 'baz',
+          c: false,
         }),
       ]);
 
@@ -166,20 +246,37 @@ describe('makeSchemaCRUD', () => {
             arr: ['d', 'e', 'f'],
           },
         ]),
+        checkDb(tx, 'uuidAndEnum', [
+          {
+            ...uuidAndEnumRow,
+            status: 'inactive',
+            type: 'system',
+            reference_id: '987fcdeb-a89b-12d3-a456-426614174002',
+          },
+        ]),
+        checkDb(tx, 'alternate_schema.basic', [
+          {id: '1', a: 3, b: 'baz', c: false},
+        ]),
       ]);
     });
   });
 
   test('update', async () => {
     await pg.begin(async tx => {
-      const crud = crudProvider(new Transaction(tx));
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
       await Promise.all([
-        crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
+        crud.basic.insert(basicRow),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
         crud.dateTypes.insert(timeRow),
         crud.jsonCases.insert(jsonRow),
         crud.jsonbCases.insert(jsonRow),
+        crud.uuidAndEnum.insert(uuidAndEnumRow),
+        crud.alternate_basic.insert(basicRow),
       ]);
 
       await Promise.all([
@@ -203,6 +300,17 @@ describe('makeSchemaCRUD', () => {
           bool: false,
           obj: {foo: 'baz'},
           arr: ['d', 'e', 'f'],
+        }),
+        crud.uuidAndEnum.update({
+          id: uuidAndEnumRow.id,
+          status: 'pending',
+          type: 'admin',
+          reference_id: '987fcdeb-a89b-12d3-a456-426614174002',
+        }),
+        crud.alternate_basic.update({
+          id: '1',
+          a: 3,
+          b: 'baz',
         }),
       ]);
 
@@ -241,20 +349,38 @@ describe('makeSchemaCRUD', () => {
             arr: ['d', 'e', 'f'],
           },
         ]),
+        checkDb(tx, 'uuidAndEnum', [
+          {
+            ...uuidAndEnumRow,
+            status: 'pending',
+            type: 'admin',
+            reference_id: '987fcdeb-a89b-12d3-a456-426614174002',
+          },
+        ]),
+        checkDb(tx, 'alternate_schema.basic', [
+          {id: '1', a: 3, b: 'baz', c: true},
+        ]),
       ]);
     });
   });
 
   test('delete', async () => {
     await pg.begin(async tx => {
-      const crud = crudProvider(new Transaction(tx));
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
+
       await Promise.all([
-        crud.basic.insert({id: '1', a: 2, b: 'foo', c: true}),
+        crud.basic.insert(basicRow),
         crud.names.insert({id: '2', a: 3, b: 'bar', c: false}),
         crud.compoundPk.insert({a: 'a', b: 1, c: 'c'}),
         crud.dateTypes.insert(timeRow),
         crud.jsonCases.insert(jsonRow),
         crud.jsonbCases.insert(jsonRow),
+        crud.uuidAndEnum.insert(uuidAndEnumRow),
+        crud.alternate_basic.insert(basicRow),
       ]);
 
       await Promise.all([
@@ -264,6 +390,8 @@ describe('makeSchemaCRUD', () => {
         crud.dateTypes.delete({ts: timeRow.ts}),
         crud.jsonCases.delete({str: jsonRow.str}),
         crud.jsonbCases.delete({str: jsonRow.str}),
+        crud.uuidAndEnum.delete({id: uuidAndEnumRow.id}),
+        crud.alternate_basic.delete({id: '1'}),
       ]);
 
       await Promise.all([
@@ -273,12 +401,14 @@ describe('makeSchemaCRUD', () => {
         checkDb(tx, 'dateTypes', []),
         checkDb(tx, 'jsonCases', []),
         checkDb(tx, 'jsonbCases', []),
+        checkDb(tx, 'uuidAndEnum', []),
+        checkDb(tx, 'alternate_schema.basic', []),
       ]);
     });
   });
 });
 
 async function checkDb(pg: PostgresDB, table: string, expected: unknown[]) {
-  const rows = await pg.unsafe(`SELECT * FROM "${table}"`);
+  const rows = await pg`SELECT * FROM ${pg(table)}`;
   expect(rows).toEqual(expected);
 }

@@ -12,6 +12,7 @@ import {
   TIMESTAMP,
   TIMESTAMPTZ,
 } from './pg-types.ts';
+import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
 
 const WITH_HH_MM_TIMEZONE = /[+-]\d\d:\d\d$/;
 const WITH_HH_TIMEZONE = /[+-]\d\d$/;
@@ -192,3 +193,65 @@ export const typeNameByOID: Record<number, string> = Object.fromEntries(
 );
 
 Object.freeze(typeNameByOID);
+
+export const pgToZqlTypeMap = Object.freeze({
+  // Numeric types
+  'smallint': 'number',
+  'integer': 'number',
+  'int': 'number',
+  'int2': 'number',
+  'int4': 'number',
+  'int8': 'number',
+  'bigint': 'number',
+  'smallserial': 'number',
+  'serial': 'number',
+  'serial2': 'number',
+  'serial4': 'number',
+  'serial8': 'number',
+  'bigserial': 'number',
+  'decimal': 'number',
+  'numeric': 'number',
+  'real': 'number',
+  'double precision': 'number',
+  'float': 'number',
+  'float4': 'number',
+  'float8': 'number',
+
+  // Date/Time types
+  'date': 'number',
+  'timestamp': 'number',
+  'timestamptz': 'number',
+  'timestamp with time zone': 'number',
+  'timestamp without time zone': 'number',
+
+  // String types
+  'bpchar': 'string',
+  'character': 'string',
+  'character varying': 'string',
+  'text': 'string',
+  'uuid': 'string',
+  'varchar': 'string',
+
+  // Boolean types
+  'bool': 'boolean',
+  'boolean': 'boolean',
+
+  'json': 'json',
+  'jsonb': 'json',
+
+  // TODO: Add support for these.
+  // 'bytea':
+});
+
+export function dataTypeToZqlValueType(
+  pgType: string,
+  isEnum: boolean,
+): ValueType | undefined {
+  const valueType = (pgToZqlTypeMap as Record<string, ValueType>)[
+    pgType.toLocaleLowerCase()
+  ];
+  if (valueType === undefined && isEnum) {
+    return 'string';
+  }
+  return valueType;
+}
