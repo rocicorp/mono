@@ -33,11 +33,13 @@ export type HandlerResult =
       type: 'transient';
       errors: ErrorBody[];
     }
-  | {
-      type: 'stream';
-      source: 'viewSyncer' | 'pusher';
-      stream: Source<Downstream>;
-    };
+  | StreamResult;
+
+export type StreamResult = {
+  type: 'stream';
+  source: 'viewSyncer' | 'pusher';
+  stream: Source<Downstream>;
+};
 
 export interface MessageHandler {
   handleMessage(msg: Upstream): Promise<HandlerResult[]>;
