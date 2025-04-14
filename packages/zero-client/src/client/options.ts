@@ -3,6 +3,7 @@ import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {CustomMutatorDefs} from './custom.ts';
+import type {UserPushParams} from '../../../zero-protocol/src/connect.ts';
 
 /**
  * Configuration for {@linkcode Zero}.
@@ -90,11 +91,11 @@ export interface ZeroOptions<
    * Custom mutations are pushed to zero-cache and then to
    * your API server.
    *
-   * The push url may also be specified here rather than in
-   * the zero-cache config. This is useful if request params
-   * should be different for different clients.
+   * push.queryParams can be used to augment the URL
+   * used to connect to your API server so it includes
+   * variables in the query string.
    */
-  pushURL?: string | undefined;
+  push?: UserPushParams;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.

@@ -453,7 +453,7 @@ describe('initConnection', () => {
     void pusher.run();
 
     const userPushParams = {
-      url: 'http://custom-url.com?workspace=1&user=2&foo=bar',
+      queryParams: {workspace: '1', user: '2', foo: 'bar'},
     };
 
     pusher.initConnection(clientID, wsID, userPushParams);
@@ -464,7 +464,7 @@ describe('initConnection', () => {
 
     // Verify the custom URL was used
     expect(fetch.mock.calls[0][0]).toMatchInlineSnapshot(
-      `"http://custom-url.com?workspace=1&user=2&foo=bar?workspace=1&user=2&foo=bar&schema=zero_0&appID=zero"`,
+      `"http://example.com?workspace=1&user=2&foo=bar&schema=zero_0&appID=zero"`,
     );
 
     // Verify the headers were passed through
