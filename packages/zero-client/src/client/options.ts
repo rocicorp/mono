@@ -96,7 +96,7 @@ export interface ZeroOptions<
    * the zero-cache config. This is useful if request params
    * should be different for different clients.
    */
-  pushParams?:
+  push?:
     | {
         url?: string | undefined;
         headers?: Record<string, string> | undefined;

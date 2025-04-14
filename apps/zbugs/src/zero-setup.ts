@@ -34,6 +34,9 @@ authAtom.onChange(auth => {
     server: import.meta.env.VITE_PUBLIC_SERVER,
     userID: authData?.sub ?? 'anon',
     mutators: createMutators(authData),
+    push: {
+      url: 'http://localhost:5173/api/push?foo=bar',
+    },
     auth: (error?: 'invalid-token') => {
       if (error === 'invalid-token') {
         clearJwt();

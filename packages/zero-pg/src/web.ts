@@ -103,7 +103,7 @@ export class PushProcessor<
     if (queryString instanceof URLSearchParams) {
       queryString = Object.fromEntries(queryString);
     }
-    const queryParams = v.parse(queryString, pushParamsSchema);
+    const queryParams = v.parse(queryString, pushParamsSchema, 'passthrough');
     const connection = await this.#dbConnectionProvider();
 
     if (req.pushVersion !== 1) {
