@@ -14,7 +14,7 @@ import {type ZeroConfig} from '../../config/zero-config.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
-import type {HandlerResult} from '../../workers/connection.ts';
+import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {Service} from '../service.ts';
 import type {UserPushParams} from '../../../../zero-protocol/src/connect.ts';
 import type {Source} from '../../types/streams.ts';
@@ -85,7 +85,7 @@ export class PusherService implements Service, Pusher {
     clientID: string,
     push: PushBody,
     jwt: string | undefined,
-  ): HandlerResult {
+  ): Exclude<HandlerResult, StreamResult> {
     this.#queue.enqueue({push, jwt, clientID});
 
     return {
@@ -411,6 +411,7 @@ export function combinePushes(
           mutations: [],
         },
       };
+      ret.push(composite);
       for (const entry of entries) {
         assertAreCompatiblePushes(composite, entry);
         composite.push.mutations.push(...entry.push.mutations);

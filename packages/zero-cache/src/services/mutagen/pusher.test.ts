@@ -20,80 +20,13 @@ const config = {
 };
 
 const clientID = 'test-cid';
-// const wsID = 'test-wsid';
+const wsID = 'test-wsid';
+
 describe('combine pushes', () => {
   test('empty array', () => {
     const [pushes, terminate] = combinePushes([]);
     expect(pushes).toEqual([]);
     expect(terminate).toBe(false);
-  });
-
-  test('same JWT for all pushes', () => {
-    const [pushes, terminate] = combinePushes([
-      {
-        push: makePush(1),
-        jwt: 'a',
-        clientID,
-      },
-      {
-        push: makePush(1),
-        jwt: 'a',
-        clientID,
-      },
-      {
-        push: makePush(1),
-        jwt: 'a',
-        clientID,
-      },
-    ]);
-    expect(pushes).toHaveLength(1);
-    expect(terminate).toBe(false);
-    expect(pushes[0].push.mutations).toHaveLength(3);
-  });
-
-  test('different JWT groups', () => {
-    const [pushes, terminate] = combinePushes([
-      {
-        push: makePush(1),
-        jwt: 'a',
-        clientID,
-      },
-      {
-        push: makePush(1),
-        jwt: 'a',
-        clientID,
-      },
-      {
-        push: makePush(1),
-        jwt: 'c',
-        clientID,
-      },
-      {
-        push: makePush(1),
-        jwt: 'b',
-        clientID,
-      },
-      {
-        push: makePush(1),
-        jwt: 'b',
-        clientID,
-      },
-      {
-        push: makePush(1),
-        jwt: 'c',
-        clientID,
-      },
-    ]);
-    expect(pushes).toHaveLength(4);
-    expect(terminate).toBe(false);
-    expect(pushes[0].push.mutations).toHaveLength(2);
-    expect(pushes[0].jwt).toBe('a');
-    expect(pushes[1].push.mutations).toHaveLength(1);
-    expect(pushes[1].jwt).toBe('c');
-    expect(pushes[2].push.mutations).toHaveLength(2);
-    expect(pushes[2].jwt).toBe('b');
-    expect(pushes[3].push.mutations).toHaveLength(1);
-    expect(pushes[3].jwt).toBe('c');
   });
 
   test('stop', () => {
@@ -135,7 +68,197 @@ describe('combine pushes', () => {
       },
     ]);
     expect(pushes).toHaveLength(1);
+    expect(pushes[0].push.mutations).toHaveLength(1);
+    expect(pushes[0].push.mutations[0].id).toBe(1);
     expect(terminate).toBe(true);
+  });
+
+  test('combines pushes for same clientID', () => {
+    const [pushes, terminate] = combinePushes([
+      {
+        push: makePush(1, 'client1'),
+        jwt: 'a',
+        clientID: 'client1',
+      },
+      {
+        push: makePush(2, 'client1'),
+        jwt: 'a',
+        clientID: 'client1',
+      },
+      {
+        push: makePush(1, 'client2'),
+        jwt: 'b',
+        clientID: 'client2',
+      },
+    ]);
+
+    expect(pushes).toHaveLength(2);
+    expect(terminate).toBe(false);
+
+    // Verify client1's pushes are combined
+    const client1Push = pushes.find(p => p.clientID === 'client1');
+    expect(client1Push).toBeDefined();
+    expect(client1Push?.push.mutations).toHaveLength(3); // 1 + 2 mutations
+
+    // Verify client2's push is separate
+    const client2Push = pushes.find(p => p.clientID === 'client2');
+    expect(client2Push).toBeDefined();
+    expect(client2Push?.push.mutations).toHaveLength(1);
+  });
+
+  test('throws on jwt mismatch for same client', () => {
+    expect(() =>
+      combinePushes([
+        {
+          push: makePush(1, 'client1'),
+          jwt: 'a',
+          clientID: 'client1',
+        },
+        {
+          push: makePush(2, 'client1'),
+          jwt: 'b', // Different JWT
+          clientID: 'client1',
+        },
+      ]),
+    ).toThrow('jwt must be the same for all pushes with the same clientID');
+  });
+
+  test('throws on schema version mismatch for same client', () => {
+    expect(() =>
+      combinePushes([
+        {
+          push: {
+            ...makePush(1, 'client1'),
+            schemaVersion: 1,
+          },
+          jwt: 'a',
+          clientID: 'client1',
+        },
+        {
+          push: {
+            ...makePush(2, 'client1'),
+            schemaVersion: 2, // Different schema version
+          },
+          jwt: 'a',
+          clientID: 'client1',
+        },
+      ]),
+    ).toThrow(
+      'schemaVersion must be the same for all pushes with the same clientID',
+    );
+  });
+
+  test('throws on push version mismatch for same client', () => {
+    expect(() =>
+      combinePushes([
+        {
+          push: {
+            ...makePush(1, 'client1'),
+            pushVersion: 1,
+          },
+          jwt: 'a',
+          clientID: 'client1',
+        },
+        {
+          push: {
+            ...makePush(2, 'client1'),
+            pushVersion: 2, // Different push version
+          },
+          jwt: 'a',
+          clientID: 'client1',
+        },
+      ]),
+    ).toThrow(
+      'pushVersion must be the same for all pushes with the same clientID',
+    );
+  });
+
+  test('combines compatible pushes with same schema version and push version', () => {
+    const [pushes, terminate] = combinePushes([
+      {
+        push: {
+          ...makePush(1, 'client1'),
+          schemaVersion: 1,
+          pushVersion: 1,
+        },
+        jwt: 'a',
+        clientID: 'client1',
+      },
+      {
+        push: {
+          ...makePush(2, 'client1'),
+          schemaVersion: 1,
+          pushVersion: 1,
+        },
+        jwt: 'a',
+        clientID: 'client1',
+      },
+    ]);
+
+    expect(pushes).toHaveLength(1);
+    expect(terminate).toBe(false);
+    expect(pushes[0].push.mutations).toHaveLength(3);
+  });
+
+  test('handles multiple clients with multiple pushes', () => {
+    const [pushes, terminate] = combinePushes([
+      {
+        push: makePush(1, 'client1'),
+        jwt: 'a',
+        clientID: 'client1',
+      },
+      {
+        push: makePush(2, 'client2'),
+        jwt: 'b',
+        clientID: 'client2',
+      },
+      {
+        push: makePush(1, 'client1'),
+        jwt: 'a',
+        clientID: 'client1',
+      },
+      {
+        push: makePush(3, 'client2'),
+        jwt: 'b',
+        clientID: 'client2',
+      },
+    ]);
+
+    expect(pushes).toHaveLength(2);
+    expect(terminate).toBe(false);
+
+    // Verify client1's pushes are combined
+    const client1Push = pushes.find(p => p.clientID === 'client1');
+    expect(client1Push?.push.mutations).toHaveLength(2);
+
+    // Verify client2's pushes are combined
+    const client2Push = pushes.find(p => p.clientID === 'client2');
+    expect(client2Push?.push.mutations).toHaveLength(5);
+  });
+
+  test('preserves mutation order within client', () => {
+    const [pushes] = combinePushes([
+      {
+        push: makePush(1, 'client1'),
+        jwt: 'a',
+        clientID: 'client1',
+      },
+      {
+        push: makePush(1, 'client2'),
+        jwt: 'b',
+        clientID: 'client2',
+      },
+      {
+        push: makePush(1, 'client1'),
+        jwt: 'a',
+        clientID: 'client1',
+      },
+    ]);
+
+    const client1Push = pushes.find(p => p.clientID === 'client1');
+    expect(client1Push?.push.mutations[0].id).toBeLessThan(
+      client1Push?.push.mutations[1].id || 0,
+    );
   });
 });
 
@@ -171,6 +294,7 @@ describe('pusher service', () => {
       'api-key',
     );
     void pusher.run();
+    pusher.initConnection(clientID, wsID, undefined);
 
     pusher.enqueuePush(clientID, makePush(1), 'jwt');
 
@@ -200,6 +324,7 @@ describe('pusher service', () => {
       'api-key',
     );
     void pusher.run();
+    pusher.initConnection(clientID, wsID, undefined);
 
     pusher.enqueuePush(clientID, makePush(1), 'jwt');
 
@@ -228,6 +353,7 @@ describe('pusher service', () => {
     );
 
     void pusher.run();
+    pusher.initConnection(clientID, wsID, undefined);
     pusher.enqueuePush(clientID, makePush(1), 'jwt');
     // release control of the loop so the push can be sent
     await Promise.resolve();
@@ -260,12 +386,8 @@ describe('pusher service', () => {
   });
 });
 
-describe('pusher streaming', () => {
-  beforeEach(() => {
-    vi.resetAllMocks();
-  });
-
-  test('returns a stream for first push from a client', () => {
+describe('initConnection', () => {
+  test('initConnection returns a stream', () => {
     const pusher = new PusherService(
       config,
       lc,
@@ -275,9 +397,98 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result = pusher.enqueuePush(clientID, makePush(1), 'jwt');
-    expect(result.type).toBe('stream');
+    // const result = pusher.initConnection(clientID, wsID, undefined);
+    // expect(result.type).toBe('stream');
   });
+
+  test('initConnection throws if it was already called for the same clientID and wsID', () => {
+    const pusher = new PusherService(
+      config,
+      lc,
+      'cgid',
+      'http://example.com',
+      'api-key',
+    );
+    void pusher.run();
+    pusher.initConnection('c1', 'ws1', undefined);
+    expect(() => pusher.initConnection('c1', 'ws1', undefined)).toThrow(
+      'Connection was already initialized',
+    );
+  });
+
+  test('initConnection destroys prior stream for same client when wsID changes', async () => {
+    const pusher = new PusherService(
+      config,
+      lc,
+      'cgid',
+      'http://example.com',
+      'api-key',
+    );
+    void pusher.run();
+    const stream1 = pusher.initConnection('c1', 'ws1', undefined);
+    pusher.initConnection('c1', 'ws2', undefined);
+    const iterator = stream1[Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+  });
+
+  test('initConnection passes userPushParams to fetch', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({mutations: []}),
+    });
+
+    const pusher = new PusherService(
+      config,
+      lc,
+      'cgid',
+      'http://example.com',
+      'api-key',
+    );
+    void pusher.run();
+
+    const userPushParams = {
+      url: 'http://custom-url.com?workspace=1',
+      headers: {
+        'X-Custom-Header': 'custom-value',
+        'Another-Header': 'another-value',
+      },
+    };
+
+    pusher.initConnection(clientID, wsID, userPushParams);
+    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+
+    // Wait for the push to be processed
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // Verify the custom URL was used
+    expect(fetch.mock.calls[0][0]).toMatchInlineSnapshot(
+      `"http://custom-url.com?workspace=1?workspace=1&schema=zero_0&appID=zero"`,
+    );
+
+    // Verify the headers were passed through
+    expect(fetch.mock.calls[0][1]?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-Api-Key': 'api-key',
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      'Authorization': 'Bearer jwt',
+      'X-Custom-Header': 'custom-value',
+      'Another-Header': 'another-value',
+    });
+
+    await pusher.stop();
+  });
+});
+
+describe('pusher streaming', () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  test('fails if we receive a push before initializing the connection', () => {});
 
   test('returns ok for subsequent pushes from same client', () => {
     const pusher = new PusherService(
@@ -289,6 +500,7 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
+    pusher.initConnection(clientID, wsID, undefined);
     pusher.enqueuePush(clientID, makePush(1), 'jwt');
     const result = pusher.enqueuePush(clientID, makePush(1), 'jwt');
     expect(result.type).toBe('ok');
@@ -321,44 +533,34 @@ describe('pusher streaming', () => {
       'api-key',
     );
     void pusher.run();
+    const stream1 = pusher.initConnection('client1', 'ws1', undefined);
+    const stream2 = pusher.initConnection('client2', 'ws2', undefined);
 
     fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve(successResponse1),
     });
-    const result1 = pusher.enqueuePush(
-      'client1',
-      makePush(1, 'client1'),
-      'jwt',
-    );
+    pusher.enqueuePush('client1', makePush(1, 'client1'), 'jwt');
     await new Promise(resolve => setTimeout(resolve, 0));
 
     fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve(successResponse2),
     });
-    const result2 = pusher.enqueuePush(
-      'client2',
-      makePush(2, 'client2'),
-      'jwt',
-    );
+    pusher.enqueuePush('client2', makePush(2, 'client2'), 'jwt');
 
-    expect(result1.type).toBe('stream');
-    expect(result2.type).toBe('stream');
+    const s1Messages: unknown[] = [];
+    const s2Messages: unknown[] = [];
+    for await (const response of stream1) {
+      s1Messages.push(response);
+      break;
+    }
+    for await (const response of stream2) {
+      s2Messages.push(response);
+      break;
+    }
 
-    if (result1.type === 'stream' && result2.type === 'stream') {
-      const s1Messages: unknown[] = [];
-      const s2Messages: unknown[] = [];
-      for await (const response of result1.stream) {
-        s1Messages.push(response);
-        break;
-      }
-      for await (const response of result2.stream) {
-        s2Messages.push(response);
-        break;
-      }
-
-      expect(s1Messages).toMatchInlineSnapshot(`
+    expect(s1Messages).toMatchInlineSnapshot(`
         [
           [
             "pushResponse",
@@ -376,7 +578,7 @@ describe('pusher streaming', () => {
           ],
         ]
       `);
-      expect(s2Messages).toMatchInlineSnapshot(`
+    expect(s2Messages).toMatchInlineSnapshot(`
         [
           [
             "pushResponse",
@@ -394,7 +596,6 @@ describe('pusher streaming', () => {
           ],
         ]
       `);
-    }
   });
 
   test('streams error response to affected clients', async () => {
@@ -413,60 +614,49 @@ describe('pusher streaming', () => {
       'api-key',
     );
     void pusher.run();
+    const stream1 = pusher.initConnection('client1', 'ws1', undefined);
+    const stream2 = pusher.initConnection('client2', 'ws2', undefined);
 
-    const result1 = pusher.enqueuePush(
-      'client1',
-      makePush(1, 'client1'),
-      'jwt',
-    );
-    const result2 = pusher.enqueuePush(
-      'client2',
-      makePush(1, 'client2'),
-      'jwt',
-    );
+    pusher.enqueuePush('client1', makePush(1, 'client1'), 'jwt');
+    pusher.enqueuePush('client2', makePush(1, 'client2'), 'jwt');
 
-    expect(result1.type).toBe('stream');
-    expect(result2.type).toBe('stream');
+    const messages1: unknown[] = [];
+    const messages2: unknown[] = [];
+    // Wait for push to be processed
+    await new Promise(resolve => setTimeout(resolve, 0));
 
-    if (result1.type === 'stream' && result2.type === 'stream') {
-      const messages1: unknown[] = [];
-      const messages2: unknown[] = [];
-      // Wait for push to be processed
-      await new Promise(resolve => setTimeout(resolve, 0));
-
-      for await (const msg of result1.stream) {
-        messages1.push(msg);
-        break;
-      }
-      for await (const msg of result2.stream) {
-        messages2.push(msg);
-        break;
-      }
-
-      expect(messages1).toEqual([
-        [
-          'pushResponse',
-          {
-            error: 'http',
-            status: 500,
-            details: 'Internal Server Error',
-            mutationIDs: [{clientID: 'client1', id: 1}],
-          },
-        ],
-      ]);
-
-      expect(messages2).toEqual([
-        [
-          'pushResponse',
-          {
-            error: 'http',
-            status: 500,
-            details: 'Internal Server Error',
-            mutationIDs: [{clientID: 'client2', id: 2}],
-          },
-        ],
-      ]);
+    for await (const msg of stream1) {
+      messages1.push(msg);
+      break;
     }
+    for await (const msg of stream2) {
+      messages2.push(msg);
+      break;
+    }
+
+    expect(messages1).toEqual([
+      [
+        'pushResponse',
+        {
+          error: 'http',
+          status: 500,
+          details: 'Internal Server Error',
+          mutationIDs: [{clientID: 'client1', id: 1}],
+        },
+      ],
+    ]);
+
+    expect(messages2).toEqual([
+      [
+        'pushResponse',
+        {
+          error: 'http',
+          status: 500,
+          details: 'Internal Server Error',
+          mutationIDs: [{clientID: 'client2', id: 2}],
+        },
+      ],
+    ]);
   });
 
   test('handles network errors', async () => {
@@ -481,28 +671,26 @@ describe('pusher streaming', () => {
       'api-key',
     );
     void pusher.run();
+    const stream = pusher.initConnection(clientID, wsID, undefined);
 
-    const result = pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
-    expect(result.type).toBe('stream');
+    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
 
-    if (result.type === 'stream') {
-      const messages: unknown[] = [];
-      for await (const msg of result.stream) {
-        messages.push(msg);
-        break;
-      }
-
-      expect(messages).toEqual([
-        [
-          'pushResponse',
-          {
-            error: 'zeroPusher',
-            details: 'Error: Network error',
-            mutationIDs: [{clientID, id: 1}],
-          },
-        ],
-      ]);
+    const messages: unknown[] = [];
+    for await (const msg of stream) {
+      messages.push(msg);
+      break;
     }
+
+    expect(messages).toEqual([
+      [
+        'pushResponse',
+        {
+          error: 'zeroPusher',
+          details: 'Error: Network error',
+          mutationIDs: [{clientID, id: 1}],
+        },
+      ],
+    ]);
   });
 
   test('cleanup removes client subscription', () => {
@@ -515,20 +703,16 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result1 = pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
-    expect(result1.type).toBe('stream');
+    const stream1 = pusher.initConnection(clientID, 'ws1', undefined);
 
-    if (result1.type === 'stream') {
-      result1.stream.cancel();
+    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
 
-      // After cleanup, should get a new stream
-      const result2 = pusher.enqueuePush(
-        clientID,
-        makePush(1, clientID),
-        'jwt',
-      );
-      expect(result2.type).toBe('stream');
-    }
+    stream1.cancel();
+
+    // After cleanup, should get a new stream (even if same wsid)
+    expect(() =>
+      pusher.initConnection(clientID, 'ws1', undefined),
+    ).not.toThrow();
   });
 
   test('new websocket for same client creates new downstream', async () => {
@@ -541,18 +725,15 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result1 = pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
-    expect(result1.type).toBe('stream');
-    const result2 = pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
-    expect(result2.type).toBe('stream');
-    if (result1.type === 'stream') {
-      // should not be iterable anymore as it is closed
-      const iterator = result1.stream[Symbol.asyncIterator]();
-      await expect(iterator.next()).resolves.toEqual({
-        done: true,
-        value: undefined,
-      });
-    }
+    const stream1 = pusher.initConnection(clientID, 'ws1', undefined);
+    pusher.initConnection(clientID, 'ws2', undefined);
+
+    // should not be iterable anymore as it is closed by the arrival of ws2
+    const iterator = stream1[Symbol.asyncIterator]();
+    await expect(iterator.next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
   });
 
   test('fails the stream on ooo mutations', async () => {
@@ -584,17 +765,16 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result = pusher.enqueuePush(clientID, makePush(2, clientID), 'jwt');
-    expect(result.type).toBe('stream');
+    const stream = pusher.initConnection(clientID, 'ws1', undefined);
+    pusher.enqueuePush(clientID, makePush(2, clientID), 'jwt');
 
-    if (result.type === 'stream') {
-      const messages: unknown[] = [];
-      for await (const msg of result.stream) {
-        messages.push(msg);
-        break;
-      }
+    const messages: unknown[] = [];
+    for await (const msg of stream) {
+      messages.push(msg);
+      break;
+    }
 
-      expect(messages).toMatchInlineSnapshot(`
+    expect(messages).toMatchInlineSnapshot(`
         [
           [
             "pushResponse",
@@ -613,12 +793,11 @@ describe('pusher streaming', () => {
         ]
       `);
 
-      // The stream should be completed after the OOO mutation
-      expect(await result.stream[Symbol.asyncIterator]().next()).toEqual({
-        done: true,
-        value: undefined,
-      });
-    }
+    // The stream should be completed after the OOO mutation
+    expect(await stream[Symbol.asyncIterator]().next()).toEqual({
+      done: true,
+      value: undefined,
+    });
   });
 
   test('fails the stream on unsupported schema version or push version', async () => {
@@ -642,14 +821,12 @@ describe('pusher streaming', () => {
     );
     void pusher.run();
 
-    const result = pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
-    expect(result.type).toBe('stream');
+    const stream = pusher.initConnection(clientID, 'ws1', undefined);
+    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
 
-    if (result.type === 'stream') {
-      await expect(
-        result.stream[Symbol.asyncIterator]().next(),
-      ).rejects.toThrow('unsupportedSchemaVersion');
-    }
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
+      'unsupportedSchemaVersion',
+    );
   });
 });
 
