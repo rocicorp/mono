@@ -520,7 +520,9 @@ export class CVRStore {
       inactivatedAt: inactivatedAt ?? null,
       patchVersion: versionString(newVersion),
       queryHash: query.id,
-      ttl: ttl < 0 ? null : ttl,
+
+      // ttl is in ms but the postgres table uses INTERVAL which treats numbers as seconds
+      ttl: ttl < 0 ? null : ttl / 1000,
     };
     this.#writes.add({
       stats: {desires: 1},

@@ -551,7 +551,9 @@ export abstract class AbstractQuery<
 
   abstract materialize(): TypedView<HumanReadable<TReturn>>;
   abstract materialize<T>(factory: ViewFactory<TSchema, TTable, TReturn, T>): T;
+
   abstract run(): Promise<HumanReadable<TReturn>>;
+
   abstract preload(): {
     cleanup: () => void;
     complete: Promise<void>;
