@@ -20,6 +20,7 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- Version 11 adds inspect queries. (0.18)
 // -- Version 12 adds 'timestamp' and 'date' types to the ClientSchema ValueType. (not shipped, reversed by version 14)
 // -- Version 14 removes 'timestamp' and 'date' types from the ClientSchema ValueType. (0.18)
+// -- Version 15 adds a `pushURL` field to `initConnection`
 export const PROTOCOL_VERSION = 15;
 
 /**

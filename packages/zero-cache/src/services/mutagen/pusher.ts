@@ -310,12 +310,6 @@ class PushWorker {
 
     const userParams = this.#clients.get(entry.clientID)?.userParams;
 
-    if (userParams?.headers) {
-      for (const [key, value] of Object.entries(userParams.headers)) {
-        headers[key] = value;
-      }
-    }
-
     if (this.#apiKey) {
       headers['X-Api-Key'] = this.#apiKey;
     }

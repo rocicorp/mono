@@ -451,11 +451,7 @@ describe('initConnection', () => {
     void pusher.run();
 
     const userPushParams = {
-      url: 'http://custom-url.com?workspace=1',
-      headers: {
-        'X-Custom-Header': 'custom-value',
-        'Another-Header': 'another-value',
-      },
+      url: 'http://custom-url.com?workspace=1&user=2&foo=bar',
     };
 
     pusher.initConnection(clientID, wsID, userPushParams);
@@ -466,7 +462,7 @@ describe('initConnection', () => {
 
     // Verify the custom URL was used
     expect(fetch.mock.calls[0][0]).toMatchInlineSnapshot(
-      `"http://custom-url.com?workspace=1?workspace=1&schema=zero_0&appID=zero"`,
+      `"http://custom-url.com?workspace=1&user=2&foo=bar?workspace=1&user=2&foo=bar&schema=zero_0&appID=zero"`,
     );
 
     // Verify the headers were passed through
@@ -475,8 +471,6 @@ describe('initConnection', () => {
       'X-Api-Key': 'api-key',
       // eslint-disable-next-line @typescript-eslint/naming-convention
       'Authorization': 'Bearer jwt',
-      'X-Custom-Header': 'custom-value',
-      'Another-Header': 'another-value',
     });
 
     await pusher.stop();
