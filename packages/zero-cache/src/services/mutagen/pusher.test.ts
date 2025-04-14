@@ -1,3 +1,4 @@
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {combinePushes, PusherService} from './pusher.ts';
 import type {
@@ -7,6 +8,7 @@ import type {
 } from '../../../../zero-protocol/src/push.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {resolver} from '@rocicorp/resolver';
+import {ErrorForClient} from '../../types/error-for-client.ts';
 
 const config = {
   app: {
@@ -826,6 +828,35 @@ describe('pusher streaming', () => {
 
     await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
       'unsupportedSchemaVersion',
+    );
+  });
+
+  test('fails the stream with AuthInvalidated error on 401 response', async () => {
+    const fetch = (global.fetch = vi.fn());
+
+    fetch.mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: () => Promise.resolve('Unauthorized access'),
+    });
+
+    const pusher = new PusherService(
+      config,
+      lc,
+      'cgid',
+      'http://example.com',
+      'api-key',
+    );
+    void pusher.run();
+
+    const stream = pusher.initConnection(clientID, 'ws1', undefined);
+    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
+
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
+      new ErrorForClient({
+        kind: ErrorKind.AuthInvalidated,
+        message: 'Unauthorized access',
+      }),
     );
   });
 });
