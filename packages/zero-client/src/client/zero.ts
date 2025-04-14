@@ -1077,7 +1077,7 @@ export class Zero<
           // The clientSchema only needs to be sent for the very first request.
           // Henceforth it is stored with the CVR and verified automatically.
           ...(this.#connectCookie === null ? {clientSchema} : {}),
-          userPushParams: this.#options.pushParams,
+          userPushParams: this.#options.push,
         },
       ]);
       this.#deletedClients = undefined;
@@ -1171,7 +1171,7 @@ export class Zero<
       wsid,
       this.#options.logLevel === 'debug',
       l,
-      this.#options.pushParams,
+      this.#options.push,
       this.#options.maxHeaderLength,
       additionalConnectParams,
     );
