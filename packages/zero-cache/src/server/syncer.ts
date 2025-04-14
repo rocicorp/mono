@@ -143,17 +143,14 @@ export default function runWorker(
       config,
     );
 
-  const pusherFactory =
-    config.push.url === undefined
-      ? undefined
-      : (id: string) =>
-          new PusherService(
-            config,
-            lc.withContext('clientGroupID', id),
-            id,
-            must(config.push.url),
-            config.push.apiKey,
-          );
+  const pusherFactory = (id: string) =>
+    new PusherService(
+      config,
+      lc.withContext('clientGroupID', id),
+      id,
+      config.push.url,
+      config.push.apiKey,
+    );
 
   const syncer = new Syncer(
     lc,

@@ -91,11 +91,15 @@ export interface ZeroOptions<
    * your API server. If you would like specific headers to be available
    * to your API server when it receives a custom mutation, you can
    * specify them here.
+   *
+   * The push url may also be specified here rather than in
+   * the zero-cache config. This is useful if request params
+   * should be different for different clients.
    */
   pushParams?:
     | {
+        url?: string | undefined;
         headers?: Record<string, string> | undefined;
-        queryParams?: Record<string, string> | undefined;
       }
     | undefined;
 

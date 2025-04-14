@@ -174,7 +174,7 @@ export default async function runWorker(
     syncers.forEach(syncer => handleSubscriptionsFrom(lc, syncer, notifier));
   }
   let mutator: Worker | undefined;
-  if (config.push.url !== undefined && clientConnectionBifurcated) {
+  if (clientConnectionBifurcated) {
     mutator = loadWorker('./server/mutator.ts', 'supporting', 'mutator');
   }
 
