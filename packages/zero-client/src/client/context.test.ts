@@ -9,12 +9,20 @@ import {Catch} from '../../../zql/src/ivm/catch.ts';
 import {Join} from '../../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
+import {
+  DEFAULT_RUN_OPTIONS_COMPLETE,
+  type RunOptions,
+} from '../../../zql/src/query/query.ts';
 import {ZeroContext, type AddQuery, type UpdateQuery} from './context.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();
+
+function normalizeRunOptions(options: RunOptions | undefined): RunOptions {
+  return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
+}
 
 test('getSource', () => {
   const schema = createSchema({
@@ -41,6 +49,7 @@ test('getSource', () => {
     null as unknown as UpdateQuery,
     testBatchViewUpdates,
     5_000,
+    normalizeRunOptions,
   );
 
   const source = context.getSource('users');
@@ -114,6 +123,7 @@ test('processChanges', () => {
     null as unknown as UpdateQuery,
     testBatchViewUpdates,
     5_000,
+    normalizeRunOptions,
   );
   const out = new Catch(
     context.getSource('t1')!.connect([
@@ -180,6 +190,7 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
     null as unknown as UpdateQuery,
     batchViewUpdates,
     5_000,
+    normalizeRunOptions,
   );
   const out = new Catch(
     context.getSource('t1')!.connect([
@@ -235,6 +246,7 @@ test('transactions', () => {
     null as unknown as UpdateQuery,
     testBatchViewUpdates,
     5_000,
+    normalizeRunOptions,
   );
   const servers = context.getSource('server')!;
   const flair = context.getSource('flair')!;
@@ -311,6 +323,7 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
     null as unknown as UpdateQuery,
     batchViewUpdates,
     5_000,
+    normalizeRunOptions,
   );
 
   expect(batchViewUpdatesCalls).toEqual(0);
@@ -331,6 +344,7 @@ test('batchViewUpdates returns value', () => {
     null as unknown as UpdateQuery,
     batchViewUpdates,
     5_000,
+    normalizeRunOptions,
   );
 
   expect(batchViewUpdatesCalls).toEqual(0);

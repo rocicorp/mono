@@ -37,8 +37,8 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   constructor(
     input: Input,
-    format: Format, // = {singular: false, relationships: {}},
-    queryComplete: true | Promise<true>, // = true,
+    format: Format,
+    queryComplete: true | Promise<true>,
     updateTTL: (ttl: TTL) => void,
   ) {
     this.#input = input;

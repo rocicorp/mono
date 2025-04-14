@@ -10,6 +10,7 @@ import type {
   CommitListener,
   GotCallback,
   QueryDelegate,
+  RunOptions,
 } from '../../../zql/src/query/query-impl.ts';
 import type {TTL} from '../../../zql/src/query/ttl.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
@@ -38,6 +39,7 @@ export class ZeroContext implements QueryDelegate {
   readonly slowMaterializeThreshold: number;
   readonly lc: LogContext;
   readonly staticQueryParameters = undefined;
+  readonly normalizeRunOptions: (options?: RunOptions) => RunOptions;
 
   constructor(
     lc: LogContext,
@@ -46,6 +48,7 @@ export class ZeroContext implements QueryDelegate {
     updateQuery: UpdateQuery,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
     slowMaterializeThreshold: number,
+    normalizeRunOptions: (options?: RunOptions) => RunOptions,
   ) {
     this.#mainSources = mainSources;
     this.#addQuery = addQuery;
@@ -53,6 +56,7 @@ export class ZeroContext implements QueryDelegate {
     this.#batchViewUpdates = batchViewUpdates;
     this.lc = lc;
     this.slowMaterializeThreshold = slowMaterializeThreshold;
+    this.normalizeRunOptions = normalizeRunOptions;
   }
 
   getSource(name: string): Source | undefined {
