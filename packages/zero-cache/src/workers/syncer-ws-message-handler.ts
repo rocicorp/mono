@@ -28,7 +28,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
   readonly #authData: JWTPayload | undefined;
   readonly #clientGroupID: string;
   readonly #syncContext: SyncContext;
-  readonly #pusher: Pusher;
+  readonly #pusher: Pusher | undefined;
   readonly #token: string | undefined;
 
   constructor(
@@ -37,7 +37,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
     tokenData: TokenData | undefined,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen,
-    pusher: Pusher,
+    pusher: Pusher | undefined,
   ) {
     const {
       clientGroupID,
@@ -174,9 +174,8 @@ export class SyncerWsMessageHandler implements MessageHandler {
         // Given we support both CRUD and Custom mutators,
         // we do not initialize the `pusher` unless the user has opted
         // into custom mutations. We detect that by checking
-        // if the pushURL has been set either in the config
-        // or by the connected zero-client.
-        if (this.#pusher.pushURL || msg[1].userPushParams?.url) {
+        // if the pushURL has been set.
+        if (this.#pusher) {
           ret.push({
             type: 'stream',
             source: 'pusher',

@@ -22,7 +22,7 @@ export const connectedMessageSchema = v.tuple([
 ]);
 
 const userPushParamsSchema = v.object({
-  url: v.string().optional(),
+  queryParams: v.record(v.string()).optional(),
 });
 
 const initConnectionBodySchema = v.object({

@@ -68,7 +68,7 @@ export class PusherService implements Service, Pusher {
     config: Config,
     lc: LogContext,
     clientGroupID: string,
-    pushURL: string | undefined,
+    pushURL: string,
     apiKey: string | undefined,
   ) {
     this.#queue = new Queue();
@@ -123,7 +123,7 @@ type PusherEntryOrStop = PusherEntry | 'stop';
  * to the user's API server.
  */
 class PushWorker {
-  readonly #pushURL: string | undefined;
+  readonly #pushURL: string;
   readonly #apiKey: string | undefined;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
@@ -140,7 +140,7 @@ class PushWorker {
   constructor(
     config: Config,
     lc: LogContext,
-    pushURL: string | undefined,
+    pushURL: string,
     apiKey: string | undefined,
     queue: Queue<PusherEntryOrStop>,
   ) {
@@ -317,8 +317,6 @@ class PushWorker {
       'Content-Type': 'application/json',
     };
 
-    const userParams = this.#clients.get(entry.clientID)?.userParams;
-
     if (this.#apiKey) {
       headers['X-Api-Key'] = this.#apiKey;
     }
@@ -327,14 +325,12 @@ class PushWorker {
     }
 
     try {
-      const pushUrl = userParams?.url ?? this.#pushURL;
-      assert(
-        pushUrl,
-        'To use custom mutators a pushURL must either be provided in the zero-cache config' +
-          ' via the `ZERO_PUSH_URL` option or as an option to the `Zero` client.',
-      );
-
-      const params = new URLSearchParams(pushUrl.split('?')[1]);
+      const params = new URLSearchParams(this.#pushURL.split('?')[1]);
+      for (const [key, value] of Object.entries(
+        this.#clients.get(entry.clientID)?.userParams?.queryParams ?? {},
+      )) {
+        params.append(key, value);
+      }
 
       for (const reserved of reservedParams) {
         assert(
@@ -352,7 +348,7 @@ class PushWorker {
       );
       params.append('appID', this.#config.app.id);
 
-      const response = await fetch(`${pushUrl}?${params.toString()}`, {
+      const response = await fetch(`${this.#pushURL}?${params.toString()}`, {
         method: 'POST',
         headers,
         body: JSON.stringify(entry.push),

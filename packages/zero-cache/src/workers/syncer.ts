@@ -43,7 +43,7 @@ export class Syncer implements SingletonService {
   readonly #lc: LogContext;
   readonly #viewSyncers: ServiceRunner<ViewSyncer & ActivityBasedService>;
   readonly #mutagens: ServiceRunner<Mutagen & Service>;
-  readonly #pushers: ServiceRunner<Pusher & Service>;
+  readonly #pushers: ServiceRunner<Pusher & Service> | undefined;
   readonly #connections = new Map<string, Connection>();
   readonly #drainCoordinator = new DrainCoordinator();
   readonly #parent: Worker;
@@ -60,7 +60,7 @@ export class Syncer implements SingletonService {
       drainCoordinator: DrainCoordinator,
     ) => ViewSyncer & ActivityBasedService,
     mutagenFactory: (id: string) => Mutagen & Service,
-    pusherFactory: (id: string) => Pusher & Service,
+    pusherFactory: ((id: string) => Pusher & Service) | undefined,
     parent: Worker,
   ) {
     this.#authConfig = config.auth;
@@ -76,7 +76,9 @@ export class Syncer implements SingletonService {
       v => v.keepalive(),
     );
     this.#mutagens = new ServiceRunner(lc, mutagenFactory);
-    this.#pushers = new ServiceRunner(lc, pusherFactory);
+    if (pusherFactory) {
+      this.#pushers = new ServiceRunner(lc, pusherFactory);
+    }
     this.#parent = parent;
     this.#wss = new WebSocketServer({noServer: true});
 
@@ -126,7 +128,7 @@ export class Syncer implements SingletonService {
           : undefined,
         this.#viewSyncers.getService(clientGroupID),
         this.#mutagens.getService(clientGroupID),
-        this.#pushers.getService(clientGroupID),
+        this.#pushers?.getService(clientGroupID),
       ),
       () => {
         if (this.#connections.get(clientID) === connection) {
