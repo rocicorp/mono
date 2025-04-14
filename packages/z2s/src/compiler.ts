@@ -224,9 +224,12 @@ export class Compiler {
     if (relationship.hidden) {
       const [join, lastAlias, lastLimit, lastTable] =
         this.makeJunctionJoin(relationship);
-      assert(relationship.subquery.related);
-      const nestedAst = relationship.subquery.related[0].subquery;
 
+      assert(
+        relationship.subquery.related,
+        'hidden relationship must be a junction',
+      );
+      const nestedAst = relationship.subquery.related[0].subquery;
       const selectionSet = this.related(
         nestedAst.related ?? [],
         format,
