@@ -21,6 +21,8 @@ import type {Source} from '../../types/streams.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 
 export interface Pusher {
+  readonly pushURL: string | undefined;
+
   enqueuePush(
     clientID: string,
     push: PushBody,
@@ -59,12 +61,16 @@ export class PusherService implements Service, Pusher {
     config: Config,
     lc: LogContext,
     clientGroupID: string,
-    pushUrl: string,
+    pushURL: string | undefined,
     apiKey: string | undefined,
   ) {
     this.#queue = new Queue();
-    this.#pusher = new PushWorker(config, lc, pushUrl, apiKey, this.#queue);
+    this.#pusher = new PushWorker(config, lc, pushURL, apiKey, this.#queue);
     this.id = clientGroupID;
+  }
+
+  get pushURL(): string | undefined {
+    return this.#pusher.pushURL;
   }
 
   initConnection(
@@ -110,7 +116,7 @@ type PusherEntryOrStop = PusherEntry | 'stop';
  * to the user's API server.
  */
 class PushWorker {
-  readonly #pushURL: string;
+  readonly #pushURL: string | undefined;
   readonly #apiKey: string | undefined;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
@@ -127,7 +133,7 @@ class PushWorker {
   constructor(
     config: Config,
     lc: LogContext,
-    pushURL: string,
+    pushURL: string | undefined,
     apiKey: string | undefined,
     queue: Queue<PusherEntryOrStop>,
   ) {
@@ -137,6 +143,10 @@ class PushWorker {
     this.#lc = lc.withContext('component', 'pusher');
     this.#config = config;
     this.#clients = new Map();
+  }
+
+  get pushURL() {
+    return this.#pushURL;
   }
 
   /**
@@ -314,13 +324,20 @@ class PushWorker {
     }
 
     try {
-      const params = new URLSearchParams();
-      if (userParams?.queryParams) {
-        for (const [key, value] of Object.entries(userParams.queryParams)) {
-          if (!reservedParams.includes(key)) {
-            params.append(key, value);
-          }
-        }
+      const pushUrl = userParams?.url ?? this.#pushURL;
+      assert(
+        pushUrl,
+        'To use custom mutators a pushURL must either be provided in the zero-cache config' +
+          ' via the `ZERO_PUSH_URL` option or as an option to the `Zero` client.',
+      );
+
+      const params = new URLSearchParams(pushUrl.split('?')[1]);
+
+      for (const reserved of reservedParams) {
+        assert(
+          !params.has(reserved),
+          `The push URL cannot contain the reserved query param "${reserved}"`,
+        );
       }
 
       params.append(
@@ -331,7 +348,8 @@ class PushWorker {
         }),
       );
       params.append('appID', this.#config.app.id);
-      const response = await fetch(`${this.#pushURL}?${params.toString()}`, {
+
+      const response = await fetch(`${pushUrl}?${params.toString()}`, {
         method: 'POST',
         headers,
         body: JSON.stringify(entry.push),
