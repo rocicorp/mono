@@ -88,20 +88,13 @@ export interface ZeroOptions<
 
   /**
    * Custom mutations are pushed to zero-cache and then to
-   * your API server. If you would like specific headers to be available
-   * to your API server when it receives a custom mutation, you can
-   * specify them here.
+   * your API server.
    *
    * The push url may also be specified here rather than in
    * the zero-cache config. This is useful if request params
    * should be different for different clients.
    */
-  push?:
-    | {
-        url?: string | undefined;
-        headers?: Record<string, string> | undefined;
-      }
-    | undefined;
+  pushURL?: string | undefined;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
