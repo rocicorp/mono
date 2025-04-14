@@ -202,12 +202,14 @@ export class Compiler {
     relationships: readonly CorrelatedSubquery[],
     format: Format | undefined,
     parentTable: string,
+    parentTableAlias?: string | undefined,
   ): SQLQuery[] {
     return relationships.map(relationship =>
       this.relationshipSubquery(
         relationship,
         format?.relationships[must(relationship.subquery.alias)],
         parentTable,
+        parentTableAlias,
       ),
     );
   }
@@ -216,30 +218,38 @@ export class Compiler {
     relationship: CorrelatedSubquery,
     format: Format | undefined,
     parentTable: string,
+    parentTableAlias?: string | undefined,
   ): SQLQuery {
+    const innerAlias = `inner_${relationship.subquery.alias}`;
     if (relationship.hidden) {
       const [join, lastAlias, lastLimit, lastTable] =
         this.makeJunctionJoin(relationship);
-      const lastClientColumns = Object.keys(this.#tables[lastTable].columns);
-      /**
-       * This aggregates the relationship subquery into an array of objects.
-       * This looks roughly like:
-       *
-       * SELECT COALESCE(json_agg(row_to_json("inner_owner")) , '[]'::json) FROM
-       * (SELECT mytable.col as client_col, mytable.col2 as client_col2 FROM mytable) inner_mytable
-       */
+
+      assert(
+        relationship.subquery.related,
+        'hidden relationship must be a junction',
+      );
+      const nestedAst = relationship.subquery.related[0].subquery;
+      const selectionSet = this.related(
+        nestedAst.related ?? [],
+        format,
+        lastTable,
+        lastAlias,
+      );
+      const tableSchema = this.#tables[nestedAst.table];
+      for (const column of Object.keys(tableSchema.columns)) {
+        selectionSet.push(this.#selectCol(nestedAst.table, column, lastAlias));
+      }
       return sql`(
         SELECT ${this.#toJSON(
-          `inner_${relationship.subquery.alias}`,
+          innerAlias,
           format?.singular,
         )} FROM (SELECT ${sql.join(
-          lastClientColumns.map(
-            c => sql`${sql.ident(lastAlias)}.${this.#mapColumn(lastTable, c)}`,
-          ),
+          selectionSet,
           ',',
         )} FROM ${join} WHERE (${this.correlate(
           parentTable,
-          parentTable,
+          parentTableAlias ?? parentTable,
           relationship.correlation.parentField,
           relationship.subquery.table,
           relationship.subquery.table,
@@ -256,46 +266,55 @@ export class Compiler {
           relationship.subquery.table,
         )} ${
           format?.singular ? this.limit(1) : this.limit(lastLimit)
-        } ) ${sql.ident(`inner_${relationship.subquery.alias}`)}
+        } ) ${sql.ident(innerAlias)}
       ) as ${sql.ident(relationship.subquery.alias)}`;
     }
     return sql`(
-      SELECT ${
-        format?.singular ? sql`` : sql`COALESCE(json_agg`
-      }(row_to_json(${sql.ident(`inner_${relationship.subquery.alias}`)})) ${
-        format?.singular ? sql`` : sql`, '[]'::json)`
-      } FROM (${this.select(
+      SELECT ${this.#toJSON(innerAlias, format?.singular)} FROM (${this.select(
         relationship.subquery,
         format,
         this.correlate(
           parentTable,
-          parentTable,
+          parentTableAlias ?? parentTable,
           relationship.correlation.parentField,
           relationship.subquery.table,
           relationship.subquery.table,
           relationship.correlation.childField,
         ),
-      )}) ${sql.ident(`inner_${relationship.subquery.alias}`)}
+      )}) ${sql.ident(innerAlias)}
     ) as ${sql.ident(relationship.subquery.alias)}`;
   }
 
   pullTablesForJunction(
     relationship: CorrelatedSubquery,
-    tables: [string, Correlation, number | undefined][] = [],
-  ) {
+  ): [
+    [string, Correlation, number | undefined],
+    [string, Correlation, number | undefined],
+  ] {
+    const tables: [string, Correlation, number | undefined][] = [];
     tables.push([
       relationship.subquery.table,
       relationship.correlation,
       relationship.subquery.limit,
     ]);
     assert(
-      relationship.subquery.related?.length || 0 <= 1,
+      relationship.subquery.related?.length === 1,
       'Too many related tables for a junction edge',
     );
-    for (const subRelationship of relationship.subquery.related ?? []) {
-      this.pullTablesForJunction(subRelationship, tables);
-    }
-    return tables;
+    const otherRelationship = relationship.subquery.related[0];
+    assert(!otherRelationship.hidden);
+    return [
+      [
+        relationship.subquery.table,
+        relationship.correlation,
+        relationship.subquery.limit,
+      ],
+      [
+        otherRelationship.subquery.table,
+        otherRelationship.correlation,
+        otherRelationship.subquery.limit,
+      ],
+    ];
   }
 
   makeJunctionJoin(
@@ -590,7 +609,7 @@ export class Compiler {
     return sql.ident(mapped);
   }
 
-  #selectCol(table: string, column: string) {
+  #selectCol(table: string, column: string, tableAlias?: string | undefined) {
     const serverColumnSchema =
       this.#serverSchema[this.#nameMapper.tableName(table)][
         this.#nameMapper.columnName(table, column)
@@ -605,13 +624,13 @@ export class Compiler {
         serverType === 'timestamp with time zone')
     ) {
       return sql`EXTRACT(EPOCH FROM ${sql.ident(
-        table,
+        tableAlias ?? table,
       )}.${this.#mapColumnNoAlias(
         table,
         column,
       )}) * 1000 as ${sql.ident(column)}`;
     }
-    return sql`${sql.ident(table)}.${this.#mapColumn(table, column)}`;
+    return sql`${sql.ident(tableAlias ?? table)}.${this.#mapColumn(table, column)}`;
   }
 
   #toJSON(table: string, singular = false): SQLQuery {
