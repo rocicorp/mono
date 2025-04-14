@@ -184,7 +184,7 @@ CREATE TABLE IF NOT EXISTS "issues" (
   "description" TEXT NOT NULL,
   "closed" BOOLEAN NOT NULL,
   "owner_id" TEXT,
-  "createdAt" TIMESTAMP NOT NULL
+  "createdAt" TIMESTAMPTZ NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS "users" (
@@ -198,6 +198,7 @@ CREATE TABLE IF NOT EXISTS "comments" (
   "authorId" TEXT NOT NULL,
   "issue_id" TEXT NOT NULL,
   "text" TEXT NOT NULL,
+  -- not TIMESTAMPTZ so that we're checking both TIMESTAMP and TIMESTAMPTZ behaviour
   "createdAt" TIMESTAMP NOT NULL
 );
 

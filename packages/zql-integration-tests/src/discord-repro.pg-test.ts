@@ -29,7 +29,7 @@ beforeAll(async () => {
 
   await pg.unsafe(/*sql*/ `
     INSERT INTO "issues" ("id", "title", "description", "closed", "owner_id", "createdAt") VALUES (
-      'issue1', 'Test Issue 1', 'Description for issue 1', false, 'user1', TIMESTAMP '2001-02-16 20:38:40'
+      'issue1', 'Test Issue 1', 'Description for issue 1', false, 'user1', TIMESTAMPTZ '2001-02-16T20:38:40.000Z'
     );
 
     INSERT INTO "users" ("id", "name") VALUES (
