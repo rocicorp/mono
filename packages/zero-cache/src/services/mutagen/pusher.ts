@@ -8,6 +8,7 @@ import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import {
   pushResponseSchema,
   type PushBody,
+  type PushError,
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
@@ -19,6 +20,12 @@ import type {Service} from '../service.ts';
 import type {UserPushParams} from '../../../../zero-protocol/src/connect.ts';
 import type {Source} from '../../types/streams.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
+
+type Fatal = {
+  error: 'forClient';
+  cause: ErrorForClient;
+  mutationIDs: PushError['mutationIDs'];
+};
 
 export interface Pusher {
   readonly pushURL: string | undefined;
@@ -204,7 +211,7 @@ class PushWorker {
    * Each client is on a different websocket connection though, so we need to fan out the response
    * to all the clients that were part of the push.
    */
-  async #fanOutResponses(response: PushResponse) {
+  async #fanOutResponses(response: PushResponse | Fatal) {
     const responses: Promise<Result>[] = [];
     const connectionTerminations: (() => void)[] = [];
     if ('error' in response) {
@@ -234,6 +241,8 @@ class PushWorker {
               message: response.error,
             }),
           );
+        } else if (response.error === 'forClient') {
+          client.downstream.fail(response.cause);
         } else {
           responses.push(
             client.downstream.push([
@@ -303,7 +312,7 @@ class PushWorker {
     }
   }
 
-  async #processPush(entry: PusherEntry): Promise<PushResponse> {
+  async #processPush(entry: PusherEntry): Promise<PushResponse | Fatal> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -355,10 +364,29 @@ class PushWorker {
         body: JSON.stringify(entry.push),
       });
       if (!response.ok) {
+        const details = await response.text();
+
+        // Zero currently handles all auth errors this way (throws ErrorForClient).
+        // Continue doing that until we have an `onError` callback exposed on the top level Zero instance.
+        // This:
+        // 1. Keeps the API the same for those migrating to custom mutators from CRUD
+        // 2. Ensures we only churn the API once, when we have `onError` available.
+        //
+        // When switching to `onError`, we should stop disconnecting the websocket
+        // on auth errors and instead let the token be updated
+        // on the existing WS connection. This will give us the chance to skip
+        // re-hydrating queries that do not use the modified fields of the token.
+        if (response.status === 401) {
+          throw new ErrorForClient({
+            kind: ErrorKind.AuthInvalidated,
+            message: details,
+          });
+        }
+
         return {
           error: 'http',
           status: response.status,
-          details: await response.text(),
+          details,
           mutationIDs: entry.push.mutations.map(m => ({
             id: m.id,
             clientID: m.clientID,
@@ -374,17 +402,27 @@ class PushWorker {
         throw e;
       }
     } catch (e) {
+      const mutationIDs = entry.push.mutations.map(m => ({
+        id: m.id,
+        clientID: m.clientID,
+      }));
+
+      this.#lc.error?.('failed to push', e);
+      if (e instanceof ErrorForClient) {
+        return {
+          error: 'forClient',
+          cause: e,
+          mutationIDs,
+        };
+      }
+
       // We do not kill the pusher on error.
       // If the user's API server is down, the mutations will never be acknowledged
       // and the client will eventually retry.
-      this.#lc.error?.('failed to push', e);
       return {
         error: 'zeroPusher',
         details: String(e),
-        mutationIDs: entry.push.mutations.map(m => ({
-          id: m.id,
-          clientID: m.clientID,
-        })),
+        mutationIDs,
       };
     }
   }

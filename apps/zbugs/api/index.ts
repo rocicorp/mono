@@ -122,12 +122,21 @@ fastify.post<{
   }
 
   const jwk = process.env.VITE_PUBLIC_JWK;
-  const authData: AuthData | undefined =
-    jwk && authorization
-      ? authDataSchema.parse(
-          (await jwtVerify(authorization, JSON.parse(jwk))).payload,
-        )
-      : undefined;
+  let authData: AuthData | undefined;
+  try {
+    authData =
+      jwk && authorization
+        ? authDataSchema.parse(
+            (await jwtVerify(authorization, JSON.parse(jwk))).payload,
+          )
+        : undefined;
+  } catch (e) {
+    if (e instanceof Error) {
+      reply.status(401).send(e.message);
+      return;
+    }
+    throw e;
+  }
 
   const response = await handlePush(authData, request.query, request.body);
   reply.send(response);
