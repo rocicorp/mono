@@ -36,7 +36,7 @@ function setupTestEnvironment() {
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
-  const queryDelegate = new QueryDelegateImpl({table: ms});
+  const queryDelegate = new QueryDelegateImpl({sources: {table: ms}});
   const tableQuery = newQuery(queryDelegate, schema, 'table');
 
   return {ms, tableQuery, queryDelegate};
