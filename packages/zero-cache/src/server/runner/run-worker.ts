@@ -7,7 +7,7 @@ import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';
 import {childWorker, type Worker} from '../../types/processes.ts';
 import {createLogContext} from '../logging.ts';
 import {getMultiZeroConfig} from './config.ts';
-import {getTaskID} from './runtime.ts';
+import {getHostIp, getTaskID} from './runtime.ts';
 import {ZeroDispatcher} from './zero-dispatcher.ts';
 
 export async function runWorker(
@@ -18,6 +18,8 @@ export async function runWorker(
   const {config, env: baseEnv} = getMultiZeroConfig(env);
   const lc = createLogContext(config, {worker: 'runner'});
   const processes = new ProcessManager(lc, parent ?? process);
+
+  await getHostIp(lc);
 
   const {serverVersion, port, changeStreamerPort = port + 1} = config;
   let {taskID} = config;

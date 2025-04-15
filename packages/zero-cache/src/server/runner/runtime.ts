@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid';
+import {networkInterfaces} from 'node:os';
 import * as v from '../../../../shared/src/valita.ts';
 
 // https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-metadata-endpoint-v4-response.html
@@ -10,6 +11,7 @@ export async function getTaskID(lc: LogContext) {
   if (containerURI) {
     try {
       const resp = await fetch(`${containerURI}/task`);
+      lc.info?.(`Task metadata`, resp);
       const {TaskARN: taskID} = v.parse(
         await resp.json(),
         containerMetadataSchema,
@@ -25,4 +27,30 @@ export async function getTaskID(lc: LogContext) {
     }
   }
   return nanoid();
+}
+
+export async function getHostIp(lc: LogContext) {
+  const interfaces = Object.values(networkInterfaces())
+    .flat()
+    .filter(val => val !== undefined)
+    .filter(val => !val.internal);
+  interfaces.sort((a, b) => {
+    if (a.family !== b.family) {
+      return a.family === 'IPv4' ? -1 : 1;
+    }
+    // arbitrary
+    return a.address.localeCompare(b.address);
+  });
+
+  lc.info?.(`Network interfaces`, {interfaces});
+
+  const containerURI = process.env['ECS_CONTAINER_METADATA_URI_V4'];
+  if (containerURI) {
+    try {
+      const resp = await fetch(`${containerURI}`);
+      lc.info?.(`Container metadata`, resp);
+    } catch (e) {
+      lc.warn?.('unable to determine host IP', e);
+    }
+  }
 }
