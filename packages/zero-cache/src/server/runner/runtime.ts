@@ -11,12 +11,13 @@ export async function getTaskID(lc: LogContext) {
   if (containerURI) {
     try {
       const resp = await fetch(`${containerURI}/task`);
-      lc.info?.(`Task metadata`, resp);
-      const {TaskARN: taskID} = v.parse(
+      const metadata = v.parse(
         await resp.json(),
         containerMetadataSchema,
         'passthrough',
       );
+      lc.info?.(`Task metadata`, {metadata});
+      const {TaskARN: taskID} = metadata;
       // Task ARN's are long, e.g.
       // "arn:aws:ecs:us-east-1:712907626835:task/zbugs-prod-Cluster-vvNFcPUVpGHr/0042ea25bf534dc19975e26f61441737"
       // We only care about the unique ID, i.e. the last path component.
@@ -48,7 +49,8 @@ export async function getHostIp(lc: LogContext) {
   if (containerURI) {
     try {
       const resp = await fetch(`${containerURI}`);
-      lc.info?.(`Container metadata`, resp);
+      const metadata = await resp.json();
+      lc.info?.(`Container metadata`, {metadata});
     } catch (e) {
       lc.warn?.('unable to determine host IP', e);
     }
