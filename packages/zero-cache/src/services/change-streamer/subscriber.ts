@@ -16,6 +16,7 @@ type ErrorType = Enum<typeof ErrorType>;
  * {@link send()} result in immediately sending the change.
  */
 export class Subscriber {
+  readonly #protocolVersion: number;
   readonly id: string;
   readonly #downstream: Subscription<Downstream>;
   #watermark: string;
@@ -23,10 +24,12 @@ export class Subscriber {
   #backlog: WatermarkedChange[] | null;
 
   constructor(
+    protocolVersion: number,
     id: string,
     watermark: string,
     downstream: Subscription<Downstream>,
   ) {
+    this.#protocolVersion = protocolVersion;
     this.id = id;
     this.#downstream = downstream;
     this.#watermark = watermark;
@@ -53,8 +56,18 @@ export class Subscriber {
     }
   }
 
+  #initialStatusSent = false;
+
+  #ensureInitialStatusSent() {
+    if (this.#protocolVersion >= 2 && !this.#initialStatusSent) {
+      this.#downstream.push(['status', {tag: 'status'}]);
+      this.#initialStatusSent = true;
+    }
+  }
+
   /** catchup() is called on ChangeEntries loaded from the store. */
   catchup(change: WatermarkedChange) {
+    this.#ensureInitialStatusSent();
     this.#send(change);
   }
 
@@ -63,6 +76,7 @@ export class Subscriber {
    * entries that were received during the catchup.
    */
   setCaughtUp() {
+    this.#ensureInitialStatusSent();
     assert(this.#backlog);
     for (const change of this.#backlog) {
       this.#send(change);

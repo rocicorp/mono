@@ -401,14 +401,19 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
-    const {id, mode, replicaVersion, watermark, initial} = ctx;
+    const {protocolVersion, id, mode, replicaVersion, watermark, initial} = ctx;
     if (mode === 'serving') {
       this.#serving.resolve();
     }
     const downstream = Subscription.create<Downstream>({
       cleanup: () => this.#forwarder.remove(subscriber),
     });
-    const subscriber = new Subscriber(id, watermark, downstream);
+    const subscriber = new Subscriber(
+      protocolVersion,
+      id,
+      watermark,
+      downstream,
+    );
     if (replicaVersion !== this.#replicaVersion) {
       this.#lc.warn?.(
         `rejecting subscriber at replica version ${replicaVersion}`,

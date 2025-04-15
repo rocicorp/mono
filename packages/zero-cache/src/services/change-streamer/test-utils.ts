@@ -1,5 +1,5 @@
 import {Subscription} from '../../types/subscription.ts';
-import type {Downstream} from './change-streamer.ts';
+import {PROTOCOL_VERSION, type Downstream} from './change-streamer.ts';
 import {Subscriber} from './subscriber.ts';
 
 let nextID = 1;
@@ -13,7 +13,7 @@ export function createSubscriber(
   const sub = Subscription.create<Downstream>({
     cleanup: unconsumed => received.push(...unconsumed),
   });
-  const subscriber = new Subscriber(id, watermark, sub);
+  const subscriber = new Subscriber(PROTOCOL_VERSION, id, watermark, sub);
   if (caughtUp) {
     subscriber.setCaughtUp();
   }
