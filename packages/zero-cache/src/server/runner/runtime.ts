@@ -31,19 +31,20 @@ export async function getTaskID(lc: LogContext) {
 }
 
 export async function getHostIp(lc: LogContext) {
-  const interfaces = Object.values(networkInterfaces())
+  const interfaces = networkInterfaces();
+  const sorted = Object.values(networkInterfaces())
     .flat()
     .filter(val => val !== undefined)
-    .filter(val => !val.internal);
-  interfaces.sort((a, b) => {
-    if (a.family !== b.family) {
-      return a.family === 'IPv4' ? -1 : 1;
-    }
-    // arbitrary
-    return a.address.localeCompare(b.address);
-  });
+    .filter(val => !val.internal)
+    .sort((a, b) => {
+      if (a.family !== b.family) {
+        return a.family === 'IPv4' ? -1 : 1;
+      }
+      // arbitrary
+      return a.address.localeCompare(b.address);
+    });
 
-  lc.info?.(`Network interfaces`, {interfaces});
+  lc.info?.(`Network interfaces`, {interfaces, sorted});
 
   const containerURI = process.env['ECS_CONTAINER_METADATA_URI_V4'];
   if (containerURI) {
