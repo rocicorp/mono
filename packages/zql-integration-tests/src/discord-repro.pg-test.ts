@@ -1,24 +1,18 @@
 import {beforeAll, expect, test} from 'vitest';
-import {
-  createTableSQL,
-  schema,
-} from '../../../zql/src/query/test/test-schemas.ts';
-import {Database} from '../../../zqlite/src/db.ts';
-import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
-import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
-import type {Query} from '../../../zql/src/query/query.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
+import {createTableSQL, schema} from '../../zql/src/query/test/test-schemas.ts';
+import {Database} from '../../zqlite/src/db.ts';
+import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
+import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import type {Query} from '../../zql/src/query/query.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {
   mapResultToClientNames,
   newQueryDelegate,
-} from '../../../zqlite/src/test/source-factory.ts';
-import {
-  newQuery,
-  type QueryDelegate,
-} from '../../../zql/src/query/query-impl.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+} from '../../zqlite/src/test/source-factory.ts';
+import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
 
 const lc = createSilentLogContext();
 

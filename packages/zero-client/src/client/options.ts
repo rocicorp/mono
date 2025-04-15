@@ -3,6 +3,7 @@ import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {CustomMutatorDefs} from './custom.ts';
+import type {UserPushParams} from '../../../zero-protocol/src/connect.ts';
 
 /**
  * Configuration for {@linkcode Zero}.
@@ -77,7 +78,24 @@ export interface ZeroOptions<
    */
   schema: S;
 
-  mutators?: MD;
+  /**
+   * `mutators` is a map of custom mutator definitions. The keys are
+   * namespaces or names of the mutators. The values are the mutator
+   * implementations. Client side mutators must be idempotent as a
+   * mutation can be rebased multiple times when folding in authoritative
+   * changes from the server to the client.
+   */
+  mutators?: MD | undefined;
+
+  /**
+   * Custom mutations are pushed to zero-cache and then to
+   * your API server.
+   *
+   * push.queryParams can be used to augment the URL
+   * used to connect to your API server so it includes
+   * variables in the query string.
+   */
+  push?: UserPushParams;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.

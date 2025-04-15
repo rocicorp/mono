@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
+import '@dotenvx/dotenvx/config';
 import {resolver} from '@rocicorp/resolver';
 import chalk from 'chalk';
 import {watch} from 'chokidar';
-import '@dotenvx/dotenvx/config';
 import {spawn, type ChildProcess} from 'node:child_process';
 import {parseOptionsAdvanced} from '../../shared/src/options.ts';
 import {
@@ -49,7 +49,7 @@ async function main() {
     process.argv.slice(2),
     ZERO_ENV_VAR_PREFIX,
     false,
-    true, // allowPartial, required by server/multi/config.ts
+    true, // allowPartial, required by server/runner/config.ts
   );
 
   const {unknown: zeroCacheArgs} = parseOptionsAdvanced(

@@ -1,3 +1,4 @@
+import Cookies from 'js-cookie';
 import {ZeroProvider} from '@rocicorp/zero/react';
 import {useCallback, useState, useSyncExternalStore} from 'react';
 import {Route, Switch} from 'wouter';
@@ -8,6 +9,7 @@ import {IssuePage} from './pages/issue/issue-page.tsx';
 import {ListPage} from './pages/list/list-page.tsx';
 import {routes} from './routes.ts';
 import {zeroRef} from './zero-setup.ts';
+import {OnboardingModal} from './components/onboarding-modal.tsx';
 
 export function Root() {
   const z = useSyncExternalStore(
@@ -16,6 +18,9 @@ export function Root() {
   );
 
   const [contentReady, setContentReady] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => !Cookies.get('onboardingDismissed'),
+  );
 
   useSoftNav();
 
@@ -49,6 +54,13 @@ export function Root() {
           </Switch>
         </div>
       </div>
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onDismiss={() => {
+          Cookies.set('onboardingDismissed', 'true', {expires: 365});
+          setShowOnboarding(false);
+        }}
+      />
     </ZeroProvider>
   );
 }

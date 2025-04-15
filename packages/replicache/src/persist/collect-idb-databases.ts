@@ -274,11 +274,10 @@ export type DropDatabaseOptions = {
 };
 
 /**
- * Deletes a single Replicache database.
- * @param dbName
- * @param createKVStore
+ * Drops the specified database.
+ * @param dbName The name of the database to drop.
+ * @param opts Options for dropping the database.
  */
-
 export async function dropDatabase(
   dbName: string,
   opts?: DropDatabaseOptions | undefined,

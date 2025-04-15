@@ -24,6 +24,7 @@ import {
   getBrowserGlobal,
   mustGetBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
+import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -34,7 +35,10 @@ import type {Writable} from '../../../shared/src/writable.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {CloseConnectionMessage} from '../../../zero-protocol/src/close-connection.ts';
-import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
+import type {
+  ConnectedMessage,
+  UserPushParams,
+} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
 import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
@@ -75,7 +79,11 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import type {Query} from '../../../zql/src/query/query.ts';
+import {
+  DEFAULT_RUN_OPTIONS_COMPLETE,
+  type Query,
+  type RunOptions,
+} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import * as ConnectionState from './connection-state-enum.ts';
@@ -133,7 +141,6 @@ import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
-import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -535,6 +542,7 @@ export class Zero<
       (ast, ttl) => this.#queryManager.update(ast, ttl),
       batchViewUpdates,
       slowMaterializeThreshold,
+      normalizeRunOptions,
     );
 
     const replicacheImplOptions: ReplicacheImplOptions = {
@@ -1074,6 +1082,7 @@ export class Zero<
           // The clientSchema only needs to be sent for the very first request.
           // Henceforth it is stored with the CVR and verified automatically.
           ...(this.#connectCookie === null ? {clientSchema} : {}),
+          userPushParams: this.#options.push,
         },
       ]);
       this.#deletedClients = undefined;
@@ -1167,6 +1176,7 @@ export class Zero<
       wsid,
       this.#options.logLevel === 'debug',
       l,
+      this.#options.push,
       this.#options.maxHeaderLength,
       additionalConnectParams,
     );
@@ -1557,7 +1567,8 @@ export class Zero<
         }
       } catch (ex) {
         if (this.#connectionState !== ConnectionState.Connected) {
-          lc.error?.('Failed to connect', ex, {
+          const level = isAuthError(ex) ? 'warn' : 'error';
+          lc[level]?.('Failed to connect', ex, {
             lmid: this.#lastMutationIDReceived,
             baseCookie: this.#connectCookie,
           });
@@ -1730,7 +1741,7 @@ export class Zero<
    * Starts a ping and waits for a pong.
    *
    * If it takes too long to get a pong we disconnect and this returns
-   * {@code PingResult.TimedOut}.
+   * {@linkcode PingResult.TimedOut}.
    */
   async #ping(
     l: LogContext,
@@ -1858,6 +1869,7 @@ export async function createSocket(
   wsid: string,
   debugPerf: boolean,
   lc: LogContext,
+  userPushParams: UserPushParams | undefined,
   maxHeaderLength = 1024 * 8,
   additionalConnectParams?: Record<string, string> | undefined,
 ): Promise<
@@ -1914,6 +1926,7 @@ export async function createSocket(
         // The clientSchema only needs to be sent for the very first request.
         // Henceforth it is stored with the CVR and verified automatically.
         ...(baseCookie === null ? {clientSchema} : {}),
+        userPushParams,
       },
     ],
     auth,
@@ -1990,3 +2003,7 @@ class TimedOutError extends Error {
 }
 
 class CloseError extends Error {}
+
+function normalizeRunOptions(options?: RunOptions | undefined): RunOptions {
+  return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
+}

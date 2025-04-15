@@ -56,7 +56,7 @@ export async function notify(
   assertIsLoggedIn(authData);
 
   const {issueID, kind} = args;
-  const issue = await tx.query.issue.where('id', issueID).one().run();
+  const issue = await tx.query.issue.where('id', issueID).one();
   assert(issue);
 
   if (issue.visibility !== 'public') {
@@ -65,10 +65,7 @@ export async function notify(
   }
 
   const modifierUserID = authData.sub;
-  const modifierUser = await tx.query.user
-    .where('id', modifierUserID)
-    .one()
-    .run();
+  const modifierUser = await tx.query.user.where('id', modifierUserID).one();
   assert(modifierUser);
 
   switch (kind) {
@@ -126,7 +123,7 @@ export async function notify(
 
     case 'add-emoji-to-comment': {
       const {commentID, emoji} = args;
-      const comment = await tx.query.comment.where('id', commentID).one().run();
+      const comment = await tx.query.comment.where('id', commentID).one();
       assert(comment);
       postCommitTasks.push(() =>
         postToDiscord({

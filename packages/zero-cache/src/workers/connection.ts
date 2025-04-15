@@ -33,14 +33,16 @@ export type HandlerResult =
       type: 'transient';
       errors: ErrorBody[];
     }
-  | {
-      type: 'stream';
-      source: 'viewSyncer' | 'pusher';
-      stream: Source<Downstream>;
-    };
+  | StreamResult;
+
+export type StreamResult = {
+  type: 'stream';
+  source: 'viewSyncer' | 'pusher';
+  stream: Source<Downstream>;
+};
 
 export interface MessageHandler {
-  handleMessage(msg: Upstream): Promise<HandlerResult>;
+  handleMessage(msg: Upstream): Promise<HandlerResult[]>;
 }
 
 // Ensures that a downstream message is sent at least every interval, sending a
@@ -191,7 +193,9 @@ export class Connection {
       }
 
       const result = await this.#messageHandler.handleMessage(msg);
-      return this.#handleMessageResult(result);
+      for (const r of result) {
+        this.#handleMessageResult(r);
+      }
     } catch (e) {
       this.#closeWithThrown(e);
     }
@@ -247,7 +251,9 @@ export class Connection {
       }
 
       const result = await this.#messageHandler.handleMessage(msg);
-      this.#handleMessageResult(result);
+      for (const r of result) {
+        this.#handleMessageResult(r);
+      }
     }
 
     this.close('WebSocket close event', {code, reason, wasClean});

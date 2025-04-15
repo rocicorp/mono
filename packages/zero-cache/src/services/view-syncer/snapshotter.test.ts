@@ -162,6 +162,9 @@ describe('view-syncer/snapshotter', () => {
             "maxSupportedVersion": 1,
             "minSupportedVersion": 1,
           },
+          "rowKey": {
+            "lock": 1,
+          },
           "table": "my_app.schemaVersions",
         },
       ]
@@ -203,6 +206,9 @@ describe('view-syncer/snapshotter', () => {
             "id": 1,
             "owner": 10,
           },
+          "rowKey": {
+            "id": 1,
+          },
           "table": "issues",
         },
         {
@@ -212,6 +218,9 @@ describe('view-syncer/snapshotter', () => {
             "desc": "bar",
             "id": 2,
             "owner": 10,
+          },
+          "rowKey": {
+            "id": 2,
           },
           "table": "issues",
         },
@@ -223,6 +232,9 @@ describe('view-syncer/snapshotter', () => {
             "id": 3,
             "owner": 20,
           },
+          "rowKey": {
+            "id": 3,
+          },
           "table": "issues",
         },
         {
@@ -233,6 +245,9 @@ describe('view-syncer/snapshotter', () => {
             "owner": 20,
           },
           "prevValue": null,
+          "rowKey": {
+            "id": 4,
+          },
           "table": "issues",
         },
         {
@@ -243,6 +258,9 @@ describe('view-syncer/snapshotter', () => {
             "owner": 10,
           },
           "prevValue": null,
+          "rowKey": {
+            "id": 5,
+          },
           "table": "issues",
         },
       ]
@@ -264,6 +282,9 @@ describe('view-syncer/snapshotter', () => {
             "id": 1,
             "owner": 10,
           },
+          "rowKey": {
+            "id": 1,
+          },
           "table": "issues",
         },
         {
@@ -273,6 +294,9 @@ describe('view-syncer/snapshotter', () => {
             "desc": "bar",
             "id": 2,
             "owner": 10,
+          },
+          "rowKey": {
+            "id": 2,
           },
           "table": "issues",
         },
@@ -284,6 +308,9 @@ describe('view-syncer/snapshotter', () => {
             "id": 3,
             "owner": 20,
           },
+          "rowKey": {
+            "id": 3,
+          },
           "table": "issues",
         },
         {
@@ -294,6 +321,9 @@ describe('view-syncer/snapshotter', () => {
             "owner": 20,
           },
           "prevValue": null,
+          "rowKey": {
+            "id": 4,
+          },
           "table": "issues",
         },
         {
@@ -304,6 +334,9 @@ describe('view-syncer/snapshotter', () => {
             "owner": 10,
           },
           "prevValue": null,
+          "rowKey": {
+            "id": 5,
+          },
           "table": "issues",
         },
       ]
@@ -331,6 +364,9 @@ describe('view-syncer/snapshotter', () => {
             "owner": 10,
           },
           "prevValue": null,
+          "rowKey": {
+            "id": 2,
+          },
           "table": "issues",
         },
         {
@@ -341,6 +377,9 @@ describe('view-syncer/snapshotter', () => {
             "id": 4,
             "owner": 20,
           },
+          "rowKey": {
+            "id": 4,
+          },
           "table": "issues",
         },
         {
@@ -350,6 +389,9 @@ describe('view-syncer/snapshotter', () => {
             "desc": "bard",
             "id": 5,
             "owner": 10,
+          },
+          "rowKey": {
+            "id": 5,
           },
           "table": "issues",
         },
@@ -387,6 +429,9 @@ describe('view-syncer/snapshotter', () => {
             "id": 1,
             "owner": 10,
           },
+          "rowKey": {
+            "id": 1,
+          },
           "table": "issues",
         },
         {
@@ -396,6 +441,9 @@ describe('view-syncer/snapshotter', () => {
             "desc": "baz",
             "id": 3,
             "owner": 20,
+          },
+          "rowKey": {
+            "id": 3,
           },
           "table": "issues",
         },
@@ -411,6 +459,9 @@ describe('view-syncer/snapshotter', () => {
             "desc": "bar",
             "id": 2,
             "owner": 10,
+          },
+          "rowKey": {
+            "id": 2,
           },
           "table": "issues",
         },
@@ -478,6 +529,7 @@ describe('view-syncer/snapshotter', () => {
             id: 1,
           },
           prevValue: null,
+          rowKey: {id: 1},
           table: 'comments',
         });
         currStmts = diff.curr.db.statementCache.size;

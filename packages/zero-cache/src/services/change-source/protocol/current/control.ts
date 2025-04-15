@@ -14,4 +14,7 @@ import * as v from '../../../../../../shared/src/valita.ts';
  * This signal should only be used in well advertised scenarios, and is not suitable
  * as a common occurrence in production.
  */
-export const resetRequiredSchema = v.object({tag: v.literal('reset-required')});
+export const resetRequiredSchema = v.object({
+  tag: v.literal('reset-required'),
+  message: v.string().optional(),
+});

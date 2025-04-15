@@ -57,7 +57,7 @@ function metadataPublicationName(appID: string, shardID: string | number) {
 function globalSetup(appID: AppID): string {
   const app = id(appSchema(appID));
 
-  return `
+  return /*sql*/ `
   CREATE SCHEMA IF NOT EXISTS ${app};
 
   CREATE TABLE IF NOT EXISTS ${app}."schemaVersions" (
@@ -105,7 +105,8 @@ export async function ensureGlobalTables(db: PostgresDB, appID: AppID) {
 }
 
 export function getClientsTableDefinition(schema: string) {
-  return `CREATE TABLE ${schema}."clients" (
+  return /*sql*/ `
+  CREATE TABLE ${schema}."clients" (
     "clientGroupID"  TEXT NOT NULL,
     "clientID"       TEXT NOT NULL,
     "lastMutationID" BIGINT NOT NULL,
@@ -126,7 +127,7 @@ export function shardSetup(
   const pubs = [...shardConfig.publications].sort();
   assert(pubs.includes(metadataPublication));
 
-  return `
+  return /*sql*/ `
   CREATE SCHEMA IF NOT EXISTS ${shard};
 
   ${getClientsTableDefinition(shard)}
@@ -165,20 +166,12 @@ export function dropShard(appID: string, shardID: string | number): string {
 
   // DROP SCHEMA ... CASCADE does not drop dependent PUBLICATIONS,
   // so PUBLICATIONs must be dropped explicitly.
-  return `
+  return /*sql*/ `
     DROP PUBLICATION IF EXISTS ${id(defaultPublication)};
     DROP PUBLICATION IF EXISTS ${id(metadataPublication)};
     DROP SCHEMA IF EXISTS ${id(schema)} CASCADE;
   `;
 }
-
-const replicaSchema = v.object({
-  slot: v.string(),
-  version: v.string(),
-  initialSchema: publishedSchema,
-});
-
-export type Replica = v.Infer<typeof replicaSchema>;
 
 const internalShardConfigSchema = v.object({
   publications: v.array(v.string()),
@@ -187,6 +180,14 @@ const internalShardConfigSchema = v.object({
 
 export type InternalShardConfig = v.Infer<typeof internalShardConfigSchema>;
 
+const replicaSchema = internalShardConfigSchema.extend({
+  slot: v.string(),
+  version: v.string(),
+  initialSchema: publishedSchema,
+});
+
+export type Replica = v.Infer<typeof replicaSchema>;
+
 // triggerSetup is run separately in a sub-transaction (i.e. SAVEPOINT) so
 // that a failure (e.g. due to lack of superuser permissions) can be handled
 // by continuing in a degraded mode (ddlDetection = false).
@@ -194,13 +195,13 @@ function triggerSetup(shard: ShardConfig): string {
   const schema = id(upstreamSchema(shard));
   return (
     createEventTriggerStatements(shard) +
-    `UPDATE ${schema}."shardConfig" SET "ddlDetection" = true;`
+    /*sql*/ `UPDATE ${schema}."shardConfig" SET "ddlDetection" = true;`
   );
 }
 
 // Called in initial-sync to store the exact schema that was initially synced.
 export async function addReplica(
-  db: PostgresDB,
+  sql: PostgresDB,
   shard: ShardID,
   slot: string,
   replicaVersion: string,
@@ -208,18 +209,19 @@ export async function addReplica(
 ) {
   const schema = upstreamSchema(shard);
   const synced: PublishedSchema = {tables, indexes};
-  await db`
-    INSERT INTO ${db(schema)}.replicas ("slot", "version", "initialSchema")
+  await sql`
+    INSERT INTO ${sql(schema)}.replicas ("slot", "version", "initialSchema")
       VALUES (${slot}, ${replicaVersion}, ${synced})`;
 }
 
 export async function getReplicaAtVersion(
-  db: PostgresDB,
+  sql: PostgresDB,
   shard: ShardID,
   replicaVersion: string,
 ): Promise<Replica | null> {
-  const result = await db`
-    SELECT * FROM ${db(upstreamSchema(shard))}.replicas 
+  const schema = sql(upstreamSchema(shard));
+  const result = await sql`
+    SELECT * FROM ${schema}.replicas JOIN ${schema}."shardConfig" ON true
       WHERE version = ${replicaVersion};
   `;
   if (result.length === 0) {
@@ -229,12 +231,12 @@ export async function getReplicaAtVersion(
 }
 
 export async function getInternalShardConfig(
-  db: PostgresDB,
+  sql: PostgresDB,
   shard: ShardID,
 ): Promise<InternalShardConfig> {
-  const result = await db`
+  const result = await sql`
     SELECT "publications", "ddlDetection"
-      FROM ${db(upstreamSchema(shard))}."shardConfig";
+      FROM ${sql(upstreamSchema(shard))}."shardConfig";
   `;
   assert(result.length === 1);
   return v.parse(result[0], internalShardConfigSchema, 'passthrough');
@@ -246,7 +248,7 @@ export async function getInternalShardConfig(
  */
 export async function setupTablesAndReplication(
   lc: LogContext,
-  tx: PostgresTransaction,
+  sql: PostgresTransaction,
   requested: ShardConfig,
 ) {
   const {publications} = requested;
@@ -263,8 +265,8 @@ export async function setupTablesAndReplication(
 
   // Setup application publications.
   if (publications.length) {
-    const results = await tx<{pubname: string}[]>`
-    SELECT pubname from pg_publication WHERE pubname IN ${tx(
+    const results = await sql<{pubname: string}[]>`
+    SELECT pubname from pg_publication WHERE pubname IN ${sql(
       publications,
     )}`.values();
 
@@ -281,8 +283,8 @@ export async function setupTablesAndReplication(
     );
     // Note: For re-syncing, this publication is dropped in dropShard(), so an existence
     //       check is unnecessary.
-    await tx`
-      CREATE PUBLICATION ${tx(defaultPublication)} 
+    await sql`
+      CREATE PUBLICATION ${sql(defaultPublication)} 
         FOR TABLES IN SCHEMA public
         WITH (publish_via_partition_root = true)`;
     allPublications.push(defaultPublication);
@@ -297,12 +299,12 @@ export async function setupTablesAndReplication(
   const shard = {...requested, publications: allPublications};
 
   // Setup the global tables and shard tables / publications.
-  await tx.unsafe(globalSetup(shard) + shardSetup(shard, metadataPublication));
+  await sql.unsafe(globalSetup(shard) + shardSetup(shard, metadataPublication));
 
-  const pubs = await getPublicationInfo(tx, allPublications);
-  await replicaIdentitiesForTablesWithoutPrimaryKeys(pubs)?.apply(lc, tx);
+  const pubs = await getPublicationInfo(sql, allPublications);
+  await replicaIdentitiesForTablesWithoutPrimaryKeys(pubs)?.apply(lc, sql);
 
-  await setupTriggers(lc, tx, shard);
+  await setupTriggers(lc, sql, shard);
 }
 
 export async function setupTriggers(
@@ -395,14 +397,14 @@ export function replicaIdentitiesForTablesWithoutPrimaryKeys(
     return undefined;
   }
   return {
-    apply: async (lc: LogContext, db: PostgresDB) => {
+    apply: async (lc: LogContext, sql: PostgresDB) => {
       for (const {schema, tableName, indexName} of replicaIdentities) {
         lc.info?.(
           `setting "${indexName}" as the REPLICA IDENTITY for "${tableName}"`,
         );
-        await db`ALTER TABLE ${db(schema)}.${db(
-          tableName,
-        )} REPLICA IDENTITY USING INDEX ${db(indexName)}`;
+        await sql`
+        ALTER TABLE ${sql(schema)}.${sql(tableName)} 
+          REPLICA IDENTITY USING INDEX ${sql(indexName)}`;
       }
     },
   };

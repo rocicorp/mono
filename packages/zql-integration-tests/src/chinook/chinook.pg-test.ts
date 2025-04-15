@@ -12,59 +12,53 @@
  */
 
 import {beforeEach, describe, expect, test} from 'vitest';
-import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
-import {wrapIterable} from '../../../../shared/src/iterables.ts';
-import type {
-  JSONValue,
-  ReadonlyJSONValue,
-} from '../../../../shared/src/json.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {must} from '../../../../shared/src/must.ts';
-import type {Writable} from '../../../../shared/src/writable.ts';
-import {testDBs} from '../../../../zero-cache/src/test/db.ts';
-import type {PostgresDB} from '../../../../zero-cache/src/types/pg.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {wrapIterable} from '../../../shared/src/iterables.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
+import {compile, extractZqlResult} from '../../../z2s/src/compiler.ts';
+import type {ServerSchema} from '../../../z2s/src/schema.ts';
+import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
+import {testDBs} from '../../../zero-cache/src/test/db.ts';
+import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
+import {ZPGQuery} from '../../../zero-pg/src/query.ts';
+import {Transaction} from '../../../zero-pg/src/test/util.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import {
   clientToServer,
   NameMapper,
-} from '../../../../zero-schema/src/name-mapper.ts';
-import type {TableSchema} from '../../../../zero-schema/src/table-schema.ts';
-import type {Change} from '../../../../zql/src/ivm/change.ts';
-import type {Node} from '../../../../zql/src/ivm/data.ts';
-import {MemorySource} from '../../../../zql/src/ivm/memory-source.ts';
-import type {Input} from '../../../../zql/src/ivm/operator.ts';
-import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
-import type {Format} from '../../../../zql/src/ivm/view.ts';
-import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
+} from '../../../zero-schema/src/name-mapper.ts';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import type {Change} from '../../../zql/src/ivm/change.ts';
+import type {Node} from '../../../zql/src/ivm/data.ts';
+import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
+import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
+import type {Format} from '../../../zql/src/ivm/view.ts';
+import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {
-  astForTestingSymbol,
-  completedAstSymbol,
+  completedAST,
+  defaultFormat,
   newQuery,
-  QueryImpl,
   type QueryDelegate,
-} from '../../../../zql/src/query/query-impl.ts';
-import type {Operator, Query} from '../../../../zql/src/query/query.ts';
-import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../../zql/src/query/test/query-delegate.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
+} from '../../../zql/src/query/query-impl.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
+import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
+import {Database} from '../../../zqlite/src/db.ts';
 import {
   mapResultToClientNames,
   newQueryDelegate,
-} from '../../../../zqlite/src/test/source-factory.ts';
-import {compile, extractZqlResult} from '../../compiler.ts';
-import '../comparePg.ts';
+} from '../../../zqlite/src/test/source-factory.ts';
+import '../helpers/comparePg.ts';
 import {writeChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
-import {formatPgInternalConvert} from '../../sql.ts';
-import type {ServerSchema} from '../../schema.ts';
-import {
-  StaticQuery,
-  staticQuery,
-} from '../../../../zql/src/query/static-query.ts';
 
 // TODO: Ideally z2s wouldn't depend on zero-pg (even in tests).  These
 // chinook tests should move to their own package.
-import {Transaction} from '../../../../zero-pg/src/test/util.ts';
-import {getServerSchema} from '../../../../zero-pg/src/schema.ts';
+import {getServerSchema} from '../../../zero-pg/src/schema.ts';
+import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 
 let pg: PostgresDB;
 let sqlite: Database;
@@ -100,7 +94,8 @@ const zqliteQueries: Queries = {
   invoiceLine: null,
   track: null,
 } as any;
-const memoryQueries: Queries = {...zqliteQueries} as any;
+const zqlQueries: Queries = {...zqliteQueries} as any;
+const zpgQueries: Queries = {...zqliteQueries} as any;
 const tables = Object.keys(zqliteQueries) as (keyof typeof zqliteQueries)[];
 
 const lc = createSilentLogContext();
@@ -135,13 +130,26 @@ beforeEach(async () => {
 
   tables.forEach(table => {
     zqliteQueries[table] = newQuery(zqliteQueryDelegate, schema, table) as any;
-    memoryQueries[table] = newQuery(memoryQueryDelegate, schema, table) as any;
+    zqlQueries[table] = newQuery(memoryQueryDelegate, schema, table) as any;
+    zpgQueries[table] = new ZPGQuery(
+      schema,
+      serverSchema,
+      table,
+      {
+        query(query, args) {
+          return pg.unsafe(query, args as JSONValue[]);
+        },
+        wrappedTransaction: pg,
+      },
+      {table},
+      defaultFormat,
+    ) as any;
   });
 
   await Promise.all(
     tables.map(async table => {
       const rows = mapResultToClientNames<Row[], typeof schema>(
-        await zqliteQueries[table].run(),
+        await zqliteQueries[table],
         schema,
         table,
       );
@@ -156,32 +164,15 @@ beforeEach(async () => {
   );
 });
 
-test('limited junction edge', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-explicit-any
-  function getSQL(q: Query<any, any, any>) {
-    return formatPgInternalConvert(
-      compile(
-        (q as StaticQuery<Schema, keyof Schema['tables']>).ast,
-        schema.tables,
-        serverSchema,
-        q.format,
-      ),
-    ).text;
-  }
-
-  const q = staticQuery(schema, 'playlist').related('tracks', q => q.limit(10));
-  expect(getSQL(q)).toMatchInlineSnapshot(`
-    "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT (
-            SELECT COALESCE(json_agg(row_to_json("inner_tracks")), '[]'::json) FROM (SELECT "table_1"."track_id" as "id","table_1"."name","table_1"."album_id" as "albumId","table_1"."media_type_id" as "mediaTypeId","table_1"."genre_id" as "genreId","table_1"."composer","table_1"."milliseconds","table_1"."bytes","table_1"."unit_price" as "unitPrice" FROM "playlist_track" as "playlistTrack" JOIN "track" as "table_1" ON "playlistTrack"."track_id" = "table_1"."track_id" WHERE ("playlist"."playlist_id" = "playlistTrack"."playlist_id")  ORDER BY "playlistTrack"."playlist_id" ASC, "playlistTrack"."track_id" ASC LIMIT $1::text::numeric ) "inner_tracks"
-          ) as "tracks","playlist"."playlist_id" as "id","playlist"."name" FROM "playlist"   ORDER BY "playlist"."playlist_id" ASC )"root""
-  `);
-});
-
 describe('basic select', () => {
   test.each(tables.map(table => [table]))(
     'select * from %s',
     async table => {
-      await checkZqlAndSql(pg, zqliteQueries[table], memoryQueries[table]);
+      await checkZqls(
+        zpgQueries[table],
+        zqliteQueries[table],
+        zqlQueries[table],
+      );
     },
     20_000,
   );
@@ -189,10 +180,10 @@ describe('basic select', () => {
   test.each(tables.map(table => [table]))(
     'select * from %s limit 100',
     async table => {
-      await checkZqlAndSql(
-        pg,
+      await checkZqls(
+        zpgQueries[table].limit(100),
         zqliteQueries[table].limit(100),
-        memoryQueries[table].limit(100),
+        zqlQueries[table].limit(100),
       );
     },
   );
@@ -206,26 +197,27 @@ describe('1 level related', () => {
     'reportsTo',
   ];
   function getQueriesAndRelationships(table: keyof Schema['tables']) {
+    const zpgQuery = zpgQueries[table] as AnyQuery;
     const zqliteQuery = zqliteQueries[table] as AnyQuery;
-    const memoryQuery = memoryQueries[table] as AnyQuery;
+    const memoryQuery = zqlQueries[table] as AnyQuery;
     const relationships = Object.keys(
       (schema.relationships as Record<string, Record<string, unknown>>)[
         table
       ] ?? {},
     );
-    return {zqliteQuery, memoryQuery, relationships};
+    return {zpgQuery, zqliteQuery, memoryQuery, relationships};
   }
 
   test.each(tables.map(table => [table]))('%s w/ related', async table => {
-    const {zqliteQuery, memoryQuery, relationships} =
+    const {zqliteQuery, zpgQuery, memoryQuery, relationships} =
       getQueriesAndRelationships(table);
 
     for (const r of relationships) {
       if (brokenRelationships.includes(r)) {
         continue;
       }
-      await checkZqlAndSql(
-        pg,
+      await checkZqls(
+        zpgQuery.related(r),
         zqliteQuery.related(r),
         memoryQuery.related(r),
         false,
@@ -236,7 +228,7 @@ describe('1 level related', () => {
   test.each(tables.map(table => [table]))(
     '%s w/ related limit 100',
     async table => {
-      const {zqliteQuery, memoryQuery, relationships} =
+      const {zqliteQuery, zpgQuery, memoryQuery, relationships} =
         getQueriesAndRelationships(table);
 
       // Junction edges do not correctly handle limits
@@ -246,8 +238,8 @@ describe('1 level related', () => {
         if (brokenRelationships.includes(r) || brokenLimits.includes(r)) {
           continue;
         }
-        await checkZqlAndSql(
-          pg,
+        await checkZqls(
+          zpgQuery.related(r, q => q.limit(100)).limit(100),
           zqliteQuery.related(r, q => q.limit(100)).limit(100),
           memoryQuery.related(r, q => q.limit(100)).limit(100),
         );
@@ -265,7 +257,7 @@ function randomRowAndColumn(table: string) {
   return {randomRow, randomColumn};
 }
 
-function randomOperator(): Operator {
+function randomOperator(): SimpleOperator {
   const operators = ['=', '!=', '>', '>=', '<', '<='] as const;
   return operators[Math.floor(Math.random() * operators.length)];
 }
@@ -282,12 +274,14 @@ describe('or', () => {
 
   test.each(tables.map(table => [table]))('1-branch %s', async table => {
     const {randomRow, randomColumn} = randomRowAndColumn(table);
-    await checkZqlAndSql(
-      pg,
+    await checkZqls(
+      (zpgQueries[table] as AnyQuery).where(({or, cmp}) =>
+        or(cmp(randomColumn as any, '=', randomRow[randomColumn])),
+      ),
       (zqliteQueries[table] as AnyQuery).where(({or, cmp}) =>
         or(cmp(randomColumn as any, '=', randomRow[randomColumn])),
       ),
-      (memoryQueries[table] as AnyQuery).where(({or, cmp}) =>
+      (zqlQueries[table] as AnyQuery).where(({or, cmp}) =>
         or(cmp(randomColumn as any, '=', randomRow[randomColumn])),
       ),
     );
@@ -306,10 +300,10 @@ describe('or', () => {
         ),
       );
     }
-    await checkZqlAndSql(
-      pg,
+    await checkZqls(
+      (zpgQueries[table] as AnyQuery).where(q),
       (zqliteQueries[table] as AnyQuery).where(q),
-      (memoryQueries[table] as AnyQuery).where(q),
+      (zqlQueries[table] as AnyQuery).where(q),
     );
   });
 
@@ -325,10 +319,10 @@ describe('or', () => {
           cmp(randomColumn as any, '!=', randomRow[randomColumn]),
         );
       }
-      await checkZqlAndSql(
-        pg,
+      await checkZqls(
+        (zpgQueries[table] as AnyQuery).where(q),
         (zqliteQueries[table] as AnyQuery).where(q),
-        (memoryQueries[table] as AnyQuery).where(q),
+        (zqlQueries[table] as AnyQuery).where(q),
         true,
         [[table, randomRow]],
       );
@@ -343,10 +337,10 @@ describe('or', () => {
           cmp('customerId', '=', randomRow.customerId as number),
           exists('lines'),
         );
-      await checkZqlAndSql(
-        pg,
+      await checkZqls(
+        zpgQueries.invoice.where(q),
         zqliteQueries.invoice.where(q),
-        memoryQueries.invoice.where(q),
+        zqlQueries.invoice.where(q),
         true,
         [['invoice', randomRow]],
       );
@@ -354,8 +348,8 @@ describe('or', () => {
   });
 });
 
-async function checkZqlAndSql(
-  pg: PostgresDB,
+async function checkZqls(
+  zpgQuery: Query<Schema, keyof Schema['tables']>,
   zqliteQuery: Query<Schema, keyof Schema['tables']>,
   memoryQuery: Query<Schema, keyof Schema['tables']>,
   // flag to disable push checking.
@@ -364,10 +358,10 @@ async function checkZqlAndSql(
   shouldCheckPush = true,
   mustEditRows?: [table: string, row: Row][],
 ) {
-  const pgResult = await runZqlAsSql(pg, zqliteQuery);
-  const zqliteResult = await zqliteQuery.run();
-  const zqlMemResult = await memoryQuery.run();
-  const ast = (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol];
+  const pgResult = await zpgQuery;
+  const zqliteResult = await zqliteQuery;
+  const zqlMemResult = await memoryQuery;
+
   // In failure output:
   // `-` is PG
   // `+` is ZQL
@@ -375,7 +369,7 @@ async function checkZqlAndSql(
     mapResultToClientNames(
       zqliteResult,
       schema,
-      ast.table as keyof Schema['tables'],
+      completedAST(zqliteQuery).table as keyof Schema['tables'],
     ),
   ).toEqualPg(pgResult);
   expect(zqlMemResult).toEqualPg(pgResult);
@@ -507,8 +501,7 @@ async function checkRemove(
       mapResultToClientNames(
         zqliteMaterialized.data,
         schema,
-        (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol]
-          .table as keyof Schema['tables'],
+        completedAST(zqliteQuery).table as keyof Schema['tables'],
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -555,8 +548,7 @@ async function checkAddBack(
       mapResultToClientNames(
         zqliteMaterialized.data,
         schema,
-        (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol]
-          .table as keyof Schema['tables'],
+        completedAST(zqliteQuery).table as keyof Schema['tables'],
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -646,8 +638,7 @@ async function checkEditToRandom(
       mapResultToClientNames(
         zqliteMaterialized.data,
         schema,
-        (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol]
-          .table as keyof Schema['tables'],
+        completedAST(zqliteQuery).table as keyof Schema['tables'],
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -729,8 +720,7 @@ async function checkEditToMatch(
       mapResultToClientNames(
         zqliteMaterialized.data,
         schema,
-        (zqliteQuery as QueryImpl<Schema, any>)[astForTestingSymbol]
-          .table as keyof Schema['tables'],
+        completedAST(zqliteQuery).table as keyof Schema['tables'],
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -801,15 +791,11 @@ async function runZqlAsSql(
   query: Query<Schema, keyof Schema['tables']>,
 ) {
   const sqlQuery = formatPgInternalConvert(
-    compile(ast(query), schema.tables, serverSchema, query.format),
+    compile(completedAST(query), schema.tables, serverSchema, query.format),
   );
   return extractZqlResult(
     await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
   );
-}
-
-function ast(q: Query<Schema, keyof Schema['tables']>) {
-  return (q as QueryImpl<Schema, keyof Schema['tables']>)[completedAstSymbol];
 }
 
 function mapRow(row: Row, table: string, mapper: NameMapper): Row {

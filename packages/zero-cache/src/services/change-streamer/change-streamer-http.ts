@@ -17,7 +17,7 @@ import {
   type SubscriberContext,
 } from './change-streamer.ts';
 
-const MIN_SUPPORTED_PROTOCOL_VERSION = 0;
+const MIN_SUPPORTED_PROTOCOL_VERSION = 1;
 
 const DIRECT_PATH_PATTERN = '/replication/:version/changes';
 const TENANT_PATH_PATTERN = '/:tenant' + DIRECT_PATH_PATTERN;
@@ -45,6 +45,7 @@ export class ChangeStreamerHttpServer extends HttpService {
       fastify.get(TENANT_PATH_PATTERN, {websocket: true}, this.#subscribe);
 
       installWebSocketReceiver<SubscriberContext>(
+        lc,
         fastify.websocketServer,
         this.#handleSubscription,
         parent,

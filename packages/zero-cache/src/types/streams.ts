@@ -18,7 +18,15 @@ import {Queue} from '../../../shared/src/queue.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {BigIntJSON, type JSONValue} from './bigint-json.ts';
 import {Subscription, type Options} from './subscription.ts';
-import {closeWithError} from './ws.ts';
+import {
+  closeWithError,
+  expectPingsForLiveness,
+  sendPingsForLiveness,
+} from './ws.ts';
+
+// Consistent with Postgres keepalives, and shorter than the
+// commonly used default idle timeout of 1 minute.
+const PING_INTERVAL_MS = 30_000;
 
 export type Source<T> = AsyncIterable<T> & {
   /**
@@ -125,6 +133,8 @@ export function stream<In extends JSONValue, Out extends JSONValue>(
     return v.parse(json, inSchema, 'passthrough');
   });
 
+  sendPingsForLiveness(lc, ws, PING_INTERVAL_MS);
+
   return {outstream, instream};
 }
 
@@ -193,6 +203,8 @@ export async function streamOut<T extends JSONValue>(
   source: Source<T>,
   sink: WebSocket,
 ): Promise<void> {
+  sendPingsForLiveness(lc, sink, PING_INTERVAL_MS);
+
   const closer = new WebSocketCloser(lc, sink, source);
 
   const acks = new Queue<Ack>();
@@ -255,6 +267,8 @@ export async function streamIn<T extends JSONValue>(
   source: WebSocket,
   schema: v.Type<T>,
 ): Promise<Source<T>> {
+  expectPingsForLiveness(lc, source, PING_INTERVAL_MS);
+
   const streamedSchema = v.object({
     msg: schema,
     id: v.number(),

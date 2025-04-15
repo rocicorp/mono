@@ -1,9 +1,11 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {deepEqual, type JSONValue} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
 import {buildPipeline} from '../../../../zql/src/builder/builder.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
@@ -28,7 +30,11 @@ import type {ShardID} from '../../types/shards.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
 import type {ClientGroupStorage} from './database-storage.ts';
-import {Snapshotter, type SnapshotDiff} from './snapshotter.ts';
+import {
+  ResetPipelinesSignal,
+  Snapshotter,
+  type SnapshotDiff,
+} from './snapshotter.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -240,9 +246,16 @@ export class PipelineDriver {
    * If a query with an identical hash has already been added, this method
    * is a no-op and no RowChanges are generated.
    *
+   * @param timer The caller-controlled {@link Timer} used to determine the
+   *        final hydration time. (The caller may pause and resume the timer
+   *        when yielding the thread for time-slicing).
    * @return The rows from the initial hydration of the query.
    */
-  *addQuery(hash: string, query: AST): Iterable<RowChange> {
+  *addQuery(
+    hash: string,
+    query: AST,
+    timer: {totalElapsed: () => number},
+  ): Iterable<RowChange> {
     assert(this.initialized());
     if (this.#pipelines.has(hash)) {
       this.#lc.info?.(`query ${hash} already added`, query);
@@ -263,8 +276,6 @@ export class PipelineDriver {
       },
     });
 
-    const start = Date.now();
-
     if (runtimeDebugFlags.trackRowsVended) {
       runtimeDebugStats.resetRowsVended(this.#clientGroupID);
     }
@@ -277,7 +288,7 @@ export class PipelineDriver {
     );
     yield* streamer.stream();
 
-    const hydrationTimeMs = Date.now() - start;
+    const hydrationTimeMs = timer.totalElapsed();
     if (runtimeDebugFlags.trackRowsVended) {
       if (hydrationTimeMs > 200) {
         let totalRowsConsidered = 0;
@@ -302,6 +313,9 @@ export class PipelineDriver {
       runtimeDebugStats.resetRowsVended(this.#clientGroupID);
     }
 
+    // Note: This hydrationTime is a wall-clock overestimate, as it does
+    // not take time slicing into account. The view-syncer resets this
+    // to a more precise processing-time measurement with setHydrationTime().
     this.#pipelines.set(hash, {input, hydrationTimeMs});
   }
 
@@ -331,11 +345,15 @@ export class PipelineDriver {
   /**
    * Advances to the new head of the database.
    *
+   * @param timer The caller-controlled {@link Timer} that will be used to
+   *        measure the progress of the advancement and abort with a
+   *        {@link ResetPipelinesSignal} if it is estimated to take longer
+   *        than a hydration.
    * @return The resulting row changes for all added queries. Note that the
    *         `changes` must be iterated over in their entirety in order to
    *         advance the database snapshot.
    */
-  advance(): {
+  advance(timer: {totalElapsed: () => number}): {
     version: string;
     numChanges: number;
     changes: Iterable<RowChange>;
@@ -345,27 +363,79 @@ export class PipelineDriver {
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(`${prev.version} => ${curr.version}: ${changes} changes`);
 
+    const totalHydrationTimeMs = this.totalHydrationTimeMs();
+
+    // Cancel the advancement processing if it takes longer than half the
+    // total hydration time to make it through half of the advancement.
+    // This serves as both a circuit breaker for very large transactions,
+    // as well as a bound on the amount of time the previous connection locks
+    // the inactive WAL file (as the lock prevents WAL2 from switching to the
+    // free WAL when the current one is over the size limit, which can make
+    // the WAL grow continuously and compound slowness).
+    //
+    // Note: 1/2 is a conservative estimate policy. A lower proportion would
+    // flag slowness sooner, at the expense of larger estimation error.
+    function checkProgress(pos: number) {
+      // Check every 10 changes
+      if (pos % 10 === 0) {
+        const elapsed = timer.totalElapsed();
+        if (elapsed > totalHydrationTimeMs / 2 && pos <= changes / 2) {
+          throw new ResetPipelinesSignal(
+            `advancement exceeded timeout at ${pos} of ${changes} changes (${elapsed} ms)`,
+          );
+        }
+      }
+    }
+
     return {
       version: curr.version,
       numChanges: changes,
-      changes: this.#advance(diff),
+      changes: this.#advance(
+        diff,
+        // Somewhat arbitrary: only check progress if there are at least 20
+        // changes (Note that the first check doesn't happen until 10 changes).
+        changes >= 20 ? checkProgress : () => {},
+      ),
     };
   }
 
-  *#advance(diff: SnapshotDiff): Iterable<RowChange> {
-    for (const {table, prevValue, nextValue} of diff) {
-      if (prevValue) {
-        if (nextValue) {
-          yield* this.#push(table, {
-            type: 'edit',
-            row: nextValue as Row,
-            oldRow: prevValue as Row,
-          });
-        } else {
+  *#advance(
+    diff: SnapshotDiff,
+    onChange: (pos: number) => void,
+  ): Iterable<RowChange> {
+    let pos = 0;
+    for (const {table, prevValue, nextValue, rowKey} of diff) {
+      try {
+        if (prevValue && nextValue) {
+          // Rows are ultimately referred to by the union key (in #streamNodes())
+          // so an update is represented as an `edit` if and only if the
+          // unionKey-based row keys are the same in prevValue and nextValue.
+          const {unionKey} = must(this.#tableSpecs.get(table)).tableSpec;
+          if (
+            Object.keys(rowKey).length === unionKey.length ||
+            deepEqual(
+              getRowKey(unionKey, prevValue as Row) as JSONValue,
+              getRowKey(unionKey, nextValue as Row) as JSONValue,
+            )
+          ) {
+            yield* this.#push(table, {
+              type: 'edit',
+              row: nextValue as Row,
+              oldRow: prevValue as Row,
+            });
+            continue;
+          }
+          // If the unionKey-based row keys differed, they will be
+          // represented as a remove of the old key and an add of the new key.
+        }
+        if (prevValue) {
           yield* this.#push(table, {type: 'remove', row: prevValue as Row});
         }
-      } else if (nextValue) {
-        yield* this.#push(table, {type: 'add', row: nextValue as Row});
+        if (nextValue) {
+          yield* this.#push(table, {type: 'add', row: nextValue as Row});
+        }
+      } finally {
+        onChange(++pos);
       }
     }
 
@@ -533,7 +603,7 @@ class Streamer {
 
     for (const node of nodes) {
       const {relationships, row} = node;
-      const rowKey = Object.fromEntries(primaryKey.map(col => [col, row[col]]));
+      const rowKey = getRowKey(primaryKey, row);
 
       yield {
         type: op,
@@ -555,4 +625,8 @@ function* toAdds(nodes: Iterable<Node>): Iterable<Change> {
   for (const node of nodes) {
     yield {type: 'add', node};
   }
+}
+
+function getRowKey(cols: PrimaryKey, row: Row): RowKey {
+  return Object.fromEntries(cols.map(col => [col, must(row[col])]));
 }

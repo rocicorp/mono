@@ -74,7 +74,8 @@ const tenantSchema = v.object({
       if (p.indexOf('/', 1) >= 0) {
         return v.err(`Only a single path component may be specified: ${p}`);
       }
-      return v.ok(p[0] === '/' ? p : '/' + p);
+      p = p[0] === '/' ? p : '/' + p;
+      return v.ok(p + '/'); // normalized to '/{path}/'
     })
     .optional(),
   env: zeroEnvSchema.partial().extend({

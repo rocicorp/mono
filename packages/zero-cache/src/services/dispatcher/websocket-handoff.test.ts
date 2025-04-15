@@ -14,6 +14,7 @@ describe('dispatcher/websocket-handoff', () => {
   let port: number;
   let server: Server;
   let wss: WebSocketServer;
+  const lc = createSilentLogContext();
 
   beforeAll(() => {
     port = randInt(10000, 20000);
@@ -35,7 +36,7 @@ describe('dispatcher/websocket-handoff', () => {
     const [parent, child] = inProcChannel();
 
     installWebSocketHandoff(
-      createSilentLogContext(),
+      lc,
       () => ({
         payload: {foo: 'boo'},
         receiver: child,
@@ -44,6 +45,42 @@ describe('dispatcher/websocket-handoff', () => {
     );
 
     installWebSocketReceiver(
+      lc,
+      wss,
+      (ws, payload) => {
+        ws.on('message', msg => {
+          ws.send(`Received "${msg}" and payload ${JSON.stringify(payload)}`);
+          ws.close();
+        });
+      },
+      parent,
+    );
+
+    const {promise: reply, resolve} = resolver<RawData>();
+    const ws = new WebSocket(`ws://localhost:${port}/`);
+    ws.on('open', () => ws.send('hello'));
+    ws.on('message', msg => resolve(msg));
+
+    expect(String(await reply)).toBe(
+      'Received "hello" and payload {"foo":"boo"}',
+    );
+  });
+
+  test('handoff callback', async () => {
+    const [parent, child] = inProcChannel();
+
+    installWebSocketHandoff(
+      lc,
+      (_, callback) =>
+        callback({
+          payload: {foo: 'boo'},
+          receiver: child,
+        }),
+      server,
+    );
+
+    installWebSocketReceiver(
+      lc,
       wss,
       (ws, payload) => {
         ws.on('message', msg => {
@@ -70,7 +107,7 @@ describe('dispatcher/websocket-handoff', () => {
 
     // server(grandParent) to parent
     installWebSocketHandoff(
-      createSilentLogContext(),
+      lc,
       () => ({
         payload: {foo: 'boo'},
         receiver: grandParent,
@@ -80,7 +117,7 @@ describe('dispatcher/websocket-handoff', () => {
 
     // parent to child
     installWebSocketHandoff(
-      createSilentLogContext(),
+      lc,
       () => ({
         payload: {foo: 'boo'},
         receiver: parent2,
@@ -90,6 +127,7 @@ describe('dispatcher/websocket-handoff', () => {
 
     // child receives socket
     installWebSocketReceiver(
+      lc,
       wss,
       (ws, payload) => {
         ws.on('message', msg => {
@@ -112,7 +150,7 @@ describe('dispatcher/websocket-handoff', () => {
 
   test('handoff error', async () => {
     installWebSocketHandoff(
-      createSilentLogContext(),
+      lc,
       () => {
         throw new Error('こんにちは' + 'あ'.repeat(150));
       },

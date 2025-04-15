@@ -1,13 +1,14 @@
 import '@dotenvx/dotenvx/config'; // Imports ENV variables from .env
+import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {parseBoolean} from '../../../../shared/src/options.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';
-import type {Service} from '../../services/service.ts';
 import {childWorker, type Worker} from '../../types/processes.ts';
 import {createLogContext} from '../logging.ts';
 import {getMultiZeroConfig} from './config.ts';
 import {getTaskID} from './runtime.ts';
-import {TenantDispatcher} from './tenant-dispatcher.ts';
+import {ZeroDispatcher} from './zero-dispatcher.ts';
 
 export async function runWorker(
   parent: Worker | null,
@@ -15,7 +16,7 @@ export async function runWorker(
 ): Promise<void> {
   const startMs = Date.now();
   const {config, env: baseEnv} = getMultiZeroConfig(env);
-  const lc = createLogContext(config, {worker: 'main'});
+  const lc = createLogContext(config, {worker: 'runner'});
   const processes = new ProcessManager(lc, parent ?? process);
 
   const {serverVersion, port, changeStreamerPort = port + 1} = config;
@@ -31,13 +32,9 @@ export async function runWorker(
 
   const multiMode = config.tenants.length;
   if (!multiMode) {
-    // Run a single tenant on main `port`, and skip the TenantDispatcher.
     config.tenants.push({
-      id: '',
-      env: {
-        ['ZERO_PORT']: String(port),
-        ['ZERO_REPLICA_FILE']: config.replica.file,
-      },
+      id: '', // sole tenant signifier
+      env: {['ZERO_REPLICA_FILE']: config.replica.file},
     });
   }
 
@@ -75,11 +72,35 @@ export async function runWorker(
         ? tenant.id
         : `/${tenant.id}`;
     }
-    return {...tenant, worker: childWorker('./server/main.ts', mergedEnv)};
+
+    let worker: Resolver<Worker> | undefined;
+
+    function getWorker(): Promise<Worker> {
+      if (worker === undefined) {
+        lc.info?.(
+          'starting zero-cache' + (tenant.id ? ` for ${tenant.id}` : ''),
+        );
+        const r = (worker = resolver<Worker>());
+        const w = childWorker('./server/main.ts', mergedEnv)
+          .once('message', () => r.resolve(w))
+          .once('error', r.reject);
+        processes.addWorker(w, 'user-facing', tenant.id);
+      }
+      return worker.promise;
+    }
+
+    return {...tenant, env: mergedEnv, getWorker};
   });
 
+  // Eagerly start zero-caches that are not configured to --run-lazily.
   for (const tenant of tenants) {
-    processes.addWorker(tenant.worker, 'user-facing', tenant.id);
+    const lazy = parseBoolean(
+      'ZERO_RUN_LAZILY',
+      tenant.env['ZERO_RUN_LAZILY'] ?? 'false',
+    );
+    if (!lazy) {
+      void tenant.getWorker();
+    }
   }
 
   const s = tenants.length > 1 ? 's' : '';
@@ -87,19 +108,16 @@ export async function runWorker(
   await processes.allWorkersReady();
   lc.info?.(`zero-cache${s} ready (${Date.now() - startMs} ms)`);
 
-  const mainServices: Service[] = [];
-  if (multiMode) {
-    mainServices.push(
-      new TenantDispatcher(lc, runAsReplicationManager, tenants, {
-        port: runAsReplicationManager ? changeStreamerPort : port,
-      }),
-    );
-  }
-
   parent?.send(['ready', {ready: true}]);
 
   try {
-    await runUntilKilled(lc, parent ?? process, ...mainServices);
+    await runUntilKilled(
+      lc,
+      parent ?? process,
+      new ZeroDispatcher(lc, runAsReplicationManager, tenants, {
+        port: runAsReplicationManager ? changeStreamerPort : port,
+      }),
+    );
   } catch (err) {
     processes.logErrorAndExit(err, 'main');
   }

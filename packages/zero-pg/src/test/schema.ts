@@ -68,6 +68,15 @@ export const schema = createSchema({
         type: enumeration<'user' | 'system' | 'admin'>(),
       })
       .primaryKey('id'),
+    table('alternate_basic')
+      .from('alternate_schema.basic')
+      .columns({
+        id: string(),
+        a: number(),
+        b: string(),
+        c: boolean().optional(),
+      })
+      .primaryKey('id'),
   ],
   relationships: [],
 });
@@ -122,14 +131,23 @@ CREATE TABLE "jsonCases" (
   PRIMARY KEY ("str")
 );
 
-CREATE TYPE status_enum AS ENUM ('active', 'inactive', 'pending');
+CREATE TYPE "statusEnum" AS ENUM ('active', 'inactive', 'pending');
 CREATE TYPE type_enum AS ENUM ('user', 'system', 'admin');
 
 CREATE TABLE "uuidAndEnum" (
   "id" UUID PRIMARY KEY,
   "reference_id" UUID NOT NULL,
-  "status" status_enum NOT NULL,
+  "status" "statusEnum" NOT NULL,
   "type" type_enum NOT NULL
+);
+
+CREATE SCHEMA alternate_schema;
+
+CREATE TABLE alternate_schema.basic (
+  id TEXT PRIMARY KEY,
+  a INTEGER,
+  b TEXT,
+  C BOOLEAN
 );
 `;
 

@@ -88,9 +88,9 @@ export function Modal({
         <div className={wrapperClasses}>
           <div ref={ref} className={modalClasses}>
             {title && (
-              <div className="flex items-center justify-between w-full pl-4">
+              <div className="header-line flex items-center justify-between w-full pl-4">
                 <div className="text-sm font-semibold text-white">{title}</div>
-                <div className="p-4" onMouseDown={close}>
+                <div className="close-button p-4" onMouseDown={close}>
                   <CloseIcon className="w-4 text-gray-500 hover:text-gray-700" />
                 </div>
               </div>

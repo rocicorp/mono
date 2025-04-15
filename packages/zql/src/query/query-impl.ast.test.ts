@@ -1,20 +1,9 @@
 import {describe, expect, test} from 'vitest';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {ExpressionFactory} from './expression.ts';
-import {
-  astForTestingSymbol,
-  newQuery,
-  QueryImpl,
-  type QueryDelegate,
-} from './query-impl.ts';
-import type {Query} from './query.ts';
+import {ast, newQuery, type QueryDelegate} from './query-impl.ts';
 import {schema} from './test/test-schemas.ts';
 
 const mockDelegate = {} as QueryDelegate;
-
-function ast(q: Query<Schema, string>) {
-  return (q as QueryImpl<Schema, string>)[astForTestingSymbol];
-}
 
 describe('building the AST', () => {
   test('creates a new query', () => {

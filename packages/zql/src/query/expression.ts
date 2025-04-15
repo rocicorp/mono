@@ -5,6 +5,7 @@ import {
   type Condition,
   type LiteralValue,
   type Parameter,
+  type SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
@@ -12,7 +13,6 @@ import type {
   DestTableName,
   GetFilterType,
   NoJsonSelector,
-  Operator,
   PullTableSchema,
   Query,
 } from './query.ts';
@@ -69,7 +69,7 @@ export class ExpressionBuilder<
 
   cmp<
     TSelector extends NoJsonSelector<PullTableSchema<TTable, TSchema>>,
-    TOperator extends Operator,
+    TOperator extends SimpleOperator,
   >(
     field: TSelector,
     op: TOperator,
@@ -85,7 +85,7 @@ export class ExpressionBuilder<
   ): Condition;
   cmp(
     field: string,
-    opOrValue: Operator | ParameterReference | LiteralValue,
+    opOrValue: SimpleOperator | ParameterReference | LiteralValue,
     value?: ParameterReference | LiteralValue,
   ): Condition {
     return cmp(field, opOrValue, value);
@@ -93,7 +93,7 @@ export class ExpressionBuilder<
 
   cmpLit(
     left: ParameterReference | LiteralValue,
-    op: Operator,
+    op: SimpleOperator,
     right: ParameterReference | LiteralValue,
   ): Condition {
     return {
@@ -178,15 +178,15 @@ export function not(expression: Condition): Condition {
 
 export function cmp(
   field: string,
-  opOrValue: Operator | ParameterReference | LiteralValue,
+  opOrValue: SimpleOperator | ParameterReference | LiteralValue,
   value?: ParameterReference | LiteralValue,
 ): Condition {
-  let op: Operator;
+  let op: SimpleOperator;
   if (value === undefined) {
     value = opOrValue;
     op = '=';
   } else {
-    op = opOrValue as Operator;
+    op = opOrValue as SimpleOperator;
   }
 
   return {

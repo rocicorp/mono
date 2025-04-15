@@ -11,6 +11,7 @@ import type {
   GotCallback,
   QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
+import type {RunOptions} from '../../../zql/src/query/query.ts';
 import type {TTL} from '../../../zql/src/query/ttl.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
@@ -35,9 +36,15 @@ export class ZeroContext implements QueryDelegate {
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
-  readonly slowMaterializeThreshold: number;
-  readonly lc: LogContext;
-  readonly staticQueryParameters = undefined;
+  readonly #slowMaterializeThreshold: number;
+  readonly #lc: LogContext;
+  readonly normalizeRunOptions: (options?: RunOptions) => RunOptions;
+
+  /**
+   * Client-side queries start out as "unknown" and are then updated to
+   * "complete" once the server has sent back the query result.
+   */
+  readonly defaultQueryComplete = false;
 
   constructor(
     lc: LogContext,
@@ -46,13 +53,15 @@ export class ZeroContext implements QueryDelegate {
     updateQuery: UpdateQuery,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
     slowMaterializeThreshold: number,
+    normalizeRunOptions: (options?: RunOptions) => RunOptions,
   ) {
     this.#mainSources = mainSources;
     this.#addQuery = addQuery;
     this.#updateQuery = updateQuery;
     this.#batchViewUpdates = batchViewUpdates;
-    this.lc = lc;
-    this.slowMaterializeThreshold = slowMaterializeThreshold;
+    this.#lc = lc;
+    this.#slowMaterializeThreshold = slowMaterializeThreshold;
+    this.normalizeRunOptions = normalizeRunOptions;
   }
 
   getSource(name: string): Source | undefined {
@@ -69,17 +78,17 @@ export class ZeroContext implements QueryDelegate {
 
   onQueryMaterialized(hash: string, ast: AST, duration: number): void {
     if (
-      this.slowMaterializeThreshold !== undefined &&
-      duration > this.slowMaterializeThreshold
+      this.#slowMaterializeThreshold !== undefined &&
+      duration > this.#slowMaterializeThreshold
     ) {
-      this.lc.warn?.(
+      this.#lc.warn?.(
         'Slow query materialization (including server/network)',
         hash,
         ast,
         duration,
       );
     } else {
-      this.lc.debug?.(
+      this.#lc.debug?.(
         'Materialized query (including server/network)',
         hash,
         ast,
@@ -143,7 +152,10 @@ export class ZeroContext implements QueryDelegate {
         // We should not fatal the inner-workings of Zero due to the user's application
         // code throwing an error.
         // Hence we wrap notifications in a try-catch block.
-        this.lc.error?.('Failed notifying a commit listener of IVM updates', e);
+        this.#lc.error?.(
+          'Failed notifying a commit listener of IVM updates',
+          e,
+        );
       }
     }
   }

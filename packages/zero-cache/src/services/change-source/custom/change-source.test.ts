@@ -2,11 +2,12 @@ import websocket from '@fastify/websocket';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {type FastifyInstance} from 'fastify';
-import {afterEach, beforeEach, describe, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import type WebSocket from 'ws';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {DbFile, expectTables} from '../../../test/lite.ts';
 import {stream, type Sink} from '../../../types/streams.ts';
+import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
 import {
   changeSourceUpstreamSchema,
@@ -236,5 +237,20 @@ describe('change-source/custom', () => {
         // in the change log.
       ],
     });
+  });
+
+  test('reset-required in initial-sync', async () => {
+    void streamChanges([
+      ['control', {tag: 'reset-required', message: 'watermark is too old yo'}],
+    ]);
+
+    await expect(
+      initializeCustomChangeSource(
+        lc,
+        changeSourceURI,
+        {appID: APP_ID, shardNum: 0, publications: ['b', 'a']},
+        replicaDbFile.path,
+      ),
+    ).rejects.toThrowError(AutoResetSignal);
   });
 });

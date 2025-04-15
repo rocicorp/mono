@@ -2,7 +2,6 @@ import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
-import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {
@@ -11,21 +10,15 @@ import {
 } from '../../../zero-schema/src/permissions.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {
-  astForTestingSymbol,
+  ast,
   newQuery,
-  QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
-import type {Query} from '../../../zql/src/query/query.ts';
 import {transformQuery} from './read-authorizer.ts';
 
 const mockDelegate = {} as QueryDelegate;
 
 const lc = createSilentLogContext();
-
-function ast(q: Query<ZeroSchema, string>) {
-  return (q as QueryImpl<ZeroSchema, string>)[astForTestingSymbol];
-}
 
 const unreadable = table('unreadable')
   .columns({

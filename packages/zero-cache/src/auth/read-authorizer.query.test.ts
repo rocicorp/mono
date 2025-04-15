@@ -39,12 +39,15 @@ import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {
-  completedAstSymbol,
+  completedAST,
   newQuery,
-  QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
-import type {Query, Row} from '../../../zql/src/query/query.ts';
+import {
+  DEFAULT_RUN_OPTIONS_COMPLETE,
+  type Query,
+  type Row,
+} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
@@ -538,6 +541,10 @@ beforeEach(() => {
     batchViewUpdates<T>(applyViewUpdates: () => T): T {
       return applyViewUpdates();
     },
+    normalizeRunOptions(options) {
+      return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
+    },
+    defaultQueryComplete: true,
   };
 
   for (const table of Object.values(schema.tables)) {
@@ -915,16 +922,17 @@ describe('issue permissions', () => {
   });
 });
 
-function ast(q: Query<ZeroSchema, string>) {
-  return (q as QueryImpl<ZeroSchema, string>)[completedAstSymbol];
-}
-
 function runReadQueryWithPermissions(
   authData: AuthData,
   query: Query<ZeroSchema, string>,
 ) {
   const updatedAst = bindStaticParameters(
-    transformQuery(new LogContext('debug'), ast(query), permissions, authData),
+    transformQuery(
+      new LogContext('debug'),
+      completedAST(query),
+      permissions,
+      authData,
+    ),
     {
       authData,
       preMutationRow: undefined,

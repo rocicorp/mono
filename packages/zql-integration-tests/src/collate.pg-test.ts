@@ -1,26 +1,13 @@
+import {Client} from 'pg';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
+import type {ServerSchema} from '../../z2s/src/schema.ts';
+import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {type Row} from '../../zero-protocol/src/data.ts';
-import {
-  completedAstSymbol,
-  newQuery,
-  QueryImpl,
-  type QueryDelegate,
-} from '../../zql/src/query/query-impl.ts';
-import {type Query} from '../../zql/src/query/query.ts';
-import {Database} from '../../zqlite/src/db.ts';
-import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
-import {
-  mapResultToClientNames,
-  newQueryDelegate,
-} from '../../zqlite/src/test/source-factory.ts';
-import {compile, extractZqlResult} from './compiler.ts';
-import {formatPgInternalConvert} from './sql.ts';
-import {Client} from 'pg';
-import './test/comparePg.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   enumeration,
@@ -28,9 +15,21 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import {
+  completedAST,
+  newQuery,
+  type QueryDelegate,
+} from '../../zql/src/query/query-impl.ts';
+import {type Query} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
-import {fillPgAndSync} from './test/setup.ts';
-import type {ServerSchema} from './schema.ts';
+import {Database} from '../../zqlite/src/db.ts';
+import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
+import {
+  mapResultToClientNames,
+  newQueryDelegate,
+} from '../../zqlite/src/test/source-factory.ts';
+import './helpers/comparePg.ts';
+import {fillPgAndSync} from './helpers/setup.ts';
 
 const lc = createSilentLogContext();
 
@@ -177,10 +176,6 @@ afterAll(async () => {
   await nodePostgres.end();
 });
 
-function ast(q: Query<Schema, keyof Schema['tables']>) {
-  return (q as QueryImpl<Schema, keyof Schema['tables']>)[completedAstSymbol];
-}
-
 describe('collation behavior', () => {
   describe('postgres.js', () => {
     t((query: string, args: unknown[]) =>
@@ -193,18 +188,16 @@ describe('collation behavior', () => {
         (await nodePostgres.query(query, args as JSONValue[])).rows,
     );
   });
-  function t(runPgQuery: (query: string, args: unknown[]) => Promise<unknown>) {
+  function t(
+    runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
+  ) {
     async function testColumn(col: 'name' | 'size' | 'uuid') {
       const itemQuery = newQuery(queryDelegate, schema, 'item');
       const query = itemQuery.orderBy(col, 'asc');
       const pgResult = await runAsSQL(query, runPgQuery);
-      const zqlResult = mapResultToClientNames(
-        await query.run(),
-        schema,
-        'item',
-      );
+      const zqlResult = mapResultToClientNames(await query, schema, 'item');
       const memoryItemQuery = newQuery(memoryQueryDelegate, schema, 'item');
-      const memoryResult = await memoryItemQuery.orderBy(col, 'asc').run();
+      const memoryResult = await memoryItemQuery.orderBy(col, 'asc');
       expect(zqlResult).toEqualPg(pgResult);
       expect(memoryResult).toEqualPg(pgResult);
 
@@ -218,9 +211,9 @@ describe('collation behavior', () => {
           .orderBy(col, 'asc');
       }
       for (let i = 0; i < memoryResult.length - 1; i++) {
-        const memResult = await makeQuery(memoryItemQuery, i).run();
+        const memResult = await makeQuery(memoryItemQuery, i);
         const zqlResult = mapResultToClientNames(
-          await makeQuery(itemQuery, i).run(),
+          await makeQuery(itemQuery, i),
           schema,
           'item',
         );
@@ -347,9 +340,9 @@ describe('collation behavior', () => {
 
 async function runAsSQL(
   q: Query<Schema, 'item'>,
-  runPgQuery: (query: string, args: unknown[]) => Promise<unknown>,
+  runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
 ) {
-  const c = compile(ast(q), schema.tables, serverSchema);
+  const c = compile(completedAST(q), schema.tables, serverSchema);
   const sqlQuery = formatPgInternalConvert(c);
   return extractZqlResult(
     await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),

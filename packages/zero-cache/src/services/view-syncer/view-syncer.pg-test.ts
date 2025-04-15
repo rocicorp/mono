@@ -1016,7 +1016,7 @@ describe('view-syncer/service', () => {
   });
 
   test('delete client', async () => {
-    const ttl = 100;
+    const ttl = 5000; // 5s
     vi.setSystemTime(Date.UTC(2025, 2, 4));
 
     const {queue: client1} = connectWithQueueAndSource(SYNC_CONTEXT, [
@@ -1065,14 +1065,14 @@ describe('view-syncer/service', () => {
           "deleted": false,
           "inactivatedAt": null,
           "queryHash": "query-hash1",
-          "ttl": "00:01:40",
+          "ttl": "00:00:05",
         },
         {
           "clientID": "bar",
           "deleted": false,
           "inactivatedAt": null,
           "queryHash": "query-hash2",
-          "ttl": "00:01:40",
+          "ttl": "00:00:05",
         },
       ]
     `);
@@ -1136,14 +1136,14 @@ describe('view-syncer/service', () => {
           "deleted": false,
           "inactivatedAt": null,
           "queryHash": "query-hash1",
-          "ttl": "00:01:40",
+          "ttl": "00:00:05",
         },
         {
           "clientID": "bar",
           "deleted": true,
           "inactivatedAt": 1741046400000,
           "queryHash": "query-hash2",
-          "ttl": "00:01:40",
+          "ttl": "00:00:05",
         },
       ]
     `);
@@ -1198,14 +1198,14 @@ describe('view-syncer/service', () => {
           "deleted": false,
           "inactivatedAt": null,
           "queryHash": "query-hash1",
-          "ttl": "00:01:40",
+          "ttl": "00:00:05",
         },
         {
           "clientID": "bar",
           "deleted": true,
           "inactivatedAt": 1741046400000,
           "queryHash": "query-hash2",
-          "ttl": "00:01:40",
+          "ttl": "00:00:05",
         },
       ]
     `);

@@ -1486,6 +1486,198 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         `_${APP_ID}_public_${SHARD_NUM}`,
       ],
     },
+    {
+      name: 'unique constraints',
+      setupUpstreamQuery: /*sql*/ `
+        CREATE TABLE "funk" (
+          "id" text PRIMARY KEY NOT NULL,
+          "name" varchar(255) NOT NULL,
+          "order" integer DEFAULT 0 NOT NULL,
+          "createdAt" timestamp DEFAULT now() NOT NULL,
+          "updatedAt" timestamp DEFAULT now() NOT NULL,
+          CONSTRAINT "funk_name_unique" UNIQUE("name"),
+          CONSTRAINT "funk_order_unique" UNIQUE("order")
+        );
+      `,
+      published: {
+        [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
+        ['public.funk']: {
+          columns: {
+            id: {
+              pos: 1,
+              characterMaximumLength: null,
+              dataType: 'text',
+              typeOID: 25,
+              notNull: true,
+              dflt: null,
+            },
+            name: {
+              pos: 2,
+              characterMaximumLength: 255,
+              dataType: 'varchar',
+              typeOID: 1043,
+              notNull: true,
+              dflt: null,
+            },
+            order: {
+              pos: 3,
+              characterMaximumLength: null,
+              dataType: 'int4',
+              typeOID: 23,
+              notNull: true,
+              dflt: '0',
+            },
+            createdAt: {
+              pos: 4,
+              characterMaximumLength: null,
+              dataType: 'timestamp',
+              typeOID: 1114,
+              notNull: true,
+              dflt: 'now()',
+            },
+            updatedAt: {
+              pos: 5,
+              characterMaximumLength: null,
+              dataType: 'timestamp',
+              typeOID: 1114,
+              notNull: true,
+              dflt: 'now()',
+            },
+          },
+          oid: expect.any(Number),
+          name: 'funk',
+          primaryKey: ['id'],
+          schema: 'public',
+          publications: {[`_${APP_ID}_public_${SHARD_NUM}`]: {rowFilter: null}},
+        },
+      },
+      replicatedSchema: {
+        [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        ['funk']: {
+          columns: {
+            id: {
+              pos: 1,
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              notNull: false,
+              dflt: null,
+            },
+            name: {
+              pos: 2,
+              characterMaximumLength: null,
+              dataType: 'varchar|NOT_NULL',
+              notNull: false,
+              dflt: null,
+            },
+            order: {
+              pos: 3,
+              characterMaximumLength: null,
+              dataType: 'int4|NOT_NULL',
+              notNull: false,
+              dflt: null,
+            },
+            createdAt: {
+              pos: 4,
+              characterMaximumLength: null,
+              dataType: 'timestamp|NOT_NULL',
+              notNull: false,
+              dflt: null,
+            },
+            updatedAt: {
+              pos: 5,
+              characterMaximumLength: null,
+              dataType: 'timestamp|NOT_NULL',
+              notNull: false,
+              dflt: null,
+            },
+            ['_0_version']: {
+              pos: 6,
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              notNull: false,
+              dflt: null,
+            },
+          },
+          name: 'funk',
+        },
+      },
+      replicatedIndexes: [
+        {
+          columns: {lock: 'ASC'},
+          name: 'permissions_pkey',
+          schema: APP_ID,
+          tableName: 'permissions',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
+          name: 'schemaVersions_pkey',
+          schema: APP_ID,
+          tableName: 'schemaVersions',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+          },
+          name: 'clients_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'clients',
+          unique: true,
+        },
+        {
+          columns: {name: 'ASC'},
+          name: 'funk_name_unique',
+          schema: 'public',
+          tableName: 'funk',
+          unique: true,
+        },
+        {
+          columns: {order: 'ASC'},
+          name: 'funk_order_unique',
+          schema: 'public',
+          tableName: 'funk',
+          unique: true,
+        },
+        {
+          columns: {id: 'ASC'},
+          name: 'funk_pkey',
+          schema: 'public',
+          tableName: 'funk',
+          unique: true,
+        },
+      ],
+      resultingPublications: [
+        `_${APP_ID}_metadata_${SHARD_NUM}`,
+        `_${APP_ID}_public_${SHARD_NUM}`,
+      ],
+      upstream: {
+        funk: [
+          {
+            id: '123',
+            name: '456',
+            order: 1,
+            createdAt: '2019-01-12T00:30:35.381101032Z',
+            updatedAt: '2019-01-12T00:30:35.381101032Z',
+          },
+        ],
+      },
+      replicatedData: {
+        funk: [
+          {
+            createdAt: 1547253035381.101,
+            id: '123',
+            name: '456',
+            order: 1n,
+            updatedAt: 1547253035381.101,
+            ['_0_version']: WATERMARK_REGEX,
+          },
+        ],
+      },
+    },
   ];
 
   let upstream: PostgresDB;
@@ -1618,6 +1810,43 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       result = e;
     }
     expect(result).toBeInstanceOf(UnsupportedTableSchemaError);
+  });
+
+  test.each([
+    [
+      'missing default publication',
+      `DROP PUBLICATION "_${APP_ID}_public_${SHARD_NUM}"`,
+    ],
+    [
+      'missing metadata publication',
+      `DROP PUBLICATION "_${APP_ID}_metadata_${SHARD_NUM}"`,
+    ],
+  ])('recover from corrupted state: %s', async (_name, corruption) => {
+    const lc = createSilentLogContext();
+    const sql = upstream;
+    await sql`CREATE TABLE foo(id int4 PRIMARY KEY);`;
+    await sql`INSERT INTO foo(id) VALUES (1);`;
+
+    const replica = new Database(lc, ':memory:');
+    const shardConfig = {
+      appID: APP_ID,
+      shardNum: SHARD_NUM,
+      publications: [],
+    };
+
+    await ensureShardSchema(lc, upstream, shardConfig);
+
+    await sql.unsafe(corruption);
+
+    await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
+      tableCopyWorkers: 5,
+      rowBatchSize: 10000,
+    });
+
+    expectMatchingObjectsInTables(replica, {
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [],
+      foo: [{id: 1}],
+    });
   });
 
   test.each([

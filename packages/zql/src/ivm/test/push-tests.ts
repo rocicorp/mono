@@ -1,19 +1,19 @@
 import {expect} from 'vitest';
+import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../../zero-schema/src/table-schema.ts';
+import {buildPipeline} from '../../builder/builder.ts';
+import {TestBuilderDelegate} from '../../builder/test-builder-delegate.ts';
 import {ArrayView} from '../array-view.ts';
 import {Catch} from '../catch.ts';
 import type {Input} from '../operator.ts';
 import type {Source, SourceChange} from '../source.ts';
 import type {Format} from '../view.ts';
 import {createSource} from './source-factory.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {TestBuilderDelegate} from '../../builder/test-builder-delegate.ts';
-import {buildPipeline} from '../../builder/builder.ts';
-import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 
 const lc = createSilentLogContext();
 
@@ -100,7 +100,7 @@ export function runPushTest(t: PushTest) {
     finalOutput: view,
     actualStorage: actualStorage2,
   } = innerTest(j => {
-    const view = new ArrayView(j, t.format);
+    const view = new ArrayView(j, t.format, true, () => {});
     data = view.data;
     return view;
   });

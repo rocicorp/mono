@@ -1,10 +1,13 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {Query} from '../../zql/src/query/query.ts';
+import {type AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
 import {getAllViewsSizeForTesting, ViewStore} from './use-query.tsx';
 
-function newMockQuery(query: string, singular = false): Query<Schema, string> {
+function newMockQuery(
+  query: string,
+  singular = false,
+): AbstractQuery<Schema, string> {
   const view = newView();
   return {
     hash() {
@@ -12,8 +15,7 @@ function newMockQuery(query: string, singular = false): Query<Schema, string> {
     },
     materialize: vi.fn().mockImplementation(() => view),
     format: {singular},
-    updateTTL: vi.fn<Query<Schema, string>['updateTTL']>(),
-  } as unknown as Query<Schema, string>;
+  } as unknown as AbstractQuery<Schema, string>;
 }
 
 function newView() {
@@ -25,6 +27,7 @@ function newView() {
     destroy() {
       this.listeners.clear();
     },
+    updateTTL() {},
   };
 }
 
@@ -86,17 +89,17 @@ describe('ViewStore', () => {
 
       const q1 = newMockQuery('query1');
       const view1 = viewStore.getView('client1', q1, true, '1s');
-      expect(q1.updateTTL).not.toHaveBeenCalled();
+
+      const updateTTLSpy = vi.spyOn(view1, 'updateTTL');
       expect(q1.materialize).toHaveBeenCalledExactlyOnceWith('1s');
 
       const q2 = newMockQuery('query1');
       const view2 = viewStore.getView('client1', q2, true, '1m');
-      // Same query hash so call updateTTL on the existing one.
-      expect(q2.updateTTL).not.toHaveBeenCalled();
-      expect(q2.materialize).not.toHaveBeenCalled();
-      expect(q1.updateTTL).toHaveBeenCalledExactlyOnceWith('1m');
-
       expect(view1).toBe(view2);
+
+      // Same query hash so only one view. Should have called updateTTL on the existing one.
+      expect(q2.materialize).not.toHaveBeenCalled();
+      expect(updateTTLSpy).toHaveBeenCalledExactlyOnceWith('1m');
 
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
     });
@@ -106,17 +109,18 @@ describe('ViewStore', () => {
 
       const q1 = newMockQuery('query1');
       const view1 = viewStore.getView('client1', q1, true, '60s');
-      expect(q1.updateTTL).not.toHaveBeenCalled();
+      const updateTTLSpy = vi.spyOn(view1, 'updateTTL');
       expect(q1.materialize).toHaveBeenCalledTimes(1);
 
       const q2 = newMockQuery('query1');
       const view2 = viewStore.getView('client1', q2, true, '1m');
-      expect(q1.updateTTL).toHaveBeenCalledExactlyOnceWith('1m');
+      expect(view1).toBe(view2);
+
+      expect(updateTTLSpy).toHaveBeenCalledExactlyOnceWith('1m');
 
       const q3 = newMockQuery('query1');
       const view3 = viewStore.getView('client1', q3, true, 60_000);
 
-      expect(view1).toBe(view2);
       expect(view1).toBe(view3);
 
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);

@@ -1,10 +1,10 @@
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {existsSync} from 'fs';
 import {readFile, writeFile} from 'fs/promises';
-import {initialSync} from '../../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
-import {getConnectionURI} from '../../../../zero-cache/src/test/db.ts';
-import type {PostgresDB} from '../../../../zero-cache/src/types/pg.ts';
-import type {Database} from '../../../../zqlite/src/db.ts';
+import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
+import {getConnectionURI} from '../../../zero-cache/src/test/db.ts';
+import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
+import type {Database} from '../../../zqlite/src/db.ts';
 
 const PG_URL =
   'https://github.com/lerocha/chinook-database/releases/download/v1.4.5/Chinook_PostgreSql.sql';

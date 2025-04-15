@@ -93,7 +93,7 @@ function append(shardNum: number) {
 function createEventFunctionStatements(shard: ShardConfig) {
   const {appID, shardNum, publications} = shard;
   const schema = id(upstreamSchema(shard)); // e.g. "{APP_ID}_{SHARD_ID}"
-  return `
+  return /*sql*/ `
 CREATE SCHEMA IF NOT EXISTS ${schema};
 
 CREATE OR REPLACE FUNCTION ${schema}.get_trigger_context()
@@ -297,7 +297,7 @@ export function createEventTriggerStatements(shard: ShardConfig) {
   ];
 
   // A single ddl_command_start trigger covering all relevant tags.
-  triggers.push(`
+  triggers.push(/*sql*/ `
 CREATE EVENT TRIGGER ${sharded(`${appID}_ddl_start`)}
   ON ddl_command_start
   WHEN TAG IN (${lit(TAGS)})
@@ -307,7 +307,7 @@ CREATE EVENT TRIGGER ${sharded(`${appID}_ddl_start`)}
   // A per-tag ddl_command_end trigger that dispatches to ${schema}.emit_ddl_end(tag)
   for (const tag of TAGS) {
     const tagID = tag.toLowerCase().replace(' ', '_');
-    triggers.push(`
+    triggers.push(/*sql*/ `
 CREATE OR REPLACE FUNCTION ${schema}.emit_${tagID}() 
 RETURNS event_trigger AS $$
 BEGIN
@@ -331,14 +331,14 @@ export function dropEventTriggerStatements(
 ) {
   const stmts: string[] = [];
   // A single ddl_command_start trigger covering all relevant tags.
-  stmts.push(`
+  stmts.push(/*sql*/ `
     DROP EVENT TRIGGER IF EXISTS ${id(`${appID}_ddl_start_${shardID}`)};
   `);
 
   // A per-tag ddl_command_end trigger that dispatches to ${schema}.emit_ddl_end(tag)
   for (const tag of TAGS) {
     const tagID = tag.toLowerCase().replace(' ', '_');
-    stmts.push(`
+    stmts.push(/*sql*/ `
       DROP EVENT TRIGGER IF EXISTS ${id(`${appID}_${tagID}_${shardID}`)};
     `);
   }

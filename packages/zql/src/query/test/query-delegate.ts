@@ -7,11 +7,12 @@ import {MemoryStorage} from '../../ivm/memory-storage.ts';
 import type {Input} from '../../ivm/operator.ts';
 import type {Source} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
-import type {
-  CommitListener,
-  GotCallback,
-  QueryDelegate,
+import {
+  type CommitListener,
+  type GotCallback,
+  type QueryDelegate,
 } from '../query-impl.ts';
+import {DEFAULT_RUN_OPTIONS_COMPLETE, type RunOptions} from '../query.ts';
 import type {TTL} from '../ttl.ts';
 import {
   commentSchema,
@@ -31,9 +32,22 @@ export class QueryDelegateImpl implements QueryDelegate {
   readonly addedServerQueries: {ast: AST; ttl: TTL}[] = [];
   readonly gotCallbacks: (GotCallback | undefined)[] = [];
   synchronouslyCallNextGotCallback = false;
+  callGot = false;
+  readonly defaultQueryComplete = false;
 
-  constructor(sources?: Record<string, Source>) {
-    this.#sources = sources ?? makeSources();
+  constructor({
+    sources = makeSources(),
+    callGot = false,
+  }: {
+    sources?: Record<string, Source> | undefined;
+    callGot?: boolean | undefined;
+  } = {}) {
+    this.#sources = sources;
+    this.callGot = callGot;
+  }
+
+  normalizeRunOptions(options?: RunOptions): RunOptions {
+    return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
   }
 
   batchViewUpdates<T>(applyViewUpdates: () => T): T {
@@ -66,9 +80,15 @@ export class QueryDelegateImpl implements QueryDelegate {
   ): () => void {
     this.addedServerQueries.push({ast, ttl});
     this.gotCallbacks.push(gotCallback);
-    if (this.synchronouslyCallNextGotCallback) {
-      this.synchronouslyCallNextGotCallback = false;
-      gotCallback?.(true);
+    if (this.callGot) {
+      void Promise.resolve().then(() => {
+        gotCallback?.(true);
+      });
+    } else {
+      if (this.synchronouslyCallNextGotCallback) {
+        this.synchronouslyCallNextGotCallback = false;
+        gotCallback?.(true);
+      }
     }
     return () => {};
   }
@@ -91,6 +111,13 @@ export class QueryDelegateImpl implements QueryDelegate {
 
   decorateInput(input: Input, _description: string): Input {
     return input;
+  }
+
+  callAllGotCallbacks() {
+    for (const gotCallback of this.gotCallbacks) {
+      gotCallback?.(true);
+    }
+    this.gotCallbacks.length = 0;
   }
 }
 

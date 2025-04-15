@@ -4,6 +4,7 @@ import {Compiler} from './compiler.ts';
 import {formatPgInternalConvert} from './sql.ts';
 import {
   boolean,
+  enumeration,
   number,
   string,
   table,
@@ -65,17 +66,51 @@ const childTable = table('child_table')
   })
   .primaryKey('id');
 
+const enumTable = table('enumTable')
+  .columns({
+    id: string(),
+    status: enumeration<'active' | 'inactive'>(),
+  })
+  .primaryKey('id');
+
+const timestampsTable = table('timestampsTable')
+  .columns({
+    id: string(),
+    timestampWithTz: number(),
+    timestampWithoutTz: number(),
+  })
+  .primaryKey('id');
+
+const alternateUser = table('alternate_user')
+  .from('alternate_schema.user')
+  .columns({
+    id: string(),
+    name: string(),
+    age: number(),
+  })
+  .primaryKey('id');
+
 const schema = createSchema({
-  tables: [user, issue, issueLabel, label, parentTable, childTable],
+  tables: [
+    user,
+    issue,
+    issueLabel,
+    label,
+    parentTable,
+    childTable,
+    enumTable,
+    timestampsTable,
+    alternateUser,
+  ],
 });
 
 const serverSchema: ServerSchema = {
-  user: {
+  'user': {
     id: {type: 'text', isEnum: false},
     name: {type: 'text', isEnum: false},
     age: {type: 'numeric', isEnum: false},
   },
-  issue: {
+  'issue': {
     id: {type: 'text', isEnum: false},
     title: {type: 'text', isEnum: false},
     description: {type: 'text', isEnum: false},
@@ -83,22 +118,36 @@ const serverSchema: ServerSchema = {
     ownerId: {type: 'text', isEnum: false},
     created: {type: 'timestamp', isEnum: false},
   },
-  issueLabel: {
+  'issueLabel': {
     issue_id: {type: 'text', isEnum: false},
     label_id: {type: 'text', isEnum: false},
   },
-  label: {
+  'label': {
     id: {type: 'text', isEnum: false},
     name: {type: 'text', isEnum: false},
   },
-  parentTable: {
+  'parentTable': {
     id: {type: 'text', isEnum: false},
     other_id: {type: 'text', isEnum: false},
   },
-  childTable: {
+  'childTable': {
     id: {type: 'text', isEnum: false},
     parent_id: {type: 'text', isEnum: false},
     parent_other_id: {type: 'text', isEnum: false},
+  },
+  'enumTable': {
+    id: {type: 'text', isEnum: false},
+    status: {type: 'statusEnum', isEnum: true},
+  },
+  'timestampsTable': {
+    id: {type: 'text', isEnum: false},
+    timestampWithoutTz: {type: 'timestamp', isEnum: false},
+    timestampWithTz: {type: 'timestamptz', isEnum: false},
+  },
+  'alternate_schema.user': {
+    id: {type: 'text', isEnum: false},
+    name: {type: 'text', isEnum: false},
+    age: {type: 'numeric', isEnum: false},
   },
 };
 
@@ -116,6 +165,23 @@ test('limit', () => {
     .toMatchInlineSnapshot(`
     {
       "text": "",
+      "values": [],
+    }
+  `);
+});
+
+test('select from different schema', () => {
+  const compiler = new Compiler(schema.tables, serverSchema);
+  expect(
+    formatPgInternalConvert(
+      compiler.compile({
+        table: 'alternate_user',
+        related: [],
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "alternate_user"."id","alternate_user"."name","alternate_user"."age" FROM "alternate_schema"."user" as "alternate_user"    )"root"",
       "values": [],
     }
   `);
@@ -168,6 +234,81 @@ test('orderBy', () => {
     {
       "text": "",
       "values": [],
+    }
+  `);
+});
+
+test('compile with enum', () => {
+  const compiler = new Compiler(schema.tables, serverSchema);
+  expect(
+    formatPgInternalConvert(
+      compiler.compile({
+        table: 'enumTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'status'},
+          right: {type: 'literal', value: 'active'},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "enumTable"."id","enumTable"."status" FROM "enumTable" WHERE "status"::text = $1::text COLLATE "ucs_basic"   )"root"",
+      "values": [
+        "active",
+      ],
+    }
+  `);
+});
+
+test('compile with timestamp (with timezone)', () => {
+  const compiler = new Compiler(schema.tables, serverSchema);
+  expect(
+    formatPgInternalConvert(
+      compiler.compile({
+        table: 'timestampsTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'timestampWithTz'},
+          right: {type: 'literal', value: 'abc'},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "timestampsTable"."id",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithTz") * 1000 as "timestampWithTz",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithoutTz") * 1000 as "timestampWithoutTz" FROM "timestampsTable" WHERE "timestampWithTz" = to_timestamp($1::text::bigint / 1000.0)   )"root"",
+      "values": [
+        ""abc"",
+      ],
+    }
+  `);
+});
+
+test('compile with timestamp (without timezone)', () => {
+  const compiler = new Compiler(schema.tables, serverSchema);
+  expect(
+    formatPgInternalConvert(
+      compiler.compile({
+        table: 'timestampsTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'timestampWithoutTz'},
+          right: {type: 'literal', value: 'abc'},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT "timestampsTable"."id",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithTz") * 1000 as "timestampWithTz",EXTRACT(EPOCH FROM "timestampsTable"."timestampWithoutTz") * 1000 as "timestampWithoutTz" FROM "timestampsTable" WHERE "timestampWithoutTz" = to_timestamp($1::text::bigint / 1000.0) AT TIME ZONE 'UTC'   )"root"",
+      "values": [
+        ""abc"",
+      ],
     }
   `);
 });
@@ -816,7 +957,7 @@ test('related thru junction edge', () => {
     {
       "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT (
             SELECT COALESCE(json_agg(row_to_json("inner_labels")), '[]'::json) FROM (SELECT "table_1"."id","table_1"."name" FROM "issue_label" as "issueLabel" JOIN "label" as "table_1" ON "issueLabel"."label_id" = "table_1"."id" WHERE ("issue"."id" = "issueLabel"."issue_id")    ) "inner_labels"
-          ) as "labels","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId",EXTRACT(EPOCH FROM "issue"."created"::timestamp AT TIME ZONE 'UTC') * 1000 as "created" FROM "issue"    )"root"",
+          ) as "labels","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId",EXTRACT(EPOCH FROM "issue"."created") * 1000 as "created" FROM "issue"    )"root"",
       "values": [],
     }
   `);
@@ -845,8 +986,8 @@ test('related w/o junction edge', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "SELECT COALESCE(json_agg(row_to_json("root")), '[]'::json)::text as "zql_result" FROM (SELECT (
-          SELECT COALESCE(json_agg(row_to_json("inner_owner")) , '[]'::json) FROM (SELECT "user"."id","user"."name","user"."age" FROM "user"  WHERE ("issue"."ownerId" = "user"."id")  ) "inner_owner"
-        ) as "owner","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId",EXTRACT(EPOCH FROM "issue"."created"::timestamp AT TIME ZONE 'UTC') * 1000 as "created" FROM "issue"    )"root"",
+          SELECT COALESCE(json_agg(row_to_json("inner_owner")), '[]'::json) FROM (SELECT "user"."id","user"."name","user"."age" FROM "user"  WHERE ("issue"."ownerId" = "user"."id")  ) "inner_owner"
+        ) as "owner","issue"."id","issue"."title","issue"."description","issue"."closed","issue"."ownerId",EXTRACT(EPOCH FROM "issue"."created") * 1000 as "created" FROM "issue"    )"root"",
       "values": [],
     }
   `);

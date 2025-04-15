@@ -89,9 +89,13 @@ test('parse options', () => {
         "port": 4848,
         "push": {},
         "replica": {},
+        "run": {
+          "lazily": false,
+        },
         "shard": {
           "num": 0,
         },
+        "targetClientRowCount": 20000,
         "tenants": [
           {
             "env": {
@@ -102,7 +106,7 @@ test('parse options', () => {
             },
             "host": "normalize.me",
             "id": "ten-boo",
-            "path": "/tenboo",
+            "path": "/tenboo/",
           },
           {
             "env": {
@@ -112,7 +116,7 @@ test('parse options', () => {
               "ZERO_REPLICA_FILE": "tenbar.db",
             },
             "id": "ten_bar",
-            "path": "/tenbar",
+            "path": "/tenbar/",
           },
           {
             "env": {
@@ -123,7 +127,7 @@ test('parse options', () => {
               "ZERO_UPSTREAM_DB": "overridden",
             },
             "id": "tenbaz-123",
-            "path": "/tenbaz",
+            "path": "/tenbaz/",
           },
         ],
         "upstream": {
@@ -153,7 +157,9 @@ test('parse options', () => {
         "ZERO_LOG_SLOW_ROW_THRESHOLD": "2",
         "ZERO_PER_USER_MUTATION_LIMIT_WINDOW_MS": "60000",
         "ZERO_PORT": "4848",
+        "ZERO_RUN_LAZILY": "false",
         "ZERO_SHARD_NUM": "0",
+        "ZERO_TARGET_CLIENT_ROW_COUNT": "20000",
         "ZERO_TENANTS_JSON": "{"tenants":[{"id":"ten-boo","host":"Normalize.ME","path":"tenboo","env":{"ZERO_REPLICA_FILE":"tenboo.db","ZERO_CVR_DB":"foo","ZERO_CHANGE_DB":"foo","ZERO_APP_ID":"foo"}},{"id":"ten_bar","path":"/tenbar","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_CVR_DB":"bar","ZERO_CHANGE_DB":"bar","ZERO_APP_ID":"bar"}},{"id":"tenbaz-123","path":"/tenbaz","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_UPSTREAM_DB":"overridden","ZERO_CVR_DB":"baz","ZERO_CHANGE_DB":"baz","ZERO_APP_ID":"foo"}}]}",
         "ZERO_UPSTREAM_DB": "foo",
         "ZERO_UPSTREAM_MAX_CONNS": "20",
@@ -389,11 +395,10 @@ test('zero-cache --help', () => {
                                                                                                                                                                   
                                                                 CREATE PUBLICATION _{app-id}_public_0 FOR TABLES IN SCHEMA public;                                
                                                                                                                                                                   
-                                                                Note that once an app has begun syncing data, this list of publications                           
-                                                                cannot be changed, and zero-cache will refuse to start if a specified                             
-                                                                value differs from what was originally synced.                                                    
-                                                                                                                                                                  
-                                                                To use a different set of publications, a new app should be created.                              
+                                                                Note that changing the set of publications will result in resyncing the replica,                  
+                                                                which may involve downtime (replication lag) while the new replica is initializing.               
+                                                                To change the set of publications without disrupting an existing app, a new app                   
+                                                                should be created.                                                                                
                                                                                                                                                                   
      --auth-jwk string                                          optional                                                                                          
        ZERO_AUTH_JWK env                                                                                                                                          
@@ -532,13 +537,26 @@ test('zero-cache --help', () => {
                                                                 to reduce the amount of heap memory used during initial sync (e.g. for tables                     
                                                                 with large rows).                                                                                 
                                                                                                                                                                   
-     --target-client-row-count number                           optional                                                                                          
+     --target-client-row-count number                           default: 20000                                                                                    
        ZERO_TARGET_CLIENT_ROW_COUNT env                                                                                                                           
                                                                 The target number of rows to keep per client in the client side cache.                            
                                                                 This limit is a soft limit. When the number of rows in the cache exceeds                          
                                                                 this limit, zero-cache will evict inactive queries in order of ttl-based expiration.              
                                                                 Active queries, on the other hand, are never evicted and are allowed to use more                  
                                                                 rows than the limit.                                                                              
+                                                                                                                                                                  
+     --run-lazily boolean                                       default: false                                                                                    
+       ZERO_RUN_LAZILY env                                                                                                                                        
+                                                                Delay starting the zero-cache processes until the first request.                                  
+                                                                                                                                                                  
+                                                                Note: This works as expected in single-node mode. While it is technically usable                  
+                                                                in a multi-node setup, there is a bootstrapping complication in that the                          
+                                                                view-syncer must first restore the replica from litestream before connecting to                   
+                                                                the replication-manager (to know where to continue replication from). If the                      
+                                                                replication-manager has never run, there will be no replica file to restore, and                  
+                                                                the view-syncer will fail to start up, never connecting to the replication-manager.               
+                                                                                                                                                                  
+                                                                As such, it is not recommended to run a replication-manager lazily.                               
                                                                                                                                                                   
      --server-version string                                    optional                                                                                          
        ZERO_SERVER_VERSION env                                                                                                                                    

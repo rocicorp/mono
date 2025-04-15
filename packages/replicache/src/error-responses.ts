@@ -31,8 +31,7 @@ export function isClientStateNotFoundResponse(
 
 /**
  * The server endpoint may respond with a `VersionNotSupported` error if it does
- * not know how to handle the {@link pullVersion}, {@link pushVersion} or the
- * {@link schemaVersion}.
+ * not know how to handle the pull, push or schema version.
  */
 export type VersionNotSupportedResponse = {
   error: 'VersionNotSupported';

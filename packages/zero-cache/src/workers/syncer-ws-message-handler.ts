@@ -69,7 +69,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
     };
   }
 
-  async handleMessage(msg: Upstream): Promise<HandlerResult> {
+  async handleMessage(msg: Upstream): Promise<HandlerResult[]> {
     const lc = this.#lc;
     const msgType = msg[0];
     const viewSyncer = this.#viewSyncer;
@@ -81,27 +81,31 @@ export class SyncerWsMessageHandler implements MessageHandler {
         lc.error?.('Pull is not supported by Zero');
         break;
       case 'push': {
-        return startAsyncSpan<HandlerResult>(
+        return startAsyncSpan<HandlerResult[]>(
           tracer,
           'connection.push',
           async () => {
             const {clientGroupID, mutations, schemaVersion} = msg[1];
             if (clientGroupID !== this.#clientGroupID) {
-              return {
-                type: 'fatal',
-                error: {
-                  kind: ErrorKind.InvalidPush,
-                  message:
-                    `clientGroupID in mutation "${clientGroupID}" does not match ` +
-                    `clientGroupID of connection "${this.#clientGroupID}`,
-                },
-              } satisfies HandlerResult;
+              return [
+                {
+                  type: 'fatal',
+                  error: {
+                    kind: ErrorKind.InvalidPush,
+                    message:
+                      `clientGroupID in mutation "${clientGroupID}" does not match ` +
+                      `clientGroupID of connection "${this.#clientGroupID}`,
+                  },
+                } satisfies HandlerResult,
+              ];
             }
 
             if (mutations.length === 0) {
-              return {
-                type: 'ok',
-              };
+              return [
+                {
+                  type: 'ok',
+                },
+              ];
             }
 
             // The client only ever sends 1 mutation per push.
@@ -112,12 +116,13 @@ export class SyncerWsMessageHandler implements MessageHandler {
                 this.#pusher,
                 'A ZERO_PUSH_URL must be set in order to process custom mutations.',
               );
-              return this.#pusher.enqueuePush(
-                this.#syncContext.clientID,
-                this.#syncContext.wsID,
-                msg[1],
-                this.#token,
-              );
+              return [
+                this.#pusher.enqueuePush(
+                  this.#syncContext.clientID,
+                  msg[1],
+                  this.#token,
+                ),
+              ];
             }
 
             // Hold a connection-level lock while processing mutations so that:
@@ -141,7 +146,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
               }
               return {type: 'ok'} satisfies HandlerResult;
             });
-            return ret;
+            return [ret];
           },
         );
       }
@@ -156,17 +161,33 @@ export class SyncerWsMessageHandler implements MessageHandler {
         );
         break;
       case 'initConnection': {
-        // TODO (mlaw): tell mutagens about the new token too
-        const stream = await startSpan(
-          tracer,
-          'connection.initConnection',
-          () => viewSyncer.initConnection(this.#syncContext, msg),
-        );
-        return {
-          type: 'stream',
-          source: 'viewSyncer',
-          stream,
-        };
+        const ret: HandlerResult[] = [
+          {
+            type: 'stream',
+            source: 'viewSyncer',
+            stream: await startSpan(tracer, 'connection.initConnection', () =>
+              viewSyncer.initConnection(this.#syncContext, msg),
+            ),
+          },
+        ];
+
+        // Given we support both CRUD and Custom mutators,
+        // we do not initialize the `pusher` unless the user has opted
+        // into custom mutations. We detect that by checking
+        // if the pushURL has been set.
+        if (this.#pusher) {
+          ret.push({
+            type: 'stream',
+            source: 'pusher',
+            stream: this.#pusher.initConnection(
+              this.#syncContext.clientID,
+              this.#syncContext.wsID,
+              msg[1].userPushParams,
+            ),
+          });
+        }
+
+        return ret;
       }
       case 'closeConnection':
         await startAsyncSpan(tracer, 'connection.closeConnection', () =>
@@ -184,6 +205,6 @@ export class SyncerWsMessageHandler implements MessageHandler {
         unreachable(msgType);
     }
 
-    return {type: 'ok'};
+    return [{type: 'ok'}];
   }
 }

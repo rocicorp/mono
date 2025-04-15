@@ -8,25 +8,42 @@ import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import {
   pushResponseSchema,
   type PushBody,
+  type PushError,
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
-import type {HandlerResult} from '../../workers/connection.ts';
+import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {Service} from '../service.ts';
+import type {UserPushParams} from '../../../../zero-protocol/src/connect.ts';
+import type {Source} from '../../types/streams.ts';
+import {assert} from '../../../../shared/src/asserts.ts';
+
+type Fatal = {
+  error: 'forClient';
+  cause: ErrorForClient;
+  mutationIDs: PushError['mutationIDs'];
+};
 
 export interface Pusher {
+  readonly pushURL: string | undefined;
+
   enqueuePush(
     clientID: string,
-    wsID: string,
     push: PushBody,
     jwt: string | undefined,
   ): HandlerResult;
+  initConnection(
+    clientID: string,
+    wsID: string,
+    userPushParams: UserPushParams | undefined,
+  ): Source<Downstream>;
 }
 
 type Config = Pick<ZeroConfig, 'app' | 'shard'>;
+const reservedParams = ['schema', 'appID'];
 
 /**
  * Receives push messages from zero-client and forwards
@@ -51,32 +68,32 @@ export class PusherService implements Service, Pusher {
     config: Config,
     lc: LogContext,
     clientGroupID: string,
-    pushUrl: string,
+    pushURL: string,
     apiKey: string | undefined,
   ) {
     this.#queue = new Queue();
-    this.#pusher = new PushWorker(config, lc, pushUrl, apiKey, this.#queue);
+    this.#pusher = new PushWorker(config, lc, pushURL, apiKey, this.#queue);
     this.id = clientGroupID;
+  }
+
+  get pushURL(): string | undefined {
+    return this.#pusher.pushURL;
+  }
+
+  initConnection(
+    clientID: string,
+    wsID: string,
+    userPushParams: UserPushParams | undefined,
+  ) {
+    return this.#pusher.initConnection(clientID, wsID, userPushParams);
   }
 
   enqueuePush(
     clientID: string,
-    wsID: string,
     push: PushBody,
     jwt: string | undefined,
-  ): HandlerResult {
-    const downstream: Subscription<Downstream> | undefined =
-      this.#pusher.maybeInitConnection(clientID, wsID);
-
-    this.#queue.enqueue({push, jwt});
-
-    if (downstream) {
-      return {
-        type: 'stream',
-        source: 'pusher',
-        stream: downstream,
-      };
-    }
+  ): Exclude<HandlerResult, StreamResult> {
+    this.#queue.enqueue({push, jwt, clientID});
 
     return {
       type: 'ok',
@@ -97,6 +114,7 @@ export class PusherService implements Service, Pusher {
 type PusherEntry = {
   push: PushBody;
   jwt: string | undefined;
+  clientID: string;
 };
 type PusherEntryOrStop = PusherEntry | 'stop';
 
@@ -110,7 +128,14 @@ class PushWorker {
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
   readonly #config: Config;
-  readonly #clients: Map<string, [wsID: string, Subscription<Downstream>]>;
+  readonly #clients: Map<
+    string,
+    {
+      wsID: string;
+      userParams?: UserPushParams | undefined;
+      downstream: Subscription<Downstream>;
+    }
+  >;
 
   constructor(
     config: Config,
@@ -127,20 +152,28 @@ class PushWorker {
     this.#clients = new Map();
   }
 
+  get pushURL() {
+    return this.#pushURL;
+  }
+
   /**
    * Returns a new downstream stream if the clientID,wsID pair has not been seen before.
    * If a clientID already exists with a different wsID, that client's downstream is cancelled.
    */
-  maybeInitConnection(clientID: string, wsID: string) {
+  initConnection(
+    clientID: string,
+    wsID: string,
+    userParams: UserPushParams | undefined,
+  ) {
     const existing = this.#clients.get(clientID);
-    if (existing && existing[0] === wsID) {
+    if (existing && existing.wsID === wsID) {
       // already initialized for this socket
-      return undefined;
+      throw new Error('Connection was already initialized');
     }
 
     // client is back on a new connection
     if (existing) {
-      existing[1].cancel();
+      existing.downstream.cancel();
     }
 
     const downstream = Subscription.create<Downstream>({
@@ -148,7 +181,7 @@ class PushWorker {
         this.#clients.delete(clientID);
       },
     });
-    this.#clients.set(clientID, [wsID, downstream]);
+    this.#clients.set(clientID, {wsID, downstream, userParams});
     return downstream;
   }
 
@@ -178,7 +211,7 @@ class PushWorker {
    * Each client is on a different websocket connection though, so we need to fan out the response
    * to all the clients that were part of the push.
    */
-  async #fanOutResponses(response: PushResponse) {
+  async #fanOutResponses(response: PushResponse | Fatal) {
     const responses: Promise<Result>[] = [];
     const connectionTerminations: (() => void)[] = [];
     if ('error' in response) {
@@ -202,15 +235,17 @@ class PushWorker {
           response.error === 'unsupportedPushVersion' ||
           response.error === 'unsupportedSchemaVersion'
         ) {
-          client[1].fail(
+          client.downstream.fail(
             new ErrorForClient({
               kind: ErrorKind.InvalidPush,
               message: response.error,
             }),
           );
+        } else if (response.error === 'forClient') {
+          client.downstream.fail(response.cause);
         } else {
           responses.push(
-            client[1].push([
+            client.downstream.push([
               'pushResponse',
               {
                 ...response,
@@ -259,12 +294,13 @@ class PushWorker {
 
         if (successes.length > 0) {
           responses.push(
-            client[1].push(['pushResponse', {mutations: successes}]).result,
+            client.downstream.push(['pushResponse', {mutations: successes}])
+              .result,
           );
         }
 
         if (failure) {
-          connectionTerminations.push(() => client[1].fail(failure));
+          connectionTerminations.push(() => client.downstream.fail(failure));
         }
       }
     }
@@ -276,10 +312,11 @@ class PushWorker {
     }
   }
 
-  async #processPush(entry: PusherEntry): Promise<PushResponse> {
+  async #processPush(entry: PusherEntry): Promise<PushResponse | Fatal> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
+
     if (this.#apiKey) {
       headers['X-Api-Key'] = this.#apiKey;
     }
@@ -288,7 +325,20 @@ class PushWorker {
     }
 
     try {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams(this.#pushURL.split('?')[1]);
+      for (const [key, value] of Object.entries(
+        this.#clients.get(entry.clientID)?.userParams?.queryParams ?? {},
+      )) {
+        params.append(key, value);
+      }
+
+      for (const reserved of reservedParams) {
+        assert(
+          !params.has(reserved),
+          `The push URL cannot contain the reserved query param "${reserved}"`,
+        );
+      }
+
       params.append(
         'schema',
         upstreamSchema({
@@ -297,16 +347,36 @@ class PushWorker {
         }),
       );
       params.append('appID', this.#config.app.id);
+
       const response = await fetch(`${this.#pushURL}?${params.toString()}`, {
         method: 'POST',
         headers,
         body: JSON.stringify(entry.push),
       });
       if (!response.ok) {
+        const details = await response.text();
+
+        // Zero currently handles all auth errors this way (throws ErrorForClient).
+        // Continue doing that until we have an `onError` callback exposed on the top level Zero instance.
+        // This:
+        // 1. Keeps the API the same for those migrating to custom mutators from CRUD
+        // 2. Ensures we only churn the API once, when we have `onError` available.
+        //
+        // When switching to `onError`, we should stop disconnecting the websocket
+        // on auth errors and instead let the token be updated
+        // on the existing WS connection. This will give us the chance to skip
+        // re-hydrating queries that do not use the modified fields of the token.
+        if (response.status === 401) {
+          throw new ErrorForClient({
+            kind: ErrorKind.AuthInvalidated,
+            message: details,
+          });
+        }
+
         return {
           error: 'http',
           status: response.status,
-          details: await response.text(),
+          details,
           mutationIDs: entry.push.mutations.map(m => ({
             id: m.id,
             clientID: m.clientID,
@@ -322,57 +392,96 @@ class PushWorker {
         throw e;
       }
     } catch (e) {
+      const mutationIDs = entry.push.mutations.map(m => ({
+        id: m.id,
+        clientID: m.clientID,
+      }));
+
+      this.#lc.error?.('failed to push', e);
+      if (e instanceof ErrorForClient) {
+        return {
+          error: 'forClient',
+          cause: e,
+          mutationIDs,
+        };
+      }
+
       // We do not kill the pusher on error.
       // If the user's API server is down, the mutations will never be acknowledged
       // and the client will eventually retry.
-      this.#lc.error?.('failed to push', e);
       return {
         error: 'zeroPusher',
         details: String(e),
-        mutationIDs: entry.push.mutations.map(m => ({
-          id: m.id,
-          clientID: m.clientID,
-        })),
+        mutationIDs,
       };
     }
   }
 }
 
 /**
- * Scans over the array of pushes and puts consecutive pushes with the same JWT
- * into a single push.
+ * Pushes for different clientIDs could theoretically be interleaved.
  *
- * If a 'stop' is encountered, the function returns the accumulated pushes up
- * to that point and a boolean indicating that the pusher should stop.
- *
- * Exported for testing.
- *
- * Future optimization: every unique clientID will have the same JWT for all of its
- * pushes. Given that, we could combine pushes across clientIDs which would
- * create less fragmentation in the case where mutations among clients are interleaved.
+ * In order to do efficient batching to the user's API server,
+ * we collect all pushes for the same clientID into a single push.
  */
 export function combinePushes(
   entries: readonly (PusherEntryOrStop | undefined)[],
 ): [PusherEntry[], boolean] {
-  const ret: PusherEntry[] = [];
+  const pushesByClientID = new Map<string, PusherEntry[]>();
+
+  function collect() {
+    const ret: PusherEntry[] = [];
+    for (const entries of pushesByClientID.values()) {
+      const composite: PusherEntry = {
+        ...entries[0],
+        push: {
+          ...entries[0].push,
+          mutations: [],
+        },
+      };
+      ret.push(composite);
+      for (const entry of entries) {
+        assertAreCompatiblePushes(composite, entry);
+        composite.push.mutations.push(...entry.push.mutations);
+      }
+    }
+    return ret;
+  }
 
   for (const entry of entries) {
     if (entry === 'stop' || entry === undefined) {
-      return [ret, true] as const;
+      return [collect(), true];
     }
 
-    if (ret.length === 0) {
-      ret.push(entry);
-      continue;
-    }
-
-    const last = ret[ret.length - 1];
-    if (last.jwt === entry.jwt) {
-      last.push.mutations.push(...entry.push.mutations);
+    const {clientID} = entry;
+    const existing = pushesByClientID.get(clientID);
+    if (existing) {
+      existing.push(entry);
     } else {
-      ret.push(entry);
+      pushesByClientID.set(clientID, [entry]);
     }
   }
 
-  return [ret, false] as const;
+  return [collect(), false] as const;
+}
+
+// These invariants should always be true for a given clientID.
+// If they are not, we have a bug in the code somewhere.
+function assertAreCompatiblePushes(left: PusherEntry, right: PusherEntry) {
+  assert(
+    left.clientID === right.clientID,
+    'clientID must be the same for all pushes',
+  );
+  assert(
+    left.jwt === right.jwt,
+    'jwt must be the same for all pushes with the same clientID',
+  );
+  assert(
+    left.push.schemaVersion === right.push.schemaVersion,
+    'schemaVersion must be the same for all pushes with the same clientID',
+  );
+  assert(
+    left.push.pushVersion === right.push.pushVersion,
+    'pushVersion must be the same for all pushes with the same clientID',
+  );
 }

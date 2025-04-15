@@ -54,11 +54,10 @@ export const appOptions = {
       ``,
       `CREATE PUBLICATION _\\{app-id\\}_public_0 FOR TABLES IN SCHEMA public;`,
       ``,
-      `Note that once an app has begun syncing data, this list of publications`,
-      `cannot be changed, and zero-cache will refuse to start if a specified`,
-      `value differs from what was originally synced.`,
-      ``,
-      `To use a different set of publications, a new app should be created.`,
+      `Note that changing the set of publications will result in resyncing the replica,`,
+      `which may involve downtime (replication lag) while the new replica is initializing.`,
+      `To change the set of publications without disrupting an existing app, a new app`,
+      `should be created.`,
     ],
   },
 };
@@ -442,7 +441,7 @@ export const zeroOptions = {
     },
 
     rowBatchSize: {
-      type: v.number().default(10000),
+      type: v.number().default(10_000),
       desc: [
         `The number of rows each table copy worker fetches at a time during`,
         `initial sync. This can be increased to speed up initial sync, or decreased`,
@@ -454,12 +453,12 @@ export const zeroOptions = {
 
   tenantID: {
     type: v.string().optional(),
-    desc: ['Passed by multi/main.ts to tag the LogContext of zero-caches'],
+    desc: ['Passed by runner/main.ts to tag the LogContext of zero-caches'],
     hidden: true,
   },
 
   targetClientRowCount: {
-    type: v.number().optional(),
+    type: v.number().default(20_000),
     desc: [
       'The target number of rows to keep per client in the client side cache.',
       'This limit is a soft limit. When the number of rows in the cache exceeds',
@@ -467,7 +466,24 @@ export const zeroOptions = {
       'Active queries, on the other hand, are never evicted and are allowed to use more',
       'rows than the limit.',
     ],
-    default: 20_000,
+  },
+
+  run: {
+    lazily: {
+      type: v.boolean().default(false),
+      desc: [
+        'Delay starting the zero-cache processes until the first request.',
+        '',
+        'Note: This works as expected in single-node mode. While it is technically usable',
+        'in a multi-node setup, there is a bootstrapping complication in that the',
+        'view-syncer must first restore the replica from litestream before connecting to',
+        'the replication-manager (to know where to continue replication from). If the',
+        'replication-manager has never run, there will be no replica file to restore, and',
+        'the view-syncer will fail to start up, never connecting to the replication-manager.',
+        '',
+        'As such, it is not recommended to run a replication-manager lazily.',
+      ],
+    },
   },
 };
 

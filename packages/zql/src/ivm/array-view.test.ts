@@ -32,6 +32,9 @@ test('basics', () => {
       ['b', 'asc'],
       ['a', 'asc'],
     ]),
+    {singular: false, relationships: {}},
+    true,
+    () => {},
   );
 
   let callCount = 0;
@@ -132,6 +135,8 @@ test('single-format', () => {
       ['a', 'asc'],
     ]),
     {singular: true, relationships: {}},
+    true,
+    () => {},
   );
 
   let callCount = 0;
@@ -180,6 +185,9 @@ test('hydrate-empty', () => {
       ['b', 'asc'],
       ['a', 'asc'],
     ]),
+    {singular: false, relationships: {}},
+    true,
+    () => {},
   );
 
   let callCount = 0;
@@ -236,10 +244,15 @@ test('tree', () => {
     system: 'client',
   });
 
-  const view = new ArrayView(join, {
-    singular: false,
-    relationships: {children: {singular: false, relationships: {}}},
-  });
+  const view = new ArrayView(
+    join,
+    {
+      singular: false,
+      relationships: {children: {singular: false, relationships: {}}},
+    },
+    true,
+    () => {},
+  );
   let data: unknown[] = [];
   view.addListener(entries => {
     assertArray(entries);
@@ -548,10 +561,15 @@ test('tree-single', () => {
     system: 'client',
   });
 
-  const view = new ArrayView(join, {
-    singular: true,
-    relationships: {child: {singular: true, relationships: {}}},
-  });
+  const view = new ArrayView(
+    join,
+    {
+      singular: true,
+      relationships: {child: {singular: true, relationships: {}}},
+    },
+    true,
+    () => {},
+  );
   let data: unknown;
   view.addListener(d => {
     data = structuredClone(d);
@@ -650,10 +668,15 @@ test('collapse', () => {
     setOutput() {},
   };
 
-  const view = new ArrayView(input, {
-    singular: false,
-    relationships: {labels: {singular: false, relationships: {}}},
-  });
+  const view = new ArrayView(
+    input,
+    {
+      singular: false,
+      relationships: {labels: {singular: false, relationships: {}}},
+    },
+    true,
+    () => {},
+  );
   let data: unknown[] = [];
   view.addListener(entries => {
     assertArray(entries);
@@ -1132,10 +1155,15 @@ test('collapse-single', () => {
     },
   };
 
-  const view = new ArrayView(input, {
-    singular: false,
-    relationships: {labels: {singular: true, relationships: {}}},
-  });
+  const view = new ArrayView(
+    input,
+    {
+      singular: false,
+      relationships: {labels: {singular: true, relationships: {}}},
+    },
+    true,
+    () => {},
+  );
   let data: unknown;
   view.addListener(d => {
     data = structuredClone(d);
@@ -1200,7 +1228,12 @@ test('basic with edit pushes', () => {
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
-  const view = new ArrayView(ms.connect([['a', 'asc']]));
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    true,
+    () => {},
+  );
 
   let callCount = 0;
   let data: unknown[] = [];
@@ -1310,10 +1343,15 @@ test('tree edit', () => {
     system: 'client',
   });
 
-  const view = new ArrayView(join, {
-    singular: false,
-    relationships: {children: {singular: false, relationships: {}}},
-  });
+  const view = new ArrayView(
+    join,
+    {
+      singular: false,
+      relationships: {children: {singular: false, relationships: {}}},
+    },
+    true,
+    () => {},
+  );
   let data: unknown[] = [];
   view.addListener(entries => {
     assertArray(entries);
@@ -1450,7 +1488,12 @@ test('edit to change the order', () => {
     ms.push({row, type: 'add'});
   }
 
-  const view = new ArrayView(ms.connect([['a', 'asc']]));
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    true,
+    () => {},
+  );
   let data: unknown[] = [];
   view.addListener(entries => {
     assertArray(entries);
@@ -1597,10 +1640,15 @@ test('edit to preserve relationships', () => {
     },
   };
 
-  const view = new ArrayView(input, {
-    singular: false,
-    relationships: {labels: {singular: false, relationships: {}}},
-  });
+  const view = new ArrayView(
+    input,
+    {
+      singular: false,
+      relationships: {labels: {singular: false, relationships: {}}},
+    },
+    true,
+    () => void 0,
+  );
   view.push({
     type: 'add',
     node: {

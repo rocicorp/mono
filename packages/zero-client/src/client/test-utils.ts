@@ -5,6 +5,7 @@ import type {Store} from '../../../replicache/src/dag/store.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
+import {mapAST} from '../../../zero-protocol/src/ast.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
@@ -28,6 +29,9 @@ import type {
 } from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
+import {ast} from '../../../zql/src/query/query-impl.ts';
+import type {PullRow, Query} from '../../../zql/src/query/query.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {LogOptions} from './log-options.ts';
@@ -85,11 +89,17 @@ export class TestZero<
   MD extends CustomMutatorDefs<S> | undefined = undefined,
 > extends Zero<S, MD> {
   pokeIDCounter = 0;
+  readonly #schema: S;
 
   #connectionStateResolvers: Set<{
     state: ConnectionState;
     resolve: (state: ConnectionState) => void;
   }> = new Set();
+
+  constructor(options: ZeroOptions<S, MD>) {
+    super(options);
+    this.#schema = options.schema;
+  }
 
   get perdag(): Store {
     return getInternalReplicacheImplForTesting(this).perdag;
@@ -248,6 +258,24 @@ export class TestZero<
 
   persist(): Promise<void> {
     return getInternalReplicacheImplForTesting(this).persist();
+  }
+
+  markQueryAsGot<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn = PullRow<TTable, TSchema>,
+  >(q: Query<TSchema, TTable, TReturn>): Promise<void> {
+    // TODO(arv): The cookies here could be better... Not sure if the client
+    // ever checks these?
+    return this.triggerPoke(null, '1', {
+      gotQueriesPatch: [
+        {
+          op: 'put',
+          ast: mapAST(ast(q), clientToServer(this.#schema.tables)),
+          hash: q.hash(),
+        },
+      ],
+    });
   }
 }
 

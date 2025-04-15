@@ -902,6 +902,93 @@ textarea.autoResize {
   border-radius: 50%;
 }
 
+/* Onboarding modal */
+
+#root-modal .onboarding-modal {
+  max-width: 40rem;
+  gap: 2rem;
+  width: 100%;
+  padding: 0;
+
+  a {
+    color: var(--color-primary-cta);
+  }
+
+  p {
+    margin: 0 0 1rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin: 1rem 0 1rem;
+  }
+
+  .aside {
+    position: relative;
+    font-size: var(--typo-label-size);
+    color: var(--color-primary-cta);
+    padding: 0.75rem 0.75rem 0.75rem 4rem;
+    border: 1px solid var(--color-primary-cta);
+    border-radius: 0.5rem;
+  }
+
+  .aside::before {
+    content: '👨🏻‍💻';
+    position: absolute;
+    font-size: 2rem;
+    left: 1rem;
+    top: 0.5rem;
+  }
+
+  .keyboard-keys {
+    border-radius: 4px;
+    height: 1.6rem;
+    width: 1.6rem;
+    line-height: 1.5rem;
+    display: inline-block;
+    text-align: center;
+    border: 1px solid #3e3e3e;
+    background: linear-gradient(180deg, #272727 0%, #131313 100%);
+  }
+
+  .opening-text {
+    padding-top: 4.5rem;
+    background: transparent url(assets/images/logo.svg) no-repeat center top;
+    background-size: 50%;
+  }
+
+  .onboarding-modal-accept {
+    color: var(--color-text-primary-active);
+    flex: 0 0 auto;
+    border-radius: var(--ui-button-radius);
+    background-color: var(--color-primary-cta);
+    padding: 0.4rem 1.2rem;
+    font-size: 1rem;
+    font-weight: 800;
+    font-family: inherit;
+    cursor: pointer;
+    overflow: hidden;
+    position: relative;
+    border: 1px solid var(--color-primary-cta-outline);
+    width: fit-content;
+    margin-top: 2rem;
+  }
+
+  .close-button {
+    display: none;
+  }
+
+  .header-line {
+    padding: 0;
+  }
+
+  .modal-container {
+    padding: 3rem;
+    overflow-y: scroll;
+  }
+}
+
 /* Issue Composer */
 
 .modal {
@@ -1334,6 +1421,26 @@ textarea.autoResize {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
+  }
+
+  #root-modal {
+    .onboarding-modal {
+      margin: 0;
+      padding: 0;
+
+      .modal-container {
+        padding: 2rem;
+        overflow-y: scroll;
+      }
+
+      .opening-text {
+        padding-top: 3.5rem;
+      }
+
+      h2 {
+        margin: 1rem 0;
+      }
+    }
   }
 }
 

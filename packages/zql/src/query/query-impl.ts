@@ -10,6 +10,7 @@ import type {
   Condition,
   Ordering,
   Parameter,
+  SimpleOperator,
   System,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
@@ -33,16 +34,21 @@ import {
 import {
   type GetFilterType,
   type HumanReadable,
-  type Operator,
   type PreloadOptions,
   type PullRow,
   type Query,
+  type RunOptions,
 } from './query.ts';
 import {DEFAULT_TTL, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 type AnyQuery = Query<Schema, string, any>;
-export const astForTestingSymbol = Symbol();
+
+const astSymbol = Symbol();
+
+export function ast(query: Query<Schema, string, any>): AST {
+  return (query as AbstractQuery<Schema, string>)[astSymbol];
+}
 
 export function newQuery<
   TSchema extends Schema,
@@ -55,22 +61,23 @@ export function newQuery<
   return new QueryImpl(delegate, schema, table, {table}, defaultFormat);
 }
 
-function newQueryWithDetails<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
->(
-  delegate: QueryDelegate,
-  schema: TSchema,
-  tableName: TTable,
-  ast: AST,
-  format: Format,
-): QueryImpl<TSchema, TTable, TReturn> {
-  return new QueryImpl(delegate, schema, tableName, ast, format);
+export type CommitListener = () => void;
+
+export type GotCallback = (got: boolean) => void;
+
+export interface NewQueryDelegate {
+  newQuery<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(
+    schema: TSchema,
+    table: TTable,
+    ast: AST,
+    format: Format,
+  ): Query<TSchema, TTable, TReturn>;
 }
 
-export type CommitListener = () => void;
-export type GotCallback = (got: boolean) => void;
 export interface QueryDelegate extends BuilderDelegate {
   addServerQuery(
     ast: AST,
@@ -81,6 +88,23 @@ export interface QueryDelegate extends BuilderDelegate {
   onTransactionCommit(cb: CommitListener): () => void;
   batchViewUpdates<T>(applyViewUpdates: () => T): T;
   onQueryMaterialized(hash: string, ast: AST, duration: number): void;
+
+  /**
+   * `run` defaults to wait for `complete` (aka got) results. But in custom mutators
+   * we default to `unknown` to avoid waiting for the server.
+   *
+   * Inside a custom mutator it is an error to call run with `{resultType: 'complete'}`.
+   */
+  normalizeRunOptions(options?: RunOptions): RunOptions;
+
+  /**
+   * Client queries start off as false (`unknown`) and are set to true when the
+   * server sends the gotQueries message.
+   *
+   * For things like ZQLite the default is true (aka `complete`) because the
+   * data is always available.
+   */
+  readonly defaultQueryComplete: boolean;
 }
 
 export function staticParam(
@@ -118,8 +142,7 @@ export abstract class AbstractQuery<
     this.format = format;
   }
 
-  // Not part of Query or QueryInternal interface
-  get [astForTestingSymbol](): AST {
+  get [astSymbol](): AST {
     return this.#ast;
   }
 
@@ -132,6 +155,7 @@ export abstract class AbstractQuery<
 
   protected abstract _system: System;
 
+  // TODO(arv): Put this in the delegate?
   protected abstract _newQuery<
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
@@ -157,6 +181,7 @@ export abstract class AbstractQuery<
       },
     );
   }
+
   whereExists(
     relationship: string,
     cb?: (q: AnyQuery) => AnyQuery,
@@ -312,7 +337,7 @@ export abstract class AbstractQuery<
 
   where(
     fieldOrExpressionFactory: string | ExpressionFactory<TSchema, TTable>,
-    opOrValue?: Operator | GetFilterType<any, any, any> | Parameter,
+    opOrValue?: SimpleOperator | GetFilterType<any, any, any> | Parameter,
     value?: GetFilterType<any, any, any> | Parameter,
   ): Query<TSchema, TTable, TReturn> {
     let cond: Condition;
@@ -532,17 +557,35 @@ export abstract class AbstractQuery<
     return this.#completedAST;
   }
 
+  then<TResult1 = HumanReadable<TReturn>, TResult2 = never>(
+    onFulfilled?:
+      | ((value: HumanReadable<TReturn>) => TResult1 | PromiseLike<TResult1>)
+      | undefined
+      | null,
+    onRejected?:
+      | ((reason: any) => TResult2 | PromiseLike<TResult2>)
+      | undefined
+      | null,
+  ): PromiseLike<TResult1 | TResult2> {
+    return this.run().then(onFulfilled, onRejected);
+  }
+
   abstract materialize(): TypedView<HumanReadable<TReturn>>;
   abstract materialize<T>(factory: ViewFactory<TSchema, TTable, TReturn, T>): T;
-  abstract run(): Promise<HumanReadable<TReturn>>;
+
+  abstract run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
+
   abstract preload(): {
     cleanup: () => void;
     complete: Promise<void>;
   };
-  abstract updateTTL(ttl: TTL): void;
 }
 
-export const completedAstSymbol = Symbol();
+const completedAstSymbol = Symbol();
+
+export function completedAST(q: Query<Schema, string, any>) {
+  return (q as QueryImpl<Schema, string>)[completedAstSymbol];
+}
 
 export class QueryImpl<
   TSchema extends Schema,
@@ -574,7 +617,7 @@ export class QueryImpl<
     ast: AST,
     format: Format,
   ): QueryImpl<TSchema, TTable, TReturn> {
-    return newQueryWithDetails(this.#delegate, schema, tableName, ast, format);
+    return new QueryImpl(this.#delegate, schema, tableName, ast, format);
   }
 
   materialize<T>(
@@ -590,15 +633,19 @@ export class QueryImpl<
     }
     const ast = this._completeAst();
     const queryCompleteResolver = resolver<true>();
-    let queryGot = false;
+    let queryComplete = this.#delegate.defaultQueryComplete;
     const removeServerQuery = this.#delegate.addServerQuery(ast, ttl, got => {
       if (got) {
         const t1 = Date.now();
         this.#delegate.onQueryMaterialized(this.hash(), ast, t1 - t0);
-        queryGot = true;
+        queryComplete = true;
         queryCompleteResolver.resolve(true);
       }
     });
+
+    const updateTTL = (newTTL: TTL) => {
+      this.#delegate.updateServerQuery(ast, newTTL);
+    };
 
     const input = buildPipeline(ast, this.#delegate);
     let removeCommitObserver: (() => void) | undefined;
@@ -618,22 +665,32 @@ export class QueryImpl<
         cb => {
           removeCommitObserver = this.#delegate.onTransactionCommit(cb);
         },
-        queryGot || queryCompleteResolver.promise,
+        queryComplete || queryCompleteResolver.promise,
+        updateTTL,
       ),
     );
 
     return view as T;
   }
 
-  override updateTTL(ttl: TTL): void {
-    this.#delegate.updateServerQuery(this._completeAst(), ttl);
-  }
-
-  run(): Promise<HumanReadable<TReturn>> {
+  run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
+    const opt = this.#delegate.normalizeRunOptions(options);
     const v: TypedView<HumanReadable<TReturn>> = this.materialize();
-    const ret = v.data;
-    v.destroy();
-    return Promise.resolve(ret);
+    if (opt.type === 'unknown') {
+      const ret = v.data;
+      v.destroy();
+      return Promise.resolve(ret);
+    }
+
+    opt.type satisfies 'complete';
+    return new Promise(resolve => {
+      v.addListener((data, type) => {
+        if (type === 'complete') {
+          v.destroy();
+          resolve(data as HumanReadable<TReturn>);
+        }
+      });
+    });
   }
 
   preload(options?: PreloadOptions): {
@@ -692,14 +749,20 @@ function arrayViewFactory<
   TTable extends string,
   TReturn,
 >(
-  _query: Query<TSchema, TTable, TReturn>,
+  _query: AbstractQuery<TSchema, TTable, TReturn>,
   input: Input,
   format: Format,
   onDestroy: () => void,
   onTransactionCommit: (cb: () => void) => void,
   queryComplete: true | Promise<true>,
+  updateTTL: (ttl: TTL) => void,
 ): TypedView<HumanReadable<TReturn>> {
-  const v = new ArrayView<HumanReadable<TReturn>>(input, format, queryComplete);
+  const v = new ArrayView<HumanReadable<TReturn>>(
+    input,
+    format,
+    queryComplete,
+    updateTTL,
+  );
   v.onDestroy = onDestroy;
   onTransactionCommit(() => {
     v.flush();

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-floating-promises */
 /* eslint-disable @typescript-eslint/ban-types */
 import {describe, expectTypeOf, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
@@ -227,7 +228,7 @@ describe('types', () => {
 
   test('simple select with enums', () => {
     const query = mockQuery as unknown as Query<Schema, 'testWithEnums'>;
-    expectTypeOf(query.run()).toMatchTypeOf<
+    expectTypeOf(query.run()).toExtend<
       Promise<
         ReadonlyArray<{
           s: string;
