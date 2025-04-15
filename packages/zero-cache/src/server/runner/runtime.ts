@@ -30,14 +30,26 @@ export async function getTaskID(lc: LogContext) {
   return nanoid();
 }
 
+function isLinkLocal(addr: string) {
+  return addr.startsWith('169.254.') || addr.startsWith('fe80::');
+}
+
 export async function getHostIp(lc: LogContext) {
   const interfaces = networkInterfaces();
   const sorted = Object.values(networkInterfaces())
     .flat()
     .filter(val => val !== undefined)
-    .filter(val => !val.internal)
     .sort((a, b) => {
+      if (a.internal !== b.internal) {
+        // Prefer non-internal addresses.
+        return a.internal ? 1 : -1;
+      }
+      if (isLinkLocal(a.address) != isLinkLocal(b.address)) {
+        // Prefer non link-local addresses
+        return isLinkLocal(a.address) ? 1 : -1;
+      }
       if (a.family !== b.family) {
+        // Prefer IPv4.
         return a.family === 'IPv4' ? -1 : 1;
       }
       // arbitrary
