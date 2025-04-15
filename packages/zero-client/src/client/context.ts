@@ -41,6 +41,12 @@ export class ZeroContext implements QueryDelegate {
   readonly staticQueryParameters = undefined;
   readonly normalizeRunOptions: (options?: RunOptions) => RunOptions;
 
+  /**
+   * Client-side queries start out as "unknown" and are then updated to
+   * "complete" once the server has sent back the query result.
+   */
+  readonly defaultQueryComplete = false;
+
   constructor(
     lc: LogContext,
     mainSources: IVMSourceBranch,

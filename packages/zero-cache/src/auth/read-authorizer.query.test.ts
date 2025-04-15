@@ -544,6 +544,7 @@ beforeEach(() => {
     normalizeRunOptions(options) {
       return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
     },
+    defaultQueryComplete: true,
   };
 
   for (const table of Object.values(schema.tables)) {

@@ -96,6 +96,15 @@ export interface QueryDelegate extends BuilderDelegate {
    * Inside a custom mutator it is an error to call run with `{resultType: 'complete'}`.
    */
   normalizeRunOptions(options?: RunOptions): RunOptions;
+
+  /**
+   * Client queries start off as false (`unknown`) and are set to true when the
+   * server sends the gotQueries message.
+   *
+   * For things like ZQLite the default is true (aka `complete`) because the
+   * data is always available.
+   */
+  readonly defaultQueryComplete: boolean;
 }
 
 export function staticParam(
@@ -624,12 +633,12 @@ export class QueryImpl<
     }
     const ast = this._completeAst();
     const queryCompleteResolver = resolver<true>();
-    let queryGot = false;
+    let queryComplete = this.#delegate.defaultQueryComplete;
     const removeServerQuery = this.#delegate.addServerQuery(ast, ttl, got => {
       if (got) {
         const t1 = Date.now();
         this.#delegate.onQueryMaterialized(this.hash(), ast, t1 - t0);
-        queryGot = true;
+        queryComplete = true;
         queryCompleteResolver.resolve(true);
       }
     });
@@ -656,7 +665,7 @@ export class QueryImpl<
         cb => {
           removeCommitObserver = this.#delegate.onTransactionCommit(cb);
         },
-        queryGot || queryCompleteResolver.promise,
+        queryComplete || queryCompleteResolver.promise,
         updateTTL,
       ),
     );

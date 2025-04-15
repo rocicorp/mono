@@ -372,9 +372,26 @@ export interface Query<
   ): T;
 
   /**
-   * Executes the query and returns the results. This is a 1-shot query that
-   * returns the results immediately. It is equivalent to calling `then` on the
-   * query.
+   * Executes the query and returns the result once. The `options` parameter
+   * specifies whether to wait for complete results or return immediately.
+   *
+   * - `{type: 'complete'}`: Waits for the latest, complete results from the server.
+   * - `{type: 'unknown'}`: Returns a snapshot of the data immediately.
+   *
+   * By default, `run` waits for complete results. Inside a custom mutator, the
+   * default behavior is `{type: 'unknown'}`, and calling `run` with `{type: 'complete'}`
+   * is not allowed.
+   *
+   * `Query` implements `PromiseLike`, and calling `then` on it will invoke `run`
+   * with the default behavior (waiting for complete results).
+   *
+   * @param options Options to control the result type. Defaults to `{type: 'complete'}`.
+   * @returns A promise resolving to the query result.
+   *
+   * @example
+   * ```js
+   * const result = await query.run({type: 'unknown'});
+   * ```
    */
   run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
 

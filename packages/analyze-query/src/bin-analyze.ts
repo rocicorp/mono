@@ -171,6 +171,7 @@ const host: QueryDelegate = {
   normalizeRunOptions(options) {
     return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
   },
+  defaultQueryComplete: true,
 };
 
 let start: number;

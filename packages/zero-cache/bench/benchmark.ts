@@ -79,6 +79,7 @@ export function bench(opts: Options) {
     normalizeRunOptions(options) {
       return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
     },
+    defaultQueryComplete: true,
   };
 
   const issueQuery = newQuery(host, schema, 'issue');

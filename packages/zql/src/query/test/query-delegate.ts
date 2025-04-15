@@ -33,6 +33,7 @@ export class QueryDelegateImpl implements QueryDelegate {
   readonly gotCallbacks: (GotCallback | undefined)[] = [];
   synchronouslyCallNextGotCallback = false;
   callGot = false;
+  readonly defaultQueryComplete = false;
 
   constructor({
     sources = makeSources(),
