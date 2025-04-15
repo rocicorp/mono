@@ -36,9 +36,8 @@ export class ZeroContext implements QueryDelegate {
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
-  readonly slowMaterializeThreshold: number;
-  readonly lc: LogContext;
-  readonly staticQueryParameters = undefined;
+  readonly #slowMaterializeThreshold: number;
+  readonly #lc: LogContext;
   readonly normalizeRunOptions: (options?: RunOptions) => RunOptions;
 
   /**
@@ -60,8 +59,8 @@ export class ZeroContext implements QueryDelegate {
     this.#addQuery = addQuery;
     this.#updateQuery = updateQuery;
     this.#batchViewUpdates = batchViewUpdates;
-    this.lc = lc;
-    this.slowMaterializeThreshold = slowMaterializeThreshold;
+    this.#lc = lc;
+    this.#slowMaterializeThreshold = slowMaterializeThreshold;
     this.normalizeRunOptions = normalizeRunOptions;
   }
 
@@ -79,17 +78,17 @@ export class ZeroContext implements QueryDelegate {
 
   onQueryMaterialized(hash: string, ast: AST, duration: number): void {
     if (
-      this.slowMaterializeThreshold !== undefined &&
-      duration > this.slowMaterializeThreshold
+      this.#slowMaterializeThreshold !== undefined &&
+      duration > this.#slowMaterializeThreshold
     ) {
-      this.lc.warn?.(
+      this.#lc.warn?.(
         'Slow query materialization (including server/network)',
         hash,
         ast,
         duration,
       );
     } else {
-      this.lc.debug?.(
+      this.#lc.debug?.(
         'Materialized query (including server/network)',
         hash,
         ast,
@@ -153,7 +152,10 @@ export class ZeroContext implements QueryDelegate {
         // We should not fatal the inner-workings of Zero due to the user's application
         // code throwing an error.
         // Hence we wrap notifications in a try-catch block.
-        this.lc.error?.('Failed notifying a commit listener of IVM updates', e);
+        this.#lc.error?.(
+          'Failed notifying a commit listener of IVM updates',
+          e,
+        );
       }
     }
   }
