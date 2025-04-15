@@ -11,6 +11,7 @@ import type {
   GotCallback,
   QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
+import type {RunOptions} from '../../../zql/src/query/query.ts';
 import type {TTL} from '../../../zql/src/query/ttl.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
@@ -38,6 +39,13 @@ export class ZeroContext implements QueryDelegate {
   readonly slowMaterializeThreshold: number;
   readonly lc: LogContext;
   readonly staticQueryParameters = undefined;
+  readonly normalizeRunOptions: (options?: RunOptions) => RunOptions;
+
+  /**
+   * Client-side queries start out as "unknown" and are then updated to
+   * "complete" once the server has sent back the query result.
+   */
+  readonly defaultQueryComplete = false;
 
   constructor(
     lc: LogContext,
@@ -46,6 +54,7 @@ export class ZeroContext implements QueryDelegate {
     updateQuery: UpdateQuery,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
     slowMaterializeThreshold: number,
+    normalizeRunOptions: (options?: RunOptions) => RunOptions,
   ) {
     this.#mainSources = mainSources;
     this.#addQuery = addQuery;
@@ -53,6 +62,7 @@ export class ZeroContext implements QueryDelegate {
     this.#batchViewUpdates = batchViewUpdates;
     this.lc = lc;
     this.slowMaterializeThreshold = slowMaterializeThreshold;
+    this.normalizeRunOptions = normalizeRunOptions;
   }
 
   getSource(name: string): Source | undefined {

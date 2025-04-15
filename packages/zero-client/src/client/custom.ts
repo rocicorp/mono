@@ -3,8 +3,11 @@ import {
   WriteTransactionImpl,
   zeroData,
 } from '../../../replicache/src/transactions.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
+import {emptyFunction} from '../../../shared/src/sentinels.ts';
+import type {MutationResult} from '../../../zero-protocol/src/push.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {
@@ -19,14 +22,16 @@ import type {
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import type {Query} from '../../../zql/src/query/query.ts';
+import {
+  DEFAULT_RUN_OPTIONS_UNKNOWN,
+  type Query,
+  type RunOptions,
+} from '../../../zql/src/query/query.ts';
 import type {ClientID} from '../types/client-state.ts';
 import {ZeroContext} from './context.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-import type {MutationResult} from '../../../zero-protocol/src/push.ts';
-import {emptyFunction} from '../../../shared/src/sentinels.ts';
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
@@ -159,6 +164,18 @@ function makeSchemaCRUD<S extends Schema>(
   ) as SchemaCRUD<S>;
 }
 
+function normalizeRunOptions(options: RunOptions | undefined): RunOptions {
+  if (options === undefined) {
+    return DEFAULT_RUN_OPTIONS_UNKNOWN;
+  }
+  // TODO(arv): We should enforce this with the type system too.
+  assert(
+    options.type !== 'complete',
+    'Cannot wait for complete results in custom mutations',
+  );
+  return options;
+}
+
 function makeSchemaQuery<S extends Schema>(
   lc: LogContext,
   schema: S,
@@ -172,6 +189,7 @@ function makeSchemaQuery<S extends Schema>(
     () => {},
     applyViewUpdates => applyViewUpdates(),
     slowMaterializeThreshold,
+    normalizeRunOptions,
   );
 
   return new Proxy(

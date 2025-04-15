@@ -7,22 +7,23 @@ import {
   test,
   vi,
 } from 'vitest';
+import {zeroData} from '../../../replicache/src/transactions.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
+import * as ConnectionState from './connection-state-enum.ts';
 import {
   TransactionImpl,
   type CustomMutatorDefs,
   type MakeCustomMutatorInterfaces,
   type PromiseWithServerResult,
 } from './custom.ts';
-import {MockSocket, zeroForTest} from './test-utils.ts';
-import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
-import {createDb} from './test/create-db.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-import {zeroData} from '../../../replicache/src/transactions.ts';
-import {must} from '../../../shared/src/must.ts';
-import * as ConnectionState from './connection-state-enum.ts';
+import {MockSocket, zeroForTest} from './test-utils.ts';
+import {createDb} from './test/create-db.ts';
+import {getInternalReplicacheImplForTesting} from './zero.ts';
 
 type Schema = typeof schema;
 
@@ -106,7 +107,7 @@ test('supports mutators without a namespace', async () => {
     createdAt: 1743018138477,
   });
 
-  const issues = await z.query.issue;
+  const issues = await z.query.issue.run({type: 'unknown'});
   expect(issues[0].title).toEqual('no-namespace');
 });
 
@@ -173,6 +174,7 @@ test('custom mutators write to the local store', async () => {
     createdAt: 1743018138477,
   });
 
+  await z.markQueryAsGot(z.query.issue);
   let issues = await z.query.issue;
   expect(issues[0].title).toEqual('foo');
 
@@ -232,12 +234,15 @@ test('custom mutators can query the local store during an optimistic mutation', 
       });
     }),
   );
-  let issues = await z.query.issue.where('closed', false);
+
+  const q = z.query.issue.where('closed', false);
+  await z.markQueryAsGot(q);
+  let issues = await q;
   expect(issues.length).toEqual(10);
 
   await z.mutate.issue.closeAll();
 
-  issues = await z.query.issue.where('closed', false);
+  issues = await q;
   expect(issues.length).toEqual(0);
 });
 
@@ -325,9 +330,35 @@ describe('rebasing custom mutators', () => {
       createdAt: 1743018138477,
     });
 
-    const issue = must(await z.query.issue.where('id', '1').one());
-    expect(issue.title).toEqual('foo updated');
-    expect(issue.description).toEqual('updated');
+    const q = z.query.issue.where('id', '1').one();
+    const issue = await q.run({type: 'unknown'});
+    expect(issue?.title).toEqual('foo updated');
+    expect(issue?.description).toEqual('updated');
+    const p = q.run({type: 'complete'});
+    let completed = false;
+    p.then(
+      () => (completed = true),
+      () => {},
+    );
+    await Promise.resolve();
+    expect(completed).toEqual(false);
+
+    await z.markQueryAsGot(q);
+
+    // Sanity check that the poke got written to the Dag Store.
+    // Pokes are scheduled using raf... give it a macro task.
+    await vi.waitFor(async () => {
+      const rep = getInternalReplicacheImplForTesting(z);
+      expect(await rep.query(tx => tx.has(`g/${q.hash()}`))).toEqual(true);
+    });
+
+    expect(completed).toEqual(true);
+
+    {
+      const issue = await p;
+      expect(issue?.title).toEqual('foo updated');
+      expect(issue?.description).toEqual('updated');
+    }
   });
 
   test('mutations on main do not change main until they are committed', async () => {
@@ -339,7 +370,7 @@ describe('rebasing custom mutators', () => {
           create: async (tx, args: InsertValue<typeof schema.tables.issue>) => {
             await tx.mutate.issue.insert(args);
             // query main. The issue should not be there yet.
-            expect(await z.query.issue).length(0);
+            expect(await z.query.issue.run({type: 'unknown'})).length(0);
             // but it is in this tx
             expect(await tx.query.issue).length(1);
 
@@ -542,4 +573,33 @@ describe('server results and keeping read queries', () => {
     await z.close();
     expect(await close.server).toEqual({error: 'app'});
   });
+});
+
+test('run waiting for complete results throws in custom mutations', async () => {
+  let err;
+  const z = zeroForTest({
+    schema,
+    mutators: {
+      issue: {
+        create: async tx => {
+          try {
+            await tx.query.issue.run({type: 'complete'});
+          } catch (e) {
+            err = e;
+          }
+        },
+      },
+    } as const satisfies CustomMutatorDefs<Schema>,
+  });
+
+  await z.triggerConnected();
+  await z.waitForConnectionState(ConnectionState.Connected);
+
+  await z.mutate.issue.create();
+
+  expect(err).toMatchInlineSnapshot(
+    `[Error: Cannot wait for complete results in custom mutations]`,
+  );
+
+  await z.close();
 });

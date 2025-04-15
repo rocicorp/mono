@@ -372,11 +372,28 @@ export interface Query<
   ): T;
 
   /**
-   * Executes the query and returns the results. This is a 1-shot query that
-   * returns the results immediately. It is equivalent to calling `then` on the
-   * query.
+   * Executes the query and returns the result once. The `options` parameter
+   * specifies whether to wait for complete results or return immediately.
+   *
+   * - `{type: 'complete'}`: Waits for the latest, complete results from the server.
+   * - `{type: 'unknown'}`: Returns a snapshot of the data immediately.
+   *
+   * By default, `run` waits for complete results. Inside a custom mutator, the
+   * default behavior is `{type: 'unknown'}`, and calling `run` with `{type: 'complete'}`
+   * is not allowed.
+   *
+   * `Query` implements `PromiseLike`, and calling `then` on it will invoke `run`
+   * with the default behavior (waiting for complete results).
+   *
+   * @param options Options to control the result type. Defaults to `{type: 'complete'}`.
+   * @returns A promise resolving to the query result.
+   *
+   * @example
+   * ```js
+   * const result = await query.run({type: 'unknown'});
+   * ```
    */
-  run(): Promise<HumanReadable<TReturn>>;
+  run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
 
   /**
    * Preload loads the data into the clients cache without keeping it in memory.
@@ -413,3 +430,27 @@ export type HumanReadable<T> = undefined extends T ? Expand<T> : Expand<T>[];
 export type HumanReadableRecursive<T> = undefined extends T
   ? ExpandRecursive<T>
   : ExpandRecursive<T>[];
+
+/**
+ * The kind of results we want to wait for when using {@linkcode run} on {@linkcode Query}.
+ *
+ * `unknown` means we don't want to wait for the server to return results. The result is a
+ * snapshot of the data at the time the query was run.
+ *
+ * `complete` means we want to ensure that we have the latest result from the server. The
+ * result is a complete and up-to-date view of the data. In some cases this means that we
+ * have to wait for the server to return results. To ensure that we have the result for
+ * this query you can preload it before calling run. See {@link preload}.
+ *
+ */
+export type RunOptions = {
+  type: 'unknown' | 'complete';
+};
+
+export const DEFAULT_RUN_OPTIONS_UNKNOWN = {
+  type: 'unknown',
+} as const;
+
+export const DEFAULT_RUN_OPTIONS_COMPLETE = {
+  type: 'complete',
+} as const;

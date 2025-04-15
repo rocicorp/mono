@@ -37,6 +37,7 @@ import {
   type PreloadOptions,
   type PullRow,
   type Query,
+  type RunOptions,
 } from './query.ts';
 import {DEFAULT_TTL, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
@@ -60,22 +61,23 @@ export function newQuery<
   return new QueryImpl(delegate, schema, table, {table}, defaultFormat);
 }
 
-function newQueryWithDetails<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
->(
-  delegate: QueryDelegate,
-  schema: TSchema,
-  tableName: TTable,
-  ast: AST,
-  format: Format,
-): QueryImpl<TSchema, TTable, TReturn> {
-  return new QueryImpl(delegate, schema, tableName, ast, format);
+export type CommitListener = () => void;
+
+export type GotCallback = (got: boolean) => void;
+
+export interface NewQueryDelegate {
+  newQuery<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(
+    schema: TSchema,
+    table: TTable,
+    ast: AST,
+    format: Format,
+  ): Query<TSchema, TTable, TReturn>;
 }
 
-export type CommitListener = () => void;
-export type GotCallback = (got: boolean) => void;
 export interface QueryDelegate extends BuilderDelegate {
   addServerQuery(
     ast: AST,
@@ -86,6 +88,23 @@ export interface QueryDelegate extends BuilderDelegate {
   onTransactionCommit(cb: CommitListener): () => void;
   batchViewUpdates<T>(applyViewUpdates: () => T): T;
   onQueryMaterialized(hash: string, ast: AST, duration: number): void;
+
+  /**
+   * `run` defaults to wait for `complete` (aka got) results. But in custom mutators
+   * we default to `unknown` to avoid waiting for the server.
+   *
+   * Inside a custom mutator it is an error to call run with `{resultType: 'complete'}`.
+   */
+  normalizeRunOptions(options?: RunOptions): RunOptions;
+
+  /**
+   * Client queries start off as false (`unknown`) and are set to true when the
+   * server sends the gotQueries message.
+   *
+   * For things like ZQLite the default is true (aka `complete`) because the
+   * data is always available.
+   */
+  readonly defaultQueryComplete: boolean;
 }
 
 export function staticParam(
@@ -136,6 +155,7 @@ export abstract class AbstractQuery<
 
   protected abstract _system: System;
 
+  // TODO(arv): Put this in the delegate?
   protected abstract _newQuery<
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
@@ -161,6 +181,7 @@ export abstract class AbstractQuery<
       },
     );
   }
+
   whereExists(
     relationship: string,
     cb?: (q: AnyQuery) => AnyQuery,
@@ -552,7 +573,7 @@ export abstract class AbstractQuery<
   abstract materialize(): TypedView<HumanReadable<TReturn>>;
   abstract materialize<T>(factory: ViewFactory<TSchema, TTable, TReturn, T>): T;
 
-  abstract run(): Promise<HumanReadable<TReturn>>;
+  abstract run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
 
   abstract preload(): {
     cleanup: () => void;
@@ -596,7 +617,7 @@ export class QueryImpl<
     ast: AST,
     format: Format,
   ): QueryImpl<TSchema, TTable, TReturn> {
-    return newQueryWithDetails(this.#delegate, schema, tableName, ast, format);
+    return new QueryImpl(this.#delegate, schema, tableName, ast, format);
   }
 
   materialize<T>(
@@ -612,12 +633,12 @@ export class QueryImpl<
     }
     const ast = this._completeAst();
     const queryCompleteResolver = resolver<true>();
-    let queryGot = false;
+    let queryComplete = this.#delegate.defaultQueryComplete;
     const removeServerQuery = this.#delegate.addServerQuery(ast, ttl, got => {
       if (got) {
         const t1 = Date.now();
         this.#delegate.onQueryMaterialized(this.hash(), ast, t1 - t0);
-        queryGot = true;
+        queryComplete = true;
         queryCompleteResolver.resolve(true);
       }
     });
@@ -644,7 +665,7 @@ export class QueryImpl<
         cb => {
           removeCommitObserver = this.#delegate.onTransactionCommit(cb);
         },
-        queryGot || queryCompleteResolver.promise,
+        queryComplete || queryCompleteResolver.promise,
         updateTTL,
       ),
     );
@@ -652,11 +673,24 @@ export class QueryImpl<
     return view as T;
   }
 
-  run(): Promise<HumanReadable<TReturn>> {
+  run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
+    const opt = this.#delegate.normalizeRunOptions(options);
     const v: TypedView<HumanReadable<TReturn>> = this.materialize();
-    const ret = v.data;
-    v.destroy();
-    return Promise.resolve(ret);
+    if (opt.type === 'unknown') {
+      const ret = v.data;
+      v.destroy();
+      return Promise.resolve(ret);
+    }
+
+    opt.type satisfies 'complete';
+    return new Promise(resolve => {
+      v.addListener((data, type) => {
+        if (type === 'complete') {
+          v.destroy();
+          resolve(data as HumanReadable<TReturn>);
+        }
+      });
+    });
   }
 
   preload(options?: PreloadOptions): {

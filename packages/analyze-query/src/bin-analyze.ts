@@ -1,10 +1,14 @@
 /* eslint-disable no-console */
 import '@dotenvx/dotenvx/config';
 import chalk from 'chalk';
+import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
+import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {must} from '../../shared/src/must.ts';
 import {parseOptions} from '../../shared/src/options.ts';
 import * as v from '../../shared/src/valita.ts';
+import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
 import {
   appOptions,
   shardOptions,
@@ -12,6 +16,8 @@ import {
   zeroOptions,
 } from '../../zero-cache/src/config/zero-config.ts';
 import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
+import {pgClient} from '../../zero-cache/src/types/pg.ts';
+import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 import {
   mapAST,
   type AST,
@@ -31,19 +37,17 @@ import {
   newQuery,
   type QueryDelegate,
 } from '../../zql/src/query/query-impl.ts';
-import type {PullRow, Query} from '../../zql/src/query/query.ts';
+import {
+  DEFAULT_RUN_OPTIONS_COMPLETE,
+  type PullRow,
+  type Query,
+} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {
   runtimeDebugFlags,
   runtimeDebugStats,
 } from '../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
-import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
-import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
-import {pgClient} from '../../zero-cache/src/types/pg.ts';
-import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
-import {must} from '../../shared/src/must.ts';
-import {formatOutput} from '../../ast-to-zql/src/format.ts';
 
 const options = {
   replicaFile: zeroOptions.replica.file,
@@ -164,6 +168,10 @@ const host: QueryDelegate = {
   batchViewUpdates<T>(applyViewUpdates: () => T): T {
     return applyViewUpdates();
   },
+  normalizeRunOptions(options) {
+    return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
+  },
+  defaultQueryComplete: true,
 };
 
 let start: number;
