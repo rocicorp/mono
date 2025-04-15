@@ -2,6 +2,7 @@ name: Build and Deploy Sandbox Zero-Cache AWS SST
 
 on:
   push:
+    # Temporarily using sandbox to test replication-manager discovery
     branches: [darkgnotic/rep-mgr-discovery]
 env:
   # Setting an environment variable with the value of a configuration variable
