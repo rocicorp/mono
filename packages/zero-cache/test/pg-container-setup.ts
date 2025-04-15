@@ -1,6 +1,6 @@
 import {PostgreSqlContainer} from '@testcontainers/postgresql';
 
-export function runPostgresContainer(image: string) {
+export function runPostgresContainer(image: string, timezone: string) {
   return async ({provide}) => {
     const container = await new PostgreSqlContainer(image)
       .withCommand([
@@ -8,7 +8,7 @@ export function runPostgresContainer(image: string) {
         '-c',
         'wal_level=logical',
         '-c',
-        'timezone=UTC+1',
+        `timezone=${timezone}`,
       ])
       .start();
 
