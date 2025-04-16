@@ -86,6 +86,7 @@ test('client queries', async () => {
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
     (await z.socket).messages.length = 0;
     const p = inspector.client.queries();
+    await Promise.resolve();
     expect((await z.socket).messages.map(s => JSON.parse(s))).toEqual([
       [
         'inspect',
@@ -199,9 +200,9 @@ test('clientGroup queries', async () => {
 
   vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
   const inspector = await z.inspect();
-  const socket = await z.socket;
   const p = inspector.clientGroup.queries();
-  expect(socket.messages).toMatchInlineSnapshot(`
+  await Promise.resolve();
+  expect((await z.socket).messages).toMatchInlineSnapshot(`
     [
       "["inspect",{"op":"queries","id":"000000000000000000000"}]",
     ]

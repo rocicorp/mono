@@ -40,7 +40,7 @@ import type {
 
 type Rep = ReplicacheImpl<MutatorDefs>;
 
-type GetWebSocket = () => WebSocket | undefined;
+type GetWebSocket = () => Promise<WebSocket>;
 
 export async function newInspector(
   rep: Rep,
@@ -86,11 +86,10 @@ class Inspector implements InspectorInterface {
 }
 
 function rpc<T extends InspectDownBody>(
-  socket: WebSocket | undefined,
+  socket: WebSocket,
   arg: Omit<InspectUpBody, 'id'>,
   downSchema: valita.Type<T>,
 ): Promise<T['value']> {
-  assert(socket, 'WebSocket not available');
   return new Promise((resolve, reject) => {
     const id = nanoid();
     const f = (ev: MessageEvent) => {
@@ -139,7 +138,7 @@ class Client implements ClientInterface {
 
   async queries(): Promise<QueryInterface[]> {
     const rows: InspectQueryRow[] = await rpc(
-      this.#socket(),
+      await this.#socket(),
       {op: 'queries', clientID: this.id} as InspectQueriesUpBody,
       inspectQueriesDownSchema,
     );
@@ -212,7 +211,7 @@ class ClientGroup implements ClientGroupInterface {
 
   async queries(): Promise<QueryInterface[]> {
     const rows: InspectQueryRow[] = await rpc(
-      this.#socket(),
+      await this.#socket(),
       {op: 'queries'},
       inspectQueriesDownSchema,
     );

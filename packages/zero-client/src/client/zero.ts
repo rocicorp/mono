@@ -1845,7 +1845,11 @@ export class Zero<
     // eslint-disable-next-line no-unused-labels
     BUNDLE_SIZE: {
       const m = await import('./inspector/inspector.ts');
-      return m.newInspector(this.#rep, this.#schema, () => this.#socket);
+      // Wait for the web socket to be available
+      return m.newInspector(this.#rep, this.#schema, async () => {
+        await this.#connectResolver.promise;
+        return this.#socket!;
+      });
     }
   }
 }
