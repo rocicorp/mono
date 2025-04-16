@@ -43,11 +43,7 @@ import {
   newQuery,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
-import {
-  DEFAULT_RUN_OPTIONS_COMPLETE,
-  type Query,
-  type Row,
-} from '../../../zql/src/query/query.ts';
+import {type Query, type Row} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
@@ -541,9 +537,7 @@ beforeEach(() => {
     batchViewUpdates<T>(applyViewUpdates: () => T): T {
       return applyViewUpdates();
     },
-    normalizeRunOptions(options) {
-      return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
-    },
+    assertValidRunOptions() {},
     defaultQueryComplete: true,
   };
 
