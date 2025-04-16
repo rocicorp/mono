@@ -80,7 +80,7 @@ import {
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {
-  DEFAULT_RUN_OPTIONS_COMPLETE,
+  DEFAULT_RUN_OPTIONS_UNKNOWN,
   type Query,
   type RunOptions,
 } from '../../../zql/src/query/query.ts';
@@ -2005,5 +2005,5 @@ class TimedOutError extends Error {
 class CloseError extends Error {}
 
 function normalizeRunOptions(options?: RunOptions | undefined): RunOptions {
-  return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
+  return options ?? DEFAULT_RUN_OPTIONS_UNKNOWN;
 }
