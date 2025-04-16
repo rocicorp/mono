@@ -79,7 +79,7 @@ DISCORD_WEBHOOK_URL=''
 Then start the server:
 
 ```bash
-npm run zero
+npm run zero-cache-dev
 ```
 
 ### Run the web app
