@@ -12,7 +12,6 @@ import {
   type GotCallback,
   type QueryDelegate,
 } from '../query-impl.ts';
-import {DEFAULT_RUN_OPTIONS_COMPLETE, type RunOptions} from '../query.ts';
 import type {TTL} from '../ttl.ts';
 import {
   commentSchema,
@@ -46,9 +45,7 @@ export class QueryDelegateImpl implements QueryDelegate {
     this.callGot = callGot;
   }
 
-  normalizeRunOptions(options?: RunOptions): RunOptions {
-    return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
-  }
+  assertValidRunOptions(): void {}
 
   batchViewUpdates<T>(applyViewUpdates: () => T): T {
     return applyViewUpdates();

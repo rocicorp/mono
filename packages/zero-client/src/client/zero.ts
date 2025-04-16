@@ -79,11 +79,7 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import {
-  DEFAULT_RUN_OPTIONS_UNKNOWN,
-  type Query,
-  type RunOptions,
-} from '../../../zql/src/query/query.ts';
+import {type Query, type RunOptions} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import * as ConnectionState from './connection-state-enum.ts';
@@ -542,7 +538,7 @@ export class Zero<
       (ast, ttl) => this.#queryManager.update(ast, ttl),
       batchViewUpdates,
       slowMaterializeThreshold,
-      normalizeRunOptions,
+      assertValidRunOptions,
     );
 
     const replicacheImplOptions: ReplicacheImplOptions = {
@@ -2004,6 +2000,4 @@ class TimedOutError extends Error {
 
 class CloseError extends Error {}
 
-function normalizeRunOptions(options?: RunOptions | undefined): RunOptions {
-  return options ?? DEFAULT_RUN_OPTIONS_UNKNOWN;
-}
+function assertValidRunOptions(_options?: RunOptions | undefined): void {}

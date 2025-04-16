@@ -8,7 +8,6 @@ import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../zql/src/ivm/operator.ts';
 import type {Source} from '../../zql/src/ivm/source.ts';
 import {newQuery, type QueryDelegate} from '../../zql/src/query/query-impl.ts';
-import {DEFAULT_RUN_OPTIONS_COMPLETE} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {computeZqlSpecs} from '../src/db/lite-tables.ts';
@@ -76,9 +75,7 @@ export function bench(opts: Options) {
     batchViewUpdates<T>(applyViewUpdates: () => T): T {
       return applyViewUpdates();
     },
-    normalizeRunOptions(options) {
-      return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
-    },
+    assertValidRunOptions() {},
     defaultQueryComplete: true,
   };
 

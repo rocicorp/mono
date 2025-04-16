@@ -107,7 +107,7 @@ test('supports mutators without a namespace', async () => {
     createdAt: 1743018138477,
   });
 
-  const issues = await z.query.issue.run({type: 'unknown'});
+  const issues = await z.query.issue;
   expect(issues[0].title).toEqual('no-namespace');
 });
 
@@ -370,7 +370,7 @@ describe('rebasing custom mutators', () => {
           create: async (tx, args: InsertValue<typeof schema.tables.issue>) => {
             await tx.mutate.issue.insert(args);
             // query main. The issue should not be there yet.
-            expect(await z.query.issue.run({type: 'unknown'})).length(0);
+            expect(await z.query.issue).length(0);
             // but it is in this tx
             expect(await tx.query.issue).length(1);
 
