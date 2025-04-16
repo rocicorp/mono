@@ -22,11 +22,7 @@ import type {
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import {
-  DEFAULT_RUN_OPTIONS_UNKNOWN,
-  type Query,
-  type RunOptions,
-} from '../../../zql/src/query/query.ts';
+import {type Query, type RunOptions} from '../../../zql/src/query/query.ts';
 import type {ClientID} from '../types/client-state.ts';
 import {ZeroContext} from './context.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
@@ -164,16 +160,12 @@ function makeSchemaCRUD<S extends Schema>(
   ) as SchemaCRUD<S>;
 }
 
-function normalizeRunOptions(options: RunOptions | undefined): RunOptions {
-  if (options === undefined) {
-    return DEFAULT_RUN_OPTIONS_UNKNOWN;
-  }
+function assertValidRunOptions(options: RunOptions | undefined): void {
   // TODO(arv): We should enforce this with the type system too.
   assert(
-    options.type !== 'complete',
+    options?.type !== 'complete',
     'Cannot wait for complete results in custom mutations',
   );
-  return options;
 }
 
 function makeSchemaQuery<S extends Schema>(
@@ -189,7 +181,7 @@ function makeSchemaQuery<S extends Schema>(
     () => {},
     applyViewUpdates => applyViewUpdates(),
     slowMaterializeThreshold,
-    normalizeRunOptions,
+    assertValidRunOptions,
   );
 
   return new Proxy(

@@ -375,22 +375,20 @@ export interface Query<
    * Executes the query and returns the result once. The `options` parameter
    * specifies whether to wait for complete results or return immediately.
    *
-   * - `{type: 'complete'}`: Waits for the latest, complete results from the server.
    * - `{type: 'unknown'}`: Returns a snapshot of the data immediately.
+   * - `{type: 'complete'}`: Waits for the latest, complete results from the server.
    *
-   * By default, `run` waits for complete results. Inside a custom mutator, the
-   * default behavior is `{type: 'unknown'}`, and calling `run` with `{type: 'complete'}`
-   * is not allowed.
+   * By default, `run` uses `{type: 'unknown'}` to avoid waiting for the server.
    *
    * `Query` implements `PromiseLike`, and calling `then` on it will invoke `run`
-   * with the default behavior (waiting for complete results).
+   * with the default behavior (`unknown`).
    *
-   * @param options Options to control the result type. Defaults to `{type: 'complete'}`.
+   * @param options Options to control the result type. Defaults to `{type: 'unknown'}`.
    * @returns A promise resolving to the query result.
    *
    * @example
    * ```js
-   * const result = await query.run({type: 'unknown'});
+   * const result = await query.run({type: 'complete'});
    * ```
    */
   run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
@@ -442,6 +440,7 @@ export type HumanReadableRecursive<T> = undefined extends T
  * have to wait for the server to return results. To ensure that we have the result for
  * this query you can preload it before calling run. See {@link preload}.
  *
+ * By default, `run` uses `{type: 'unknown'}` to avoid waiting for the server.
  */
 export type RunOptions = {
   type: 'unknown' | 'complete';

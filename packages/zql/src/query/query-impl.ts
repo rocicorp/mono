@@ -90,12 +90,11 @@ export interface QueryDelegate extends BuilderDelegate {
   onQueryMaterialized(hash: string, ast: AST, duration: number): void;
 
   /**
-   * `run` defaults to wait for `complete` (aka got) results. But in custom mutators
-   * we default to `unknown` to avoid waiting for the server.
-   *
-   * Inside a custom mutator it is an error to call run with `{resultType: 'complete'}`.
+   * Asserts that the `RunOptions` provided to the `run` method are supported in
+   * this context. For example, in a custom mutator, the `{type: 'complete'}`
+   * option is not supported and this will throw.
    */
-  normalizeRunOptions(options?: RunOptions): RunOptions;
+  assertValidRunOptions(options?: RunOptions): void;
 
   /**
    * Client queries start off as false (`unknown`) and are set to true when the
@@ -674,23 +673,24 @@ export class QueryImpl<
   }
 
   run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
-    const opt = this.#delegate.normalizeRunOptions(options);
+    this.#delegate.assertValidRunOptions(options);
     const v: TypedView<HumanReadable<TReturn>> = this.materialize();
-    if (opt.type === 'unknown') {
-      const ret = v.data;
-      v.destroy();
-      return Promise.resolve(ret);
+    if (options?.type === 'complete') {
+      return new Promise(resolve => {
+        v.addListener((data, type) => {
+          if (type === 'complete') {
+            v.destroy();
+            resolve(data as HumanReadable<TReturn>);
+          }
+        });
+      });
     }
 
-    opt.type satisfies 'complete';
-    return new Promise(resolve => {
-      v.addListener((data, type) => {
-        if (type === 'complete') {
-          v.destroy();
-          resolve(data as HumanReadable<TReturn>);
-        }
-      });
-    });
+    options?.type satisfies 'unknown' | undefined;
+
+    const ret = v.data;
+    v.destroy();
+    return Promise.resolve(ret);
   }
 
   preload(options?: PreloadOptions): {

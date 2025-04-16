@@ -18,7 +18,6 @@ import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {SourceFactory} from '../../../zql/src/ivm/test/source-factory.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-impl.ts';
-import {DEFAULT_RUN_OPTIONS_COMPLETE} from '../../../zql/src/query/query.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
 import {TableSource, toSQLiteTypeName} from '../table-source.ts';
@@ -179,9 +178,7 @@ export function newQueryDelegate(
     batchViewUpdates<T>(applyViewUpdates: () => T): T {
       return applyViewUpdates();
     },
-    normalizeRunOptions(options) {
-      return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
-    },
+    assertValidRunOptions() {},
     defaultQueryComplete: true,
   };
 }

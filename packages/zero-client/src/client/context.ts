@@ -38,7 +38,7 @@ export class ZeroContext implements QueryDelegate {
 
   readonly #slowMaterializeThreshold: number;
   readonly #lc: LogContext;
-  readonly normalizeRunOptions: (options?: RunOptions) => RunOptions;
+  readonly assertValidRunOptions: (options?: RunOptions) => void;
 
   /**
    * Client-side queries start out as "unknown" and are then updated to
@@ -53,7 +53,7 @@ export class ZeroContext implements QueryDelegate {
     updateQuery: UpdateQuery,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
     slowMaterializeThreshold: number,
-    normalizeRunOptions: (options?: RunOptions) => RunOptions,
+    assertValidRunOptions: (options?: RunOptions) => void,
   ) {
     this.#mainSources = mainSources;
     this.#addQuery = addQuery;
@@ -61,7 +61,7 @@ export class ZeroContext implements QueryDelegate {
     this.#batchViewUpdates = batchViewUpdates;
     this.#lc = lc;
     this.#slowMaterializeThreshold = slowMaterializeThreshold;
-    this.normalizeRunOptions = normalizeRunOptions;
+    this.assertValidRunOptions = assertValidRunOptions;
   }
 
   getSource(name: string): Source | undefined {
