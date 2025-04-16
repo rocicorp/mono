@@ -24,7 +24,7 @@ export type UseQueryOptions = {
   /**
    * Time to live (TTL) in seconds. Controls how long query results are cached
    * after the query is removed. During this time, Zero continues to sync the query.
-   * Default is 10 seconds.
+   * Default is 'never'.
    */
   ttl?: TTL | undefined;
 };
