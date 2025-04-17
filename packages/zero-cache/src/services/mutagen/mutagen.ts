@@ -5,7 +5,7 @@ import type {JWTPayload} from 'jose';
 import postgres from 'postgres';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
   primaryKeyValueSchema,

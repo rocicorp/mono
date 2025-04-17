@@ -46,6 +46,7 @@ export type {
   SimpleOperator,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
+export {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 export {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 export {
   createSchema,
@@ -129,5 +130,8 @@ export type {
   ClientGroup as InspectorClientGroup,
   Query as InspectorQuery,
 } from './client/inspector/types.ts';
+export {OnErrorKind} from './client/on-error-kind.ts';
+export type {OnError, OnErrorParameters} from './client/on-error.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
+export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
 export {Zero, type MakeEntityQueriesFromSchema} from './client/zero.ts';

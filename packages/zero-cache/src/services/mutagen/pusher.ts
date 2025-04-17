@@ -1,10 +1,12 @@
 import type {LogContext} from '@rocicorp/logger';
 import {groupBy} from '../../../../shared/src/arrays.ts';
+import {assert} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import * as v from '../../../../shared/src/valita.ts';
+import type {UserPushParams} from '../../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {
   pushResponseSchema,
   type PushBody,
@@ -14,12 +16,10 @@ import {
 import {type ZeroConfig} from '../../config/zero-config.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import {upstreamSchema} from '../../types/shards.ts';
+import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {Service} from '../service.ts';
-import type {UserPushParams} from '../../../../zero-protocol/src/connect.ts';
-import type {Source} from '../../types/streams.ts';
-import {assert} from '../../../../shared/src/asserts.ts';
 
 type Fatal = {
   error: 'forClient';
