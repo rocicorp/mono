@@ -480,7 +480,6 @@ export class Zero<
           sink.log(level, context, ...args);
         }
       },
-      // eslint-disable-next-line require-await
       async flush() {
         await sink.flush?.();
       },
