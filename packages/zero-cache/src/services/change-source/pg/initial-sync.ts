@@ -106,6 +106,9 @@ export async function initialSync(
     const {snapshot_name: snapshot, consistent_point: lsn} = slot;
     const initialVersion = toLexiVersion(lsn);
 
+    initReplicationState(tx, publications, initialVersion);
+    initChangeLog(tx);
+
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const start = Date.now();
     let numTables: number;
@@ -145,8 +148,6 @@ export async function initialSync(
 
     await addReplica(sql, shard, slotName, initialVersion, published);
 
-    initReplicationState(tx, publications, initialVersion);
-    initChangeLog(tx);
     lc.info?.(
       `Synced ${numRows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} (${
         Date.now() - start
