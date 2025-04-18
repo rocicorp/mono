@@ -11,7 +11,18 @@ We deploy this continuously (on trunk) to aws and is our dogfood of Zero.
 
 ## Setup
 
+First, install and build dependencies the `mono` repository root:
+
 ```bash
+# In repository root
+npm install
+npm run build
+```
+
+Then, install dependencies in the `zbugs` directory:
+
+```bash
+# In apps/zbugs
 npm install
 ```
 
@@ -79,7 +90,7 @@ DISCORD_WEBHOOK_URL=''
 Then start the server:
 
 ```bash
-npm run zero
+npm run zero-cache-dev
 ```
 
 ### Run the web app
