@@ -1,8 +1,18 @@
-import {LogContext} from '@rocicorp/logger';
 import * as v from '../../../shared/src/valita.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {errorKindSchema} from '../../../zero-protocol/src/error.ts';
+import {OnErrorKind} from './on-error-kind.ts';
+import {updateNeededReasonTypeSchema} from './options.ts';
+import type {UpdateNeededReasonType} from './update-needed-reason-type.ts';
+import type {ZeroLogContext} from './zero-log-context.ts';
 
 export const RELOAD_REASON_STORAGE_KEY = '_zeroReloadReason';
 export const RELOAD_BACKOFF_STATE_KEY = '_zeroReloadBackoffState';
+
+const reloadReasonSchema = v.tuple([
+  v.union(updateNeededReasonTypeSchema, errorKindSchema),
+  v.string(),
+]);
 
 const backoffStateSchema = v.object({
   lastReloadTime: v.number().default(0),
@@ -22,12 +32,13 @@ let reloadTimer: ReturnType<typeof setTimeout> | null = null;
 // TODO: This should get pushed down into Replicache and used for reloads we
 // do there.
 export function reloadWithReason(
-  lc: LogContext,
+  lc: ZeroLogContext,
   reload: () => void,
-  reason: string,
+  reason: UpdateNeededReasonType | ErrorKind,
+  message: string,
 ) {
   if (reloadTimer) {
-    lc.warn?.('reload timer already scheduled');
+    lc.info?.('reload timer already scheduled');
     return;
   }
   const now = Date.now();
@@ -36,7 +47,10 @@ export function reloadWithReason(
   // Record state immediately so that it persists if the user manually reloads first.
   if (typeof sessionStorage !== 'undefined') {
     sessionStorage.setItem(RELOAD_BACKOFF_STATE_KEY, JSON.stringify(backoff));
-    sessionStorage.setItem(RELOAD_REASON_STORAGE_KEY, reason);
+    sessionStorage.setItem(
+      RELOAD_REASON_STORAGE_KEY,
+      JSON.stringify([reason, message]),
+    );
   }
 
   const delay = backoff.lastReloadTime - now;
@@ -52,12 +66,20 @@ export function reloadWithReason(
   }, delay);
 }
 
-export function reportReloadReason(lc: LogContext) {
+export function reportReloadReason(lc: ZeroLogContext) {
   if (typeof sessionStorage !== 'undefined') {
-    const reason = sessionStorage.getItem(RELOAD_REASON_STORAGE_KEY);
-    if (reason) {
+    const value = sessionStorage.getItem(RELOAD_REASON_STORAGE_KEY);
+    if (value) {
       sessionStorage.removeItem(RELOAD_REASON_STORAGE_KEY);
-      lc.error?.('Zero reloaded the page.', reason);
+      try {
+        const parsed = JSON.parse(value);
+        const [reasonType, message] = v.parse(parsed, reloadReasonSchema);
+        lc.error?.(reasonType, 'Zero reloaded the page.', message);
+      } catch (e) {
+        lc.error?.(OnErrorKind.InvalidState, 'Zero reloaded the page.', e);
+        // ignore if not able to parse
+        return;
+      }
     }
   }
 }
@@ -74,7 +96,7 @@ export function resetBackoff() {
   }
 }
 
-function nextBackoff(lc: LogContext, now: number): BackoffState {
+function nextBackoff(lc: ZeroLogContext, now: number): BackoffState {
   if (typeof sessionStorage === 'undefined') {
     lc.warn?.(
       `sessionStorage not supported. backing off in ${

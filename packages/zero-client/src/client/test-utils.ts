@@ -8,7 +8,7 @@ import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import {mapAST} from '../../../zero-protocol/src/ast.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import type {ErrorMessage} from '../../../zero-protocol/src/error.ts';
 import type {
   PokeEndBody,
@@ -46,7 +46,6 @@ import {
 } from './zero.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
-type ErrorKind = Enum<typeof ErrorKind>;
 
 // Do not use an import statement here because vitest will then load that file
 // which does not work in a worker context.

@@ -1,10 +1,8 @@
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {
   type BackoffBody,
   type ErrorBody,
 } from '../../../zero-protocol/src/error.ts';
-
-type ErrorKind = (typeof ErrorKind)[keyof typeof ErrorKind];
 
 /**
  * Represents an error sent by server as part of Zero protocol.

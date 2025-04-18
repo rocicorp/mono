@@ -1,4 +1,3 @@
-import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {setDeletedClients} from '../../../replicache/src/deleted-clients.ts';
@@ -60,6 +59,7 @@ import {
   waitForUpstreamMessage,
   zeroForTest,
 } from './test-utils.ts'; // Why use fakes when we can use the real thing!
+import {ZeroLogContext} from './zero-log-context.ts';
 import {
   CONNECT_TIMEOUT_MS,
   createSocket,
@@ -122,27 +122,27 @@ test('onOnlineChange callback', async () => {
     // the onOnlineChange callback.
     await z.waitForConnectionState(ConnectionState.Connecting);
     expect(z.online).false;
-    expect(onlineCount).to.equal(0);
-    expect(offlineCount).to.equal(0);
+    expect(onlineCount).toBe(0);
+    expect(offlineCount).toBe(0);
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).to.equal(1);
-    expect(offlineCount).to.equal(0);
+    expect(onlineCount).toBe(1);
+    expect(offlineCount).toBe(0);
     await z.triggerClose();
     await z.waitForConnectionState(ConnectionState.Disconnected);
     // Still connected because we haven't yet failed to reconnect.
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).to.equal(1);
-    expect(offlineCount).to.equal(0);
+    expect(onlineCount).toBe(1);
+    expect(offlineCount).toBe(0);
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).to.equal(1);
-    expect(offlineCount).to.equal(0);
+    expect(onlineCount).toBe(1);
+    expect(offlineCount).toBe(0);
   }
 
   {
@@ -153,8 +153,8 @@ test('onOnlineChange callback', async () => {
     await z.waitForConnectionState(ConnectionState.Disconnected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).false;
-    expect(onlineCount).to.equal(0);
-    expect(offlineCount).to.equal(1);
+    expect(onlineCount).toBe(0);
+    expect(offlineCount).toBe(1);
 
     // And followed by a reconnect.
     expect(z.online).false;
@@ -162,8 +162,8 @@ test('onOnlineChange callback', async () => {
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).to.equal(1);
-    expect(offlineCount).to.equal(1);
+    expect(onlineCount).toBe(1);
+    expect(offlineCount).toBe(1);
   }
 
   {
@@ -176,8 +176,8 @@ test('onOnlineChange callback', async () => {
     await z.waitForConnectionState(ConnectionState.Disconnected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).false;
-    expect(onlineCount).to.equal(0);
-    expect(offlineCount).to.equal(1);
+    expect(onlineCount).toBe(0);
+    expect(offlineCount).toBe(1);
 
     // And followed by a reconnect with the longer BACKOFF_MS.
     expect(z.online).false;
@@ -185,8 +185,8 @@ test('onOnlineChange callback', async () => {
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).to.equal(1);
-    expect(offlineCount).to.equal(1);
+    expect(onlineCount).toBe(1);
+    expect(offlineCount).toBe(1);
   }
 
   {
@@ -203,8 +203,8 @@ test('onOnlineChange callback', async () => {
     await z.waitForConnectionState(ConnectionState.Disconnected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).false;
-    expect(onlineCount).to.equal(0);
-    expect(offlineCount).to.equal(1);
+    expect(onlineCount).toBe(0);
+    expect(offlineCount).toBe(1);
 
     // And followed by a reconnect with the longer BACKOFF_MS.
     expect(z.online).false;
@@ -219,8 +219,8 @@ test('onOnlineChange callback', async () => {
     );
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).to.equal(1);
-    expect(offlineCount).to.equal(1);
+    expect(onlineCount).toBe(1);
+    expect(offlineCount).toBe(1);
   }
 
   {
@@ -230,16 +230,16 @@ test('onOnlineChange callback', async () => {
     await z.waitForConnectionState(ConnectionState.Disconnected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).to.equal(0);
-    expect(offlineCount).to.equal(0);
+    expect(onlineCount).toBe(0);
+    expect(offlineCount).toBe(0);
 
     // And followed by a reconnect.
     expect(z.online).true;
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).to.equal(0);
-    expect(offlineCount).to.equal(0);
+    expect(onlineCount).toBe(0);
+    expect(offlineCount).toBe(0);
   }
 
   {
@@ -249,8 +249,8 @@ test('onOnlineChange callback', async () => {
     await z.waitForConnectionState(ConnectionState.Disconnected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).to.equal(0);
-    expect(offlineCount).to.equal(0);
+    expect(onlineCount).toBe(0);
+    expect(offlineCount).toBe(0);
 
     await z.waitForConnectionState(ConnectionState.Connecting);
     await z.triggerError(ErrorKind.Unauthorized, 'ddd');
@@ -258,16 +258,16 @@ test('onOnlineChange callback', async () => {
     await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).false;
-    expect(onlineCount).to.equal(0);
-    expect(offlineCount).to.equal(1);
+    expect(onlineCount).toBe(0);
+    expect(offlineCount).toBe(1);
 
     // And followed by a reconnect.
     await z.waitForConnectionState(ConnectionState.Connecting);
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).to.equal(1);
-    expect(offlineCount).to.equal(1);
+    expect(onlineCount).toBe(1);
+    expect(offlineCount).toBe(1);
   }
 
   {
@@ -275,15 +275,15 @@ test('onOnlineChange callback', async () => {
     onlineCount = offlineCount = 0;
     await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS);
     expect(z.online).false;
-    expect(onlineCount).to.equal(0);
-    expect(offlineCount).to.equal(1);
+    expect(onlineCount).toBe(0);
+    expect(offlineCount).toBe(1);
     await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
     // and back online
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).to.equal(1);
-    expect(offlineCount).to.equal(1);
+    expect(onlineCount).toBe(1);
+    expect(offlineCount).toBe(1);
   }
 });
 
@@ -293,11 +293,11 @@ test('disconnects if ping fails', async () => {
   const r = zeroForTest();
 
   await r.waitForConnectionState(ConnectionState.Connecting);
-  expect(r.connectionState).to.equal(ConnectionState.Connecting);
+  expect(r.connectionState).toBe(ConnectionState.Connecting);
 
   await r.triggerConnected();
   await r.waitForConnectionState(ConnectionState.Connected);
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
   (await r.socket).messages.length = 0;
 
   // Wait PING_INTERVAL_MS which will trigger a ping
@@ -307,18 +307,18 @@ test('disconnects if ping fails', async () => {
 
   await r.triggerPong();
   await tickAFewTimes(vi);
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
 
   await tickAFewTimes(vi, watchdogInterval);
   await r.triggerPong();
   await tickAFewTimes(vi);
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
 
   await tickAFewTimes(vi, watchdogInterval);
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
 
   await tickAFewTimes(vi, pingTimeout);
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  expect(r.connectionState).toBe(ConnectionState.Disconnected);
 });
 
 const mockRep = {
@@ -378,7 +378,7 @@ describe('createSocket', () => {
         lmid,
         'wsidx',
         debugPerf,
-        new LogContext('error', undefined, new TestLogSink()),
+        new ZeroLogContext('error', undefined, new TestLogSink()),
         undefined,
         1048 * 8,
         additionalConnectParams,
@@ -414,7 +414,7 @@ describe('createSocket', () => {
         lmid,
         'wsidx',
         debugPerf,
-        new LogContext('error', undefined, new TestLogSink()),
+        new ZeroLogContext('error', undefined, new TestLogSink()),
         undefined,
         0, // do not put any extra information into headers
         additionalConnectParams,
@@ -1228,11 +1228,11 @@ test('pusher sends one mutation per push message', async () => {
       for (let i = 1; i < mockSocket.messages.length; i++) {
         const raw = mockSocket.messages[i];
         const msg = valita.parse(JSON.parse(raw), pushMessageSchema);
-        expect(msg[1].clientGroupID).to.equal(
+        expect(msg[1].clientGroupID).toBe(
           clientGroupID ?? (await r.clientGroupID),
         );
         expect(msg[1].mutations).to.have.lengthOf(1);
-        expect(msg[1].requestID).to.equal(requestID);
+        expect(msg[1].requestID).toBe(requestID);
       }
     }
   };
@@ -1575,12 +1575,12 @@ test('pusher adjusts mutation timestamps to be unix timestamps', async () => {
     JSON.parse(mockSocket.messages[0]),
     pushMessageSchema,
   );
-  expect(push0[1].mutations[0].timestamp).to.equal(startTime + 100);
+  expect(push0[1].mutations[0].timestamp).toBe(startTime + 100);
   const push1 = valita.parse(
     JSON.parse(mockSocket.messages[1]),
     pushMessageSchema,
   );
-  expect(push1[1].mutations[0].timestamp).to.equal(startTime + 200);
+  expect(push1[1].mutations[0].timestamp).toBe(startTime + 200);
 });
 
 test('puller with mutation recovery pull, success response', async () => {
@@ -1601,7 +1601,7 @@ test('puller with mutation recovery pull, success response', async () => {
   const resultPromise = r.puller(pullReq, 'test-request-id');
 
   await tickAFewTimes(vi);
-  expect(mockSocket.messages.length).to.equal(1);
+  expect(mockSocket.messages.length).toBe(1);
   expect(JSON.parse(mockSocket.messages[0])).to.deep.equal([
     'pull',
     {
@@ -1650,7 +1650,7 @@ test('puller with mutation recovery pull, response timeout', async () => {
   const resultPromise = r.puller(pullReq, 'test-request-id');
 
   await tickAFewTimes(vi);
-  expect(mockSocket.messages.length).to.equal(1);
+  expect(mockSocket.messages.length).toBe(1);
   expect(JSON.parse(mockSocket.messages[0])).to.deep.equal([
     'pull',
     {
@@ -1941,24 +1941,24 @@ test(ErrorKind.AuthInvalidated, async () => {
 test('Disconnect on error', async () => {
   const r = zeroForTest();
   await r.triggerConnected();
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
   await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  expect(r.connectionState).toBe(ConnectionState.Disconnected);
 });
 
 test('No backoff on errors', async () => {
   const r = zeroForTest();
   await r.triggerConnected();
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
 
   const step = async (delta: number, message: string) => {
     await r.triggerError(ErrorKind.InvalidMessage, message);
-    expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+    expect(r.connectionState).toBe(ConnectionState.Disconnected);
 
     await vi.advanceTimersByTimeAsync(delta - 1);
-    expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+    expect(r.connectionState).toBe(ConnectionState.Disconnected);
     await vi.advanceTimersByTimeAsync(1);
-    expect(r.connectionState).to.equal(ConnectionState.Connecting);
+    expect(r.connectionState).toBe(ConnectionState.Connecting);
   };
 
   const steps = async () => {
@@ -1971,7 +1971,7 @@ test('No backoff on errors', async () => {
   await steps();
 
   await r.triggerConnected();
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
 
   await steps();
 });
@@ -1979,7 +1979,7 @@ test('No backoff on errors', async () => {
 test('Ping pong', async () => {
   const r = zeroForTest();
   await r.triggerConnected();
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
   (await r.socket).messages.length = 0;
 
   await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS - 1);
@@ -1988,16 +1988,16 @@ test('Ping pong', async () => {
 
   expect((await r.socket).messages).deep.equal([JSON.stringify(['ping', {}])]);
   await vi.advanceTimersByTimeAsync(PING_TIMEOUT_MS - 1);
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
   await vi.advanceTimersByTimeAsync(1);
 
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  expect(r.connectionState).toBe(ConnectionState.Disconnected);
 });
 
 test('Ping timeout', async () => {
   const r = zeroForTest();
   await r.triggerConnected();
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
   (await r.socket).messages.length = 0;
 
   await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS - 1);
@@ -2006,9 +2006,9 @@ test('Ping timeout', async () => {
   expect((await r.socket).messages).deep.equal([JSON.stringify(['ping', {}])]);
   await vi.advanceTimersByTimeAsync(PING_TIMEOUT_MS - 1);
   await r.triggerPong();
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
   await vi.advanceTimersByTimeAsync(1);
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
 });
 
 const connectTimeoutMessage = 'Rejecting connect resolver due to timeout';
@@ -2033,19 +2033,19 @@ test('Connect timeout', async () => {
       await vi.advanceTimersByTimeAsync(0);
     }
 
-    expect(r.connectionState).to.equal(ConnectionState.Connecting);
+    expect(r.connectionState).toBe(ConnectionState.Connecting);
     await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS - 1);
-    expect(r.connectionState).to.equal(ConnectionState.Connecting);
+    expect(r.connectionState).toBe(ConnectionState.Connecting);
     await vi.advanceTimersByTimeAsync(1);
-    expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+    expect(r.connectionState).toBe(ConnectionState.Disconnected);
     expectLogMessages(r).contain(connectTimeoutMessage);
 
     // We got disconnected so we sleep for RUN_LOOP_INTERVAL_MS before trying again
 
     await vi.advanceTimersByTimeAsync(sleepMS - 1);
-    expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+    expect(r.connectionState).toBe(ConnectionState.Disconnected);
     await vi.advanceTimersByTimeAsync(1);
-    expect(r.connectionState).to.equal(ConnectionState.Connecting);
+    expect(r.connectionState).toBe(ConnectionState.Connecting);
   };
 
   await step(RUN_LOOP_INTERVAL_MS);
@@ -2057,7 +2057,7 @@ test('Connect timeout', async () => {
 
   // And success after this...
   await r.triggerConnected();
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
 });
 
 test('socketOrigin', async () => {
@@ -2080,7 +2080,7 @@ test('socketOrigin', async () => {
 
     await tickAFewTimes(vi);
 
-    expect(r.connectionState, c.name).to.equal(
+    expect(r.connectionState, c.name).toBe(
       c.socketEnabled
         ? ConnectionState.Connecting
         : ConnectionState.Disconnected,
@@ -2091,7 +2091,7 @@ test('socketOrigin', async () => {
 test('Logs errors in connect', async () => {
   const r = zeroForTest({});
   await r.triggerError(ErrorKind.InvalidMessage, 'bad-message');
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  expect(r.connectionState).toBe(ConnectionState.Disconnected);
   await vi.advanceTimersByTimeAsync(0);
 
   const index = r.testLogSink.messages.findIndex(
@@ -2108,12 +2108,12 @@ test('New connection logs', async () => {
   await r.waitForConnectionState(ConnectionState.Connecting);
   await vi.advanceTimersByTimeAsync(500);
   await r.triggerConnected();
-  expect(r.connectionState).to.equal(ConnectionState.Connected);
+  expect(r.connectionState).toBe(ConnectionState.Connected);
   await vi.advanceTimersByTimeAsync(500);
   await r.triggerPong();
   await r.triggerClose();
   await r.waitForConnectionState(ConnectionState.Disconnected);
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  expect(r.connectionState).toBe(ConnectionState.Disconnected);
   const connectIndex = r.testLogSink.messages.findIndex(
     ([level, _context, args]) =>
       level === 'info' &&
@@ -2149,7 +2149,7 @@ async function testWaitsForConnection(
   const log: ('resolved' | 'rejected')[] = [];
 
   await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  expect(r.connectionState).toBe(ConnectionState.Disconnected);
 
   fn(r).then(
     () => log.push('resolved'),
@@ -2162,7 +2162,7 @@ async function testWaitsForConnection(
   expect(log).to.deep.equal([]);
 
   await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
-  expect(r.connectionState).to.equal(ConnectionState.Connecting);
+  expect(r.connectionState).toBe(ConnectionState.Connecting);
 
   await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
   await tickAFewTimes(vi);
@@ -2208,12 +2208,12 @@ test('VersionNotSupported default handler', async () => {
   await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
   await vi.advanceTimersToNextTimerAsync();
   await promise;
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  expect(r.connectionState).toBe(ConnectionState.Disconnected);
 
   expect(fake).toBeCalledTimes(1);
 
-  expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
-    "The server no longer supports this client's protocol version. server test message",
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toMatchInlineSnapshot(
+    `"["VersionNotSupported","The server no longer supports this client's protocol version. server test message"]"`,
   );
 });
 
@@ -2226,7 +2226,7 @@ test('VersionNotSupported custom onUpdateNeeded handler', async () => {
 
   await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
   await promise;
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  expect(r.connectionState).toBe(ConnectionState.Disconnected);
 
   expect(fake).toBeCalledTimes(1);
 });
@@ -2247,12 +2247,12 @@ test('SchemaVersionNotSupported default handler', async () => {
   );
   await vi.advanceTimersToNextTimerAsync();
   await promise;
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  expect(r.connectionState).toBe(ConnectionState.Disconnected);
 
   expect(fake).toBeCalledTimes(1);
 
-  expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
-    'Client and server schemas incompatible. server test message',
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toMatchInlineSnapshot(
+    `"["SchemaVersionNotSupported","Client and server schemas incompatible. server test message"]"`,
   );
 });
 
@@ -2268,7 +2268,7 @@ test('SchemaVersionNotSupported custom onUpdateNeeded handler', async () => {
     'server test message',
   );
   await promise;
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  expect(r.connectionState).toBe(ConnectionState.Disconnected);
 
   expect(fake).toBeCalledTimes(1);
 });
@@ -2286,12 +2286,12 @@ test('ClientNotFound default handler', async () => {
   await r.triggerError(ErrorKind.ClientNotFound, 'server test message');
   await vi.advanceTimersToNextTimerAsync();
   await promise;
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  expect(r.connectionState).toBe(ConnectionState.Disconnected);
 
   expect(fake).toBeCalledTimes(1);
 
-  expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
-    'Server could not find state needed to synchronize this client. server test message',
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toBe(
+    `["ClientNotFound","Server could not find state needed to synchronize this client. server test message"]`,
   );
 });
 
@@ -2303,7 +2303,7 @@ test('ClientNotFound custom onClientStateNotFound handler', async () => {
   const r = zeroForTest({onClientStateNotFound: fake});
   await r.triggerError(ErrorKind.ClientNotFound, 'server test message');
   await promise;
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  expect(r.connectionState).toBe(ConnectionState.Disconnected);
 
   expect(fake).toBeCalledTimes(1);
 });
@@ -2328,8 +2328,8 @@ test('server ahead', async () => {
   }
   await promise;
 
-  expect(storage[RELOAD_REASON_STORAGE_KEY]).to.equal(
-    'Server reported that client is ahead of server (InvalidConnectionRequestBaseCookie). This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero.',
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toMatchInlineSnapshot(
+    `"["InvalidConnectionRequestBaseCookie","Server reported that client is ahead of server. This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero."]"`,
   );
 });
 
@@ -2408,7 +2408,7 @@ describe('Disconnect on hide', () => {
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
         // Disconnect due to visibility does not happen until pong is received
         // and microtask queue is processed.
-        expect(r.connectionState).to.equal(ConnectionState.Connected);
+        expect(r.connectionState).toBe(ConnectionState.Connected);
         await r.triggerPong();
         await vi.advanceTimersByTimeAsync(0);
       },
@@ -2448,7 +2448,7 @@ describe('Disconnect on hide', () => {
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
         // Disconnect due to visibility does not happen until pong is received
         // and microtask queue is processed.
-        expect(r.connectionState).to.equal(ConnectionState.Connected);
+        expect(r.connectionState).toBe(ConnectionState.Connected);
         await r.triggerPong();
         await vi.advanceTimersByTimeAsync(0);
       },
@@ -2474,7 +2474,7 @@ describe('Disconnect on hide', () => {
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
         // Disconnect due to visibility does not happen until pong is received
         // and microtask queue is processed.
-        expect(r.connectionState).to.equal(ConnectionState.Connected);
+        expect(r.connectionState).toBe(ConnectionState.Connected);
         await r.triggerPong();
         await vi.advanceTimersByTimeAsync(0);
       },
@@ -2498,7 +2498,7 @@ describe('Disconnect on hide', () => {
         await vi.advanceTimersByTimeAsync(0);
         // Disconnect due to visibility does not happen until pong is received
         // and microtask queue is processed.
-        expect(r.connectionState).to.equal(ConnectionState.Connected);
+        expect(r.connectionState).toBe(ConnectionState.Connected);
         await r.triggerPong();
         await vi.advanceTimersByTimeAsync(0);
       },
@@ -2535,7 +2535,7 @@ describe('Disconnect on hide', () => {
     let onOnlineChangeP = makeOnOnlineChangePromise();
 
     await z.triggerConnected();
-    expect(z.connectionState).to.equal(ConnectionState.Connected);
+    expect(z.connectionState).toBe(ConnectionState.Connected);
     expect(await onOnlineChangeP).true;
     expect(z.online).true;
 
@@ -2543,16 +2543,16 @@ describe('Disconnect on hide', () => {
 
     await c.test(z, changeVisibilityState);
 
-    expect(z.connectionState).to.equal(ConnectionState.Disconnected);
+    expect(z.connectionState).toBe(ConnectionState.Disconnected);
     expect(await onOnlineChangeP).false;
     expect(z.online).false;
 
     // Stays disconnected as long as we are hidden.
     while (Date.now() < 100_000) {
       await vi.advanceTimersByTimeAsync(1_000);
-      expect(z.connectionState).to.equal(ConnectionState.Disconnected);
+      expect(z.connectionState).toBe(ConnectionState.Disconnected);
       expect(z.online).false;
-      expect(document.visibilityState).to.equal('hidden');
+      expect(document.visibilityState).toBe('hidden');
     }
 
     onOnlineChangeP = makeOnOnlineChangePromise();
@@ -2562,7 +2562,7 @@ describe('Disconnect on hide', () => {
 
     await z.waitForConnectionState(ConnectionState.Connecting);
     await z.triggerConnected();
-    expect(z.connectionState).to.equal(ConnectionState.Connected);
+    expect(z.connectionState).toBe(ConnectionState.Connected);
     expect(await onOnlineChangeP).true;
     expect(z.online).true;
 
@@ -2573,7 +2573,7 @@ describe('Disconnect on hide', () => {
 test(ErrorKind.InvalidConnectionRequest, async () => {
   const r = zeroForTest({});
   await r.triggerError(ErrorKind.InvalidConnectionRequest, 'test');
-  expect(r.connectionState).to.equal(ConnectionState.Disconnected);
+  expect(r.connectionState).toBe(ConnectionState.Disconnected);
   await vi.advanceTimersByTimeAsync(0);
   const msg = r.testLogSink.messages.at(-1);
   assert(msg);
@@ -2602,7 +2602,7 @@ describe('Invalid Downstream message', () => {
       logLevel: 'debug',
     });
     await r.triggerConnected();
-    expect(r.connectionState).to.equal(ConnectionState.Connected);
+    expect(r.connectionState).toBe(ConnectionState.Connected);
 
     if (c.duringPing) {
       await waitForUpstreamMessage(r, 'ping', vi);
@@ -2775,11 +2775,11 @@ test('ensure we get the same query object back', () => {
   });
   const issueQuery1 = z.query.issue;
   const issueQuery2 = z.query.issue;
-  expect(issueQuery1).to.equal(issueQuery2);
+  expect(issueQuery1).toBe(issueQuery2);
 
   const commentQuery1 = z.query.comment;
   const commentQuery2 = z.query.comment;
-  expect(commentQuery1).to.equal(commentQuery2);
+  expect(commentQuery1).toBe(commentQuery2);
 
   expect(issueQuery1).to.not.equal(commentQuery1);
 });
@@ -3586,4 +3586,40 @@ test('push is called on initial connect and reconnect', async () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(pushSpy).toBeCalledTimes(2);
   }
+});
+
+test('onError is called on error', async () => {
+  const onErrorSpy = vi.fn();
+  const z = zeroForTest({
+    logLevel: 'debug',
+    schema: createSchema({
+      tables: [
+        table('foo')
+          .columns({
+            id: string(),
+            val: string(),
+          })
+          .primaryKey('id'),
+      ],
+    }),
+    onError: onErrorSpy,
+  });
+
+  await z.triggerConnected();
+  expect(z.connectionState).toBe(ConnectionState.Connected);
+
+  await z.triggerError(ErrorKind.MutationRateLimited, 'test');
+
+  expect(onErrorSpy).toBeCalledTimes(1);
+  expect(onErrorSpy.mock.calls).toMatchInlineSnapshot(`
+    [
+      [
+        "MutationRateLimited",
+        "Mutation rate limited",
+        {
+          "message": "test",
+        },
+      ],
+    ]
+  `);
 });

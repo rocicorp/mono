@@ -1,4 +1,3 @@
-import type {LogContext} from '@rocicorp/logger';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {
   getDeletedClients,
@@ -18,6 +17,7 @@ import type {
   DeleteClientsBody,
   DeleteClientsMessage,
 } from '../../../zero-protocol/src/delete-clients.ts';
+import type {ZeroLogContext} from './zero-log-context.ts';
 
 /**
  * Replicache will tell us when it deletes clients from the persistent storage
@@ -30,13 +30,13 @@ import type {
  */
 export class DeleteClientsManager {
   readonly #send: (msg: DeleteClientsMessage) => void;
-  readonly #lc: LogContext;
+  readonly #lc: ZeroLogContext;
   readonly #dagStore: Store;
 
   constructor(
     send: (msg: DeleteClientsMessage) => void,
     dagStore: Store,
-    lc: LogContext,
+    lc: ZeroLogContext,
   ) {
     this.#send = send;
     this.#dagStore = dagStore;

@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@rocicorp/lock": "^1.0.4",
-    "@rocicorp/logger": "^5.3.0",
+    "@rocicorp/logger": "^5.4.0",
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {

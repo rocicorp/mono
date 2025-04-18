@@ -1,5 +1,5 @@
 import * as v from '../../shared/src/valita.ts';
-import * as ErrorKind from './error-kind-enum.ts';
+import {ErrorKind} from './error-kind.ts';
 
 const basicErrorKindSchema = v.union(
   v.literal(ErrorKind.AuthInvalidated),
@@ -43,6 +43,11 @@ const backoffBodySchema = v.object({
   // reconnect, and not after that.
   reconnectParams: v.record(v.string()).optional(),
 });
+
+export const errorKindSchema: v.Type<ErrorKind> = v.union(
+  basicErrorKindSchema,
+  backoffErrorKindSchema,
+);
 
 export const errorBodySchema = v.union(basicErrorBodySchema, backoffBodySchema);
 

@@ -1,9 +1,8 @@
-import type {LogContext} from '@rocicorp/logger';
 import type {MaybePromise} from '../../../shared/src/types.ts';
-import * as ServerErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import * as MetricName from './metric-name-enum.ts';
-
-type ServerErrorKind = (typeof ServerErrorKind)[keyof typeof ServerErrorKind];
+import {OnErrorKind} from './on-error-kind.ts';
+import type {ZeroLogContext} from './zero-log-context.ts';
 
 // This value is used to indicate that the client's last connection attempt
 // failed. We don't make this -1 because we want to stack this never connected
@@ -31,7 +30,7 @@ type NotConnectedReason =
 
 export type DisconnectReason =
   | {
-      server: ServerErrorKind;
+      server: ErrorKind;
     }
   | {
       client: ClientDisconnectReason;
@@ -61,7 +60,7 @@ export type MetricManagerOptions = {
   host: string;
   source: string;
   reporter: MetricsReporter;
-  lc: LogContext;
+  lc: ZeroLogContext;
 };
 
 /**
@@ -72,7 +71,7 @@ export class MetricManager {
   #reportIntervalMs: number;
   #host: string;
   #reporter: MetricsReporter;
-  #lc: LogContext;
+  #lc: ZeroLogContext;
   #timerID: ReturnType<typeof setInterval> | null;
 
   constructor(opts: MetricManagerOptions) {
@@ -205,7 +204,10 @@ export class MetricManager {
   async flush() {
     const lc = this.#lc;
     if (this.#timerID === null) {
-      lc.error?.('MetricManager.flush() called but already stopped');
+      lc.error?.(
+        OnErrorKind.InvalidState,
+        'MetricManager.flush() called but already stopped',
+      );
       return;
     }
     const allSeries: Series[] = [];
@@ -226,13 +228,16 @@ export class MetricManager {
     try {
       await this.#reporter(allSeries);
     } catch (e) {
-      lc?.error?.(`Error reporting metrics: ${e}`);
+      lc?.error?.(OnErrorKind.Metrics, `Error reporting metrics: ${e}`);
     }
   }
 
   stop() {
     if (this.#timerID === null) {
-      this.#lc.error?.('MetricManager.stop() called but already stopped');
+      this.#lc.error?.(
+        OnErrorKind.InvalidState,
+        'MetricManager.stop() called but already stopped',
+      );
       return;
     }
     clearInterval(this.#timerID);

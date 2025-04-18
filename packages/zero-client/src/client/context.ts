@@ -1,8 +1,8 @@
-import type {LogContext} from '@rocicorp/logger';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Input, Storage} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
@@ -15,6 +15,7 @@ import type {RunOptions} from '../../../zql/src/query/query.ts';
 import type {TTL} from '../../../zql/src/query/ttl.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
+import type {ZeroLogContext} from './zero-log-context.ts';
 
 export type AddQuery = QueryManager['add'];
 
@@ -37,7 +38,7 @@ export class ZeroContext implements QueryDelegate {
   readonly #commitListeners: Set<CommitListener> = new Set();
 
   readonly #slowMaterializeThreshold: number;
-  readonly #lc: LogContext;
+  readonly #lc: ZeroLogContext;
   readonly assertValidRunOptions: (options?: RunOptions) => void;
 
   /**
@@ -47,7 +48,7 @@ export class ZeroContext implements QueryDelegate {
   readonly defaultQueryComplete = false;
 
   constructor(
-    lc: LogContext,
+    lc: ZeroLogContext,
     mainSources: IVMSourceBranch,
     addQuery: AddQuery,
     updateQuery: UpdateQuery,
@@ -153,6 +154,7 @@ export class ZeroContext implements QueryDelegate {
         // code throwing an error.
         // Hence we wrap notifications in a try-catch block.
         this.#lc.error?.(
+          ErrorKind.Internal,
           'Failed notifying a commit listener of IVM updates',
           e,
         );

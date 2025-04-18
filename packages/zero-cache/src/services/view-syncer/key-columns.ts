@@ -1,5 +1,5 @@
 import {deepEqual} from '../../../../shared/src/json.ts';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import type {JSONObject} from '../../types/bigint-json.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {RowID, RowRecord} from './schema/types.ts';

@@ -1,20 +1,21 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import type {
+  EphemeralID,
+  MutationTrackingData,
+} from '../../../replicache/src/replicache-options.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {emptyObject} from '../../../shared/src/sentinels.ts';
+import type {
   MutationError,
   MutationID,
   MutationOk,
+  MutationResult,
   PushError,
   PushOk,
   PushResponse,
 } from '../../../zero-protocol/src/push.ts';
-import {assert} from '../../../shared/src/asserts.ts';
-import {emptyObject} from '../../../shared/src/sentinels.ts';
-import type {LogContext} from '@rocicorp/logger';
-import type {
-  EphemeralID,
-  MutationTrackingData,
-} from '../../../replicache/src/replicache-options.ts';
-import type {MutationResult} from '../../../zero-protocol/src/push.ts';
+import {OnErrorKind} from './on-error-kind.ts';
+import type {ZeroLogContext} from './zero-log-context.ts';
 
 const transientPushErrorTypes: PushError['error'][] = [
   'zeroPusher',
@@ -48,10 +49,10 @@ export class MutationTracker {
   >;
   readonly #ephemeralIDsByMutationID: Map<number, EphemeralID>;
   readonly #allMutationsConfirmedListeners: Set<() => void>;
-  readonly #lc: LogContext;
+  readonly #lc: ZeroLogContext;
   #clientID: string | undefined;
 
-  constructor(lc: LogContext) {
+  constructor(lc: ZeroLogContext) {
     this.#lc = lc.withContext('MutationTracker');
     this.#outstandingMutations = new Map();
     this.#ephemeralIDsByMutationID = new Map();
@@ -94,6 +95,7 @@ export class MutationTracker {
   processPushResponse(response: PushResponse): void {
     if ('error' in response) {
       this.#lc.error?.(
+        OnErrorKind.Push,
         'Received an error response when pushing mutations',
         response,
       );
@@ -181,7 +183,11 @@ export class MutationTracker {
       mid.clientID === this.#clientID,
       'received mutation for the wrong client',
     );
-    this.#lc.error?.(`Mutation ${mid.id} returned an error`, error);
+    this.#lc.error?.(
+      OnErrorKind.Mutation,
+      `Mutation ${mid.id} returned an error`,
+      error,
+    );
     const ephemeralID = this.#ephemeralIDsByMutationID.get(mid.id);
     assert(
       ephemeralID,

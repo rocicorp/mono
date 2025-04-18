@@ -1,5 +1,4 @@
 import {Lock} from '@rocicorp/lock';
-import type {LogContext} from '@rocicorp/logger';
 import type {
   PatchOperationInternal,
   PokeInternal,
@@ -26,6 +25,8 @@ import {
   toGotQueriesKey,
   toPrimaryKeyString,
 } from './keys.ts';
+import {OnErrorKind} from './on-error-kind.ts';
+import type {ZeroLogContext} from './zero-log-context.ts';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
@@ -46,7 +47,7 @@ export class PokeHandler {
   readonly #replicachePoke: (poke: PokeInternal) => Promise<void>;
   readonly #onPokeError: () => void;
   readonly #clientID: ClientID;
-  readonly #lc: LogContext;
+  readonly #lc: ZeroLogContext;
   #receivingPoke: Omit<PokeAccumulator, 'pokeEnd'> | undefined = undefined;
   readonly #pokeBuffer: PokeAccumulator[] = [];
   #pokePlaybackLoopRunning = false;
@@ -65,7 +66,7 @@ export class PokeHandler {
     onPokeError: () => void,
     clientID: ClientID,
     schema: Schema,
-    lc: LogContext,
+    lc: ZeroLogContext,
   ) {
     this.#replicachePoke = replicachePoke;
     this.#onPokeError = onPokeError;
@@ -154,7 +155,7 @@ export class PokeHandler {
     rafLC.debug?.('processing pokes took', performance.now() - start);
   };
 
-  #processPokesForFrame(lc: LogContext): Promise<void> {
+  #processPokesForFrame(lc: ZeroLogContext): Promise<void> {
     return this.#pokeLock.withLock(async () => {
       const now = Date.now();
       lc.debug?.('got poke lock at', now);
@@ -187,7 +188,11 @@ export class PokeHandler {
       // client group at very different times.  Unusual but possible.
       this.#lc.debug?.('clearing due to', e);
     } else {
-      this.#lc.error?.('clearing due to unexpected poke error', e);
+      this.#lc.error?.(
+        OnErrorKind.Poke,
+        'clearing due to unexpected poke error',
+        e,
+      );
     }
     this.#clear();
     this.#onPokeError();

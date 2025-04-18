@@ -1,9 +1,12 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
+import * as v from '../../../shared/src/valita.ts';
+import type {UserPushParams} from '../../../zero-protocol/src/connect.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {CustomMutatorDefs} from './custom.ts';
-import type {UserPushParams} from '../../../zero-protocol/src/connect.ts';
+import type {OnError} from './on-error.ts';
+import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
 /**
  * Configuration for {@linkcode Zero}.
@@ -141,6 +144,17 @@ export interface ZeroOptions<
   hiddenTabDisconnectDelay?: number | undefined;
 
   /**
+   * This gets called when the Zero instance encounters an error.
+   * The default behavior is to log the error to the console.
+   * Provide your own function to prevent the default behavior.
+   * The error kind is passed as the first argument to the function.
+   *
+   * The remaining arguments are of type `unknown` and may change
+   * in the future. Only rely on the declared types.
+   */
+  onError?: OnError | undefined;
+
+  /**
    * Determines what kind of storage implementation to use on the client.
    *
    * Defaults to `'idb'` which means that Zero uses an IndexedDB storage
@@ -222,13 +236,13 @@ export interface ZeroAdvancedOptions<
 > extends ZeroOptions<S, MD> {}
 
 export type UpdateNeededReason =
-  // There is a new client group due to a another tab loading new code which
-  // cannot sync locally with this tab until it updates to the new code.
-  // This tab can still sync with the zero-cache.
-  | {type: 'NewClientGroup'}
-  // This client was unable to connect to the zero-cache because it is using a
-  // protocol version that the zero-cache does not support.
-  | {type: 'VersionNotSupported'}
-  // This client was unable to connect to the zero-cache because it is using a
-  // schema version (see {@link Schema}) that the zero-cache does not support.
-  | {type: 'SchemaVersionNotSupported'};
+  | {type: UpdateNeededReasonType.NewClientGroup}
+  | {type: UpdateNeededReasonType.VersionNotSupported}
+  | {type: UpdateNeededReasonType.SchemaVersionNotSupported};
+
+export const updateNeededReasonTypeSchema: v.Type<UpdateNeededReason['type']> =
+  v.union(
+    v.literal(UpdateNeededReasonType.NewClientGroup),
+    v.literal(UpdateNeededReasonType.VersionNotSupported),
+    v.literal(UpdateNeededReasonType.SchemaVersionNotSupported),
+  );
