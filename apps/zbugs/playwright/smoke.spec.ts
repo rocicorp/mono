@@ -33,7 +33,7 @@ test('loadtest', async ({page, browser, context}) => {
         path: '/',
         expires: -1,
         httpOnly: false,
-      }
+      },
     ]);
   } else {
     await page.context().addCookies([
@@ -44,7 +44,7 @@ test('loadtest', async ({page, browser, context}) => {
         path: '/',
         expires: -1,
         httpOnly: false,
-      }
+      },
     ]);
   }
 
