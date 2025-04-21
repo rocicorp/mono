@@ -47,7 +47,7 @@ describe('view-syncer/cvr-store', () => {
     await db.begin(tx => setupCVRTables(lc, tx, SHARD));
     await db.unsafe(`
     INSERT INTO "roze_1/cvr".instances ("clientGroupID", version, "lastActive", "replicaVersion")
-      VALUES('${CVR_ID}', '03', '2024-09-04', '01');
+      VALUES('${CVR_ID}', '03', '2024-09-04T00:00:00Z', '01');
     INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", 
                              "patchVersion", "transformationHash", "transformationVersion")
       VALUES('${CVR_ID}', 'foo', '{"table":"issues"}', '01', 'foo-transformed', '01');
@@ -754,7 +754,7 @@ describe('view-syncer/cvr-store', () => {
       INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion")
         VALUES('${CVR_ID}', 'client1', 'foo', '01');
       INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "ttl", "inactivatedAt")
-        VALUES('${CVR_ID}', 'missing-client', 'foo', '01', '3600', '2025-03-10');
+        VALUES('${CVR_ID}', 'missing-client', 'foo', '01', '3600', '2025-03-10T00:00:00Z');
     `);
 
     const cvr = await store.load(lc, CONNECT_TIME);
@@ -838,7 +838,7 @@ describe('view-syncer/cvr-store', () => {
       INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "ttl")
         VALUES('${CVR_ID}', 'client2', 'baz', '03', INTERVAL '7200 milliseconds');
       INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAt")
-        VALUES('${CVR_ID}', 'client2', 'bar', '02', '2024-10-15');
+        VALUES('${CVR_ID}', 'client2', 'bar', '02', '2024-10-15T00:00:00Z');
     `);
 
     // Test inspectQueries with no clientID (should return all queries)
