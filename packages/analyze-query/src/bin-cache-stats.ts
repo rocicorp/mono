@@ -8,11 +8,13 @@ import {
   appOptions,
   shardOptions,
   ZERO_ENV_VAR_PREFIX,
+  zeroOptions,
 } from '../../zero-cache/src/config/zero-config.ts';
 import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 import {BigIntJSON} from '../../zero-cache/src/types/bigint-json.ts';
 import chalk from 'chalk';
+import {Database} from '../../zqlite/src/db.ts';
 
 const options = {
   upstream: {
@@ -28,6 +30,7 @@ const options = {
   shard: shardOptions,
   dumpZql: v.boolean().optional(),
   detailed: v.boolean().optional(),
+  replica: zeroOptions.replica,
 };
 
 const config = parseOptions(
@@ -269,6 +272,21 @@ async function changelogStats() {
   await sql.end();
 }
 
+function replicaStats() {
+  const db = new Database(lc, config.replica.file);
+  printReplicaStats([
+    ['wal checkpoint', pick(first(db.pragma('WAL_CHECKPOINT')))],
+    ['page count', pick(first(db.pragma('PAGE_COUNT')))],
+    ['page size', pick(first(db.pragma('PAGE_SIZE')))],
+    ['journal mode', pick(first(db.pragma('JOURNAL_MODE')))],
+    ['synchronous', pick(first(db.pragma('SYNCHRONOUS')))],
+    ['cache size', pick(first(db.pragma('CACHE_SIZE')))],
+    ['auto vacuum', pick(first(db.pragma('AUTO_VACUUM')))],
+    ['freelist count', pick(first(db.pragma('FREELIST_COUNT')))],
+    ['wal autocheckpoint', pick(first(db.pragma('WAL_AUTOCHECKPOINT')))],
+  ] as const);
+}
+
 async function printStats(
   pendingQueries: [
     name: string,
@@ -284,6 +302,28 @@ async function printStats(
   }
 }
 
+function printReplicaStats(
+  queries: readonly [name: string, result: unknown][],
+) {
+  console.log(chalk.blue.bold('=== Replica Stats: ===\n'));
+  for (const [name, result] of queries) {
+    console.log(
+      '\n',
+      chalk.blue.bold(name),
+      BigIntJSON.stringify(result, null, 2),
+    );
+  }
+}
+
 await changelogStats();
 await upstreamStats();
 await cvrStats();
+replicaStats();
+
+function first(x: object[]): object {
+  return x[0];
+}
+
+function pick(x: object): unknown {
+  return Object.values(x)[0];
+}
