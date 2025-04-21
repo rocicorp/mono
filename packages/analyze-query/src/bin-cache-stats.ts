@@ -168,6 +168,30 @@ async function cvrStats() {
         AVG(row_count) AS "avg"
       FROM client_group_counts;`,
     ],
+    [
+      // check for AST blowup due to DNF conversion.
+      'ast sizes',
+      sql`SELECT 
+        percentile_cont(0.25) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "25th_percentile",
+        percentile_cont(0.5) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "50th_percentile",
+        percentile_cont(0.75) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "75th_percentile",
+        percentile_cont(0.9) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "90th_percentile",
+        percentile_cont(0.95) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "95th_percentile",
+        percentile_cont(0.99) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "99th_percentile",
+        MIN(length("clientAST"::text)) AS "minimum_length",
+        MAX(length("clientAST"::text)) AS "maximum_length",
+        AVG(length("clientAST"::text))::integer AS "average_length",
+        COUNT(*) AS "total_records"
+      FROM ${sql(schema)}."queries";`,
+    ],
+    [
+      // output the hash of the largest AST
+      'biggest ast hash',
+      sql`SELECT "queryHash", length("clientAST"::text) AS "ast_length"
+      FROM ${sql(schema)}."queries"
+      ORDER BY length("clientAST"::text) DESC
+      LIMIT 1;`,
+    ],
     ...((config.detailed
       ? [
           [
