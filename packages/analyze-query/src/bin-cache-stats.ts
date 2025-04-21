@@ -15,6 +15,8 @@ import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 import {BigIntJSON} from '../../zero-cache/src/types/bigint-json.ts';
 import chalk from 'chalk';
 import {Database} from '../../zqlite/src/db.ts';
+import fs from 'fs';
+import os from 'os';
 
 const options = {
   upstream: {
@@ -45,7 +47,7 @@ async function upstreamStats() {
   const schema = upstreamSchema(getShardID(config));
   const sql = pgClient(lc, config.upstream.db);
 
-  await printStats([
+  await printPgStats([
     [
       'num replicas',
       sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."replicas"`,
@@ -101,7 +103,7 @@ async function cvrStats() {
     ORDER BY g.num_queries DESC;`;
   }
 
-  await printStats([
+  await printPgStats([
     [
       'total num queries',
       sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires"`,
@@ -263,7 +265,7 @@ async function changelogStats() {
   const schema = upstreamSchema(getShardID(config)) + '/cdc';
   const sql = pgClient(lc, config.change.db);
 
-  await printStats([
+  await printPgStats([
     [
       'change log size',
       sql`SELECT COUNT(*) as "change_log_size" FROM ${sql(schema)}."changeLog"`,
@@ -274,7 +276,7 @@ async function changelogStats() {
 
 function replicaStats() {
   const db = new Database(lc, config.replica.file);
-  printReplicaStats([
+  printStats('replica', [
     ['wal checkpoint', pick(first(db.pragma('WAL_CHECKPOINT')))],
     ['page count', pick(first(db.pragma('PAGE_COUNT')))],
     ['page size', pick(first(db.pragma('PAGE_SIZE')))],
@@ -284,10 +286,25 @@ function replicaStats() {
     ['auto vacuum', pick(first(db.pragma('AUTO_VACUUM')))],
     ['freelist count', pick(first(db.pragma('FREELIST_COUNT')))],
     ['wal autocheckpoint', pick(first(db.pragma('WAL_AUTOCHECKPOINT')))],
+    ['db file stats', fs.statSync(config.replica.file)],
   ] as const);
 }
 
-async function printStats(
+function osStats() {
+  printStats('os', [
+    ['load avg', os.loadavg()],
+    ['uptime', os.uptime()],
+    ['total mem', os.totalmem()],
+    ['free mem', os.freemem()],
+    ['cpus', os.cpus().length],
+    ['platform', os.platform()],
+    ['arch', os.arch()],
+    ['release', os.release()],
+    ['uptime', os.uptime()],
+  ] as const);
+}
+
+async function printPgStats(
   pendingQueries: [
     name: string,
     query: ReturnType<ReturnType<typeof pgClient>>,
@@ -302,10 +319,11 @@ async function printStats(
   }
 }
 
-function printReplicaStats(
+function printStats(
+  group: string,
   queries: readonly [name: string, result: unknown][],
 ) {
-  console.log(chalk.blue.bold('=== Replica Stats: ===\n'));
+  console.log(chalk.blue.bold(`\n=== ${group} Stats: ===`));
   for (const [name, result] of queries) {
     console.log(
       '\n',
@@ -319,6 +337,7 @@ await changelogStats();
 await upstreamStats();
 await cvrStats();
 replicaStats();
+osStats();
 
 function first(x: object[]): object {
   return x[0];
