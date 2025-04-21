@@ -5,7 +5,7 @@ import {pid} from 'node:process';
 import {MessagePort} from 'node:worker_threads';
 import {WebSocketServer, type WebSocket} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {verifyToken} from '../auth/jwt.ts';
 import {type AuthConfig, type ZeroConfig} from '../config/zero-config.ts';
 import type {ConnectParams} from '../services/dispatcher/connect-params.ts';

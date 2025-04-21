@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
-    "@rocicorp/logger": "^5.3.0",
+    "@rocicorp/logger": "^5.4.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "fast-check": "^3.18.0",
     "nanoid": "^5.1.2",
@@ -33,7 +33,7 @@
   "dependencies": {
     "@databases/escape-identifier": "^1.0.3",
     "@databases/sql": "^3.3.0",
-    "@rocicorp/logger": "^5.3.0",
+    "@rocicorp/logger": "^5.4.0",
     "@rocicorp/zero-sqlite3": "^1.0.4",
     "zql": "0.0.0"
   }

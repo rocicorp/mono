@@ -5,7 +5,7 @@ import type {JWTPayload} from 'jose';
 import {startAsyncSpan, startSpan} from '../../../otel/src/span.ts';
 import {version} from '../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {ConnectParams} from '../services/dispatcher/connect-params.ts';

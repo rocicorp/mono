@@ -15,7 +15,7 @@ import {sleep} from '../../../../shared/src/sleep.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import type {ErrorBody} from '../../../../zero-protocol/src/error.ts';
 import type {
   PokeEndBody,

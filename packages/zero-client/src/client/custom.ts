@@ -1,4 +1,3 @@
-import type {LogContext} from '@rocicorp/logger';
 import {
   WriteTransactionImpl,
   zeroData,
@@ -28,6 +27,7 @@ import {ZeroContext} from './context.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
+import type {ZeroLogContext} from './zero-log-context.ts';
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
@@ -86,7 +86,7 @@ export type MakeCustomMutatorInterface<
 
 export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
   constructor(
-    lc: LogContext,
+    lc: ZeroLogContext,
     repTx: WriteTransaction,
     schema: S,
     slowMaterializeThreshold: number,
@@ -124,7 +124,7 @@ export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
 }
 
 export function makeReplicacheMutator<S extends Schema>(
-  lc: LogContext,
+  lc: ZeroLogContext,
   mutator: CustomMutatorImpl<S>,
   schema: S,
   slowMaterializeThreshold: number,
@@ -169,7 +169,7 @@ function assertValidRunOptions(options: RunOptions | undefined): void {
 }
 
 function makeSchemaQuery<S extends Schema>(
-  lc: LogContext,
+  lc: ZeroLogContext,
   schema: S,
   ivmBranch: IVMSourceBranch,
   slowMaterializeThreshold: number,

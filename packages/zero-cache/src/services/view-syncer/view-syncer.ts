@@ -24,7 +24,7 @@ import type {
 } from '../../../../zero-protocol/src/connect.ts';
 import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import type {
   InspectUpBody,
   InspectUpMessage,
