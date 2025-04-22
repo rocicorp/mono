@@ -340,7 +340,57 @@ describe('MutationTracker', () => {
       ],
     };
     expect(() => tracker.processPushResponse(response)).toThrow(
-      'invalid state. An ephemeral id was never assigned to mutation 1',
+      'ephemeral ID is missing. This can happen if a mutation response is received twice but it should be impossible to receive a success response twice for the same mutation.',
     );
+  });
+
+  test('resolve a mutation a second time with "already processed" error', () => {
+    const tracker = new MutationTracker(lc);
+    tracker.clientID = CLIENT_ID;
+
+    const {ephemeralID} = tracker.trackMutation();
+    tracker.mutationIDAssigned(ephemeralID, 1);
+
+    const response: PushResponse = {
+      mutations: [
+        {
+          id: {clientID: CLIENT_ID, id: 1},
+          result: {},
+        },
+      ],
+    };
+
+    tracker.processPushResponse(response);
+    expect(tracker.size).toBe(0);
+
+    // alreadyProcessedErrors are ignored if we've already resolved the mutation
+    // once.
+    expect(() =>
+      tracker.processPushResponse({
+        mutations: [
+          {
+            id: {clientID: CLIENT_ID, id: 1},
+            result: {
+              error: 'alreadyProcessed',
+            },
+          },
+        ],
+      }),
+    ).not.toThrow();
+
+    // other errors throw since we should not process a mutation more than once
+    // unless the error is an alreadyProcessed error.
+    expect(() =>
+      tracker.processPushResponse({
+        mutations: [
+          {
+            id: {clientID: CLIENT_ID, id: 1},
+            result: {
+              error: 'app',
+            },
+          },
+        ],
+      }),
+    ).toThrow('ephemeral ID is missing for mutation error: app.');
   });
 });
