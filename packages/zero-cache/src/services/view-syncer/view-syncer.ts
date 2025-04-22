@@ -399,6 +399,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ctx: SyncContext,
     initConnectionMessage: InitConnectionMessage,
   ): Source<Downstream> {
+    this.#lc.debug?.('viewSyncer.initConnection');
     return startSpan(tracer, 'vs.initConnection', () => {
       const {clientID, wsID, baseCookie, schemaVersion, tokenData} = ctx;
       this.#authData = pickToken(this.#authData, tokenData?.decoded);
@@ -552,9 +553,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               .withContext('clientID', clientID)
               .withContext('wsID', wsID)
               .withContext('cmd', cmd);
+            lc.debug?.('acquired lock for cvr');
 
             client = this.#clients.get(clientID);
             if (client?.wsID !== wsID) {
+              lc.debug?.('mismatched wsID', client?.wsID, wsID);
               // Only respond to messages of the currently connected client.
               // Connections may have been drained or dropped due to an error.
               return;
@@ -617,8 +620,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
 
         // Apply requested patches.
+        lc.debug?.(`applying ${desiredQueriesPatch?.length} query patches`);
         if (desiredQueriesPatch?.length) {
-          lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
           const now = Date.now();
           for (const patch of desiredQueriesPatch) {
             switch (patch.op) {

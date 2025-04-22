@@ -91,9 +91,17 @@ export class Syncer implements SingletonService {
   }
 
   readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {
+    this.#lc.debug?.(
+      'creating connection',
+      params.clientGroupID,
+      params.clientID,
+    );
     const {clientID, clientGroupID, auth, userID} = params;
     const existing = this.#connections.get(clientID);
     if (existing) {
+      this.#lc.debug?.(
+        `client ${clientID} already connected, closing existing connection`,
+      );
       existing.close(`replaced by ${params.wsID}`);
     }
 
@@ -140,6 +148,11 @@ export class Syncer implements SingletonService {
 
     connection.init();
     if (params.initConnectionMsg) {
+      this.#lc.debug?.(
+        'handling init connection message from sec header',
+        params.clientGroupID,
+        params.clientID,
+      );
       await connection.handleInitConnection(
         JSON.stringify(params.initConnectionMsg),
       );
