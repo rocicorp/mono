@@ -190,6 +190,33 @@ export default $config({
     });
 
     if ($app.stage === 'sandbox') {
+      // Main OpenTelemetry collector log group
+      const otelCollector = new aws.cloudwatch.LogGroup(
+        'ecs-aws-otel-sidecar-collector',
+        {
+          name: '/ecs/otel/ecs-aws-otel-sidecar-collector',
+          retentionInDays: 30, // 1 month retention
+        },
+      );
+
+      // X-Ray emitter log group
+      const xrayEmitter = new aws.cloudwatch.LogGroup('aws-xray-emitter', {
+        name: '/ecs/otel/aws-xray-emitter',
+        retentionInDays: 30,
+      });
+
+      // Nginx log group
+      const nginx = new aws.cloudwatch.LogGroup('nginx', {
+        name: '/ecs/otel/nginx',
+        retentionInDays: 30,
+      });
+
+      // StatsD emitter log group
+      const statsdEmitter = new aws.cloudwatch.LogGroup('statsd-emitter', {
+        name: '/ecs/otel/statsd-emitter',
+        retentionInDays: 30,
+      });
+
       // Create the task role first
       const otelTaskRole = new aws.iam.Role(
         `${$app.name}-${$app.stage}-OTELTaskRole`,
@@ -245,110 +272,129 @@ export default $config({
           AWS_REGION: process.env.AWS_REGION!,
         },
         command: ['--config=/etc/ecs/ecs-default-config.yaml'],
-        transform: defu(
-          {
-            service: {
-              healthCheckGracePeriodSeconds: 60,
+        loadBalancer: {
+          public: false,
+          ports: [
+            {
+              listen: '80/http',
+              forward: '80/http',
             },
-            taskDefinition: (args: any) => {
-              let value = $jsonParse(args.containerDefinitions);
-              value = value.apply((containerDefinitions: any) => {
-                // Add additional container definitions
-                containerDefinitions.push({
-                  name: 'aws-xray-emitter',
-                  image:
-                    'public.ecr.aws/aws-otel-test/aws-otel-goxray-sample-app:latest',
-                  cpu: 256,
-                  memory: 512,
-                  essential: false,
-                  dependsOn: [
-                    {
-                      containerName: 'main',
-                      condition: 'START',
-                    },
-                  ],
-                  logConfiguration: {
-                    logDriver: 'awslogs',
-                    options: {
-                      'awslogs-create-group': 'true',
-                      'awslogs-group': '/ecs/aws-xray-emitter',
-                      'awslogs-region': process.env.AWS_REGION,
-                      'awslogs-stream-prefix': 'ecs',
-                    },
-                  },
-                });
-                containerDefinitions.push({
-                  name: 'nginx',
-                  image: 'public.ecr.aws/nginx/nginx:latest',
-                  cpu: 256,
-                  memory: 512,
-                  essential: false,
-                  dependsOn: [
-                    {
-                      containerName: 'main',
-                      condition: 'START',
-                    },
-                  ],
-                  logConfiguration: {
-                    logDriver: 'awslogs',
-                    options: {
-                      'awslogs-create-group': 'true',
-                      'awslogs-group': '/ecs/nginx',
-                      'awslogs-region': process.env.AWS_REGION,
-                      'awslogs-stream-prefix': 'ecs',
-                    },
-                  },
-                });
-                containerDefinitions.push({
-                  name: 'statsd-emitter',
-                  image: 'public.ecr.aws/amazonlinux/amazonlinux:latest',
-                  cpu: 256,
-                  memory: 512,
-                  essential: false,
-                  dependsOn: [
-                    {
-                      containerName: 'main',
-                      condition: 'START',
-                    },
-                  ],
-                  entryPoint: [
-                    '/bin/sh',
-                    '-c',
-                    "yum install -y socat; while true; do echo 'statsdTestMetric:1|c' | socat -v -t 0 - UDP:127.0.0.1:8125; sleep 1; done",
-                  ],
-                  logConfiguration: {
-                    logDriver: 'awslogs',
-                    options: {
-                      'awslogs-create-group': 'true',
-                      'awslogs-group': '/ecs/statsd-emitter',
-                      'awslogs-region': process.env.AWS_REGION,
-                      'awslogs-stream-prefix': 'ecs',
-                    },
-                  },
-                });
-                return containerDefinitions;
-              });
-              args.containerDefinitions = $jsonStringify(value);
-              args.family = 'aws-otel-collector';
-              args.requiresCompatibilities = ['FARGATE'];
-              args.taskRoleArn = otelTaskRole.arn;
-              return args;
-            },
-            target: {
-              healthCheck: {
+          ],
+        },
+        transform: {
+          service: {
+            name: 'aws-otel-sidecar-service',
+            healthCheckGracePeriodSeconds: 60,
+          },
+          taskDefinition: (args: any) => {
+            let value = $jsonParse(args.containerDefinitions);
+            value = value.apply((containerDefinitions: any) => {
+              // Add additional container definitions
+              containerDefinitions[0].name = 'otel';
+              containerDefinitions[0].cpu = 256;
+              containerDefinitions[0].memory = 512;
+              containerDefinitions[0].essential = true;
+              containerDefinitions[0].logConfiguration = {
+                logDriver: 'awslogs',
+                options: {
+                  'awslogs-group': otelCollector.name,
+                  'awslogs-region': process.env.AWS_REGION,
+                  'awslogs-stream-prefix': 'ecs',
+                },
+              };
+              containerDefinitions[0].healthCheck = {
                 command: ['/healthcheck'],
                 interval: 5,
                 timeout: 3,
                 retries: 2,
                 startPeriod: 10,
-              },
-              deregistrationDelay: 30,
-            },
+              };
+              containerDefinitions.push({
+                name: 'aws-xray-emitter',
+                image:
+                  'public.ecr.aws/aws-otel-test/aws-otel-goxray-sample-app:latest',
+                cpu: 256,
+                memory: 512,
+                essential: false,
+                dependsOn: [
+                  {
+                    containerName: 'otel',
+                    condition: 'START',
+                  },
+                ],
+                logConfiguration: {
+                  logDriver: 'awslogs',
+                  options: {
+                    'awslogs-group': xrayEmitter.name,
+                    'awslogs-region': process.env.AWS_REGION,
+                    'awslogs-stream-prefix': 'ecs',
+                  },
+                },
+              });
+              containerDefinitions.push({
+                name: 'nginx',
+                image: 'public.ecr.aws/nginx/nginx:latest',
+                cpu: 256,
+                memory: 512,
+                essential: false,
+                dependsOn: [
+                  {
+                    containerName: 'otel',
+                    condition: 'START',
+                  },
+                ],
+                logConfiguration: {
+                  logDriver: 'awslogs',
+                  options: {
+                    'awslogs-group': nginx.name,
+                    'awslogs-region': process.env.AWS_REGION,
+                    'awslogs-stream-prefix': 'ecs',
+                  },
+                },
+              });
+              containerDefinitions.push({
+                name: 'statsd-emitter',
+                image: 'public.ecr.aws/amazonlinux/amazonlinux:latest',
+                cpu: 256,
+                memory: 512,
+                essential: false,
+                dependsOn: [
+                  {
+                    containerName: 'otel',
+                    condition: 'START',
+                  },
+                ],
+                entryPoint: [
+                  '/bin/sh',
+                  '-c',
+                  "yum install -y socat; while true; do echo 'statsdTestMetric:1|c' | socat -v -t 0 - UDP:127.0.0.1:8125; sleep 1; done",
+                ],
+                logConfiguration: {
+                  logDriver: 'awslogs',
+                  options: {
+                    'awslogs-group': statsdEmitter.name,
+                    'awslogs-region': process.env.AWS_REGION,
+                    'awslogs-stream-prefix': 'ecs',
+                  },
+                },
+              });
+              return containerDefinitions;
+            });
+            args.containerDefinitions = $jsonStringify(value);
+            args.family = 'aws-otel-collector';
+            args.requiresCompatibilities = ['FARGATE'];
+            args.taskRoleArn = otelTaskRole.arn;
+            return args;
           },
-          BASE_TRANSFORM,
-        ),
+          target: {
+            healthCheck: {
+              interval: 5,
+              timeout: 3,
+            },
+            deregistrationDelay: 30,
+          },
+        },
       });
-
       otelUrl = $interpolate`http://${otel.url}/v1/logs`;
     }
 
@@ -424,51 +470,51 @@ export default $config({
       wait: false,
     });
 
-    if ($app.stage === 'sandbox') {
-      // In sandbox, deploy permissions in a Lambda.
-      const permissionsDeployer = new sst.aws.Function(
-        'zero-permissions-deployer',
-        {
-          handler: '../functions/src/permissions.deploy',
-          vpc,
-          environment: {
-            ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
-            ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
-          },
-          copyFiles: [
-            {from: '../../apps/zbugs/shared/schema.ts', to: './schema.ts'},
-          ],
-          nodejs: {install: ['@rocicorp/zero']},
-        },
-      );
+    // if ($app.stage === 'sandbox') {
+    //   // In sandbox, deploy permissions in a Lambda.
+    //   const permissionsDeployer = new sst.aws.Function(
+    //     'zero-permissions-deployer',
+    //     {
+    //       handler: '../functions/src/permissions.deploy',
+    //       vpc,
+    //       environment: {
+    //         ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
+    //         ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
+    //       },
+    //       copyFiles: [
+    //         {from: '../../apps/zbugs/shared/schema.ts', to: './schema.ts'},
+    //       ],
+    //       nodejs: {install: ['@rocicorp/zero']},
+    //     },
+    //   );
 
-      new aws.lambda.Invocation(
-        'invoke-zero-permissions-deployer',
-        {
-          // Invoke the Lambda on every deploy.
-          input: Date.now().toString(),
-          functionName: permissionsDeployer.name,
+    //   new aws.lambda.Invocation(
+    //     'invoke-zero-permissions-deployer',
+    //     {
+    //       // Invoke the Lambda on every deploy.
+    //       input: Date.now().toString(),
+    //       functionName: permissionsDeployer.name,
+    //     },
+    //     {dependsOn: viewSyncer},
+    //   );
+    // } else {
+    // In prod, deploy permissions via a local Command, to exercise both approaches.
+    new command.local.Command(
+      'zero-deploy-permissions',
+      {
+        // Pulumi operates with cwd at the package root.
+        dir: join(process.cwd(), '../../packages/zero/'),
+        create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/shared/schema.ts`,
+        environment: {
+          ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
+          ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
         },
-        {dependsOn: viewSyncer},
-      );
-    } else {
-      // In prod, deploy permissions via a local Command, to exercise both approaches.
-      new command.local.Command(
-        'zero-deploy-permissions',
-        {
-          // Pulumi operates with cwd at the package root.
-          dir: join(process.cwd(), '../../packages/zero/'),
-          create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/shared/schema.ts`,
-          environment: {
-            ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
-            ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
-          },
-          // Run the Command on every deploy.
-          triggers: [Date.now()],
-        },
-        // after the view-syncer is deployed.
-        {dependsOn: viewSyncer},
-      );
-    }
+        // Run the Command on every deploy.
+        triggers: [Date.now()],
+      },
+      // after the view-syncer is deployed.
+      {dependsOn: viewSyncer},
+    );
+    // }
   },
 });
