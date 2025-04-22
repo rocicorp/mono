@@ -248,7 +248,7 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
     this.#lc = lc;
     this.#attrs = attrs;
     this.#it = it;
-    this.#start = NaN;
+    this.#start = performance.now();
     this.#threshold = slowQueryThreshold;
     this.#sqliteRowTimeSum = 0;
   }
@@ -280,7 +280,6 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
   }
 
   [Symbol.iterator](): IterableIterator<T> {
-    this.#start = performance.now();
     return this;
   }
 
