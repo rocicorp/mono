@@ -168,7 +168,11 @@ test('previously seen mutation', async () => {
           clientID: 'cid',
           id: 2,
         },
-        result: {},
+        result: {
+          error: 'alreadyProcessed',
+          details:
+            'Ignoring mutation from cid with ID 2 as it was already processed. Expected: 4',
+        },
       },
     ],
   });
