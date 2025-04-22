@@ -112,6 +112,7 @@ export default function runWorker(
       .withContext('component', 'view-syncer')
       .withContext('clientGroupID', id)
       .withContext('instance', randomID());
+    lc.debug?.(`creating view syncer`);
     return new ViewSyncerService(
       logger,
       shard,

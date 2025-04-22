@@ -98,6 +98,7 @@ export class Connection {
       .withContext('clientID', clientID)
       .withContext('clientGroupID', clientGroupID)
       .withContext('wsID', wsID);
+    this.#lc.debug?.('new connection');
     this.#onClose = onClose;
 
     this.#ws.addEventListener('close', this.#handleClose);

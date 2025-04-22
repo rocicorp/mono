@@ -126,6 +126,7 @@ export class ClientHandler {
     schemaVersion: number | null,
     downstream: Subscription<Downstream>,
   ) {
+    lc.debug?.('new client handler');
     this.#clientGroupID = clientGroupID;
     this.clientID = clientID;
     this.wsID = wsID;
