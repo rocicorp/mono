@@ -155,6 +155,7 @@ export default $config({
           },
         };
 
+    let otelUrl: $util.Output<string>;
     // Replication Manager Service
     const replicationManager = cluster.addService(`replication-manager`, {
       cpu: '2 vCPU',
@@ -171,6 +172,7 @@ export default $config({
         ...commonEnv,
         ZERO_CHANGE_MAX_CONNS: '3',
         ZERO_NUM_SYNC_WORKERS: '0',
+        ZERO_LOG_TRACE_COLLECTOR: $interpolate`${$app.stage}-otel-collector`,
       },
       logging: {
         retention: '1 month',
@@ -186,6 +188,170 @@ export default $config({
       },
       transform: defu(EBS_TRANSFORM, BASE_TRANSFORM),
     });
+
+    if ($app.stage === 'sandbox') {
+      // Create the task role first
+      const otelTaskRole = new aws.iam.Role(
+        `${$app.name}-${$app.stage}-OTELTaskRole`,
+        {
+          assumeRolePolicy: JSON.stringify({
+            Version: '2012-10-17',
+            Statement: [
+              {
+                Effect: 'Allow',
+                Principal: {
+                  Service: 'ecs-tasks.amazonaws.com',
+                },
+                Action: 'sts:AssumeRole',
+              },
+            ],
+          }),
+        },
+      );
+
+      // Attach the policy to the role
+      new aws.iam.RolePolicy(`${$app.name}-${$app.stage}-OTELRolePolicy`, {
+        role: otelTaskRole.name,
+        policy: JSON.stringify({
+          Version: '2012-10-17',
+          Statement: [
+            {
+              Effect: 'Allow',
+              Action: [
+                'logs:PutLogEvents',
+                'logs:CreateLogGroup',
+                'logs:CreateLogStream',
+                'logs:DescribeLogStreams',
+                'logs:DescribeLogGroups',
+                'xray:PutTraceSegments',
+                'xray:PutTelemetryRecords',
+                'xray:GetSamplingRules',
+                'xray:GetSamplingTargets',
+                'xray:GetSamplingStatisticSummaries',
+                'ssm:GetParameters',
+              ],
+              Resource: '*',
+            },
+          ],
+        }),
+      });
+
+      const otel = new sst.aws.Service(`otel`, {
+        cluster,
+        cpu: '1 vCPU',
+        memory: '2 GB',
+        image: 'public.ecr.aws/aws-observability/aws-otel-collector:latest',
+        environment: {
+          AWS_REGION: process.env.AWS_REGION!,
+        },
+        command: ['--config=/etc/ecs/ecs-default-config.yaml'],
+        transform: defu(
+          {
+            service: {
+              healthCheckGracePeriodSeconds: 60,
+            },
+            taskDefinition: (args: any) => {
+              let value = $jsonParse(args.containerDefinitions);
+              value = value.apply((containerDefinitions: any) => {
+                // Add additional container definitions
+                containerDefinitions.push({
+                  name: 'aws-xray-emitter',
+                  image:
+                    'public.ecr.aws/aws-otel-test/aws-otel-goxray-sample-app:latest',
+                  cpu: 256,
+                  memory: 512,
+                  essential: false,
+                  dependsOn: [
+                    {
+                      containerName: 'main',
+                      condition: 'START',
+                    },
+                  ],
+                  logConfiguration: {
+                    logDriver: 'awslogs',
+                    options: {
+                      'awslogs-create-group': 'true',
+                      'awslogs-group': '/ecs/aws-xray-emitter',
+                      'awslogs-region': process.env.AWS_REGION,
+                      'awslogs-stream-prefix': 'ecs',
+                    },
+                  },
+                });
+                containerDefinitions.push({
+                  name: 'nginx',
+                  image: 'public.ecr.aws/nginx/nginx:latest',
+                  cpu: 256,
+                  memory: 512,
+                  essential: false,
+                  dependsOn: [
+                    {
+                      containerName: 'main',
+                      condition: 'START',
+                    },
+                  ],
+                  logConfiguration: {
+                    logDriver: 'awslogs',
+                    options: {
+                      'awslogs-create-group': 'true',
+                      'awslogs-group': '/ecs/nginx',
+                      'awslogs-region': process.env.AWS_REGION,
+                      'awslogs-stream-prefix': 'ecs',
+                    },
+                  },
+                });
+                containerDefinitions.push({
+                  name: 'statsd-emitter',
+                  image: 'public.ecr.aws/amazonlinux/amazonlinux:latest',
+                  cpu: 256,
+                  memory: 512,
+                  essential: false,
+                  dependsOn: [
+                    {
+                      containerName: 'main',
+                      condition: 'START',
+                    },
+                  ],
+                  entryPoint: [
+                    '/bin/sh',
+                    '-c',
+                    "yum install -y socat; while true; do echo 'statsdTestMetric:1|c' | socat -v -t 0 - UDP:127.0.0.1:8125; sleep 1; done",
+                  ],
+                  logConfiguration: {
+                    logDriver: 'awslogs',
+                    options: {
+                      'awslogs-create-group': 'true',
+                      'awslogs-group': '/ecs/statsd-emitter',
+                      'awslogs-region': process.env.AWS_REGION,
+                      'awslogs-stream-prefix': 'ecs',
+                    },
+                  },
+                });
+                return containerDefinitions;
+              });
+              args.containerDefinitions = $jsonStringify(value);
+              args.family = 'aws-otel-collector';
+              args.requiresCompatibilities = ['FARGATE'];
+              args.taskRoleArn = otelTaskRole.arn;
+              return args;
+            },
+            target: {
+              healthCheck: {
+                command: ['/healthcheck'],
+                interval: 5,
+                timeout: 3,
+                retries: 2,
+                startPeriod: 10,
+              },
+              deregistrationDelay: 30,
+            },
+          },
+          BASE_TRANSFORM,
+        ),
+      });
+
+      otelUrl = $interpolate`http://${otel.url}/v1/logs`;
+    }
+
     // View Syncer Service
     const viewSyncer = cluster.addService(`view-syncer`, {
       cpu: '8 vCPU',
@@ -203,6 +369,7 @@ export default $config({
         ZERO_CHANGE_STREAMER_URI: replicationManager.url,
         ZERO_UPSTREAM_MAX_CONNS: '15',
         ZERO_CVR_MAX_CONNS: '160',
+        ZERO_LOG_TRACE_COLLECTOR: otelUrl ? otelUrl : undefined,
       },
       logging: {
         retention: '1 month',
