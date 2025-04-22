@@ -1,15 +1,15 @@
-import { LogContext } from '@rocicorp/logger'
-import { resolver } from '@rocicorp/resolver'
-import type { IncomingHttpHeaders } from 'node:http'
-import { pid } from 'node:process'
-import type { EventEmitter } from 'stream'
+import {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
+import type {IncomingHttpHeaders} from 'node:http';
+import {pid} from 'node:process';
+import type {EventEmitter} from 'stream';
 import {
   singleProcessMode,
   type Subprocess,
   type Worker,
-} from '../types/processes.ts'
-import { RunningState } from './running-state.ts'
-import type { SingletonService } from './service.ts'
+} from '../types/processes.ts';
+import {RunningState} from './running-state.ts';
+import type {SingletonService} from './service.ts';
 
 /**
  * * `user-facing` workers serve external requests and are the first to
@@ -333,10 +333,10 @@ export class HeartbeatMonitor {
       const timeSinceLastHeartbeat = Date.now() - this.#lastHeartbeat;
       if (timeSinceLastHeartbeat >= this.#stopInterval) {
         this.#lc.info?.(
-        `last heartbeat received ${
-          timeSinceLastHeartbeat / 1000
-        } seconds ago. draining.`,
-      );
+          `last heartbeat received ${
+            timeSinceLastHeartbeat / 1000
+          } seconds ago. draining.`,
+        );
         process.kill(process.pid, GRACEFUL_SHUTDOWN[0]);
       }
     });
