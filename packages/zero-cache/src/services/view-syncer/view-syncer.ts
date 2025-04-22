@@ -209,9 +209,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #runInLockWithCVR(
     fn: (lc: LogContext, cvr: CVRSnapshot) => Promise<void> | void,
   ): Promise<void> {
+    const rid = randomID();
+    this.#lc.debug?.('about to acquire lock for cvr ', rid);
     return this.#lock.withLock(async () => {
-      const lc = this.#lc.withContext('lock', randomID());
+      this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
+      const lc = this.#lc.withContext('lock', rid);
       if (!this.#stateChanges.active) {
+        this.#lc.debug?.('state changes are inactive');
         clearTimeout(this.#expiredQueriesTimer);
         return; // view-syncer has been shutdown
       }
@@ -222,6 +226,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         return;
       }
       if (!this.#cvr) {
+        this.#lc.debug?.('loading CVR');
         this.#cvr = await this.#cvrStore.load(lc, this.#lastConnectTime);
       }
       try {
@@ -535,6 +540,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ) => Promise<void>,
     newClient?: ClientHandler,
   ): Promise<void> {
+    this.#lc.debug?.('viewSyncer.#runInLockForClient');
     const {clientID, wsID} = ctx;
     const [cmd, body] = msg;
 
