@@ -27,9 +27,6 @@ export const counters = {
   pokeTransactions: meter.createCounter('poke-transactions', {
     description: 'Number of poke transactions (pokeStart,pokeEnd) pairs',
   }),
-  ivmRowsProcessed: meter.createCounter('ivm-changes-processed', {
-    description: 'Number of rows emitted by IVM pipelines',
-  }),
 };
 
 export const upDownCounters = {
@@ -75,6 +72,16 @@ export const histograms = {
       unit: 'milliseconds',
     },
   ),
+  transactionAdvanceTime: meter.createHistogram('cg-advance-time', {
+    description:
+      'Time to advance all queries for a given client group after applying a new transaction to the replica.',
+    unit: 'milliseconds',
+  }),
+  changeAdvanceTime: meter.createHistogram('change-advance-time', {
+    description:
+      'Time to advance all queries for a given client group for in response to a single change.',
+    unit: 'milliseconds',
+  }),
   cvrFlushTime: meter.createHistogram('cvr-flush-time', {
     description: 'Time to flush a CVR transaction.',
     unit: 'milliseconds',

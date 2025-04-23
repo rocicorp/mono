@@ -35,6 +35,7 @@ import {
   Snapshotter,
   type SnapshotDiff,
 } from './snapshotter.ts';
+import {histograms} from '../../observability/view-syncer-instruments.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -405,6 +406,8 @@ export class PipelineDriver {
   ): Iterable<RowChange> {
     let pos = 0;
     for (const {table, prevValue, nextValue, rowKey} of diff) {
+      const start = performance.now();
+      let type;
       try {
         if (prevValue && nextValue) {
           // Rows are ultimately referred to by the union key (in #streamNodes())
@@ -418,6 +421,7 @@ export class PipelineDriver {
               getRowKey(unionKey, nextValue as Row) as JSONValue,
             )
           ) {
+            type = 'edit';
             yield* this.#push(table, {
               type: 'edit',
               row: nextValue as Row,
@@ -429,14 +433,23 @@ export class PipelineDriver {
           // represented as a remove of the old key and an add of the new key.
         }
         if (prevValue) {
+          type = 'remove';
           yield* this.#push(table, {type: 'remove', row: prevValue as Row});
         }
         if (nextValue) {
+          type = 'add';
           yield* this.#push(table, {type: 'add', row: nextValue as Row});
         }
       } finally {
         onChange(++pos);
       }
+
+      const elapsed = performance.now() - start;
+      histograms.changeAdvanceTime.record(elapsed, {
+        clientGroupID: this.#clientGroupID,
+        table,
+        type,
+      });
     }
 
     // Set the new snapshot on all TableSources.
