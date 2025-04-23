@@ -156,6 +156,8 @@ export default $config({
         };
 
     let otelUrl: $util.Output<string>;
+
+    console.log('otelUrl!!!', otelUrl);
     // Replication Manager Service
     const replicationManager = cluster.addService(`replication-manager`, {
       cpu: '2 vCPU',
@@ -172,7 +174,7 @@ export default $config({
         ...commonEnv,
         ZERO_CHANGE_MAX_CONNS: '3',
         ZERO_NUM_SYNC_WORKERS: '0',
-        ZERO_LOG_TRACE_COLLECTOR: $interpolate`${$app.stage}-otel-collector`,
+        ZERO_LOG_TRACE_COLLECTOR: otelUrl ? $interpolate`${otelUrl}:4318/v1/traces` : undefined,
       },
       logging: {
         retention: '1 month',
@@ -200,22 +202,22 @@ export default $config({
       );
 
       // X-Ray emitter log group
-      const xrayEmitter = new aws.cloudwatch.LogGroup('aws-xray-emitter', {
-        name: '/ecs/otel/aws-xray-emitter',
-        retentionInDays: 30,
-      });
+      // const xrayEmitter = new aws.cloudwatch.LogGroup('aws-xray-emitter', {
+      //   name: '/ecs/otel/aws-xray-emitter',
+      //   retentionInDays: 30,
+      // });
 
       // Nginx log group
-      const nginx = new aws.cloudwatch.LogGroup('nginx', {
-        name: '/ecs/otel/nginx',
-        retentionInDays: 30,
-      });
+      // const nginx = new aws.cloudwatch.LogGroup('nginx', {
+      //   name: '/ecs/otel/nginx',
+      //   retentionInDays: 30,
+      // });
 
       // StatsD emitter log group
-      const statsdEmitter = new aws.cloudwatch.LogGroup('statsd-emitter', {
-        name: '/ecs/otel/statsd-emitter',
-        retentionInDays: 30,
-      });
+      // const statsdEmitter = new aws.cloudwatch.LogGroup('statsd-emitter', {
+      //   name: '/ecs/otel/statsd-emitter',
+      //   retentionInDays: 30,
+      // });
 
       // Create the task role first
       const otelTaskRole = new aws.iam.Role(
@@ -269,15 +271,15 @@ export default $config({
         memory: '2 GB',
         image: 'public.ecr.aws/aws-observability/aws-otel-collector:latest',
         environment: {
-          AWS_REGION: process.env.AWS_REGION!,
+          AWS_REGION: process.env.AWS_REGION!
         },
         command: ['--config=/etc/ecs/ecs-default-config.yaml'],
         loadBalancer: {
-          public: false,
+          public: true,
           ports: [
             {
-              listen: '80/http',
-              forward: '80/http',
+              listen: '4318/http',
+              forward: '4318/http',
             },
           ],
         },
@@ -309,75 +311,83 @@ export default $config({
                 retries: 2,
                 startPeriod: 10,
               };
-              containerDefinitions.push({
-                name: 'aws-xray-emitter',
-                image:
-                  'public.ecr.aws/aws-otel-test/aws-otel-goxray-sample-app:latest',
-                cpu: 256,
-                memory: 512,
-                essential: false,
-                dependsOn: [
-                  {
-                    containerName: 'otel',
-                    condition: 'START',
-                  },
-                ],
-                logConfiguration: {
-                  logDriver: 'awslogs',
-                  options: {
-                    'awslogs-group': xrayEmitter.name,
-                    'awslogs-region': process.env.AWS_REGION,
-                    'awslogs-stream-prefix': 'ecs',
-                  },
+              // Add port mappings to expose port 4318
+              containerDefinitions[0].portMappings = [
+                {
+                  containerPort: 4318,
+                  hostPort: 4318,
+                  protocol: 'tcp'
                 },
-              });
-              containerDefinitions.push({
-                name: 'nginx',
-                image: 'public.ecr.aws/nginx/nginx:latest',
-                cpu: 256,
-                memory: 512,
-                essential: false,
-                dependsOn: [
-                  {
-                    containerName: 'otel',
-                    condition: 'START',
-                  },
-                ],
-                logConfiguration: {
-                  logDriver: 'awslogs',
-                  options: {
-                    'awslogs-group': nginx.name,
-                    'awslogs-region': process.env.AWS_REGION,
-                    'awslogs-stream-prefix': 'ecs',
-                  },
-                },
-              });
-              containerDefinitions.push({
-                name: 'statsd-emitter',
-                image: 'public.ecr.aws/amazonlinux/amazonlinux:latest',
-                cpu: 256,
-                memory: 512,
-                essential: false,
-                dependsOn: [
-                  {
-                    containerName: 'otel',
-                    condition: 'START',
-                  },
-                ],
-                entryPoint: [
-                  '/bin/sh',
-                  '-c',
-                  "yum install -y socat; while true; do echo 'statsdTestMetric:1|c' | socat -v -t 0 - UDP:127.0.0.1:8125; sleep 1; done",
-                ],
-                logConfiguration: {
-                  logDriver: 'awslogs',
-                  options: {
-                    'awslogs-group': statsdEmitter.name,
-                    'awslogs-region': process.env.AWS_REGION,
-                    'awslogs-stream-prefix': 'ecs',
-                  },
-                },
-              });
+              ];
+              // containerDefinitions.push({
+              //   name: 'aws-xray-emitter',
+              //   image:
+              //     'public.ecr.aws/aws-otel-test/aws-otel-goxray-sample-app:latest',
+              //   cpu: 256,
+              //   memory: 512,
+              //   essential: false,
+              //   dependsOn: [
+              //     {
+              //       containerName: 'otel',
+              //       condition: 'START',
+              //     },
+              //   ],
+              //   logConfiguration: {
+              //     logDriver: 'awslogs',
+              //     options: {
+              //       'awslogs-group': xrayEmitter.name,
+              //       'awslogs-region': process.env.AWS_REGION,
+              //       'awslogs-stream-prefix': 'ecs',
+              //     },
+              //   },
+              // });
+              // containerDefinitions.push({
+              //   name: 'nginx',
+              //   image: 'public.ecr.aws/nginx/nginx:latest',
+              //   cpu: 256,
+              //   memory: 512,
+              //   essential: false,
+              //   dependsOn: [
+              //     {
+              //       containerName: 'otel',
+              //       condition: 'START',
+              //     },
+              //   ],
+              //   logConfiguration: {
+              //     logDriver: 'awslogs',
+              //     options: {
+              //       'awslogs-group': nginx.name,
+              //       'awslogs-region': process.env.AWS_REGION,
+              //       'awslogs-stream-prefix': 'ecs',
+              //     },
+              //   },
+              // });
+              // containerDefinitions.push({
+              //   name: 'statsd-emitter',
+              //   image: 'public.ecr.aws/amazonlinux/amazonlinux:latest',
+              //   cpu: 256,
+              //   memory: 512,
+              //   essential: false,
+              //   dependsOn: [
+              //     {
+              //       containerName: 'otel',
+              //       condition: 'START',
+              //     },
+              //   ],
+              //   entryPoint: [
+              //     '/bin/sh',
+              //     '-c',
+              //     "yum install -y socat; while true; do echo 'statsdTestMetric:1|c' | socat -v -t 0 - UDP:127.0.0.1:8125; sleep 1; done",
+              //   ],
+              //   logConfiguration: {
+              //     logDriver: 'awslogs',
+              //     options: {
+              //       'awslogs-group': statsdEmitter.name,
+              //       'awslogs-region': process.env.AWS_REGION,
+              //       'awslogs-stream-prefix': 'ecs',
+              //     },
+              //   },
+              // });
               return containerDefinitions;
             });
             args.containerDefinitions = $jsonStringify(value);
@@ -388,14 +398,17 @@ export default $config({
           },
           target: {
             healthCheck: {
+              protocol: 'HTTP',
+              path: '/v1/traces',
               interval: 5,
               timeout: 3,
+              matcher: '405',
             },
             deregistrationDelay: 30,
           },
         },
       });
-      otelUrl = $interpolate`http://${otel.url}/v1/logs`;
+      otelUrl = $interpolate`${otel.url}`;
     }
 
     // View Syncer Service
@@ -415,7 +428,7 @@ export default $config({
         ZERO_CHANGE_STREAMER_URI: replicationManager.url,
         ZERO_UPSTREAM_MAX_CONNS: '15',
         ZERO_CVR_MAX_CONNS: '160',
-        ZERO_LOG_TRACE_COLLECTOR: otelUrl ? otelUrl : undefined,
+        ZERO_LOG_TRACE_COLLECTOR: otelUrl ? $interpolate`${otelUrl}:4318/v1/traces` : undefined,
       },
       logging: {
         retention: '1 month',
