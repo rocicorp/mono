@@ -325,9 +325,11 @@ export class HeartbeatMonitor {
     //   this.#lastHeartbeat. Downtime ensues.
     //
     // To avoid this, we push the check out to a phase of the event loop *after*
-    // I/O events are processed, using setImmediate(). This ensures we see
-    // a value for this.#lastHeartbeat that reflects any keepalive requests
-    // that came in during the current event loop turn.
+    // I/O events are processed, using setImmediate():
+    // https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick#setimmediate-vs-settimeout
+    //
+    // This ensures we see a value for this.#lastHeartbeat that reflects
+    // any keepalive requests that came in during the current event loop turn.
     this.#checkImmediateTimer = setImmediate(() => {
       this.#checkImmediateTimer = undefined;
       const timeSinceLastHeartbeat = Date.now() - this.#lastHeartbeat;
