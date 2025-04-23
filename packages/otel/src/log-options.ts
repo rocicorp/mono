@@ -27,6 +27,14 @@ export const logOptions = {
     ],
   },
 
+  metricCollector: {
+    type: v.string().optional(),
+    desc: [
+      `The URL of the metric collector to which to send metric data. Metrics are sent over http.`,
+      `Port defaults to 4318 for most collectors.`,
+    ],
+  },
+
   slowRowThreshold: {
     type: v.number().default(2),
     desc: [
