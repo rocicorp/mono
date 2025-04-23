@@ -12,6 +12,9 @@ export const counters = {
   customMutations: meter.createCounter('custom-mutations', {
     description: 'Number of custom mutations processed',
   }),
+  pushes: meter.createCounter('pushes', {
+    description: 'Number of pushes processed by the pusher',
+  }),
   queryHydrations: meter.createCounter('query-hydrations', {
     description: 'Number of query hydrations',
   }),

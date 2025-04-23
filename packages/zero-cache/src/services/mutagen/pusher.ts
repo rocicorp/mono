@@ -20,6 +20,7 @@ import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {Service} from '../service.ts';
+import {counters} from '../../observability/view-syncer-instruments.ts';
 
 type Fatal = {
   error: 'forClient';
@@ -313,6 +314,13 @@ class PushWorker {
   }
 
   async #processPush(entry: PusherEntry): Promise<PushResponse | Fatal> {
+    counters.customMutations.add(entry.push.mutations.length, {
+      clientGroupID: entry.push.clientGroupID,
+    });
+    counters.pushes.add(1, {
+      clientGroupID: entry.push.clientGroupID,
+    });
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
