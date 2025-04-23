@@ -75,7 +75,7 @@ export default function runWorker(
           }),
     metricReader: new PeriodicExportingMetricReader({
       exporter: (() => {
-        if (config.log.traceCollector === undefined) {
+        if (config.log.metricCollector === undefined) {
           if (process.env.NODE_ENV === 'dev') {
             return new ConsoleMetricExporter();
           }
@@ -84,7 +84,7 @@ export default function runWorker(
         }
 
         return new OTLPMetricExporter({
-          url: config.log.traceCollector,
+          url: config.log.metricCollector,
         });
       })(),
     }),
