@@ -72,6 +72,10 @@ import {
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
+import {
+  counters,
+  histograms,
+} from '../../observability/view-syncer-instruments.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -808,7 +812,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
         },
       );
+
       const elapsed = Date.now() - start;
+      counters.queryHydrations.add(1, {
+        clientGroupID: this.id,
+        hash,
+        transformationHash,
+      });
+      histograms.hydrationTime.record(elapsed, {
+        clientGroupID: this.id,
+        hash,
+        transformationHash,
+      });
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
     }
   }
