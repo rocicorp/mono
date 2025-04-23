@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.19.2025042202",
+  "version": "0.19.2025042204",
   "description": "Zero is a web framework for serverless web development.",
   "author": "Rocicorp, Inc.",
   "repository": {
@@ -36,9 +36,10 @@
     "@fastify/websocket": "^11.0.0",
     "@google-cloud/precise-date": "^4.0.0",
     "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.56.0",
-    "@opentelemetry/sdk-node": "^0.56.0",
-    "@opentelemetry/sdk-trace-node": "^1.29.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.200.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
+    "@opentelemetry/sdk-node": "^0.200.0",
+    "@opentelemetry/sdk-trace-node": "^2.0.0",
     "@postgresql-typed/oids": "^0.2.0",
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",

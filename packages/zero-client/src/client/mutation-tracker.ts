@@ -183,18 +183,31 @@ export class MutationTracker {
       mid.clientID === this.#clientID,
       'received mutation for the wrong client',
     );
+
     this.#lc.error?.(
       OnErrorKind.Mutation,
       `Mutation ${mid.id} returned an error`,
       error,
     );
+
     const ephemeralID = this.#ephemeralIDsByMutationID.get(mid.id);
+    if (!ephemeralID && error.error === 'alreadyProcessed') {
+      return;
+    }
+
+    // Each tab sends all mutations for the client group
+    // and the server responds back to the individual client that actually
+    // ran the mutation. This means that N clients can send the same
+    // mutation concurrently. If that happens, the promise for the mutation tracked
+    // by this class will try to be resolved N times.
+    // Every time after the first, the ephemeral ID will not be
+    // found in the map. These later times, however, should always have been
+    // "mutation already processed" events which we ignore (above).
     assert(
       ephemeralID,
-      () =>
-        'invalid state. An ephemeral id was never assigned to mutation ' +
-        mid.id,
+      `ephemeral ID is missing for mutation error: ${error.error}.`,
     );
+
     const entry = this.#outstandingMutations.get(ephemeralID);
     assert(entry && entry.mutationID === mid.id);
     // Resolving the promise with an error was an intentional API decision
@@ -210,9 +223,8 @@ export class MutationTracker {
     const ephemeralID = this.#ephemeralIDsByMutationID.get(mid.id);
     assert(
       ephemeralID,
-      () =>
-        'invalid state. An ephemeral id was never assigned to mutation ' +
-        mid.id,
+      'ephemeral ID is missing. This can happen if a mutation response is received twice ' +
+        'but it should be impossible to receive a success response twice for the same mutation.',
     );
     const entry = this.#outstandingMutations.get(ephemeralID);
     assert(entry && entry.mutationID === mid.id);

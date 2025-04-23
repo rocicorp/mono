@@ -110,7 +110,7 @@ const appErrorSchema = v.object({
   details: jsonSchema.optional(),
 });
 const zeroErrorSchema = v.object({
-  error: v.literal('oooMutation'),
+  error: v.union(v.literal('oooMutation'), v.literal('alreadyProcessed')),
   details: jsonSchema.optional(),
 });
 
