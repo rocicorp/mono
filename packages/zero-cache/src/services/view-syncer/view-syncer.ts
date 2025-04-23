@@ -1233,7 +1233,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Promise<'success' | ResetPipelinesSignal> {
     return startAsyncSpan(tracer, 'vs.#advancePipelines', async () => {
       assert(this.#pipelines.initialized());
-      const start = Date.now();
+      const start = performance.now();
 
       const timer = new Timer();
       const {version, numChanges, changes} = this.#pipelines.advance(timer);
@@ -1283,9 +1283,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       await this.#evictInactiveQueries(lc, this.#cvr);
 
+      const elapsed = performance.now() - start;
       lc.info?.(
-        `finished processing advancement of ${numChanges} changes (${Date.now() - start} ms)`,
+        `finished processing advancement of ${numChanges} changes (${elapsed} ms)`,
       );
+      histograms.transactionAdvanceTime.record(elapsed, {
+        clientGroupID: this.id,
+      });
       return 'success';
     });
   }
