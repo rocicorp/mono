@@ -35,7 +35,7 @@ import {
   Snapshotter,
   type SnapshotDiff,
 } from './snapshotter.ts';
-import {histograms} from '../../observability/view-syncer-instruments.ts';
+import instruments from '../../observability/view-syncer-instruments.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -445,7 +445,7 @@ export class PipelineDriver {
       }
 
       const elapsed = performance.now() - start;
-      histograms.changeAdvanceTime.record(elapsed, {
+      instruments.histograms.changeAdvanceTime.record(elapsed, {
         clientGroupID: this.#clientGroupID,
         table,
         type,

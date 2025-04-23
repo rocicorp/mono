@@ -32,7 +32,7 @@ import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema
 import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.ts';
 import type {Service} from '../service.ts';
-import {counters} from '../../observability/view-syncer-instruments.ts';
+import instruments from '../../observability/view-syncer-instruments.ts';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -102,7 +102,7 @@ export class MutagenService implements Mutagen, Service {
         'Rate limit exceeded',
       ]);
     }
-    counters.crudMutations.add(1, {
+    instruments.counters.crudMutations.add(1, {
       clientGroupID: this.id,
     });
     return processMutation(

@@ -12,7 +12,7 @@ import {ChangeProcessor, type TransactionMode} from './change-processor.ts';
 import {Notifier} from './notifier.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
-import {counters} from '../../observability/view-syncer-instruments.ts';
+import instruments from '../../observability/view-syncer-instruments.ts';
 
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
@@ -76,7 +76,7 @@ export class IncrementalSyncer {
         unregister = this.#state.cancelOnStop(downstream);
 
         for await (const message of downstream) {
-          counters.replicationEvents.add(1);
+          instruments.counters.replicationEvents.add(1);
           switch (message[0]) {
             case 'status':
               // Used for checking if a replica can be caught up. Not

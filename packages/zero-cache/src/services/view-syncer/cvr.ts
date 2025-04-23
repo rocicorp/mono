@@ -32,10 +32,7 @@ import {
   type RowID,
   type RowRecord,
 } from './schema/types.ts';
-import {
-  counters,
-  histograms,
-} from '../../observability/view-syncer-instruments.ts';
+import instruments from '../../observability/view-syncer-instruments.ts';
 
 export type RowUpdate = {
   version?: string; // Undefined for an unref.
@@ -150,8 +147,8 @@ export class CVRUpdater {
       `flushed cvr@${versionString(this._cvr.version)} ` +
         `${JSON.stringify(flushed)} in (${elapsed} ms)`,
     );
-    counters.cvrRowsFlushed.add(flushed.rows);
-    histograms.cvrFlushTime.record(elapsed);
+    instruments.counters.cvrRowsFlushed.add(flushed.rows);
+    instruments.histograms.cvrFlushTime.record(elapsed);
     return {cvr: this._cvr, flushed};
   }
 }

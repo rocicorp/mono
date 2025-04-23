@@ -6,3 +6,4 @@ To collect traces for local development:
 2. `cd docker-otel-lgtm`
 3. `./run-lgtm.sh`
 4. Add `ZERO_LOG_TRACE_COLLECTOR = "http://localhost:4318/v1/traces"` to your `.env`
+5. Add `ZERO_LOG_METRIC_COLLECTOR = "http://localhost:4318/v1/metrics"` to your `.env`
