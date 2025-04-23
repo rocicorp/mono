@@ -72,10 +72,7 @@ import {
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
-import {
-  counters,
-  histograms,
-} from '../../observability/view-syncer-instruments.ts';
+import instruments from '../../observability/view-syncer-instruments.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -814,12 +811,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       const elapsed = Date.now() - start;
-      counters.queryHydrations.add(1, {
+      instruments.counters.queryHydrations.add(1, {
         clientGroupID: this.id,
         hash,
         transformationHash,
       });
-      histograms.hydrationTime.record(elapsed, {
+      instruments.histograms.hydrationTime.record(elapsed, {
         clientGroupID: this.id,
         hash,
         transformationHash,
@@ -1287,7 +1284,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc.info?.(
         `finished processing advancement of ${numChanges} changes (${elapsed} ms)`,
       );
-      histograms.transactionAdvanceTime.record(elapsed, {
+      instruments.histograms.transactionAdvanceTime.record(elapsed, {
         clientGroupID: this.id,
       });
       return 'success';

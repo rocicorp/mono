@@ -74,6 +74,7 @@ export default function runWorker(
             url: config.log.traceCollector,
           }),
     metricReader: new PeriodicExportingMetricReader({
+      exportIntervalMillis: 5000,
       exporter: (() => {
         if (config.log.metricCollector === undefined) {
           if (process.env.NODE_ENV === 'dev') {
