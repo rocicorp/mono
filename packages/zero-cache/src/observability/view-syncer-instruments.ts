@@ -79,8 +79,8 @@ export const histograms = {
     description: 'Time to flush a CVR transaction.',
     unit: 'milliseconds',
   }),
-  pokeFlushTime: meter.createHistogram('poke-flush-time', {
-    description: 'Time to flush a poke transaction.',
+  pokeTime: meter.createHistogram('poke-flush-time', {
+    description: 'Time to poke to all clients.',
     unit: 'milliseconds',
   }),
   hydrationTime: meter.createHistogram('hydration-time', {

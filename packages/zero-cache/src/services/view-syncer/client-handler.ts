@@ -37,6 +37,10 @@ import {
   type PutQueryPatch,
   type RowID,
 } from './schema/types.ts';
+import {
+  counters,
+  histograms,
+} from '../../observability/view-syncer-instruments.ts';
 
 export type PutRowPatch = {
   type: 'row';
@@ -79,6 +83,9 @@ export function startPoke(
   tentativeVersion: CVRVersion,
   schemaVersions?: SchemaVersions, // absent for config-only pokes
 ): PokeHandler {
+  const start = performance.now();
+  counters.pokeTransactions.add(1);
+
   const pokers = clients.map(c =>
     c.startPoke(tentativeVersion, schemaVersions),
   );
@@ -88,12 +95,15 @@ export function startPoke(
   // rate (per client group) will be limited by the slowest connection.
   return {
     addPatch: async patch => {
+      counters.rowsPoked.add(1);
       await Promise.allSettled(pokers.map(poker => poker.addPatch(patch)));
     },
     cancel: async () => {
       await Promise.allSettled(pokers.map(poker => poker.cancel()));
     },
     end: async finalVersion => {
+      const elapsed = performance.now() - start;
+      histograms.pokeTime.record(elapsed);
       await Promise.allSettled(pokers.map(poker => poker.end(finalVersion)));
     },
   };
