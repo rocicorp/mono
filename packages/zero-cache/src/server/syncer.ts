@@ -1,5 +1,5 @@
 import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-http';
-import {Resource} from '@opentelemetry/resources';
+import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
 import {NodeSDK} from '@opentelemetry/sdk-node';
 import {
   ATTR_SERVICE_NAME,
@@ -8,7 +8,9 @@ import {
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
+import {resourceFromAttributes} from '@opentelemetry/resources';
 import {NoopSpanExporter} from '../../../otel/src/noop-span-exporter.ts';
+import {NoopMetricExporter} from '../../../otel/src/noop-metric-exporter.ts';
 import {version} from '../../../otel/src/version.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -36,6 +38,10 @@ import {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
 import {createLogContext} from './logging.ts';
+import {
+  PeriodicExportingMetricReader,
+  ConsoleMetricExporter,
+} from '@opentelemetry/sdk-metrics';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -57,7 +63,7 @@ export default function runWorker(
   }
 
   const sdk = new NodeSDK({
-    resource: new Resource({
+    resource: resourceFromAttributes({
       [ATTR_SERVICE_NAME]: 'syncer',
       [ATTR_SERVICE_VERSION]: version,
     }),
@@ -67,6 +73,21 @@ export default function runWorker(
         : new OTLPTraceExporter({
             url: config.log.traceCollector,
           }),
+    metricReader: new PeriodicExportingMetricReader({
+      exporter: (() => {
+        if (config.log.traceCollector === undefined) {
+          if (process.env.NODE_ENV === 'dev') {
+            return new ConsoleMetricExporter();
+          }
+
+          return new NoopMetricExporter();
+        }
+
+        return new OTLPMetricExporter({
+          url: config.log.traceCollector,
+        });
+      })(),
+    }),
   });
   sdk.start();
 
