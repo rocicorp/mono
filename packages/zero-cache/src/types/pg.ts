@@ -39,7 +39,11 @@ export function timestampToFpMillis(timestamp: string): number {
     const fullTime = new PreciseDate(ts).getFullTime();
     const millis = Number(fullTime / 1_000_000n);
     const nanos = Number(fullTime % 1_000_000n);
-    return millis + nanos * 1e-6; // floating point milliseconds
+
+    // `Z` time returns microsecond precision. All other timezones do not.
+    // To ensure consistency, truncate off microseconds.
+    const ret = Math.floor(millis + nanos * 1e-6); // floating point milliseconds
+    return ret;
   } catch (e) {
     throw new Error(`Error parsing ${timestamp}`, {cause: e});
   }
