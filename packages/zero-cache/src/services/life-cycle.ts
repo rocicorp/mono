@@ -281,7 +281,8 @@ export class HeartbeatMonitor {
   readonly #stopInterval: number;
 
   #lc: LogContext;
-  #timer: NodeJS.Timeout | undefined;
+  #checkIntervalTimer: NodeJS.Timeout | undefined;
+  #checkImmediateTimer: NodeJS.Immediate | undefined;
   #lastHeartbeat = 0;
 
   constructor(lc: LogContext, stopInterval = DEFAULT_STOP_INTERVAL_MS) {
@@ -291,7 +292,7 @@ export class HeartbeatMonitor {
 
   onHeartbeat(reqHeaders: IncomingHttpHeaders) {
     this.#lastHeartbeat = Date.now();
-    if (this.#timer === undefined) {
+    if (this.#checkIntervalTimer === undefined) {
       this.#lc.info?.(
         `starting heartbeat monitor at ${
           this.#stopInterval / 1000
@@ -300,7 +301,7 @@ export class HeartbeatMonitor {
       );
       // e.g. check every 5 seconds to see if it's been over 20 seconds
       //      since the last heartbeat.
-      this.#timer = setInterval(
+      this.#checkIntervalTimer = setInterval(
         this.#checkStopInterval,
         this.#stopInterval / 4,
       );
@@ -308,18 +309,45 @@ export class HeartbeatMonitor {
   }
 
   #checkStopInterval = () => {
-    const timeSinceLastHeartbeat = Date.now() - this.#lastHeartbeat;
-    if (timeSinceLastHeartbeat >= this.#stopInterval) {
-      this.#lc.info?.(
-        `last heartbeat received ${
-          timeSinceLastHeartbeat / 1000
-        } seconds ago. draining.`,
-      );
-      process.kill(process.pid, GRACEFUL_SHUTDOWN[0]);
-    }
+    // In the Node.js event loop, timers like setInterval and setTimeout
+    // run *before* I/O events coming from network sockets or file reads/writes.
+    // When this process gets starved of CPU resources for long periods of time,
+    // for example when other processes are monopolizing all available cores,
+    // pathological behavior can emerge:
+    // - keepalive network request comes in, but is queued in Node internals waiting
+    //   for time on the event loop
+    // - CPU is starved/monopolized by other processes for longer than the time
+    //   configured via this.#stopInterval
+    // - When CPU becomes available and the event loop wakes up, this stop interval
+    //   check is run *before* the keepalive request is processed. The value of
+    //   this.#lastHeartbeat is now very stale, and erroneously triggers a shutdown
+    //   even though keepalive requests were about to be processed and update
+    //   this.#lastHeartbeat. Downtime ensues.
+    //
+    // To avoid this, we push the check out to a phase of the event loop *after*
+    // I/O events are processed, using setImmediate():
+    // https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick#setimmediate-vs-settimeout
+    //
+    // This ensures we see a value for this.#lastHeartbeat that reflects
+    // any keepalive requests that came in during the current event loop turn.
+    this.#checkImmediateTimer = setImmediate(() => {
+      this.#checkImmediateTimer = undefined;
+      const timeSinceLastHeartbeat = Date.now() - this.#lastHeartbeat;
+      if (timeSinceLastHeartbeat >= this.#stopInterval) {
+        this.#lc.info?.(
+          `last heartbeat received ${
+            timeSinceLastHeartbeat / 1000
+          } seconds ago. draining.`,
+        );
+        process.kill(process.pid, GRACEFUL_SHUTDOWN[0]);
+      }
+    });
   };
 
   stop() {
-    clearTimeout(this.#timer);
+    clearTimeout(this.#checkIntervalTimer);
+    if (this.#checkImmediateTimer) {
+      clearImmediate(this.#checkImmediateTimer);
+    }
   }
 }

@@ -73,6 +73,8 @@ test('parse options', () => {
           "configPath": "./src/services/litestream/config.yml",
           "incrementalBackupIntervalMinutes": 15,
           "logLevel": "warn",
+          "multipartConcurrency": 48,
+          "multipartSize": 16777216,
           "restoreParallelism": 48,
           "snapshotBackupIntervalHours": 12,
         },
@@ -148,6 +150,8 @@ test('parse options', () => {
         "ZERO_LITESTREAM_CONFIG_PATH": "./src/services/litestream/config.yml",
         "ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES": "15",
         "ZERO_LITESTREAM_LOG_LEVEL": "warn",
+        "ZERO_LITESTREAM_MULTIPART_CONCURRENCY": "48",
+        "ZERO_LITESTREAM_MULTIPART_SIZE": "16777216",
         "ZERO_LITESTREAM_RESTORE_PARALLELISM": "48",
         "ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS": "12",
         "ZERO_LOG_FORMAT": "text",
@@ -524,6 +528,22 @@ test('zero-cache --help', () => {
        ZERO_LITESTREAM_RESTORE_PARALLELISM env                                                                                                                    
                                                                 The number of WAL files to download in parallel when performing the                               
                                                                 initial restore of the replica from the backup.                                                   
+                                                                                                                                                                  
+     --litestream-multipart-concurrency number                  default: 48                                                                                       
+       ZERO_LITESTREAM_MULTIPART_CONCURRENCY env                                                                                                                  
+                                                                The number of parts (of size --litestream-multipart-size bytes)                                   
+                                                                to download in parallel when restoring the snapshot from the backup.                              
+                                                                                                                                                                  
+                                                                This requires a custom build of litestream (version 0.3.13+z0.0.1+).                              
+                                                                Set to 0 to disable.                                                                              
+                                                                                                                                                                  
+     --litestream-multipart-size number                         default: 16777216                                                                                 
+       ZERO_LITESTREAM_MULTIPART_SIZE env                                                                                                                         
+                                                                The size of each part when downloading the snapshot with --multipart-concurrency.                 
+                                                                Multipart downloads require concurrency * size bytes of memory when restoring                     
+                                                                the snapshot from the backup.                                                                     
+                                                                                                                                                                  
+                                                                This requires a custom build of litestream (version 0.3.13+z0.0.1+).                              
                                                                                                                                                                   
      --storage-db-tmp-dir string                                optional                                                                                          
        ZERO_STORAGE_DB_TMP_DIR env                                                                                                                                
