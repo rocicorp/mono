@@ -84,7 +84,20 @@ function getLitestream(
 async function tryRestore(config: ZeroLitestreamConfig) {
   // The log output for litestream restore is minimal. Include it all.
   const {litestream, env} = getLitestream(config, 'debug');
-  const {restoreParallelism: parallelism} = config.litestream;
+  const {
+    restoreParallelism: parallelism,
+    multipartConcurrency,
+    multipartSize,
+  } = config.litestream;
+  const multipartArgs =
+    multipartConcurrency === 0 || multipartSize === 0
+      ? []
+      : [
+          '-multipart-concurrency',
+          multipartConcurrency.toString(),
+          '-multipart-size',
+          multipartSize.toString(),
+        ];
   const proc = spawn(
     litestream,
     [
@@ -93,6 +106,7 @@ async function tryRestore(config: ZeroLitestreamConfig) {
       '-if-replica-exists',
       '-parallelism',
       String(parallelism),
+      ...multipartArgs,
       config.replica.file,
     ],
     {env, stdio: 'inherit', windowsHide: true},

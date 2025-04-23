@@ -1,4 +1,16 @@
-FROM litestream/litestream:0.3.13 as litestream
+FROM golang:1.23 AS litestream
+
+WORKDIR /src/
+RUN git clone https://github.com/rocicorp/litestream.git
+WORKDIR /src/litestream/
+
+RUN git checkout 5c53233c50749a5f4e83915be77215dc1efce4c4
+ARG LITESTREAM_VERSION=0.3.13+z0.0.1  # upstream version + zero version
+
+RUN --mount=type=cache,target=/root/.cache/go-build \
+	--mount=type=cache,target=/go/pkg \
+	go build -ldflags "-s -w -X 'main.Version=${LITESTREAM_VERSION}' -extldflags '-static'" -tags osusergo,netgo,sqlite_omit_load_extension -o /usr/local/bin/litestream ./cmd/litestream
+
 FROM node:22.11.0-alpine3.20
 
 ARG ZERO_VERSION
