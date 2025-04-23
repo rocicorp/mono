@@ -350,6 +350,9 @@ function send(
     lc.debug?.(`Dropping outbound message on ws (state: ${ws.readyState})`, {
       dropped: data,
     });
+    if (callback !== 'ignore-backpressure') {
+      callback(new Error('websocket closed'));
+    }
   }
 }
 
