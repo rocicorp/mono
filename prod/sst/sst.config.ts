@@ -2,7 +2,6 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 // Load .env file
 require('@dotenvx/dotenvx').config();
-
 import {createDefu} from 'defu';
 import {join} from 'node:path';
 
@@ -157,7 +156,6 @@ export default $config({
 
     let otelUrl: $util.Output<string>;
 
-    console.log('otelUrl!!!', otelUrl);
     // Replication Manager Service
     const replicationManager = cluster.addService(`replication-manager`, {
       cpu: '2 vCPU',
@@ -174,7 +172,9 @@ export default $config({
         ...commonEnv,
         ZERO_CHANGE_MAX_CONNS: '3',
         ZERO_NUM_SYNC_WORKERS: '0',
-        ZERO_LOG_TRACE_COLLECTOR: otelUrl ? $interpolate`${otelUrl}:4318/v1/traces` : undefined,
+        ZERO_LOG_TRACE_COLLECTOR: otelUrl
+          ? $interpolate`${otelUrl}:4318/v1/traces`
+          : undefined,
       },
       logging: {
         retention: '1 month',
@@ -271,9 +271,68 @@ export default $config({
         memory: '2 GB',
         image: 'public.ecr.aws/aws-observability/aws-otel-collector:latest',
         environment: {
-          AWS_REGION: process.env.AWS_REGION!
+          AWS_REGION: process.env.AWS_REGION!,
+          OTEL_CONFIG: `
+extensions:
+  health_check:
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch/traces:
+    timeout: 1s
+    send_batch_size: 5
+  batch/metrics:
+    timeout: 60s
+  batch/logs:
+    timeout: 60s
+  batch/datadog:
+    # Datadog APM Intake limit is 3.2MB.    
+    send_batch_max_size: 1000
+    send_batch_size: 5
+    timeout: 10s
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 1000
+
+exporters:
+  debug:
+    verbosity: detailed
+  awsxray:
+  awsemf:
+    namespace: ECS/AWSOTel
+    log_group_name: '/aws/ecs/otel/zero/metrics'
+  datadog/api:
+    hostname: zero-sandbox
+    api:
+      key: ${process.env.DATADOG_API_KEY}
+      site: datadoghq.com
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch/datadog]
+      exporters: [datadog/api, awsxray]
+    metrics:
+      receivers: [otlp]
+      processors: [batch/metrics]
+      exporters: [datadog/api]
+    logs:
+      receivers: [otlp]
+      processors: [batch/datadog]
+      exporters: [datadog/api]
+  extensions: [health_check]
+          `,
         },
-        command: ['--config=/etc/ecs/ecs-default-config.yaml'],
+        command: [
+          '--config=env:OTEL_CONFIG',
+          '--feature-gates=-exporter.datadogexporter.DisableAPMStats',
+        ],
         loadBalancer: {
           public: true,
           ports: [
@@ -316,7 +375,7 @@ export default $config({
                 {
                   containerPort: 4318,
                   hostPort: 4318,
-                  protocol: 'tcp'
+                  protocol: 'tcp',
                 },
               ];
               // containerDefinitions.push({
@@ -428,7 +487,9 @@ export default $config({
         ZERO_CHANGE_STREAMER_URI: replicationManager.url,
         ZERO_UPSTREAM_MAX_CONNS: '15',
         ZERO_CVR_MAX_CONNS: '160',
-        ZERO_LOG_TRACE_COLLECTOR: otelUrl ? $interpolate`${otelUrl}:4318/v1/traces` : undefined,
+        ZERO_LOG_TRACE_COLLECTOR: otelUrl
+          ? $interpolate`${otelUrl}:4318/v1/traces`
+          : undefined,
       },
       logging: {
         retention: '1 month',
@@ -528,6 +589,7 @@ export default $config({
       // after the view-syncer is deployed.
       {dependsOn: viewSyncer},
     );
+
     // }
   },
 });
