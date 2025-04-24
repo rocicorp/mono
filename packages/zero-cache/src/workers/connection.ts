@@ -285,6 +285,10 @@ export class Connection {
     //       from createWebSocketStream() were instead used, exceptions
     //       from the outboundStream result in the Writable closing the
     //       the websocket before the error message can be sent.
+    this.#ws
+      .once('error', () => outboundStream.cancel())
+      .once('close', () => outboundStream.cancel());
+
     pipeline(
       Readable.from(outboundStream),
       new Writable({
