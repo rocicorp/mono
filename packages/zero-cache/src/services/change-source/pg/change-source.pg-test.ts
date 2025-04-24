@@ -15,7 +15,7 @@ import {
 } from '../../../test/db.ts';
 import {DbFile} from '../../../test/lite.ts';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
-import type {PostgresDB} from '../../../types/pg.ts';
+import {type PostgresDB} from '../../../types/pg.ts';
 import type {Source} from '../../../types/streams.ts';
 import type {
   ChangeSource,

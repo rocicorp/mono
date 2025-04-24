@@ -724,7 +724,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             orgID: 789n,
             isAdmin: null,
             bigint: null,
-            timestamp: 1547253035381,
+            timestamp: 1547253035381.101,
             bytes: null,
             intArray: null,
             json: '[1,2,3]',
@@ -1684,11 +1684,11 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       replicatedData: {
         funk: [
           {
-            createdAt: 1547253035381,
+            createdAt: 1547253035381.101,
             id: '123',
             name: '456',
             order: 1n,
-            updatedAt: 1547253035381,
+            updatedAt: 1547253035381.101,
             ['_0_version']: WATERMARK_REGEX,
           },
         ],
