@@ -154,4 +154,11 @@ export type Error = v.Infer<typeof errorSchema>;
  */
 export type Downstream = v.Infer<typeof downstreamSchema>;
 
-export interface ChangeStreamerService extends ChangeStreamer, Service {}
+export interface ChangeStreamerService extends ChangeStreamer, Service {
+  /**
+   * Notifies the change streamer of a watermark that has been backed up,
+   * indicating that changes before the watermark can be purged if active
+   * subscribers have progressed beyond the watermark.
+   */
+  scheduleCleanup(watermark: string): void;
+}

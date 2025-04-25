@@ -2,6 +2,8 @@ dbs:
   - path: ${ZERO_REPLICA_FILE}
     min-checkpoint-page-count: ${ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT}
     max-checkpoint-page-count: ${ZERO_LITESTREAM_MAX_CHECKPOINT_PAGE_COUNT}
+    watermark-table: _zero.replicationState
+    watermark-column: stateVersion
     replicas:
       - url: ${ZERO_LITESTREAM_BACKUP_URL}
         retention: ${ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_MINUTES}m
@@ -11,3 +13,5 @@ dbs:
 logging:
   level: ${ZERO_LITESTREAM_LOG_LEVEL}
   type: ${ZERO_LOG_FORMAT}
+
+addr: localhost:${LITESTREAM_PORT}

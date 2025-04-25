@@ -43,6 +43,7 @@
     "jose": "^5.9.3",
     "json-custom-numbers": "^3.1.1",
     "nanoid": "^5.1.2",
+    "parse-prometheus-text-format": "^1.1.1",
     "pg-format": "npm:pg-format-fix@^1.0.5",
     "postgres": "^3.4.4",
     "tsx": "^4.19.1",
@@ -62,6 +63,7 @@
     "@types/ws": "^8.5.12",
     "@vitest/runner": "3.0.8",
     "concurrently": "^8.2.1",
+    "nock": "^14.0.4",
     "shared": "0.0.0",
     "typescript": "~5.8.2",
     "vitest": "3.0.8"

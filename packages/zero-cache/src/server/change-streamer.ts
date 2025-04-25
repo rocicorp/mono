@@ -6,11 +6,13 @@ import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
+import {BackupMonitor} from '../services/change-streamer/backup-monitor.ts';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
+import type {Service} from '../services/service.ts';
 import {pgClient} from '../types/pg.ts';
 import {
   parentWorker,
@@ -32,6 +34,7 @@ export default async function runWorker(
     change,
     replica,
     initialSync,
+    litestream,
   } = config;
   const lc = createLogContext(config, {worker: 'change-streamer'});
 
@@ -46,10 +49,12 @@ export default async function runWorker(
   const shard = getShardConfig(config);
 
   let changeStreamer: ChangeStreamerService | undefined;
+  let initialSyncTime: number | undefined;
 
   for (const first of [true, false]) {
     try {
       // Note: This performs initial sync of the replica if necessary.
+      const start = Date.now();
       const {changeSource, subscriptionState} =
         upstream.type === 'pg'
           ? await initializePostgresChangeSource(
@@ -65,6 +70,7 @@ export default async function runWorker(
               shard,
               replica.file,
             );
+      initialSyncTime = Date.now() - start;
 
       changeStreamer = await initializeStreamer(
         lc,
@@ -105,7 +111,20 @@ export default async function runWorker(
 
   parent.send(['ready', {ready: true}]);
 
-  return runUntilKilled(lc, parent, changeStreamer, changeStreamerWebServer);
+  const services: Service[] = [changeStreamer, changeStreamerWebServer];
+  if (litestream.backupURL) {
+    const {port: metricsPort = config.port + 2} = litestream;
+    services.push(
+      new BackupMonitor(
+        lc,
+        `http://localhost:${metricsPort}/metrics`,
+        changeStreamer,
+        litestream.restoreDurationMsEstimate ?? initialSyncTime,
+      ),
+    );
+  }
+
+  return runUntilKilled(lc, parent, ...services);
 }
 
 // fork()

@@ -96,7 +96,18 @@ export default async function runWorker(
     // a restore once, allowing the backup to be absent.
     // For view-syncers, attempt a restore for up to 10 times over 30 seconds.
     try {
-      await restoreReplica(lc, config, runChangeStreamer ? 1 : 10, 3000);
+      const restoreElapsedMs = await restoreReplica(
+        lc,
+        config,
+        runChangeStreamer ? 1 : 10,
+        3000,
+      );
+      if (!config.litestream.restoreDurationMsEstimate && restoreElapsedMs) {
+        internalFlags.push(
+          '--litestream-restore-duration-ms-estimate',
+          String(restoreElapsedMs),
+        );
+      }
     } catch (e) {
       if (runChangeStreamer) {
         // If the restore failed, e.g. due to a corrupt backup, the

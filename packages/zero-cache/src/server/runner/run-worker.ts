@@ -43,7 +43,7 @@ export async function runWorker(
   // or change-streamer requests (i.e. by tenant `id`).
   const runAsReplicationManager = config.numSyncWorkers === 0;
 
-  // Start the first tenant at (port + 2) unless explicitly
+  // Start the first tenant at (port + 3) unless explicitly
   // overridden by its own ZERO_PORT ...
   let tenantPort = port;
   const tenants = config.tenants.map(tenant => {
@@ -51,7 +51,7 @@ export async function runWorker(
       ...process.env, // propagate all ENV variables from this process
       ...baseEnv, // defaults
       ['ZERO_TENANT_ID']: tenant.id,
-      ['ZERO_PORT']: String((tenantPort += 2)), // and bump the port by 2 thereafter.
+      ['ZERO_PORT']: String((tenantPort += 3)), // and bump the port by 3 thereafter.
       ...tenant.env, // overrides
     };
 
