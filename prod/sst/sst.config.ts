@@ -4,7 +4,7 @@
 require('@dotenvx/dotenvx').config();
 import {createDefu} from 'defu';
 import {join} from 'node:path';
-
+import {withOtelContainers} from './otel';
 const defu = createDefu((obj, key, value) => {
   // Don't merge functions, just use the last one
   if (typeof obj[key] === 'function' || typeof value === 'function') {
@@ -160,340 +160,70 @@ export default $config({
     const replicationManager = cluster.addService(`replication-manager`, {
       cpu: '2 vCPU',
       memory: '8 GB',
-      image: commonEnv.ZERO_IMAGE_URL,
-      link: [replicationBucket],
-      health: {
-        command: ['CMD-SHELL', 'curl -f http://localhost:4849/ || exit 1'],
-        interval: '5 seconds',
-        retries: 3,
-        startPeriod: '300 seconds',
-      },
-      environment: {
-        ...commonEnv,
-        ZERO_CHANGE_MAX_CONNS: '3',
-        ZERO_NUM_SYNC_WORKERS: '0',
-        ZERO_LOG_TRACE_COLLECTOR: otelUrl
-          ? $interpolate`${otelUrl}:4318/v1/traces`
-          : undefined,
-      },
-      logging: {
-        retention: '1 month',
-      },
+      containers: withOtelContainers(
+        {
+          name: 'replication-manager',
+          image: commonEnv.ZERO_IMAGE_URL,
+		  link: [replicationBucket],
+          health: {
+            command: ['CMD-SHELL', 'curl -f http://localhost:4849/ || exit 1'],
+            interval: '5 seconds',
+            retries: 3,
+            startPeriod: '300 seconds',
+          },
+          environment: {
+            ...commonEnv,
+            ZERO_CHANGE_MAX_CONNS: '3',
+            ZERO_NUM_SYNC_WORKERS: '0',
+          },
+          logging: {
+            retention: '1 month',
+          },
+        },
+        process.env.DATADOG_API_KEY,
+      ),
+
       loadBalancer: {
         public: false,
         ports: [
           {
             listen: '80/http',
             forward: '4849/http',
+            container: 'replication-manager',
           },
+          
         ],
       },
       transform: defu(EBS_TRANSFORM, BASE_TRANSFORM),
     });
 
-    if ($app.stage === 'sandbox') {
-      // Main OpenTelemetry collector log group
-      const otelCollector = new aws.cloudwatch.LogGroup(
-        'ecs-aws-otel-sidecar-collector',
-        {
-          name: '/ecs/otel/ecs-aws-otel-sidecar-collector',
-          retentionInDays: 30, // 1 month retention
-        },
-      );
-
-      // X-Ray emitter log group
-      // const xrayEmitter = new aws.cloudwatch.LogGroup('aws-xray-emitter', {
-      //   name: '/ecs/otel/aws-xray-emitter',
-      //   retentionInDays: 30,
-      // });
-
-      // Nginx log group
-      // const nginx = new aws.cloudwatch.LogGroup('nginx', {
-      //   name: '/ecs/otel/nginx',
-      //   retentionInDays: 30,
-      // });
-
-      // StatsD emitter log group
-      // const statsdEmitter = new aws.cloudwatch.LogGroup('statsd-emitter', {
-      //   name: '/ecs/otel/statsd-emitter',
-      //   retentionInDays: 30,
-      // });
-
-      // Create the task role first
-      const otelTaskRole = new aws.iam.Role(
-        `${$app.name}-${$app.stage}-OTELTaskRole`,
-        {
-          assumeRolePolicy: JSON.stringify({
-            Version: '2012-10-17',
-            Statement: [
-              {
-                Effect: 'Allow',
-                Principal: {
-                  Service: 'ecs-tasks.amazonaws.com',
-                },
-                Action: 'sts:AssumeRole',
-              },
-            ],
-          }),
-        },
-      );
-
-      // Attach the policy to the role
-      new aws.iam.RolePolicy(`${$app.name}-${$app.stage}-OTELRolePolicy`, {
-        role: otelTaskRole.name,
-        policy: JSON.stringify({
-          Version: '2012-10-17',
-          Statement: [
-            {
-              Effect: 'Allow',
-              Action: [
-                'logs:PutLogEvents',
-                'logs:CreateLogGroup',
-                'logs:CreateLogStream',
-                'logs:DescribeLogStreams',
-                'logs:DescribeLogGroups',
-                'xray:PutTraceSegments',
-                'xray:PutTelemetryRecords',
-                'xray:GetSamplingRules',
-                'xray:GetSamplingTargets',
-                'xray:GetSamplingStatisticSummaries',
-                'ssm:GetParameters',
-              ],
-              Resource: '*',
-            },
-          ],
-        }),
-      });
-
-      const otel = new sst.aws.Service(`otel`, {
-        cluster,
-        cpu: '1 vCPU',
-        memory: '2 GB',
-        image: 'public.ecr.aws/aws-observability/aws-otel-collector:latest',
-        environment: {
-          AWS_REGION: process.env.AWS_REGION!,
-          OTEL_CONFIG: `
-extensions:
-  health_check:
-receivers:
-  otlp:
-    protocols:
-      http:
-        endpoint: 0.0.0.0:4318
-      grpc:
-        endpoint: 0.0.0.0:4317
-
-processors:
-  batch/traces:
-    timeout: 1s
-    send_batch_size: 5
-  batch/metrics:
-    timeout: 60s
-  batch/logs:
-    timeout: 60s
-  batch/datadog:
-    # Datadog APM Intake limit is 3.2MB.    
-    send_batch_max_size: 1000
-    send_batch_size: 5
-    timeout: 10s
-  memory_limiter:
-    check_interval: 1s
-    limit_mib: 1000
-
-exporters:
-  debug:
-    verbosity: detailed
-  awsxray:
-  awsemf:
-    namespace: ECS/AWSOTel
-    log_group_name: '/aws/ecs/otel/zero/metrics'
-  datadog/api:
-    hostname: zero-sandbox
-    api:
-      key: ${process.env.DATADOG_API_KEY}
-      site: datadoghq.com
-service:
-  pipelines:
-    traces:
-      receivers: [otlp]
-      processors: [batch/datadog]
-      exporters: [datadog/api, awsxray]
-    metrics:
-      receivers: [otlp]
-      processors: [batch/metrics]
-      exporters: [datadog/api]
-    logs:
-      receivers: [otlp]
-      processors: [batch/datadog]
-      exporters: [datadog/api]
-  extensions: [health_check]
-          `,
-        },
-        command: [
-          '--config=env:OTEL_CONFIG',
-          '--feature-gates=-exporter.datadogexporter.DisableAPMStats',
-        ],
-        loadBalancer: {
-          public: true,
-          ports: [
-            {
-              listen: '4318/http',
-              forward: '4318/http',
-            },
-          ],
-        },
-        transform: {
-          service: {
-            name: 'aws-otel-sidecar-service',
-            healthCheckGracePeriodSeconds: 60,
-          },
-          taskDefinition: (args: any) => {
-            let value = $jsonParse(args.containerDefinitions);
-            value = value.apply((containerDefinitions: any) => {
-              // Add additional container definitions
-              containerDefinitions[0].name = 'otel';
-              containerDefinitions[0].cpu = 256;
-              containerDefinitions[0].memory = 512;
-              containerDefinitions[0].essential = true;
-              containerDefinitions[0].logConfiguration = {
-                logDriver: 'awslogs',
-                options: {
-                  'awslogs-group': otelCollector.name,
-                  'awslogs-region': process.env.AWS_REGION,
-                  'awslogs-stream-prefix': 'ecs',
-                },
-              };
-              containerDefinitions[0].healthCheck = {
-                command: ['/healthcheck'],
-                interval: 5,
-                timeout: 3,
-                retries: 2,
-                startPeriod: 10,
-              };
-              // Add port mappings to expose port 4318
-              containerDefinitions[0].portMappings = [
-                {
-                  containerPort: 4318,
-                  hostPort: 4318,
-                  protocol: 'tcp',
-                },
-              ];
-              // containerDefinitions.push({
-              //   name: 'aws-xray-emitter',
-              //   image:
-              //     'public.ecr.aws/aws-otel-test/aws-otel-goxray-sample-app:latest',
-              //   cpu: 256,
-              //   memory: 512,
-              //   essential: false,
-              //   dependsOn: [
-              //     {
-              //       containerName: 'otel',
-              //       condition: 'START',
-              //     },
-              //   ],
-              //   logConfiguration: {
-              //     logDriver: 'awslogs',
-              //     options: {
-              //       'awslogs-group': xrayEmitter.name,
-              //       'awslogs-region': process.env.AWS_REGION,
-              //       'awslogs-stream-prefix': 'ecs',
-              //     },
-              //   },
-              // });
-              // containerDefinitions.push({
-              //   name: 'nginx',
-              //   image: 'public.ecr.aws/nginx/nginx:latest',
-              //   cpu: 256,
-              //   memory: 512,
-              //   essential: false,
-              //   dependsOn: [
-              //     {
-              //       containerName: 'otel',
-              //       condition: 'START',
-              //     },
-              //   ],
-              //   logConfiguration: {
-              //     logDriver: 'awslogs',
-              //     options: {
-              //       'awslogs-group': nginx.name,
-              //       'awslogs-region': process.env.AWS_REGION,
-              //       'awslogs-stream-prefix': 'ecs',
-              //     },
-              //   },
-              // });
-              // containerDefinitions.push({
-              //   name: 'statsd-emitter',
-              //   image: 'public.ecr.aws/amazonlinux/amazonlinux:latest',
-              //   cpu: 256,
-              //   memory: 512,
-              //   essential: false,
-              //   dependsOn: [
-              //     {
-              //       containerName: 'otel',
-              //       condition: 'START',
-              //     },
-              //   ],
-              //   entryPoint: [
-              //     '/bin/sh',
-              //     '-c',
-              //     "yum install -y socat; while true; do echo 'statsdTestMetric:1|c' | socat -v -t 0 - UDP:127.0.0.1:8125; sleep 1; done",
-              //   ],
-              //   logConfiguration: {
-              //     logDriver: 'awslogs',
-              //     options: {
-              //       'awslogs-group': statsdEmitter.name,
-              //       'awslogs-region': process.env.AWS_REGION,
-              //       'awslogs-stream-prefix': 'ecs',
-              //     },
-              //   },
-              // });
-              return containerDefinitions;
-            });
-            args.containerDefinitions = $jsonStringify(value);
-            args.family = 'aws-otel-collector';
-            args.requiresCompatibilities = ['FARGATE'];
-            args.taskRoleArn = otelTaskRole.arn;
-            return args;
-          },
-          target: {
-            healthCheck: {
-              protocol: 'HTTP',
-              path: '/v1/traces',
-              interval: 5,
-              timeout: 3,
-              matcher: '405',
-            },
-            deregistrationDelay: 30,
-          },
-        },
-      });
-      otelUrl = $interpolate`${otel.url}`;
-    }
-
     // View Syncer Service
     const viewSyncer = cluster.addService(`view-syncer`, {
       cpu: '8 vCPU',
       memory: '16 GB',
-      image: commonEnv.ZERO_IMAGE_URL,
-      link: [replicationBucket],
-      health: {
-        command: ['CMD-SHELL', 'curl -f http://localhost:4848/ || exit 1'],
-        interval: '5 seconds',
-        retries: 3,
-        startPeriod: '300 seconds',
-      },
-      environment: {
-        ...commonEnv,
-        ZERO_CHANGE_STREAMER_URI: replicationManager.url,
-        ZERO_UPSTREAM_MAX_CONNS: '15',
-        ZERO_CVR_MAX_CONNS: '160',
-        ZERO_LOG_TRACE_COLLECTOR: otelUrl
-          ? $interpolate`${otelUrl}:4318/v1/traces`
-          : undefined,
-      },
-      logging: {
-        retention: '1 month',
-      },
+      containers: withOtelContainers(
+        {
+          name: 'view-syncer',
+          image: commonEnv.ZERO_IMAGE_URL,
+		  link: [replicationBucket],
+          health: {
+            command: ['CMD-SHELL', 'curl -f http://localhost:4848/ || exit 1'],
+            interval: '5 seconds',
+            retries: 3,
+            startPeriod: '300 seconds',
+          },
+          environment: {
+            ...commonEnv,
+            ZERO_CHANGE_STREAMER_URI: replicationManager.url,
+            ZERO_UPSTREAM_MAX_CONNS: '15',
+            ZERO_CVR_MAX_CONNS: '160',
+          },
+          logging: {
+            retention: '1 month',
+          },
+        },
+        process.env.DATADOG_API_KEY,
+      ),
       loadBalancer: {
         public: true,
         //only set domain if both are provided
@@ -508,10 +238,12 @@ service:
                 {
                   listen: '80/http',
                   forward: '4848/http',
+                  container: 'view-syncer',
                 },
                 {
                   listen: '443/https',
                   forward: '4848/http',
+                  container: 'view-syncer',
                 },
               ],
             }
