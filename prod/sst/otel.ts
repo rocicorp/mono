@@ -2,32 +2,22 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 // Load .env file
 
-/**
- * Represents the configuration for an ECS container
- */
+
 interface ContainerDefinition {
-  /** The name of the container */
   name: string;
-  /** The Docker image to use */
   image?: string;
-  /** The amount of CPU to allocate */
   cpu?: string;
-  /** The amount of memory to allocate */
   memory?: string;
-  /** Container health check configuration */
   health?: {
     command: string[];
     interval: string;
     retries: number;
     startPeriod: string;
   };
-  /** Environment variables for the container */
   environment?: Record<string, string| any> 
-  /** Logging configuration */
   logging?: {
     retention: string;
   };
-  /** Load balancer configuration */
   loadBalancer?: {
     public: boolean;
     ports?: Array<{
@@ -47,7 +37,6 @@ export function withOtelContainers(
   base: ContainerDefinition,
   apiKey: string,
 ): any[] {
-  // 1) Create the OTEL Task Role (only when invoked)
   const otelTaskRole = new aws.iam.Role(`${base.name}-otel-task-role`, {
     assumeRolePolicy: JSON.stringify({
       Version: '2012-10-17',
@@ -61,7 +50,6 @@ export function withOtelContainers(
     }),
   });
 
-  // 2) Attach CloudWatch Logs, X-Ray & SSM permissions
   new aws.iam.RolePolicy(`${base.name}-otel-policy`, {
     role: otelTaskRole.id,
     policy: JSON.stringify({
@@ -83,7 +71,6 @@ export function withOtelContainers(
     }),
   });
 
-  // 3) Build your primary application container (just echo back `base`)
   const appContainer = {
     ...base,
     environment: {
@@ -92,7 +79,6 @@ export function withOtelContainers(
     },
   };
 
-  // 4) Build the OTEL side-car container
   const otelContainer = {
     name: 'otel',
     image: 'public.ecr.aws/aws-observability/aws-otel-collector:latest',
