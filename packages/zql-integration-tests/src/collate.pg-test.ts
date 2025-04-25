@@ -134,7 +134,7 @@ beforeAll(async () => {
 
   // Set up memory query
   const memorySources = makeMemorySources();
-  memoryQueryDelegate = new TestMemoryQueryDelegate(memorySources);
+  memoryQueryDelegate = new TestMemoryQueryDelegate({sources: memorySources});
 
   // Initialize memory sources with test data
   for (const row of testData.item) {

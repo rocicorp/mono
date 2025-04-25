@@ -158,7 +158,7 @@ async function makeDelegates<TSchema extends Schema>(
       serverSchema,
     },
     sqlite: newQueryDelegate(lc, testLogConfig, dbs.sqlite, schema),
-    memory: new TestMemoryQueryDelegate(dbs.memory),
+    memory: new TestMemoryQueryDelegate({sources: dbs.memory}),
   };
 }
 

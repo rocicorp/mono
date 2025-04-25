@@ -126,7 +126,7 @@ beforeEach(async () => {
   );
 
   zqliteQueryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
-  memoryQueryDelegate = new TestMemoryQueryDelegate(memorySources);
+  memoryQueryDelegate = new TestMemoryQueryDelegate({sources: memorySources});
 
   tables.forEach(table => {
     zqliteQueries[table] = newQuery(zqliteQueryDelegate, schema, table) as any;
