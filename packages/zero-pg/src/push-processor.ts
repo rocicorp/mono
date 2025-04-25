@@ -2,8 +2,6 @@ import {LogContext, type LogLevel} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import * as v from '../../shared/src/valita.ts';
-import type {ServerSchema} from '../../z2s/src/schema.ts';
-import {formatPg, sql} from '../../z2s/src/sql.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
 import {
   pushBodySchema,
@@ -13,53 +11,43 @@ import {
   type PushBody,
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import {
-  splitMutatorKey,
-  type ConnectionProvider,
-  type DBConnection,
-  type DBTransaction,
-  type SchemaCRUD,
-  type SchemaQuery,
-} from '../../zql/src/mutate/custom.ts';
-import {
-  makeSchemaCRUD,
-  TransactionImpl,
-  type CustomMutatorDefs,
-} from './custom.ts';
+import {splitMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {createLogContext} from './logging.ts';
-import {makeSchemaQuery} from './query.ts';
-import {getServerSchema} from './schema.ts';
+import type {CustomMutatorDefs} from './custom.ts';
 
 export type Params = v.Infer<typeof pushParamsSchema>;
 
-export class PushProcessor<
-  S extends Schema,
-  TDBTransaction,
-  MD extends CustomMutatorDefs<S, TDBTransaction>,
-> {
-  readonly #dbConnectionProvider: ConnectionProvider<TDBTransaction>;
-  readonly #lc: LogContext;
-  readonly #mutate: (
-    dbTransaction: DBTransaction<unknown>,
-    serverSchema: ServerSchema,
-  ) => SchemaCRUD<S>;
-  readonly #query: (
-    dbTransaction: DBTransaction<unknown>,
-    serverSchema: ServerSchema,
-  ) => SchemaQuery<S>;
-  readonly #schema: S;
+export interface TransactionProviderHooks {
+  updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
+}
 
-  constructor(
-    schema: S,
-    dbConnectionProvider: ConnectionProvider<TDBTransaction>,
-    logLevel: LogLevel = 'info',
-  ) {
-    this.#dbConnectionProvider = dbConnectionProvider;
+export interface TransactionProviderInput {
+  upstreamSchema: string;
+  clientGroupID: string;
+  clientID: string;
+  mutationID: number;
+}
+
+export interface DatabaseProvider<T> {
+  transaction: <R>(
+    callback: (tx: T, transactionHooks: TransactionProviderHooks) => Promise<R>,
+    transactionInput: TransactionProviderInput,
+  ) => Promise<R>;
+}
+
+type ExtractTransactionType<D> =
+  D extends DatabaseProvider<infer T> ? T : never;
+
+export class PushProcessor<
+  D extends DatabaseProvider<ExtractTransactionType<D>>,
+  MD extends CustomMutatorDefs<ExtractTransactionType<D>>,
+> {
+  readonly #dbProvider: D;
+  readonly #lc: LogContext;
+
+  constructor(dbProvider: D, logLevel: LogLevel = 'info') {
+    this.#dbProvider = dbProvider;
     this.#lc = createLogContext(logLevel).withContext('PushProcessor');
-    this.#mutate = makeSchemaCRUD(schema);
-    this.#query = makeSchemaQuery(schema);
-    this.#schema = schema;
   }
 
   /**
@@ -104,7 +92,6 @@ export class PushProcessor<
       queryString = Object.fromEntries(queryString);
     }
     const queryParams = v.parse(queryString, pushParamsSchema, 'passthrough');
-    const connection = await this.#dbConnectionProvider();
 
     if (req.pushVersion !== 1) {
       this.#lc.error?.(
@@ -117,13 +104,7 @@ export class PushProcessor<
 
     const responses: MutationResponse[] = [];
     for (const m of req.mutations) {
-      const res = await this.#processMutation(
-        connection,
-        mutators,
-        queryParams,
-        req,
-        m,
-      );
+      const res = await this.#processMutation(mutators, queryParams, req, m);
       responses.push(res);
       if ('error' in res.result) {
         break;
@@ -136,21 +117,13 @@ export class PushProcessor<
   }
 
   async #processMutation(
-    dbConnection: DBConnection<TDBTransaction>,
     mutators: MD,
     params: Params,
     req: PushBody,
     m: Mutation,
   ): Promise<MutationResponse> {
     try {
-      return await this.#processMutationImpl(
-        dbConnection,
-        mutators,
-        params,
-        req,
-        m,
-        false,
-      );
+      return await this.#processMutationImpl(mutators, params, req, m, false);
     } catch (e) {
       if (e instanceof OutOfOrderMutation) {
         this.#lc.error?.(e);
@@ -181,7 +154,6 @@ export class PushProcessor<
       }
 
       const ret = await this.#processMutationImpl(
-        dbConnection,
         mutators,
         params,
         req,
@@ -208,7 +180,6 @@ export class PushProcessor<
   }
 
   #processMutationImpl(
-    dbConnection: DBConnection<TDBTransaction>,
     mutators: MD,
     params: Params,
     req: PushBody,
@@ -221,45 +192,41 @@ export class PushProcessor<
       );
     }
 
-    return dbConnection.transaction(async (dbTx): Promise<MutationResponse> => {
-      await checkAndIncrementLastMutationID(
-        this.#lc,
-        dbTx,
-        params.schema,
-        req.clientGroupID,
-        m.clientID,
-        m.id,
-      );
+    return this.#dbProvider.transaction(
+      async (dbTx, transactionHooks): Promise<MutationResponse> => {
+        await this.#checkAndIncrementLastMutationID(
+          this.#lc,
+          transactionHooks,
+          m.clientID,
+          m.id,
+        );
 
-      if (!errorMode) {
-        const serverSchema = await getServerSchema(dbTx, this.#schema);
-        await this.#dispatchMutation(dbTx, serverSchema, mutators, m);
-      }
+        if (!errorMode) {
+          await this.#dispatchMutation(dbTx, mutators, m);
+        }
 
-      return {
-        id: {
-          clientID: m.clientID,
-          id: m.id,
-        },
-        result: {},
-      };
-    });
+        return {
+          id: {
+            clientID: m.clientID,
+            id: m.id,
+          },
+          result: {},
+        };
+      },
+      {
+        upstreamSchema: params.schema,
+        clientGroupID: req.clientGroupID,
+        clientID: m.clientID,
+        mutationID: m.id,
+      },
+    );
   }
 
   #dispatchMutation(
-    dbTx: DBTransaction<TDBTransaction>,
-    serverSchema: ServerSchema,
+    dbTx: ExtractTransactionType<D>,
     mutators: MD,
     m: Mutation,
   ): Promise<void> {
-    const zeroTx = new TransactionImpl(
-      dbTx,
-      m.clientID,
-      m.id,
-      this.#mutate(dbTx, serverSchema),
-      this.#query(dbTx, serverSchema),
-    );
-
     const [namespace, name] = splitMutatorKey(m.name);
     if (name === undefined) {
       const mutator = mutators[namespace];
@@ -267,7 +234,7 @@ export class PushProcessor<
         typeof mutator === 'function',
         () => `could not find mutator ${m.name}`,
       );
-      return mutator(zeroTx, m.args[0]);
+      return mutator(dbTx, m.args[0]);
     }
 
     const mutatorGroup = mutators[namespace];
@@ -280,52 +247,43 @@ export class PushProcessor<
       typeof mutator === 'function',
       () => `could not find mutator ${m.name}`,
     );
-    return mutator(zeroTx, m.args[0]);
+    return mutator(dbTx, m.args[0]);
   }
-}
 
-async function checkAndIncrementLastMutationID(
-  lc: LogContext,
-  tx: DBTransaction<unknown>,
-  schema: string,
-  clientGroupID: string,
-  clientID: string,
-  receivedMutationID: number,
-) {
-  lc.debug?.(`Incrementing LMID. Received: ${receivedMutationID}`);
-  const formatted = formatPg(
-    sql`INSERT INTO ${sql.ident(schema)}.clients 
-    as current ("clientGroupID", "clientID", "lastMutationID")
-        VALUES (${clientGroupID}, ${clientID}, ${1})
-    ON CONFLICT ("clientGroupID", "clientID")
-    DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
-    RETURNING "lastMutationID"`,
-  );
+  async #checkAndIncrementLastMutationID(
+    lc: LogContext,
+    transactionHooks: TransactionProviderHooks,
+    clientID: string,
+    receivedMutationID: number,
+  ) {
+    lc.debug?.(`Incrementing LMID. Received: ${receivedMutationID}`);
 
-  const [{lastMutationID}] = (await tx.query(
-    formatted.text,
-    formatted.values,
-  )) as {lastMutationID: bigint}[];
+    const {lastMutationID} = await transactionHooks.updateClientMutationID();
 
-  if (receivedMutationID < lastMutationID) {
-    throw new MutationAlreadyProcessedError(
-      clientID,
-      receivedMutationID,
-      lastMutationID,
+    if (receivedMutationID < lastMutationID) {
+      throw new MutationAlreadyProcessedError(
+        clientID,
+        receivedMutationID,
+        lastMutationID,
+      );
+    } else if (receivedMutationID > lastMutationID) {
+      throw new OutOfOrderMutation(
+        clientID,
+        receivedMutationID,
+        lastMutationID,
+      );
+    }
+    lc.debug?.(
+      `Incremented LMID. Received: ${receivedMutationID}. New: ${lastMutationID}`,
     );
-  } else if (receivedMutationID > lastMutationID) {
-    throw new OutOfOrderMutation(clientID, receivedMutationID, lastMutationID);
   }
-  lc.debug?.(
-    `Incremented LMID. Received: ${receivedMutationID}. New: ${lastMutationID}`,
-  );
 }
 
 class OutOfOrderMutation extends Error {
   constructor(
     clientID: string,
     receivedMutationID: number,
-    lastMutationID: bigint,
+    lastMutationID: number | bigint,
   ) {
     super(
       `Client ${clientID} sent mutation ID ${receivedMutationID} but expected ${lastMutationID}`,

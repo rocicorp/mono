@@ -6,7 +6,6 @@ import type {
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
 import type {Query} from '../query/query.ts';
-import type {MaybePromise} from '../../../shared/src/types.ts';
 
 type ClientID = string;
 
@@ -55,14 +54,6 @@ export interface ClientTransaction<S extends Schema>
 export interface Row {
   [column: string]: unknown;
 }
-
-/**
- * A function that returns a connection to the database which
- * will be used by custom mutators.
- */
-export type ConnectionProvider<TWrappedTransaction> = () => MaybePromise<
-  DBConnection<TWrappedTransaction>
->;
 
 export interface DBConnection<TWrappedTransaction> extends Queryable {
   transaction: <T>(
