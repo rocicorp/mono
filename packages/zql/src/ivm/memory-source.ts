@@ -130,6 +130,10 @@ export class MemorySource implements Source {
     );
   }
 
+  get data(): BTreeSet<Row> {
+    return this.#getPrimaryIndex().data;
+  }
+
   #getSchema(connection: Connection): SourceSchema {
     return {
       tableName: this.#tableName,
