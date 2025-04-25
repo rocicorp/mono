@@ -382,6 +382,16 @@ export const zeroOptions = {
       ],
     },
 
+    port: {
+      type: v.number().optional(),
+      desc: [
+        `Port on which litestream exports metrics, used to determine the replication`,
+        `watermark up to which it is safe to purge change log records.`,
+        ``,
+        `If unspecified, defaults to {bold --port} + 2.`,
+      ],
+    },
+
     checkpointThresholdMB: {
       type: v.number().default(40),
       desc: [
@@ -441,6 +451,19 @@ export const zeroOptions = {
         `the snapshot from the backup.`,
         ``,
         `This requires a custom build of litestream (version 0.3.13+z0.0.1+).`,
+      ],
+    },
+
+    restoreDurationMsEstimate: {
+      type: v.number().optional(),
+      desc: [
+        `The estimated time required to restore the replica from backup. This duration`,
+        `is used to determine when it is safe to purge change long entries; the`,
+        `{bold change-streamer} waits for at least this duration before purging changes`,
+        `that have been successfully backed up.`,
+        ``,
+        `This can generally be left unspecified, as the server will compute the estimate`,
+        `based on an actual restore, using the initial-sync time for bootstrapping.`,
       ],
     },
   },
