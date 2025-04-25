@@ -245,9 +245,11 @@ export class Connection {
       try {
         const data = JSON.parse(reason);
         msg = valita.parse(data, closeConnectionMessageSchema);
-      } catch {
+      } catch (e) {
         // failed to to parse reason as JSON.
-        this.#lc.warn?.(`failed to parse message "${reason}": ${String(e)}`);
+        this.#lc.warn?.(
+          `failed to parse close message "${reason}": ${String(e)}`,
+        );
         return;
       }
 
