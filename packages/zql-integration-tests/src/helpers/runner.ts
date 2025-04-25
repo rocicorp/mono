@@ -252,9 +252,7 @@ function makeTest<TSchema extends Schema>(
       zqlSchema,
       ast(queries.sqlite).table,
     );
-    const memoryResult = await queries.memory.run({
-      type: 'complete',
-    });
+    const memoryResult = await queries.memory;
 
     expect(memoryResult).toEqualPg(pgResult);
     expect(sqliteResult).toEqualPg(pgResult);
