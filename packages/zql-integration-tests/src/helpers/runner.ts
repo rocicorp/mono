@@ -1,6 +1,6 @@
 import {expect} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import type {JSONValue} from '../../../shared/src/json.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {compile, extractZqlResult} from '../../../z2s/src/compiler.ts';
 import type {ServerSchema} from '../../../z2s/src/schema.ts';
@@ -30,6 +30,20 @@ import {
   newQueryDelegate,
 } from '../../../zqlite/src/test/source-factory.ts';
 import '../helpers/comparePg.ts';
+import {wrapIterable} from '../../../shared/src/iterables.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
+import type {Format} from '../../../zql/src/ivm/view.ts';
+import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
+import type {Node} from '../../../zql/src/ivm/data.ts';
+import type {Change} from '../../../zql/src/ivm/change.ts';
+import {must} from '../../../shared/src/must.ts';
+import {
+  clientToServer,
+  type NameMapper,
+} from '../../../zero-schema/src/name-mapper.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import tmp from 'tmp';
 
 const lc = createSilentLogContext();
 
@@ -38,6 +52,8 @@ type DBs<TSchema extends Schema> = {
   sqlite: Database;
   memory: Record<keyof TSchema['tables'], MemorySource>;
   raw: ReadonlyMap<keyof TSchema['tables'], readonly Row[]>;
+  pgSchema: ServerSchema;
+  sqliteFile: tmp.FileResult;
 };
 
 type Delegates = {
@@ -47,6 +63,7 @@ type Delegates = {
   };
   sqlite: QueryDelegate;
   memory: QueryDelegate;
+  mapper: NameMapper;
 };
 
 type Queries<TSchema extends Schema> = {
@@ -57,6 +74,12 @@ type QueriesBySource<TSchema extends Schema> = {
   pg: Queries<TSchema>;
   sqlite: Queries<TSchema>;
   memory: Queries<TSchema>;
+};
+
+type QueryInstances = {
+  pg: AnyQuery;
+  sqlite: AnyQuery;
+  memory: AnyQuery;
 };
 
 async function makeDatabases<TSchema extends Schema>(
@@ -87,7 +110,9 @@ async function makeDatabases<TSchema extends Schema>(
     });
   }
 
-  const sqlite = new Database(lc, ':memory:');
+  const tmpFile = tmp.fileSync();
+  const sqlite = new Database(lc, tmpFile.name);
+  sqlite.pragma('journal_mode = WAL2');
 
   await initialSync(
     lc,
@@ -137,16 +162,13 @@ async function makeDatabases<TSchema extends Schema>(
     }),
   );
 
-  return {pg, sqlite, memory, raw};
+  return {pg, sqlite, memory, raw, pgSchema: serverSchema, sqliteFile: tmpFile};
 }
 
-async function makeDelegates<TSchema extends Schema>(
+function makeDelegates<TSchema extends Schema>(
   dbs: DBs<TSchema>,
   schema: TSchema,
-): Promise<Delegates> {
-  const serverSchema = await dbs.pg.begin(tx =>
-    getServerSchema(new Transaction(tx), schema),
-  );
+): Delegates {
   return {
     pg: {
       transaction: {
@@ -155,10 +177,11 @@ async function makeDelegates<TSchema extends Schema>(
         },
         wrappedTransaction: dbs.pg,
       },
-      serverSchema,
+      serverSchema: dbs.pgSchema,
     },
     sqlite: newQueryDelegate(lc, testLogConfig, dbs.sqlite, schema),
     memory: new TestMemoryQueryDelegate({sources: dbs.memory}),
+    mapper: clientToServer(schema.tables),
   };
 }
 
@@ -201,10 +224,17 @@ type Options<TSchema extends Schema> = {
   // Optional test data to insert (using client names).
   // You may also run insert statements in `pgContent`.
   testData?: (serverSchema: ServerSchema) => Record<string, Row[]>;
+  push?: number;
 };
 
 export async function createVitests<TSchema extends Schema>(
-  {suiteName, zqlSchema, pgContent, testData}: Options<TSchema>,
+  {
+    suiteName,
+    zqlSchema,
+    pgContent,
+    testData,
+    push: pushEvery,
+  }: Options<TSchema>,
   testSpecs: readonly {
     name: string;
     createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
@@ -212,16 +242,16 @@ export async function createVitests<TSchema extends Schema>(
   }[],
 ) {
   const dbs = await makeDatabases(suiteName, zqlSchema, pgContent, testData);
-  const delegates = await makeDelegates(dbs, zqlSchema);
-  const queryBuilders = makeQueries(zqlSchema, delegates);
+  const delegates = makeDelegates(dbs, zqlSchema);
 
   return testSpecs.map(({name, createQuery, manualVerification}) => ({
     name,
     fn: makeTest(
       zqlSchema,
       dbs,
-      queryBuilders,
+      delegates,
       createQuery,
+      pushEvery ?? 1,
       manualVerification,
     ),
   }));
@@ -233,31 +263,462 @@ function makeTest<TSchema extends Schema>(
   // have complete isolation. Hence why `dbs` is here (as a reminder for future improvement).
   // ZPG supports transactions. ZQLite wouldn't be much more work to add it.
   // Memory can do it by forking the sources as we do in custom mutators on rebase.
-  _dbs: DBs<TSchema>,
-  queryBuilders: QueriesBySource<TSchema>,
+  dbs: DBs<TSchema>,
+  delegates: Delegates,
   createQuery: (q: Queries<TSchema>) => Query<TSchema, string>,
+  pushEvery: number,
   manualVerification?: unknown,
 ) {
   return async () => {
-    const queries = {
-      pg: createQuery(queryBuilders.pg),
-      sqlite: createQuery(queryBuilders.sqlite),
-      memory: createQuery(queryBuilders.memory),
-    };
+    await dbs.pg.begin(async tx => {
+      // Isolate the test from other tests by putting each test in its own transaction.
+      delegates = {
+        ...delegates,
+        pg: {
+          transaction: {
+            query(query: string, args: unknown[]) {
+              return tx.unsafe(query, args as JSONValue[]);
+            },
+            wrappedTransaction: tx,
+          },
+          serverSchema: dbs.pgSchema,
+        },
+        memory: new TestMemoryQueryDelegate({
+          sources: Object.fromEntries(
+            Object.entries(dbs.memory).map(([key, source]) => [
+              key,
+              source.fork(),
+            ]),
+          ),
+        }),
+        sqlite: newQueryDelegate(
+          lc,
+          testLogConfig,
+          (() => {
+            const db = new Database(lc, dbs.sqliteFile.name);
+            db.exec('BEGIN CONCURRENT');
+            return db;
+          })(),
+          zqlSchema,
+        ),
+      };
+
+      const queryBuilders = makeQueries(zqlSchema, delegates);
+      const queries = {
+        pg: createQuery(queryBuilders.pg),
+        sqlite: createQuery(queryBuilders.sqlite),
+        memory: createQuery(queryBuilders.memory),
+      };
+
+      const pgResult = await queries.pg;
+      // Might we worth being able to configure ZQLite to return client vs server names
+      const sqliteResult = mapResultToClientNames(
+        await queries.sqlite,
+        zqlSchema,
+        ast(queries.sqlite).table,
+      );
+      const memoryResult = await queries.memory;
+
+      expect(memoryResult).toEqualPg(pgResult);
+      expect(sqliteResult).toEqualPg(pgResult);
+      if (manualVerification) {
+        expect(manualVerification).toEqualPg(pgResult);
+      }
+
+      if (pushEvery > 0) {
+        await checkPush(zqlSchema, delegates, queries, pushEvery);
+      }
+    });
+  };
+}
+
+async function checkPush(
+  zqlSchema: Schema,
+  delegates: Delegates,
+  queries: QueryInstances,
+  pushEvery: number,
+  mustEditRows?: [table: string, row: Row][],
+) {
+  const queryRows = gatherRows(zqlSchema, queries.memory);
+
+  function copyRows() {
+    return new Map(
+      wrapIterable(queryRows.entries()).map(([table, rows]) => [
+        table,
+        [...rows.values()],
+      ]),
+    );
+  }
+
+  const totalNumRows = [...queryRows.values()].reduce(
+    (acc, rows) => acc + rows.size,
+    0,
+  );
+
+  const interval = Math.floor(totalNumRows / pushEvery);
+  const removedRows = await checkRemove(
+    zqlSchema,
+    delegates,
+    interval,
+    copyRows(),
+    queries,
+    mustEditRows,
+  );
+  await checkAddBack(zqlSchema, delegates, removedRows, queries);
+  const editedRows = await checkEditToRandom(
+    zqlSchema,
+    delegates,
+    interval,
+    copyRows(),
+    queries,
+    mustEditRows,
+  );
+  await checkEditToMatch(zqlSchema, delegates, editedRows, queries);
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyQuery = Query<any, any, any>;
+function gatherRows(
+  zqlSchema: Schema,
+  q: AnyQuery,
+): Map<string, Map<string, Row>> {
+  const rows = new Map<string, Map<string, Row>>();
+
+  const view = q.materialize(
+    (
+      _query: AnyQuery,
+      input: Input,
+      _format: Format,
+      onDestroy: () => void,
+      _onTransactionCommit: (cb: () => void) => void,
+      _queryComplete: true | Promise<true>,
+    ) => {
+      const schema = input.getSchema();
+      for (const node of input.fetch({})) {
+        processNode(schema, node);
+      }
+
+      return {
+        push: (_change: Change) => {
+          throw new Error('should not receive a push');
+        },
+        destroy() {
+          onDestroy();
+        },
+      } as const;
+    },
+  );
+
+  function processNode(schema: SourceSchema, node: Node) {
+    const {tableName: table} = schema;
+    let rowsForTable = rows.get(table);
+    if (rowsForTable === undefined) {
+      rowsForTable = new Map();
+      rows.set(table, rowsForTable);
+    }
+    rowsForTable.set(pullPrimaryKey(zqlSchema, table, node.row), node.row);
+    for (const [relationship, getChildren] of Object.entries(
+      node.relationships,
+    )) {
+      const childSchema = must(schema.relationships[relationship]);
+      for (const child of getChildren()) {
+        processNode(childSchema, child);
+      }
+    }
+  }
+
+  view.destroy();
+  return rows;
+}
+
+function pullPrimaryKey(zqlSchema: Schema, table: string, row: Row): string {
+  const {primaryKey} = zqlSchema.tables[table];
+  return primaryKey.map(col => row[col] ?? '').join('-');
+}
+
+// Removes all rows that are in the result set
+// one at a time till there are no rows left.
+// Randomly selects which table to remove a row from on each iteration.
+async function checkRemove(
+  zqlSchema: Schema,
+  delegates: Delegates,
+  removalInterval: number,
+  queryRows: Map<string, Row[]>,
+  queries: QueryInstances,
+  mustEditRows: [table: string, row: Row][] = [],
+): Promise<[table: string, row: Row][]> {
+  const tables = [...queryRows.keys()];
+
+  const zqliteMaterialized = queries.sqlite.materialize();
+  const zqlMaterialized = queries.memory.materialize();
+
+  let numOps = 0;
+  const removedRows: [string, Row][] = [];
+  const seen = new Set<string>();
+
+  const crud = makeSchemaCRUD(zqlSchema)(
+    delegates.pg.transaction,
+    delegates.pg.serverSchema,
+  );
+  while (tables.length > 0) {
+    ++numOps;
+    const tableIndex = Math.floor(Math.random() * tables.length);
+    const table = tables[tableIndex];
+    const rows = must(queryRows.get(table));
+    const rowIndex = Math.floor(Math.random() * rows.length);
+    const row = must(rows[rowIndex]);
+    rows.splice(rowIndex, 1);
+
+    if (rows.length === 0) {
+      tables.splice(tableIndex, 1);
+    }
+
+    // doing this for all rows of a large table
+    // is too slow we only do it every `removalInterval`
+    if (numOps % removalInterval === 0) {
+      await run(table, row);
+    }
+  }
+
+  for (const [table, row] of mustEditRows) {
+    if (!seen.has(pullPrimaryKey(zqlSchema, table, row))) {
+      await run(table, row);
+    }
+  }
+
+  async function run(table: string, row: Row) {
+    seen.add(pullPrimaryKey(zqlSchema, table, row));
+    removedRows.push([table, row]);
+    const mappedRow = mapRow(row, table, delegates.mapper);
+
+    await crud[table].delete(row);
+
+    must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
+      type: 'remove',
+      row: mappedRow,
+    });
+    must(delegates.memory.getSource(table)).push({
+      type: 'remove',
+      row,
+    });
+
+    // pg cannot be materialized.
+    const pgResult = await queries.pg;
+    expect(
+      mapResultToClientNames(
+        zqliteMaterialized.data,
+        zqlSchema,
+        ast(queries.sqlite).table,
+      ),
+    ).toEqualPg(pgResult);
+    expect(zqlMaterialized.data).toEqualPg(pgResult);
+  }
+
+  zqliteMaterialized.destroy();
+  zqlMaterialized.destroy();
+
+  return removedRows;
+}
+
+function mapRow(row: Row, table: string, mapper: NameMapper): Row {
+  const newRow: Writable<Row> = {};
+  for (const [column, value] of Object.entries(row)) {
+    newRow[mapper.columnName(table, column)] = value;
+  }
+  return newRow;
+}
+
+async function checkAddBack(
+  zqlSchema: Schema,
+  delegates: Delegates,
+  rowsToAdd: [string, Row][],
+  queries: QueryInstances,
+) {
+  const zqliteMaterialized = queries.sqlite.materialize();
+  const zqlMaterialized = queries.memory.materialize();
+
+  const crud = makeSchemaCRUD(zqlSchema)(
+    delegates.pg.transaction,
+    delegates.pg.serverSchema,
+  );
+  for (const [table, row] of rowsToAdd) {
+    const mappedRow = mapRow(row, table, delegates.mapper);
+    await crud[table].insert(row);
+
+    must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
+      type: 'add',
+      row: mappedRow,
+    });
+    must(delegates.memory.getSource(table)).push({
+      type: 'add',
+      row,
+    });
 
     const pgResult = await queries.pg;
-    // Might we worth being able to configure ZQLite to return client vs server names
-    const sqliteResult = mapResultToClientNames(
-      await queries.sqlite,
-      zqlSchema,
-      ast(queries.sqlite).table,
-    );
-    const memoryResult = await queries.memory;
+    expect(
+      mapResultToClientNames(
+        zqliteMaterialized.data,
+        zqlSchema,
+        ast(queries.sqlite).table,
+      ),
+    ).toEqualPg(pgResult);
+    expect(zqlMaterialized.data).toEqualPg(pgResult);
+  }
 
-    expect(memoryResult).toEqualPg(pgResult);
-    expect(sqliteResult).toEqualPg(pgResult);
-    if (manualVerification) {
-      expect(manualVerification).toEqualPg(pgResult);
+  zqlMaterialized.destroy();
+  zqliteMaterialized.destroy();
+}
+
+// TODO: we should handle foreign keys more intelligently
+async function checkEditToRandom(
+  zqlSchema: Schema,
+  delegates: Delegates,
+  removalInterval: number,
+  queryRows: Map<string, Row[]>,
+  queries: QueryInstances,
+  mustEditRows: [table: string, row: Row][] = [],
+): Promise<[table: string, [original: Row, edited: Row]][]> {
+  const tables = [...queryRows.keys()];
+
+  const zqliteMaterialized = queries.sqlite.materialize();
+  const zqlMaterialized = queries.memory.materialize();
+
+  let numOps = 0;
+  const editedRows: [string, [original: Row, edited: Row]][] = [];
+  const seen = new Set<string>();
+
+  const crud = makeSchemaCRUD(zqlSchema)(
+    delegates.pg.transaction,
+    delegates.pg.serverSchema,
+  );
+  while (tables.length > 0) {
+    ++numOps;
+    const tableIndex = Math.floor(Math.random() * tables.length);
+    const table = tables[tableIndex];
+    const rows = must(queryRows.get(table));
+    const rowIndex = Math.floor(Math.random() * rows.length);
+    const row = must(rows[rowIndex]);
+    rows.splice(rowIndex, 1);
+
+    if (rows.length === 0) {
+      tables.splice(tableIndex, 1);
     }
-  };
+
+    if (numOps % removalInterval === 0) {
+      await run(table, row);
+    }
+  }
+
+  for (const [table, row] of mustEditRows) {
+    if (!seen.has(pullPrimaryKey(zqlSchema, table, row))) {
+      await run(table, row);
+    }
+  }
+
+  async function run(table: string, row: Row) {
+    seen.add(pullPrimaryKey(zqlSchema, table, row));
+    const tableSchema = zqlSchema.tables[table];
+    const editedRow = assignRandomValues(tableSchema, row);
+    editedRows.push([table, [row, editedRow]]);
+    const mappedRow = mapRow(row, table, delegates.mapper);
+    const mappedEditedRow = mapRow(editedRow, table, delegates.mapper);
+
+    await crud[table].update(editedRow);
+    must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
+      type: 'edit',
+      oldRow: mappedRow,
+      row: mappedEditedRow,
+    });
+    must(delegates.memory.getSource(table)).push({
+      type: 'edit',
+      oldRow: row,
+      row: editedRow,
+    });
+
+    const pgResult = await queries.pg;
+    expect(
+      mapResultToClientNames(
+        zqliteMaterialized.data,
+        zqlSchema,
+        ast(queries.sqlite).table,
+      ),
+    ).toEqualPg(pgResult);
+    expect(zqlMaterialized.data).toEqualPg(pgResult);
+  }
+
+  zqliteMaterialized.destroy();
+  zqlMaterialized.destroy();
+
+  return editedRows;
+}
+
+function assignRandomValues(schema: TableSchema, row: Row): Row {
+  const newRow: Record<string, ReadonlyJSONValue | undefined> = {...row};
+  for (const [col, colSchema] of Object.entries(schema.columns)) {
+    if (schema.primaryKey.includes(col)) {
+      continue;
+    }
+    switch (colSchema.type) {
+      case 'boolean':
+        newRow[col] = Math.random() > 0.5;
+        break;
+      case 'number':
+        newRow[col] = Math.floor(Math.random() * 100);
+        break;
+      case 'string':
+        newRow[col] = Math.random().toString(36).substring(7);
+        break;
+      case 'json':
+        newRow[col] = {random: Math.random()};
+        break;
+      case 'null':
+        newRow[col] = null;
+        break;
+    }
+  }
+  return newRow;
+}
+
+async function checkEditToMatch(
+  zqlSchema: Schema,
+  delegates: Delegates,
+  rowsToEdit: [string, [original: Row, edited: Row]][],
+  queries: QueryInstances,
+) {
+  const zqliteMaterialized = queries.sqlite.materialize();
+  const zqlMaterialized = queries.memory.materialize();
+
+  const crud = makeSchemaCRUD(zqlSchema)(
+    delegates.pg.transaction,
+    delegates.pg.serverSchema,
+  );
+  for (const [table, [original, edited]] of rowsToEdit) {
+    const mappedOriginal = mapRow(original, table, delegates.mapper);
+    const mappedEdited = mapRow(edited, table, delegates.mapper);
+    await crud[table].update(original);
+
+    must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
+      type: 'edit',
+      oldRow: mappedEdited,
+      row: mappedOriginal,
+    });
+    must(delegates.memory.getSource(table)).push({
+      type: 'edit',
+      oldRow: edited,
+      row: original,
+    });
+
+    const pgResult = await queries.pg;
+    expect(
+      mapResultToClientNames(
+        zqliteMaterialized.data,
+        zqlSchema,
+        ast(queries.sqlite).table,
+      ),
+    ).toEqualPg(pgResult);
+    expect(zqlMaterialized.data).toEqualPg(pgResult);
+  }
+
+  zqliteMaterialized.destroy();
+  zqlMaterialized.destroy();
 }

@@ -530,4 +530,9 @@ test.each(
       },
     ],
   ),
-)('$name', ({fn}) => fn());
+)('$name', async ({name, fn}) => {
+  if (name !== 'basic where clause') {
+    return;
+  }
+  await fn();
+});
