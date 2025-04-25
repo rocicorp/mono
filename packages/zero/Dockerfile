@@ -1,10 +1,9 @@
 FROM golang:1.23 AS litestream
 
 WORKDIR /src/
-RUN git clone https://github.com/rocicorp/litestream.git
+RUN git clone --depth 1 --branch zero@v0.0.2 https://github.com/rocicorp/litestream.git
 WORKDIR /src/litestream/
 
-RUN git checkout 5f52147c6ed5af87a3e4a0f952b02a82b2e2e0e2
 ARG LITESTREAM_VERSION=0.3.13+z0.0.2  # upstream version + zero version
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
