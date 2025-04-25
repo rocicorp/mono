@@ -62,6 +62,7 @@
     "pg-format": "npm:pg-format-fix@^1.0.5",
     "postgres": "^3.4.4",
     "prettier": "^3.5.3",
+    "parse-prometheus-text-format": "^1.1.1",
     "semver": "^7.5.4",
     "tsx": "^4.19.1",
     "typedoc": "^0.28.2",
