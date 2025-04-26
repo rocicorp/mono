@@ -94,12 +94,23 @@ export function ListPage({onReady}: {onReady: () => void}) {
     q = q.whereExists('labels', q => q.where('name', label));
   }
 
+  const pageSize = 10;
+  const [limit, setLimit] = useState(pageSize);
+  useEffect(() => {
+    setLimit(pageSize);
+    virtualizer.scrollToIndex(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q.hash()]);
+
+  q = q.limit(limit);
+
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
   const [issues, issuesResult] = useQuery(
     q,
     textFilterQuery === textFilter ? CACHE_AWHILE : CACHE_NONE,
   );
+  const isSearchComplete = issues.length < limit;
 
   useEffect(() => {
     if (issues.length > 0 || issuesResult.type === 'complete') {
@@ -258,6 +269,18 @@ export function ListPage({onReady}: {onReady: () => void}) {
     getScrollElement: () => listRef.current,
   });
 
+  const virtualItems = virtualizer.getVirtualItems();
+  useEffect(() => {
+    const [lastItem] = virtualItems.reverse();
+    if (!lastItem) {
+      return;
+    }
+
+    if (lastItem.index >= limit - pageSize / 4) {
+      setLimit(limit + pageSize);
+    }
+  }, [limit, virtualItems]);
+
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
   const searchBox = useRef<HTMLHeadingElement>(null);
@@ -315,7 +338,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
             <span className="list-view-title">{title}</span>
           )}
           {issuesResult.type === 'complete' || issues.length > 0 ? (
-            <span className="issue-count">{issues.length}</span>
+            <span className="issue-count">
+              {issues.length}
+              {isSearchComplete ? '' : '+'}
+            </span>
           ) : null}
         </h1>
         <Button
@@ -375,7 +401,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
               className="virtual-list"
               style={{height: virtualizer.getTotalSize()}}
             >
-              {virtualizer.getVirtualItems().map(virtualRow => (
+              {virtualItems.map(virtualRow => (
                 <Row
                   key={virtualRow.key + ''}
                   index={virtualRow.index}
