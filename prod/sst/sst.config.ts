@@ -54,14 +54,11 @@ export default $config({
 
     // Common environment variables
     const commonEnv = {
-      AWS_REGION: process.env.AWS_REGION!,
       ZERO_UPSTREAM_DB: process.env.ZERO_UPSTREAM_DB!,
       ZERO_PUSH_URL: process.env.ZERO_PUSH_URL!,
       ZERO_CVR_DB: process.env.ZERO_CVR_DB!,
       ZERO_CHANGE_DB: process.env.ZERO_CHANGE_DB!,
       ZERO_AUTH_JWK: process.env.ZERO_AUTH_JWK!,
-      AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID!,
-      AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
       ZERO_LOG_FORMAT: 'json',
       ZERO_REPLICA_FILE: IS_EBS_STAGE
         ? '/data/sync-replica.db'
@@ -163,6 +160,7 @@ export default $config({
       cpu: '2 vCPU',
       memory: '8 GB',
       image: commonEnv.ZERO_IMAGE_URL,
+      link: [replicationBucket],
       health: {
         command: ['CMD-SHELL', 'curl -f http://localhost:4849/ || exit 1'],
         interval: '5 seconds',
@@ -193,6 +191,7 @@ export default $config({
       cpu: '8 vCPU',
       memory: '16 GB',
       image: commonEnv.ZERO_IMAGE_URL,
+      link: [replicationBucket],
       health: {
         command: ['CMD-SHELL', 'curl -f http://localhost:4848/ || exit 1'],
         interval: '5 seconds',
