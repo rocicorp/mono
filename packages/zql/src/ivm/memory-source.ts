@@ -185,20 +185,15 @@ export class MemorySource implements Source {
   #disconnect(input: Input): void {
     const idx = this.#connections.findIndex(c => c.input === input);
     assert(idx !== -1, 'Connection not found');
-    const connection = this.#connections[idx];
     this.#connections.splice(idx, 1);
 
-    const primaryIndexKey = JSON.stringify(this.#primaryIndexSort);
-
-    for (const [key, index] of this.#indexes) {
-      if (key === primaryIndexKey) {
-        continue;
-      }
-      index.usedBy.delete(connection);
-      if (index.usedBy.size === 0) {
-        this.#indexes.delete(key);
-      }
-    }
+    // TODO: We used to delete unused indexes here. But in common cases like
+    // navigating into issue detail pages it caused a ton of constantly
+    // building and destroying indexes.
+    //
+    // Perhaps some intelligent LRU or something is needed here but for now,
+    // the opposite extreme of keeping all indexes for the lifetime of the
+    // page seems better.
   }
 
   #getPrimaryIndex(): Index {
