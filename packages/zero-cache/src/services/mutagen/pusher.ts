@@ -356,6 +356,14 @@ class PushWorker {
       );
       params.append('appID', this.#config.app.id);
 
+      this.#lc.debug?.(
+        'pushing custom mutators to',
+        this.#pushURL,
+        'with params',
+        params.toString(),
+        'and body',
+        JSON.stringify(entry.push),
+      );
       const response = await fetch(`${this.#pushURL}?${params.toString()}`, {
         method: 'POST',
         headers,
