@@ -408,7 +408,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#lc.debug?.('viewSyncer.initConnection');
     return startSpan(tracer, 'vs.initConnection', () => {
       const {clientID, wsID, baseCookie, schemaVersion, tokenData} = ctx;
-      this.#authData = pickToken(this.#authData, tokenData?.decoded);
+      this.#authData = pickToken(this.#lc, this.#authData, tokenData?.decoded);
+      this.#lc.debug?.(`Picked auth token: ${JSON.stringify(this.#authData)}`);
 
       const lc = this.#lc
         .withContext('clientID', clientID)
@@ -1472,10 +1473,12 @@ function checkClientAndCVRVersions(
 }
 
 export function pickToken(
+  lc: LogContext,
   previousToken: JWTPayload | undefined,
   newToken: JWTPayload | undefined,
 ) {
   if (previousToken === undefined) {
+    lc.debug?.(`No previous token, using new token`);
     return newToken;
   }
 
@@ -1489,6 +1492,7 @@ export function pickToken(
     }
 
     if (previousToken.iat === undefined) {
+      lc.debug?.(`No issued at time for the existing token, using new token`);
       // No issued at time for the existing token? We take the most recently received token.
       return newToken;
     }
@@ -1503,10 +1507,12 @@ export function pickToken(
 
     // The new token is newer, so we take it.
     if (previousToken.iat < newToken.iat) {
+      lc.debug?.(`New token is newer, using it`);
       return newToken;
     }
 
     // if the new token is older or the same, we keep the existing token.
+    lc.debug?.(`New token is older or the same, using existing token`);
     return previousToken;
   }
 

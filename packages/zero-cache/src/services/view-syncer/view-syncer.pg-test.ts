@@ -8008,92 +8008,94 @@ describe('permissions', () => {
 });
 
 describe('pickToken', () => {
+  const lc = createSilentLogContext();
+
   test('previous token is undefined', () => {
-    expect(pickToken(undefined, {sub: 'foo', iat: 1})).toEqual({
+    expect(pickToken(lc, undefined, {sub: 'foo', iat: 1})).toEqual({
       sub: 'foo',
       iat: 1,
     });
   });
 
   test('previous token exists, new token is undefined', () => {
-    expect(() => pickToken({sub: 'foo', iat: 1}, undefined)).toThrowError(
+    expect(() => pickToken(lc, {sub: 'foo', iat: 1}, undefined)).toThrowError(
       ErrorForClient,
     );
   });
 
   test('previous token has a subject, new token does not', () => {
-    expect(() => pickToken({sub: 'foo'}, {})).toThrowError(ErrorForClient);
+    expect(() => pickToken(lc, {sub: 'foo'}, {})).toThrowError(ErrorForClient);
   });
 
   test('previous token has a subject, new token has a different subject', () => {
     expect(() =>
-      pickToken({sub: 'foo', iat: 1}, {sub: 'bar', iat: 1}),
+      pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'bar', iat: 1}),
     ).toThrowError(ErrorForClient);
   });
 
   test('previous token has a subject, new token has the same subject', () => {
-    expect(pickToken({sub: 'foo', iat: 1}, {sub: 'foo', iat: 2})).toEqual({
+    expect(pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'foo', iat: 2})).toEqual({
       sub: 'foo',
       iat: 2,
     });
 
-    expect(pickToken({sub: 'foo', iat: 2}, {sub: 'foo', iat: 1})).toEqual({
+    expect(pickToken(lc, {sub: 'foo', iat: 2}, {sub: 'foo', iat: 1})).toEqual({
       sub: 'foo',
       iat: 2,
     });
   });
 
   test('previous token has no subject, new token has a subject', () => {
-    expect(() => pickToken({sub: 'foo', iat: 123}, {iat: 123})).toThrowError(
-      ErrorForClient,
-    );
+    expect(() =>
+      pickToken(lc, {sub: 'foo', iat: 123}, {iat: 123}),
+    ).toThrowError(ErrorForClient);
   });
 
   test('previous token has no subject, new token has no subject', () => {
-    expect(pickToken({iat: 1}, {iat: 2})).toEqual({
+    expect(pickToken(lc, {iat: 1}, {iat: 2})).toEqual({
       iat: 2,
     });
-    expect(pickToken({iat: 2}, {iat: 1})).toEqual({
+    expect(pickToken(lc, {iat: 2}, {iat: 1})).toEqual({
       iat: 2,
     });
   });
 
   test('previous token has an issued at time, new token does not', () => {
-    expect(() => pickToken({sub: 'foo', iat: 1}, {sub: 'foo'})).toThrowError(
-      ErrorForClient,
-    );
+    expect(() =>
+      pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'foo'}),
+    ).toThrowError(ErrorForClient);
   });
 
   test('previous token has an issued at time, new token has a greater issued at time', () => {
-    expect(pickToken({sub: 'foo', iat: 1}, {sub: 'foo', iat: 2})).toEqual({
+    expect(pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'foo', iat: 2})).toEqual({
       sub: 'foo',
       iat: 2,
     });
   });
 
   test('previous token has an issued at time, new token has a lesser issued at time', () => {
-    expect(pickToken({sub: 'foo', iat: 2}, {sub: 'foo', iat: 1})).toEqual({
+    expect(pickToken(lc, {sub: 'foo', iat: 2}, {sub: 'foo', iat: 1})).toEqual({
       sub: 'foo',
       iat: 2,
     });
   });
 
   test('previous token has an issued at time, new token has the same issued at time', () => {
-    expect(pickToken({sub: 'foo', iat: 2}, {sub: 'foo', iat: 2})).toEqual({
+    expect(pickToken(lc, {sub: 'foo', iat: 2}, {sub: 'foo', iat: 2})).toEqual({
       sub: 'foo',
       iat: 2,
     });
   });
 
   test('previous token has no issued at time, new token has an issued at time', () => {
-    expect(pickToken({sub: 'foo'}, {sub: 'foo', iat: 2})).toEqual({
+    expect(pickToken(lc, {sub: 'foo'}, {sub: 'foo', iat: 2})).toEqual({
       sub: 'foo',
       iat: 2,
     });
   });
 
   test('previous token has no issued at time, new token has no issued at time', () => {
-    expect(pickToken({sub: 'foo'}, {sub: 'foo'})).toEqual({
+    expect(pickToken(lc, {sub: 'foo'}, {sub: 'foo'})).toEqual({
       sub: 'foo',
     });
   });

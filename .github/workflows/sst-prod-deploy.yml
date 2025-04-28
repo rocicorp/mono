@@ -70,10 +70,7 @@ jobs:
           ZERO_CVR_DB: ${{ secrets.PROD_ZERO_CVR_DB }}
           ZERO_CHANGE_DB: ${{ secrets.PROD_ZERO_CHANGE_DB }}
           ZERO_AUTH_JWK: ${{ secrets.PROD_ZERO_AUTH_JWK }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
           DOMAIN_NAME: 'zbugs-sync.rocicorp.dev'
           DOMAIN_CERT: ${{ vars.PROD_CERTIFICATE_ARN }}
