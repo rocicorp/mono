@@ -4,7 +4,7 @@
 require('@dotenvx/dotenvx').config();
 import {createDefu} from 'defu';
 import {join} from 'node:path';
-import {withOtelContainers, addServiceWithOtel} from './otel';
+import {addServiceWithOtel} from './otel';
 const defu = createDefu((obj, key, value) => {
   // Don't merge functions, just use the last one
   if (typeof obj[key] === 'function' || typeof value === 'function') {
@@ -53,11 +53,14 @@ export default $config({
 
     // Common environment variables
     const commonEnv = {
+      AWS_REGION: process.env.AWS_REGION!,
       ZERO_UPSTREAM_DB: process.env.ZERO_UPSTREAM_DB!,
       ZERO_PUSH_URL: process.env.ZERO_PUSH_URL!,
       ZERO_CVR_DB: process.env.ZERO_CVR_DB!,
       ZERO_CHANGE_DB: process.env.ZERO_CHANGE_DB!,
       ZERO_AUTH_JWK: process.env.ZERO_AUTH_JWK!,
+      AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID!,
+      AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY!,
       ZERO_LOG_FORMAT: 'json',
       ZERO_REPLICA_FILE: IS_EBS_STAGE
         ? '/data/sync-replica.db'
@@ -154,8 +157,6 @@ export default $config({
           },
         };
 
-    let otelUrl: $util.Output<string>;
-
     // Replication Manager Service
     const replicationManager = addServiceWithOtel(
       cluster,
@@ -167,7 +168,6 @@ export default $config({
           {
             name: 'replication-manager',
             image: commonEnv.ZERO_IMAGE_URL,
-			link: [replicationBucket],
             health: {
               command: [
                 'CMD-SHELL',
@@ -218,7 +218,6 @@ export default $config({
           {
             name: 'view-syncer',
             image: commonEnv.ZERO_IMAGE_URL,
-			link: [replicationBucket],
             health: {
               command: [
                 'CMD-SHELL',

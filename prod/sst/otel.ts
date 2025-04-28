@@ -1,10 +1,5 @@
 /* eslint-disable */
 /// <reference path="./.sst/platform/config.d.ts" />
-
-
-// Load .env file
-
-
 interface ContainerDefinition {
   name: string;
   image?: string;
@@ -180,8 +175,6 @@ export function addServiceWithOtel(
   }
 
   const [baseContainer, ...extraContainers] = containers;
-
-  // Generate the OTEL-enhanced container definitions
   const otelContainers = withOtelContainers(baseContainer, config);
 
   return cluster.addService(name, {
