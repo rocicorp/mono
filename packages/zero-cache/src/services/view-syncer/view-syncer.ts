@@ -24,7 +24,7 @@ import type {
 } from '../../../../zero-protocol/src/connect.ts';
 import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import type {
   InspectUpBody,
   InspectUpMessage,
@@ -72,6 +72,7 @@ import {
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
+import instruments from '../../observability/view-syncer-instruments.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -209,9 +210,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #runInLockWithCVR(
     fn: (lc: LogContext, cvr: CVRSnapshot) => Promise<void> | void,
   ): Promise<void> {
+    const rid = randomID();
+    this.#lc.debug?.('about to acquire lock for cvr ', rid);
     return this.#lock.withLock(async () => {
-      const lc = this.#lc.withContext('lock', randomID());
+      this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
+      const lc = this.#lc.withContext('lock', rid);
       if (!this.#stateChanges.active) {
+        this.#lc.debug?.('state changes are inactive');
         clearTimeout(this.#expiredQueriesTimer);
         return; // view-syncer has been shutdown
       }
@@ -222,6 +227,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         return;
       }
       if (!this.#cvr) {
+        this.#lc.debug?.('loading CVR');
         this.#cvr = await this.#cvrStore.load(lc, this.#lastConnectTime);
       }
       try {
@@ -399,9 +405,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ctx: SyncContext,
     initConnectionMessage: InitConnectionMessage,
   ): Source<Downstream> {
+    this.#lc.debug?.('viewSyncer.initConnection');
     return startSpan(tracer, 'vs.initConnection', () => {
       const {clientID, wsID, baseCookie, schemaVersion, tokenData} = ctx;
-      this.#authData = pickToken(this.#authData, tokenData?.decoded);
+      this.#authData = pickToken(this.#lc, this.#authData, tokenData?.decoded);
+      this.#lc.debug?.(`Picked auth token: ${JSON.stringify(this.#authData)}`);
 
       const lc = this.#lc
         .withContext('clientID', clientID)
@@ -534,6 +542,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ) => Promise<void>,
     newClient?: ClientHandler,
   ): Promise<void> {
+    this.#lc.debug?.('viewSyncer.#runInLockForClient');
     const {clientID, wsID} = ctx;
     const [cmd, body] = msg;
 
@@ -552,9 +561,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               .withContext('clientID', clientID)
               .withContext('wsID', wsID)
               .withContext('cmd', cmd);
+            lc.debug?.('acquired lock for cvr');
 
             client = this.#clients.get(clientID);
             if (client?.wsID !== wsID) {
+              lc.debug?.('mismatched wsID', client?.wsID, wsID);
               // Only respond to messages of the currently connected client.
               // Connections may have been drained or dropped due to an error.
               return;
@@ -617,8 +628,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
 
         // Apply requested patches.
+        lc.debug?.(`applying ${desiredQueriesPatch?.length} query patches`);
         if (desiredQueriesPatch?.length) {
-          lc.debug?.(`applying ${desiredQueriesPatch.length} query patches`);
           const now = Date.now();
           for (const patch of desiredQueriesPatch) {
             switch (patch.op) {
@@ -799,7 +810,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
         },
       );
+
       const elapsed = Date.now() - start;
+      instruments.counters.queryHydrations.add(1, {
+        clientGroupID: this.id,
+        hash,
+        transformationHash,
+      });
+      instruments.histograms.hydrationTime.record(elapsed, {
+        clientGroupID: this.id,
+        hash,
+        transformationHash,
+      });
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
     }
   }
@@ -1209,7 +1231,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Promise<'success' | ResetPipelinesSignal> {
     return startAsyncSpan(tracer, 'vs.#advancePipelines', async () => {
       assert(this.#pipelines.initialized());
-      const start = Date.now();
+      const start = performance.now();
 
       const timer = new Timer();
       const {version, numChanges, changes} = this.#pipelines.advance(timer);
@@ -1259,9 +1281,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       await this.#evictInactiveQueries(lc, this.#cvr);
 
+      const elapsed = performance.now() - start;
       lc.info?.(
-        `finished processing advancement of ${numChanges} changes (${Date.now() - start} ms)`,
+        `finished processing advancement of ${numChanges} changes (${elapsed} ms)`,
       );
+      instruments.histograms.transactionAdvanceTime.record(elapsed, {
+        clientGroupID: this.id,
+      });
       return 'success';
     });
   }
@@ -1447,10 +1473,12 @@ function checkClientAndCVRVersions(
 }
 
 export function pickToken(
+  lc: LogContext,
   previousToken: JWTPayload | undefined,
   newToken: JWTPayload | undefined,
 ) {
   if (previousToken === undefined) {
+    lc.debug?.(`No previous token, using new token`);
     return newToken;
   }
 
@@ -1464,6 +1492,7 @@ export function pickToken(
     }
 
     if (previousToken.iat === undefined) {
+      lc.debug?.(`No issued at time for the existing token, using new token`);
       // No issued at time for the existing token? We take the most recently received token.
       return newToken;
     }
@@ -1478,10 +1507,12 @@ export function pickToken(
 
     // The new token is newer, so we take it.
     if (previousToken.iat < newToken.iat) {
+      lc.debug?.(`New token is newer, using it`);
       return newToken;
     }
 
     // if the new token is older or the same, we keep the existing token.
+    lc.debug?.(`New token is older or the same, using existing token`);
     return previousToken;
   }
 

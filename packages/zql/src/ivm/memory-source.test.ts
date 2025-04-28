@@ -25,7 +25,7 @@ test('schema', () => {
   });
 });
 
-test('indexes get cleaned up when not needed', () => {
+test('indexes remain after not needed', () => {
   const ms = new MemorySource(
     'table',
     {a: {type: 'string'}, b: {type: 'string'}, c: {type: 'string'}},
@@ -86,6 +86,10 @@ test('indexes get cleaned up when not needed', () => {
       ['a', 'asc'],
       ['b', 'asc'],
     ]),
+    JSON.stringify([
+      ['a', 'asc'],
+      ['c', 'asc'],
+    ]),
   ]);
 
   conn2.destroy();
@@ -95,10 +99,24 @@ test('indexes get cleaned up when not needed', () => {
       ['a', 'asc'],
       ['b', 'asc'],
     ]),
+    JSON.stringify([
+      ['a', 'asc'],
+      ['c', 'asc'],
+    ]),
   ]);
 
   conn1.destroy();
-  expect(ms.getIndexKeys()).toEqual([JSON.stringify([['a', 'asc']])]);
+  expect(ms.getIndexKeys()).toEqual([
+    JSON.stringify([['a', 'asc']]),
+    JSON.stringify([
+      ['a', 'asc'],
+      ['b', 'asc'],
+    ]),
+    JSON.stringify([
+      ['a', 'asc'],
+      ['c', 'asc'],
+    ]),
+  ]);
 });
 
 test('push edit change', () => {

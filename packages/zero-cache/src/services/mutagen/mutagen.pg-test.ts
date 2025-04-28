@@ -5,7 +5,7 @@ import {
   createSilentLogContext,
   TestLogSink,
 } from '../../../../shared/src/logging-test-utils.ts';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
   type CRUDMutation,

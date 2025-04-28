@@ -18,7 +18,7 @@
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
-    "@rocicorp/logger": "^5.3.0"
+    "@rocicorp/logger": "^5.4.0"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.3.0",

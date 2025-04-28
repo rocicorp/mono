@@ -5,7 +5,7 @@ import type {JWTPayload} from 'jose';
 import postgres from 'postgres';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
   primaryKeyValueSchema,
@@ -32,6 +32,7 @@ import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema
 import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.ts';
 import type {Service} from '../service.ts';
+import instruments from '../../observability/view-syncer-instruments.ts';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -101,6 +102,9 @@ export class MutagenService implements Mutagen, Service {
         'Rate limit exceeded',
       ]);
     }
+    instruments.counters.crudMutations.add(1, {
+      clientGroupID: this.id,
+    });
     return processMutation(
       this.#lc,
       authData,
@@ -440,7 +444,7 @@ async function checkSchemaVersionAndIncrementLastMutationID(
 }
 
 export class MutationAlreadyProcessedError extends Error {
-  constructor(clientID: string, received: number, actual: bigint) {
+  constructor(clientID: string, received: number, actual: number | bigint) {
     super(
       `Ignoring mutation from ${clientID} with ID ${received} as it was already processed. Expected: ${actual}`,
     );

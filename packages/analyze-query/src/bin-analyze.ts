@@ -37,11 +37,7 @@ import {
   newQuery,
   type QueryDelegate,
 } from '../../zql/src/query/query-impl.ts';
-import {
-  DEFAULT_RUN_OPTIONS_COMPLETE,
-  type PullRow,
-  type Query,
-} from '../../zql/src/query/query.ts';
+import {type PullRow, type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {
   runtimeDebugFlags,
@@ -168,9 +164,7 @@ const host: QueryDelegate = {
   batchViewUpdates<T>(applyViewUpdates: () => T): T {
     return applyViewUpdates();
   },
-  normalizeRunOptions(options) {
-    return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
-  },
+  assertValidRunOptions() {},
   defaultQueryComplete: true,
 };
 

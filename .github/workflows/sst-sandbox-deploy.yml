@@ -2,8 +2,7 @@ name: Build and Deploy Sandbox Zero-Cache AWS SST
 
 on:
   push:
-    # Temporarily using sandbox to test replication-manager discovery
-    branches: [darkgnotic/rep-mgr-discovery]
+    branches: [sandbox-disable]
 env:
   # Setting an environment variable with the value of a configuration variable
   ECR_IMAGE_ZERO_CACHE: zero-zbugs-sandbox
@@ -71,10 +70,7 @@ jobs:
           ZERO_CVR_DB: ${{ secrets.SANDBOX_ZERO_CVR_DB }}
           ZERO_CHANGE_DB: ${{ secrets.SANDBOX_ZERO_CHANGE_DB }}
           ZERO_AUTH_JWK: ${{ secrets.SANDBOX_ZERO_AUTH_JWK }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
           ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
           DOMAIN_NAME: 'zbugs-sync-sandbox.rocicorp.dev'
           DOMAIN_CERT: ${{ vars.SANDBOX_CERTIFICATE_ARN }}

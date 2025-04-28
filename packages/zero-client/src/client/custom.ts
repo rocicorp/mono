@@ -1,4 +1,3 @@
-import type {LogContext} from '@rocicorp/logger';
 import {
   WriteTransactionImpl,
   zeroData,
@@ -22,16 +21,13 @@ import type {
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import {
-  DEFAULT_RUN_OPTIONS_UNKNOWN,
-  type Query,
-  type RunOptions,
-} from '../../../zql/src/query/query.ts';
+import {type Query, type RunOptions} from '../../../zql/src/query/query.ts';
 import type {ClientID} from '../types/client-state.ts';
 import {ZeroContext} from './context.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
+import type {ZeroLogContext} from './zero-log-context.ts';
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
@@ -90,7 +86,7 @@ export type MakeCustomMutatorInterface<
 
 export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
   constructor(
-    lc: LogContext,
+    lc: ZeroLogContext,
     repTx: WriteTransaction,
     schema: S,
     slowMaterializeThreshold: number,
@@ -128,7 +124,7 @@ export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
 }
 
 export function makeReplicacheMutator<S extends Schema>(
-  lc: LogContext,
+  lc: ZeroLogContext,
   mutator: CustomMutatorImpl<S>,
   schema: S,
   slowMaterializeThreshold: number,
@@ -164,20 +160,16 @@ function makeSchemaCRUD<S extends Schema>(
   ) as SchemaCRUD<S>;
 }
 
-function normalizeRunOptions(options: RunOptions | undefined): RunOptions {
-  if (options === undefined) {
-    return DEFAULT_RUN_OPTIONS_UNKNOWN;
-  }
+function assertValidRunOptions(options: RunOptions | undefined): void {
   // TODO(arv): We should enforce this with the type system too.
   assert(
-    options.type !== 'complete',
+    options?.type !== 'complete',
     'Cannot wait for complete results in custom mutations',
   );
-  return options;
 }
 
 function makeSchemaQuery<S extends Schema>(
-  lc: LogContext,
+  lc: ZeroLogContext,
   schema: S,
   ivmBranch: IVMSourceBranch,
   slowMaterializeThreshold: number,
@@ -189,7 +181,7 @@ function makeSchemaQuery<S extends Schema>(
     () => {},
     applyViewUpdates => applyViewUpdates(),
     slowMaterializeThreshold,
-    normalizeRunOptions,
+    assertValidRunOptions,
   );
 
   return new Proxy(

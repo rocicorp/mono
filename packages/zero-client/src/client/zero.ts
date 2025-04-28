@@ -1,4 +1,4 @@
-import {LogContext, type LogLevel} from '@rocicorp/logger';
+import {type LogLevel, type LogSink} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import {
   ReplicacheImpl,
@@ -43,7 +43,7 @@ import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
 import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {downstreamSchema} from '../../../zero-protocol/src/down.ts';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import type {ErrorMessage} from '../../../zero-protocol/src/error.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
 import type {PingMessage} from '../../../zero-protocol/src/ping.ts';
@@ -79,11 +79,7 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import {
-  DEFAULT_RUN_OPTIONS_COMPLETE,
-  type Query,
-  type RunOptions,
-} from '../../../zql/src/query/query.ts';
+import {type Query, type RunOptions} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import * as ConnectionState from './connection-state-enum.ts';
@@ -122,6 +118,8 @@ import {
   getLastConnectErrorValue,
 } from './metrics.ts';
 import {MutationTracker} from './mutation-tracker.ts';
+import {OnErrorKind} from './on-error-kind.ts';
+import type {OnErrorParameters} from './on-error.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import * as PingResult from './ping-result-enum.ts';
 import {QueryManager} from './query-manager.ts';
@@ -139,6 +137,7 @@ import {
 } from './server-error.ts';
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
+import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
 
@@ -219,7 +218,7 @@ function convertOnUpdateNeededReason(
   return {type: reason.type};
 }
 
-function updateNeededReloadReason(
+function updateNeededReloadReasonMessage(
   reason: UpdateNeededReason,
   serverErrMsg?: string | undefined,
 ) {
@@ -246,9 +245,7 @@ function updateNeededReloadReason(
   return reasonMsg;
 }
 
-function serverAheadReloadReason(kind: string) {
-  return `Server reported that client is ahead of server (${kind}). This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero.`;
-}
+const serverAheadReloadReason = `Server reported that client is ahead of server. This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero.`;
 
 function onClientStateNotFoundServerReason(serverErrMsg: string) {
   return `Server could not find state needed to synchronize this client. ${serverErrMsg}`;
@@ -285,7 +282,7 @@ export class Zero<
   readonly userID: string;
   readonly storageKey: string;
 
-  readonly #lc: LogContext;
+  readonly #lc: ZeroLogContext;
   readonly #logOptions: LogOptions;
   readonly #enableAnalytics: boolean;
   readonly #schema: S;
@@ -471,7 +468,25 @@ export class Zero<
       );
     }
 
-    const lc = new LogContext(logOptions.logLevel, {}, logOptions.logSink);
+    // We create a special log sink that calls onError if defined instead of
+    // logging error messages.
+    const {onError} = options;
+    const sink = logOptions.logSink;
+    const logSink: LogSink<OnErrorParameters> = {
+      log(level, context, ...args) {
+        if (level === 'error' && onError) {
+          onError(...(args as OnErrorParameters));
+        } else {
+          sink.log(level, context, ...args);
+        }
+      },
+      async flush() {
+        await sink.flush?.();
+      },
+    };
+
+    const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
+
     this.#mutationTracker = new MutationTracker(lc);
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
@@ -542,7 +557,7 @@ export class Zero<
       (ast, ttl) => this.#queryManager.update(ast, ttl),
       batchViewUpdates,
       slowMaterializeThreshold,
-      normalizeRunOptions,
+      assertValidRunOptions,
     );
 
     const replicacheImplOptions: ReplicacheImplOptions = {
@@ -570,15 +585,21 @@ export class Zero<
     this.#lc = lc.withContext('clientID', rep.clientID);
     this.#mutationTracker.clientID = rep.clientID;
 
-    const onUpdateNeededCallback =
-      onUpdateNeeded ??
-      ((reason: UpdateNeededReason, serverErrorMsg?: string | undefined) => {
+    const onUpdateNeededCallback = (
+      reason: UpdateNeededReason,
+      serverErrorMsg?: string | undefined,
+    ) => {
+      if (onUpdateNeeded) {
+        onUpdateNeeded(reason);
+      } else {
         reloadWithReason(
           this.#lc,
           this.#reload,
-          updateNeededReloadReason(reason, serverErrorMsg),
+          reason.type,
+          updateNeededReloadReasonMessage(reason, serverErrorMsg),
         );
-      });
+      }
+    };
     this.#onUpdateNeeded = onUpdateNeededCallback;
     this.#rep.onUpdateNeeded = reason => {
       onUpdateNeededCallback(convertOnUpdateNeededReason(reason));
@@ -590,6 +611,7 @@ export class Zero<
         reloadWithReason(
           this.#lc,
           this.#reload,
+          ErrorKind.ClientNotFound,
           reason ?? ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT,
         );
       });
@@ -925,7 +947,8 @@ export class Zero<
     const l = addWebSocketIDFromSocketToLogContext(this.#socket!, this.#lc);
     if (this.#connectStart === undefined) {
       l.error?.(
-        'Got open event but connect start time is undefined. This should not happen.',
+        OnErrorKind.InvalidState,
+        'Got open event but connect start time is undefined.',
       );
     } else {
       const now = Date.now();
@@ -938,19 +961,26 @@ export class Zero<
   };
 
   #onClose = (e: CloseEvent) => {
-    const l = addWebSocketIDFromSocketToLogContext(this.#socket!, this.#lc);
+    const lc = addWebSocketIDFromSocketToLogContext(this.#socket!, this.#lc);
     const {code, reason, wasClean} = e;
-    const log = code <= 1001 ? 'info' : 'error';
-    l[log]?.('Got socket close event', {code, reason, wasClean});
+    if (code <= 1001) {
+      lc.info?.('Got socket close event', {code, reason, wasClean});
+    } else {
+      lc.error?.(OnErrorKind.Network, 'Got unexpected socket close event', {
+        code,
+        reason,
+        wasClean,
+      });
+    }
 
     const closeKind = wasClean ? 'CleanClose' : 'AbruptClose';
     this.#connectResolver.reject(new CloseError(closeKind));
-    this.#disconnect(l, {client: closeKind});
+    this.#disconnect(lc, {client: closeKind});
   };
 
   // An error on the connection is fatal for the connection.
   async #handleErrorMessage(
-    lc: LogContext,
+    lc: ZeroLogContext,
     downMessage: ErrorMessage,
   ): Promise<void> {
     const [, {kind, message}] = downMessage;
@@ -960,7 +990,7 @@ export class Zero<
     // it'll use more resources on the server
     if (kind === ErrorKind.MutationRateLimited) {
       this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
-      lc.error?.('Mutation rate limited', {message});
+      lc.error?.(kind, 'Mutation rate limited', {message});
       return;
     }
 
@@ -985,12 +1015,12 @@ export class Zero<
       kind === ErrorKind.InvalidConnectionRequestBaseCookie
     ) {
       await dropDatabase(this.#rep.idbName);
-      reloadWithReason(lc, this.#reload, serverAheadReloadReason(kind));
+      reloadWithReason(lc, this.#reload, kind, serverAheadReloadReason);
     }
   }
 
   async #handleConnectedMessage(
-    lc: LogContext,
+    lc: ZeroLogContext,
     connectedMessage: ConnectedMessage,
   ): Promise<void> {
     const now = Date.now();
@@ -1012,7 +1042,8 @@ export class Zero<
     let connectMsgLatencyMs: number | undefined;
     if (this.#connectStart === undefined) {
       lc.error?.(
-        'Got connected message but connect start time is undefined. This should not happen.',
+        OnErrorKind.InvalidState,
+        'Got connected message but connect start time is undefined.',
       );
     } else {
       timeToConnectMs = now - this.#connectStart;
@@ -1026,7 +1057,8 @@ export class Zero<
     let totalTimeToConnectMs: number | undefined;
     if (this.#totalToConnectStart === undefined) {
       lc.error?.(
-        'Got connected message but total to connect start time is undefined. This should not happen.',
+        OnErrorKind.InvalidState,
+        'Got connected message but total to connect start time is undefined.',
       );
     } else {
       totalTimeToConnectMs = now - this.#totalToConnectStart;
@@ -1112,7 +1144,7 @@ export class Zero<
    * attempt times out.
    */
   async #connect(
-    l: LogContext,
+    lc: ZeroLogContext,
     additionalConnectParams: Record<string, string> | undefined,
   ): Promise<void> {
     assert(this.#server);
@@ -1121,8 +1153,8 @@ export class Zero<
     assert(this.#connectionState === ConnectionState.Disconnected);
 
     const wsid = nanoid();
-    l = addWebSocketIDToLogContext(wsid, l);
-    l.info?.('Connecting...', {navigatorOnline: navigator?.onLine});
+    lc = addWebSocketIDToLogContext(wsid, lc);
+    lc.info?.('Connecting...', {navigatorOnline: navigator?.onLine});
 
     this.#setConnectionState(ConnectionState.Connecting);
 
@@ -1149,9 +1181,9 @@ export class Zero<
 
     // Reject connect after a timeout.
     const timeoutID = setTimeout(() => {
-      l.debug?.('Rejecting connect resolver due to timeout');
+      lc.debug?.('Rejecting connect resolver due to timeout');
       this.#connectResolver.reject(new TimedOutError('Connect'));
-      this.#disconnect(l, {
+      this.#disconnect(lc, {
         client: 'ConnectTimeout',
       });
     }, CONNECT_TIMEOUT_MS);
@@ -1175,7 +1207,7 @@ export class Zero<
       this.#lastMutationIDReceived,
       wsid,
       this.#options.logLevel === 'debug',
-      l,
+      lc,
       this.#options.push,
       this.#options.maxHeaderLength,
       additionalConnectParams,
@@ -1199,7 +1231,7 @@ export class Zero<
     );
 
     try {
-      l.debug?.('Waiting for connection to be acknowledged');
+      lc.debug?.('Waiting for connection to be acknowledged');
       await this.#connectResolver.promise;
       this.#mutationTracker.onConnected(this.#lastMutationIDReceived);
       // push any outstanding mutations on reconnect.
@@ -1214,7 +1246,7 @@ export class Zero<
   }
 
   #disconnect(
-    l: LogContext,
+    lc: ZeroLogContext,
     reason: DisconnectReason,
     closeCode?: CloseCode,
     closeReason?: string,
@@ -1222,7 +1254,7 @@ export class Zero<
     if (this.#connectionState === ConnectionState.Connecting) {
       this.#connectErrorCount++;
     }
-    l.info?.('disconnecting', {
+    lc.info?.('disconnecting', {
       navigatorOnline: navigator?.onLine,
       reason,
       connectStart: this.#connectStart,
@@ -1239,8 +1271,9 @@ export class Zero<
     switch (this.#connectionState) {
       case ConnectionState.Connected: {
         if (this.#connectStart !== undefined) {
-          l.error?.(
-            'disconnect() called while connected but connect start time is defined. This should not happen.',
+          lc.error?.(
+            OnErrorKind.InvalidState,
+            'disconnect() called while connected but connect start time is defined.',
           );
           // this._connectStart reset below.
         }
@@ -1261,20 +1294,24 @@ export class Zero<
         }
         // this._connectStart reset below.
         if (this.#connectStart === undefined) {
-          l.error?.(
-            'disconnect() called while connecting but connect start time is undefined. This should not happen.',
+          lc.error?.(
+            OnErrorKind.InvalidState,
+            'disconnect() called while connecting but connect start time is undefined.',
           );
         }
 
         break;
       }
       case ConnectionState.Disconnected:
-        l.error?.('disconnect() called while disconnected');
+        lc.error?.(
+          OnErrorKind.InvalidState,
+          'disconnect() called while disconnected',
+        );
         break;
     }
 
     this.#socketResolver = resolver();
-    l.debug?.('Creating new connect resolver');
+    lc.debug?.('Creating new connect resolver');
     this.#connectResolver = resolver();
     this.#setConnectionState(ConnectionState.Disconnected);
     this.#messageCount = 0;
@@ -1294,12 +1331,12 @@ export class Zero<
     );
   }
 
-  #handlePokeStart(_lc: LogContext, pokeMessage: PokeStartMessage): void {
+  #handlePokeStart(_lc: ZeroLogContext, pokeMessage: PokeStartMessage): void {
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeStart(pokeMessage[1]);
   }
 
-  #handlePokePart(_lc: LogContext, pokeMessage: PokePartMessage): void {
+  #handlePokePart(_lc: ZeroLogContext, pokeMessage: PokePartMessage): void {
     this.#abortPingTimeout();
     const lastMutationIDChangeForSelf = this.#pokeHandler.handlePokePart(
       pokeMessage[1],
@@ -1309,7 +1346,7 @@ export class Zero<
     }
   }
 
-  #handlePokeEnd(_lc: LogContext, pokeMessage: PokeEndMessage): void {
+  #handlePokeEnd(_lc: ZeroLogContext, pokeMessage: PokeEndMessage): void {
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
   }
@@ -1332,7 +1369,7 @@ export class Zero<
   }
 
   #handlePullResponse(
-    lc: LogContext,
+    lc: ZeroLogContext,
     pullResponseMessage: PullResponseMessage,
   ): void {
     this.#abortPingTimeout();
@@ -1421,7 +1458,7 @@ export class Zero<
   }
 
   async #updateAuthToken(
-    lc: LogContext,
+    lc: ZeroLogContext,
     error?: 'invalid-token',
   ): Promise<void> {
     const {auth: authOption} = this.#options;
@@ -1506,7 +1543,7 @@ export class Zero<
           case ConnectionState.Connecting:
             // Can't get here because Disconnected waits for Connected or
             // rejection.
-            lc.error?.('unreachable');
+            lc.error?.(OnErrorKind.InvalidState);
             gotError = true;
             break;
 
@@ -1568,7 +1605,8 @@ export class Zero<
       } catch (ex) {
         if (this.#connectionState !== ConnectionState.Connected) {
           const level = isAuthError(ex) ? 'warn' : 'error';
-          lc[level]?.('Failed to connect', ex, {
+          const kind = isServerError(ex) ? ex.kind : OnErrorKind.Unknown;
+          lc[level]?.(kind, 'Failed to connect', ex, {
             lmid: this.#lastMutationIDReceived,
             baseCookie: this.#connectCookie,
           });
@@ -1712,7 +1750,7 @@ export class Zero<
           };
         }
         default:
-          assert(false, 'unreachable');
+          unreachable();
       }
     } finally {
       pullResponseResolver.reject('timed out');
@@ -1744,10 +1782,10 @@ export class Zero<
    * {@linkcode PingResult.TimedOut}.
    */
   async #ping(
-    l: LogContext,
+    lc: ZeroLogContext,
     messageErrorRejectionPromise: Promise<never>,
   ): Promise<PingResult> {
-    l.debug?.('pinging');
+    lc.debug?.('pinging');
     const {promise, resolve} = resolver();
     this.#onPong = resolve;
     const pingMessage: PingMessage = ['ping', {}];
@@ -1764,14 +1802,14 @@ export class Zero<
 
     const delta = performance.now() - t0;
     if (!connected) {
-      l.info?.('ping failed in', delta, 'ms - disconnecting');
-      this.#disconnect(l, {
+      lc.info?.('ping failed in', delta, 'ms - disconnecting');
+      this.#disconnect(lc, {
         client: 'PingTimeout',
       });
       return PingResult.TimedOut;
     }
 
-    l.debug?.('ping succeeded in', delta, 'ms');
+    lc.debug?.('ping succeeded in', delta, 'ms');
     return PingResult.Success;
   }
 
@@ -1849,7 +1887,11 @@ export class Zero<
     // eslint-disable-next-line no-unused-labels
     BUNDLE_SIZE: {
       const m = await import('./inspector/inspector.ts');
-      return m.newInspector(this.#rep, this.#schema, () => this.#socket);
+      // Wait for the web socket to be available
+      return m.newInspector(this.#rep, this.#schema, async () => {
+        await this.#connectResolver.promise;
+        return this.#socket!;
+      });
     }
   }
 }
@@ -1868,7 +1910,7 @@ export async function createSocket(
   lmid: number,
   wsid: string,
   debugPerf: boolean,
-  lc: LogContext,
+  lc: ZeroLogContext,
   userPushParams: UserPushParams | undefined,
   maxHeaderLength = 1024 * 8,
   additionalConnectParams?: Record<string, string> | undefined,
@@ -1979,13 +2021,16 @@ function skipEmptyDeletedClients(
  */
 function addWebSocketIDFromSocketToLogContext(
   {url}: {url: string},
-  lc: LogContext,
-): LogContext {
+  lc: ZeroLogContext,
+): ZeroLogContext {
   const wsid = new URL(url).searchParams.get('wsid') ?? nanoid();
   return addWebSocketIDToLogContext(wsid, lc);
 }
 
-function addWebSocketIDToLogContext(wsid: string, lc: LogContext): LogContext {
+function addWebSocketIDToLogContext(
+  wsid: string,
+  lc: ZeroLogContext,
+): ZeroLogContext {
   return lc.withContext('wsid', wsid);
 }
 
@@ -2004,6 +2049,4 @@ class TimedOutError extends Error {
 
 class CloseError extends Error {}
 
-function normalizeRunOptions(options?: RunOptions | undefined): RunOptions {
-  return options ?? DEFAULT_RUN_OPTIONS_COMPLETE;
-}
+function assertValidRunOptions(_options?: RunOptions | undefined): void {}

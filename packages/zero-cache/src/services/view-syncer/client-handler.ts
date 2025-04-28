@@ -37,6 +37,7 @@ import {
   type PutQueryPatch,
   type RowID,
 } from './schema/types.ts';
+import instruments from '../../observability/view-syncer-instruments.ts';
 
 export type PutRowPatch = {
   type: 'row';
@@ -79,6 +80,9 @@ export function startPoke(
   tentativeVersion: CVRVersion,
   schemaVersions?: SchemaVersions, // absent for config-only pokes
 ): PokeHandler {
+  const start = performance.now();
+  instruments.counters.pokeTransactions.add(1);
+
   const pokers = clients.map(c =>
     c.startPoke(tentativeVersion, schemaVersions),
   );
@@ -88,12 +92,15 @@ export function startPoke(
   // rate (per client group) will be limited by the slowest connection.
   return {
     addPatch: async patch => {
+      instruments.counters.rowsPoked.add(1);
       await Promise.allSettled(pokers.map(poker => poker.addPatch(patch)));
     },
     cancel: async () => {
       await Promise.allSettled(pokers.map(poker => poker.cancel()));
     },
     end: async finalVersion => {
+      const elapsed = performance.now() - start;
+      instruments.histograms.pokeTime.record(elapsed);
       await Promise.allSettled(pokers.map(poker => poker.end(finalVersion)));
     },
   };
@@ -126,6 +133,7 @@ export class ClientHandler {
     schemaVersion: number | null,
     downstream: Subscription<Downstream>,
   ) {
+    lc.debug?.('new client handler');
     this.#clientGroupID = clientGroupID;
     this.clientID = clientID;
     this.wsID = wsID;

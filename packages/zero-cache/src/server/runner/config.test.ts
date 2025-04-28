@@ -73,6 +73,8 @@ test('parse options', () => {
           "configPath": "./src/services/litestream/config.yml",
           "incrementalBackupIntervalMinutes": 15,
           "logLevel": "warn",
+          "multipartConcurrency": 48,
+          "multipartSize": 16777216,
           "restoreParallelism": 48,
           "snapshotBackupIntervalHours": 12,
         },
@@ -148,6 +150,8 @@ test('parse options', () => {
         "ZERO_LITESTREAM_CONFIG_PATH": "./src/services/litestream/config.yml",
         "ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES": "15",
         "ZERO_LITESTREAM_LOG_LEVEL": "warn",
+        "ZERO_LITESTREAM_MULTIPART_CONCURRENCY": "48",
+        "ZERO_LITESTREAM_MULTIPART_SIZE": "16777216",
         "ZERO_LITESTREAM_RESTORE_PARALLELISM": "48",
         "ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS": "12",
         "ZERO_LOG_FORMAT": "text",
@@ -350,6 +354,11 @@ test('zero-cache --help', () => {
                                                                 The URL of the trace collector to which to send trace data. Traces are sent over http.            
                                                                 Port defaults to 4318 for most collectors.                                                        
                                                                                                                                                                   
+     --log-metric-collector string                              optional                                                                                          
+       ZERO_LOG_METRIC_COLLECTOR env                                                                                                                              
+                                                                The URL of the metric collector to which to send metric data. Metrics are sent over http.         
+                                                                Port defaults to 4318 for most collectors.                                                        
+                                                                                                                                                                  
      --log-slow-row-threshold number                            default: 2                                                                                        
        ZERO_LOG_SLOW_ROW_THRESHOLD env                                                                                                                            
                                                                 The number of ms a row must take to fetch from table-source before it is considered slow.         
@@ -492,6 +501,13 @@ test('zero-cache --help', () => {
                                                                 The location of the litestream backup, usually an s3:// URL.                                      
                                                                 If set, the litestream-executable must also be specified.                                         
                                                                                                                                                                   
+     --litestream-port number                                   optional                                                                                          
+       ZERO_LITESTREAM_PORT env                                                                                                                                   
+                                                                Port on which litestream exports metrics, used to determine the replication                       
+                                                                watermark up to which it is safe to purge change log records.                                     
+                                                                                                                                                                  
+                                                                If unspecified, defaults to --port + 2.                                                           
+                                                                                                                                                                  
      --litestream-checkpoint-threshold-mb number                default: 40                                                                                       
        ZERO_LITESTREAM_CHECKPOINT_THRESHOLD_MB env                                                                                                                
                                                                 The size of the WAL file at which to perform an SQlite checkpoint to apply                        
@@ -519,6 +535,32 @@ test('zero-cache --help', () => {
        ZERO_LITESTREAM_RESTORE_PARALLELISM env                                                                                                                    
                                                                 The number of WAL files to download in parallel when performing the                               
                                                                 initial restore of the replica from the backup.                                                   
+                                                                                                                                                                  
+     --litestream-multipart-concurrency number                  default: 48                                                                                       
+       ZERO_LITESTREAM_MULTIPART_CONCURRENCY env                                                                                                                  
+                                                                The number of parts (of size --litestream-multipart-size bytes)                                   
+                                                                to download in parallel when restoring the snapshot from the backup.                              
+                                                                                                                                                                  
+                                                                This requires a custom build of litestream (version 0.3.13+z0.0.1+).                              
+                                                                Set to 0 to disable.                                                                              
+                                                                                                                                                                  
+     --litestream-multipart-size number                         default: 16777216                                                                                 
+       ZERO_LITESTREAM_MULTIPART_SIZE env                                                                                                                         
+                                                                The size of each part when downloading the snapshot with --multipart-concurrency.                 
+                                                                Multipart downloads require concurrency * size bytes of memory when restoring                     
+                                                                the snapshot from the backup.                                                                     
+                                                                                                                                                                  
+                                                                This requires a custom build of litestream (version 0.3.13+z0.0.1+).                              
+                                                                                                                                                                  
+     --litestream-restore-duration-ms-estimate number           optional                                                                                          
+       ZERO_LITESTREAM_RESTORE_DURATION_MS_ESTIMATE env                                                                                                           
+                                                                The estimated time required to restore the replica from backup. This duration                     
+                                                                is used to determine when it is safe to purge change long entries; the                            
+                                                                change-streamer waits for at least this duration before purging changes                           
+                                                                that have been successfully backed up.                                                            
+                                                                                                                                                                  
+                                                                This can generally be left unspecified, as the server will compute the estimate                   
+                                                                based on an actual restore, using the initial-sync time for bootstrapping.                        
                                                                                                                                                                   
      --storage-db-tmp-dir string                                optional                                                                                          
        ZERO_STORAGE_DB_TMP_DIR env                                                                                                                                

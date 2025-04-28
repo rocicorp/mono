@@ -1,4 +1,4 @@
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorForClient} from './error-for-client.ts';
 
 export type SchemaVersions = {
