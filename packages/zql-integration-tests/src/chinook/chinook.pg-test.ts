@@ -21,6 +21,7 @@ type Schema = typeof schema;
 type Rrc<T extends keyof Schema['tables']> = ReturnType<
   typeof randomRowAndColumn<T>
 >;
+const operators = ['=', '!=', '>', '>=', '<', '<='] as const;
 
 test.each(
   await createVitests(
@@ -48,7 +49,148 @@ test.each(
           },
         ],
       },
+      // TODO: self join is broken
+      // reportsTo is a broken relationship in z2s due to self join
+      // {
+      //   name: '3 level related: customer -> supportRep -> reportsTo',
+      //   createQuery: q =>
+      //     q.invoice.related('customer', c =>
+      //       c.related('supportRep', r => r.related('reportsTo')),
+      //     ),
+      // },
+      {
+        name: 'Build a playlist',
+        createQuery: q =>
+          q.playlist.related('tracks', t =>
+            t
+              .related('mediaType')
+              .related('genre')
+              .related('album', a => a.related('artist')),
+          ),
+      },
+      {
+        name: '6 level related: Artist -> albums -> tracks -> invoiceLines -> invoices -> customer',
+        createQuery: q =>
+          q.artist.related('albums', a =>
+            a.related('tracks', t =>
+              t.related('invoiceLines', l =>
+                l.related('invoice', i => i.related('customer')),
+              ),
+            ),
+          ),
+      },
+      {
+        name: 'Tracks that have been sold (exists testing)',
+        createQuery: q => q.track.where(({exists}) => exists('invoiceLines')),
+      },
+      // TODO: not(exists) is broken
+      // {
+      //   name: 'Tracks that have not been sold (not exists testing)',
+      //   createQuery: q =>
+      //     q.track.where(({not, exists}) => not(exists('invoiceLines'))),
+      // },
+      {
+        name: 'Tracks sold or in a playlist (exists in or)',
+        createQuery: q =>
+          q.track.where(({or, exists}) =>
+            or(exists('invoiceLines'), exists('playlists')),
+          ),
+      },
+      {
+        name: 'Tracks not sold and not in a playlist (not exists in and)',
+        createQuery: q =>
+          q.track.where(({and, not, exists}) =>
+            and(not(exists('invoiceLines')), not(exists('playlists'))),
+          ),
+      },
+      {
+        name: 'Tracks sold and in a playlist (exists in and)',
+        createQuery: q =>
+          q.track.where(({and, exists}) =>
+            and(exists('invoiceLines'), exists('playlists')),
+          ),
+      },
+      {
+        name: 'Prefix like',
+        createQuery: q => q.album.where('title', 'LIKE', 'Riot%').limit(1),
+        manualVerification: [
+          {
+            artistId: 118,
+            id: 180,
+            title: 'Riot Act',
+          },
+        ],
+      },
+      {
+        name: 'Suffix like',
+        createQuery: q => q.album.where('title', 'LIKE', '%Act').limit(1),
+        manualVerification: [
+          {
+            artistId: 118,
+            id: 180,
+            title: 'Riot Act',
+          },
+        ],
+      },
+      {
+        name: 'Contains like',
+        createQuery: q => q.album.where('title', 'LIKE', '%Riot%').limit(1),
+        manualVerification: [
+          {
+            artistId: 118,
+            id: 180,
+            title: 'Riot Act',
+          },
+        ],
+      },
+      {
+        name: 'Not like',
+        createQuery: q => q.album.where('title', 'NOT LIKE', '%Act').limit(1),
+      },
+      // TODO: `in` and `not in` are broken
+      // {
+      //   name: 'In operator',
+      //   createQuery: q =>
+      //     q.album.where('title', 'IN', ['Riot Act', 'For Those About To Rock']),
+      //   manualVerification: [
+      //     {
+      //       artistId: 118,
+      //       id: 180,
+      //       title: 'Riot Act',
+      //     },
+      //     {
+      //       artistId: 1,
+      //       id: 2,
+      //       title: 'For Those About To Rock We Salute You',
+      //     },
+      //   ],
+      // },
+      // {
+      //   name: 'Not in operator',
+      //   createQuery: q =>
+      //     q.album
+      //       .where('title', 'NOT IN', ['Riot Act', 'For Those About To Rock'])
+      //       .limit(10),
+      // },
     ],
+    // compare against primary key for each operator
+    (() =>
+      operators.map(
+        op =>
+          ({
+            name: `track.where('id', '${op}', 2941)`,
+            createQuery: q => q.track.where('id', op, 2941),
+          }) as const,
+      ))(),
+    // same with limit 1
+    (() =>
+      operators.map(
+        op =>
+          ({
+            name: `track.where('id', '${op}', 2941)`,
+            createQuery: q => q.track.where('id', op, 2941).limit(1),
+          }) as const,
+      ))(),
     // SELECT * FROM <table> WHERE <column> = <value>
     (() =>
       tables.map(table => {
@@ -135,21 +277,17 @@ test.each(
       // n-ary or
       (() => {
         const n = 5;
-        let cached:
-          | {rowsAndColumns: Array<Rrc<'artist'>>; operators: SimpleOperator[]}
-          | undefined;
+        let cached: Array<Rrc<'artist'>> | undefined;
         const rrc = () =>
           cached ??
-          (cached = {
-            rowsAndColumns: Array.from({length: n}, () =>
-              randomRowAndColumn('artist'),
-            ),
-            operators: Array.from({length: n}, () => randomOperator()),
-          });
+          (cached = Array.from({length: n}, () =>
+            randomRowAndColumn('artist'),
+          ));
         return {
           name: 'n-branches',
           createQuery: q => {
-            const {rowsAndColumns, operators} = rrc();
+            const rowsAndColumns = rrc();
+            const operators = Array.from({length: n}, () => randomOperator());
             return q.artist.where(({or, cmp}) =>
               or(
                 ...rowsAndColumns.map(({randomRow, randomColumn}, i) =>
@@ -237,6 +375,5 @@ function randomRowAndColumn<TTable extends keyof Schema['tables']>(
 }
 
 function randomOperator(): SimpleOperator {
-  const operators = ['=', '!=', '>', '>=', '<', '<='] as const;
   return operators[Math.floor(Math.random() * operators.length)];
 }

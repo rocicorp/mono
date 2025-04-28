@@ -145,6 +145,27 @@ const albumRelationships = relationships(album, ({one, many}) => ({
   }),
 }));
 
+const artistRelationships = relationships(artist, ({many}) => ({
+  albums: many({
+    sourceField: ['id'],
+    destField: ['artistId'],
+    destSchema: album,
+  }),
+}));
+
+const invoiceLineRelationships = relationships(invoiceLine, ({one}) => ({
+  track: one({
+    sourceField: ['trackId'],
+    destField: ['id'],
+    destSchema: track,
+  }),
+  invoice: one({
+    sourceField: ['invoiceId'],
+    destField: ['id'],
+    destSchema: invoice,
+  }),
+}));
+
 const customerRelationships = relationships(customer, ({one}) => ({
   supportRep: one({
     sourceField: ['supportRepId'],
@@ -202,6 +223,11 @@ const trackRelationships = relationships(track, ({one, many}) => ({
       destSchema: playlist,
     },
   ),
+  invoiceLines: many({
+    sourceField: ['id'],
+    destField: ['trackId'],
+    destSchema: invoiceLine,
+  }),
 }));
 
 const playlistRelationships = relationships(playlist, ({many}) => ({
@@ -235,9 +261,11 @@ export const schema = createSchema({
   ],
   relationships: [
     albumRelationships,
+    artistRelationships,
     customerRelationships,
     employeeRelationships,
     invoiceRelationships,
+    invoiceLineRelationships,
     trackRelationships,
     playlistRelationships,
   ],
