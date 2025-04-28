@@ -4,18 +4,18 @@ import {
   type AddEmojiArgs,
   type AddCommentArgs,
 } from '../shared/mutators.ts';
-import {type CustomMutatorDefs, type UpdateValue} from '@rocicorp/zero';
-import {schema} from '../shared/schema.ts';
+import type {UpdateValue} from '@rocicorp/zero';
+import type {schema} from '../shared/schema.ts';
 import {notify} from './notify.ts';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import {type AuthData} from '../shared/auth.ts';
+import type {
+  CustomMutatorDefs,
+  ServerTransaction,
+  PostgresJSTransaction,
+} from '@rocicorp/zero/pg';
 
-export type PostCommitTask = () => Promise<void>;
-
-export function createServerMutators(
-  authData: AuthData | undefined,
-  postCommitTasks: PostCommitTask[],
-) {
+export function createServerMutators(authData: AuthData | undefined) {
   const mutators = createMutators(authData);
 
   return {
@@ -32,12 +32,7 @@ export function createServerMutators(
           created: Date.now(),
           modified: Date.now(),
         });
-        await notify(
-          tx,
-          authData,
-          {kind: 'create-issue', issueID: id},
-          postCommitTasks,
-        );
+        await notify(tx, authData, {kind: 'create-issue', issueID: id});
       },
 
       async update(tx, update: UpdateValue<typeof schema.tables.issue>) {
@@ -45,16 +40,11 @@ export function createServerMutators(
           ...update,
           modified: Date.now(),
         });
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'update-issue',
-            issueID: update.id,
-            update,
-          },
-          postCommitTasks,
-        );
+        await notify(tx, authData, {
+          kind: 'update-issue',
+          issueID: update.id,
+          update,
+        });
       },
 
       async addLabel(
@@ -62,16 +52,11 @@ export function createServerMutators(
         {issueID, labelID}: {issueID: string; labelID: string},
       ) {
         await mutators.issue.addLabel(tx, {issueID, labelID});
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'update-issue',
-            issueID,
-            update: {id: issueID},
-          },
-          postCommitTasks,
-        );
+        await notify(tx, authData, {
+          kind: 'update-issue',
+          issueID,
+          update: {id: issueID},
+        });
       },
 
       async removeLabel(
@@ -79,16 +64,11 @@ export function createServerMutators(
         {issueID, labelID}: {issueID: string; labelID: string},
       ) {
         await mutators.issue.removeLabel(tx, {issueID, labelID});
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'update-issue',
-            issueID,
-            update: {id: issueID},
-          },
-          postCommitTasks,
-        );
+        await notify(tx, authData, {
+          kind: 'update-issue',
+          issueID,
+          update: {id: issueID},
+        });
       },
     },
 
@@ -100,16 +80,11 @@ export function createServerMutators(
           ...args,
           created: Date.now(),
         });
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'add-emoji-to-issue',
-            issueID: args.subjectID,
-            emoji: args.unicode,
-          },
-          postCommitTasks,
-        );
+        await notify(tx, authData, {
+          kind: 'add-emoji-to-issue',
+          issueID: args.subjectID,
+          emoji: args.unicode,
+        });
       },
 
       async addToComment(tx, args: AddEmojiArgs) {
@@ -122,17 +97,12 @@ export function createServerMutators(
           .where('id', args.subjectID)
           .one();
         assert(comment);
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'add-emoji-to-comment',
-            issueID: comment.issueID,
-            commentID: args.subjectID,
-            emoji: args.unicode,
-          },
-          postCommitTasks,
-        );
+        await notify(tx, authData, {
+          kind: 'add-emoji-to-comment',
+          issueID: comment.issueID,
+          commentID: args.subjectID,
+          emoji: args.unicode,
+        });
       },
     },
 
@@ -146,17 +116,12 @@ export function createServerMutators(
           body,
           created: Date.now(),
         });
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'add-comment',
-            issueID,
-            commentID: id,
-            comment: body,
-          },
-          postCommitTasks,
-        );
+        await notify(tx, authData, {
+          kind: 'add-comment',
+          issueID,
+          commentID: id,
+          comment: body,
+        });
       },
 
       async edit(tx, {id, body}: {id: string; body: string}) {
@@ -165,18 +130,15 @@ export function createServerMutators(
         const comment = await tx.query.comment.where('id', id).one();
         assert(comment);
 
-        await notify(
-          tx,
-          authData,
-          {
-            kind: 'edit-comment',
-            issueID: comment.issueID,
-            commentID: id,
-            comment: body,
-          },
-          postCommitTasks,
-        );
+        await notify(tx, authData, {
+          kind: 'edit-comment',
+          issueID: comment.issueID,
+          commentID: id,
+          comment: body,
+        });
       },
     },
-  } as const satisfies CustomMutatorDefs<typeof schema>;
+  } as const satisfies CustomMutatorDefs<
+    ServerTransaction<typeof schema, PostgresJSTransaction>
+  >;
 }

@@ -1,10 +1,11 @@
+import type {ServerTransaction, PostgresJSTransaction} from '@rocicorp/zero/pg';
+
 import {type Schema} from '../shared/schema.ts';
 import {assert} from '../../../packages/shared/src/asserts.ts';
-import {type Transaction, type UpdateValue} from '@rocicorp/zero';
+import type {UpdateValue} from '@rocicorp/zero';
 import {postToDiscord} from './discord.ts';
 import {schema} from '../shared/schema.ts';
 import {assertIsLoggedIn, type AuthData} from '../shared/auth.ts';
-import type {PostCommitTask} from './server-mutators.ts';
 
 type CreateIssueNotification = {
   kind: 'create-issue';
@@ -48,10 +49,9 @@ type NotificationArgs = {issueID: string} & (
 );
 
 export async function notify(
-  tx: Transaction<Schema>,
+  tx: ServerTransaction<Schema, PostgresJSTransaction>,
   authData: AuthData | undefined,
   args: NotificationArgs,
-  postCommitTasks: PostCommitTask[],
 ): Promise<void> {
   assertIsLoggedIn(authData);
 
@@ -70,7 +70,7 @@ export async function notify(
 
   switch (kind) {
     case 'create-issue': {
-      postCommitTasks.push(() =>
+      tx.after(() =>
         postToDiscord({
           title: `${modifierUser.login} reported an issue`,
           message: [issue.title, clip(issue.description ?? '')]
@@ -88,7 +88,7 @@ export async function notify(
         const title = `${modifierUser.login} ${
           update.open ? 'reopened' : 'closed'
         } an issue`;
-        postCommitTasks.push(() =>
+        tx.after(() =>
           postToDiscord({
             title,
             message: issue.title,
@@ -96,7 +96,7 @@ export async function notify(
           }),
         );
       } else {
-        postCommitTasks.push(() =>
+        tx.after(() =>
           postToDiscord({
             title: `${modifierUser.login} updated an issue`,
             message: [issue.title, clip(issue.description ?? '')]
@@ -111,7 +111,7 @@ export async function notify(
 
     case 'add-emoji-to-issue': {
       const {emoji} = args;
-      postCommitTasks.push(() =>
+      tx.after(() =>
         postToDiscord({
           title: `${modifierUser.login} reacted to an issue`,
           message: [issue.title, emoji].join('\n'),
@@ -125,7 +125,7 @@ export async function notify(
       const {commentID, emoji} = args;
       const comment = await tx.query.comment.where('id', commentID).one();
       assert(comment);
-      postCommitTasks.push(() =>
+      tx.after(() =>
         postToDiscord({
           title: `${modifierUser.login} reacted to a comment`,
           message: [clip(comment.body), emoji].filter(Boolean).join('\n'),
@@ -137,7 +137,7 @@ export async function notify(
 
     case 'add-comment': {
       const {commentID, comment} = args;
-      postCommitTasks.push(() =>
+      tx.after(() =>
         postToDiscord({
           title: `${modifierUser.login} commented on an issue`,
           message: [issue.title, clip(comment)].join('\n'),
@@ -149,7 +149,7 @@ export async function notify(
 
     case 'edit-comment': {
       const {commentID, comment} = args;
-      postCommitTasks.push(() =>
+      tx.after(() =>
         postToDiscord({
           title: `${modifierUser.login} edited a comment`,
           message: [issue.title, clip(comment)].join('\n'),

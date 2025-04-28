@@ -53,6 +53,7 @@ export class ZQLDatabaseProvider<S extends Schema, WrappedTransaction>
         this.#schema,
         this.#mutate,
         this.#query,
+        transactionInput.after,
       );
 
       return callback(zeroTx, {

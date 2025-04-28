@@ -24,6 +24,7 @@ interface ServerTransaction<S extends Schema, TWrappedTransaction>
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
+  readonly after: (task: () => Promise<void>) => void;
 }
 
 export type CustomMutatorDefs<TDBTransaction> = {
@@ -50,6 +51,7 @@ export class TransactionImpl<S extends Schema, TWrappedTransaction>
   readonly mutationID: number;
   readonly mutate: SchemaCRUD<S>;
   readonly query: SchemaQuery<S>;
+  readonly after: (task: () => Promise<void>) => void;
 
   constructor(
     dbTransaction: DBTransaction<TWrappedTransaction>,
@@ -57,12 +59,14 @@ export class TransactionImpl<S extends Schema, TWrappedTransaction>
     mutationID: number,
     mutate: SchemaCRUD<S>,
     query: SchemaQuery<S>,
+    after: (task: () => Promise<void>) => void,
   ) {
     this.dbTransaction = dbTransaction;
     this.clientID = clientID;
     this.mutationID = mutationID;
     this.mutate = mutate;
     this.query = query;
+    this.after = after;
   }
 }
 
@@ -89,6 +93,7 @@ export async function makeServerTransaction<
     dbTransaction: DBTransaction<TWrappedTransaction>,
     serverSchema: ServerSchema,
   ) => SchemaQuery<S>,
+  after: (task: () => Promise<void>) => void,
 ) {
   const serverSchema = await getServerSchema(dbTransaction, schema);
   return new TransactionImpl(
@@ -97,6 +102,7 @@ export async function makeServerTransaction<
     mutationID,
     mutate(dbTransaction, serverSchema),
     query(dbTransaction, serverSchema),
+    after,
   );
 }
 

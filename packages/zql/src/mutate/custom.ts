@@ -38,6 +38,7 @@ export interface ServerTransaction<S extends Schema, TWrappedTransaction>
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
+  readonly after: (task: () => Promise<void>) => void;
 }
 
 /**
