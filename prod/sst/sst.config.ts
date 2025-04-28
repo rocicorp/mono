@@ -165,6 +165,7 @@ export default $config({
           {
             name: 'replication-manager',
             image: commonEnv.ZERO_IMAGE_URL,
+            link: [replicationBucket],
             health: {
               command: [
                 'CMD-SHELL',
@@ -215,6 +216,7 @@ export default $config({
           {
             name: 'view-syncer',
             image: commonEnv.ZERO_IMAGE_URL,
+            link: [replicationBucket],
             health: {
               command: [
                 'CMD-SHELL',
