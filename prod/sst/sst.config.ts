@@ -180,7 +180,7 @@ export default $config({
             retention: '1 month',
           },
         },
-        process.env.DATADOG_API_KEY,
+        {apiKey: process.env.DATADOG_API_KEY, appName: `${$app.name}-${$app.stage}`, appVersion: `${process.env.ZERO_IMAGE_URL}`},
       ),
 
       loadBalancer: {
@@ -222,7 +222,7 @@ export default $config({
             retention: '1 month',
           },
         },
-        process.env.DATADOG_API_KEY,
+        {apiKey: process.env.DATADOG_API_KEY, appName: `${$app.name}-${$app.stage}`, appVersion: `${process.env.ZERO_IMAGE_URL}`},
       ),
       loadBalancer: {
         public: true,

@@ -35,7 +35,11 @@ interface ContainerDefinition {
  */
 export function withOtelContainers(
   base: ContainerDefinition,
-  apiKey: string,
+  config: {
+    apiKey: string,
+    appName: string,
+    appVersion: string,
+  },
 ): any[] {
   const otelTaskRole = new aws.iam.Role(`${base.name}-otel-task-role`, {
     assumeRolePolicy: JSON.stringify({
@@ -81,12 +85,13 @@ export function withOtelContainers(
 
   const otelContainer = {
     name: 'otel',
-    image: 'public.ecr.aws/aws-observability/aws-otel-collector:latest',
+    image: 'otel/opentelemetry-collector-contrib:0.123.0-amd64',
     cpu: '0.25 vCPU',
     memory: '0.5 GB',
     essential: false,
     taskRole: otelTaskRole.arn,
     environment: {
+      OTEL_RESOURCE_ATTRIBUTES: `service.name=${config.appName},service.version=${config.appVersion}`,
       OTEL_CONFIG: `
       extensions:
         health_check:
@@ -109,32 +114,36 @@ export function withOtelContainers(
         batch/datadog:
           # Datadog APM Intake limit is 3.2MB.    
           send_batch_max_size: 1000
-          send_batch_size: 5
+          send_batch_size: 100
           timeout: 10s
         memory_limiter:
           check_interval: 1s
           limit_mib: 1000
-      
+        resourcedetection/env:
+          detectors: [env]
+          timeout: 2s
+          override: false
+      connectors:
+        datadog/connector:
       exporters:
         debug:
           verbosity: detailed
-        awsxray:
         awsemf:
           namespace: ECS/AWSOTel
           log_group_name: '/aws/ecs/otel/zero/metrics'
         datadog/api:
           hostname: zero-sandbox
           api:
-            key: ${apiKey}
+            key: ${config.apiKey}
             site: datadoghq.com
       service:
         pipelines:
           traces:
             receivers: [otlp]
-            processors: [batch/datadog]
-            exporters: [datadog/api, awsxray]
+            processors: [resourcedetection/env, batch/traces]
+            exporters: [datadog/connector, datadog/api]
           metrics:
-            receivers: [otlp]
+            receivers: [datadog/connector, otlp]
             processors: [batch/metrics]
             exporters: [datadog/api]
           logs:
@@ -147,7 +156,6 @@ export function withOtelContainers(
 
     command: [
       '--config=env:OTEL_CONFIG',
-      '--feature-gates=-exporter.datadogexporter.DisableAPMStats',
     ],
   };
 
