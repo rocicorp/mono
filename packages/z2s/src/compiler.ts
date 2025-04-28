@@ -142,8 +142,13 @@ export class Compiler {
   ): SQLQuery {
     const selectionSet = this.related(ast.related ?? [], format, ast.table);
     const tableSchema = this.#tables[ast.table];
+    const usedAliases = new Set<string>(
+      ast.related?.map(r => r.subquery.alias ?? ''),
+    );
     for (const column of Object.keys(tableSchema.columns)) {
-      selectionSet.push(this.#selectCol(ast.table, column));
+      if (!usedAliases.has(column)) {
+        selectionSet.push(this.#selectCol(ast.table, column));
+      }
     }
     return sql`SELECT ${sql.join(selectionSet, ',')} FROM ${this.#mapTable(
       ast.table,

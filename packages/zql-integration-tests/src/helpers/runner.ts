@@ -219,12 +219,16 @@ function makeQueries<TSchema extends Schema>(
 type Options<TSchema extends Schema> = {
   suiteName: string;
   zqlSchema: TSchema;
+  only?: string;
   // pg schema and, optionally, data to insert.
   pgContent: string;
   // Optional test data to insert (using client names).
   // You may also run insert statements in `pgContent`.
   testData?: (serverSchema: ServerSchema) => Record<string, Row[]>;
   push?: number;
+  setRawData?: (
+    raw: ReadonlyMap<keyof TSchema['tables'], readonly Row[]>,
+  ) => void;
 };
 
 export async function createVitests<TSchema extends Schema>(
@@ -232,29 +236,37 @@ export async function createVitests<TSchema extends Schema>(
     suiteName,
     zqlSchema,
     pgContent,
+    only,
     testData,
     push: pushEvery,
+    setRawData,
   }: Options<TSchema>,
-  testSpecs: readonly {
+  ...testSpecs: (readonly {
     name: string;
     createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
     manualVerification?: unknown;
-  }[],
+  }[])[]
 ) {
   const dbs = await makeDatabases(suiteName, zqlSchema, pgContent, testData);
   const delegates = makeDelegates(dbs, zqlSchema);
+  if (setRawData) {
+    setRawData(dbs.raw);
+  }
 
-  return testSpecs.map(({name, createQuery, manualVerification}) => ({
-    name,
-    fn: makeTest(
-      zqlSchema,
-      dbs,
-      delegates,
-      createQuery,
-      pushEvery ?? 1,
-      manualVerification,
-    ),
-  }));
+  return testSpecs
+    .flat()
+    .filter(t => (only ? only.includes(t.name) : true))
+    .map(({name, createQuery, manualVerification}) => ({
+      name,
+      fn: makeTest(
+        zqlSchema,
+        dbs,
+        delegates,
+        createQuery,
+        pushEvery ?? 1,
+        manualVerification,
+      ),
+    }));
 }
 
 function makeTest<TSchema extends Schema>(
