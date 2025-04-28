@@ -1,5 +1,7 @@
 /* eslint-disable */
 /// <reference path="./.sst/platform/config.d.ts" />
+
+
 // Load .env file
 
 
@@ -159,6 +161,31 @@ export function withOtelContainers(
     ],
   };
 
-  // 5) Return both definitions so SST will include them in your Task Definition
   return [appContainer, otelContainer];
+}
+
+
+export function addServiceWithOtel(
+  cluster: sst.aws.Cluster,
+  name: string,
+  serviceProps: Omit<any, "containers"> & { containers: any[] },
+  config: { apiKey: string; appName: string; appVersion: string }
+) {
+  const { containers, ...restProps } = serviceProps;
+
+  if (!containers || containers.length === 0) {
+    throw new Error(
+      "addServiceWithOtel requires at least one container definition in 'containers'"
+    );
+  }
+
+  const [baseContainer, ...extraContainers] = containers;
+
+  // Generate the OTEL-enhanced container definitions
+  const otelContainers = withOtelContainers(baseContainer, config);
+
+  return cluster.addService(name, {
+    ...restProps,
+    containers: [...otelContainers, ...extraContainers],
+  });
 }

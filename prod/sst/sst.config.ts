@@ -4,7 +4,7 @@
 require('@dotenvx/dotenvx').config();
 import {createDefu} from 'defu';
 import {join} from 'node:path';
-import {withOtelContainers} from './otel';
+import {withOtelContainers, addServiceWithOtel} from './otel';
 const defu = createDefu((obj, key, value) => {
   // Don't merge functions, just use the last one
   if (typeof obj[key] === 'function' || typeof value === 'function') {
@@ -157,171 +157,192 @@ export default $config({
     let otelUrl: $util.Output<string>;
 
     // Replication Manager Service
-    const replicationManager = cluster.addService(`replication-manager`, {
-      cpu: '2 vCPU',
-      memory: '8 GB',
-      containers: withOtelContainers(
-        {
-          name: 'replication-manager',
-          image: commonEnv.ZERO_IMAGE_URL,
-		  link: [replicationBucket],
-          health: {
-            command: ['CMD-SHELL', 'curl -f http://localhost:4849/ || exit 1'],
-            interval: '5 seconds',
-            retries: 3,
-            startPeriod: '300 seconds',
-          },
-          environment: {
-            ...commonEnv,
-            ZERO_CHANGE_MAX_CONNS: '3',
-            ZERO_NUM_SYNC_WORKERS: '0',
-          },
-          logging: {
-            retention: '1 month',
-          },
-        },
-        {apiKey: process.env.DATADOG_API_KEY, appName: `${$app.name}-${$app.stage}`, appVersion: `${process.env.ZERO_IMAGE_URL}`},
-      ),
-
-      loadBalancer: {
-        public: false,
-        ports: [
-          {
-            listen: '80/http',
-            forward: '4849/http',
-            container: 'replication-manager',
-          },
-          
-        ],
-      },
-      transform: defu(EBS_TRANSFORM, BASE_TRANSFORM),
-    });
-
-    // View Syncer Service
-    const viewSyncer = cluster.addService(`view-syncer`, {
-      cpu: '8 vCPU',
-      memory: '16 GB',
-      containers: withOtelContainers(
-        {
-          name: 'view-syncer',
-          image: commonEnv.ZERO_IMAGE_URL,
-		  link: [replicationBucket],
-          health: {
-            command: ['CMD-SHELL', 'curl -f http://localhost:4848/ || exit 1'],
-            interval: '5 seconds',
-            retries: 3,
-            startPeriod: '300 seconds',
-          },
-          environment: {
-            ...commonEnv,
-            ZERO_CHANGE_STREAMER_URI: replicationManager.url,
-            ZERO_UPSTREAM_MAX_CONNS: '15',
-            ZERO_CVR_MAX_CONNS: '160',
-          },
-          logging: {
-            retention: '1 month',
-          },
-        },
-        {apiKey: process.env.DATADOG_API_KEY, appName: `${$app.name}-${$app.stage}`, appVersion: `${process.env.ZERO_IMAGE_URL}`},
-      ),
-      loadBalancer: {
-        public: true,
-        //only set domain if both are provided
-        ...(process.env.DOMAIN_NAME && process.env.DOMAIN_CERT
-          ? {
-              domain: {
-                name: process.env.DOMAIN_NAME,
-                dns: false,
-                cert: process.env.DOMAIN_CERT,
-              },
-              ports: [
-                {
-                  listen: '80/http',
-                  forward: '4848/http',
-                  container: 'view-syncer',
-                },
-                {
-                  listen: '443/https',
-                  forward: '4848/http',
-                  container: 'view-syncer',
-                },
-              ],
-            }
-          : {
-              ports: [
-                {
-                  listen: '80/http',
-                  forward: '4848/http',
-                },
-              ],
-            }),
-      },
-      transform: defu(EBS_TRANSFORM, BASE_TRANSFORM, {
-        target: {
-          stickiness: {
-            enabled: true,
-            type: 'lb_cookie',
-            cookieDuration: 120,
-          },
-          loadBalancingAlgorithmType: 'least_outstanding_requests',
-        },
-        autoScalingTarget: {
-          minCapacity: 1,
-          maxCapacity: 10,
-        },
-      }),
-      // Set this to `true` to make SST wait for the view-syncer to be deployed
-      // before proceeding (to permissions deployment, etc.). This makes the deployment
-      // take a lot longer and is only necessary if there is an AST format change.
-      wait: false,
-    });
-
-    // if ($app.stage === 'sandbox') {
-    //   // In sandbox, deploy permissions in a Lambda.
-    //   const permissionsDeployer = new sst.aws.Function(
-    //     'zero-permissions-deployer',
-    //     {
-    //       handler: '../functions/src/permissions.deploy',
-    //       vpc,
-    //       environment: {
-    //         ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
-    //         ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
-    //       },
-    //       copyFiles: [
-    //         {from: '../../apps/zbugs/shared/schema.ts', to: './schema.ts'},
-    //       ],
-    //       nodejs: {install: ['@rocicorp/zero']},
-    //     },
-    //   );
-
-    //   new aws.lambda.Invocation(
-    //     'invoke-zero-permissions-deployer',
-    //     {
-    //       // Invoke the Lambda on every deploy.
-    //       input: Date.now().toString(),
-    //       functionName: permissionsDeployer.name,
-    //     },
-    //     {dependsOn: viewSyncer},
-    //   );
-    // } else {
-    // In prod, deploy permissions via a local Command, to exercise both approaches.
-    new command.local.Command(
-      'zero-deploy-permissions',
+    const replicationManager = addServiceWithOtel(
+      cluster,
+      `replication-manager`,
       {
-        // Pulumi operates with cwd at the package root.
-        dir: join(process.cwd(), '../../packages/zero/'),
-        create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/shared/schema.ts`,
-        environment: {
-          ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
-          ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
+        cpu: '2 vCPU',
+        memory: '8 GB',
+        containers: [
+          {
+            name: 'replication-manager',
+            image: commonEnv.ZERO_IMAGE_URL,
+			link: [replicationBucket],
+            health: {
+              command: [
+                'CMD-SHELL',
+                'curl -f http://localhost:4849/ || exit 1',
+              ],
+              interval: '5 seconds',
+              retries: 3,
+              startPeriod: '300 seconds',
+            },
+            environment: {
+              ...commonEnv,
+              ZERO_CHANGE_MAX_CONNS: '3',
+              ZERO_NUM_SYNC_WORKERS: '0',
+            },
+            logging: {
+              retention: '1 month',
+            },
+          },
+        ],
+        loadBalancer: {
+          public: false,
+          ports: [
+            {
+              listen: '80/http',
+              forward: '4849/http',
+              container: 'replication-manager',
+            },
+          ],
         },
-        // Run the Command on every deploy.
-        triggers: [Date.now()],
+        transform: defu(EBS_TRANSFORM, BASE_TRANSFORM),
       },
-      // after the view-syncer is deployed.
-      {dependsOn: viewSyncer},
+
+      {
+        apiKey: process.env.DATADOG_API_KEY,
+        appName: `${$app.name}-${$app.stage}`,
+        appVersion: `${process.env.ZERO_IMAGE_URL}`,
+      },
     );
 
-    // }
+    // View Syncer Service
+    const viewSyncer = addServiceWithOtel(
+      cluster,
+      `view-syncer`,
+      {
+        cpu: '8 vCPU',
+        memory: '16 GB',
+        containers: [
+          {
+            name: 'view-syncer',
+            image: commonEnv.ZERO_IMAGE_URL,
+			link: [replicationBucket],
+            health: {
+              command: [
+                'CMD-SHELL',
+                'curl -f http://localhost:4848/ || exit 1',
+              ],
+              interval: '5 seconds',
+              retries: 3,
+              startPeriod: '300 seconds',
+            },
+            environment: {
+              ...commonEnv,
+              ZERO_CHANGE_STREAMER_URI: replicationManager.url,
+              ZERO_UPSTREAM_MAX_CONNS: '15',
+              ZERO_CVR_MAX_CONNS: '160',
+            },
+            logging: {
+              retention: '1 month',
+            },
+          },
+        ],
+
+        loadBalancer: {
+          public: true,
+          //only set domain if both are provided
+          ...(process.env.DOMAIN_NAME && process.env.DOMAIN_CERT
+            ? {
+                domain: {
+                  name: process.env.DOMAIN_NAME,
+                  dns: false,
+                  cert: process.env.DOMAIN_CERT,
+                },
+                ports: [
+                  {
+                    listen: '80/http',
+                    forward: '4848/http',
+                    container: 'view-syncer',
+                  },
+                  {
+                    listen: '443/https',
+                    forward: '4848/http',
+                    container: 'view-syncer',
+                  },
+                ],
+              }
+            : {
+                ports: [
+                  {
+                    listen: '80/http',
+                    forward: '4848/http',
+                  },
+                ],
+              }),
+        },
+        transform: defu(EBS_TRANSFORM, BASE_TRANSFORM, {
+          target: {
+            stickiness: {
+              enabled: true,
+              type: 'lb_cookie',
+              cookieDuration: 120,
+            },
+            loadBalancingAlgorithmType: 'least_outstanding_requests',
+          },
+          autoScalingTarget: {
+            minCapacity: 1,
+            maxCapacity: 10,
+          },
+        }),
+        // Set this to `true` to make SST wait for the view-syncer to be deployed
+        // before proceeding (to permissions deployment, etc.). This makes the deployment
+        // take a lot longer and is only necessary if there is an AST format change.
+        wait: false,
+      },
+      {
+        apiKey: process.env.DATADOG_API_KEY,
+        appName: `${$app.name}-${$app.stage}`,
+        appVersion: `${process.env.ZERO_IMAGE_URL}`,
+      },
+    );
+
+    if ($app.stage === 'sandbox') {
+      // In sandbox, deploy permissions in a Lambda.
+      const permissionsDeployer = new sst.aws.Function(
+        'zero-permissions-deployer',
+        {
+          handler: '../functions/src/permissions.deploy',
+          vpc,
+          environment: {
+            ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
+            ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
+          },
+          copyFiles: [
+            {from: '../../apps/zbugs/shared/schema.ts', to: './schema.ts'},
+          ],
+          nodejs: {install: ['@rocicorp/zero']},
+        },
+      );
+
+      new aws.lambda.Invocation(
+        'invoke-zero-permissions-deployer',
+        {
+          // Invoke the Lambda on every deploy.
+          input: Date.now().toString(),
+          functionName: permissionsDeployer.name,
+        },
+        {dependsOn: viewSyncer},
+      );
+    } else {
+      // In prod, deploy permissions via a local Command, to exercise both approaches.
+      new command.local.Command(
+        'zero-deploy-permissions',
+        {
+          // Pulumi operates with cwd at the package root.
+          dir: join(process.cwd(), '../../packages/zero/'),
+          create: `npx zero-deploy-permissions --schema-path ../../apps/zbugs/shared/schema.ts`,
+          environment: {
+            ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
+            ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
+          },
+          // Run the Command on every deploy.
+          triggers: [Date.now()],
+        },
+        // after the view-syncer is deployed.
+        {dependsOn: viewSyncer},
+      );
+    }
   },
 });
