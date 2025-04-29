@@ -440,8 +440,8 @@ export type Column = string;
 export type RefCounts = Record<Hash, number>;
 
 type RowPatchInfo = {
-  op: 'put' | 'del';
-  toVersion: CVRVersion;
+  rowVersion: string | null; // null for a row-del
+  toVersion: CVRVersion; // patchVersion
 };
 
 /**
@@ -727,7 +727,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         // delete it.
         if (existing || previouslyReceived) {
           // dedupe
-          if (lastPatch?.op !== 'del') {
+          if (lastPatch?.rowVersion !== null) {
             patches.push({
               patch: {
                 type: 'row',
@@ -736,12 +736,13 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
               },
               toVersion,
             });
-            this.#lastPatches.set(id, {op: 'del', toVersion});
+            this.#lastPatches.set(id, {rowVersion: null, toVersion});
           }
         }
       } else if (contents) {
+        assert(rowVersion);
         // dedupe
-        if (lastPatch?.op !== 'put') {
+        if (!lastPatch?.rowVersion || lastPatch.rowVersion < rowVersion) {
           patches.push({
             patch: {
               type: 'row',
@@ -751,7 +752,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
             },
             toVersion,
           });
-          this.#lastPatches.set(id, {op: 'put', toVersion});
+          this.#lastPatches.set(id, {rowVersion, toVersion});
         }
       }
     }
