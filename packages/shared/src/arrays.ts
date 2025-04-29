@@ -33,6 +33,13 @@ export function zip<T1, T2>(a1: readonly T1[], a2: readonly T2[]): [T1, T2][] {
   return result;
 }
 
+export function last<T>(arr: T[]): T | undefined {
+  if (arr.length === 0) {
+    return undefined;
+  }
+  return arr[arr.length - 1];
+}
+
 export function groupBy<T, K>(
   arr: readonly T[],
   keyFn: (el: T) => K,
