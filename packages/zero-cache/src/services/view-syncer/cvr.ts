@@ -23,6 +23,7 @@ import {type CVRFlushStats, type CVRStore} from './cvr-store.ts';
 import {KeyColumns} from './key-columns.ts';
 import {
   cmpVersions,
+  maxVersion,
   oneAfter,
   versionString,
   type CVRVersion,
@@ -438,6 +439,11 @@ type Hash = string;
 export type Column = string;
 export type RefCounts = Record<Hash, number>;
 
+type RowPatchInfo = {
+  op: 'put' | 'del';
+  toVersion: CVRVersion;
+};
+
 /**
  * A {@link CVRQueryDrivenUpdater} is used for updating a CVR after making queries.
  * The caller should invoke:
@@ -458,6 +464,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     rowIDString,
   );
   readonly #replacedRows = new CustomKeyMap<RowID, boolean>(rowIDString);
+  readonly #lastPatches = new CustomKeyMap<RowID, RowPatchInfo>(rowIDString);
 
   #existingRows: Promise<Iterable<RowRecord>> | undefined = undefined;
 
@@ -710,29 +717,42 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         this._cvrStore.delRowRecord(id);
       }
 
+      // Dedupe against the lastPatch sent for the row, and ensure that
+      // toVersion never backtracks (lest it be undesirably filtered).
+      const lastPatch = this.#lastPatches.get(id);
+      const toVersion = maxVersion(patchVersion, lastPatch?.toVersion);
+
       if (merged === null) {
         // All refCounts have gone to zero, if row was previously synced
         // delete it.
         if (existing || previouslyReceived) {
+          // dedupe
+          if (lastPatch?.op !== 'del') {
+            patches.push({
+              patch: {
+                type: 'row',
+                op: 'del',
+                id,
+              },
+              toVersion,
+            });
+            this.#lastPatches.set(id, {op: 'del', toVersion});
+          }
+        }
+      } else if (contents) {
+        // dedupe
+        if (lastPatch?.op !== 'put') {
           patches.push({
             patch: {
               type: 'row',
-              op: 'del',
+              op: 'put',
               id,
+              contents,
             },
-            toVersion: patchVersion,
+            toVersion,
           });
+          this.#lastPatches.set(id, {op: 'put', toVersion});
         }
-      } else if (contents) {
-        patches.push({
-          patch: {
-            type: 'row',
-            op: 'put',
-            id,
-            contents,
-          },
-          toVersion: patchVersion,
-        });
       }
     }
     return patches;
