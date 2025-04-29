@@ -736,8 +736,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
               },
               toVersion,
             });
+            this.#lastPatches.set(id, {op: 'del', toVersion});
           }
-          this.#lastPatches.set(id, {op: 'del', toVersion});
         }
       } else if (contents) {
         // dedupe
@@ -751,8 +751,8 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
             },
             toVersion,
           });
+          this.#lastPatches.set(id, {op: 'put', toVersion});
         }
-        this.#lastPatches.set(id, {op: 'put', toVersion});
       }
     }
     return patches;
