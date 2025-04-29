@@ -1595,16 +1595,8 @@ describe('view-syncer/cvr', () => {
         ]),
       ),
     ).toEqual([
-      {
-        toVersion: {stateVersion: '1a0'},
-        patch: {
-          type: 'row',
-          op: 'put',
-          id: ROW_ID1,
-          contents: {id: 'should-show-up-in-patch'},
-        },
-      },
-    ] satisfies PatchToVersion[]);
+      // deduped
+    ]);
 
     expect(await updater.deleteUnreferencedRows()).toEqual([]);
 
@@ -2553,16 +2545,8 @@ describe('view-syncer/cvr', () => {
         ]),
       ),
     ).toEqual([
-      {
-        toVersion: {stateVersion: '1aa', minorVersion: 1},
-        patch: {
-          type: 'row',
-          op: 'put',
-          id: ROW_ID1,
-          contents: {id: 'existing-patch'},
-        },
-      },
-    ] satisfies PatchToVersion[]);
+      // deduped
+    ]);
     await updater.received(
       lc,
       new Map([
@@ -3530,16 +3514,8 @@ describe('view-syncer/cvr', () => {
         ]),
       ),
     ).toEqual([
-      {
-        toVersion: {stateVersion: '1aa', minorVersion: 1},
-        patch: {
-          type: 'row',
-          op: 'put',
-          id: ROW_ID1,
-          contents: {id: 'existing-patch'},
-        },
-      },
-    ] satisfies PatchToVersion[]);
+      // deduped
+    ]);
     await updater.received(
       lc,
       new Map([
@@ -4434,6 +4410,160 @@ describe('view-syncer/cvr', () => {
         },
       ],
     });
+  });
+
+  test('advance with delete and re-add existing row', async () => {
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1aa',
+          replicaVersion: '120',
+          lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
+        },
+      ],
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      queries: [
+        {
+          clientGroupID: 'abc123',
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          transformationHash: null,
+          transformationVersion: null,
+          patchVersion: null,
+          internal: null,
+          deleted: null,
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+          inactivatedAt: null,
+          ttl: null,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY1,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY2,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    };
+
+    await setInitialState(db, initialState);
+
+    const cvrStore = new CVRStore(
+      lc,
+      db,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, LAST_CONNECT);
+    const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+    const newVersion = updater.updatedVersion();
+    expect(newVersion).toEqual({
+      stateVersion: '1ba',
+    });
+
+    expect(
+      await updater.received(
+        lc,
+        new Map([[ROW_ID1, {refCounts: {oneHash: -1}}]]),
+      ),
+    ).toEqual([
+      {
+        toVersion: {stateVersion: '1ba'},
+        patch: {
+          type: 'row',
+          op: 'del',
+          id: ROW_ID1,
+        },
+      },
+    ] satisfies PatchToVersion[]);
+
+    expect(
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {
+              version: '03',
+              refCounts: {oneHash: 1},
+              contents: {id: 'im-back'},
+            },
+          ],
+        ]),
+      ),
+    ).toEqual([
+      {
+        // Note: The toVersion needs to be bumped, even though the row
+        //       technically has not changed, in order to override the
+        //       row-del that was previously sent.
+        toVersion: {stateVersion: '1ba'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: ROW_ID1,
+          contents: {id: 'im-back'},
+        },
+      },
+    ] satisfies PatchToVersion[]);
+
+    expect(
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {
+              version: '03',
+              refCounts: {oneHash: 0},
+              contents: {id: 'im-back'},
+            },
+          ],
+        ]),
+      ),
+    ).toEqual([
+      // deduped
+    ]);
+
+    // No net change to the CVR expected.
+    const {flushed} = await updater.flush(
+      lc,
+      LAST_CONNECT,
+      Date.UTC(2024, 3, 23, 1),
+    );
+    expect(flushed).toBe(false);
   });
 
   test('advance with add and delete of new row', async () => {

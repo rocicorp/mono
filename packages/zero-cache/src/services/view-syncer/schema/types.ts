@@ -62,6 +62,10 @@ export function cmpVersions(
             : (a.minorVersion ?? 0) - (b.minorVersion ?? 0);
 }
 
+export function maxVersion(a: CVRVersion, b?: CVRVersion): CVRVersion {
+  return !b ? a : cmpVersions(b, a) > 0 ? b : a;
+}
+
 export function versionToCookie(v: CVRVersion): string {
   return versionString(v);
 }
