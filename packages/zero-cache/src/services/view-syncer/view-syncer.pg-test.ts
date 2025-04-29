@@ -230,6 +230,112 @@ const ISSUES_QUERY_WITH_RELATED: AST = {
   ],
 };
 
+const ISSUES_QUERY_WITH_EXISTS_AND_RELATED: AST = {
+  table: 'issues',
+  orderBy: [['id', 'asc']],
+  where: {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      system: 'client',
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueID'],
+      },
+      subquery: {
+        table: 'comments',
+        alias: 'exists_comments',
+        orderBy: [
+          ['issueID', 'asc'],
+          ['id', 'asc'],
+        ],
+        where: {
+          type: 'simple',
+          left: {
+            type: 'column',
+            name: 'text',
+          },
+          op: '=',
+          right: {
+            type: 'literal',
+            value: 'foo',
+          },
+        },
+      },
+    },
+  },
+  related: [
+    {
+      system: 'client',
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueID'],
+      },
+      subquery: {
+        table: 'comments',
+        alias: 'comments',
+        orderBy: [
+          ['issueID', 'asc'],
+          ['id', 'asc'],
+        ],
+      },
+    },
+  ],
+};
+
+const ISSUES_QUERY_WITH_NOT_EXISTS_AND_RELATED: AST = {
+  table: 'issues',
+  orderBy: [['id', 'asc']],
+  where: {
+    type: 'correlatedSubquery',
+    op: 'NOT EXISTS',
+    related: {
+      system: 'client',
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueID'],
+      },
+      subquery: {
+        table: 'comments',
+        alias: 'exists_comments',
+        orderBy: [
+          ['issueID', 'asc'],
+          ['id', 'asc'],
+        ],
+        where: {
+          type: 'simple',
+          left: {
+            type: 'column',
+            name: 'text',
+          },
+          op: '=',
+          right: {
+            type: 'literal',
+            value: 'bar',
+          },
+        },
+      },
+    },
+  },
+  related: [
+    {
+      system: 'client',
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueID'],
+      },
+      subquery: {
+        table: 'comments',
+        alias: 'comments',
+        orderBy: [
+          ['issueID', 'asc'],
+          ['id', 'asc'],
+        ],
+      },
+    },
+  ],
+};
+
 const ISSUES_QUERY2: AST = {
   table: 'issues',
   orderBy: [['id', 'asc']],
@@ -423,7 +529,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
   INSERT INTO "labels" (id, name, _0_version) VALUES ('1', 'bug', '01');
 
   INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('1', '1', 'comment 1', '01');
-  INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('2', '1', 'comment 2', '01');
+  INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('2', '1', 'bar', '01');
   `);
 
   const cvrDB = await testDBs.create('view_syncer_service_test');
@@ -550,6 +656,7 @@ const messages = new ReplicationMessages({
   issues: 'id',
   users: 'id',
   issueLabels: ['issueID', 'labelID'],
+  comments: 'id',
 });
 const appMessages = new ReplicationMessages(
   {
@@ -3871,6 +3978,165 @@ describe('view-syncer/service', () => {
     `);
   });
 
+  test('query with exists and related', async () => {
+    const client = connect(SYNC_CONTEXT, [
+      {
+        op: 'put',
+        hash: 'query-hash',
+        ast: ISSUES_QUERY_WITH_EXISTS_AND_RELATED,
+      },
+    ]);
+    await nextPoke(client); // config update
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client); // hydration
+
+    // Satisfy the exists condition
+    replicator.processTransaction(
+      '123',
+      messages.update('comments', {
+        id: '1',
+        text: 'foo',
+      }),
+    );
+
+    stateChanges.push({state: 'version-ready'});
+
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01",
+            "pokeID": "123",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "pokeID": "123",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "json": null,
+                  "owner": "100",
+                  "parent": null,
+                  "title": "parent issue foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "comments",
+                "value": {
+                  "id": "1",
+                  "issueID": "1",
+                  "text": "foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "comments",
+                "value": {
+                  "id": "2",
+                  "issueID": "1",
+                  "text": "bar",
+                },
+              },
+            ],
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "123",
+            "pokeID": "123",
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('query with not exists and related', async () => {
+    const client = connect(SYNC_CONTEXT, [
+      {
+        op: 'put',
+        hash: 'query-hash',
+        ast: ISSUES_QUERY_WITH_NOT_EXISTS_AND_RELATED,
+      },
+    ]);
+    await nextPoke(client); // config update
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client); // hydration
+
+    // Satisfy the not-exists condition by deleting the comment
+    // that matches text='bar'.
+    replicator.processTransaction(
+      '123',
+      messages.delete('comments', {id: '2'}),
+    );
+
+    stateChanges.push({state: 'version-ready'});
+
+    expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "01",
+            "pokeID": "123",
+            "schemaVersions": {
+              "maxSupportedVersion": 3,
+              "minSupportedVersion": 2,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "pokeID": "123",
+            "rowsPatch": [
+              {
+                "op": "put",
+                "tableName": "issues",
+                "value": {
+                  "big": 9007199254740991,
+                  "id": "1",
+                  "json": null,
+                  "owner": "100",
+                  "parent": null,
+                  "title": "parent issue foo",
+                },
+              },
+              {
+                "op": "put",
+                "tableName": "comments",
+                "value": {
+                  "id": "1",
+                  "issueID": "1",
+                  "text": "comment 1",
+                },
+              },
+            ],
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "123",
+            "pokeID": "123",
+          },
+        ],
+      ]
+    `);
+  });
+
   describe('expired queries', () => {
     test('expired query is removed', async () => {
       const ttl = 100;
@@ -5253,7 +5519,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "id": "2",
                   "issueID": "1",
-                  "text": "comment 2",
+                  "text": "bar",
                 },
               },
             ],
@@ -5545,7 +5811,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "id": "2",
                   "issueID": "1",
-                  "text": "comment 2",
+                  "text": "bar",
                 },
               },
               {
@@ -5940,7 +6206,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "id": "2",
                   "issueID": "1",
-                  "text": "comment 2",
+                  "text": "bar",
                 },
               },
               {
@@ -6229,7 +6495,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "id": "2",
                   "issueID": "1",
-                  "text": "comment 2",
+                  "text": "bar",
                 },
               },
             ],
@@ -6505,7 +6771,7 @@ describe('view-syncer/service', () => {
                 "value": {
                   "id": "2",
                   "issueID": "1",
-                  "text": "comment 2",
+                  "text": "bar",
                 },
               },
               {
@@ -7989,7 +8255,7 @@ describe('permissions', () => {
                 "value": {
                   "id": "2",
                   "issueID": "1",
-                  "text": "comment 2",
+                  "text": "bar",
                 },
               },
             ],

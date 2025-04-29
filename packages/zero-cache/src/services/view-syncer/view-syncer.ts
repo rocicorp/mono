@@ -31,6 +31,7 @@ import type {
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import type {Upstream} from '../../../../zero-protocol/src/up.ts';
 import {transformAndHashQuery} from '../../auth/read-authorizer.ts';
+import instruments from '../../observability/view-syncer-instruments.ts';
 import {stringify} from '../../types/bigint-json.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -72,7 +73,6 @@ import {
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
-import instruments from '../../observability/view-syncer-instruments.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -1175,11 +1175,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           queryIDs.forEach(hash => (parsedRow.refCounts[hash] ??= 0));
 
           const updateVersion = (row: Row) => {
-            if (!parsedRow.version) {
-              const {version, contents} = contentsAndVersion(row);
-              parsedRow.version = version;
-              parsedRow.contents = contents;
-            }
+            // IVM can output multiple versions of a row as it goes through its
+            // intermediate stages. Always update the version and contents;
+            // the last version will reflect the final state.
+            const {version, contents} = contentsAndVersion(row);
+            parsedRow.version = version;
+            parsedRow.contents = contents;
           };
           switch (type) {
             case 'add':

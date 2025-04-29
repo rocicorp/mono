@@ -4412,6 +4412,272 @@ describe('view-syncer/cvr', () => {
     });
   });
 
+  test('advance with adds and different versions of a row', async () => {
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1aa',
+          replicaVersion: '120',
+          lastActive: Date.UTC(2024, 3, 23),
+          clientSchema: null,
+        },
+      ],
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      queries: [
+        {
+          clientGroupID: 'abc123',
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          transformationHash: null,
+          transformationVersion: null,
+          patchVersion: null,
+          internal: null,
+          deleted: null,
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+          inactivatedAt: null,
+          ttl: null,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY1,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY2,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    };
+
+    await setInitialState(db, initialState);
+
+    const cvrStore = new CVRStore(
+      lc,
+      db,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, LAST_CONNECT);
+    const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '120');
+
+    const newVersion = updater.updatedVersion();
+    expect(newVersion).toEqual({
+      stateVersion: '1ba',
+    });
+
+    expect(
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {
+              version: '03',
+              refCounts: {oneHash: 0},
+              contents: {id: 'old-view-of-row'},
+            },
+          ],
+        ]),
+      ),
+    ).toEqual([
+      {
+        toVersion: {stateVersion: '1a0'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: ROW_ID1,
+          contents: {id: 'old-view-of-row'},
+        },
+      },
+    ] satisfies PatchToVersion[]);
+
+    expect(
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {
+              version: '04',
+              refCounts: {oneHash: 0},
+              contents: {id: 'new-view-of-row'},
+            },
+          ],
+        ]),
+      ),
+    ).toEqual([
+      {
+        toVersion: {stateVersion: '1ba'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: ROW_ID1,
+          contents: {id: 'new-view-of-row'},
+        },
+      },
+    ] satisfies PatchToVersion[]);
+
+    expect(
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {
+              version: '03',
+              refCounts: {oneHash: 0},
+              contents: {id: 'old-view-of-row'},
+            },
+          ],
+        ]),
+      ),
+    ).toEqual([
+      // suppressed - doesn't go backwards
+    ]);
+
+    expect(
+      await updater.received(
+        lc,
+        new Map([
+          [
+            ROW_ID1,
+            {
+              version: '04',
+              refCounts: {oneHash: 0},
+              contents: {id: 'new-view-of-row'},
+            },
+          ],
+        ]),
+      ),
+    ).toEqual([
+      // deduped
+    ]);
+
+    // Same last active day (no index change), but different hour.
+    const {cvr: updated, flushed} = await updater.flush(
+      lc,
+      LAST_CONNECT,
+      Date.UTC(2024, 3, 23, 1),
+    );
+    expect(flushed).toMatchInlineSnapshot(`
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 1,
+        "queries": 0,
+        "rows": 1,
+        "rowsDeferred": 0,
+        "statements": 3,
+      }
+    `);
+
+    // Verify round tripping.
+    const cvrStore2 = new CVRStore(
+      lc,
+      db,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
+    expect(reloaded).toEqual(updated);
+
+    await expectState(db, {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1ba',
+          replicaVersion: '120',
+          lastActive: Date.UTC(2024, 3, 23, 1),
+          owner: 'my-task',
+          grantedAt: 1709251200000,
+          clientSchema: null,
+        },
+      ],
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          patchVersion: '1a9:01',
+          deleted: null,
+        },
+      ],
+      queries: [
+        {
+          clientGroupID: 'abc123',
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          transformationHash: null,
+          transformationVersion: null,
+          patchVersion: null,
+          internal: null,
+          deleted: null,
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+          inactivatedAt: null,
+          ttl: null,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY2,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY1,
+          rowVersion: '04',
+          refCounts: {oneHash: 1},
+          patchVersion: '1ba',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    });
+  });
+
   test('advance with delete and re-add existing row', async () => {
     const initialState: DBState = {
       instances: [
