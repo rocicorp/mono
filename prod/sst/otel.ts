@@ -11,7 +11,7 @@ interface ContainerDefinition {
     retries: number;
     startPeriod: string;
   };
-  environment?: Record<string, string| any> 
+  environment?: Record<string, string | any>;
   logging?: {
     retention: string;
   };
@@ -33,9 +33,9 @@ interface ContainerDefinition {
 export function withOtelContainers(
   base: ContainerDefinition,
   config: {
-    apiKey: string,
-    appName: string,
-    appVersion: string,
+    apiKey: string;
+    appName: string;
+    appVersion: string;
   },
 ): any[] {
   const otelTaskRole = new aws.iam.Role(`${base.name}-otel-task-role`, {
@@ -151,26 +151,23 @@ export function withOtelContainers(
                 `,
     },
 
-    command: [
-      '--config=env:OTEL_CONFIG',
-    ],
+    command: ['--config=env:OTEL_CONFIG'],
   };
 
   return [appContainer, otelContainer];
 }
 
-
 export function addServiceWithOtel(
   cluster: sst.aws.Cluster,
   name: string,
-  serviceProps: Omit<any, "containers"> & { containers: any[] },
-  config: { apiKey: string; appName: string; appVersion: string }
+  serviceProps: Omit<any, 'containers'> & {containers: any[]},
+  config: {apiKey: string; appName: string; appVersion: string},
 ) {
-  const { containers, ...restProps } = serviceProps;
+  const {containers, ...restProps} = serviceProps;
 
   if (!containers || containers.length === 0) {
     throw new Error(
-      "addServiceWithOtel requires at least one container definition in 'containers'"
+      "addServiceWithOtel requires at least one container definition in 'containers'",
     );
   }
 
