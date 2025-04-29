@@ -5,7 +5,11 @@ import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import type {DBTransaction, SchemaQuery} from '../../zql/src/mutate/custom.ts';
-import {AbstractQuery, defaultFormat} from '../../zql/src/query/query-impl.ts';
+import {
+  AbstractQuery,
+  defaultFormat,
+  newQuerySymbol,
+} from '../../zql/src/query/query-impl.ts';
 import type {HumanReadable, PullRow, Query} from '../../zql/src/query/query.ts';
 import type {TypedView} from '../../zql/src/query/typed-view.ts';
 
@@ -82,15 +86,13 @@ export class ZPGQuery<
     ast: AST,
     format: Format,
   ) {
-    super(schema, tableName, ast, format);
+    super(schema, tableName, ast, format, 'permissions');
     this.#dbTransaction = dbTransaction;
     this.#schema = schema;
     this.#serverSchema = serverSchema;
   }
 
-  protected readonly _system = 'permissions';
-
-  protected _newQuery<
+  protected [newQuerySymbol]<
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
