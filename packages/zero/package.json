@@ -41,6 +41,7 @@
     "@opentelemetry/resources": "^2.0.0",
     "@opentelemetry/sdk-node": "^0.200.0",
     "@opentelemetry/sdk-trace-node": "^2.0.0",
+    "@opentelemetry/sdk-metrics": "^2.0.0",
     "@postgresql-typed/oids": "^0.2.0",
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
