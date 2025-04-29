@@ -9,8 +9,6 @@ import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {PullRow} from '../../../zql/src/query/query.ts';
 
-// we need to auto-alias tables. `reportsTo` is a self join.
-const brokenRelationships = ['reportsTo'];
 // Junction edges do not correctly handle limits in ZQL
 const brokenRelationshipLimits = ['tracks'];
 
@@ -28,6 +26,7 @@ test.each(
     {
       suiteName: 'compiler_chinook',
       pgContent,
+      only: 'In operator',
       zqlSchema: schema,
       setRawData: r => {
         data = r;
@@ -49,15 +48,13 @@ test.each(
           },
         ],
       },
-      // TODO: self join is broken
-      // reportsTo is a broken relationship in z2s due to self join
-      // {
-      //   name: '3 level related: customer -> supportRep -> reportsTo',
-      //   createQuery: q =>
-      //     q.invoice.related('customer', c =>
-      //       c.related('supportRep', r => r.related('reportsTo')),
-      //     ),
-      // },
+      {
+        name: '3 level related: customer -> supportRep -> reportsTo',
+        createQuery: q =>
+          q.invoice.related('customer', c =>
+            c.related('supportRep', r => r.related('reportsTo')),
+          ),
+      },
       {
         name: 'Build a playlist',
         createQuery: q =>
@@ -83,12 +80,11 @@ test.each(
         name: 'Tracks that have been sold (exists testing)',
         createQuery: q => q.track.where(({exists}) => exists('invoiceLines')),
       },
-      // TODO: not(exists) is broken
-      // {
-      //   name: 'Tracks that have not been sold (not exists testing)',
-      //   createQuery: q =>
-      //     q.track.where(({not, exists}) => not(exists('invoiceLines'))),
-      // },
+      {
+        name: 'Tracks that have not been sold (not exists testing)',
+        createQuery: q =>
+          q.track.where(({not, exists}) => not(exists('invoiceLines'))),
+      },
       {
         name: 'Tracks sold or in a playlist (exists in or)',
         createQuery: q =>
@@ -147,31 +143,36 @@ test.each(
         name: 'Not like',
         createQuery: q => q.album.where('title', 'NOT LIKE', '%Act').limit(1),
       },
-      // TODO: `in` and `not in` are broken
-      // {
-      //   name: 'In operator',
-      //   createQuery: q =>
-      //     q.album.where('title', 'IN', ['Riot Act', 'For Those About To Rock']),
-      //   manualVerification: [
-      //     {
-      //       artistId: 118,
-      //       id: 180,
-      //       title: 'Riot Act',
-      //     },
-      //     {
-      //       artistId: 1,
-      //       id: 2,
-      //       title: 'For Those About To Rock We Salute You',
-      //     },
-      //   ],
-      // },
-      // {
-      //   name: 'Not in operator',
-      //   createQuery: q =>
-      //     q.album
-      //       .where('title', 'NOT IN', ['Riot Act', 'For Those About To Rock'])
-      //       .limit(10),
-      // },
+      {
+        name: 'In operator',
+        createQuery: q =>
+          q.album.where('title', 'IN', [
+            'Riot Act',
+            'For Those About To Rock We Salute You',
+          ]),
+        manualVerification: [
+          {
+            artistId: 1,
+            id: 1,
+            title: 'For Those About To Rock We Salute You',
+          },
+          {
+            artistId: 118,
+            id: 180,
+            title: 'Riot Act',
+          },
+        ],
+      },
+      {
+        name: 'Not in operator',
+        createQuery: q =>
+          q.album
+            .where('title', 'NOT IN', [
+              'Riot Act',
+              'For Those About To Rock We Salute You',
+            ])
+            .limit(10),
+      },
     ],
     // compare against primary key for each operator
     (() =>
@@ -227,25 +228,19 @@ test.each(
     // table.related('relationship')
     (() =>
       tables.flatMap(table =>
-        getRelationships(table)
-          .filter(r => !brokenRelationships.includes(r))
-          .map(
-            relationship =>
-              ({
-                name: `${table}.related('${relationship}')`,
-                createQuery: q => (q[table] as AnyQuery).related(relationship),
-              }) as const,
-          ),
+        getRelationships(table).map(
+          relationship =>
+            ({
+              name: `${table}.related('${relationship}')`,
+              createQuery: q => (q[table] as AnyQuery).related(relationship),
+            }) as const,
+        ),
       ))(),
     // table.related('relationship', q => q.limit(100))
     (() =>
       tables.flatMap(table =>
         getRelationships(table)
-          .filter(
-            r =>
-              !brokenRelationships.includes(r) &&
-              !brokenRelationshipLimits.includes(r),
-          )
+          .filter(r => !brokenRelationshipLimits.includes(r))
           .map(
             relationship =>
               ({
@@ -277,17 +272,21 @@ test.each(
       // n-ary or
       (() => {
         const n = 5;
-        let cached: Array<Rrc<'artist'>> | undefined;
+        let cached:
+          | {rowsAndColumns: Array<Rrc<'artist'>>; operators: SimpleOperator[]}
+          | undefined;
         const rrc = () =>
           cached ??
-          (cached = Array.from({length: n}, () =>
-            randomRowAndColumn('artist'),
-          ));
+          (cached = {
+            rowsAndColumns: Array.from({length: n}, () =>
+              randomRowAndColumn('artist'),
+            ),
+            operators: Array.from({length: n}, () => randomOperator()),
+          });
         return {
           name: 'n-branches',
           createQuery: q => {
-            const rowsAndColumns = rrc();
-            const operators = Array.from({length: n}, () => randomOperator());
+            const {rowsAndColumns, operators} = rrc();
             return q.artist.where(({or, cmp}) =>
               or(
                 ...rowsAndColumns.map(({randomRow, randomColumn}, i) =>

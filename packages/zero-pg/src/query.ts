@@ -115,9 +115,9 @@ export class ZPGQuery<
       this.#query ??
       formatPgInternalConvert(
         compile(
-          this._completeAst(),
-          this.#schema.tables,
           this.#serverSchema,
+          this.#schema,
+          this._completeAst(),
           this.format,
         ),
       );

@@ -211,7 +211,7 @@ describe('compiling ZQL to SQL', () => {
   ) {
     test('All bigints in safe Number range', async () => {
       const query = issueQuery.related('comments').limit(2);
-      const c = compile(completedAST(query), schema.tables, serverSchema);
+      const c = compile(serverSchema, schema, completedAST(query));
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
@@ -258,7 +258,7 @@ describe('compiling ZQL to SQL', () => {
 
     test('bigint exceeds safe range', async () => {
       const query = issueQuery.related('comments');
-      const c = compile(completedAST(query), schema.tables, serverSchema);
+      const c = compile(serverSchema, schema, completedAST(query));
       const sqlQuery = formatPgInternalConvert(c);
       const result = await runPgQuery(
         sqlQuery.text,
@@ -276,7 +276,7 @@ describe('compiling ZQL to SQL', () => {
           .where('hash', '<', Number(Number.MAX_SAFE_INTEGER))
           .where('hash', '!=', Number(Number.MAX_SAFE_INTEGER - 3)),
       );
-      const c = compile(completedAST(query), schema.tables, serverSchema);
+      const c = compile(serverSchema, schema, completedAST(query));
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
@@ -323,7 +323,7 @@ describe('compiling ZQL to SQL', () => {
       const q2 = issueQuery.related('comments', q =>
         q.where('hash', '=', Number.MAX_SAFE_INTEGER - 3),
       );
-      const c2 = compile(completedAST(q2), schema.tables, serverSchema);
+      const c2 = compile(serverSchema, schema, completedAST(q2));
       const sqlQuery2 = formatPgInternalConvert(c2);
       const pgResult2 = extractZqlResult(
         await runPgQuery(sqlQuery2.text, sqlQuery2.values as JSONValue[]),
