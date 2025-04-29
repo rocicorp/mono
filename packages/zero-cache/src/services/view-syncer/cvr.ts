@@ -12,6 +12,7 @@ import {stringCompare} from '../../../../shared/src/string-compare.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {compareTTL} from '../../../../zql/src/query/ttl.ts';
+import instruments from '../../observability/view-syncer-instruments.ts';
 import {stringify, type JSONObject} from '../../types/bigint-json.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
@@ -32,7 +33,6 @@ import {
   type RowID,
   type RowRecord,
 } from './schema/types.ts';
-import instruments from '../../observability/view-syncer-instruments.ts';
 
 export type RowUpdate = {
   version?: string; // Undefined for an unref.
@@ -680,10 +680,19 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
       this.#receivedRows.set(id, merged);
 
+      const newRowVersion = merged === null ? undefined : version;
       const patchVersion =
-        existing && existing?.rowVersion === version
-          ? existing.patchVersion
+        existing && existing.rowVersion === newRowVersion
+          ? existing.patchVersion // existing row is unchanged
           : this.#assertNewVersion();
+
+      // Note: for determining what to commit to the CVR store, use the
+      // `version` of the update even if `merged` is null (i.e. don't
+      // use `newRowVersion`). This will be deduped by the cvr-store flush
+      // if it is redundant. In rare cases--namely, if the row key has
+      // changed--we _do_ want to add row-put for the new row key with
+      // `refCounts: null` in order to correctly record a delete patch
+      // for that row, as the row with the old key will be removed.
       const rowVersion = version ?? existing?.rowVersion;
       if (rowVersion) {
         this._cvrStore.putRowRecord({
