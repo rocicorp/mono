@@ -135,17 +135,21 @@ test.each(
       // n-ary or
       (() => {
         const n = 5;
-        let cached: Array<Rrc<'artist'>> | undefined;
+        let cached:
+          | {rowsAndColumns: Array<Rrc<'artist'>>; operators: SimpleOperator[]}
+          | undefined;
         const rrc = () =>
           cached ??
-          (cached = Array.from({length: n}, () =>
-            randomRowAndColumn('artist'),
-          ));
+          (cached = {
+            rowsAndColumns: Array.from({length: n}, () =>
+              randomRowAndColumn('artist'),
+            ),
+            operators: Array.from({length: n}, () => randomOperator()),
+          });
         return {
           name: 'n-branches',
           createQuery: q => {
-            const rowsAndColumns = rrc();
-            const operators = Array.from({length: n}, () => randomOperator());
+            const {rowsAndColumns, operators} = rrc();
             return q.artist.where(({or, cmp}) =>
               or(
                 ...rowsAndColumns.map(({randomRow, randomColumn}, i) =>
