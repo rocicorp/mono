@@ -1,4 +1,4 @@
-import {expect} from 'vitest';
+import {afterAll, expect} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
@@ -43,7 +43,9 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import tmp from 'tmp';
+import os from 'node:os';
+import path from 'node:path';
+import fs from 'node:fs/promises';
 
 const lc = createSilentLogContext();
 
@@ -53,7 +55,7 @@ type DBs<TSchema extends Schema> = {
   memory: Record<keyof TSchema['tables'], MemorySource>;
   raw: ReadonlyMap<keyof TSchema['tables'], readonly Row[]>;
   pgSchema: ServerSchema;
-  sqliteFile: tmp.FileResult;
+  sqliteFile: string;
 };
 
 type Delegates = {
@@ -81,6 +83,14 @@ type QueryInstances = {
   sqlite: AnyQuery;
   memory: AnyQuery;
 };
+
+let tempDir: string | undefined;
+afterAll(async () => {
+  if (tempDir) {
+    await fs.rm(tempDir, {recursive: true, force: true});
+  }
+  tempDir = undefined;
+});
 
 async function makeDatabases<TSchema extends Schema>(
   suiteName: string,
@@ -110,8 +120,9 @@ async function makeDatabases<TSchema extends Schema>(
     });
   }
 
-  const tmpFile = tmp.fileSync();
-  const sqlite = new Database(lc, tmpFile.name);
+  tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'zero-integration-tests'));
+  const tempFile = path.join(tempDir, `${suiteName}.db`);
+  const sqlite = new Database(lc, tempFile);
   sqlite.pragma('journal_mode = WAL2');
 
   await initialSync(
@@ -162,7 +173,14 @@ async function makeDatabases<TSchema extends Schema>(
     }),
   );
 
-  return {pg, sqlite, memory, raw, pgSchema: serverSchema, sqliteFile: tmpFile};
+  return {
+    pg,
+    sqlite,
+    memory,
+    raw,
+    pgSchema: serverSchema,
+    sqliteFile: tempFile,
+  };
 }
 
 function makeDelegates<TSchema extends Schema>(
@@ -307,7 +325,7 @@ function makeTest<TSchema extends Schema>(
           lc,
           testLogConfig,
           (() => {
-            const db = new Database(lc, dbs.sqliteFile.name);
+            const db = new Database(lc, dbs.sqliteFile);
             db.exec('BEGIN CONCURRENT');
             return db;
           })(),
