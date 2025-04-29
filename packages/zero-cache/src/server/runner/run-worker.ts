@@ -114,7 +114,7 @@ export async function runWorker(
     await runUntilKilled(
       lc,
       parent ?? process,
-      new ZeroDispatcher(lc, runAsReplicationManager, tenants, {
+      new ZeroDispatcher(config, lc, runAsReplicationManager, tenants, {
         port: runAsReplicationManager ? changeStreamerPort : port,
       }),
     );
