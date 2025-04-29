@@ -478,6 +478,11 @@ test('zero-cache --help', () => {
                                                                 clients. This is a heavy-weight operation and can result in user-visible                          
                                                                 slowness or downtime if compute resources are scarce.                                             
                                                                                                                                                                   
+     --admin-password string                                    optional                                                                                          
+       ZERO_ADMIN_PASSWORD env                                                                                                                                    
+                                                                A password used to administer zero-cache server, for example to access the                        
+                                                                /statz endpoint.                                                                                  
+                                                                                                                                                                  
      --litestream-executable string                             optional                                                                                          
        ZERO_LITESTREAM_EXECUTABLE env                                                                                                                             
                                                                 Path to the litestream executable. This option has no effect if                                   

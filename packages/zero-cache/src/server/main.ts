@@ -203,7 +203,7 @@ export default async function runWorker(
 
   if (numSyncers) {
     mainServices.push(
-      new Dispatcher(lc, taskID, parent, syncers, mutator, {port}),
+      new Dispatcher(config, lc, taskID, parent, syncers, mutator, {port}),
     );
   } else if (changeStreamer && parent) {
     // When running as the replication-manager, the dispatcher process

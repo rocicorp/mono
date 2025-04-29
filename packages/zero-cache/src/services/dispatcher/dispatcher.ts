@@ -7,6 +7,7 @@ import {HttpService, type Options} from '../http-service.ts';
 import {getConnectParams} from './connect-params.ts';
 import {installWebSocketHandoff} from './websocket-handoff.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
 
 // The server allows the client to use any /:base/ path to facilitate
 // servicing requests on the same domain as the application.
@@ -19,6 +20,7 @@ export class Dispatcher extends HttpService {
   readonly #mutator: Worker | undefined;
 
   constructor(
+    config: ZeroConfig,
     lc: LogContext,
     taskID: string,
     parent: Worker | null,
@@ -26,7 +28,7 @@ export class Dispatcher extends HttpService {
     mutator: Worker | undefined,
     opts: Options,
   ) {
-    super('dispatcher', lc, opts, fastify => {
+    super('dispatcher', config, lc, opts, fastify => {
       installWebSocketHandoff(lc, req => this.#handoff(req), fastify.server);
     });
 

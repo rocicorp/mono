@@ -3,6 +3,8 @@ import Fastify, {type FastifyInstance} from 'fastify';
 import {HeartbeatMonitor} from './life-cycle.ts';
 import {RunningState} from './running-state.ts';
 import type {Service} from './service.ts';
+import {handleStatzRequest} from './statz.ts';
+import {type ZeroConfig} from '../config/zero-config.ts';
 
 export type Options = {
   port: number;
@@ -16,6 +18,7 @@ export type Options = {
 export class HttpService implements Service {
   readonly id: string;
   protected readonly _lc: LogContext;
+  readonly #config: ZeroConfig;
   readonly #fastify: FastifyInstance;
   readonly #port: number;
   readonly #state: RunningState;
@@ -24,12 +27,14 @@ export class HttpService implements Service {
 
   constructor(
     id: string,
+    config: ZeroConfig,
     lc: LogContext,
     opts: Options,
     init: (fastify: FastifyInstance) => void | Promise<void>,
   ) {
     this.id = id;
     this._lc = lc.withContext('component', this.id);
+    this.#config = config;
     this.#fastify = Fastify();
     this.#port = opts.port;
     this.#init = init;
@@ -41,6 +46,9 @@ export class HttpService implements Service {
   // run() is the lifecycle method called by the ServiceRunner.
   async start(): Promise<string> {
     this.#fastify.get('/', (_req, res) => res.send('OK'));
+    this.#fastify.get('/statz', (req, res) =>
+      handleStatzRequest(this.#config, req, res),
+    );
     this.#fastify.get('/keepalive', ({headers}, res) => {
       this.#heartbeatMonitor.onHeartbeat(headers);
       return res.send('OK');
