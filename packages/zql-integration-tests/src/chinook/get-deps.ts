@@ -10,12 +10,12 @@ const PG_URL =
   'https://github.com/lerocha/chinook-database/releases/download/v1.4.5/Chinook_PostgreSql.sql';
 const PG_FILE_NAME = 'Chinook_PostgreSql.sql';
 
-async function getChinook(fileName: string, url: string): Promise<string> {
-  if (existsSync(fileName)) {
-    return readFile(fileName, {encoding: 'utf-8'});
+export async function getChinook(): Promise<string> {
+  if (existsSync(PG_FILE_NAME)) {
+    return readFile(PG_FILE_NAME, {encoding: 'utf-8'});
   }
 
-  const response = await fetch(url);
+  const response = await fetch(PG_URL);
 
   if (!response.ok) {
     throw new Error(
@@ -29,12 +29,12 @@ async function getChinook(fileName: string, url: string): Promise<string> {
     .replaceAll('\\c chinook;', '')
     // disabled foreign key constraints as push tests do not respect an insertion order that would preserved them.
     .replace(/ALTER TABLE.*?FOREIGN KEY.*?;/gs, '');
-  await writeFile(fileName, content);
+  await writeFile(PG_FILE_NAME, content);
   return content;
 }
 
 export async function writeChinook(pg: PostgresDB, replica: Database) {
-  const pgContent = await getChinook(PG_FILE_NAME, PG_URL);
+  const pgContent = await getChinook();
   await pg.unsafe(pgContent);
 
   await initialSync(

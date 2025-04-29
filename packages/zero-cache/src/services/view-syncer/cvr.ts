@@ -12,6 +12,7 @@ import {stringCompare} from '../../../../shared/src/string-compare.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {compareTTL} from '../../../../zql/src/query/ttl.ts';
+import instruments from '../../observability/view-syncer-instruments.ts';
 import {stringify, type JSONObject} from '../../types/bigint-json.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
@@ -22,6 +23,7 @@ import {type CVRFlushStats, type CVRStore} from './cvr-store.ts';
 import {KeyColumns} from './key-columns.ts';
 import {
   cmpVersions,
+  maxVersion,
   oneAfter,
   versionString,
   type CVRVersion,
@@ -32,7 +34,6 @@ import {
   type RowID,
   type RowRecord,
 } from './schema/types.ts';
-import instruments from '../../observability/view-syncer-instruments.ts';
 
 export type RowUpdate = {
   version?: string; // Undefined for an unref.
@@ -438,6 +439,11 @@ type Hash = string;
 export type Column = string;
 export type RefCounts = Record<Hash, number>;
 
+type RowPatchInfo = {
+  rowVersion: string | null; // null for a row-del
+  toVersion: CVRVersion; // patchVersion
+};
+
 /**
  * A {@link CVRQueryDrivenUpdater} is used for updating a CVR after making queries.
  * The caller should invoke:
@@ -458,6 +464,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     rowIDString,
   );
   readonly #replacedRows = new CustomKeyMap<RowID, boolean>(rowIDString);
+  readonly #lastPatches = new CustomKeyMap<RowID, RowPatchInfo>(rowIDString);
 
   #existingRows: Promise<Iterable<RowRecord>> | undefined = undefined;
 
@@ -680,10 +687,19 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
 
       this.#receivedRows.set(id, merged);
 
+      const newRowVersion = merged === null ? undefined : version;
       const patchVersion =
-        existing && existing?.rowVersion === version
-          ? existing.patchVersion
+        existing && existing.rowVersion === newRowVersion
+          ? existing.patchVersion // existing row is unchanged
           : this.#assertNewVersion();
+
+      // Note: for determining what to commit to the CVR store, use the
+      // `version` of the update even if `merged` is null (i.e. don't
+      // use `newRowVersion`). This will be deduped by the cvr-store flush
+      // if it is redundant. In rare cases--namely, if the row key has
+      // changed--we _do_ want to add row-put for the new row key with
+      // `refCounts: null` in order to correctly record a delete patch
+      // for that row, as the row with the old key will be removed.
       const rowVersion = version ?? existing?.rowVersion;
       if (rowVersion) {
         this._cvrStore.putRowRecord({
@@ -701,29 +717,43 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
         this._cvrStore.delRowRecord(id);
       }
 
+      // Dedupe against the lastPatch sent for the row, and ensure that
+      // toVersion never backtracks (lest it be undesirably filtered).
+      const lastPatch = this.#lastPatches.get(id);
+      const toVersion = maxVersion(patchVersion, lastPatch?.toVersion);
+
       if (merged === null) {
         // All refCounts have gone to zero, if row was previously synced
         // delete it.
         if (existing || previouslyReceived) {
+          // dedupe
+          if (lastPatch?.rowVersion !== null) {
+            patches.push({
+              patch: {
+                type: 'row',
+                op: 'del',
+                id,
+              },
+              toVersion,
+            });
+            this.#lastPatches.set(id, {rowVersion: null, toVersion});
+          }
+        }
+      } else if (contents) {
+        assert(rowVersion);
+        // dedupe
+        if (!lastPatch?.rowVersion || lastPatch.rowVersion < rowVersion) {
           patches.push({
             patch: {
               type: 'row',
-              op: 'del',
+              op: 'put',
               id,
+              contents,
             },
-            toVersion: patchVersion,
+            toVersion,
           });
+          this.#lastPatches.set(id, {rowVersion, toVersion});
         }
-      } else if (contents) {
-        patches.push({
-          patch: {
-            type: 'row',
-            op: 'put',
-            id,
-            contents,
-          },
-          toVersion: patchVersion,
-        });
       }
     }
     return patches;
