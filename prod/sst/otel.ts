@@ -36,8 +36,15 @@ type ServiceProps = {
   cluster: sst.aws.Cluster;
   containers?: ContainerDefinition[];
   image?: string;
-  cpu?: string;
-  memory?: string;
+  cpu?:
+    | '0.25 vCPU'
+    | '0.5 vCPU'
+    | '1 vCPU'
+    | '2 vCPU'
+    | '4 vCPU'
+    | '8 vCPU'
+    | '16 vCPU';
+  memory?: `${number} GB`;
   health?: ContainerDefinition['health'];
   environment?: ContainerDefinition['environment'];
   logging?: ContainerDefinition['logging'];
@@ -103,8 +110,6 @@ export function withOtelContainers(
   const otelContainer = {
     name: 'otel',
     image: 'otel/opentelemetry-collector-contrib:0.123.0-amd64',
-    cpu: '0.25 vCPU',
-    memory: '0.5 GB',
     essential: false,
     taskRole: otelTaskRole.arn,
     environment: {
@@ -221,7 +226,9 @@ export function addServiceWithOtel(
       throw new Error('Either `containers` or top-level `image` is required');
     }
 
-    containers = [{name: serviceName, image, health, environment, logging}];
+    containers = [
+      {name: serviceName, image, health, environment, logging, cpu, memory},
+    ];
   }
 
   const otelConfig = {
@@ -235,6 +242,8 @@ export function addServiceWithOtel(
 
   return new sst.aws.Service(serviceName, {
     cluster,
+    cpu,
+    memory,
     loadBalancer: noramlizedLoadbalancer as any,
     ...otherServiceProps,
     containers: [...otelSidecars, ...extraContainers],
