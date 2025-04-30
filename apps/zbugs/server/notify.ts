@@ -10,7 +10,7 @@ import {schema} from '../shared/schema.ts';
 import {assertIsLoggedIn, type AuthData} from '../shared/auth.ts';
 import type {PostCommitTask} from './server-mutators.ts';
 import type postgres from 'postgres';
-import {sendEmail} from './_email.ts';
+import {sendEmail} from '../api/_email.ts';
 
 type CreateIssueNotification = {
   kind: 'create-issue';
@@ -82,7 +82,6 @@ export async function notify(
 
   switch (kind) {
     case 'create-issue': {
-
       const payload = {
         recipients,
         title: `${modifierUser.login} reported an issue`,
@@ -91,12 +90,8 @@ export async function notify(
           .join('\n'),
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
       };
-      postCommitTasks.push(() => 
-		sendEmail(payload);
-      )
-      postCommitTasks.push(() =>
-        postToDiscord(payload);
-      );
+      postCommitTasks.push(() => sendEmail(payload));
+      postCommitTasks.push(() => postToDiscord(payload));
 
       break;
     }
@@ -107,20 +102,15 @@ export async function notify(
         const title = `${modifierUser.login} ${
           update.open ? 'reopened' : 'closed'
         } an issue`;
-        
+
         const payload = {
           recipients,
           title,
           message: issue.title,
           link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
         };
-		postCommitTasks.push(() =>
-			sendEmail(payload);
-		);
-		postCommitTasks.push(() =>
-          postToDiscord(payload);
-        );
-
+        postCommitTasks.push(() => sendEmail(payload));
+        postCommitTasks.push(() => postToDiscord(payload));
       } else {
         const payload = {
           recipients,
@@ -130,14 +120,10 @@ export async function notify(
             .join('\n'),
           link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
         };
-		
-		postCommitTasks.push(() =>
-			sendEmail(payload);
-		);
 
-		postCommitTasks.push(() =>
-			postToDiscord(payload);
-		);
+        postCommitTasks.push(() => sendEmail(payload));
+
+        postCommitTasks.push(() => postToDiscord(payload));
       }
       break;
     }
@@ -151,13 +137,9 @@ export async function notify(
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
       };
 
-		postCommitTasks.push(() =>
-			sendEmail(payload);
-		);
+      postCommitTasks.push(() => sendEmail(payload));
 
-		postCommitTasks.push(() =>
-			postToDiscord(payload);
-		);
+      postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
 
@@ -173,14 +155,9 @@ export async function notify(
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
       };
 
+      postCommitTasks.push(() => sendEmail(payload));
 
-		postCommitTasks.push(() =>
-			sendEmail(payload);
-		);
-
-		postCommitTasks.push(() =>
-			postToDiscord(payload);
-		);
+      postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
 
@@ -193,14 +170,9 @@ export async function notify(
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}#comment-${commentID}`,
       };
 
+      postCommitTasks.push(() => sendEmail(payload));
 
-		postCommitTasks.push(() =>
-			sendEmail(payload);
-		);
-
-		postCommitTasks.push(() =>
-			postToDiscord(payload);
-		);
+      postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
 
@@ -214,13 +186,9 @@ export async function notify(
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}#comment-${commentID}`,
       };
 
-		postCommitTasks.push(() =>
-			sendEmail(payload);
-		);
+      postCommitTasks.push(() => sendEmail(payload));
 
-		postCommitTasks.push(() =>
-			postToDiscord(payload);
-		);
+      postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
   }
