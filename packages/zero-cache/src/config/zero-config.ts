@@ -558,15 +558,21 @@ export function getZeroConfig(
     }
   }
 
+  return normalizeZeroConfig(loadedConfig);
+}
+
+export function normalizeZeroConfig<T extends Config<typeof zeroOptions>>(
+  config: T,
+) {
   return {
-    ...loadedConfig,
+    ...config,
     cvr: {
-      ...loadedConfig.cvr,
-      db: loadedConfig.cvr.db ?? loadedConfig.upstream.db,
+      ...config.cvr,
+      db: config.cvr.db ?? config.upstream.db,
     },
     change: {
-      ...loadedConfig.change,
-      db: loadedConfig.change.db ?? loadedConfig.upstream.db,
+      ...config.change,
+      db: config.change.db ?? config.upstream.db,
     },
   };
 }
