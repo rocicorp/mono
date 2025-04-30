@@ -24,6 +24,7 @@ import {buildPipeline, type BuilderDelegate} from '../builder/builder.ts';
 import {ArrayView} from '../ivm/array-view.ts';
 import type {Input} from '../ivm/operator.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
+import {assertNoNotExists} from './assert-no-not-exists.ts';
 import {dnf} from './dnf.ts';
 import {
   and,
@@ -367,12 +368,20 @@ export abstract class AbstractQuery<
       cond = and(existingWhere, cond);
     }
 
+    const where = dnf(cond);
+
+    if (this.#system === 'client') {
+      // We need to do this after the DNF since the DNF conversion might change
+      // an EXISTS to a NOT EXISTS condition (and vice versa).
+      assertNoNotExists(where);
+    }
+
     return this[newQuerySymbol](
       this.#schema,
       this.#tableName,
       {
         ...this.#ast,
-        where: dnf(cond),
+        where,
       },
       this.format,
     );
