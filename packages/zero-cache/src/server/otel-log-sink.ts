@@ -8,7 +8,7 @@ import {
 import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
 import {errorOrObject} from './logging.ts';
 import {stringify} from '../types/bigint-json.ts';
-import {startOtel, type OtelEndpoints} from './start-otel.ts';
+import {startOtel, type OtelEndpoints} from './otel-start.ts';
 
 export class OtelLogSink implements LogSink {
   readonly #logger: Logger;
@@ -36,7 +36,7 @@ export class OtelLogSink implements LogSink {
 
     const payload: LogRecord = {
       severityNumber: toErrorNum(level),
-      severityText: level.toUpperCase(),
+      severityText: level,
       body: message,
       timestamp: Date.now() * 1_000_000, // nanoseconds
     };
