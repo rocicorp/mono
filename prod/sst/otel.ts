@@ -1,5 +1,6 @@
 /* eslint-disable */
 /// <reference path="./.sst/platform/config.d.ts" />
+
 interface ContainerDefinition {
   name: string;
   image?: string;
@@ -17,16 +18,35 @@ interface ContainerDefinition {
   };
   loadBalancer?: {
     public: boolean;
+    domain?: {
+      name: string;
+      dns: boolean;
+      cert: string;
+    };
     ports?: Array<{
       listen: string;
       forward: string;
+      container?: string;
     }>;
   };
+  // any other fields you might put on your base container
+  [key: string]: any;
 }
-
+type ServiceProps = {
+  cluster: sst.aws.Cluster;
+  containers?: ContainerDefinition[];
+  image?: string;
+  cpu?: string;
+  memory?: string;
+  health?: ContainerDefinition['health'];
+  environment?: ContainerDefinition['environment'];
+  logging?: ContainerDefinition['logging'];
+  loadBalancer?: ContainerDefinition['loadBalancer'];
+  [key: string]: any;
+};
 /**
  * Returns an array of ECS container definitions:
- *  [ your primary “app” container, plus the OTEL side-car ]
+ *  [ your primary "app" container, plus the OTEL side-car ]
  *
  * Only when you call this will the OTEL IAM Role & Policy be created.
  */
@@ -156,26 +176,61 @@ export function withOtelContainers(
 
   return [appContainer, otelContainer];
 }
-
 export function addServiceWithOtel(
-  cluster: sst.aws.Cluster,
-  name: string,
-  serviceProps: Omit<any, 'containers'> & {containers: any[]},
-  config: {apiKey: string; appName: string; appVersion: string},
-) {
-  const {containers, ...restProps} = serviceProps;
+  serviceName: string,
+  props: ServiceProps,
+): sst.aws.Service {
+  const {
+    cluster,
+    containers: propContainers,
+    image,
+    cpu,
+    memory,
+    health,
+    environment,
+    logging,
+    loadBalancer,
+    ...otherServiceProps
+  } = props;
 
-  if (!containers || containers.length === 0) {
-    throw new Error(
-      "addServiceWithOtel requires at least one container definition in 'containers'",
-    );
+  //Normalize loadbalancer
+  const noramlizedLoadbalancer = {
+    public: loadBalancer.public,
+    domain: loadBalancer.domain,
+    ports: loadBalancer.ports.map(port => ({
+      ...port,
+      container: serviceName,
+    })),
+  };
+
+  //Normalize into one ContainerDefinition[]
+  let containers: ContainerDefinition[];
+  if (Array.isArray(propContainers)) {
+    if (propContainers.length === 0) {
+      throw new Error('`containers` must be non-empty');
+    }
+    containers = propContainers;
+  } else {
+    if (!image) {
+      throw new Error('Either `containers` or top-level `image` is required');
+    }
+
+    containers = [{name: serviceName, image, health, environment, logging}];
   }
 
-  const [baseContainer, ...extraContainers] = containers;
-  const otelContainers = withOtelContainers(baseContainer, config);
+  const otelConfig = {
+    apiKey: process.env.DATADOG_API_KEY!,
+    appName: `${$app.name}-${$app.stage}`,
+    appVersion: process.env.ZERO_IMAGE_URL!,
+  };
 
-  return cluster.addService(name, {
-    ...restProps,
-    containers: [...otelContainers, ...extraContainers],
+  const [primary, ...extraContainers] = containers;
+  const otelSidecars = withOtelContainers(primary, otelConfig);
+
+  return new sst.aws.Service(serviceName, {
+    cluster,
+    loadBalancer: noramlizedLoadbalancer as any,
+    ...otherServiceProps,
+    containers: [...otelSidecars, ...extraContainers],
   });
 }

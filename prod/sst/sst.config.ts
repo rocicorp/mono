@@ -154,147 +154,109 @@ export default $config({
           },
         };
 
-    // Replication Manager Service
-    const replicationManager = addServiceWithOtel(
+    const replicationManager = addServiceWithOtel(`replication-manager`, {
       cluster,
-      `replication-manager`,
-      {
-        cpu: '2 vCPU',
-        memory: '8 GB',
-        containers: [
+      cpu: '2 vCPU',
+      memory: '8 GB',
+      image: commonEnv.ZERO_IMAGE_URL,
+      link: [replicationBucket],
+      health: {
+        command: ['CMD-SHELL', 'curl -f http://localhost:4849/ || exit 1'],
+        interval: '5 seconds',
+        retries: 3,
+        startPeriod: '300 seconds',
+      },
+      environment: {
+        ...commonEnv,
+        ZERO_CHANGE_MAX_CONNS: '3',
+        ZERO_NUM_SYNC_WORKERS: '0',
+      },
+      logging: {
+        retention: '1 month',
+      },
+      loadBalancer: {
+        public: false,
+        ports: [
           {
-            name: 'replication-manager',
-            image: commonEnv.ZERO_IMAGE_URL,
-            link: [replicationBucket],
-            health: {
-              command: [
-                'CMD-SHELL',
-                'curl -f http://localhost:4849/ || exit 1',
-              ],
-              interval: '5 seconds',
-              retries: 3,
-              startPeriod: '300 seconds',
-            },
-            environment: {
-              ...commonEnv,
-              ZERO_CHANGE_MAX_CONNS: '3',
-              ZERO_NUM_SYNC_WORKERS: '0',
-            },
-            logging: {
-              retention: '1 month',
-            },
+            listen: '80/http',
+            forward: '4849/http',
           },
         ],
-        loadBalancer: {
-          public: false,
-          ports: [
-            {
-              listen: '80/http',
-              forward: '4849/http',
-              container: 'replication-manager',
-            },
-          ],
-        },
-        transform: defu(EBS_TRANSFORM, BASE_TRANSFORM),
       },
-
-      {
-        apiKey: process.env.DATADOG_API_KEY,
-        appName: `${$app.name}-${$app.stage}`,
-        appVersion: `${process.env.ZERO_IMAGE_URL}`,
-      },
-    );
+      transform: defu(EBS_TRANSFORM, BASE_TRANSFORM),
+    });
 
     // View Syncer Service
-    const viewSyncer = addServiceWithOtel(
+    const viewSyncer = addServiceWithOtel(`view-syncer`, {
       cluster,
-      `view-syncer`,
-      {
-        cpu: '8 vCPU',
-        memory: '16 GB',
-        containers: [
-          {
-            name: 'view-syncer',
-            image: commonEnv.ZERO_IMAGE_URL,
-            link: [replicationBucket],
-            health: {
-              command: [
-                'CMD-SHELL',
-                'curl -f http://localhost:4848/ || exit 1',
-              ],
-              interval: '5 seconds',
-              retries: 3,
-              startPeriod: '300 seconds',
-            },
-            environment: {
-              ...commonEnv,
-              ZERO_CHANGE_STREAMER_URI: replicationManager.url,
-              ZERO_UPSTREAM_MAX_CONNS: '15',
-              ZERO_CVR_MAX_CONNS: '160',
-            },
-            logging: {
-              retention: '1 month',
-            },
-          },
-        ],
-
-        loadBalancer: {
-          public: true,
-          //only set domain if both are provided
-          ...(process.env.DOMAIN_NAME && process.env.DOMAIN_CERT
-            ? {
-                domain: {
-                  name: process.env.DOMAIN_NAME,
-                  dns: false,
-                  cert: process.env.DOMAIN_CERT,
+      cpu: '8 vCPU',
+      memory: '16 GB',
+      image: commonEnv.ZERO_IMAGE_URL,
+      link: [replicationBucket],
+      health: {
+        command: ['CMD-SHELL', 'curl -f http://localhost:4848/ || exit 1'],
+        interval: '5 seconds',
+        retries: 3,
+        startPeriod: '300 seconds',
+      },
+      environment: {
+        ...commonEnv,
+        ZERO_CHANGE_STREAMER_URI: replicationManager.url,
+        ZERO_UPSTREAM_MAX_CONNS: '15',
+        ZERO_CVR_MAX_CONNS: '160',
+      },
+      logging: {
+        retention: '1 month',
+      },
+      loadBalancer: {
+        public: true,
+        //only set domain if both are provided
+        ...(process.env.DOMAIN_NAME && process.env.DOMAIN_CERT
+          ? {
+              domain: {
+                name: process.env.DOMAIN_NAME,
+                dns: false,
+                cert: process.env.DOMAIN_CERT,
+              },
+              ports: [
+                {
+                  listen: '80/http',
+                  forward: '4848/http',
                 },
-                ports: [
-                  {
-                    listen: '80/http',
-                    forward: '4848/http',
-                    container: 'view-syncer',
-                  },
-                  {
-                    listen: '443/https',
-                    forward: '4848/http',
-                    container: 'view-syncer',
-                  },
-                ],
-              }
-            : {
-                ports: [
-                  {
-                    listen: '80/http',
-                    forward: '4848/http',
-                  },
-                ],
-              }),
+                {
+                  listen: '443/https',
+                  forward: '4848/http',
+                },
+              ],
+            }
+          : {
+              ports: [
+                {
+                  listen: '80/http',
+                  forward: '4848/http',
+                },
+              ],
+            }),
+      },
+      transform: defu(EBS_TRANSFORM, BASE_TRANSFORM, {
+        target: {
+          stickiness: {
+            enabled: true,
+            type: 'lb_cookie',
+            cookieDuration: 120,
+          },
+          loadBalancingAlgorithmType: 'least_outstanding_requests',
         },
-        transform: defu(EBS_TRANSFORM, BASE_TRANSFORM, {
-          target: {
-            stickiness: {
-              enabled: true,
-              type: 'lb_cookie',
-              cookieDuration: 120,
-            },
-            loadBalancingAlgorithmType: 'least_outstanding_requests',
-          },
-          autoScalingTarget: {
-            minCapacity: 1,
-            maxCapacity: 10,
-          },
-        }),
-        // Set this to `true` to make SST wait for the view-syncer to be deployed
-        // before proceeding (to permissions deployment, etc.). This makes the deployment
-        // take a lot longer and is only necessary if there is an AST format change.
-        wait: false,
-      },
-      {
-        apiKey: process.env.DATADOG_API_KEY,
-        appName: `${$app.name}-${$app.stage}`,
-        appVersion: `${process.env.ZERO_IMAGE_URL}`,
-      },
-    );
+        autoScalingTarget: {
+          minCapacity: 1,
+          maxCapacity: 10,
+        },
+      }),
+      // Set this to `true` to make SST wait for the view-syncer to be deployed
+      // before proceeding (to permissions deployment, etc.). This makes the deployment
+      // take a lot longer and is only necessary if there is an AST format change.
+      wait: false,
+    });
 
     if ($app.stage === 'sandbox') {
       // In sandbox, deploy permissions in a Lambda.
