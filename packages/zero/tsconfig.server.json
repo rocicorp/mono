@@ -13,7 +13,6 @@
     "src/pg.ts",
     "src/ast-to-zql.ts",
     "src/analyze-query.ts",
-    "src/transform-query.ts",
-    "src/cache-stats.ts"
+    "src/transform-query.ts"
   ]
 }

@@ -1,6 +1,7 @@
 import {describe, expect, test} from 'vitest';
 import type {ExpressionFactory} from './expression.ts';
 import {ast, newQuery, type QueryDelegate} from './query-impl.ts';
+import {staticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
 
 const mockDelegate = {} as QueryDelegate;
@@ -1723,8 +1724,8 @@ describe('exists', () => {
     `);
   });
 
-  test('negated existence', () => {
-    const issueQuery = newQuery(mockDelegate, schema, 'issue');
+  test('negated existence - permission', () => {
+    const issueQuery = staticQuery(schema, 'issue');
 
     expect(ast(issueQuery.where(({not, exists}) => not(exists('comments')))))
       .toMatchInlineSnapshot(`
@@ -1751,7 +1752,7 @@ describe('exists', () => {
                 ],
                 "table": "comment",
               },
-              "system": "client",
+              "system": "permissions",
             },
             "type": "correlatedSubquery",
           },
@@ -1759,69 +1760,88 @@ describe('exists', () => {
       `);
   });
 
-  test('negated existence over junction edge', () => {
+  test('negated existence - client', () => {
     const issueQuery = newQuery(mockDelegate, schema, 'issue');
 
-    expect(ast(issueQuery.where(({not, exists}) => not(exists('labels')))))
-      .toMatchInlineSnapshot(`
-        {
-          "table": "issue",
-          "where": {
-            "op": "NOT EXISTS",
-            "related": {
-              "correlation": {
-                "childField": [
-                  "issueId",
-                ],
-                "parentField": [
-                  "id",
-                ],
-              },
-              "subquery": {
-                "alias": "zsubq_labels",
-                "orderBy": [
-                  [
-                    "issueId",
-                    "asc",
-                  ],
-                  [
-                    "labelId",
-                    "asc",
-                  ],
-                ],
-                "table": "issueLabel",
-                "where": {
-                  "op": "EXISTS",
-                  "related": {
-                    "correlation": {
-                      "childField": [
-                        "id",
-                      ],
-                      "parentField": [
-                        "labelId",
-                      ],
-                    },
-                    "subquery": {
-                      "alias": "zsubq_labels",
-                      "orderBy": [
-                        [
-                          "id",
-                          "asc",
-                        ],
-                      ],
-                      "table": "label",
-                    },
-                    "system": "client",
-                  },
-                  "type": "correlatedSubquery",
-                },
-              },
-              "system": "client",
+    expect(() =>
+      issueQuery.where(({not, exists}) => not(exists('comments'))),
+    ).toThrowError(new Error('NOT EXISTS is not supported on the client'));
+  });
+
+  test('negated existence over junction edge - permission', () => {
+    const issueQuery = staticQuery(schema, 'issue');
+
+    expect(
+      ast(issueQuery.where(({not, exists}) => not(exists('labels')))),
+    ).toMatchInlineSnapshot(
+      `
+      {
+        "table": "issue",
+        "where": {
+          "op": "NOT EXISTS",
+          "related": {
+            "correlation": {
+              "childField": [
+                "issueId",
+              ],
+              "parentField": [
+                "id",
+              ],
             },
-            "type": "correlatedSubquery",
+            "subquery": {
+              "alias": "zsubq_labels",
+              "orderBy": [
+                [
+                  "issueId",
+                  "asc",
+                ],
+                [
+                  "labelId",
+                  "asc",
+                ],
+              ],
+              "table": "issueLabel",
+              "where": {
+                "op": "EXISTS",
+                "related": {
+                  "correlation": {
+                    "childField": [
+                      "id",
+                    ],
+                    "parentField": [
+                      "labelId",
+                    ],
+                  },
+                  "subquery": {
+                    "alias": "zsubq_labels",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "label",
+                  },
+                  "system": "permissions",
+                },
+                "type": "correlatedSubquery",
+              },
+            },
+            "system": "permissions",
           },
-        }
-      `);
+          "type": "correlatedSubquery",
+        },
+      }
+    `,
+    );
+  });
+
+  test('negated existence over junction edge - client', () => {
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
+
+    expect(() =>
+      issueQuery.where(({not, exists}) => not(exists('labels'))),
+    ).toThrowError(new Error('NOT EXISTS is not supported on the client'));
   });
 
   test('many exists on different relationships', () => {

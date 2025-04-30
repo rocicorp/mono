@@ -3,6 +3,7 @@ import {LogContext} from '@rocicorp/logger';
 import {IncomingMessage} from 'node:http';
 import WebSocket from 'ws';
 import {assert} from '../../../../shared/src/asserts.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
 import type {ShardID} from '../../types/shards.ts';
@@ -34,12 +35,13 @@ export class ChangeStreamerHttpServer extends HttpService {
   readonly #delegate: ChangeStreamer;
 
   constructor(
+    config: ZeroConfig,
     lc: LogContext,
     delegate: ChangeStreamer,
     opts: Options,
     parent: Worker,
   ) {
-    super('change-streamer-http-server', lc, opts, async fastify => {
+    super('change-streamer-http-server', config, lc, opts, async fastify => {
       await fastify.register(websocket);
 
       // fastify does not support optional path components, so we just

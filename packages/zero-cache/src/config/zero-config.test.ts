@@ -106,6 +106,11 @@ test('zero-cache --help', () => {
                                                                 The URL of the metric collector to which to send metric data. Metrics are sent over http.         
                                                                 Port defaults to 4318 for most collectors.                                                        
                                                                                                                                                                   
+     --log-log-collector string                                 optional                                                                                          
+       ZERO_LOG_LOG_COLLECTOR env                                                                                                                                 
+                                                                The URL of the log collector to which to send log data. Logs are sent over http.                  
+                                                                Port defaults to 4318 for most collectors.                                                        
+                                                                                                                                                                  
      --log-slow-row-threshold number                            default: 2                                                                                        
        ZERO_LOG_SLOW_ROW_THRESHOLD env                                                                                                                            
                                                                 The number of ms a row must take to fetch from table-source before it is considered slow.         
@@ -239,6 +244,11 @@ test('zero-cache --help', () => {
                                                                 by shutting down, and when restarted, resetting the replica and all synced                        
                                                                 clients. This is a heavy-weight operation and can result in user-visible                          
                                                                 slowness or downtime if compute resources are scarce.                                             
+                                                                                                                                                                  
+     --admin-password string                                    optional                                                                                          
+       ZERO_ADMIN_PASSWORD env                                                                                                                                    
+                                                                A password used to administer zero-cache server, for example to access the                        
+                                                                /statz endpoint.                                                                                  
                                                                                                                                                                   
      --litestream-executable string                             optional                                                                                          
        ZERO_LITESTREAM_EXECUTABLE env                                                                                                                             

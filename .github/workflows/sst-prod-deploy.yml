@@ -74,6 +74,7 @@ jobs:
           ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
           DOMAIN_NAME: 'zbugs-sync.rocicorp.dev'
           DOMAIN_CERT: ${{ vars.PROD_CERTIFICATE_ARN }}
+          DATADOG_API_KEY: ${{ secrets.PROD_DATADOG_API_KEY }}
         run: |
           cd prod/sst
           npm install

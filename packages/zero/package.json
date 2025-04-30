@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.19.2025042901",
+  "version": "0.19.2025043001",
   "description": "Zero is a web framework for serverless web development.",
   "author": "Rocicorp, Inc.",
   "repository": {
@@ -16,7 +16,7 @@
   "scripts": {
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && npx tsx tool/build.js",
-    "build-server": "tsc -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js out/zero/src/deploy-permissions.js out/zero/src/zero-cache-dev.js out/zero/src/ast-to-zql.js out/zero/src/analyze-query.js out/zero/src/transform-query.js out/zero/src/cache-stats.js",
+    "build-server": "tsc -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js out/zero/src/deploy-permissions.js out/zero/src/zero-cache-dev.js out/zero/src/ast-to-zql.js out/zero/src/analyze-query.js out/zero/src/transform-query.js",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
@@ -36,17 +36,22 @@
     "@fastify/websocket": "^11.0.0",
     "@google-cloud/precise-date": "^4.0.0",
     "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/api-logs": "^0.200.0",
+    "@opentelemetry/exporter-logs-otlp-http": "^0.200.0",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.200.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
     "@opentelemetry/resources": "^2.0.0",
+    "@opentelemetry/sdk-logs": "^0.200.0",
+    "@opentelemetry/sdk-metrics": "^2.0.0",
     "@opentelemetry/sdk-node": "^0.200.0",
     "@opentelemetry/sdk-trace-node": "^2.0.0",
-    "@opentelemetry/sdk-metrics": "^2.0.0",
     "@postgresql-typed/oids": "^0.2.0",
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
     "@rocicorp/resolver": "^1.0.2",
     "@rocicorp/zero-sqlite3": "^1.0.4",
+    "@types/basic-auth": "^1.1.8",
+    "basic-auth": "^2.0.1",
     "chalk": "^5.3.0",
     "chalk-template": "^1.1.0",
     "chokidar": "^4.0.1",
@@ -122,8 +127,7 @@
     "zero-deploy-permissions": "./out/zero/src/deploy-permissions.js",
     "ast-to-zql": "./out/zero/src/ast-to-zql.js",
     "analyze-query": "./out/zero/src/analyze-query.js",
-    "transform-query": "./out/zero/src/transform-query.js",
-    "cache-stats": "./out/zero/src/cache-stats.js"
+    "transform-query": "./out/zero/src/transform-query.js"
   },
   "engines": {
     "node": ">=20"

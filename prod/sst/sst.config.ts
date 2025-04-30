@@ -2,10 +2,9 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 // Load .env file
 require('@dotenvx/dotenvx').config();
-
 import {createDefu} from 'defu';
 import {join} from 'node:path';
-
+import {addServiceWithOtel} from './otel';
 const defu = createDefu((obj, key, value) => {
   // Don't merge functions, just use the last one
   if (typeof obj[key] === 'function' || typeof value === 'function') {
@@ -155,8 +154,8 @@ export default $config({
           },
         };
 
-    // Replication Manager Service
-    const replicationManager = cluster.addService(`replication-manager`, {
+    const replicationManager = addServiceWithOtel(`replication-manager`, {
+      cluster,
       cpu: '2 vCPU',
       memory: '8 GB',
       image: commonEnv.ZERO_IMAGE_URL,
@@ -187,8 +186,10 @@ export default $config({
       },
       transform: defu(EBS_TRANSFORM, BASE_TRANSFORM),
     });
+
     // View Syncer Service
-    const viewSyncer = cluster.addService(`view-syncer`, {
+    const viewSyncer = addServiceWithOtel(`view-syncer`, {
+      cluster,
       cpu: '8 vCPU',
       memory: '16 GB',
       image: commonEnv.ZERO_IMAGE_URL,

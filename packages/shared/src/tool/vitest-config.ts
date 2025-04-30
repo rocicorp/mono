@@ -10,7 +10,6 @@ const logSilenceMessages = [
   'REPLICACHE LICENSE NOT VALID',
   'enableAnalytics false',
   'no such entity',
-  'Zero starting up with no server URL',
   'PokeHandler clearing due to unexpected poke error',
   'Not indexing value',
   'Zero starting up with no server URL',

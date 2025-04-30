@@ -152,13 +152,9 @@ async function makeDatabases<TSchema extends Schema>(
   await Promise.all(
     Object.values(schema.tables).map(async table => {
       const sqlQuery = formatPgInternalConvert(
-        compile(
-          {
-            table: table.name,
-          },
-          schema.tables,
-          serverSchema,
-        ),
+        compile(serverSchema, schema, {
+          table: table.name,
+        }),
       );
       const rows = extractZqlResult(
         await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),

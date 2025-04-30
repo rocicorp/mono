@@ -10,6 +10,7 @@ import {
 } from 'vitest';
 import WebSocket from 'ws';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
 import {testDBs} from '../../test/db.ts';
 import {type PostgresDB} from '../../types/pg.ts';
 import {inProcChannel} from '../../types/processes.ts';
@@ -63,17 +64,26 @@ describe('change-streamer/http', () => {
 
     const [parent, receiver] = inProcChannel();
 
-    const dispatcher = new HttpService('dispatcher', lc, {port: 0}, fastify => {
-      installWebSocketHandoff(
-        lc,
-        req => ({payload: getSubscriberContext(req), receiver}),
-        fastify.server,
-      );
-    });
+    const config = {} as unknown as ZeroConfig;
+
+    const dispatcher = new HttpService(
+      'dispatcher',
+      config,
+      lc,
+      {port: 0},
+      fastify => {
+        installWebSocketHandoff(
+          lc,
+          req => ({payload: getSubscriberContext(req), receiver}),
+          fastify.server,
+        );
+      },
+    );
 
     // Run the server for real instead of using `injectWS()`, as that has a
     // different behavior for ws.close().
     const server = new ChangeStreamerHttpServer(
+      config,
       lc,
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       {port: 0},

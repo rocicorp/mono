@@ -363,6 +363,14 @@ export const zeroOptions = {
     ],
   },
 
+  adminPassword: {
+    type: v.string().optional(),
+    desc: [
+      `A password used to administer zero-cache server, for example to access the`,
+      `/statz endpoint.`,
+    ],
+  },
+
   litestream: {
     executable: {
       type: v.string().optional(),
@@ -554,16 +562,16 @@ export const zeroOptions = {
   },
 };
 
-export type ZeroConfig = Config<typeof zeroOptions>;
+export type ZeroConfig = ReturnType<typeof getZeroConfig>;
 
 export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
 
-let loadedConfig: ZeroConfig | undefined;
+let loadedConfig: Config<typeof zeroOptions> | undefined;
 
 export function getZeroConfig(
   env: NodeJS.ProcessEnv = process.env,
   argv = process.argv.slice(2),
-): ZeroConfig {
+) {
   if (!loadedConfig || singleProcessMode()) {
     loadedConfig = parseOptions(zeroOptions, argv, ZERO_ENV_VAR_PREFIX, env);
 
@@ -572,5 +580,21 @@ export function getZeroConfig(
     }
   }
 
-  return loadedConfig;
+  return normalizeZeroConfig(loadedConfig);
+}
+
+export function normalizeZeroConfig<T extends Config<typeof zeroOptions>>(
+  config: T,
+) {
+  return {
+    ...config,
+    cvr: {
+      ...config.cvr,
+      db: config.cvr.db ?? config.upstream.db,
+    },
+    change: {
+      ...config.change,
+      db: config.change.db ?? config.upstream.db,
+    },
+  };
 }

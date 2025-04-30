@@ -8,8 +8,13 @@ import {
 import {pid} from 'node:process';
 import {type LogConfig, type ZeroConfig} from '../config/zero-config.ts';
 import {stringify} from '../types/bigint-json.ts';
+import {OtelLogSink} from './otel-log-sink.ts';
 
-function createLogSink(config: LogConfig) {
+function createLogSink(config: LogConfig): LogSink {
+  if (config.logCollector) {
+    return new OtelLogSink(config);
+  }
+
   return config.format === 'json' ? consoleJsonLogSink : consoleLogSink;
 }
 
@@ -57,7 +62,7 @@ const consoleJsonLogSink: LogSink = {
   },
 };
 
-function errorOrObject(v: unknown): object | undefined {
+export function errorOrObject(v: unknown): object | undefined {
   if (v instanceof Error) {
     return {
       ...v, // some properties of Error subclasses may be enumerable

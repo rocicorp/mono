@@ -2,7 +2,7 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../ivm/view.ts';
 import {ExpressionBuilder} from './expression.ts';
-import {AbstractQuery, defaultFormat} from './query-impl.ts';
+import {AbstractQuery, defaultFormat, newQuerySymbol} from './query-impl.ts';
 import type {HumanReadable, PullRow, Query} from './query.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -31,9 +31,11 @@ export class StaticQuery<
     return new ExpressionBuilder(this._exists);
   }
 
-  protected readonly _system = 'permissions';
+  constructor(schema: TSchema, tableName: TTable, ast: AST, format: Format) {
+    super(schema, tableName, ast, format, 'permissions');
+  }
 
-  protected _newQuery<
+  protected [newQuerySymbol]<
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,

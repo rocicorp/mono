@@ -74,6 +74,7 @@ jobs:
           ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
           DOMAIN_NAME: 'zbugs-sync-sandbox.rocicorp.dev'
           DOMAIN_CERT: ${{ vars.SANDBOX_CERTIFICATE_ARN }}
+          DATADOG_API_KEY: ${{ secrets.SANDBOX_DATADOG_API_KEY }}
         run: |
           cd prod/sst
           # The permissions.deployer function's package.json is configured to install

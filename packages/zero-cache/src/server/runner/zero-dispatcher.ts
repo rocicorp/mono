@@ -7,6 +7,7 @@ import {
 import {HttpService, type Options} from '../../services/http-service.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
 import type {Worker} from '../../types/processes.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
 
 type Tenant = {
   // Note: The empty signifies the sole tenant. This can only be provided
@@ -24,12 +25,13 @@ export class ZeroDispatcher extends HttpService {
   readonly #runAsReplicationManager: boolean;
 
   constructor(
+    config: ZeroConfig,
     lc: LogContext,
     runAsReplicationManager: boolean,
     tenants: Tenant[],
     opts: Options,
   ) {
-    super('zero-dispatcher', lc, opts, fastify => {
+    super('zero-dispatcher', config, lc, opts, fastify => {
       installWebSocketHandoff(lc, this.#handoff, fastify.server);
     });
 
