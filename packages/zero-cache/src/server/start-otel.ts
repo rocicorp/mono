@@ -16,17 +16,21 @@ import {NoopMetricExporter} from '../../../otel/src/noop-metric-exporter.ts';
 import {version} from '../../../otel/src/version.ts';
 import {
   BatchLogRecordProcessor,
+  ConsoleLogRecordExporter,
   LoggerProvider,
+  SimpleLogRecordProcessor,
   type LogRecordProcessor,
 } from '@opentelemetry/sdk-logs';
 import {logs} from '@opentelemetry/api-logs';
 
-let started = false;
-export function startOtel(endpoints: {
+export type OtelEndpoints = {
   traceCollector?: string | undefined;
   metricCollector?: string | undefined;
   logCollector?: string | undefined;
-}) {
+};
+
+let started = false;
+export function startOtel(endpoints: OtelEndpoints) {
   if (started) {
     return;
   }
@@ -47,8 +51,15 @@ export function startOtel(endpoints: {
         url: endpoints.logCollector,
       }),
     );
+    const consoleProcessor = new SimpleLogRecordProcessor(
+      // TODO: we need to write a custom console log exporter to preserve
+      // our old format.
+      new ConsoleLogRecordExporter(),
+    );
     logRecordProcessors.push(processor);
+    logRecordProcessors.push(consoleProcessor);
     provider.addLogRecordProcessor(processor);
+    provider.addLogRecordProcessor(consoleProcessor);
     logs.setGlobalLoggerProvider(provider);
   }
 
