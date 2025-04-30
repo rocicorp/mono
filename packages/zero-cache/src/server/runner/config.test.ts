@@ -59,9 +59,11 @@ test('parse options', () => {
         "auth": {},
         "autoReset": true,
         "change": {
+          "db": "foo",
           "maxConns": 5,
         },
         "cvr": {
+          "db": "foo",
           "maxConns": 30,
         },
         "initialSync": {
