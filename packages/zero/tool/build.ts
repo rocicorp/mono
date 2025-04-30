@@ -93,8 +93,8 @@ async function verifyDependencies(external: Iterable<string>) {
   const {dependencies} = JSON.parse(packageJSON);
   const actualDeps = new Set(Object.keys(dependencies));
   assert.deepEqual(
-    expectedDeps,
     actualDeps,
+    expectedDeps,
     'zero/package.json dependencies do not match the dependencies of the internal packages',
   );
 }
