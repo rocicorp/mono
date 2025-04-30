@@ -431,13 +431,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       this.#storer.catchup(subscriber, mode);
 
       if (initial) {
-        this.#scheduleCleanup(watermark);
+        this.scheduleCleanup(watermark);
       }
     }
     return Promise.resolve(downstream);
   }
 
-  #scheduleCleanup(watermark: string) {
+  scheduleCleanup(watermark: string) {
     const origSize = this.#initialWatermarks.size;
     this.#initialWatermarks.add(watermark);
 

@@ -530,4 +530,6 @@ test.each(
       },
     ],
   ),
-)('$name', ({fn}) => fn());
+)('$name', async ({fn}) => {
+  await fn();
+});

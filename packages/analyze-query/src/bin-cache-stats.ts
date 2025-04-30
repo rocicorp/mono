@@ -8,11 +8,15 @@ import {
   appOptions,
   shardOptions,
   ZERO_ENV_VAR_PREFIX,
+  zeroOptions,
 } from '../../zero-cache/src/config/zero-config.ts';
 import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 import {BigIntJSON} from '../../zero-cache/src/types/bigint-json.ts';
 import chalk from 'chalk';
+import {Database} from '../../zqlite/src/db.ts';
+import fs from 'fs';
+import os from 'os';
 
 const options = {
   upstream: {
@@ -28,6 +32,7 @@ const options = {
   shard: shardOptions,
   dumpZql: v.boolean().optional(),
   detailed: v.boolean().optional(),
+  replica: zeroOptions.replica,
 };
 
 const config = parseOptions(
@@ -42,7 +47,7 @@ async function upstreamStats() {
   const schema = upstreamSchema(getShardID(config));
   const sql = pgClient(lc, config.upstream.db);
 
-  await printStats([
+  await printPgStats([
     [
       'num replicas',
       sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."replicas"`,
@@ -98,7 +103,7 @@ async function cvrStats() {
     ORDER BY g.num_queries DESC;`;
   }
 
-  await printStats([
+  await printPgStats([
     [
       'total num queries',
       sql`SELECT COUNT(*) as "c" FROM ${sql(schema)}."desires"`,
@@ -168,6 +173,30 @@ async function cvrStats() {
         AVG(row_count) AS "avg"
       FROM client_group_counts;`,
     ],
+    [
+      // check for AST blowup due to DNF conversion.
+      'ast sizes',
+      sql`SELECT 
+        percentile_cont(0.25) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "25th_percentile",
+        percentile_cont(0.5) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "50th_percentile",
+        percentile_cont(0.75) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "75th_percentile",
+        percentile_cont(0.9) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "90th_percentile",
+        percentile_cont(0.95) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "95th_percentile",
+        percentile_cont(0.99) WITHIN GROUP (ORDER BY length("clientAST"::text)) AS "99th_percentile",
+        MIN(length("clientAST"::text)) AS "minimum_length",
+        MAX(length("clientAST"::text)) AS "maximum_length",
+        AVG(length("clientAST"::text))::integer AS "average_length",
+        COUNT(*) AS "total_records"
+      FROM ${sql(schema)}."queries";`,
+    ],
+    [
+      // output the hash of the largest AST
+      'biggest ast hash',
+      sql`SELECT "queryHash", length("clientAST"::text) AS "ast_length"
+      FROM ${sql(schema)}."queries"
+      ORDER BY length("clientAST"::text) DESC
+      LIMIT 1;`,
+    ],
     ...((config.detailed
       ? [
           [
@@ -236,7 +265,7 @@ async function changelogStats() {
   const schema = upstreamSchema(getShardID(config)) + '/cdc';
   const sql = pgClient(lc, config.change.db);
 
-  await printStats([
+  await printPgStats([
     [
       'change log size',
       sql`SELECT COUNT(*) as "change_log_size" FROM ${sql(schema)}."changeLog"`,
@@ -245,7 +274,37 @@ async function changelogStats() {
   await sql.end();
 }
 
-async function printStats(
+function replicaStats() {
+  const db = new Database(lc, config.replica.file);
+  printStats('replica', [
+    ['wal checkpoint', pick(first(db.pragma('WAL_CHECKPOINT')))],
+    ['page count', pick(first(db.pragma('PAGE_COUNT')))],
+    ['page size', pick(first(db.pragma('PAGE_SIZE')))],
+    ['journal mode', pick(first(db.pragma('JOURNAL_MODE')))],
+    ['synchronous', pick(first(db.pragma('SYNCHRONOUS')))],
+    ['cache size', pick(first(db.pragma('CACHE_SIZE')))],
+    ['auto vacuum', pick(first(db.pragma('AUTO_VACUUM')))],
+    ['freelist count', pick(first(db.pragma('FREELIST_COUNT')))],
+    ['wal autocheckpoint', pick(first(db.pragma('WAL_AUTOCHECKPOINT')))],
+    ['db file stats', fs.statSync(config.replica.file)],
+  ] as const);
+}
+
+function osStats() {
+  printStats('os', [
+    ['load avg', os.loadavg()],
+    ['uptime', os.uptime()],
+    ['total mem', os.totalmem()],
+    ['free mem', os.freemem()],
+    ['cpus', os.cpus().length],
+    ['platform', os.platform()],
+    ['arch', os.arch()],
+    ['release', os.release()],
+    ['uptime', os.uptime()],
+  ] as const);
+}
+
+async function printPgStats(
   pendingQueries: [
     name: string,
     query: ReturnType<ReturnType<typeof pgClient>>,
@@ -260,6 +319,30 @@ async function printStats(
   }
 }
 
+function printStats(
+  group: string,
+  queries: readonly [name: string, result: unknown][],
+) {
+  console.log(chalk.blue.bold(`\n=== ${group} Stats: ===`));
+  for (const [name, result] of queries) {
+    console.log(
+      '\n',
+      chalk.blue.bold(name),
+      BigIntJSON.stringify(result, null, 2),
+    );
+  }
+}
+
 await changelogStats();
 await upstreamStats();
 await cvrStats();
+replicaStats();
+osStats();
+
+function first(x: object[]): object {
+  return x[0];
+}
+
+function pick(x: object): unknown {
+  return Object.values(x)[0];
+}

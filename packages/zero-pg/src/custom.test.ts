@@ -4,7 +4,7 @@ import type {CustomMutatorDefs as CustomMutatorClientDefs} from '../../zero-clie
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 
 test('server mutator type is compatible with client mutator type', () => {
-  expectTypeOf<CustomMutatorDefs<Schema, unknown>>().toExtend<
+  expectTypeOf<CustomMutatorDefs<unknown>>().toExtend<
     CustomMutatorClientDefs<Schema>
   >();
 });

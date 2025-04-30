@@ -98,6 +98,7 @@ export class Connection {
       .withContext('clientID', clientID)
       .withContext('clientGroupID', clientGroupID)
       .withContext('wsID', wsID);
+    this.#lc.debug?.('new connection');
     this.#onClose = onClose;
 
     this.#ws.addEventListener('close', this.#handleClose);
@@ -244,9 +245,11 @@ export class Connection {
       try {
         const data = JSON.parse(reason);
         msg = valita.parse(data, closeConnectionMessageSchema);
-      } catch {
+      } catch (e) {
         // failed to to parse reason as JSON.
-        this.#lc.warn?.(`failed to parse message "${reason}": ${String(e)}`);
+        this.#lc.warn?.(
+          `failed to parse close message "${reason}": ${String(e)}`,
+        );
         return;
       }
 
@@ -349,6 +352,9 @@ function send(
     lc.debug?.(`Dropping outbound message on ws (state: ${ws.readyState})`, {
       dropped: data,
     });
+    if (callback !== 'ignore-backpressure') {
+      callback(new Error('websocket closed'));
+    }
   }
 }
 

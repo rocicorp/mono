@@ -91,9 +91,17 @@ export class Syncer implements SingletonService {
   }
 
   readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {
+    this.#lc.debug?.(
+      'creating connection',
+      params.clientGroupID,
+      params.clientID,
+    );
     const {clientID, clientGroupID, auth, userID} = params;
     const existing = this.#connections.get(clientID);
     if (existing) {
+      this.#lc.debug?.(
+        `client ${clientID} already connected, closing existing connection`,
+      );
       existing.close(`replaced by ${params.wsID}`);
     }
 
@@ -103,6 +111,9 @@ export class Syncer implements SingletonService {
         decodedToken = await verifyToken(this.#authConfig, auth, {
           subject: userID,
         });
+        this.#lc.debug?.(
+          `Received auth token ${auth} for clientID ${clientID}, decoded: ${JSON.stringify(decodedToken)}`,
+        );
       } catch (e) {
         sendError(this.#lc, ws, {
           kind: ErrorKind.AuthInvalidated,
@@ -111,6 +122,8 @@ export class Syncer implements SingletonService {
         ws.close(3000, 'Failed to decode JWT');
         return;
       }
+    } else {
+      this.#lc.debug?.(`No auth token received for clientID ${clientID}`);
     }
 
     const connection = new Connection(
@@ -140,6 +153,11 @@ export class Syncer implements SingletonService {
 
     connection.init();
     if (params.initConnectionMsg) {
+      this.#lc.debug?.(
+        'handling init connection message from sec header',
+        params.clientGroupID,
+        params.clientID,
+      );
       await connection.handleInitConnection(
         JSON.stringify(params.initConnectionMsg),
       );

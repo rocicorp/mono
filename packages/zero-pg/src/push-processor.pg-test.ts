@@ -3,10 +3,11 @@ import {beforeEach, describe, expect, test} from 'vitest';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {getClientsTableDefinition} from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
 
-import {PushProcessor} from './web.ts';
+import {PushProcessor} from './push-processor.ts';
+import {ZQLPostgresJSAdapter} from './zql-postgresjs-provider.ts';
 import type {PushBody} from '../../zero-protocol/src/push.ts';
 import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
-import {Connection} from './test/util.ts';
+import {ZQLDatabaseProvider} from './zql-provider.ts';
 
 let pg: PostgresDB;
 const params = {
@@ -54,12 +55,11 @@ const mutators = {
 describe('out of order mutation', () => {
   test('first mutation is out of order', async () => {
     const processor = new PushProcessor(
-      {
+      new ZQLDatabaseProvider(new ZQLPostgresJSAdapter(pg), {
         tables: {},
         relationships: {},
         version: 1,
-      },
-      () => new Connection(pg),
+      }),
     );
     const result = await processor.process(mutators, params, makePush(15));
 
@@ -83,12 +83,11 @@ describe('out of order mutation', () => {
 
   test('later mutations are out of order', async () => {
     const processor = new PushProcessor(
-      {
+      new ZQLDatabaseProvider(new ZQLPostgresJSAdapter(pg), {
         tables: {},
         relationships: {},
         version: 1,
-      },
-      () => new Connection(pg),
+      }),
     );
 
     expect(await processor.process(mutators, params, makePush(1))).toEqual({
@@ -124,12 +123,11 @@ describe('out of order mutation', () => {
 
 test('first mutation', async () => {
   const processor = new PushProcessor(
-    {
+    new ZQLDatabaseProvider(new ZQLPostgresJSAdapter(pg), {
       tables: {},
       relationships: {},
       version: 1,
-    },
-    () => new Connection(pg),
+    }),
   );
 
   expect(await processor.process(mutators, params, makePush(1))).toEqual({
@@ -149,12 +147,11 @@ test('first mutation', async () => {
 
 test('previously seen mutation', async () => {
   const processor = new PushProcessor(
-    {
+    new ZQLDatabaseProvider(new ZQLPostgresJSAdapter(pg), {
       tables: {},
       relationships: {},
       version: 1,
-    },
-    () => new Connection(pg),
+    }),
   );
 
   await processor.process(mutators, params, makePush(1));
@@ -168,7 +165,11 @@ test('previously seen mutation', async () => {
           clientID: 'cid',
           id: 2,
         },
-        result: {},
+        result: {
+          error: 'alreadyProcessed',
+          details:
+            'Ignoring mutation from cid with ID 2 as it was already processed. Expected: 4',
+        },
       },
     ],
   });
@@ -178,12 +179,11 @@ test('previously seen mutation', async () => {
 
 test('lmid still moves forward if the mutator implementation throws', async () => {
   const processor = new PushProcessor(
-    {
+    new ZQLDatabaseProvider(new ZQLPostgresJSAdapter(pg), {
       tables: {},
       relationships: {},
       version: 1,
-    },
-    () => new Connection(pg),
+    }),
   );
 
   await processor.process(mutators, params, makePush(1));
@@ -212,12 +212,11 @@ test('lmid still moves forward if the mutator implementation throws', async () =
 
 test('mutators with and without namespaces', async () => {
   const processor = new PushProcessor(
-    {
+    new ZQLDatabaseProvider(new ZQLPostgresJSAdapter(pg), {
       tables: {},
       relationships: {},
       version: 1,
-    },
-    () => new Connection(pg),
+    }),
   );
   const mutators = {
     namespaced: {
