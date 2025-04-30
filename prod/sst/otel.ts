@@ -140,6 +140,12 @@ export function withOtelContainers(
           detectors: [env]
           timeout: 2s
           override: false
+        transform:
+          trace_statements:
+            - context: resource
+              statements:
+                - set(attributes["datadog.host.name"], "${config.appName}")
+                - set(attributes["datadog.host.version"], "${config.appVersion}")
       connectors:
         datadog/connector:
       exporters:
@@ -157,7 +163,7 @@ export function withOtelContainers(
         pipelines:
           traces:
             receivers: [otlp]
-            processors: [resourcedetection/env, batch/traces]
+            processors: [transform, resourcedetection/env, batch/traces]
             exporters: [datadog/connector, datadog/api]
           metrics:
             receivers: [datadog/connector, otlp]
