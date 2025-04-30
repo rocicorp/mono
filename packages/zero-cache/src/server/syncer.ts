@@ -1,17 +1,6 @@
-import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-http';
-import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
-import {NodeSDK} from '@opentelemetry/sdk-node';
-import {
-  ATTR_SERVICE_NAME,
-  ATTR_SERVICE_VERSION,
-} from '@opentelemetry/semantic-conventions';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
-import {resourceFromAttributes} from '@opentelemetry/resources';
-import {NoopSpanExporter} from '../../../otel/src/noop-span-exporter.ts';
-import {NoopMetricExporter} from '../../../otel/src/noop-metric-exporter.ts';
-import {version} from '../../../otel/src/version.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
@@ -38,10 +27,7 @@ import {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
 import {createLogContext} from './logging.ts';
-import {
-  PeriodicExportingMetricReader,
-  ConsoleMetricExporter,
-} from '@opentelemetry/sdk-metrics';
+import {startOtel} from './start-otel.ts';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -53,45 +39,9 @@ export default function runWorker(
   ...args: string[]
 ): Promise<void> {
   const config = getZeroConfig(env, args.slice(1));
+  startOtel(config.log);
+
   const lc = createLogContext(config, {worker: 'syncer'});
-
-  const {traceCollector} = config.log;
-  if (!traceCollector) {
-    lc.warn?.('trace collector not set');
-  } else {
-    lc.debug?.(`trace collector: ${traceCollector}`);
-  }
-
-  const sdk = new NodeSDK({
-    resource: resourceFromAttributes({
-      [ATTR_SERVICE_NAME]: 'syncer',
-      [ATTR_SERVICE_VERSION]: version,
-    }),
-    traceExporter:
-      config.log.traceCollector === undefined
-        ? new NoopSpanExporter()
-        : new OTLPTraceExporter({
-            url: config.log.traceCollector,
-          }),
-    metricReader: new PeriodicExportingMetricReader({
-      exportIntervalMillis: 5000,
-      exporter: (() => {
-        if (config.log.metricCollector === undefined) {
-          if (process.env.NODE_ENV === 'dev') {
-            return new ConsoleMetricExporter();
-          }
-
-          return new NoopMetricExporter();
-        }
-
-        return new OTLPMetricExporter({
-          url: config.log.metricCollector,
-        });
-      })(),
-    }),
-  });
-  sdk.start();
-
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
