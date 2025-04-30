@@ -44,7 +44,7 @@ export default async function runWorker(
   const shard = getShardConfig(config);
   const {taskID, change} = config;
   // Create a pg client with a single short-lived connection for the purpose
-  // of change-streamer discover (i.e. DNS).
+  // of change-streamer discovery (i.e. ChangeDB as DNS).
   const changeDB = pgClient(lc, change.db, {
     max: 1,
     ['idle_timeout']: 15,

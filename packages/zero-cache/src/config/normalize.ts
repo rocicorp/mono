@@ -3,7 +3,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {getHostIp, getTaskID} from './runtime.ts';
 import type {ZeroConfig} from './zero-config.ts';
 
-/** {@link ZeroConfig} with defaults set as per option documentation. */
+/** {@link ZeroConfig} with defaults set per option documentation. */
 export type NormalizedZeroConfig = ZeroConfig & {
   taskID: string;
   changeStreamer: {
