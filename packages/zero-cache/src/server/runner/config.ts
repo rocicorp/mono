@@ -1,10 +1,9 @@
 import {
   envSchema,
   parseOptionsAdvanced,
-  type Config,
 } from '../../../../shared/src/options.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import {zeroOptions} from '../../config/zero-config.ts';
+import {normalizeZeroConfig, zeroOptions} from '../../config/zero-config.ts';
 
 const ENV_VAR_PREFIX = 'ZERO_';
 
@@ -107,13 +106,12 @@ const tenantsSchema = v
     return v.ok(val);
   });
 
-export type MultiZeroConfig = v.Infer<typeof tenantsSchema> &
-  Omit<Config<typeof multiConfigSchema>, 'tenantsJSON'>;
+export type MultiZeroConfig = ReturnType<typeof getMultiZeroConfig>;
 
 export function getMultiZeroConfig(
   processEnv: NodeJS.ProcessEnv = process.env,
   argv = process.argv.slice(2),
-): {config: MultiZeroConfig; env: NodeJS.ProcessEnv} {
+) {
   const {
     config: {tenantsJSON, ...config},
     env,
@@ -128,5 +126,5 @@ export function getMultiZeroConfig(
   const tenantsConfig = tenantsJSON
     ? v.parse(JSON.parse(tenantsJSON), tenantsSchema)
     : {tenants: []};
-  return {config: {...config, ...tenantsConfig}, env};
+  return {config: {...normalizeZeroConfig(config), ...tenantsConfig}, env};
 }
