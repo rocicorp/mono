@@ -1,5 +1,10 @@
-import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-http';
 import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
+import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-http';
+import {resourceFromAttributes} from '@opentelemetry/resources';
+import {
+  ConsoleMetricExporter,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
 import {NodeSDK} from '@opentelemetry/sdk-node';
 import {
   ATTR_SERVICE_NAME,
@@ -8,14 +13,14 @@ import {
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
-import {resourceFromAttributes} from '@opentelemetry/resources';
-import {NoopSpanExporter} from '../../../otel/src/noop-span-exporter.ts';
 import {NoopMetricExporter} from '../../../otel/src/noop-metric-exporter.ts';
+import {NoopSpanExporter} from '../../../otel/src/noop-span-exporter.ts';
 import {version} from '../../../otel/src/version.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {assertNormalized} from '../config/normalize.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
@@ -38,10 +43,6 @@ import {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
 import {createLogContext} from './logging.ts';
-import {
-  PeriodicExportingMetricReader,
-  ConsoleMetricExporter,
-} from '@opentelemetry/sdk-metrics';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -53,6 +54,7 @@ export default function runWorker(
   ...args: string[]
 ): Promise<void> {
   const config = getZeroConfig(env, args.slice(1));
+  assertNormalized(config);
   const lc = createLogContext(config, {worker: 'syncer'});
 
   const {traceCollector} = config.log;
@@ -102,7 +104,7 @@ export default function runWorker(
   const replicaFile = replicaFileName(config.replica.file, fileMode);
   lc.debug?.(`running view-syncer on ${replicaFile}`);
 
-  const cvrDB = pgClient(lc, cvr.db ?? upstream.db, {
+  const cvrDB = pgClient(lc, cvr.db, {
     max: cvr.maxConnsPerWorker,
     connection: {['application_name']: `zero-sync-worker-${pid}-cvr`},
   });
@@ -138,7 +140,7 @@ export default function runWorker(
     return new ViewSyncerService(
       logger,
       shard,
-      must(config.taskID, 'main must set --task-id'),
+      config.taskID,
       id,
       cvrDB,
       new PipelineDriver(

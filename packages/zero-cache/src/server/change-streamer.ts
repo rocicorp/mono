@@ -1,6 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {DatabaseInitError} from '../../../zqlite/src/db.ts';
+import {assertNormalized} from '../config/normalize.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {warmupConnections} from '../db/warmup.ts';
@@ -27,9 +28,10 @@ export default async function runWorker(
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
   const config = getZeroConfig(env);
+  assertNormalized(config);
   const {
     taskID,
-    changeStreamerPort: port = config.port + 1,
+    changeStreamer: {port, address},
     upstream,
     change,
     replica,
@@ -39,7 +41,7 @@ export default async function runWorker(
   const lc = createLogContext(config, {worker: 'change-streamer'});
 
   // Kick off DB connection warmup in the background.
-  const changeDB = pgClient(lc, change.db ?? upstream.db, {
+  const changeDB = pgClient(lc, change.db, {
     max: change.maxConns,
     connection: {['application_name']: 'zero-change-streamer'},
   });
@@ -75,7 +77,8 @@ export default async function runWorker(
       changeStreamer = await initializeStreamer(
         lc,
         shard,
-        must(taskID, `main must set --task-id`),
+        taskID,
+        address,
         changeDB,
         changeSource,
         subscriptionState,

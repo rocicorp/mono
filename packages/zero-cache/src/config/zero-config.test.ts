@@ -172,13 +172,35 @@ test('zero-cache --help', () => {
        ZERO_PORT env                                                                                                                                              
                                                                 The port for sync connections.                                                                    
                                                                                                                                                                   
+     --change-streamer-mode dedicated,discover                  default: "dedicated"                                                                              
+       ZERO_CHANGE_STREAMER_MODE env                                                                                                                              
+                                                                The mode for running or connecting to the change-streamer:                                        
+                                                                * dedicated: runs the change-streamer and exits if another change-streamer                        
+                                                                      takes over the replication slot. This is appropriate in a single-node                       
+                                                                      configuration, or for the replication-manager in a multi-node configuration.                
+                                                                * discover: connects to the change-streamer as advertised in the change-db.                       
+                                                                      This is appropriate for the view-syncers in a multi-node configuration.                     
+                                                                                                                                                                  
      --change-streamer-port number                              optional                                                                                          
        ZERO_CHANGE_STREAMER_PORT env                                                                                                                              
                                                                 The port on which the change-streamer runs. This is an internal                                   
-                                                                protocol between the replication-manager and zero-cache, which                                    
-                                                                runs in the same process in local development.                                                    
+                                                                protocol between the replication-manager and view-syncers, which                                  
+                                                                runs in the same process tree in local development or a single-node configuration.                
                                                                                                                                                                   
                                                                 If unspecified, defaults to --port + 1.                                                           
+                                                                                                                                                                  
+     --change-streamer-address string                           optional                                                                                          
+       ZERO_CHANGE_STREAMER_ADDRESS env                                                                                                                           
+                                                                The host:port for other processes to use when connecting to this                                  
+                                                                change-streamer. Leaving this unspecified will result in using the machine's                      
+                                                                IP address and the --change-streamer-port to advertise for discovery.                             
+                                                                                                                                                                  
+                                                                In most cases, the default behavior (unspecified) will work, including in a single-node           
+                                                                configuration or a multi-node configuration with host/awsvpc networking (e.g. Fargate).           
+                                                                For a multi-node configuration in which the container is running with bridge mode                 
+                                                                networking, the process is be unable to determine the externally addressable port, so             
+                                                                the --change-streamer-address must be specified manually (e.g. a load balancer or                 
+                                                                service discovery address).                                                                       
                                                                                                                                                                   
      --task-id string                                           optional                                                                                          
        ZERO_TASK_ID env                                                                                                                                           
@@ -203,13 +225,6 @@ test('zero-cache --help', () => {
                                                                 Leave this unset to use the maximum available parallelism.                                        
                                                                 If set to 0, the server runs without sync workers, which is the                                   
                                                                 configuration for running the replication-manager.                                                
-                                                                                                                                                                  
-     --change-streamer-uri string                               optional                                                                                          
-       ZERO_CHANGE_STREAMER_URI env                                                                                                                               
-                                                                When unset, the zero-cache runs its own replication-manager                                       
-                                                                (i.e. change-streamer). In production, this should be set to                                      
-                                                                the replication-manager URI, which runs a change-streamer                                         
-                                                                on port 4849.                                                                                     
                                                                                                                                                                   
      --auto-reset boolean                                       default: true                                                                                     
        ZERO_AUTO_RESET env                                                                                                                                        

@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid';
 import {networkInterfaces} from 'node:os';
-import * as v from '../../../../shared/src/valita.ts';
+import * as v from '../../../shared/src/valita.ts';
 
 // https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-metadata-endpoint-v4-response.html
 const containerMetadataSchema = v.object({['TaskARN']: v.string()});
@@ -9,6 +9,15 @@ const containerMetadataSchema = v.object({['TaskARN']: v.string()});
 export async function getTaskID(lc: LogContext) {
   const containerURI = process.env['ECS_CONTAINER_METADATA_URI_V4'];
   if (containerURI) {
+    try {
+      const resp = await fetch(`${containerURI}`);
+      const metadata = await resp.json();
+      // Logged purely for debugging.
+      lc.info?.(`Container metadata`, {metadata});
+    } catch (e) {
+      lc.warn?.('unable to lookup container metadata', e);
+    }
+
     try {
       const resp = await fetch(`${containerURI}/task`);
       const metadata = v.parse(
@@ -34,7 +43,7 @@ function isLinkLocal(addr: string) {
   return addr.startsWith('169.254.') || addr.startsWith('fe80::');
 }
 
-export async function getHostIp(lc: LogContext) {
+export function getHostIp(lc: LogContext) {
   const interfaces = networkInterfaces();
   const sorted = Object.values(networkInterfaces())
     .flat()
@@ -44,7 +53,7 @@ export async function getHostIp(lc: LogContext) {
         // Prefer non-internal addresses.
         return a.internal ? 1 : -1;
       }
-      if (isLinkLocal(a.address) != isLinkLocal(b.address)) {
+      if (isLinkLocal(a.address) !== isLinkLocal(b.address)) {
         // Prefer non link-local addresses
         return isLinkLocal(a.address) ? 1 : -1;
       }
@@ -56,16 +65,7 @@ export async function getHostIp(lc: LogContext) {
       return a.address.localeCompare(b.address);
     });
 
-  lc.info?.(`Network interfaces`, {interfaces, sorted});
-
-  const containerURI = process.env['ECS_CONTAINER_METADATA_URI_V4'];
-  if (containerURI) {
-    try {
-      const resp = await fetch(`${containerURI}`);
-      const metadata = await resp.json();
-      lc.info?.(`Container metadata`, {metadata});
-    } catch (e) {
-      lc.warn?.('unable to determine host IP', e);
-    }
-  }
+  const preferred = sorted[0].address;
+  lc.debug?.(`Network interfaces`, {preferred, sorted, interfaces});
+  return preferred;
 }
