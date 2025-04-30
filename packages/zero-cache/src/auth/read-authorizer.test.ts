@@ -9,14 +9,9 @@ import {
   definePermissions,
 } from '../../../zero-schema/src/permissions.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
-import {
-  ast,
-  newQuery,
-  type QueryDelegate,
-} from '../../../zql/src/query/query-impl.ts';
+import {ast} from '../../../zql/src/query/query-impl.ts';
+import {staticQuery} from '../../../zql/src/query/static-query.ts';
 import {transformQuery} from './read-authorizer.ts';
-
-const mockDelegate = {} as QueryDelegate;
 
 const lc = createSilentLogContext();
 
@@ -183,7 +178,7 @@ describe('unreadable tables', () => {
   ];
   test('top-level', () => {
     for (const tableName of unreadables) {
-      const query = newQuery(mockDelegate, schema, tableName);
+      const query = staticQuery(schema, tableName);
       expect(
         transformQuery(lc, ast(query), permissionRules, authData),
       ).toStrictEqual({
@@ -198,7 +193,7 @@ describe('unreadable tables', () => {
   });
 
   test('related', () => {
-    const query = newQuery(mockDelegate, schema, 'readable')
+    const query = staticQuery(schema, 'readable')
       .related('unreadable')
       .related('readable');
 
@@ -230,7 +225,7 @@ describe('unreadable tables', () => {
                   "type": "or",
                 },
               },
-              "system": "client",
+              "system": "permissions",
             },
             {
               "correlation": {
@@ -256,7 +251,7 @@ describe('unreadable tables', () => {
                   "type": "and",
                 },
               },
-              "system": "client",
+              "system": "permissions",
             },
           ],
           "table": "readable",
@@ -294,7 +289,7 @@ describe('unreadable tables', () => {
                   "type": "or",
                 },
               },
-              "system": "client",
+              "system": "permissions",
             },
             {
               "correlation": {
@@ -320,7 +315,7 @@ describe('unreadable tables', () => {
                   "type": "and",
                 },
               },
-              "system": "client",
+              "system": "permissions",
             },
           ],
           "table": "readable",
@@ -336,7 +331,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          newQuery(mockDelegate, schema, 'readable').related('readable', q =>
+          staticQuery(schema, 'readable').related('readable', q =>
             q.related('readable', q => q.related('unreadable')),
           ),
         ),
@@ -406,7 +401,7 @@ describe('unreadable tables', () => {
                             "type": "or",
                           },
                         },
-                        "system": "client",
+                        "system": "permissions",
                       },
                     ],
                     "table": "readable",
@@ -415,7 +410,7 @@ describe('unreadable tables', () => {
                       "type": "and",
                     },
                   },
-                  "system": "client",
+                  "system": "permissions",
                 },
               ],
               "table": "readable",
@@ -424,7 +419,7 @@ describe('unreadable tables', () => {
                 "type": "and",
               },
             },
-            "system": "client",
+            "system": "permissions",
           },
         ],
         "table": "readable",
@@ -439,7 +434,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          newQuery(mockDelegate, schema, 'readable').related('readable', q =>
+          staticQuery(schema, 'readable').related('readable', q =>
             q.related('readable', q => q.related('unreadable')),
           ),
         ),
@@ -509,7 +504,7 @@ describe('unreadable tables', () => {
                             "type": "or",
                           },
                         },
-                        "system": "client",
+                        "system": "permissions",
                       },
                     ],
                     "table": "readable",
@@ -518,7 +513,7 @@ describe('unreadable tables', () => {
                       "type": "and",
                     },
                   },
-                  "system": "client",
+                  "system": "permissions",
                 },
               ],
               "table": "readable",
@@ -527,7 +522,7 @@ describe('unreadable tables', () => {
                 "type": "and",
               },
             },
-            "system": "client",
+            "system": "permissions",
           },
         ],
         "table": "readable",
@@ -541,7 +536,7 @@ describe('unreadable tables', () => {
     expect(
       transformQuery(
         lc,
-        ast(newQuery(mockDelegate, schema, 'readable').related('unreadable')),
+        ast(staticQuery(schema, 'readable').related('unreadable')),
         permissionRules,
         authData,
       ),
@@ -572,7 +567,7 @@ describe('unreadable tables', () => {
                 "type": "or",
               },
             },
-            "system": "client",
+            "system": "permissions",
           },
         ],
         "table": "readable",
@@ -585,9 +580,7 @@ describe('unreadable tables', () => {
   });
 
   test('subqueries in conditions are replaced by `const true` or `const false` expressions', () => {
-    const query = newQuery(mockDelegate, schema, 'readable').whereExists(
-      'unreadable',
-    );
+    const query = staticQuery(schema, 'readable').whereExists('unreadable');
 
     // `unreadable` should be replaced by `false` condition.
     expect(transformQuery(lc, ast(query), permissionRules, undefined))
@@ -623,7 +616,7 @@ describe('unreadable tables', () => {
                       "type": "or",
                     },
                   },
-                  "system": "client",
+                  "system": "permissions",
                 },
                 "type": "correlatedSubquery",
               },
@@ -665,7 +658,7 @@ describe('unreadable tables', () => {
                       "type": "or",
                     },
                   },
-                  "system": "client",
+                  "system": "permissions",
                 },
                 "type": "correlatedSubquery",
               },
@@ -680,7 +673,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          newQuery(mockDelegate, schema, 'readable').where(({not, exists}) =>
+          staticQuery(schema, 'readable').where(({not, exists}) =>
             not(exists('unreadable')),
           ),
         ),
@@ -719,7 +712,7 @@ describe('unreadable tables', () => {
                     "type": "or",
                   },
                 },
-                "system": "client",
+                "system": "permissions",
               },
               "type": "correlatedSubquery",
             },
@@ -732,7 +725,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          newQuery(mockDelegate, schema, 'readable').where(({not, exists}) =>
+          staticQuery(schema, 'readable').where(({not, exists}) =>
             not(exists('unreadable')),
           ),
         ),
@@ -771,7 +764,7 @@ describe('unreadable tables', () => {
                     "type": "or",
                   },
                 },
-                "system": "client",
+                "system": "permissions",
               },
               "type": "correlatedSubquery",
             },
@@ -786,9 +779,8 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          newQuery(mockDelegate, schema, 'readable').whereExists(
-            'readable',
-            q => q.whereExists('unreadable', q => q.where('id', '1')),
+          staticQuery(schema, 'readable').whereExists('readable', q =>
+            q.whereExists('unreadable', q => q.where('id', '1')),
           ),
         ),
         permissionRules,
@@ -849,7 +841,7 @@ describe('unreadable tables', () => {
                               "type": "or",
                             },
                           },
-                          "system": "client",
+                          "system": "permissions",
                         },
                         "type": "correlatedSubquery",
                       },
@@ -857,7 +849,7 @@ describe('unreadable tables', () => {
                     "type": "and",
                   },
                 },
-                "system": "client",
+                "system": "permissions",
               },
               "type": "correlatedSubquery",
             },
@@ -871,9 +863,8 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          newQuery(mockDelegate, schema, 'readable').whereExists(
-            'readable',
-            q => q.whereExists('unreadable', q => q.where('id', '1')),
+          staticQuery(schema, 'readable').whereExists('readable', q =>
+            q.whereExists('unreadable', q => q.where('id', '1')),
           ),
         ),
         permissionRules,
@@ -934,7 +925,7 @@ describe('unreadable tables', () => {
                               "type": "or",
                             },
                           },
-                          "system": "client",
+                          "system": "permissions",
                         },
                         "type": "correlatedSubquery",
                       },
@@ -942,7 +933,7 @@ describe('unreadable tables', () => {
                     "type": "and",
                   },
                 },
-                "system": "client",
+                "system": "permissions",
               },
               "type": "correlatedSubquery",
             },
@@ -957,7 +948,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          newQuery(mockDelegate, schema, 'readable')
+          staticQuery(schema, 'readable')
             .where(({not, exists}) => not(exists('unreadable')))
             .whereExists('readable'),
         ),
@@ -996,7 +987,7 @@ describe('unreadable tables', () => {
                     "type": "or",
                   },
                 },
-                "system": "client",
+                "system": "permissions",
               },
               "type": "correlatedSubquery",
             },
@@ -1026,7 +1017,7 @@ describe('unreadable tables', () => {
                     "type": "and",
                   },
                 },
-                "system": "client",
+                "system": "permissions",
               },
               "type": "correlatedSubquery",
             },
@@ -1040,7 +1031,7 @@ describe('unreadable tables', () => {
       transformQuery(
         lc,
         ast(
-          newQuery(mockDelegate, schema, 'readable')
+          staticQuery(schema, 'readable')
             .where(({not, exists}) => not(exists('unreadable')))
             .whereExists('readable'),
         ),
@@ -1079,7 +1070,7 @@ describe('unreadable tables', () => {
                     "type": "or",
                   },
                 },
-                "system": "client",
+                "system": "permissions",
               },
               "type": "correlatedSubquery",
             },
@@ -1109,7 +1100,7 @@ describe('unreadable tables', () => {
                     "type": "and",
                   },
                 },
-                "system": "client",
+                "system": "permissions",
               },
               "type": "correlatedSubquery",
             },
@@ -1125,7 +1116,7 @@ test('exists rules in permissions are tagged as the permissions system', () => {
   expect(
     transformQuery(
       lc,
-      ast(newQuery(mockDelegate, schema, 'readableThruUnreadable')),
+      ast(staticQuery(schema, 'readableThruUnreadable')),
       permissionRules,
       undefined,
     ),
@@ -1169,11 +1160,7 @@ test('exists rules in permissions are tagged as the permissions system', () => {
   expect(
     transformQuery(
       lc,
-      ast(
-        newQuery(mockDelegate, schema, 'readable').related(
-          'readableThruUnreadable',
-        ),
-      ),
+      ast(staticQuery(schema, 'readable').related('readableThruUnreadable')),
       permissionRules,
       undefined,
     ),
@@ -1230,7 +1217,7 @@ test('exists rules in permissions are tagged as the permissions system', () => {
               "type": "correlatedSubquery",
             },
           },
-          "system": "client",
+          "system": "permissions",
         },
       ],
       "table": "readable",
@@ -1248,7 +1235,7 @@ describe('admin readable', () => {
       transformQuery(
         lc,
         ast(
-          newQuery(mockDelegate, schema, 'adminReadable')
+          staticQuery(schema, 'adminReadable')
             .related('self1')
             .related('self2'),
         ),
@@ -1291,7 +1278,7 @@ describe('admin readable', () => {
                 "type": "simple",
               },
             },
-            "system": "client",
+            "system": "permissions",
           },
           {
             "correlation": {
@@ -1325,7 +1312,7 @@ describe('admin readable', () => {
                 "type": "simple",
               },
             },
-            "system": "client",
+            "system": "permissions",
           },
         ],
         "table": "adminReadable",
@@ -1349,7 +1336,7 @@ describe('admin readable', () => {
       transformQuery(
         lc,
         ast(
-          newQuery(mockDelegate, schema, 'adminReadable')
+          staticQuery(schema, 'adminReadable')
             .related('self1', q => q.where('id', '1'))
             .related('self2', q =>
               q.where('id', '2').related('self1', q => q.where('id', '3')),
@@ -1411,7 +1398,7 @@ describe('admin readable', () => {
                 "type": "and",
               },
             },
-            "system": "client",
+            "system": "permissions",
           },
           {
             "correlation": {
@@ -1480,7 +1467,7 @@ describe('admin readable', () => {
                       "type": "and",
                     },
                   },
-                  "system": "client",
+                  "system": "permissions",
                 },
               ],
               "table": "adminReadable",
@@ -1514,7 +1501,7 @@ describe('admin readable', () => {
                 "type": "and",
               },
             },
-            "system": "client",
+            "system": "permissions",
           },
         ],
         "table": "adminReadable",
@@ -1555,9 +1542,7 @@ describe('admin readable', () => {
     expect(
       transformQuery(
         lc,
-        ast(
-          newQuery(mockDelegate, schema, 'adminReadable').whereExists('self1'),
-        ),
+        ast(staticQuery(schema, 'adminReadable').whereExists('self1')),
         permissionRules,
         authData,
       ),
@@ -1601,7 +1586,7 @@ describe('admin readable', () => {
                     "type": "simple",
                   },
                 },
-                "system": "client",
+                "system": "permissions",
               },
               "type": "correlatedSubquery",
             },
@@ -1627,9 +1612,8 @@ describe('admin readable', () => {
       transformQuery(
         lc,
         ast(
-          newQuery(mockDelegate, schema, 'adminReadable').whereExists(
-            'self1',
-            q => q.where('id', '1'),
+          staticQuery(schema, 'adminReadable').whereExists('self1', q =>
+            q.where('id', '1'),
           ),
         ),
         permissionRules,
@@ -1692,7 +1676,7 @@ describe('admin readable', () => {
                     "type": "and",
                   },
                 },
-                "system": "client",
+                "system": "permissions",
               },
               "type": "correlatedSubquery",
             },
@@ -1718,9 +1702,8 @@ describe('admin readable', () => {
       transformQuery(
         lc,
         ast(
-          newQuery(mockDelegate, schema, 'adminReadable').whereExists(
-            'self1',
-            q => q.whereExists('self2'),
+          staticQuery(schema, 'adminReadable').whereExists('self1', q =>
+            q.whereExists('self2'),
           ),
         ),
         permissionRules,
@@ -1789,7 +1772,7 @@ describe('admin readable', () => {
                               "type": "simple",
                             },
                           },
-                          "system": "client",
+                          "system": "permissions",
                         },
                         "type": "correlatedSubquery",
                       },
@@ -1809,7 +1792,7 @@ describe('admin readable', () => {
                     "type": "and",
                   },
                 },
-                "system": "client",
+                "system": "permissions",
               },
               "type": "correlatedSubquery",
             },
