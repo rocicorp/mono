@@ -26,7 +26,7 @@ test('formatEmojiCreatorList', () => {
 
   // Missing creator
   const badEmoji = makeEmoji('a', 'holden');
-  (badEmoji as Writable<Emoji>).creator = undefined;
+  (badEmoji as Writable<Emoji>).creator = null;
   expect(formatEmojiCreatorList([badEmoji], 'me-id')).toBe('');
   expect(
     formatEmojiCreatorList([badEmoji, makeEmoji('a', 'holden')], 'b'),

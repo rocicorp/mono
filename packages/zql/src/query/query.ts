@@ -54,15 +54,15 @@ type DestRow<
   TRelationship extends string,
 > = TSchema['relationships'][TTable][TRelationship][0]['cardinality'] extends 'many'
   ? PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema>
-  : PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema> | undefined;
+  : PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema> | null;
 
 type AddSubreturn<TExistingReturn, TSubselectReturn, TAs extends string> = {
-  readonly [K in TAs]: undefined extends TSubselectReturn
+  readonly [K in TAs]: null extends TSubselectReturn
     ? TSubselectReturn
     : readonly TSubselectReturn[];
 } extends infer TNewRelationship
-  ? undefined extends TExistingReturn
-    ? (Exclude<TExistingReturn, undefined> & TNewRelationship) | undefined
+  ? null extends TExistingReturn
+    ? (Exclude<TExistingReturn, null> & TNewRelationship) | null
     : TExistingReturn & TNewRelationship
   : never;
 
@@ -333,11 +333,11 @@ export interface Query<
    * row. This is useful when you expect only one row to be returned and want to
    * work with the row directly.
    *
-   * If the query returns no rows, the result will be `undefined`.
+   * If the query returns no rows, the result will be `null`.
    *
    * @returns A new query instance with the applied limit to one row.
    */
-  one(): Query<TSchema, TTable, TReturn | undefined>;
+  one(): Query<TSchema, TTable, TReturn | null>;
 
   /**
    * Creates a materialized view of the query. This is a view that will be kept
@@ -419,13 +419,13 @@ export type PreloadOptions = {
 /**
  * A helper type that tries to make the type more readable.
  */
-export type HumanReadable<T> = undefined extends T ? Expand<T> : Expand<T>[];
+export type HumanReadable<T> = null extends T ? Expand<T> : Expand<T>[];
 
 /**
  * A helper type that tries to make the type more readable.
  */
 // Note: opaque types expand incorrectly.
-export type HumanReadableRecursive<T> = undefined extends T
+export type HumanReadableRecursive<T> = null extends T
   ? ExpandRecursive<T>
   : ExpandRecursive<T>[];
 

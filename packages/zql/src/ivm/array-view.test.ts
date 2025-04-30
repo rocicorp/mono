@@ -165,7 +165,7 @@ test('single-format', () => {
   expect(callCount).toBe(1);
   view.flush();
 
-  expect(data).toEqual(undefined);
+  expect(data).toEqual(null);
   expect(callCount).toBe(2);
 
   unlisten();
@@ -597,7 +597,7 @@ test('tree-single', () => {
     id: 1,
     name: 'foo',
     childID: 2,
-    child: undefined,
+    child: null,
   });
 
   // remove the parent
@@ -606,7 +606,7 @@ test('tree-single', () => {
     row: {id: 1, name: 'foo', childID: 2},
   });
   view.flush();
-  expect(data).toEqual(undefined);
+  expect(data).toEqual(null);
 });
 
 test('collapse', () => {

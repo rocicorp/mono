@@ -371,57 +371,45 @@ describe('types', () => {
   test('one', () => {
     const q1 = mockQuery as unknown as Query<Schema, 'test'>;
     expectTypeOf(q1.one().run()).toMatchTypeOf<
-      Promise<
-        | {
-            readonly s: string;
-            readonly b: boolean;
-            readonly n: number;
-          }
-        | undefined
-      >
+      Promise<{
+        readonly s: string;
+        readonly b: boolean;
+        readonly n: number;
+      } | null>
     >();
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const q1_1 = mockQuery as unknown as Query<Schema, 'test'>;
-    expectTypeOf(q1_1.one().one().materialize().data).toMatchTypeOf<
-      | {
-          readonly s: string;
-          readonly b: boolean;
-          readonly n: number;
-        }
-      | undefined
-    >();
+    expectTypeOf(q1_1.one().one().materialize().data).toMatchTypeOf<{
+      readonly s: string;
+      readonly b: boolean;
+      readonly n: number;
+    } | null>();
 
     const q2 = mockQuery as unknown as Query<Schema, 'testWithRelationships'>;
-    expectTypeOf(q2.related('test').one().materialize().data).toMatchTypeOf<
-      | {
-          readonly s: string;
-          readonly a: string;
-          readonly b: boolean;
-          readonly test: ReadonlyArray<{
-            readonly s: string;
-            readonly b: boolean;
-            readonly n: number;
-          }>;
-        }
-      | undefined
-    >();
+    expectTypeOf(q2.related('test').one().materialize().data).toMatchTypeOf<{
+      readonly s: string;
+      readonly a: string;
+      readonly b: boolean;
+      readonly test: ReadonlyArray<{
+        readonly s: string;
+        readonly b: boolean;
+        readonly n: number;
+      }>;
+    } | null>();
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const q2_1 = mockQuery as unknown as Query<Schema, 'testWithRelationships'>;
-    expectTypeOf(q2_1.one().related('test').materialize().data).toMatchTypeOf<
-      | {
-          readonly s: string;
-          readonly a: string;
-          readonly b: boolean;
-          readonly test: ReadonlyArray<{
-            readonly s: string;
-            readonly b: boolean;
-            readonly n: number;
-          }>;
-        }
-      | undefined
-    >();
+    expectTypeOf(q2_1.one().related('test').materialize().data).toMatchTypeOf<{
+      readonly s: string;
+      readonly a: string;
+      readonly b: boolean;
+      readonly test: ReadonlyArray<{
+        readonly s: string;
+        readonly b: boolean;
+        readonly n: number;
+      }>;
+    } | null>();
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const q2_2 = mockQuery as unknown as Query<Schema, 'testWithRelationships'>;
@@ -432,13 +420,11 @@ describe('types', () => {
         readonly s: string;
         readonly a: string;
         readonly b: boolean;
-        readonly test:
-          | {
-              readonly s: string;
-              readonly b: boolean;
-              readonly n: number;
-            }
-          | undefined;
+        readonly test: {
+          readonly s: string;
+          readonly b: boolean;
+          readonly n: number;
+        } | null;
       }>
     >();
 
@@ -451,13 +437,11 @@ describe('types', () => {
         readonly s: string;
         readonly a: string;
         readonly b: boolean;
-        readonly test:
-          | {
-              readonly s: string;
-              readonly b: boolean;
-              readonly n: number;
-            }
-          | undefined;
+        readonly test: {
+          readonly s: string;
+          readonly b: boolean;
+          readonly n: number;
+        } | null;
       }>
     >();
 
@@ -467,24 +451,21 @@ describe('types', () => {
     >;
     expectTypeOf(
       q3.related('test').related('self').one().materialize().data,
-    ).toMatchTypeOf<
-      | {
-          readonly s: string;
-          readonly a: string;
-          readonly b: boolean;
-          readonly test: ReadonlyArray<{
-            readonly s: string;
-            readonly b: boolean;
-            readonly n: number;
-          }>;
-          readonly self: ReadonlyArray<{
-            readonly s: string;
-            readonly a: string;
-            readonly b: boolean;
-          }>;
-        }
-      | undefined
-    >();
+    ).toMatchTypeOf<{
+      readonly s: string;
+      readonly a: string;
+      readonly b: boolean;
+      readonly test: ReadonlyArray<{
+        readonly s: string;
+        readonly b: boolean;
+        readonly n: number;
+      }>;
+      readonly self: ReadonlyArray<{
+        readonly s: string;
+        readonly a: string;
+        readonly b: boolean;
+      }>;
+    } | null>();
 
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const q3_1 = mockQuery as unknown as Query<
@@ -497,28 +478,21 @@ describe('types', () => {
         .related('self', s => s.one())
         .one()
         .materialize().data,
-    ).toMatchTypeOf<
-      | {
-          readonly s: string;
-          readonly a: string;
-          readonly b: boolean;
-          readonly test:
-            | {
-                readonly s: string;
-                readonly b: boolean;
-                readonly n: number;
-              }
-            | undefined;
-          readonly self:
-            | {
-                readonly s: string;
-                readonly a: string;
-                readonly b: boolean;
-              }
-            | undefined;
-        }
-      | undefined
-    >();
+    ).toMatchTypeOf<{
+      readonly s: string;
+      readonly a: string;
+      readonly b: boolean;
+      readonly test: {
+        readonly s: string;
+        readonly b: boolean;
+        readonly n: number;
+      } | null;
+      readonly self: {
+        readonly s: string;
+        readonly a: string;
+        readonly b: boolean;
+      } | null;
+    } | null>();
   });
 
   test('related in subquery position', () => {
@@ -759,9 +733,7 @@ test('json type', () => {
   const datum = query.one().materialize().data;
   const {data} = query.materialize();
 
-  expectTypeOf(datum).toMatchTypeOf<
-    {a: string; j: ReadonlyJSONValue} | undefined
-  >();
+  expectTypeOf(datum).toMatchTypeOf<{a: string; j: ReadonlyJSONValue} | null>();
 
   expectTypeOf(data).toMatchTypeOf<
     ReadonlyArray<{a: string; j: ReadonlyJSONValue}>
@@ -977,14 +949,11 @@ test('one', async () => {
     }[]
   >();
 
-  expectTypeOf(r2).toEqualTypeOf<
-    | {
-        readonly s: string;
-        readonly b: boolean;
-        readonly n: number;
-      }
-    | undefined
-  >();
+  expectTypeOf(r2).toEqualTypeOf<{
+    readonly s: string;
+    readonly b: boolean;
+    readonly n: number;
+  } | null>();
 });
 
 test('one in related subquery', async () => {
@@ -997,13 +966,11 @@ test('one in related subquery', async () => {
       readonly s: string;
       readonly a: string;
       readonly b: boolean;
-      readonly testWithRelationships:
-        | {
-            readonly s: string;
-            readonly b: boolean;
-            readonly a: string;
-          }
-        | undefined;
+      readonly testWithRelationships: {
+        readonly s: string;
+        readonly b: boolean;
+        readonly a: string;
+      } | null;
     }[]
   >();
 });

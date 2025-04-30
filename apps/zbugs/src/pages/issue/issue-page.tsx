@@ -206,8 +206,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   // when they were viewing it.
   const [issueSnapshot, setIssueSnapshot] = useState(displayed);
   if (
-    displayed !== undefined &&
-    (issueSnapshot === undefined || issueSnapshot.id !== displayed.id)
+    displayed !== null &&
+    (issueSnapshot === null || issueSnapshot.id !== displayed.id)
   ) {
     setIssueSnapshot(displayed);
   }
@@ -914,7 +914,7 @@ function noop() {
 function buildListQuery(
   z: Zero<Schema, Mutators>,
   listContext: ListContext | undefined,
-  issue: Row<Schema['tables']['issue']> | undefined,
+  issue: Row<Schema['tables']['issue']> | null,
   dir: 'next' | 'prev',
 ) {
   if (!listContext || !issue) {
@@ -965,11 +965,11 @@ type Issue = IssueRow & {
 };
 
 function useEmojiChangeListener(
-  issue: Issue | undefined,
+  issue: Issue | null,
   cb: (added: readonly Emoji[], removed: readonly Emoji[]) => void,
 ) {
   const z = useZero();
-  const enabled = issue !== undefined;
+  const enabled = issue !== null;
   const issueID = issue?.id;
   const [emojis, result] = useQuery(
     z.query.emoji
@@ -978,7 +978,7 @@ function useEmojiChangeListener(
     {enabled},
   );
 
-  const lastEmojis = useRef<Map<string, Emoji> | undefined>();
+  const lastEmojis = useRef<Map<string, Emoji> | null>();
 
   useEffect(() => {
     const newEmojis = new Map(emojis.map(emoji => [emoji.id, emoji]));
@@ -1017,7 +1017,7 @@ function useEmojiChangeListener(
 
 function useShowToastForNewComment(
   comments:
-    | ReadonlyArray<CommentRow & {readonly creator: UserRow | undefined}>
+    | ReadonlyArray<CommentRow & {readonly creator: UserRow | null}>
     | undefined,
   virtualizer: Virtualizer<Window, HTMLElement>,
   highlightComment: (id: string) => void,

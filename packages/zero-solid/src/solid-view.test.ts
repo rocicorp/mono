@@ -128,7 +128,7 @@ test('single-format', () => {
   expect(view.data).toEqual(state0);
   commit();
 
-  expect(view.data).toEqual(undefined);
+  expect(view.data).toEqual(null);
 });
 
 test('hydrate-empty', () => {
@@ -562,7 +562,7 @@ test('tree-single', () => {
     id: 1,
     name: 'foo',
     childID: 2,
-    child: undefined,
+    child: null,
     [refCountSymbol]: 1,
   };
   expect(view.data).toEqual(state1);
@@ -575,7 +575,7 @@ test('tree-single', () => {
 
   expect(view.data).toEqual(state1);
   commit();
-  expect(view.data).toEqual(undefined);
+  expect(view.data).toEqual(null);
 });
 
 test('collapse', () => {

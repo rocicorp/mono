@@ -4,7 +4,7 @@ import type {Mutators} from '../shared/mutators.ts';
 
 export function commentQuery(
   z: Zero<Schema, Mutators>,
-  displayed: IssueRow | undefined,
+  displayed: IssueRow | null,
 ) {
   return z.query.comment
     .where('issueID', 'IS', displayed?.id ?? null)

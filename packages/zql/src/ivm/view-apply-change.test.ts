@@ -517,7 +517,7 @@ describe('applyChange', () => {
           {
             "": [
               {
-                "athletes": undefined,
+                "athletes": null,
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
                 Symbol(rc): 1,
@@ -829,7 +829,7 @@ describe('applyChange', () => {
       });
       expect(root).toMatchInlineSnapshot(`
         {
-          "": undefined,
+          "": null,
         }
       `);
 

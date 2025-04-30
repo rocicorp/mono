@@ -124,29 +124,22 @@ test('building a schema', async () => {
   const r = await q
     .related('recruiter', q => q.related('recruiter', q => q.one()).one())
     .one();
-  expectTypeOf<typeof r>().toEqualTypeOf<
-    | {
+  expectTypeOf<typeof r>().toEqualTypeOf<{
+    readonly id: string;
+    readonly name: string;
+    readonly recruiterId: number;
+    readonly recruiter: {
+      readonly id: string;
+      readonly name: string;
+      readonly recruiterId: number;
+      readonly recruiter: {
         readonly id: string;
         readonly name: string;
         readonly recruiterId: number;
-        readonly recruiter:
-          | {
-              readonly id: string;
-              readonly name: string;
-              readonly recruiterId: number;
-              readonly recruiter:
-                | {
-                    readonly id: string;
-                    readonly name: string;
-                    readonly recruiterId: number;
-                  }
-                | undefined;
-            }
-          | undefined;
-      }
-    | undefined
+      } | null;
+    } | null;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  >({} as any);
+  } | null>({} as any);
 
   // recruiter is a singular relationship
   expectTypeOf(await q.related('recruiter')).toEqualTypeOf<
@@ -154,13 +147,11 @@ test('building a schema', async () => {
       readonly id: string;
       readonly name: string;
       readonly recruiterId: number;
-      readonly recruiter:
-        | {
-            readonly id: string;
-            readonly name: string;
-            readonly recruiterId: number;
-          }
-        | undefined;
+      readonly recruiter: {
+        readonly id: string;
+        readonly name: string;
+        readonly recruiterId: number;
+      } | null;
     }[]
   >();
 
@@ -170,13 +161,11 @@ test('building a schema', async () => {
       readonly id: string;
       readonly name: string;
       readonly recruiterId: number;
-      readonly recruiter:
-        | {
-            readonly id: string;
-            readonly name: string;
-            readonly recruiterId: number;
-          }
-        | undefined;
+      readonly recruiter: {
+        readonly id: string;
+        readonly name: string;
+        readonly recruiterId: number;
+      } | null;
     }[]
   >();
 
@@ -188,18 +177,16 @@ test('building a schema', async () => {
       readonly id: string;
       readonly title: string;
       readonly ownerId: number;
-      readonly owner:
-        | {
-            readonly id: string;
-            readonly name: string;
-            readonly recruiterId: number;
-            readonly ownedIssues: readonly {
-              readonly id: string;
-              readonly title: string;
-              readonly ownerId: number;
-            }[];
-          }
-        | undefined;
+      readonly owner: {
+        readonly id: string;
+        readonly name: string;
+        readonly recruiterId: number;
+        readonly ownedIssues: readonly {
+          readonly id: string;
+          readonly title: string;
+          readonly ownerId: number;
+        }[];
+      } | null;
     }[]
   >({} as never);
 

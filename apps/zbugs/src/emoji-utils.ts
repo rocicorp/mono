@@ -3,7 +3,7 @@ import {assert} from 'shared/src/asserts.js';
 import type {Schema} from '../shared/schema.ts';
 
 export type Emoji = Row<Schema['tables']['emoji']> & {
-  readonly creator: Row<Schema['tables']['user']> | undefined;
+  readonly creator: Row<Schema['tables']['user']> | null;
 };
 
 export function formatEmojiCreatorList(
@@ -12,7 +12,7 @@ export function formatEmojiCreatorList(
 ): string {
   assert(emojis.length > 0);
   const names = emojis
-    .filter(emoji => emoji.creator !== undefined)
+    .filter(emoji => emoji.creator !== null)
     .map(emoji => {
       const {creator} = emoji;
       assert(creator);

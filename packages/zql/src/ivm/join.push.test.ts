@@ -1873,7 +1873,7 @@ suite('push many:one', () => {
       [
         {
           "id": "i1",
-          "owner": undefined,
+          "owner": null,
           "ownerID": "u2",
           Symbol(rc): 1,
         },
@@ -2751,14 +2751,14 @@ suite('push many:one', () => {
         [
           {
             "id": "i1",
-            "owner": undefined,
+            "owner": null,
             "ownerID": "u1",
             "text": "item 1",
             Symbol(rc): 1,
           },
           {
             "id": "i2",
-            "owner": undefined,
+            "owner": null,
             "ownerID": "u1",
             "text": "item 2",
             Symbol(rc): 1,
@@ -6362,13 +6362,13 @@ suite('test overlay on many:one pushes', () => {
         },
         {
           "id": "i1",
-          "owner": undefined,
+          "owner": null,
           "ownerID": "u1",
           Symbol(rc): 1,
         },
         {
           "id": "i2",
-          "owner": undefined,
+          "owner": null,
           "ownerID": "u1",
           Symbol(rc): 1,
         },

@@ -166,7 +166,7 @@ export abstract class AbstractQuery<
     format: Format,
   ): AbstractQuery<TSchema, TTable, TReturn>;
 
-  one(): Query<TSchema, TTable, TReturn | undefined> {
+  one(): Query<TSchema, TTable, TReturn | null> {
     return this._newQuery(
       this.#schema,
       this.#tableName,

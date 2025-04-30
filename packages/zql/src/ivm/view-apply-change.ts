@@ -137,8 +137,12 @@ export function applyChange(
 
       let rc = 1;
       if (singular) {
-        const oldEntry = parentEntry[relationship] as RCEntry | undefined;
-        if (oldEntry !== undefined) {
+        const oldEntry = parentEntry[relationship] as
+          | RCEntry
+          | undefined
+          | null;
+        // eslint-disable-next-line eqeqeq
+        if (oldEntry != null) {
           assert(
             schema.compareRows(oldEntry, change.node.row) === 0,
             `Singular relationship '${relationship}' should not have multiple rows. You may need to declare this relationship with the \`many\` helper instead of the \`one\` helper in your schema.`,
@@ -168,7 +172,7 @@ export function applyChange(
           continue;
         }
 
-        const newView = childFormat.singular ? undefined : ([] as RCEntryList);
+        const newView = childFormat.singular ? null : ([] as RCEntryList);
         newEntry[relationship] = newView;
 
         for (const node of children()) {
@@ -185,11 +189,15 @@ export function applyChange(
     }
     case 'remove': {
       if (singular) {
-        const oldEntry = parentEntry[relationship] as RCEntry | undefined;
-        assert(oldEntry !== undefined, 'node does not exist');
+        const oldEntry = parentEntry[relationship] as
+          | RCEntry
+          | undefined
+          | null;
+        // eslint-disable-next-line eqeqeq
+        assert(oldEntry != null, 'node does not exist');
         const rc = oldEntry[refCountSymbol];
         if (rc === 1) {
-          (parentEntry as Writable<Entry>)[relationship] = undefined;
+          (parentEntry as Writable<Entry>)[relationship] = null;
         }
         oldEntry[refCountSymbol]--;
       } else {
