@@ -106,6 +106,11 @@ test('zero-cache --help', () => {
                                                                 The URL of the metric collector to which to send metric data. Metrics are sent over http.         
                                                                 Port defaults to 4318 for most collectors.                                                        
                                                                                                                                                                   
+     --log-log-collector string                                 optional                                                                                          
+       ZERO_LOG_LOG_COLLECTOR env                                                                                                                                 
+                                                                The URL of the log collector to which to send log data. Logs are sent over http.                  
+                                                                Port defaults to 4318 for most collectors.                                                        
+                                                                                                                                                                  
      --log-slow-row-threshold number                            default: 2                                                                                        
        ZERO_LOG_SLOW_ROW_THRESHOLD env                                                                                                                            
                                                                 The number of ms a row must take to fetch from table-source before it is considered slow.         
