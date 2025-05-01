@@ -226,9 +226,7 @@ export function addServiceWithOtel(
       throw new Error('Either `containers` or top-level `image` is required');
     }
 
-    containers = [
-      {name: serviceName, image, health, environment, logging},
-    ];
+    containers = [{name: serviceName, image, health, environment, logging}];
   }
 
   const otelConfig = {
