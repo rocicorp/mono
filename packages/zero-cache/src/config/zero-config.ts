@@ -587,9 +587,21 @@ export function getZeroConfig(
   return normalizeZeroConfig(loadedConfig);
 }
 
-export function normalizeZeroConfig<T extends Config<typeof zeroOptions>>(
-  config: T,
-) {
+export function normalizeZeroConfig<
+  T extends {
+    cvr: {
+      db?: string | undefined;
+    };
+    change?:
+      | {
+          db?: string | undefined;
+        }
+      | undefined;
+    upstream: {
+      db: string;
+    };
+  },
+>(config: T) {
   return {
     ...config,
     cvr: {
@@ -598,7 +610,7 @@ export function normalizeZeroConfig<T extends Config<typeof zeroOptions>>(
     },
     change: {
       ...config.change,
-      db: config.change.db ?? config.upstream.db,
+      db: config.change?.db ?? config.upstream.db,
     },
   };
 }
