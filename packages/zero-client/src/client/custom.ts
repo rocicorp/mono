@@ -40,7 +40,8 @@ export type CustomMutatorDefs<S extends Schema> = {
     | CustomMutatorImpl<S>;
 };
 
-export type PromiseWithServerResult = Promise<void> & {
+export type MutatorResult = {
+  client: Promise<void>;
   server: Promise<MutationOk>;
 };
 
@@ -67,7 +68,7 @@ export type MakeCustomMutatorInterfaces<
     tx: Transaction<S>,
     ...args: infer Args
   ) => Promise<void>
-    ? (...args: Args) => PromiseWithServerResult
+    ? (...args: Args) => MutatorResult
     : {
         readonly [P in keyof MD[NamespaceOrName]]: MakeCustomMutatorInterface<
           S,
@@ -81,7 +82,7 @@ export type MakeCustomMutatorInterface<
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   F,
 > = F extends (tx: ClientTransaction<S>, ...args: infer Args) => Promise<void>
-  ? (...args: Args) => PromiseWithServerResult
+  ? (...args: Args) => MutatorResult
   : never;
 
 export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {

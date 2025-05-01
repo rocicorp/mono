@@ -1449,13 +1449,19 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   #register<Return extends ReadonlyJSONValue | void, Args extends JSONValue>(
     name: string,
     mutatorImpl: (tx: WriteTransaction, args?: Args) => MaybePromise<Return>,
-  ): (args?: Args) => Promise<Return> {
+  ): (
+    args?: Args,
+  ) => Promise<Return> | {client: Promise<Return>; server: Promise<unknown>} {
     this.#mutatorRegistry[name] = mutatorImpl as (
       tx: WriteTransaction,
       args: JSONValue | undefined,
     ) => Promise<void | JSONValue>;
 
-    return (args?: Args): Promise<Return> => {
+    return (
+      args?: Args,
+    ):
+      | Promise<Return>
+      | {client: Promise<Return>; server: Promise<unknown>} => {
       // DO NOT track CRUD mutations as they do not receive responses from
       // the server.
       const trackingData =
@@ -1470,8 +1476,17 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       );
 
       if (trackingData) {
-        (result as unknown as Record<string, unknown>).server =
-          trackingData.serverPromise;
+        return {
+          client: result,
+          server: trackingData.serverPromise,
+          then: (onFulfilled, onRejected) => {
+            this.#lc.warn?.(
+              'Awaiting the mutator result directly is being deprecated.' +
+                ' Please use `await z.mutate[mutatorName].client` or `await result.mutate[mutatorName].server`',
+            );
+            return result.then(onFulfilled, onRejected);
+          },
+        };
       }
 
       return result;
