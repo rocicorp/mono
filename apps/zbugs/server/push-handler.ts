@@ -5,7 +5,7 @@ import {
 } from '@rocicorp/zero/pg';
 import postgres from 'postgres';
 import {schema} from '../shared/schema.ts';
-import {createServerMutators, type PostCommitTask} from './server-mutators.ts';
+import {createServerMutators} from './server-mutators.ts';
 import type {AuthData} from '../shared/auth.ts';
 import type {ReadonlyJSONValue} from '@rocicorp/zero';
 
@@ -21,9 +21,7 @@ export async function handlePush(
   params: Record<string, string> | URLSearchParams,
   body: ReadonlyJSONValue,
 ) {
-  const postCommitTasks: PostCommitTask[] = [];
-  const mutators = createServerMutators(authData, postCommitTasks);
+  const mutators = createServerMutators(authData);
   const response = await processor.process(mutators, params, body);
-  await Promise.all(postCommitTasks.map(task => task()));
   return response;
 }
