@@ -1593,7 +1593,7 @@ export class Zero<
         if (this.#connectionState !== ConnectionState.Connected) {
           const level = isAuthError(ex) ? 'warn' : 'error';
           const kind = isServerError(ex) ? ex.kind : 'Unknown Error';
-          lc[level]?.(kind, 'Failed to connect', ex, {
+          lc[level]?.('Failed to connect', kind, ex, {
             lmid: this.#lastMutationIDReceived,
             baseCookie: this.#connectCookie,
           });
