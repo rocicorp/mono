@@ -11,6 +11,7 @@ import * as v from '../../shared/src/valita.ts';
 import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
 import {
   appOptions,
+  normalizeZeroConfig,
   shardOptions,
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
@@ -90,18 +91,33 @@ const options = {
     db: {
       type: v.string().optional(),
       desc: [
-        'Connection URL to the CVR database. Required if using a query hash.',
+        'Connection URL to the CVR database. Required if using a query hash. ',
+        'Will attempt to be set to your upstream db if this option is not specified.',
+        'If your upstream db does not have a schema for the cvr, you must provide this in ',
+        'order to use the hash option.',
       ],
     },
   },
   app: appOptions,
   shard: shardOptions,
+
+  // This args is hidden as it is only present to:
+  // 1. Parse it out of the env if it exists
+  // 2. Use it to default the `cvr` to `upstream` if `cvr` is not provided
+  upstream: Object.fromEntries(
+    Object.entries(zeroOptions.upstream).map(([key, value]) => [
+      key,
+      {
+        ...value,
+        type: value.type.optional(),
+        hidden: true,
+      },
+    ]),
+  ) as unknown as typeof zeroOptions.upstream,
 };
 
-const config = parseOptions(
-  options,
-  process.argv.slice(2),
-  ZERO_ENV_VAR_PREFIX,
+const config = normalizeZeroConfig(
+  parseOptions(options, process.argv.slice(2), ZERO_ENV_VAR_PREFIX),
 );
 
 runtimeDebugFlags.trackRowsVended = true;
