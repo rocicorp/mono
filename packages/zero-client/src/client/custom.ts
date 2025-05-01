@@ -6,7 +6,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
-import type {MutationResult} from '../../../zero-protocol/src/push.ts';
+import type {MutationOk} from '../../../zero-protocol/src/push.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {
@@ -41,7 +41,7 @@ export type CustomMutatorDefs<S extends Schema> = {
 };
 
 export type PromiseWithServerResult = Promise<void> & {
-  server: Promise<MutationResult>;
+  server: Promise<MutationOk>;
 };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

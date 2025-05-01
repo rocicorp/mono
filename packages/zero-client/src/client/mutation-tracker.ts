@@ -9,13 +9,18 @@ import type {
   MutationError,
   MutationID,
   MutationOk,
-  MutationResult,
   PushError,
   PushOk,
   PushResponse,
 } from '../../../zero-protocol/src/push.ts';
 import {OnErrorKind} from './on-error-kind.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
+
+type ErrorType =
+  | MutationError
+  | Omit<PushError, 'mutationIDs'>
+  | Error
+  | unknown;
 
 const transientPushErrorTypes: PushError['error'][] = [
   'zeroPusher',
@@ -32,10 +37,6 @@ function nextEphemeralID(): EphemeralID {
   return ++currentEphemeralID as EphemeralID;
 }
 
-type MutationResultOrPushError =
-  | MutationResult
-  | Omit<PushError, 'mutationIDs'>;
-
 /**
  * Tracks what pushes are in-flight and resolves promises when they're acked.
  */
@@ -44,7 +45,7 @@ export class MutationTracker {
     EphemeralID,
     {
       mutationID?: number | undefined;
-      resolver: Resolver<MutationResultOrPushError>;
+      resolver: Resolver<MutationOk, ErrorType>;
     }
   >;
   readonly #ephemeralIDsByMutationID: Map<number, EphemeralID>;
@@ -65,7 +66,7 @@ export class MutationTracker {
 
   trackMutation(): MutationTrackingData {
     const id = nextEphemeralID();
-    const mutationResolver = resolver<MutationResultOrPushError>();
+    const mutationResolver = resolver<MutationOk, ErrorType>();
 
     this.#outstandingMutations.set(id, {
       resolver: mutationResolver,
@@ -212,7 +213,7 @@ export class MutationTracker {
     assert(entry && entry.mutationID === mid.id);
     // Resolving the promise with an error was an intentional API decision
     // so the user receives typed errors.
-    this.#settleMutation(ephemeralID, entry, 'resolve', error);
+    this.#settleMutation(ephemeralID, entry, 'reject', error);
   }
 
   #processMutationOk(result: MutationOk, mid: MutationID): void {
@@ -235,14 +236,14 @@ export class MutationTracker {
     ephemeralID: EphemeralID,
     entry: {
       mutationID?: number | undefined;
-      resolver: Resolver<MutationResultOrPushError>;
+      resolver: Resolver<MutationOk, ErrorType>;
     },
     type: Type,
-    result: 'resolve' extends Type ? MutationResultOrPushError : unknown,
+    result: 'resolve' extends Type ? MutationOk : unknown,
   ): void {
     switch (type) {
       case 'resolve':
-        entry.resolver.resolve(result as MutationResultOrPushError);
+        entry.resolver.resolve(result as MutationOk);
         break;
       case 'reject':
         entry.resolver.reject(result);

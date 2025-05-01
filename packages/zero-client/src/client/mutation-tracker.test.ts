@@ -50,7 +50,7 @@ describe('MutationTracker', () => {
     };
 
     tracker.processPushResponse(response);
-    expect(await serverPromise).toEqual({
+    await expect(serverPromise).rejects.toEqual({
       error: 'app',
       details: '',
     });
@@ -146,6 +146,10 @@ describe('MutationTracker', () => {
 
     const mutation2 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation2.ephemeralID, 2);
+
+    mutation2.serverPromise.catch(() => {
+      // expected
+    });
 
     const response: PushResponse = {
       mutations: [
@@ -261,6 +265,10 @@ describe('MutationTracker', () => {
     tracker.mutationIDAssigned(mutation3.ephemeralID, 3);
     const mutation4 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation4.ephemeralID, 4);
+
+    mutation4.serverPromise.catch(() => {
+      // expected
+    });
 
     tracker.processPushResponse({
       mutations: [
