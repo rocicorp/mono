@@ -39,6 +39,7 @@ export function assertNormalized(
  * to spawned child workers. Child workers can then call
  * {@link assertNormalized} to verify that the expected defaults have been set.
  */
+// TODO: Merge / unify this with zero-config.ts:normalizeZeroConfig()
 export async function normalizeConfig(
   lc: LogContext,
   config: ZeroConfig,
