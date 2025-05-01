@@ -188,7 +188,8 @@ let start: number;
 let end: number;
 
 if (config.ast) {
-  [start, end] = await runAst(JSON.parse(config.ast));
+  // the user likely has a transformed AST since the wire and storage formats are the transformed AST
+  [start, end] = await runAst(JSON.parse(config.ast), true);
 } else if (config.query) {
   [start, end] = await runQuery(config.query);
 } else if (config.hash) {
@@ -197,7 +198,10 @@ if (config.ast) {
   throw new Error('No query or AST or hash provided');
 }
 
-async function runAst(ast: AST): Promise<[number, number]> {
+async function runAst(
+  ast: AST,
+  isTransformed: boolean,
+): Promise<[number, number]> {
   if (config.applyPermissions) {
     const authData = config.authData ? JSON.parse(config.authData) : {};
     if (!config.authData) {
@@ -212,7 +216,15 @@ async function runAst(ast: AST): Promise<[number, number]> {
     console.log(await formatOutput(ast.table + astToZQL(ast)));
   }
 
-  const pipeline = buildPipeline(ast, host);
+  const pipeline = buildPipeline(
+    ast,
+    isTransformed
+      ? {
+          ...host,
+          mapAst: (ast: AST) => ast,
+        }
+      : host,
+  );
   const output = new Catch(pipeline);
 
   const start = performance.now();
@@ -235,7 +247,7 @@ function runQuery(queryString: string): Promise<[number, number]> {
   const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
 
   const ast = completedAST(q);
-  return runAst(ast);
+  return runAst(ast, false);
 }
 
 async function runHash(hash: string) {
@@ -254,7 +266,7 @@ async function runHash(hash: string) {
   const ast = rows[0].clientAST as AST;
   console.log(await formatOutput(ast.table + astToZQL(ast)));
 
-  return runAst(ast);
+  return runAst(ast, true);
 }
 
 console.log(chalk.blue.bold('=== Query Stats: ===\n'));
