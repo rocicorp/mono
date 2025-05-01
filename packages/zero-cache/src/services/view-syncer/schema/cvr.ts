@@ -95,6 +95,7 @@ export function compareClientsRows(a: ClientsRow, b: ClientsRow) {
 export type QueriesRow = {
   clientGroupID: string;
   queryHash: string;
+  // This is the client AST _AFTER_ applying server name transformations.
   clientAST: JSONValue;
   patchVersion: string | null;
   transformationHash: string | null;
