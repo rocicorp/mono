@@ -227,7 +227,7 @@ export function addServiceWithOtel(
     }
 
     containers = [
-      {name: serviceName, image, health, environment, logging, cpu, memory},
+      {name: serviceName, image, health, environment, logging},
     ];
   }
 
