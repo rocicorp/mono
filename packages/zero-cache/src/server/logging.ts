@@ -8,9 +8,17 @@ import {
 import {pid} from 'node:process';
 import {type LogConfig, type ZeroConfig} from '../config/zero-config.ts';
 import {stringify} from '../types/bigint-json.ts';
+import {OtelLogSink} from './otel-log-sink.ts';
 
-function createLogSink(config: LogConfig) {
-  return config.format === 'json' ? consoleJsonLogSink : consoleLogSink;
+function createLogSink(config: LogConfig): LogSink {
+  const consoleSink =
+    config.format === 'json' ? consoleJsonLogSink : consoleLogSink;
+  if (config.logCollector) {
+    const otelSink = new OtelLogSink(config);
+    return new CompositeLogSink([otelSink, consoleSink]);
+  }
+
+  return consoleSink;
 }
 
 export function createLogContext(
@@ -28,6 +36,20 @@ export function createLogContext(
   // for some reason gets prepended to the first log line in CloudWatch.
   lc.info?.('');
   return lc;
+}
+
+class CompositeLogSink implements LogSink {
+  readonly #sinks: LogSink[];
+
+  constructor(sinks: LogSink[]) {
+    this.#sinks = sinks;
+  }
+
+  log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
+    for (const sink of this.#sinks) {
+      sink.log(level, context, ...args);
+    }
+  }
 }
 
 const consoleJsonLogSink: LogSink = {
@@ -57,7 +79,7 @@ const consoleJsonLogSink: LogSink = {
   },
 };
 
-function errorOrObject(v: unknown): object | undefined {
+export function errorOrObject(v: unknown): object | undefined {
   if (v instanceof Error) {
     return {
       ...v, // some properties of Error subclasses may be enumerable

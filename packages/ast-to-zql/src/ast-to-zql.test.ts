@@ -386,6 +386,123 @@ test('related query with filters', () => {
   );
 });
 
+test('nested related query with filters', () => {
+  const ast: AST = {
+    table: 'issue',
+    related: [
+      {
+        correlation: {
+          parentField: ['id'],
+          childField: ['issue_id'],
+        },
+        subquery: {
+          table: 'comment',
+          alias: 'comments',
+          where: {
+            type: 'simple',
+            left: {type: 'column', name: 'is_deleted'},
+            op: '=',
+            right: {type: 'literal', value: false},
+          },
+          related: [
+            {
+              correlation: {
+                parentField: ['authorID'],
+                childField: ['id'],
+              },
+              subquery: {
+                table: 'user',
+                alias: 'author',
+                where: {
+                  type: 'simple',
+                  left: {type: 'column', name: 'name'},
+                  op: '=',
+                  right: {type: 'literal', value: 'Bob'},
+                },
+              },
+            },
+          ],
+        },
+      },
+    ],
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".related('comments', q => q.where('is_deleted', false).related('author', q => q.where('name', 'Bob')))"`,
+  );
+});
+
+test('related query with hidden junction', () => {
+  const ast: AST = {
+    table: 'issue',
+    related: [
+      {
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueId'],
+        },
+        hidden: true,
+        subquery: {
+          table: 'issueLabel',
+          alias: 'labels',
+          related: [
+            {
+              correlation: {
+                parentField: ['labelId'],
+                childField: ['id'],
+              },
+              subquery: {
+                table: 'label',
+                alias: 'labels',
+              },
+            },
+          ],
+        },
+      },
+    ],
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(`".related('labels')"`);
+});
+
+test('related query with hidden junction with filters', () => {
+  const ast: AST = {
+    table: 'issue',
+    related: [
+      {
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueId'],
+        },
+        hidden: true,
+        subquery: {
+          table: 'issueLabel',
+          alias: 'labels',
+          related: [
+            {
+              correlation: {
+                parentField: ['labelId'],
+                childField: ['id'],
+              },
+              subquery: {
+                table: 'label',
+                alias: 'labels',
+                where: {
+                  type: 'simple',
+                  left: {type: 'column', name: 'name'},
+                  op: '=',
+                  right: {type: 'literal', value: 'Bob'},
+                },
+              },
+            },
+          ],
+        },
+      },
+    ],
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".related('labels', q => q.where('name', 'Bob'))"`,
+  );
+});
+
 test('complex query with multiple features', () => {
   const ast: AST = {
     table: 'issue',

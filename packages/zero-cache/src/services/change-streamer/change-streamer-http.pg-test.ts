@@ -1,7 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {
-  afterEach,
   beforeEach,
   describe,
   expect,
@@ -11,7 +10,11 @@ import {
 } from 'vitest';
 import WebSocket from 'ws';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
+import {testDBs} from '../../test/db.ts';
+import {type PostgresDB} from '../../types/pg.ts';
 import {inProcChannel} from '../../types/processes.ts';
+import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {installWebSocketHandoff} from '../dispatcher/websocket-handoff.ts';
@@ -24,22 +27,35 @@ import {
 } from './change-streamer-http.ts';
 import type {Downstream, SubscriberContext} from './change-streamer.ts';
 import {PROTOCOL_VERSION} from './change-streamer.ts';
-import type {ZeroConfig} from '../../config/zero-config.ts';
+import {setupCDCTables} from './schema/tables.ts';
+
+const SHARD_ID = {
+  appID: 'foo',
+  shardNum: 123,
+} satisfies ShardID;
 
 describe('change-streamer/http', () => {
   let lc: LogContext;
+  let changeDB: PostgresDB;
   let downstream: Subscription<Downstream>;
   let subscribeFn: MockedFunction<
     (ctx: SubscriberContext) => Promise<Subscription<Downstream>>
   >;
-  let serverURL: string;
-  let dispatcherURL: string;
-  let server: ChangeStreamerHttpServer;
-  let dispatcher: HttpService;
+  let serverAddress: string;
+  let dispatcherAddress: string;
   let connectionClosed: Promise<Downstream[]>;
+  let changeStreamerClient: ChangeStreamerHttpClient;
 
   beforeEach(async () => {
     lc = createSilentLogContext();
+
+    changeDB = await testDBs.create('change_streamer_http_client');
+    await changeDB.begin(tx => setupCDCTables(lc, tx, SHARD_ID));
+    await changeDB/*sql*/ `
+      INSERT INTO ${changeDB(cdcSchema(SHARD_ID))}."replicationState"
+        ${changeDB({lastWatermark: '123'})}
+    `;
+    changeStreamerClient = new ChangeStreamerHttpClient(lc, SHARD_ID, changeDB);
 
     const {promise, resolve: cleanup} = resolver<Downstream[]>();
     connectionClosed = promise;
@@ -50,7 +66,7 @@ describe('change-streamer/http', () => {
 
     const config = {} as unknown as ZeroConfig;
 
-    dispatcher = new HttpService(
+    const dispatcher = new HttpService(
       'dispatcher',
       config,
       lc,
@@ -66,7 +82,7 @@ describe('change-streamer/http', () => {
 
     // Run the server for real instead of using `injectWS()`, as that has a
     // different behavior for ws.close().
-    server = new ChangeStreamerHttpServer(
+    const server = new ChangeStreamerHttpServer(
       config,
       lc,
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
@@ -74,15 +90,25 @@ describe('change-streamer/http', () => {
       parent,
     );
 
-    [dispatcherURL, serverURL] = await Promise.all([
+    const [dispatcherURL, serverURL] = await Promise.all([
       dispatcher.start(),
       server.start(),
     ]);
+    dispatcherAddress = dispatcherURL.substring('http://'.length);
+    serverAddress = serverURL.substring('http://'.length);
+
+    return async () => {
+      await Promise.all([dispatcher.stop(), server.stop]);
+      await testDBs.drop(changeDB);
+    };
   });
 
-  afterEach(async () => {
-    await Promise.all([dispatcher.stop(), server.stop]);
-  });
+  async function setChangeStreamerAddress(addr: string) {
+    await changeDB/*sql*/ `
+      UPDATE ${changeDB(cdcSchema(SHARD_ID))}."replicationState"
+        SET "ownerAddress" = ${addr}
+    `;
+  }
 
   async function drain<T>(num: number, sub: Source<T>): Promise<T[]> {
     const drained: T[] = [];
@@ -97,10 +123,10 @@ describe('change-streamer/http', () => {
   }
 
   test('health check', async () => {
-    let res = await fetch(`${serverURL}/`);
+    let res = await fetch(`http://${serverAddress}/`);
     expect(res.ok).toBe(true);
 
-    res = await fetch(`${serverURL}/?foo=bar`);
+    res = await fetch(`http://${serverAddress}/?foo=bar`);
     expect(res.ok).toBe(true);
   });
 
@@ -108,23 +134,23 @@ describe('change-streamer/http', () => {
     test.each([
       [
         'invalid querystring - missing id',
-        `/api/replication/v${PROTOCOL_VERSION}/changes`,
+        `/replication/v${PROTOCOL_VERSION}/changes`,
       ],
       [
         'invalid querystring - missing watermark',
-        `/api/replication/v${PROTOCOL_VERSION}/changes?id=foo&replicaVersion=bar&initial=true`,
+        `/replication/v${PROTOCOL_VERSION}/changes?id=foo&replicaVersion=bar&initial=true`,
       ],
       [
         // Change the error message as necessary
         `Cannot service client at protocol v3. Supported protocols: [v1 ... v2]`,
-        `/api/replication/v${PROTOCOL_VERSION + 1}/changes` +
+        `/replication/v${PROTOCOL_VERSION + 1}/changes` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
     ])('%s: %s', async (error, path) => {
-      for (const baseURL of [serverURL, dispatcherURL]) {
+      for (const address of [serverAddress, dispatcherAddress]) {
         const {promise: result, resolve} = resolver<unknown>();
 
-        const ws = new WebSocket(new URL(path, baseURL));
+        const ws = new WebSocket(new URL(path, `http://${address}/`));
         ws.on('close', (_code, reason) => resolve(reason));
 
         expect(String(await result)).toEqual(`Error: ${error}`);
@@ -133,36 +159,9 @@ describe('change-streamer/http', () => {
   });
 
   test.each([
-    ['hostname', () => new ChangeStreamerHttpClient(lc, `${serverURL}`)],
-    [
-      'hostname with slash',
-      () => new ChangeStreamerHttpClient(lc, `${serverURL}/`),
-    ],
-    [
-      'hostname with path',
-      () => new ChangeStreamerHttpClient(lc, `${serverURL}/tenant-id`),
-    ],
-    [
-      'hostname with path and trailing slash',
-      () => new ChangeStreamerHttpClient(lc, `${serverURL}/foo_bar/`),
-    ],
-    [
-      'websocket handoff hostname',
-      () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}`),
-    ],
-    [
-      'websocket handoff hostname with slash',
-      () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}/`),
-    ],
-    [
-      'websocket handoff hostname with path',
-      () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}/tenant-id`),
-    ],
-    [
-      'websocket handoff hostname with path and trailing slash',
-      () => new ChangeStreamerHttpClient(lc, `${dispatcherURL}/foo_bar/`),
-    ],
-  ])('basic messages streamed over websocket: %s', async (_name, client) => {
+    ['hostname', () => serverAddress],
+    ['websocket handoff', () => dispatcherAddress],
+  ])('basic messages streamed over websocket: %s', async (_name, addr) => {
     const ctx = {
       protocolVersion: PROTOCOL_VERSION,
       id: 'foo',
@@ -171,7 +170,8 @@ describe('change-streamer/http', () => {
       watermark: '123',
       initial: true,
     } as const;
-    const sub = await client().subscribe(ctx);
+    await setChangeStreamerAddress(addr());
+    const sub = await changeStreamerClient.subscribe(ctx);
 
     downstream.push(['begin', {tag: 'begin'}, {commitWatermark: '456'}]);
     downstream.push(['commit', {tag: 'commit'}, {watermark: '456'}]);
@@ -190,7 +190,8 @@ describe('change-streamer/http', () => {
   });
 
   test('bigint fields', async () => {
-    const sub = await new ChangeStreamerHttpClient(lc, serverURL).subscribe({
+    await setChangeStreamerAddress(serverAddress);
+    const sub = await changeStreamerClient.subscribe({
       protocolVersion: PROTOCOL_VERSION,
       id: 'foo',
       mode: 'serving',

@@ -24,6 +24,7 @@ import {buildPipeline, type BuilderDelegate} from '../builder/builder.ts';
 import {ArrayView} from '../ivm/array-view.ts';
 import type {Input} from '../ivm/operator.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
+import {assertNoNotExists} from './assert-no-not-exists.ts';
 import {dnf} from './dnf.ts';
 import {
   and,
@@ -122,6 +123,9 @@ export const SUBQ_PREFIX = 'zsubq_';
 
 export const defaultFormat = {singular: false, relationships: {}} as const;
 
+export const systemSymbol = Symbol();
+export const newQuerySymbol = Symbol();
+
 export abstract class AbstractQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
@@ -133,12 +137,20 @@ export abstract class AbstractQuery<
   readonly #ast: AST;
   readonly format: Format;
   #hash: string = '';
+  readonly #system: System;
 
-  constructor(schema: TSchema, tableName: TTable, ast: AST, format: Format) {
+  constructor(
+    schema: TSchema,
+    tableName: TTable,
+    ast: AST,
+    format: Format,
+    system: System,
+  ) {
     this.#schema = schema;
     this.#tableName = tableName;
     this.#ast = ast;
     this.format = format;
+    this.#system = system;
   }
 
   get [astSymbol](): AST {
@@ -152,10 +164,8 @@ export abstract class AbstractQuery<
     return this.#hash;
   }
 
-  protected abstract _system: System;
-
   // TODO(arv): Put this in the delegate?
-  protected abstract _newQuery<
+  protected abstract [newQuerySymbol]<
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
@@ -167,7 +177,7 @@ export abstract class AbstractQuery<
   ): AbstractQuery<TSchema, TTable, TReturn>;
 
   one(): Query<TSchema, TTable, TReturn | undefined> {
-    return this._newQuery(
+    return this[newQuerySymbol](
       this.#schema,
       this.#tableName,
       {
@@ -200,7 +210,7 @@ export abstract class AbstractQuery<
     assert(related, 'Invalid relationship');
     if (isOneHop(related)) {
       const {destSchema, destField, sourceField, cardinality} = related[0];
-      let q: AnyQuery = this._newQuery(
+      let q: AnyQuery = this[newQuerySymbol](
         this.#schema,
         destSchema,
         {
@@ -229,7 +239,7 @@ export abstract class AbstractQuery<
         'The source and destination of a relationship must have the same number of fields',
       );
 
-      return this._newQuery(
+      return this[newQuerySymbol](
         this.#schema,
         this.#tableName,
         {
@@ -237,7 +247,7 @@ export abstract class AbstractQuery<
           related: [
             ...(this.#ast.related ?? []),
             {
-              system: this._system,
+              system: this.#system,
               correlation: {
                 parentField: sourceField,
                 childField: destField,
@@ -264,7 +274,7 @@ export abstract class AbstractQuery<
       const {destSchema} = secondRelation;
       const junctionSchema = firstRelation.destSchema;
       const sq = cb(
-        this._newQuery(
+        this[newQuerySymbol](
           this.#schema,
           destSchema,
           {
@@ -283,7 +293,7 @@ export abstract class AbstractQuery<
       assert(isCompoundKey(secondRelation.sourceField), 'Invalid relationship');
       assert(isCompoundKey(secondRelation.destField), 'Invalid relationship');
 
-      return this._newQuery(
+      return this[newQuerySymbol](
         this.#schema,
         this.#tableName,
         {
@@ -291,7 +301,7 @@ export abstract class AbstractQuery<
           related: [
             ...(this.#ast.related ?? []),
             {
-              system: this._system,
+              system: this.#system,
               correlation: {
                 parentField: firstRelation.sourceField,
                 childField: firstRelation.destField,
@@ -306,7 +316,7 @@ export abstract class AbstractQuery<
                 ),
                 related: [
                   {
-                    system: this._system,
+                    system: this.#system,
                     correlation: {
                       parentField: secondRelation.sourceField,
                       childField: secondRelation.destField,
@@ -358,12 +368,20 @@ export abstract class AbstractQuery<
       cond = and(existingWhere, cond);
     }
 
-    return this._newQuery(
+    const where = dnf(cond);
+
+    if (this.#system === 'client') {
+      // We need to do this after the DNF since the DNF conversion might change
+      // an EXISTS to a NOT EXISTS condition (and vice versa).
+      assertNoNotExists(where);
+    }
+
+    return this[newQuerySymbol](
       this.#schema,
       this.#tableName,
       {
         ...this.#ast,
-        where: dnf(cond),
+        where,
       },
       this.format,
     );
@@ -373,7 +391,7 @@ export abstract class AbstractQuery<
     row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean} | undefined,
   ): Query<TSchema, TTable, TReturn> {
-    return this._newQuery(
+    return this[newQuerySymbol](
       this.#schema,
       this.#tableName,
       {
@@ -395,7 +413,7 @@ export abstract class AbstractQuery<
       throw new Error('Limit must be an integer');
     }
 
-    return this._newQuery(
+    return this[newQuerySymbol](
       this.#schema,
       this.#tableName,
       {
@@ -410,7 +428,7 @@ export abstract class AbstractQuery<
     field: TSelector,
     direction: 'asc' | 'desc',
   ): Query<TSchema, TTable, TReturn> {
-    return this._newQuery(
+    return this[newQuerySymbol](
       this.#schema,
       this.#tableName,
       {
@@ -434,7 +452,7 @@ export abstract class AbstractQuery<
       assert(isCompoundKey(destField), 'Invalid relationship');
 
       const sq = cb(
-        this._newQuery(
+        this[newQuerySymbol](
           this.#schema,
           destSchema,
           {
@@ -447,7 +465,7 @@ export abstract class AbstractQuery<
       return {
         type: 'correlatedSubquery',
         related: {
-          system: this._system,
+          system: this.#system,
           correlation: {
             parentField: sourceField,
             childField: destField,
@@ -470,7 +488,7 @@ export abstract class AbstractQuery<
       const {destSchema} = secondRelation;
       const junctionSchema = firstRelation.destSchema;
       const queryToDest = cb(
-        this._newQuery(
+        this[newQuerySymbol](
           this.#schema,
           destSchema,
           {
@@ -484,7 +502,7 @@ export abstract class AbstractQuery<
       return {
         type: 'correlatedSubquery',
         related: {
-          system: this._system,
+          system: this.#system,
           correlation: {
             parentField: firstRelation.sourceField,
             childField: firstRelation.destField,
@@ -499,7 +517,7 @@ export abstract class AbstractQuery<
             where: {
               type: 'correlatedSubquery',
               related: {
-                system: this._system,
+                system: this.#system,
                 correlation: {
                   parentField: secondRelation.sourceField,
                   childField: secondRelation.destField,
@@ -600,17 +618,19 @@ export class QueryImpl<
     ast: AST,
     format: Format,
   ) {
-    super(schema, tableName, ast, format);
+    super(schema, tableName, ast, format, 'client');
     this.#delegate = delegate;
   }
-
-  protected readonly _system = 'client';
 
   get [completedAstSymbol](): AST {
     return this._completeAst();
   }
 
-  protected _newQuery<TSchema extends Schema, TTable extends string, TReturn>(
+  protected [newQuerySymbol]<
+    TSchema extends Schema,
+    TTable extends string,
+    TReturn,
+  >(
     schema: TSchema,
     tableName: TTable,
     ast: AST,

@@ -57,6 +57,7 @@ describe('change-streamer/schema/tables', () => {
         {
           lastWatermark: '183',
           owner: null,
+          ownerAddress: null,
           lock: 1,
         },
       ],
@@ -96,6 +97,7 @@ describe('change-streamer/schema/tables', () => {
         {
           lastWatermark: '184',
           owner: 'my-task',
+          ownerAddress: null,
           lock: 1,
         },
       ],
@@ -123,6 +125,7 @@ describe('change-streamer/schema/tables', () => {
         {
           lastWatermark: '184',
           owner: 'my-task',
+          ownerAddress: null,
           lock: 1,
         },
       ],
@@ -182,6 +185,7 @@ describe('change-streamer/schema/tables', () => {
         {
           lastWatermark: '1g8',
           owner: null,
+          ownerAddress: null,
           lock: 1,
         },
       ],

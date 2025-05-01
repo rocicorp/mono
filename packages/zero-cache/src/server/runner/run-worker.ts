@@ -7,7 +7,6 @@ import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';
 import {childWorker, type Worker} from '../../types/processes.ts';
 import {createLogContext} from '../logging.ts';
 import {getMultiZeroConfig} from './config.ts';
-import {getTaskID} from './runtime.ts';
 import {ZeroDispatcher} from './zero-dispatcher.ts';
 
 export async function runWorker(
@@ -19,15 +18,14 @@ export async function runWorker(
   const lc = createLogContext(config, {worker: 'runner'});
   const processes = new ProcessManager(lc, parent ?? process);
 
-  const {serverVersion, port, changeStreamerPort = port + 1} = config;
-  let {taskID} = config;
-  if (!taskID) {
-    taskID = await getTaskID(lc);
-    baseEnv['ZERO_TASK_ID'] = taskID;
-  }
+  const {
+    serverVersion,
+    port,
+    changeStreamer: {port: changeStreamerPort = port + 1},
+  } = config;
   lc.info?.(
     `starting server${!serverVersion ? '' : `@${serverVersion}`} ` +
-      `protocolVersion=${PROTOCOL_VERSION}, taskID=${taskID}`,
+      `protocolVersion=${PROTOCOL_VERSION}`,
   );
 
   const multiMode = config.tenants.length;

@@ -11,6 +11,7 @@ import * as v from '../../shared/src/valita.ts';
 import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
 import {
   appOptions,
+  normalizeZeroConfig,
   shardOptions,
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
@@ -90,18 +91,40 @@ const options = {
     db: {
       type: v.string().optional(),
       desc: [
-        'Connection URL to the CVR database. Required if using a query hash.',
+        'Connection URL to the CVR database. Required if using a query hash. ',
+        'Will attempt to be set to your upstream db if this option is not specified.',
+        'If your upstream db does not have a schema for the cvr, you must provide this in ',
+        'order to use the hash option.',
       ],
     },
   },
   app: appOptions,
   shard: shardOptions,
+
+  // This args is hidden as it is only present to:
+  // 1. Parse it out of the env if it exists
+  // 2. Use it to default the `cvr` to `upstream` if `cvr` is not provided
+  upstream: Object.fromEntries(
+    Object.entries(zeroOptions.upstream).map(([key, value]) => [
+      key,
+      {
+        ...value,
+        type: value.type.optional(),
+        hidden: true,
+      },
+    ]),
+  ) as unknown as typeof zeroOptions.upstream,
 };
 
-const config = parseOptions(
-  options,
-  process.argv.slice(2),
-  ZERO_ENV_VAR_PREFIX,
+const config = normalizeZeroConfig(
+  parseOptions(
+    options,
+    // the command line parses drops all text after the first newline
+    // so we need to replace newlines with spaces
+    // before parsing
+    process.argv.slice(2).map(s => s.replaceAll('\n', ' ')),
+    ZERO_ENV_VAR_PREFIX,
+  ),
 );
 
 runtimeDebugFlags.trackRowsVended = true;
@@ -172,7 +195,8 @@ let start: number;
 let end: number;
 
 if (config.ast) {
-  [start, end] = await runAst(JSON.parse(config.ast));
+  // the user likely has a transformed AST since the wire and storage formats are the transformed AST
+  [start, end] = await runAst(JSON.parse(config.ast), true);
 } else if (config.query) {
   [start, end] = await runQuery(config.query);
 } else if (config.hash) {
@@ -181,7 +205,10 @@ if (config.ast) {
   throw new Error('No query or AST or hash provided');
 }
 
-async function runAst(ast: AST): Promise<[number, number]> {
+async function runAst(
+  ast: AST,
+  isTransformed: boolean,
+): Promise<[number, number]> {
   if (config.applyPermissions) {
     const authData = config.authData ? JSON.parse(config.authData) : {};
     if (!config.authData) {
@@ -196,7 +223,15 @@ async function runAst(ast: AST): Promise<[number, number]> {
     console.log(await formatOutput(ast.table + astToZQL(ast)));
   }
 
-  const pipeline = buildPipeline(ast, host);
+  const pipeline = buildPipeline(
+    ast,
+    isTransformed
+      ? {
+          ...host,
+          mapAst: (ast: AST) => ast,
+        }
+      : host,
+  );
   const output = new Catch(pipeline);
 
   const start = performance.now();
@@ -219,7 +254,7 @@ function runQuery(queryString: string): Promise<[number, number]> {
   const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
 
   const ast = completedAST(q);
-  return runAst(ast);
+  return runAst(ast, false);
 }
 
 async function runHash(hash: string) {
@@ -238,7 +273,7 @@ async function runHash(hash: string) {
   const ast = rows[0].clientAST as AST;
   console.log(await formatOutput(ast.table + astToZQL(ast)));
 
-  return runAst(ast);
+  return runAst(ast, true);
 }
 
 console.log(chalk.blue.bold('=== Query Stats: ===\n'));

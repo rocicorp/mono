@@ -3,7 +3,10 @@ import {LogContext} from '@rocicorp/logger';
 import {IncomingMessage} from 'node:http';
 import WebSocket from 'ws';
 import {assert} from '../../../../shared/src/asserts.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
+import type {PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
+import type {ShardID} from '../../types/shards.ts';
 import {streamIn, streamOut, type Source} from '../../types/streams.ts';
 import {URLParams} from '../../types/url-params.ts';
 import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
@@ -16,7 +19,7 @@ import {
   type Downstream,
   type SubscriberContext,
 } from './change-streamer.ts';
-import type {ZeroConfig} from '../../config/zero-config.ts';
+import {discoverChangeStreamerAddress} from './schema/tables.ts';
 
 const MIN_SUPPORTED_PROTOCOL_VERSION = 1;
 
@@ -79,22 +82,28 @@ export class ChangeStreamerHttpServer extends HttpService {
 
 export class ChangeStreamerHttpClient implements ChangeStreamer {
   readonly #lc: LogContext;
-  readonly #uri: string;
+  readonly #shardID: ShardID;
+  readonly #changeDB: PostgresDB;
 
-  constructor(lc: LogContext, uri: string) {
-    const url = new URL(uri);
-    url.pathname += url.pathname.endsWith('/')
-      ? CHANGES_PATH.substring(1)
-      : CHANGES_PATH;
-    uri = url.toString();
+  constructor(lc: LogContext, shardID: ShardID, changeDB: PostgresDB) {
     this.#lc = lc;
-    this.#uri = uri;
+    this.#shardID = shardID;
+    this.#changeDB = changeDB;
   }
 
-  subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
-    this.#lc.info?.(`connecting to change-streamer@${this.#uri}`);
+  async subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
+    const address = await discoverChangeStreamerAddress(
+      this.#shardID,
+      this.#changeDB,
+    );
+    if (!address) {
+      throw new Error(`no change-streamer is running`);
+    }
+    const uri = new URL(CHANGES_PATH, `http://${address}/`);
+
+    this.#lc.info?.(`connecting to change-streamer@${uri}`);
     const params = getParams(ctx);
-    const ws = new WebSocket(this.#uri + `?${params.toString()}`);
+    const ws = new WebSocket(uri + `?${params.toString()}`);
 
     return streamIn(this.#lc, ws, downstreamSchema);
   }

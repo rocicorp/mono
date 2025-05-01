@@ -35,6 +35,14 @@ export const logOptions = {
     ],
   },
 
+  logCollector: {
+    type: v.string().optional(),
+    desc: [
+      `The URL of the log collector to which to send log data. Logs are sent over http.`,
+      `Port defaults to 4318 for most collectors.`,
+    ],
+  },
+
   slowRowThreshold: {
     type: v.number().default(2),
     desc: [
