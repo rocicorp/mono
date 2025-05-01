@@ -36,7 +36,12 @@ export function astToZQL(ast: AST): string {
   // Handle related subqueries
   if (ast.related && ast.related.length > 0) {
     for (const related of ast.related) {
-      if (!related.hidden) {
+      if (related.hidden) {
+        const nestedRelated = related.subquery.related?.[0];
+        if (nestedRelated) {
+          code += transformRelated(nestedRelated);
+        }
+      } else {
         code += transformRelated(related);
       }
     }
