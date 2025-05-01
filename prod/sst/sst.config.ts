@@ -276,7 +276,6 @@ export default $config({
           nodejs: {install: ['@rocicorp/zero']},
         },
       );
-
       new aws.lambda.Invocation(
         'invoke-zero-permissions-deployer',
         {
