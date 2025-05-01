@@ -117,7 +117,14 @@ const options = {
 };
 
 const config = normalizeZeroConfig(
-  parseOptions(options, process.argv.slice(2), ZERO_ENV_VAR_PREFIX),
+  parseOptions(
+    options,
+    // the command line parses drops all text after the first newline
+    // so we need to replace newlines with spaces
+    // before parsing
+    process.argv.slice(2).map(s => s.replaceAll('\n', ' ')),
+    ZERO_ENV_VAR_PREFIX,
+  ),
 );
 
 runtimeDebugFlags.trackRowsVended = true;
