@@ -17,7 +17,7 @@ import {
   TransactionImpl,
   type CustomMutatorDefs,
   type MakeCustomMutatorInterfaces,
-  type PromiseWithServerResult,
+  type MutatorResult,
 } from './custom.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
@@ -64,22 +64,16 @@ test('argument types are preserved on the generated mutator interface', () => {
 
   expectTypeOf<MutatorsInterface>().toEqualTypeOf<{
     readonly issue: {
-      readonly setTitle: (args: {
-        id: string;
-        title: string;
-      }) => PromiseWithServerResult;
+      readonly setTitle: (args: {id: string; title: string}) => MutatorResult;
       readonly setProps: (args: {
         id: string;
         title: string;
         status: 'closed' | 'open';
         assignee: string;
-      }) => PromiseWithServerResult;
+      }) => MutatorResult;
     };
     readonly nonTableNamespace: {
-      readonly doThing: (_a: {
-        arg1: string;
-        arg2: number;
-      }) => PromiseWithServerResult;
+      readonly doThing: (_a: {arg1: string; arg2: number}) => MutatorResult;
     };
   }>();
 });
@@ -105,7 +99,7 @@ test('supports mutators without a namespace', async () => {
     ownerId: '',
     description: '',
     createdAt: 1743018138477,
-  });
+  }).client;
 
   const issues = await z.query.issue;
   expect(issues[0].title).toEqual('no-namespace');
@@ -172,17 +166,17 @@ test('custom mutators write to the local store', async () => {
     ownerId: '',
     description: '',
     createdAt: 1743018138477,
-  });
+  }).client;
 
   await z.markQueryAsGot(z.query.issue);
   let issues = await z.query.issue;
   expect(issues[0].title).toEqual('foo');
 
-  await z.mutate.issue.setTitle({id: '1', title: 'bar'});
+  await z.mutate.issue.setTitle({id: '1', title: 'bar'}).client;
   issues = await z.query.issue;
   expect(issues[0].title).toEqual('bar');
 
-  await z.mutate.customNamespace.clown('1');
+  await z.mutate.customNamespace.clown('1').client;
   issues = await z.query.issue;
   expect(issues[0].title).toEqual('🤡');
 
@@ -193,11 +187,12 @@ test('custom mutators write to the local store', async () => {
     ownerId: '',
     description: '',
     createdAt: 1743018138477,
-  });
+  }).client;
   issues = await z.query.issue;
   expect(issues.length).toEqual(2);
 
-  await z.mutate.issue.deleteTwoIssues({id1: issues[0].id, id2: issues[1].id});
+  await z.mutate.issue.deleteTwoIssues({id1: issues[0].id, id2: issues[1].id})
+    .client;
   issues = await z.query.issue;
   expect(issues.length).toEqual(0);
 });
@@ -231,7 +226,7 @@ test('custom mutators can query the local store during an optimistic mutation', 
         description: '',
         ownerId: '',
         createdAt: 1743018138477,
-      });
+      }).client;
     }),
   );
 
@@ -240,7 +235,7 @@ test('custom mutators can query the local store during an optimistic mutation', 
   let issues = await q;
   expect(issues.length).toEqual(10);
 
-  await z.mutate.issue.closeAll();
+  await z.mutate.issue.closeAll().client;
 
   issues = await q;
   expect(issues.length).toEqual(0);
@@ -328,7 +323,7 @@ describe('rebasing custom mutators', () => {
       description: '',
       closed: false,
       createdAt: 1743018138477,
-    });
+    }).client;
 
     const q = z.query.issue.where('id', '1').one();
     const issue = await q.run({type: 'unknown'});
@@ -387,7 +382,7 @@ describe('rebasing custom mutators', () => {
       description: '',
       ownerId: '',
       createdAt: 1743018138477,
-    });
+    }).client;
 
     expect(mutationRun).toEqual(true);
   });
@@ -429,7 +424,7 @@ describe('server results and keeping read queries', () => {
       ownerId: '',
       createdAt: 1743018138477,
     });
-    await create;
+    await create.client;
 
     await z.triggerPushResponse({
       mutations: [
@@ -447,7 +442,7 @@ describe('server results and keeping read queries', () => {
     expect(await create.server).toEqual({data: {shortID: '1'}});
 
     const close = z.mutate.issue.close({});
-    await close;
+    await close.client;
 
     await z.triggerPushResponse({
       mutations: [
@@ -504,7 +499,7 @@ describe('server results and keeping read queries', () => {
       description: '',
       ownerId: '',
       createdAt: 1743018138477,
-    });
+    }).client;
 
     const q = z.query.issue.limit(1).materialize();
     q.destroy();
@@ -595,11 +590,44 @@ test('run waiting for complete results throws in custom mutations', async () => 
   await z.triggerConnected();
   await z.waitForConnectionState(ConnectionState.Connected);
 
-  await z.mutate.issue.create();
+  await z.mutate.issue.create().client;
 
   expect(err).toMatchInlineSnapshot(
     `[Error: Cannot wait for complete results in custom mutations]`,
   );
+
+  await z.close();
+});
+
+test('warns when awaiting the promise directly', async () => {
+  const z = zeroForTest({
+    schema,
+    logLevel: 'warn',
+    mutators: {
+      issue: {
+        create: async tx => {
+          await tx.query.issue;
+        },
+      },
+    } as const satisfies CustomMutatorDefs<Schema>,
+  });
+
+  await z.triggerConnected();
+  await z.waitForConnectionState(ConnectionState.Connected);
+
+  await z.mutate.issue.create();
+
+  expect(z.testLogSink.messages).toEqual([
+    [
+      'warn',
+      {
+        name: 'zero-test-user-id-0-',
+      },
+      [
+        'Awaiting the mutator result directly is being deprecated. Please use `await z.mutate[mutatorName].client` or `await result.mutate[mutatorName].server`',
+      ],
+    ],
+  ]);
 
   await z.close();
 });

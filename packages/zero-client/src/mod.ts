@@ -122,7 +122,7 @@ export type {
   CustomMutatorImpl,
   MakeCustomMutatorInterface,
   MakeCustomMutatorInterfaces,
-  PromiseWithServerResult,
+  MutatorResult as PromiseWithServerResult,
 } from './client/custom.ts';
 export type {
   Inspector,
