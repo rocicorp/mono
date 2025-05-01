@@ -14,13 +14,9 @@ CREATE TABLE "user" (
     "login" VARCHAR NOT NULL,
     "name" VARCHAR,
     "avatar" VARCHAR,
+    "email" VARCHAR NOT NULL,
     "role" VARCHAR DEFAULT 'user' NOT NULL,
     "githubID" INTEGER NOT NULL
-);
-
-CREATE TABLE "userInternal" (
-    "id" VARCHAR PRIMARY KEY,
-    "email" VARCHAR
 );
 
 CREATE UNIQUE INDEX user_login_idx ON "user" (login);

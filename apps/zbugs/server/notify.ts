@@ -10,7 +10,7 @@ import {schema} from '../shared/schema.ts';
 import {assertIsLoggedIn, type AuthData} from '../shared/auth.ts';
 import type {PostCommitTask} from './server-mutators.ts';
 import type postgres from 'postgres';
-import {sendEmail} from '../api/_email.ts';
+import {sendEmail} from './email.ts';
 
 type CreateIssueNotification = {
   kind: 'create-issue';
@@ -90,9 +90,9 @@ export async function notify(
           .join('\n'),
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
       };
+
       postCommitTasks.push(() => sendEmail(payload));
       postCommitTasks.push(() => postToDiscord(payload));
-
       break;
     }
 
@@ -122,7 +122,6 @@ export async function notify(
         };
 
         postCommitTasks.push(() => sendEmail(payload));
-
         postCommitTasks.push(() => postToDiscord(payload));
       }
       break;
@@ -138,7 +137,6 @@ export async function notify(
       };
 
       postCommitTasks.push(() => sendEmail(payload));
-
       postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
@@ -156,7 +154,6 @@ export async function notify(
       };
 
       postCommitTasks.push(() => sendEmail(payload));
-
       postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
@@ -171,7 +168,6 @@ export async function notify(
       };
 
       postCommitTasks.push(() => sendEmail(payload));
-
       postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
@@ -187,7 +183,6 @@ export async function notify(
       };
 
       postCommitTasks.push(() => sendEmail(payload));
-
       postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
@@ -204,7 +199,7 @@ async function gatherRecipients(
 ) {
   const sql = tx.dbTransaction.wrappedTransaction;
 
-  const recipientRows = await sql`SELECT DISTINCT "userInternal".email
+  const recipientRows = await sql`SELECT DISTINCT "user".email
   FROM (
       SELECT DISTINCT "creatorID" AS "userID" FROM "comment" WHERE "issueID" = ${issueID}
       UNION
@@ -214,7 +209,7 @@ async function gatherRecipients(
       UNION
       SELECT "assigneeID" AS "userID" FROM "issue" WHERE "id" = ${issueID}
   ) AS combined
-  JOIN "userInternal" ON "userInternal".id = combined."userID" AND "userInternal".email IS NOT NULL;`;
+  JOIN "user" ON "user".id = combined."userID" AND "user".email IS NOT NULL;`;
 
   return recipientRows.map(row => row.email);
 }
