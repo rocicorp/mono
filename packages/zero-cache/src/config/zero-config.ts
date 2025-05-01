@@ -280,15 +280,51 @@ export const zeroOptions = {
     desc: [`The port for sync connections.`],
   },
 
-  changeStreamerPort: {
-    type: v.number().optional(),
-    desc: [
-      `The port on which the {bold change-streamer} runs. This is an internal`,
-      `protocol between the {bold replication-manager} and {bold zero-cache}, which`,
-      `runs in the same process in local development.`,
-      ``,
-      `If unspecified, defaults to {bold --port} + 1.`,
-    ],
+  changeStreamer: {
+    mode: {
+      type: v
+        .union(v.literal('dedicated'), v.literal('discover'))
+        .default('dedicated'),
+      desc: [
+        `The mode for running or connecting to the change-streamer:`,
+        `* {bold dedicated}: runs the change-streamer and shuts down when another`,
+        `      change-streamer takes over the replication slot. This is appropriate in a `,
+        `      single-node configuration, or for the {bold replication-manager} in a `,
+        `      multi-node configuration.`,
+        `* {bold discover}: connects to the change-streamer as internally advertised in the`,
+        `      change-db. This is appropriate for the {bold view-syncers} in a multi-node `,
+        `      configuration.`,
+      ],
+    },
+
+    port: {
+      type: v.number().optional(),
+      desc: [
+        `The port on which the {bold change-streamer} runs. This is an internal`,
+        `protocol between the {bold replication-manager} and {bold view-syncers}, which`,
+        `runs in the same process tree in local development or a single-node configuration.`,
+        ``,
+        `If unspecified, defaults to {bold --port} + 1.`,
+      ],
+    },
+
+    address: {
+      type: v.string().optional(),
+      desc: [
+        `The {bold host:port} for other processes to use when connecting to this `,
+        `change-streamer. When unspecified, the machine's IP address and the`,
+        `{bold --change-streamer-port} will be advertised for discovery.`,
+        ``,
+        `In most cases, the default behavior (unspecified) is sufficient, including in a`,
+        `single-node configuration or a multi-node configuration with host/awsvpc networking`,
+        `(e.g. Fargate).`,
+        ``,
+        `For a multi-node configuration in which the process is unable to determine the externally`,
+        `addressable port (e.g. a container running with {bold bridge} mode networking), the`,
+        `{bold --change-streamer-address} must be specified manually (e.g. a load balancer or`,
+        `service discovery address).`,
+      ],
+    },
   },
 
   taskID: {
@@ -311,16 +347,6 @@ export const zeroOptions = {
       `Leave this unset to use the maximum available parallelism.`,
       `If set to 0, the server runs without sync workers, which is the`,
       `configuration for running the {bold replication-manager}.`,
-    ],
-  },
-
-  changeStreamerURI: {
-    type: v.string().optional(),
-    desc: [
-      `When unset, the zero-cache runs its own {bold replication-manager}`,
-      `(i.e. {bold change-streamer}). In production, this should be set to`,
-      `the {bold replication-manager} URI, which runs a {bold change-streamer}`,
-      `on port 4849.`,
     ],
   },
 

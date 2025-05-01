@@ -93,6 +93,7 @@ export class Storer implements Service {
   readonly #lc: LogContext;
   readonly #shard: ShardID;
   readonly #taskID: string;
+  readonly #discoveryAddress: string;
   readonly #db: PostgresDB;
   readonly #replicaVersion: string;
   readonly #onConsumed: (c: Commit | StatusMessage) => void;
@@ -103,6 +104,7 @@ export class Storer implements Service {
     lc: LogContext,
     shard: ShardID,
     taskID: string,
+    discoveryAddress: string,
     db: PostgresDB,
     replicaVersion: string,
     onConsumed: (c: Commit | StatusMessage) => void,
@@ -111,6 +113,7 @@ export class Storer implements Service {
     this.#lc = lc;
     this.#shard = shard;
     this.#taskID = taskID;
+    this.#discoveryAddress = discoveryAddress;
     this.#db = db;
     this.#replicaVersion = replicaVersion;
     this.#onConsumed = onConsumed;
@@ -125,7 +128,9 @@ export class Storer implements Service {
   async assumeOwnership() {
     const db = this.#db;
     const owner = this.#taskID;
-    await db`UPDATE ${this.#cdc('replicationState')} SET ${db({owner})}`;
+    const ownerAddress = this.#discoveryAddress;
+    await db`UPDATE ${this.#cdc('replicationState')} SET ${db({owner, ownerAddress})}`;
+    this.#lc.info?.(`assumed ownership at ${ownerAddress}`);
   }
 
   async getLastWatermarkToStartStream(): Promise<string> {

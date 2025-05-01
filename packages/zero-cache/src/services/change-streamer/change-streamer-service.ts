@@ -10,7 +10,6 @@ import type {PostgresDB} from '../../types/pg.ts';
 import type {ShardID} from '../../types/shards.ts';
 import type {Sink, Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
-import {orTimeout} from '../../types/timeout.ts';
 import {
   type ChangeStreamControl,
   type ChangeStreamData,
@@ -46,6 +45,7 @@ export async function initializeStreamer(
   lc: LogContext,
   shard: ShardID,
   taskID: string,
+  discoveryAddress: string,
   changeDB: PostgresDB,
   changeSource: ChangeSource,
   subscriptionState: SubscriptionState,
@@ -67,6 +67,7 @@ export async function initializeStreamer(
     lc,
     shard,
     taskID,
+    discoveryAddress,
     changeDB,
     replicaVersion,
     changeSource,
@@ -106,12 +107,6 @@ export interface ChangeSource {
    */
   startStream(afterWatermark: string): Promise<ChangeStream>;
 }
-
-/**
- * The maximum time to wait for a serving request before taking
- * over the change stream from the previous change-streamer.
- */
-const MAX_SERVING_DELAY = 30_000;
 
 /**
  * Upstream-agnostic dispatch of messages in a {@link ChangeStreamMessage} to a
@@ -281,6 +276,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     lc: LogContext,
     shard: ShardID,
     taskID: string,
+    discoveryAddress: string,
     changeDB: PostgresDB,
     replicaVersion: string,
     source: ChangeSource,
@@ -297,6 +293,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       lc,
       shard,
       taskID,
+      discoveryAddress,
       changeDB,
       replicaVersion,
       consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
@@ -308,13 +305,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   async run() {
-    this.#lc.info?.('awaiting first serving subscriber');
-    if (
-      (await orTimeout(this.#serving.promise, MAX_SERVING_DELAY)) ===
-      'timed-out'
-    ) {
-      this.#lc.info?.('timed out waiting for first request');
-    }
     this.#lc.info?.('starting change stream');
 
     // Once this change-streamer acquires "ownership" of the change DB,

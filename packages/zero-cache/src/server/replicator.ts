@@ -2,6 +2,7 @@ import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {assertNormalized} from '../config/normalize.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
@@ -9,11 +10,13 @@ import {
   ReplicatorService,
   type ReplicatorMode,
 } from '../services/replicator/replicator.ts';
+import {pgClient} from '../types/pg.ts';
 import {
   parentWorker,
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
+import {getShardConfig} from '../types/shards.ts';
 import {
   replicaFileModeSchema,
   setUpMessageHandlers,
@@ -30,20 +33,28 @@ export default async function runWorker(
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
   const config = getZeroConfig(env, args.slice(1));
+  assertNormalized(config);
+
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;
   const lc = createLogContext(config, {worker: workerName});
 
   const replica = await setupReplica(lc, fileMode, config.replica);
 
-  const changeStreamerPort = config.changeStreamerPort ?? config.port + 1;
-  const changeStreamerURI =
-    config.changeStreamerURI ?? `ws://localhost:${changeStreamerPort}`;
-  const changeStreamer = new ChangeStreamerHttpClient(lc, changeStreamerURI);
+  const shard = getShardConfig(config);
+  const {taskID, change} = config;
+  // Create a pg client with a single short-lived connection for the purpose
+  // of change-streamer discovery (i.e. ChangeDB as DNS).
+  const changeDB = pgClient(lc, change.db, {
+    max: 1,
+    ['idle_timeout']: 15,
+    connection: {['application_name']: 'change-streamer-discovery'},
+  });
+  const changeStreamer = new ChangeStreamerHttpClient(lc, shard, changeDB);
 
   const replicator = new ReplicatorService(
     lc,
-    must(config.taskID, `main must set --task-id`),
+    taskID,
     `${workerName}-${pid}`,
     mode,
     changeStreamer,
