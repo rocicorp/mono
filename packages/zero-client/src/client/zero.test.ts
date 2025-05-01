@@ -3614,7 +3614,6 @@ test('onError is called on error', async () => {
   expect(onErrorSpy.mock.calls).toMatchInlineSnapshot(`
     [
       [
-        "MutationRateLimited",
         "Mutation rate limited",
         {
           "message": "test",

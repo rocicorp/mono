@@ -144,13 +144,9 @@ export interface ZeroOptions<
   hiddenTabDisconnectDelay?: number | undefined;
 
   /**
-   * This gets called when the Zero instance encounters an error.
-   * The default behavior is to log the error to the console.
-   * Provide your own function to prevent the default behavior.
-   * The error kind is passed as the first argument to the function.
-   *
-   * The remaining arguments are of type `unknown` and may change
-   * in the future. Only rely on the declared types.
+   * This gets called when the Zero instance encounters an error. The default
+   * behavior is to log the error to the console. Provide your own function to
+   * prevent the default behavior.
    */
   onError?: OnError | undefined;
 

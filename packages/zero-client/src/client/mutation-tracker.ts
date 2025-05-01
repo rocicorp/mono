@@ -13,7 +13,6 @@ import type {
   PushOk,
   PushResponse,
 } from '../../../zero-protocol/src/push.ts';
-import {OnErrorKind} from './on-error-kind.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 
 type ErrorType =
@@ -96,7 +95,6 @@ export class MutationTracker {
   processPushResponse(response: PushResponse): void {
     if ('error' in response) {
       this.#lc.error?.(
-        OnErrorKind.Push,
         'Received an error response when pushing mutations',
         response,
       );
@@ -185,11 +183,7 @@ export class MutationTracker {
       'received mutation for the wrong client',
     );
 
-    this.#lc.error?.(
-      OnErrorKind.Mutation,
-      `Mutation ${mid.id} returned an error`,
-      error,
-    );
+    this.#lc.error?.(`Mutation ${mid.id} returned an error`, error);
 
     const ephemeralID = this.#ephemeralIDsByMutationID.get(mid.id);
     if (!ephemeralID && error.error === 'alreadyProcessed') {

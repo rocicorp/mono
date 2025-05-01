@@ -130,7 +130,6 @@ export type {
   ClientGroup as InspectorClientGroup,
   Query as InspectorQuery,
 } from './client/inspector/types.ts';
-export {OnErrorKind} from './client/on-error-kind.ts';
 export type {OnError, OnErrorParameters} from './client/on-error.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
 export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
