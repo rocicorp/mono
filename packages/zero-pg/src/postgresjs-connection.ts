@@ -33,7 +33,11 @@ class Transaction<WrappedTransaction extends PostgresJSTransaction>
   }
 }
 
-export class ZQLPostgresJSAdapter<
+/**
+ * Implements the `DBConnection` interface needed by PushProcessor for the
+ * postgres.js library.
+ */
+export class PostgresJSConnection<
   WrappedTransaction extends PostgresJSTransaction,
   WrappedPostgres extends PostgresJSClient<WrappedTransaction>,
 > implements DBConnection<WrappedTransaction>
