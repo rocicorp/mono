@@ -70,6 +70,7 @@ test('parse options', () => {
           "rowBatchSize": 10000,
           "tableCopyWorkers": 5,
         },
+        "lazyStartup": false,
         "litestream": {
           "checkpointThresholdMB": 40,
           "configPath": "./src/services/litestream/config.yml",
@@ -93,9 +94,6 @@ test('parse options', () => {
         "port": 4848,
         "push": {},
         "replica": {},
-        "run": {
-          "lazily": false,
-        },
         "shard": {
           "num": 0,
         },
@@ -148,6 +146,7 @@ test('parse options', () => {
         "ZERO_CVR_MAX_CONNS": "30",
         "ZERO_INITIAL_SYNC_ROW_BATCH_SIZE": "10000",
         "ZERO_INITIAL_SYNC_TABLE_COPY_WORKERS": "5",
+        "ZERO_LAZY_STARTUP": "false",
         "ZERO_LITESTREAM_CHECKPOINT_THRESHOLD_MB": "40",
         "ZERO_LITESTREAM_CONFIG_PATH": "./src/services/litestream/config.yml",
         "ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES": "15",
@@ -163,7 +162,6 @@ test('parse options', () => {
         "ZERO_LOG_SLOW_ROW_THRESHOLD": "2",
         "ZERO_PER_USER_MUTATION_LIMIT_WINDOW_MS": "60000",
         "ZERO_PORT": "4848",
-        "ZERO_RUN_LAZILY": "false",
         "ZERO_SHARD_NUM": "0",
         "ZERO_TARGET_CLIENT_ROW_COUNT": "20000",
         "ZERO_TENANTS_JSON": "{"tenants":[{"id":"ten-boo","host":"Normalize.ME","path":"tenboo","env":{"ZERO_REPLICA_FILE":"tenboo.db","ZERO_CVR_DB":"foo","ZERO_CHANGE_DB":"foo","ZERO_APP_ID":"foo"}},{"id":"ten_bar","path":"/tenbar","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_CVR_DB":"bar","ZERO_CHANGE_DB":"bar","ZERO_APP_ID":"bar"}},{"id":"tenbaz-123","path":"/tenbaz","env":{"ZERO_REPLICA_FILE":"tenbar.db","ZERO_UPSTREAM_DB":"overridden","ZERO_CVR_DB":"baz","ZERO_CHANGE_DB":"baz","ZERO_APP_ID":"foo"}}]}",
@@ -599,18 +597,14 @@ test('zero-cache --help', () => {
                                                                 Active queries, on the other hand, are never evicted and are allowed to use more                  
                                                                 rows than the limit.                                                                              
                                                                                                                                                                   
-     --run-lazily boolean                                       default: false                                                                                    
-       ZERO_RUN_LAZILY env                                                                                                                                        
-                                                                Delay starting the zero-cache processes until the first request.                                  
+     --lazy-startup boolean                                     default: false                                                                                    
+       ZERO_LAZY_STARTUP env                                                                                                                                      
+                                                                Delay starting the majority of zero-cache until first request.                                    
                                                                                                                                                                   
-                                                                Note: This works as expected in single-node mode. While it is technically usable                  
-                                                                in a multi-node setup, there is a bootstrapping complication in that the                          
-                                                                view-syncer must first restore the replica from litestream before connecting to                   
-                                                                the replication-manager (to know where to continue replication from). If the                      
-                                                                replication-manager has never run, there will be no replica file to restore, and                  
-                                                                the view-syncer will fail to start up, never connecting to the replication-manager.               
+                                                                This is mainly intended to avoid connecting to Postgres replication stream                        
+                                                                until the first request is received, which can be useful i.e., for preview instances.             
                                                                                                                                                                   
-                                                                As such, it is not recommended to run a replication-manager lazily.                               
+                                                                Currently only supported in single-node mode.                                                     
                                                                                                                                                                   
      --server-version string                                    optional                                                                                          
        ZERO_SERVER_VERSION env                                                                                                                                    
