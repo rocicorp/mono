@@ -33,6 +33,7 @@ type SubscriberAndMode = {
 type QueueEntry =
   | ['change', WatermarkedChange]
   | ['ready', callback: () => void]
+  | ['abort', callback: (abortedWatermark: string | null) => void]
   | ['subscriber', SubscriberAndMode]
   | StatusMessage
   | 'stop';
@@ -99,6 +100,8 @@ export class Storer implements Service {
   readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
 
+  #running = false;
+
   constructor(
     lc: LogContext,
     shard: ShardID,
@@ -155,6 +158,15 @@ export class Storer implements Service {
     this.#queue.enqueue(['change', entry]);
   }
 
+  abort(): Promise<string | null> {
+    if (!this.#running) {
+      return Promise.resolve(null);
+    }
+    const abortedWatermark = resolver<string | null>();
+    this.#queue.enqueue(['abort', abortedWatermark.resolve]);
+    return abortedWatermark.promise;
+  }
+
   status(s: StatusMessage) {
     this.#queue.enqueue(s);
   }
@@ -193,6 +205,15 @@ export class Storer implements Service {
   }
 
   async run() {
+    this.#running = true;
+    try {
+      await this.#processQueue();
+    } finally {
+      this.#running = false;
+    }
+  }
+
+  async #processQueue() {
     let tx: PendingTransaction | null = null;
     let msg: QueueEntry | false;
 
@@ -219,6 +240,19 @@ export class Storer implements Service {
         case 'status':
           this.#onConsumed(msg);
           continue;
+        case 'abort': {
+          const aborted = msg[1];
+          if (tx === null) {
+            aborted(null);
+          } else {
+            const {preCommitWatermark} = tx;
+            tx.pool.abort();
+            await tx.pool.done();
+            tx = null;
+            aborted(preCommitWatermark);
+          }
+          continue;
+        }
       }
       // msgType === 'change'
       const [watermark, downstream] = msg[1];
