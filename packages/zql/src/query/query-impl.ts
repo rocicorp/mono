@@ -123,7 +123,6 @@ export const SUBQ_PREFIX = 'zsubq_';
 
 export const defaultFormat = {singular: false, relationships: {}} as const;
 
-export const systemSymbol = Symbol();
 export const newQuerySymbol = Symbol();
 
 export abstract class AbstractQuery<
