@@ -224,7 +224,7 @@ export class MetricManager {
     try {
       await this.#reporter(allSeries);
     } catch (e) {
-      lc?.error?.(`Error reporting metrics: ${e}`);
+      lc?.error?.('Error reporting metrics', e);
     }
   }
 

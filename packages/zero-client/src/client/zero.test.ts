@@ -2580,7 +2580,7 @@ test(ErrorKind.InvalidConnectionRequest, async () => {
 
   expect(msg[0]).equal('error');
 
-  const err = msg[2].at(-2);
+  const err = msg[2][1];
   assert(err instanceof ServerError);
   expect(err.message).equal('InvalidConnectionRequest: test');
 
