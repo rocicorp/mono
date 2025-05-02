@@ -883,6 +883,88 @@ describe('change-streamer/service', () => {
     expect(source.startStream.mock.calls[1][0]).toBe(NEW_WATERMARK);
   });
 
+  test('rolls back pending transaction when change-source dies', async () => {
+    const changes1 = Subscription.create<ChangeStreamMessage>();
+    const changes2 = Subscription.create<ChangeStreamMessage>();
+    const source = {
+      startStream: vi
+        .fn()
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            initialWatermark: '01',
+            changes: changes1,
+            acks: () => {},
+          }),
+        )
+        .mockImplementationOnce(() =>
+          Promise.resolve({
+            initialWatermark: '01',
+            changes: changes2,
+            acks: () => {},
+          }),
+        ),
+    };
+    const streamer = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      changeDB,
+      source,
+      replicaConfig,
+      true,
+    );
+    void streamer.run();
+
+    const sub = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      id: 'myid',
+      mode: 'serving',
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+    const downstream = drainToQueue(sub);
+
+    changes1.push(['begin', messages.begin(), {commitWatermark: '09'}]);
+    changes1.push(['data', messages.insert('foo', {id: 'hello'})]);
+
+    expect(await nextChange(downstream)).toMatchObject({tag: 'status'});
+    expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'insert',
+      new: {id: 'hello'},
+    });
+
+    changes1.cancel(); // simulate a connection close or error.
+
+    expect(await nextChange(downstream)).toMatchObject({tag: 'rollback'});
+
+    changes2.push(['begin', messages.begin(), {commitWatermark: '09'}]);
+    changes2.push(['data', messages.insert('foo', {id: 'hello'})]);
+    changes2.push(['data', messages.insert('foo', {id: 'world'})]);
+    changes2.push([
+      'commit',
+      messages.commit({extra: 'fields'}),
+      {watermark: '09'},
+    ]);
+
+    expect(await nextChange(downstream)).toMatchObject({tag: 'begin'});
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'insert',
+      new: {id: 'hello'},
+    });
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'insert',
+      new: {id: 'world'},
+    });
+    expect(await nextChange(downstream)).toMatchObject({
+      tag: 'commit',
+      extra: 'fields',
+    });
+
+    await streamer.stop();
+  });
+
   test('ownership takeover before tx begins', async () => {
     // Kick off the initial stream with a serving request.
     void streamer.subscribe({
