@@ -139,6 +139,45 @@ describe('change-streamer/storer', () => {
     ]);
   });
 
+  test('abort', async () => {
+    expect(await storer.abort()).toBeNull();
+
+    storer.store(['0a', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
+    storer.store(['0a', ['data', messages.insert('issues', {id: 'foo'})]]);
+    expect(await storer.abort()).toBe('0a');
+
+    storer.store(['0a', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
+    storer.store(['0a', ['data', messages.insert('issues', {id: 'bar'})]]);
+    storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
+
+    await expectConsumed('0a');
+
+    expect(
+      await db`
+      SELECT watermark, pos, change FROM "xero_5/cdc"."changeLog"
+        WHERE watermark >= '0a'`,
+    ).toMatchObject([
+      {
+        change: {tag: 'begin'},
+        pos: 0n,
+        watermark: '0a',
+      },
+      {
+        change: {
+          tag: 'insert',
+          new: {id: 'bar'},
+        },
+        pos: 1n,
+        watermark: '0a',
+      },
+      {
+        change: {tag: 'commit'},
+        pos: 2n,
+        watermark: '0a',
+      },
+    ]);
+  });
+
   test('no queueing if not in transaction', async () => {
     const [sub, _, stream] = createSubscriber('00');
 

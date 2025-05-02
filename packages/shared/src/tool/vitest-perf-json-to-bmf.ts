@@ -166,10 +166,14 @@ function convertVitestToBMF(vitestOutput: VitestOutput): BMFMetric {
         const metricName = `${group.fullName} > ${benchmark.name}`;
 
         bmf[metricName] = {
+          // benchmark outputs are the time in milliseconds it took to run.
+          // If we want to convert to throughput, we need to divide 1000 by the time.
+          // This is the inverse of the time taken.
+          // So if it took 100ms to run, the throughput is 1000 / 100 = 10
           throughput: {
-            value: benchmark.mean,
-            ['lower_value']: benchmark.min,
-            ['upper_value']: benchmark.max,
+            value: 1000 / benchmark.mean,
+            ['lower_value']: 1000 / benchmark.min,
+            ['upper_value']: 1000 / benchmark.max,
           },
         };
       });
