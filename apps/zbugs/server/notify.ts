@@ -121,7 +121,6 @@ export async function notify(
           link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
         };
 
-        postCommitTasks.push(() => sendEmail(payload));
         postCommitTasks.push(() => postToDiscord(payload));
       }
       break;
@@ -136,7 +135,6 @@ export async function notify(
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
       };
 
-      postCommitTasks.push(() => sendEmail(payload));
       postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
@@ -153,7 +151,6 @@ export async function notify(
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
       };
 
-      postCommitTasks.push(() => sendEmail(payload));
       postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
@@ -182,7 +179,6 @@ export async function notify(
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}#comment-${commentID}`,
       };
 
-      postCommitTasks.push(() => sendEmail(payload));
       postCommitTasks.push(() => postToDiscord(payload));
       break;
     }

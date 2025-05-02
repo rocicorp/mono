@@ -29,7 +29,6 @@ async function getTransport() {
   }
 }
 
-let transport: Awaited<ReturnType<typeof getTransport>> | undefined;
 export async function sendEmail({
   recipients,
   title,
@@ -41,13 +40,7 @@ export async function sendEmail({
   message: string;
   link: string;
 }) {
-  if (!transport) {
-    transport = await getTransport();
-    if (!transport) {
-      throw new Error('No email transport configured');
-    }
-  }
-
+  const transport = await getTransport();
   if ((transport as any).isLoops) {
     await transport.sendMail({
       from: 'no-reply@roci.dev',
