@@ -378,6 +378,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         this.#stream = undefined;
       }
 
+      // When the change stream is interrupted, abort any pending transaction.
+      const aborted = await this.#storer.abort();
+      if (aborted) {
+        this.#lc.warn?.(`aborting interrupted transaction ${aborted}`);
+        this.#forwarder.forward([aborted, ['rollback', {tag: 'rollback'}]]);
+      }
+
       await this.#state.backoff(this.#lc, err);
     }
     this.#lc.info?.('ChangeStreamer stopped');
