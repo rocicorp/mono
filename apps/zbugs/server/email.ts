@@ -1,10 +1,7 @@
 import nodemailer from 'nodemailer';
 
 async function getTransport() {
-  if (process.env.NODE_ENV === 'development') {
-    if (!process.env.LOOPS_EMAIL_API_KEY) {
-      throw new Error('LOOPS_API_KEY is not set');
-    }
+  if (process.env.LOOPS_EMAIL_API_KEY !== undefined) {
     const transport = nodemailer.createTransport({
       host: 'smtp.loops.so',
       name: 'loops',
@@ -18,19 +15,18 @@ async function getTransport() {
 
     (transport as any).isLoops = true;
     return transport;
+  } else {
+    const testAccount = await nodemailer.createTestAccount();
+    return nodemailer.createTransport({
+      host: 'smtp.ethereal.email',
+      port: 587,
+      secure: false,
+      auth: {
+        user: testAccount.user,
+        pass: testAccount.pass,
+      },
+    });
   }
-
-  const testAccount = await nodemailer.createTestAccount();
-  console.log('MAILER TEST ACCOUNT:', testAccount.user, testAccount.pass);
-  return nodemailer.createTransport({
-    host: 'smtp.ethereal.email',
-    port: 587,
-    secure: false,
-    auth: {
-      user: testAccount.user,
-      pass: testAccount.pass,
-    },
-  });
 }
 
 let transport: Awaited<ReturnType<typeof getTransport>> | undefined;
@@ -48,8 +44,7 @@ export async function sendEmail({
   if (!transport) {
     transport = await getTransport();
     if (!transport) {
-      console.log('No email transport configured');
-      return;
+      throw new Error('No email transport configured');
     }
   }
 
