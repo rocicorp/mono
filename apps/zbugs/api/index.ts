@@ -70,7 +70,6 @@ fastify.get<{
     },
   });
 
-  console.log('userDetails!!!!!!', userDetails);
   let userId = nanoid();
   const existingUser =
     await sql`SELECT id, email FROM "user" WHERE "githubID" = ${userDetails.data.id}`;
