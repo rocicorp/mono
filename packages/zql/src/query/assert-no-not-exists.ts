@@ -23,7 +23,9 @@ export function assertNoNotExists(condition: Condition): void {
 
     case 'correlatedSubquery':
       if (condition.op === 'NOT EXISTS') {
-        throw new Error('NOT EXISTS is not supported on the client');
+        throw new Error(
+          'not(exists()) is not supported on the client - see https://bugs.rocicorp.dev/issue/3438',
+        );
       }
       // Check if the subquery has a where condition
       if (condition.related.subquery.where) {
