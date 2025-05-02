@@ -1,5 +1,5 @@
 import type {
-  DatabaseProvider,
+  Database,
   TransactionProviderHooks,
   TransactionProviderInput,
 } from './push-processor.ts';
@@ -16,8 +16,15 @@ import {makeSchemaCRUD, TransactionImpl} from './custom.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {makeServerTransaction} from './custom.ts';
 
-export class ZQLDatabaseProvider<S extends Schema, WrappedTransaction>
-  implements DatabaseProvider<TransactionImpl<S, WrappedTransaction>>
+/**
+ * Implements a Database for use with PushProcessor that is backed by Postgres.
+ *
+ * This implementation also implements the same ZQL interfaces for reading and
+ * writing data that the Zero client does, so that mutator functions can be
+ * shared across client and server.
+ */
+export class ZQLDatabase<S extends Schema, WrappedTransaction>
+  implements Database<TransactionImpl<S, WrappedTransaction>>
 {
   readonly #connection: DBConnection<WrappedTransaction>;
 

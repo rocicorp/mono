@@ -82,19 +82,10 @@ export async function initChangeStreamerSchema(
     },
   };
 
-  const migrateV4ToV5 = {
-    migrateSchema: async (_: LogContext, db: PostgresTransaction) => {
-      await db`
-      ALTER TABLE ${db(schema)}."replicationState" ADD "ownerAddress" TEXT;
-      `;
-    },
-  };
-
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: {migrateSchema: migrateV1toV2},
     3: migrateV2ToV3,
     4: migrateV3ToV4,
-    5: migrateV4ToV5,
   };
 
   await runSchemaMigrations(

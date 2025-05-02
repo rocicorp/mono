@@ -5,11 +5,11 @@ import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {PushProcessor} from './push-processor.ts';
 import {
-  ZQLPostgresJSAdapter,
+  PostgresJSConnection,
   type PostgresJSTransaction,
   type PostgresJSClient,
-} from './zql-postgresjs-provider.ts';
-import {ZQLDatabaseProvider} from './zql-provider.ts';
+} from './postgresjs-connection.ts';
+import {ZQLDatabase} from './zql-database.ts';
 describe('PushProcessor', () => {
   const body = {
     pushVersion: 1,
@@ -32,10 +32,7 @@ describe('PushProcessor', () => {
 
   test('should accept Record<string, string> as params', async () => {
     const processor = new PushProcessor(
-      new ZQLDatabaseProvider(
-        new ZQLPostgresJSAdapter(mockPgClient),
-        mockSchema,
-      ),
+      new ZQLDatabase(new PostgresJSConnection(mockPgClient), mockSchema),
     );
 
     const params: Record<string, string> = {
@@ -56,10 +53,7 @@ describe('PushProcessor', () => {
 
   test('should accept URLSearchParams as params', async () => {
     const processor = new PushProcessor(
-      new ZQLDatabaseProvider(
-        new ZQLPostgresJSAdapter(mockPgClient),
-        mockSchema,
-      ),
+      new ZQLDatabase(new PostgresJSConnection(mockPgClient), mockSchema),
     );
 
     const urlParams = new URLSearchParams();
@@ -79,10 +73,7 @@ describe('PushProcessor', () => {
 
   test('should accept Request as a param', async () => {
     const processor = new PushProcessor(
-      new ZQLDatabaseProvider(
-        new ZQLPostgresJSAdapter(mockPgClient),
-        mockSchema,
-      ),
+      new ZQLDatabase(new PostgresJSConnection(mockPgClient), mockSchema),
     );
 
     const req = new Request(
@@ -106,10 +97,7 @@ describe('PushProcessor', () => {
 
   test('invalid params throw', async () => {
     const processor = new PushProcessor(
-      new ZQLDatabaseProvider(
-        new ZQLPostgresJSAdapter(mockPgClient),
-        mockSchema,
-      ),
+      new ZQLDatabase(new PostgresJSConnection(mockPgClient), mockSchema),
     );
 
     const invalidParams: Record<string, string> = {

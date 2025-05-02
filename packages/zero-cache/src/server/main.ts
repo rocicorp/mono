@@ -1,7 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
-import {normalizeConfig} from '../config/normalize.ts';
+import {must} from '../../../shared/src/must.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {getSubscriberContext} from '../services/change-streamer/change-streamer-http.ts';
 import {Dispatcher} from '../services/dispatcher/dispatcher.ts';
@@ -40,9 +40,10 @@ export default async function runWorker(
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
   const startMs = Date.now();
-  const cfg = getZeroConfig(env);
-  const lc = createLogContext(cfg, {worker: 'dispatcher'});
-  const config = await normalizeConfig(lc, cfg, env);
+  const config = getZeroConfig(env);
+  const lc = createLogContext(config, {worker: 'dispatcher'});
+  const taskID = must(config.taskID, `main must set --task-id`);
+  const shard = getShardID(config);
 
   const processes = new ProcessManager(lc, parent ?? process);
 
@@ -86,14 +87,9 @@ export default async function runWorker(
     return processes.addWorker(worker, type, name);
   }
 
-  const shard = getShardID(config);
-  const {
-    taskID,
-    litestream: {backupURL, restoreDurationMsEstimate},
-    changeStreamer: {mode: changeStreamerMode},
-  } = config;
+  const {backupURL} = config.litestream;
   const litestream = backupURL?.length;
-  const runChangeStreamer = changeStreamerMode === 'dedicated';
+  const runChangeStreamer = !config.changeStreamerURI;
 
   if (litestream) {
     // For the replication-manager (i.e. authoritative replica), only attempt
@@ -106,7 +102,7 @@ export default async function runWorker(
         runChangeStreamer ? 1 : 10,
         3000,
       );
-      if (!restoreDurationMsEstimate && restoreElapsedMs) {
+      if (!config.litestream.restoreDurationMsEstimate && restoreElapsedMs) {
         internalFlags.push(
           '--litestream-restore-duration-ms-estimate',
           String(restoreElapsedMs),
@@ -139,8 +135,8 @@ export default async function runWorker(
     // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
     // but it is done here in the main thread because it is wasteful to have all of
     // the Syncers attempt the migration in parallel.
-    const {cvr} = config;
-    const cvrDB = pgClient(lc, cvr.db);
+    const {cvr, upstream} = config;
+    const cvrDB = pgClient(lc, cvr.db ?? upstream.db);
     await initViewSyncerSchema(lc, cvrDB, shard);
     void cvrDB.end();
   }

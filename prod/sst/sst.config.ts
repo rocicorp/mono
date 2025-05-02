@@ -174,7 +174,6 @@ export default $config({
       logging: {
         retention: '1 month',
       },
-      // TODO: Remove.
       loadBalancer: {
         public: false,
         ports: [
@@ -202,7 +201,7 @@ export default $config({
       },
       environment: {
         ...commonEnv,
-        ZERO_CHANGE_STREAMER_MODE: 'discover',
+        ZERO_CHANGE_STREAMER_URI: replicationManager.url,
         ZERO_UPSTREAM_MAX_CONNS: '15',
         ZERO_CVR_MAX_CONNS: '160',
       },

@@ -600,7 +600,7 @@ describe('integration', {timeout: 30000}, () => {
         // startZero() will then copy to replicaDbFile2 for the view-syncer
         {
           ...env,
-          ['ZERO_CHANGE_STREAMER_MODE']: 'discover',
+          ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
           ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
         },
       ],
@@ -619,7 +619,7 @@ describe('integration', {timeout: 30000}, () => {
         // startZero() will then copy to replicaDbFile2 for the view-syncer
         {
           ...env,
-          ['ZERO_CHANGE_STREAMER_MODE']: 'discover',
+          ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
           ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
           ['ZERO_RUN_LAZILY']: 'true',
         },
@@ -653,7 +653,7 @@ describe('integration', {timeout: 30000}, () => {
         {
           ['ZERO_PORT']: String(port),
           ['ZERO_LOG_LEVEL']: LOG_LEVEL,
-          ['ZERO_CHANGE_STREAMER_MODE']: 'discover',
+          ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
           ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
           ['ZERO_TENANTS_JSON']: JSON.stringify({
             tenants: [

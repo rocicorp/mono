@@ -1,6 +1,14 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {beforeEach, describe, expect, test, vi, type Mock} from 'vitest';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+  type Mock,
+} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
@@ -37,7 +45,7 @@ import {
 describe('change-streamer/service', () => {
   let lc: LogContext;
   let replicaConfig: SubscriptionState;
-  let sql: PostgresDB;
+  let changeDB: PostgresDB;
   let streamer: ChangeStreamerService;
   let changes: Subscription<ChangeStreamMessage>;
   let acks: Queue<StatusMessage>;
@@ -53,7 +61,7 @@ describe('change-streamer/service', () => {
   beforeEach(async () => {
     lc = createSilentLogContext();
 
-    sql = await testDBs.create('change_streamer_test_change_db');
+    changeDB = await testDBs.create('change_streamer_test_change_db');
 
     const replica = new Database(lc, ':memory:');
     initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
@@ -67,8 +75,7 @@ describe('change-streamer/service', () => {
       lc,
       shard,
       'task-id',
-      'change.streamer:12345',
-      sql,
+      changeDB,
       {
         startStream: () =>
           Promise.resolve({
@@ -82,11 +89,11 @@ describe('change-streamer/service', () => {
       setTimeoutFn as unknown as typeof setTimeout,
     );
     streamerDone = streamer.run();
+  });
 
-    return async () => {
-      await streamer.stop();
-      await testDBs.drop(sql);
-    };
+  afterEach(async () => {
+    await streamer.stop();
+    await testDBs.drop(changeDB);
   });
 
   function drainToQueue(sub: Source<Downstream>): Queue<Downstream> {
@@ -153,7 +160,7 @@ describe('change-streamer/service', () => {
     // Await the ACK for the single commit, then the status message.
     await expectAcks('09', '0b');
 
-    const logEntries = await sql<
+    const logEntries = await changeDB<
       ChangeLogEntry[]
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
@@ -162,14 +169,9 @@ describe('change-streamer/service', () => {
       'insert',
       'commit',
     ]);
-    await expectTables(sql, {
+    await expectTables(changeDB, {
       ['zoro_3/cdc.replicationState']: [
-        {
-          lock: 1,
-          owner: 'task-id',
-          ownerAddress: 'change.streamer:12345',
-          lastWatermark: '09',
-        },
+        {lock: 1, owner: 'task-id', lastWatermark: '09'},
       ],
     });
   });
@@ -237,7 +239,7 @@ describe('change-streamer/service', () => {
     // Two commits with intervening status messages
     await expectAcks('09', '0a', '0b', '0d');
 
-    const logEntries = await sql<
+    const logEntries = await changeDB<
       ChangeLogEntry[]
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
@@ -249,14 +251,9 @@ describe('change-streamer/service', () => {
       'delete',
       'commit',
     ]);
-    await expectTables(sql, {
+    await expectTables(changeDB, {
       ['zoro_3/cdc.replicationState']: [
-        {
-          lock: 1,
-          owner: 'task-id',
-          ownerAddress: 'change.streamer:12345',
-          lastWatermark: '0b',
-        },
+        {lock: 1, owner: 'task-id', lastWatermark: '0b'},
       ],
     });
   });
@@ -316,7 +313,7 @@ describe('change-streamer/service', () => {
     await expectAcks('09', '0d');
 
     // Only the changes for the committed (i.e. first) transaction are persisted.
-    const logEntries = await sql<
+    const logEntries = await changeDB<
       ChangeLogEntry[]
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
@@ -325,14 +322,9 @@ describe('change-streamer/service', () => {
       'insert',
       'commit',
     ]);
-    await expectTables(sql, {
+    await expectTables(changeDB, {
       ['zoro_3/cdc.replicationState']: [
-        {
-          lock: 1,
-          owner: 'task-id',
-          ownerAddress: 'change.streamer:12345',
-          lastWatermark: '09',
-        },
+        {lock: 1, owner: 'task-id', lastWatermark: '09'},
       ],
     });
   });
@@ -392,7 +384,7 @@ describe('change-streamer/service', () => {
     await expectAcks('09', '0b', '0c');
 
     // Only the changes for the committed (i.e. first) transaction are persisted.
-    const logEntries = await sql<
+    const logEntries = await changeDB<
       ChangeLogEntry[]
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
@@ -407,14 +399,9 @@ describe('change-streamer/service', () => {
       'insert',
       'commit',
     ]);
-    await expectTables(sql, {
+    await expectTables(changeDB, {
       ['zoro_3/cdc.replicationState']: [
-        {
-          lock: 1,
-          owner: 'task-id',
-          ownerAddress: 'change.streamer:12345',
-          lastWatermark: '0c',
-        },
+        {lock: 1, owner: 'task-id', lastWatermark: '0c'},
       ],
     });
   });
@@ -466,7 +453,7 @@ describe('change-streamer/service', () => {
 
     await expectAcks('09');
 
-    const logEntries = await sql<
+    const logEntries = await changeDB<
       ChangeLogEntry[]
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
@@ -510,21 +497,16 @@ describe('change-streamer/service', () => {
       tag: 'commit',
       extra: 'info',
     });
-    await expectTables(sql, {
+    await expectTables(changeDB, {
       ['zoro_3/cdc.replicationState']: [
-        {
-          lock: 1,
-          owner: 'task-id',
-          ownerAddress: 'change.streamer:12345',
-          lastWatermark: '09',
-        },
+        {lock: 1, owner: 'task-id', lastWatermark: '09'},
       ],
     });
   });
 
   test('immediate subscription status', async () => {
     // Initialize the change log with entries that will be purged.
-    await sql`
+    await changeDB`
       INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"begin"}'::json);
       INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 1, '{"tag":"commit"}'::json);
       INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"begin"}'::json);
@@ -579,7 +561,7 @@ describe('change-streamer/service', () => {
 
   test('change log cleanup', async () => {
     // Initialize the change log with entries that will be purged.
-    await sql`
+    await changeDB`
       INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
       INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
       INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('05', 0, '{"tag":"begin"}'::json);
@@ -609,7 +591,7 @@ describe('change-streamer/service', () => {
     });
 
     expect(
-      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+      await changeDB`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
     ).toEqual([['03'], ['04'], ['05'], ['06'], ['07'], ['08']]);
 
     expect(setTimeoutFn).toHaveBeenCalledTimes(1);
@@ -618,7 +600,7 @@ describe('change-streamer/service', () => {
     // The first purge should have deleted records before '04'.
     await (setTimeoutFn.mock.calls[0][0]() as unknown as Promise<void>);
     expect(
-      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+      await changeDB`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
     ).toEqual([['04'], ['05'], ['06'], ['07'], ['08']]);
 
     expect(setTimeoutFn).toHaveBeenCalledTimes(2);
@@ -626,7 +608,7 @@ describe('change-streamer/service', () => {
     // The second purge should be a noop, because sub2 is still at '04'.
     await (setTimeoutFn.mock.calls[1][0]() as unknown as Promise<void>);
     expect(
-      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+      await changeDB`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
     ).toEqual([['04'], ['05'], ['06'], ['07'], ['08']]);
 
     // And the timer should thus be rescheduled.
@@ -638,20 +620,15 @@ describe('change-streamer/service', () => {
         // a purge should successfully clear records before '06'
         await (setTimeoutFn.mock.calls[2][0]() as unknown as Promise<void>);
         expect(
-          await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+          await changeDB`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
         ).toEqual([['06'], ['07'], ['08']]);
         break;
       }
     }
     // replicationState is unaffected
-    await expectTables(sql, {
+    await expectTables(changeDB, {
       ['zoro_3/cdc.replicationState']: [
-        {
-          lock: 1,
-          owner: 'task-id',
-          ownerAddress: 'change.streamer:12345',
-          lastWatermark: '08',
-        },
+        {lock: 1, owner: 'task-id', lastWatermark: '08'},
       ],
     });
 
@@ -714,13 +691,22 @@ describe('change-streamer/service', () => {
       lc,
       shard,
       'task-id',
-      'change.streamer:12345',
-      sql,
+      changeDB,
       source,
       replicaConfig,
       true,
     );
     void streamer.run();
+
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
 
     expect(await hasRetried).toBe(true);
   });
@@ -737,17 +723,26 @@ describe('change-streamer/service', () => {
       lc,
       shard,
       'task-id',
-      'change.streamer:12345',
-      sql,
+      changeDB,
       source,
       replicaConfig,
       true,
     );
     void streamer.run();
 
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
     expect(await requests.dequeue()).toBe(REPLICA_VERSION);
 
-    await sql`
+    await changeDB`
       INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
       INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
       UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '04';
@@ -757,13 +752,22 @@ describe('change-streamer/service', () => {
       lc,
       shard,
       'task-id',
-      'change.streamer:12345',
-      sql,
+      changeDB,
       source,
       replicaConfig,
       true,
     );
     void streamer.run();
+
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
 
     expect(await requests.dequeue()).toBe('04');
   });
@@ -789,13 +793,22 @@ describe('change-streamer/service', () => {
       lc,
       shard,
       'task-id',
-      'change.streamer:12345',
-      sql,
+      changeDB,
       source,
       replicaConfig,
       true,
     );
     void streamer.run();
+
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
 
     changes.fail(new Error('doh'));
 
@@ -804,7 +817,6 @@ describe('change-streamer/service', () => {
 
   test('retries at right watermark', async () => {
     const {promise: hasRetried, resolve: retried} = resolver<true>();
-    const changes = Subscription.create<ChangeStreamMessage>();
     const source = {
       startStream: vi
         .fn()
@@ -824,13 +836,22 @@ describe('change-streamer/service', () => {
       lc,
       shard,
       'task-id',
-      'change.streamer:54321',
-      sql,
+      changeDB,
       source,
       replicaConfig,
       true,
     );
     void streamer.run();
+
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      id: 'myid',
+      mode: 'serving',
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
 
     // Stream down a big (1MB) transaction, which should take time to commit.
     const NEW_WATERMARK = '0g';
@@ -863,6 +884,16 @@ describe('change-streamer/service', () => {
   });
 
   test('ownership takeover before tx begins', async () => {
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
     changes.push(['begin', {tag: 'begin'}, {commitWatermark: '0d'}]);
     changes.push(['data', messages.insert('foo', {id: 'hello'})]);
     changes.push(['commit', {tag: 'commit'}, {watermark: '0d'}]);
@@ -870,9 +901,7 @@ describe('change-streamer/service', () => {
     // Wait for the ack of the first commit.
     await expectAcks('0d');
     // Take over ownership.
-    await sql`
-      UPDATE "zoro_3/cdc"."replicationState" 
-        SET "owner" = 'other-task', "ownerAddress" = 'change.streamer3:7645'`;
+    await changeDB`UPDATE "zoro_3/cdc"."replicationState" SET owner = 'other-task'`;
 
     // The begin will read the new owner and eventually fail the transaction.
     changes.push(['begin', {tag: 'begin'}, {commitWatermark: '0f'}]);
@@ -882,7 +911,7 @@ describe('change-streamer/service', () => {
     await streamerDone;
 
     // Only the first changes should be committed.
-    const logEntries = await sql<
+    const logEntries = await changeDB<
       ChangeLogEntry[]
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
@@ -891,19 +920,24 @@ describe('change-streamer/service', () => {
       'commit',
     ]);
 
-    await expectTables(sql, {
+    await expectTables(changeDB, {
       ['zoro_3/cdc.replicationState']: [
-        {
-          lock: 1,
-          owner: 'other-task',
-          ownerAddress: 'change.streamer3:7645',
-          lastWatermark: '0d',
-        },
+        {lock: 1, owner: 'other-task', lastWatermark: '0d'},
       ],
     });
   });
 
   test('ownership takeover during tx', async () => {
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
     changes.push(['begin', {tag: 'begin'}, {commitWatermark: '0d'}]);
     changes.push(['data', messages.insert('foo', {id: 'hello'})]);
     changes.push(['commit', {tag: 'commit'}, {watermark: '0d'}]);
@@ -918,16 +952,14 @@ describe('change-streamer/service', () => {
     await sleep(10);
 
     // Take over ownership.
-    await sql`
-      UPDATE "zoro_3/cdc"."replicationState" 
-        SET "owner" = 'other-task', "ownerAddress" = 'change.streamer2:9876'`;
+    await changeDB`UPDATE "zoro_3/cdc"."replicationState" SET owner = 'other-task'`;
     // The commit should fail (with a SERIALIZATION error).
     changes.push(['commit', {tag: 'commit'}, {watermark: '0f'}]);
 
     await streamerDone;
 
     // Only the first changes should be committed.
-    const logEntries = await sql<
+    const logEntries = await changeDB<
       ChangeLogEntry[]
     >`SELECT * FROM "zoro_3/cdc"."changeLog"`;
     expect(logEntries.map(e => e.change.tag)).toEqual([
@@ -936,30 +968,45 @@ describe('change-streamer/service', () => {
       'commit',
     ]);
 
-    await expectTables(sql, {
+    await expectTables(changeDB, {
       ['zoro_3/cdc.replicationState']: [
-        {
-          lock: 1,
-          owner: 'other-task',
-          ownerAddress: 'change.streamer2:9876',
-          lastWatermark: '0d',
-        },
+        {lock: 1, owner: 'other-task', lastWatermark: '0d'},
       ],
     });
   });
 
   test('reset required', async () => {
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
     changes.push(['control', {tag: 'reset-required'}]);
     await streamerDone;
     await expect(
-      ensureReplicationConfig(lc, sql, replicaConfig, shard, true),
+      ensureReplicationConfig(lc, changeDB, replicaConfig, shard, true),
     ).rejects.toThrow(AutoResetSignal);
   });
 
   test('reset required if backup is behind', async () => {
-    await sql`
+    await changeDB`
       INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
     `;
+
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
 
     void streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
@@ -972,30 +1019,58 @@ describe('change-streamer/service', () => {
 
     await streamerDone;
     await expect(
-      ensureReplicationConfig(lc, sql, replicaConfig, shard, true),
+      ensureReplicationConfig(lc, changeDB, replicaConfig, shard, true),
     ).rejects.toThrow(AutoResetSignal);
   });
 
   test('shutdown on AbortError', async () => {
+    // Kick off the initial stream with a serving request.
+    void streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      id: 'myid',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
     changes.fail(new AbortError());
     await streamerDone;
   });
 
   test('shutdown on unexpected invalid stream', async () => {
+    await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      id: 'myid',
+      mode: 'serving',
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
     changes.push(['data', messages.insert('foo', {id: 'hello'})]);
 
     // Streamer should be shut down because of the error.
     await streamerDone;
 
     // Nothing should be committed
-    expect(await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`).toEqual(
-      [],
-    );
+    expect(
+      await changeDB`SELECT watermark FROM "zoro_3/cdc"."changeLog"`,
+    ).toEqual([]);
   });
 
   test('shutdown on unexpected storage error', async () => {
+    await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      id: 'myid',
+      mode: 'serving',
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+
     // Insert unexpected data simulating that the stream and store are not in the expected state.
-    await sql`INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change)
+    await changeDB`INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change)
       VALUES ('05', 3, ${{conflicting: 'entry'}})`;
 
     changes.push(['begin', messages.begin(), {commitWatermark: '05'}]);
@@ -1008,7 +1083,7 @@ describe('change-streamer/service', () => {
 
     // Commit should not have succeeded
     expect(
-      await sql`SELECT watermark, pos FROM "zoro_3/cdc"."changeLog"`,
+      await changeDB`SELECT watermark, pos FROM "zoro_3/cdc"."changeLog"`,
     ).toEqual([{watermark: '05', pos: 3n}]);
   });
 });

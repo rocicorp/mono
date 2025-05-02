@@ -1,7 +1,7 @@
 import {
+  ZQLDatabase,
+  PostgresJSConnection,
   PushProcessor,
-  ZQLDatabaseProvider,
-  ZQLPostgresJSAdapter,
 } from '@rocicorp/zero/pg';
 import postgres from 'postgres';
 import {schema} from '../shared/schema.ts';
@@ -10,8 +10,8 @@ import type {AuthData} from '../shared/auth.ts';
 import type {ReadonlyJSONValue} from '@rocicorp/zero';
 
 const processor = new PushProcessor(
-  new ZQLDatabaseProvider(
-    new ZQLPostgresJSAdapter(postgres(process.env.ZERO_UPSTREAM_DB as string)),
+  new ZQLDatabase(
+    new PostgresJSConnection(postgres(process.env.ZERO_UPSTREAM_DB as string)),
     schema,
   ),
 );

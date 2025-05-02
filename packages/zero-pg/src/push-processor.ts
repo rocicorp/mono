@@ -17,6 +17,9 @@ import type {CustomMutatorDefs} from './custom.ts';
 
 export type Params = v.Infer<typeof pushParamsSchema>;
 
+// TODO: This file should move to @rocicorp/zero/server. It is not specific to
+// Postgres.
+
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
 }
@@ -28,18 +31,21 @@ export interface TransactionProviderInput {
   mutationID: number;
 }
 
-export interface DatabaseProvider<T> {
+/**
+ * Defines the abstract interface for a database that PushProcessor can execute
+ * transactions against.
+ */
+export interface Database<T> {
   transaction: <R>(
     callback: (tx: T, transactionHooks: TransactionProviderHooks) => Promise<R>,
     transactionInput: TransactionProviderInput,
   ) => Promise<R>;
 }
 
-type ExtractTransactionType<D> =
-  D extends DatabaseProvider<infer T> ? T : never;
+type ExtractTransactionType<D> = D extends Database<infer T> ? T : never;
 
 export class PushProcessor<
-  D extends DatabaseProvider<ExtractTransactionType<D>>,
+  D extends Database<ExtractTransactionType<D>>,
   MD extends CustomMutatorDefs<ExtractTransactionType<D>>,
 > {
   readonly #dbProvider: D;
