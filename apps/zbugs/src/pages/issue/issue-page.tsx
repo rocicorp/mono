@@ -65,7 +65,7 @@ import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
 import type {Mutators} from '../../../shared/mutators.ts';
 
-function softNavigate(path: string, state?: any) {
+function softNavigate(path: string, state?: ZbugsHistoryState) {
   navigate(path, {state});
   requestAnimationFrame(() => {
     window.scrollTo(0, 0);
