@@ -18,7 +18,7 @@ test('throws an error when NOT EXISTS is used', () => {
   };
 
   expect(() => assertNoNotExists(condition)).toThrow(
-    'NOT EXISTS is not supported on the client',
+    'not(exists()) is not supported on the client - see https://bugs.rocicorp.dev/issue/3438',
   );
 });
 
@@ -78,7 +78,7 @@ test('checks nested conditions', () => {
   };
 
   expect(() => assertNoNotExists(condition)).toThrow(
-    'NOT EXISTS is not supported on the client',
+    'not(exists()) is not supported on the client - see https://bugs.rocicorp.dev/issue/3438',
   );
 });
 
@@ -111,6 +111,6 @@ test('checks subquery where conditions', () => {
   };
 
   expect(() => assertNoNotExists(condition)).toThrow(
-    'NOT EXISTS is not supported on the client',
+    'not(exists()) is not supported on the client - see https://bugs.rocicorp.dev/issue/3438',
   );
 });
