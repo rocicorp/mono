@@ -70,12 +70,12 @@ fastify.get<{
     },
   });
 
+  console.log('userDetails!!!!!!', userDetails);
   let userId = nanoid();
   const existingUser =
     await sql`SELECT id, email FROM "user" WHERE "githubID" = ${userDetails.data.id}`;
   if (existingUser.length > 0) {
     userId = existingUser[0].id;
-
     // update email on login if it has changed
     if (existingUser[0].email !== userDetails.data.email) {
       await sql`UPDATE "user" SET "email" = ${userDetails.data.email} WHERE "id" = ${userId}`;
