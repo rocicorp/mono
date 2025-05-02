@@ -16,7 +16,7 @@ function schema(shard: ShardID) {
 export const PG_SCHEMA = 'cdc';
 
 function createSchema(shard: ShardID) {
-  return /*sql*/ `CREATE SCHEMA IF NOT EXISTS ${schema(shard)};`;
+  return `CREATE SCHEMA IF NOT EXISTS ${schema(shard)};`;
 }
 
 export type ChangeLogEntry = {
@@ -30,7 +30,7 @@ function createChangeLogTable(shard: ShardID) {
   // Note: The "change" column used to be JSONB, but that was problematic in that
   // it does not handle the NULL unicode character.
   // https://vladimir.varank.in/notes/2021/01/you-dont-insert-unicode-null-character-as-postgres-jsonb/
-  return /*sql*/ `
+  return `
   CREATE TABLE ${schema(shard)}."changeLog" (
     watermark  TEXT,
     pos        INT8,
@@ -51,23 +51,13 @@ export type ReplicationState = {
 };
 
 export function createReplicationStateTable(shard: ShardID) {
-  return /*sql*/ `
+  return `
   CREATE TABLE ${schema(shard)}."replicationState" (
     "lastWatermark" TEXT NOT NULL,
     "owner" TEXT,
-    "ownerAddress" TEXT,
     "lock" INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
 `;
-}
-
-export async function discoverChangeStreamerAddress(
-  shard: ShardID,
-  sql: PostgresDB,
-): Promise<string | null> {
-  const result = await sql<{ownerAddress: string | null}[]>/*sql*/ `
-    SELECT "ownerAddress" FROM ${sql(cdcSchema(shard))}."replicationState"`;
-  return result[0].ownerAddress;
 }
 
 /**
@@ -82,7 +72,7 @@ export type ReplicationConfig = {
 };
 
 function createReplicationConfigTable(shard: ShardID) {
-  return /*sql*/ `
+  return `
   CREATE TABLE ${schema(shard)}."replicationConfig" (
     "replicaVersion" TEXT NOT NULL,
     "publications" TEXT[] NOT NULL,
@@ -110,10 +100,10 @@ export async function setupCDCTables(
   await db.unsafe(createTables(shard));
 }
 
-export async function markResetRequired(sql: PostgresDB, shard: ShardID) {
+export async function markResetRequired(db: PostgresDB, shard: ShardID) {
   const schema = cdcSchema(shard);
-  await sql`
-  UPDATE ${sql(schema)}."replicationConfig"
+  await db`
+  UPDATE ${db(schema)}."replicationConfig"
     SET "resetRequired" = true`;
 }
 
@@ -131,17 +121,17 @@ export async function ensureReplicationConfig(
   };
   const schema = cdcSchema(shard);
 
-  await db.begin(async sql => {
+  await db.begin(async tx => {
     const stmts: PendingQuery<Row[]>[] = [];
-    const results = await sql<
+    const results = await tx<
       {
         replicaVersion: string;
         publications: string[];
         resetRequired: boolean | null;
       }[]
-    >/*sql*/ `
+    >`
     SELECT "replicaVersion", "publications", "resetRequired" 
-      FROM ${sql(schema)}."replicationConfig"`;
+      FROM ${tx(schema)}."replicationConfig"`;
 
     if (results.length) {
       const {replicaVersion, publications} = results[0];
@@ -161,18 +151,18 @@ export async function ensureReplicationConfig(
             `with replica @${replicaConfig.replicaVersion}. Clearing tables.`,
         );
         stmts.push(
-          sql`TRUNCATE TABLE ${sql(schema)}."changeLog"`,
-          sql`TRUNCATE TABLE ${sql(schema)}."replicationConfig"`,
-          sql`TRUNCATE TABLE ${sql(schema)}."replicationState"`,
+          tx`TRUNCATE TABLE ${tx(schema)}."changeLog"`,
+          tx`TRUNCATE TABLE ${tx(schema)}."replicationConfig"`,
+          tx`TRUNCATE TABLE ${tx(schema)}."replicationState"`,
         );
       }
     }
     // Initialize (or re-initialize TRUNCATED) tables
     if (results.length === 0 || stmts.length > 0) {
       stmts.push(
-        sql`INSERT INTO ${sql(schema)}."replicationConfig" ${sql(replicaConfig)}`,
-        sql`INSERT INTO ${sql(schema)}."replicationState" 
-           ${sql(replicationState)}`,
+        tx`INSERT INTO ${tx(schema)}."replicationConfig" ${tx(replicaConfig)}`,
+        tx`INSERT INTO ${tx(schema)}."replicationState" 
+           ${tx(replicationState)}`,
       );
       return Promise.all(stmts);
     }
