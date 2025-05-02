@@ -25,7 +25,6 @@ import {
   toGotQueriesKey,
   toPrimaryKeyString,
 } from './keys.ts';
-import {OnErrorKind} from './on-error-kind.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 
 type PokeAccumulator = {
@@ -188,11 +187,7 @@ export class PokeHandler {
       // client group at very different times.  Unusual but possible.
       this.#lc.debug?.('clearing due to', e);
     } else {
-      this.#lc.error?.(
-        OnErrorKind.Poke,
-        'clearing due to unexpected poke error',
-        e,
-      );
+      this.#lc.error?.('clearing due to unexpected poke error', e);
     }
     this.#clear();
     this.#onPokeError();

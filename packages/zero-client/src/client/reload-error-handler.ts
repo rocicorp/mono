@@ -1,7 +1,6 @@
 import * as v from '../../../shared/src/valita.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {errorKindSchema} from '../../../zero-protocol/src/error.ts';
-import {OnErrorKind} from './on-error-kind.ts';
 import {updateNeededReasonTypeSchema} from './options.ts';
 import type {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
@@ -76,7 +75,7 @@ export function reportReloadReason(lc: ZeroLogContext) {
         const [reasonType, message] = v.parse(parsed, reloadReasonSchema);
         lc.error?.(reasonType, 'Zero reloaded the page.', message);
       } catch (e) {
-        lc.error?.(OnErrorKind.InvalidState, 'Zero reloaded the page.', e);
+        lc.error?.('Zero reloaded the page.', e);
         // ignore if not able to parse
         return;
       }

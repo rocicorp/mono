@@ -1,7 +1,6 @@
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import * as MetricName from './metric-name-enum.ts';
-import {OnErrorKind} from './on-error-kind.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 
 // This value is used to indicate that the client's last connection attempt
@@ -204,10 +203,7 @@ export class MetricManager {
   async flush() {
     const lc = this.#lc;
     if (this.#timerID === null) {
-      lc.error?.(
-        OnErrorKind.InvalidState,
-        'MetricManager.flush() called but already stopped',
-      );
+      lc.error?.('MetricManager.flush() called but already stopped');
       return;
     }
     const allSeries: Series[] = [];
@@ -228,16 +224,13 @@ export class MetricManager {
     try {
       await this.#reporter(allSeries);
     } catch (e) {
-      lc?.error?.(OnErrorKind.Metrics, `Error reporting metrics: ${e}`);
+      lc?.error?.('Error reporting metrics', e);
     }
   }
 
   stop() {
     if (this.#timerID === null) {
-      this.#lc.error?.(
-        OnErrorKind.InvalidState,
-        'MetricManager.stop() called but already stopped',
-      );
+      this.#lc.error?.('MetricManager.stop() called but already stopped');
       return;
     }
     clearInterval(this.#timerID);

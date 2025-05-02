@@ -118,7 +118,6 @@ import {
   getLastConnectErrorValue,
 } from './metrics.ts';
 import {MutationTracker} from './mutation-tracker.ts';
-import {OnErrorKind} from './on-error-kind.ts';
 import type {OnErrorParameters} from './on-error.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import * as PingResult from './ping-result-enum.ts';
@@ -946,10 +945,7 @@ export class Zero<
   #onOpen = () => {
     const l = addWebSocketIDFromSocketToLogContext(this.#socket!, this.#lc);
     if (this.#connectStart === undefined) {
-      l.error?.(
-        OnErrorKind.InvalidState,
-        'Got open event but connect start time is undefined.',
-      );
+      l.error?.('Got open event but connect start time is undefined.');
     } else {
       const now = Date.now();
       const timeToOpenMs = now - this.#connectStart;
@@ -966,7 +962,7 @@ export class Zero<
     if (code <= 1001) {
       lc.info?.('Got socket close event', {code, reason, wasClean});
     } else {
-      lc.error?.(OnErrorKind.Network, 'Got unexpected socket close event', {
+      lc.error?.('Got unexpected socket close event', {
         code,
         reason,
         wasClean,
@@ -1041,10 +1037,7 @@ export class Zero<
     let timeToConnectMs: number | undefined;
     let connectMsgLatencyMs: number | undefined;
     if (this.#connectStart === undefined) {
-      lc.error?.(
-        OnErrorKind.InvalidState,
-        'Got connected message but connect start time is undefined.',
-      );
+      lc.error?.('Got connected message but connect start time is undefined.');
     } else {
       timeToConnectMs = now - this.#connectStart;
       this.#metrics.timeToConnectMs.set(timeToConnectMs);
@@ -1057,7 +1050,6 @@ export class Zero<
     let totalTimeToConnectMs: number | undefined;
     if (this.#totalToConnectStart === undefined) {
       lc.error?.(
-        OnErrorKind.InvalidState,
         'Got connected message but total to connect start time is undefined.',
       );
     } else {
@@ -1272,7 +1264,6 @@ export class Zero<
       case ConnectionState.Connected: {
         if (this.#connectStart !== undefined) {
           lc.error?.(
-            OnErrorKind.InvalidState,
             'disconnect() called while connected but connect start time is defined.',
           );
           // this._connectStart reset below.
@@ -1295,7 +1286,6 @@ export class Zero<
         // this._connectStart reset below.
         if (this.#connectStart === undefined) {
           lc.error?.(
-            OnErrorKind.InvalidState,
             'disconnect() called while connecting but connect start time is undefined.',
           );
         }
@@ -1303,10 +1293,7 @@ export class Zero<
         break;
       }
       case ConnectionState.Disconnected:
-        lc.error?.(
-          OnErrorKind.InvalidState,
-          'disconnect() called while disconnected',
-        );
+        lc.error?.('disconnect() called while disconnected');
         break;
     }
 
@@ -1543,7 +1530,7 @@ export class Zero<
           case ConnectionState.Connecting:
             // Can't get here because Disconnected waits for Connected or
             // rejection.
-            lc.error?.(OnErrorKind.InvalidState);
+            lc.error?.('unreachable');
             gotError = true;
             break;
 
@@ -1605,8 +1592,8 @@ export class Zero<
       } catch (ex) {
         if (this.#connectionState !== ConnectionState.Connected) {
           const level = isAuthError(ex) ? 'warn' : 'error';
-          const kind = isServerError(ex) ? ex.kind : OnErrorKind.Unknown;
-          lc[level]?.(kind, 'Failed to connect', ex, {
+          const kind = isServerError(ex) ? ex.kind : 'Unknown Error';
+          lc[level]?.('Failed to connect', ex, kind, {
             lmid: this.#lastMutationIDReceived,
             baseCookie: this.#connectCookie,
           });
