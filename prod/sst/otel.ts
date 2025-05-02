@@ -105,6 +105,7 @@ export function withOtelContainers(
       ...base.environment,
       ZERO_LOG_TRACE_COLLECTOR: 'http://localhost:4318/v1/traces',
       ZERO_LOG_METRIC_COLLECTOR: 'http://localhost:4318/v1/metrics',
+      ZERO_LOG_LOG_COLLECTOR: 'http://localhost:4318/v1/logs',
     },
   };
 
