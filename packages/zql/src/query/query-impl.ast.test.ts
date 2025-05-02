@@ -1765,7 +1765,11 @@ describe('exists', () => {
 
     expect(() =>
       issueQuery.where(({not, exists}) => not(exists('comments'))),
-    ).toThrowError(new Error('NOT EXISTS is not supported on the client'));
+    ).toThrowError(
+      new Error(
+        'not(exists()) is not supported on the client - see https://bugs.rocicorp.dev/issue/3438',
+      ),
+    );
   });
 
   test('negated existence over junction edge - permission', () => {
@@ -1841,7 +1845,11 @@ describe('exists', () => {
 
     expect(() =>
       issueQuery.where(({not, exists}) => not(exists('labels'))),
-    ).toThrowError(new Error('NOT EXISTS is not supported on the client'));
+    ).toThrowError(
+      new Error(
+        'not(exists()) is not supported on the client - see https://bugs.rocicorp.dev/issue/3438',
+      ),
+    );
   });
 
   test('many exists on different relationships', () => {
