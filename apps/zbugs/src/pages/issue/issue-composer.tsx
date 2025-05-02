@@ -68,8 +68,7 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
     setDescription('');
   };
 
-  const canSave = () =>
-    title.trim().length > 0 && description.trim().length > 0;
+  const canSave = () => title.trim().length > 0;
 
   const isDirty = useCallback(
     () => title.trim().length > 0 || description.trim().length > 0,
