@@ -344,18 +344,14 @@ test('zero-cache --help', () => {
                                                                 Active queries, on the other hand, are never evicted and are allowed to use more                  
                                                                 rows than the limit.                                                                              
                                                                                                                                                                   
-     --run-lazily boolean                                       default: false                                                                                    
-       ZERO_RUN_LAZILY env                                                                                                                                        
-                                                                Delay starting the zero-cache processes until the first request.                                  
+     --lazy-startup boolean                                     default: false                                                                                    
+       ZERO_LAZY_STARTUP env                                                                                                                                      
+                                                                Delay starting the majority of zero-cache until first request.                                    
                                                                                                                                                                   
-                                                                Note: This works as expected in single-node mode. While it is technically usable                  
-                                                                in a multi-node setup, there is a bootstrapping complication in that the                          
-                                                                view-syncer must first restore the replica from litestream before connecting to                   
-                                                                the replication-manager (to know where to continue replication from). If the                      
-                                                                replication-manager has never run, there will be no replica file to restore, and                  
-                                                                the view-syncer will fail to start up, never connecting to the replication-manager.               
+                                                                This is mainly intended to avoid connecting to Postgres replication stream                        
+                                                                until the first request is received, which can be useful i.e., for preview instances.             
                                                                                                                                                                   
-                                                                As such, it is not recommended to run a replication-manager lazily.                               
+                                                                Currently only supported in single-node mode.                                                     
                                                                                                                                                                   
     "
   `);

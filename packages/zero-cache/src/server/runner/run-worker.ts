@@ -92,11 +92,11 @@ export async function runWorker(
     return {...tenant, env: mergedEnv, getWorker};
   });
 
-  // Eagerly start zero-caches that are not configured to --run-lazily.
+  // Eagerly start zero-caches that are not configured to --lazy-startup.
   for (const tenant of tenants) {
     const lazy = parseBoolean(
-      'ZERO_RUN_LAZILY',
-      tenant.env['ZERO_RUN_LAZILY'] ?? 'false',
+      'ZERO_LAZY_STARTUP',
+      tenant.env['ZERO_LAZY_STARTUP'] ?? 'false',
     );
     if (!lazy) {
       void tenant.getWorker();

@@ -529,7 +529,7 @@ describe('integration', {timeout: 30000}, () => {
     [
       'lazy single-node standalone',
       'pg',
-      () => [{...env, ['ZERO_RUN_LAZILY']: 'true'}],
+      () => [{...env, ['ZERO_LAZY_STARTUP']: 'true'}],
       undefined,
     ],
     [
@@ -582,7 +582,7 @@ describe('integration', {timeout: 30000}, () => {
               },
             ],
           }),
-          ['ZERO_RUN_LAZILY']: 'true',
+          ['ZERO_LAZY_STARTUP']: 'true',
         },
       ],
       undefined,
@@ -621,7 +621,7 @@ describe('integration', {timeout: 30000}, () => {
           ...env,
           ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
           ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
-          ['ZERO_RUN_LAZILY']: 'true',
+          ['ZERO_LAZY_STARTUP']: 'true',
         },
       ],
       undefined,
