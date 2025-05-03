@@ -3,6 +3,7 @@ import {OID} from '@postgresql-typed/oids';
 import {LogContext} from '@rocicorp/logger';
 import postgres, {type Notice, type PostgresType} from 'postgres';
 import {randInt} from '../../../shared/src/rand.ts';
+import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
 import {BigIntJSON, type JSONValue} from './bigint-json.ts';
 import {
   DATE,
@@ -12,7 +13,6 @@ import {
   TIMESTAMP,
   TIMESTAMPTZ,
 } from './pg-types.ts';
-import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
 
 const WITH_HH_MM_TIMEZONE = /[+-]\d\d:\d\d$/;
 const WITH_HH_TIMEZONE = /[+-]\d\d$/;
@@ -179,7 +179,6 @@ export function pgClient(
     ...postgresTypeConfig(jsonAsString),
     onnotice,
     ['max_lifetime']: maxLifetimeSeconds,
-    ['connect_timeout']: 60, // scale-from-zero dbs need more than 30 seconds
     ssl: ssl === 'disable' || ssl === 'false' ? false : (ssl as 'prefer'),
     ...options,
   });
