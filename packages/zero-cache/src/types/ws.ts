@@ -62,19 +62,26 @@ export function expectPingsForLiveness(
   intervalMs: number,
   timeoutBufferMs = 3_000,
 ) {
-  let missedPingTimer: NodeJS.Timeout | undefined;
+  let gotLivenessSignal = false;
 
-  function expectNextPing() {
-    clearTimeout(missedPingTimer);
-
-    missedPingTimer = setTimeout(() => {
-      lc.warn?.(`socket@${ws.url} did not send heartbeat. Terminating...`);
+  const livenessTimer = setInterval(() => {
+    if (!gotLivenessSignal) {
+      lc.warn?.(
+        `socket@${ws.url} did not send heartbeat or messages. Terminating...`,
+      );
       ws.terminate();
-    }, intervalMs + timeoutBufferMs);
-  }
+    } else {
+      // Reset gotLivenessSignal and expect another ping or message to arrive
+      // before the next interval elapses.
+      gotLivenessSignal = false;
+    }
+  }, intervalMs + timeoutBufferMs);
 
-  ws.on('ping', expectNextPing);
-  ws.once('close', () => clearTimeout(missedPingTimer));
-
-  expectNextPing();
+  // Both pings and messages are accepted as signs of liveness.
+  // Checking for pings only risks false positives as pings may be backed
+  // up behind a large stream of messages.
+  const signalAlive = () => (gotLivenessSignal = true);
+  ws.on('ping', signalAlive);
+  ws.on('message', signalAlive);
+  ws.once('close', () => clearTimeout(livenessTimer));
 }
