@@ -313,7 +313,7 @@ class PostgresChangeSource implements ChangeSource {
     const slotExpression = replicationSlotExpression(this.#shard);
     const legacySlotName = legacyReplicationSlot(this.#shard);
 
-    // Note: slot_name <= slotToKeep uses a string compare of the millisecond
+    // Note: `slot_name <= slotToKeep` uses a string compare of the millisecond
     // timestamp, which works until it exceeds 13 digits (sometime in 2286).
     const result = await sql<{slot: string; pid: string | null}[]>`
     SELECT slot_name as slot, pg_terminate_backend(active_pid), active_pid as pid
