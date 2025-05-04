@@ -9,7 +9,11 @@ import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-s
 
 export const ALLOWED_APP_ID_CHARACTERS = /^[a-z0-9_]+$/;
 
-const ALLOWED_IDENTIFIER_CHARS = /^[A-Za-z_]+[A-Za-z0-9_-]*$/;
+const ALLOWED_TABLE_CHARS = /^[A-Za-z_]+[A-Za-z0-9_-]*$/;
+
+// Dots are allowed in column names since there is no need for
+// a schema/table delimiter when mapped to SQLite names.
+const ALLOWED_COLUMN_CHARS = /^[A-Za-z_]+[.A-Za-z0-9_-]*$/;
 
 export function validate(lc: LogContext, table: PublishedTableSpec) {
   if (ZERO_VERSION_COLUMN_NAME in table.columns) {
@@ -25,13 +29,13 @@ export function validate(lc: LogContext, table: PublishedTableSpec) {
         `\n\n\n`,
     );
   }
-  if (!ALLOWED_IDENTIFIER_CHARS.test(table.name)) {
+  if (!ALLOWED_TABLE_CHARS.test(table.name)) {
     throw new UnsupportedTableSchemaError(
       `Table "${table.name}" has invalid characters.`,
     );
   }
   for (const [col, spec] of Object.entries(mapPostgresToLite(table).columns)) {
-    if (!ALLOWED_IDENTIFIER_CHARS.test(col)) {
+    if (!ALLOWED_COLUMN_CHARS.test(col)) {
       throw new UnsupportedTableSchemaError(
         `Column "${col}" in table "${table.name}" has invalid characters.`,
       );

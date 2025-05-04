@@ -84,11 +84,11 @@ function initialPGSetup(replicaIdentity = 'DEFAULT') {
         b BOOL,
         j1 JSON,
         j2 JSONB,
-        j3 JSON,
+        "j.3" JSON,
         j4 JSON
       );
       ALTER TABLE foo REPLICA IDENTITY ${replicaIdentity};
-      INSERT INTO foo(id, far_id, b, j1, j2, j3, j4) 
+      INSERT INTO foo(id, far_id, b, j1, j2, "j.3", j4) 
         VALUES (
           'bar',
           'baz',
@@ -135,7 +135,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
           b: {pos: 2, dataType: 'bool'},
           j1: {pos: 3, dataType: 'json'},
           j2: {pos: 4, dataType: 'jsonb'},
-          j3: {pos: 5, dataType: 'json'},
+          ['j.3']: {pos: 5, dataType: 'json'},
           j4: {pos: 6, dataType: 'json'},
         },
       },
@@ -169,7 +169,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
         b: true,
         j1: {foo: 'bar\u0000'},
         j2: true,
-        j3: 123,
+        ['j.3']: 123,
         j4: 'string',
       },
     },
@@ -760,7 +760,7 @@ describe('integration', {timeout: 30000}, () => {
                 b: true,
                 j1: {foo: 'bar\u0000'},
                 j2: true,
-                j3: 123,
+                ['j.3']: 123,
                 j4: 'string',
               },
             },
@@ -782,7 +782,7 @@ describe('integration', {timeout: 30000}, () => {
       // Trigger an upstream change and verify replication.
       if (backend === 'pg') {
         await upDB`
-          INSERT INTO foo(id, far_id, b, j1, j2, j3, j4) 
+          INSERT INTO foo(id, far_id, b, j1, j2, "j.3", j4) 
             VALUES ('voo', 'doo', null, '"foo"', 'false', '456.789', '{"bar":"baz"}');
           UPDATE foo SET far_id = 'not_baz' WHERE id = 'bar';
         `.simple();
@@ -805,7 +805,7 @@ describe('integration', {timeout: 30000}, () => {
                 b: null,
                 j1: '"foo"',
                 j2: 'false',
-                j3: '456.789',
+                ['j.3']: '456.789',
                 j4: '{"bar":"baz"}',
               },
             },
@@ -825,7 +825,7 @@ describe('integration', {timeout: 30000}, () => {
                 b: true,
                 j1: '{"foo":"bar\\u0000"}',
                 j2: 'true',
-                j3: '123',
+                ['j.3']: '123',
                 j4: '"string"',
               },
               key: null,
@@ -855,7 +855,7 @@ describe('integration', {timeout: 30000}, () => {
                   foo: 'bar\u0000',
                 },
                 j2: true,
-                j3: 123,
+                ['j.3']: 123,
                 j4: 'string',
               },
             },
@@ -874,7 +874,7 @@ describe('integration', {timeout: 30000}, () => {
                 b: null,
                 j1: 'foo',
                 j2: false,
-                j3: 456.789,
+                ['j.3']: 456.789,
                 j4: {bar: 'baz'},
               },
             },
