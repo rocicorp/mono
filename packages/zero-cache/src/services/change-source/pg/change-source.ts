@@ -298,9 +298,13 @@ class PostgresChangeSource implements ChangeSource {
   }
 
   /**
-   * Stops all replication slots associated with this shard, and returns
+   * Stops replication slots associated with this shard, and returns
    * a `cleanup` task that drops any slot other than the specified
    * `slotToKeep`.
+   *
+   * Note that replication slots created after `slotToKeep` (as indicated by
+   * the timestamp suffix) are preserved, as those are newly syncing replicas
+   * that will soon take over the slot.
    */
   async #stopExistingReplicationSlotSubscribers(
     sql: PostgresDB,
@@ -309,16 +313,18 @@ class PostgresChangeSource implements ChangeSource {
     const slotExpression = replicationSlotExpression(this.#shard);
     const legacySlotName = legacyReplicationSlot(this.#shard);
 
+    // Note: `slot_name <= slotToKeep` uses a string compare of the millisecond
+    // timestamp, which works until it exceeds 13 digits (sometime in 2286).
     const result = await sql<{slot: string; pid: string | null}[]>`
     SELECT slot_name as slot, pg_terminate_backend(active_pid), active_pid as pid
       FROM pg_replication_slots 
-      WHERE slot_name LIKE ${slotExpression} OR slot_name = ${legacySlotName}`;
+      WHERE (slot_name LIKE ${slotExpression} OR slot_name = ${legacySlotName})
+            AND slot_name <= ${slotToKeep}`;
     if (result.length === 0) {
-      // Note: This should not happen as it is checked at initialization time,
-      //       but it is technically possible for the replication slot to be
-      //       dropped (e.g. manually).
       throw new AbortError(
-        `replication slot ${slotToKeep} is missing. Delete the replica and resync.`,
+        `replication slot ${slotToKeep} is missing. A different ` +
+          `replication-manager should now be running on a new ` +
+          `replication slot.`,
       );
     }
     // Clean up the replicas table.
