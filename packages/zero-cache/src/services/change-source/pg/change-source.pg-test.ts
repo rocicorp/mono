@@ -813,7 +813,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
     const {changes: changes1} = await startStream('00');
 
     // Force another initial sync with an empty replica.
-    const anotherReplicaFile = new DbFile('change_source_pg_test_replica2');
+    const replicaFile2 = new DbFile('change_source_pg_test_replica2');
     const {changeSource: source2} = await initializePostgresChangeSource(
       lc,
       upstreamURI,
@@ -822,7 +822,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
         publications: ['zero_foo', 'zero_zero'],
         shardNum: SHARD_NUM,
       },
-      anotherReplicaFile.path,
+      replicaFile2.path,
       {tableCopyWorkers: 5, rowBatchSize: 10000},
     );
 
@@ -856,8 +856,29 @@ describe('change-source/pg', {timeout: 30000}, () => {
       {watermark: expect.stringMatching(WATERMARK_REGEX)},
     ]);
 
+    // Start a *third* initial sync with an empty replica.
+    const replicaFile3 = new DbFile('change_source_pg_test_replica2');
+    await initializePostgresChangeSource(
+      lc,
+      upstreamURI,
+      {
+        appID: APP_ID,
+        publications: ['zero_foo', 'zero_zero'],
+        shardNum: SHARD_NUM,
+      },
+      replicaFile3.path,
+      {tableCopyWorkers: 5, rowBatchSize: 10000},
+    );
+
+    // There should now be 3 replication slot2.
+    const slots2 = await upstream<{slot: string}[]>`
+        SELECT slot_name as slot FROM pg_replication_slots
+          WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
+      `.values();
+    expect(slots2).toHaveLength(3);
+
     // Starting a subscription on the new slot should kill the old
-    // subscription.
+    // subscription and drop the first replication slot.
     const {changes: changes2} = await startStream('00', source2);
 
     await expect(() => downstream1.dequeue()).rejects.toThrow(AbortError);
@@ -888,16 +909,17 @@ describe('change-source/pg', {timeout: 30000}, () => {
     `);
     expect(replicas2).toEqual(replicas1.slice(1));
 
-    // Verify that only one slot remains. (Add a sleep to reduce
+    // Verify that the two latter slots remain. (Add a sleep to reduce
     // flakiness because the drop is non-transactional.)
     await sleep(100);
-    const slots2 = await upstream<{slot: string}[]>`
+    const slots3 = await upstream<{slot: string}[]>`
       SELECT slot_name as slot FROM pg_replication_slots
         WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
     `.values();
-    expect(slots2).toEqual(slots1.slice(1));
+    expect(slots3).toEqual(slots2.slice(1));
 
-    anotherReplicaFile.delete();
+    replicaFile2.delete();
+    replicaFile3.delete();
   });
 
   test('AutoReset on changed publications', async () => {
