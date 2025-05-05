@@ -539,7 +539,7 @@ export const zeroOptions = {
   },
 };
 
-export type ZeroConfig = ReturnType<typeof getZeroConfig>;
+export type ZeroConfig = Config<typeof zeroOptions>;
 
 export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
 
@@ -556,34 +556,5 @@ export function getZeroConfig(
       runtimeDebugFlags.trackRowsVended = true;
     }
   }
-
-  return normalizeZeroConfig(loadedConfig);
-}
-
-export function normalizeZeroConfig<
-  T extends {
-    cvr: {
-      db?: string | undefined;
-    };
-    change?:
-      | {
-          db?: string | undefined;
-        }
-      | undefined;
-    upstream: {
-      db: string;
-    };
-  },
->(config: T) {
-  return {
-    ...config,
-    cvr: {
-      ...config.cvr,
-      db: config.cvr.db ?? config.upstream.db,
-    },
-    change: {
-      ...config.change,
-      db: config.change?.db ?? config.upstream.db,
-    },
-  };
+  return loadedConfig;
 }

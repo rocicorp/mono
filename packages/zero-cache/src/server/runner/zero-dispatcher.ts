@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {ZeroConfig} from '../../config/zero-config.ts';
+import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import {HttpService, type Options} from '../../services/http-service.ts';
 import {handleStatzRequest} from '../../services/statz.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
@@ -14,7 +14,7 @@ export class ZeroDispatcher extends HttpService {
   readonly #getWorker: () => Promise<Worker>;
 
   constructor(
-    config: ZeroConfig,
+    config: NormalizedZeroConfig,
     lc: LogContext,
     opts: Options,
     getWorker: () => Promise<Worker>,

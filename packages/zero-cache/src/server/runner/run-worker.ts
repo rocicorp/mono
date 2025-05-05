@@ -1,6 +1,7 @@
 import '@dotenvx/dotenvx/config'; // Imports ENV variables from .env
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
+import {normalizeZeroConfig} from '../../config/normalize.ts';
 import {getZeroConfig} from '../../config/zero-config.ts';
 import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';
 import {childWorker, type Worker} from '../../types/processes.ts';
@@ -19,20 +20,17 @@ export async function runWorker(
   parent: Worker | null,
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
-  const config = getZeroConfig(env);
-  const lc = createLogContext(config, {worker: 'runner'});
+  const cfg = getZeroConfig(env);
+  const lc = createLogContext(cfg, {worker: 'runner'});
+
+  const defaultTaskID = await getTaskID(lc);
+  const config = normalizeZeroConfig(lc, cfg, env, defaultTaskID);
   const processes = new ProcessManager(lc, parent ?? process);
 
   const {serverVersion, port, lazyStartup} = config;
-
-  let {taskID} = config;
-  if (!taskID) {
-    taskID = await getTaskID(lc);
-    env['ZERO_TASK_ID'] = taskID;
-  }
   lc.info?.(
     `starting server${!serverVersion ? '' : `@${serverVersion}`} ` +
-      `protocolVersion=${PROTOCOL_VERSION}, taskID=${taskID}`,
+      `protocolVersion=${PROTOCOL_VERSION}`,
   );
 
   let zeroCache: Resolver<Worker> | undefined;
