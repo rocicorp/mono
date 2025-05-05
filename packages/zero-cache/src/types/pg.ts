@@ -14,32 +14,41 @@ import {
   TIMESTAMPTZ,
 } from './pg-types.ts';
 
-const WITH_HH_MM_TIMEZONE = /[+-]\d\d:\d\d$/;
-const WITH_HH_TIMEZONE = /[+-]\d\d$/;
-
 // exported for testing.
 export function timestampToFpMillis(timestamp: string): number {
   // Convert from PG's time string, e.g. "1999-01-08 12:05:06+00" to "Z"
   // format expected by PreciseDate.
-  let ts = timestamp.replace(' ', 'T');
-  if (ts.match(WITH_HH_TIMEZONE)) {
-    if (ts.endsWith('+00')) {
-      // Using 'Z' provides microsecond precision with PreciseDate.
-      ts = ts.replace('+00', 'Z');
-    } else {
-      ts += ':00'; // PG's timezone offset "HH" needs to be converted to "HH:MM"
-    }
-  } else if (ts.match(WITH_HH_MM_TIMEZONE)) {
-    // Using 'Z' provides microsecond precision with PreciseDate.
-    ts = ts.replace('+00:00', 'Z');
-  } else {
-    ts += 'Z';
-  }
+  timestamp = timestamp.replace(' ', 'T');
+  const positiveOffset = timestamp.includes('+');
+  const tzSplitIndex = positiveOffset
+    ? timestamp.lastIndexOf('+')
+    : timestamp.indexOf('-', timestamp.indexOf('T'));
+  const timezoneOffset =
+    tzSplitIndex === -1 ? undefined : timestamp.substring(tzSplitIndex);
+  const tsWithoutTimezone =
+    (tzSplitIndex === -1 ? timestamp : timestamp.substring(0, tzSplitIndex)) +
+    'Z';
+
   try {
-    const fullTime = new PreciseDate(ts).getFullTime();
+    // PreciseDate does not return microsecond precision unless the provided
+    // timestamp is in UTC time so we need to add the timezone offset back in.
+    const fullTime = new PreciseDate(tsWithoutTimezone).getFullTime();
     const millis = Number(fullTime / 1_000_000n);
     const nanos = Number(fullTime % 1_000_000n);
-    return millis + nanos * 1e-6; // floating point milliseconds
+    const ret = millis + nanos * 1e-6; // floating point milliseconds
+
+    // add back in the timezone offset
+    if (timezoneOffset) {
+      const [hours, minutes] = timezoneOffset.split(':');
+      const offset =
+        Math.abs(Number(hours)) * 60 + (minutes ? Number(minutes) : 0);
+      const offsetMillis = offset * 60 * 1_000;
+      // If it is a positive offset, we subtract the offset from the UTC
+      // because we passed in the "local time" as if it was UTC.
+      // The opposite is true for negative offsets.
+      return positiveOffset ? ret - offsetMillis : ret + offsetMillis;
+    }
+    return ret;
   } catch (e) {
     throw new Error(`Error parsing ${timestamp}`, {cause: e});
   }
