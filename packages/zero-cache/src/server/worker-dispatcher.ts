@@ -128,7 +128,7 @@ export class WorkerDispatcher implements Service {
   }
 }
 
-export const URL_PATTERN = new UrlPattern('(/:base)/:worker/v:version/:action');
+const URL_PATTERN = new UrlPattern('(/:base)/:worker/v:version/:action');
 
 export function parsePath(
   url: URL,
