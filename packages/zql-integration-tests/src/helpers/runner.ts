@@ -1,4 +1,4 @@
-import {afterAll, expect} from 'vitest';
+import {afterAll, bench, describe, expect} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
@@ -245,6 +245,13 @@ type Options<TSchema extends Schema> = {
   ) => void;
 };
 
+type BenchOptions<TSchema extends Schema> = {
+  suiteName: string;
+  zqlSchema: TSchema;
+  only?: string;
+  pgContent: string;
+};
+
 export async function createVitests<TSchema extends Schema>(
   {
     suiteName,
@@ -281,6 +288,49 @@ export async function createVitests<TSchema extends Schema>(
         manualVerification,
       ),
     }));
+}
+
+export async function runHydrationBenchmarks<TSchema extends Schema>(
+  {suiteName, zqlSchema, pgContent, only}: BenchOptions<TSchema>,
+  ...benchSpecs: (readonly {
+    name: string;
+    createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
+  }[])[]
+) {
+  const dbs = await makeDatabases(suiteName, zqlSchema, pgContent);
+  const delegates = makeDelegates(dbs, zqlSchema);
+  const queries = makeQueries(zqlSchema, delegates);
+
+  return benchSpecs
+    .flat()
+    .filter(t => (only ? only.includes(t.name) : true))
+    .map(({name, createQuery}) =>
+      describe(name, () => {
+        makeHydrationBenchmark({
+          createQuery,
+          queries,
+        });
+      }),
+    );
+}
+
+function makeHydrationBenchmark<TSchema extends Schema>({
+  createQuery,
+  queries,
+}: {
+  createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
+  queries: QueriesBySource<TSchema>;
+}) {
+  const zql = createQuery(queries.memory);
+  const zqlite = createQuery(queries.sqlite);
+  const pg = createQuery(queries.pg);
+  return [doBench('zql', zql), doBench('zqlite', zqlite), doBench('zpg', pg)];
+}
+
+function doBench(name: string, q: AnyQuery) {
+  bench(name, async () => {
+    await q;
+  });
 }
 
 function makeTest<TSchema extends Schema>(
