@@ -253,9 +253,13 @@ export class Connection {
         return;
       }
 
-      const result = await this.#messageHandler.handleMessage(msg);
-      for (const r of result) {
-        this.#handleMessageResult(r);
+      try {
+        const result = await this.#messageHandler.handleMessage(msg);
+        for (const r of result) {
+          this.#handleMessageResult(r);
+        }
+      } catch (e) {
+        this.#lc.warn?.(`error while handling close connection`, e);
       }
     }
 
