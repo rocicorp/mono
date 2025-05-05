@@ -1,67 +1,69 @@
-import nodemailer from 'nodemailer';
-
-async function getTransport() {
-  if (process.env.LOOPS_EMAIL_API_KEY !== undefined) {
-    const transport = nodemailer.createTransport({
-      host: 'smtp.loops.so',
-      name: 'loops',
-      port: 587,
-      secure: false,
-      auth: {
-        user: 'loops',
-        pass: process.env.LOOPS_EMAIL_API_KEY,
-      },
-    });
-
-    (transport as any).isLoops = true;
-    return transport;
-  } else {
-    const testAccount = await nodemailer.createTestAccount();
-    return nodemailer.createTransport({
-      host: 'smtp.ethereal.email',
-      port: 587,
-      secure: false,
-      auth: {
-        user: testAccount.user,
-        pass: testAccount.pass,
-      },
-    });
-  }
-}
+import {type Schema} from '../shared/schema.ts';
+import {type Transaction} from '@rocicorp/zero';
 
 export async function sendEmail({
-  recipients,
+  tx,
+  email,
   title,
   message,
   link,
+  attachments = [],
 }: {
-  recipients: string[];
+  tx: Transaction<Schema>;
+  email: string;
   title: string;
   message: string;
   link: string;
+  attachments?: {
+    filename: string;
+    contentType: string;
+    data: string; // base64-encoded string
+  }[];
 }) {
-  const transport = await getTransport();
-  if ((transport as any).isLoops) {
-    await transport.sendMail({
-      from: 'no-reply@roci.dev',
-      to: recipients.join(', '),
-      subject: title,
-      text: JSON.stringify({
-        transactionalId: process.env.LOOPS_TRANSACTIONAL_ID,
-        email: recipients.join(', '),
-        dataVariables: {
-          subject: title,
-          message: message,
-          link: link,
-        },
-      }),
-    });
-  } else {
-    await transport.sendMail({
-      from: 'no-reply@roci.dev',
-      to: recipients.join(', '),
-      subject: title,
-      text: `${message}\n\n${link}`,
-    });
+  const apiKey = process.env.LOOPS_EMAIL_API_KEY;
+  const transactionalId = process.env.LOOPS_TRANSACTIONAL_ID;
+
+  if (!apiKey || !transactionalId) {
+    console.log(
+      'Missing LOOPS_EMAIL_API_KEY or LOOPS_TRANSACTIONAL_ID Skipping Email',
+    );
+    return;
   }
+
+  const body = {
+    email,
+    transactionalId,
+    addToAudience: true,
+    dataVariables: {
+      subject: title,
+      message,
+      link,
+    },
+    attachments,
+  };
+
+  const idempotencyKey = `${tx.clientID}:${tx.mutationID}`;
+  const options = {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey,
+    },
+    body: JSON.stringify(body),
+  };
+
+  const response = await fetch(
+    'https://app.loops.so/api/v1/transactional',
+    options,
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to send Loops email: ${response.status} ${errorText}`,
+    );
+  }
+
+  return response.json();
 }

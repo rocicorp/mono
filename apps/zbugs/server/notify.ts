@@ -83,15 +83,17 @@ export async function notify(
   switch (kind) {
     case 'create-issue': {
       const payload = {
-        recipients,
         title: `${modifierUser.login} reported an issue`,
         message: [issue.title, clip(issue.description ?? '')]
           .filter(Boolean)
           .join('\n'),
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
       };
-
-      postCommitTasks.push(() => sendEmail(payload));
+      for (const recipient of recipients) {
+        postCommitTasks.push(async () => {
+          await sendEmail({tx, email: recipient, ...payload});
+        });
+      }
       postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
@@ -109,7 +111,11 @@ export async function notify(
           message: issue.title,
           link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
         };
-        postCommitTasks.push(() => sendEmail(payload));
+        for (const recipient of recipients) {
+          postCommitTasks.push(async () => {
+            await sendEmail({tx, email: recipient, ...payload});
+          });
+        }
         postCommitTasks.push(() => postToDiscord(payload));
       } else {
         const payload = {
@@ -164,7 +170,11 @@ export async function notify(
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}#comment-${commentID}`,
       };
 
-      postCommitTasks.push(() => sendEmail(payload));
+      for (const recipient of recipients) {
+        postCommitTasks.push(async () => {
+          await sendEmail({tx, email: recipient, ...payload});
+        });
+      }
       postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
@@ -192,7 +202,7 @@ function clip(s: string) {
 async function gatherRecipients(
   tx: ServerTransaction<Schema, postgres.TransactionSql>,
   issueID: string,
-) {
+): Promise<string[]> {
   const sql = tx.dbTransaction.wrappedTransaction;
 
   const recipientRows = await sql`SELECT DISTINCT "user".email
