@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import Fastify from 'fastify';
 import {
-  afterEach,
   beforeEach,
   describe,
   expect,
@@ -14,8 +14,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {inProcChannel} from '../../types/processes.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
-import {installWebSocketHandoff} from '../dispatcher/websocket-handoff.ts';
-import {HttpService} from '../http-service.ts';
+import {installWebSocketHandoff} from '../../types/websocket-handoff.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {
   ChangeStreamerHttpClient,
@@ -24,7 +23,6 @@ import {
 } from './change-streamer-http.ts';
 import type {Downstream, SubscriberContext} from './change-streamer.ts';
 import {PROTOCOL_VERSION} from './change-streamer.ts';
-import type {ZeroConfig} from '../../config/zero-config.ts';
 
 describe('change-streamer/http', () => {
   let lc: LogContext;
@@ -34,8 +32,6 @@ describe('change-streamer/http', () => {
   >;
   let serverURL: string;
   let dispatcherURL: string;
-  let server: ChangeStreamerHttpServer;
-  let dispatcher: HttpService;
   let connectionClosed: Promise<Downstream[]>;
 
   beforeEach(async () => {
@@ -48,26 +44,16 @@ describe('change-streamer/http', () => {
 
     const [parent, receiver] = inProcChannel();
 
-    const config = {} as unknown as ZeroConfig;
-
-    dispatcher = new HttpService(
-      'dispatcher',
-      config,
+    const dispatcher = Fastify();
+    installWebSocketHandoff(
       lc,
-      {port: 0},
-      fastify => {
-        installWebSocketHandoff(
-          lc,
-          req => ({payload: getSubscriberContext(req), receiver}),
-          fastify.server,
-        );
-      },
+      req => ({payload: getSubscriberContext(req), receiver}),
+      dispatcher.server,
     );
 
     // Run the server for real instead of using `injectWS()`, as that has a
     // different behavior for ws.close().
-    server = new ChangeStreamerHttpServer(
-      config,
+    const server = new ChangeStreamerHttpServer(
       lc,
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       {port: 0},
@@ -75,13 +61,13 @@ describe('change-streamer/http', () => {
     );
 
     [dispatcherURL, serverURL] = await Promise.all([
-      dispatcher.start(),
+      dispatcher.listen(),
       server.start(),
     ]);
-  });
 
-  afterEach(async () => {
-    await Promise.all([dispatcher.stop(), server.stop]);
+    return async () => {
+      await Promise.all([dispatcher.close(), server.stop]);
+    };
   });
 
   async function drain<T>(num: number, sub: Source<T>): Promise<T[]> {

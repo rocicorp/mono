@@ -103,7 +103,6 @@ export default async function runWorker(
   assert(changeStreamer, `resetting replica did not advance replicaVersion`);
 
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
-    config,
     lc,
     changeStreamer,
     {port},

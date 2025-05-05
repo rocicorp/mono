@@ -2,15 +2,15 @@ import {resolver} from '@rocicorp/resolver';
 import {Server} from 'node:http';
 import {afterAll, afterEach, beforeAll, describe, expect, test} from 'vitest';
 import {WebSocket, WebSocketServer, type RawData} from 'ws';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {randInt} from '../../../../shared/src/rand.ts';
-import {inProcChannel} from '../../types/processes.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {randInt} from '../../../shared/src/rand.ts';
+import {inProcChannel} from './processes.ts';
 import {
   installWebSocketHandoff,
   installWebSocketReceiver,
 } from './websocket-handoff.ts';
 
-describe('dispatcher/websocket-handoff', () => {
+describe('types/websocket-handoff', () => {
   let port: number;
   let server: Server;
   let wss: WebSocketServer;

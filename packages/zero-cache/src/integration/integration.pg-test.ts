@@ -524,7 +524,7 @@ describe('integration', {timeout: 30000}, () => {
   const WATERMARK_REGEX = /[0-9a-z]{4,}/;
 
   test.each([
-    ['single-node standalone', 'pg', () => [env], undefined],
+    ['single-node', 'pg', () => [env], undefined],
     ['replica identity full', 'pg', () => [env], 'FULL'],
     [
       'lazy single-node standalone',
@@ -533,62 +533,7 @@ describe('integration', {timeout: 30000}, () => {
       undefined,
     ],
     [
-      'single-node multi-tenant direct-dispatch',
-      'pg',
-      () => [
-        {
-          ['ZERO_PORT']: String(port - 3),
-          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
-          ['ZERO_TENANTS_JSON']: JSON.stringify({
-            tenants: [{id: 'tenant', path: '/zero', env}],
-          }),
-        },
-      ],
-      undefined,
-    ],
-    [
-      'single-node multi-tenant, double-dispatch',
-      'pg',
-      () => [
-        {
-          ['ZERO_PORT']: String(port),
-          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
-          ['ZERO_TENANTS_JSON']: JSON.stringify({
-            tenants: [
-              {
-                id: 'tenant',
-                path: '/zero',
-                env: {...env, ['ZERO_PORT']: String(port + 3)},
-              },
-            ],
-          }),
-        },
-      ],
-      undefined,
-    ],
-    [
-      'lazy single-node multi-tenant, double-dispatch',
-      'pg',
-      () => [
-        {
-          ['ZERO_PORT']: String(port),
-          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
-          ['ZERO_TENANTS_JSON']: JSON.stringify({
-            tenants: [
-              {
-                id: 'tenant',
-                path: '/zero',
-                env: {...env, ['ZERO_PORT']: String(port + 3)},
-              },
-            ],
-          }),
-          ['ZERO_LAZY_STARTUP']: 'true',
-        },
-      ],
-      undefined,
-    ],
-    [
-      'multi-node standalone',
+      'multi-node',
       'pg',
       () => [
         // The replication-manager must be started first for initial-sync
@@ -607,7 +552,7 @@ describe('integration', {timeout: 30000}, () => {
       undefined,
     ],
     [
-      'lazy view-syncer multi-node standalone',
+      'lazy view-syncer multi-node',
       'pg',
       () => [
         // The replication-manager must be started first for initial-sync
@@ -627,49 +572,7 @@ describe('integration', {timeout: 30000}, () => {
       undefined,
     ],
     [
-      'multi-node multi-tenant',
-      'pg',
-      () => [
-        // The replication-manager must be started first for initial-sync
-        {
-          ['ZERO_PORT']: String(port2),
-          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
-          ['ZERO_NUM_SYNC_WORKERS']: '0',
-          ['ZERO_TENANTS_JSON']: JSON.stringify({
-            tenants: [
-              {
-                id: 'tenant',
-                path: '/zero',
-                env: {
-                  ...env,
-                  ['ZERO_PORT']: String(port2 + 3),
-                  ['ZERO_NUM_SYNC_WORKERS']: '0',
-                },
-              },
-            ],
-          }),
-        },
-        // startZero() will then copy to replicaDbFile2 for the view-syncer
-        {
-          ['ZERO_PORT']: String(port),
-          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
-          ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
-          ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
-          ['ZERO_TENANTS_JSON']: JSON.stringify({
-            tenants: [
-              {
-                id: 'tenant',
-                path: '/zero',
-                env: {...env, ['ZERO_PORT']: String(port + 3)},
-              },
-            ],
-          }),
-        },
-      ],
-      undefined,
-    ],
-    [
-      'single-node standalone',
+      'single-node',
       'custom',
       () => [
         {

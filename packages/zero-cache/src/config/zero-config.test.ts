@@ -353,6 +353,10 @@ test('zero-cache --help', () => {
                                                                                                                                                                   
                                                                 Currently only supported in single-node mode.                                                     
                                                                                                                                                                   
+     --server-version string                                    optional                                                                                          
+       ZERO_SERVER_VERSION env                                                                                                                                    
+                                                                The version string outputted to logs when the server starts up.                                   
+                                                                                                                                                                  
     "
   `);
 });
