@@ -84,11 +84,11 @@ function initialPGSetup(replicaIdentity = 'DEFAULT') {
         b BOOL,
         j1 JSON,
         j2 JSONB,
-        j3 JSON,
+        "j.3" JSON,
         j4 JSON
       );
       ALTER TABLE foo REPLICA IDENTITY ${replicaIdentity};
-      INSERT INTO foo(id, far_id, b, j1, j2, j3, j4) 
+      INSERT INTO foo(id, far_id, b, j1, j2, "j.3", j4) 
         VALUES (
           'bar',
           'baz',
@@ -135,7 +135,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
           b: {pos: 2, dataType: 'bool'},
           j1: {pos: 3, dataType: 'json'},
           j2: {pos: 4, dataType: 'jsonb'},
-          j3: {pos: 5, dataType: 'json'},
+          ['j.3']: {pos: 5, dataType: 'json'},
           j4: {pos: 6, dataType: 'json'},
         },
       },
@@ -169,7 +169,7 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
         b: true,
         j1: {foo: 'bar\u0000'},
         j2: true,
-        j3: 123,
+        ['j.3']: 123,
         j4: 'string',
       },
     },
@@ -524,7 +524,7 @@ describe('integration', {timeout: 30000}, () => {
   const WATERMARK_REGEX = /[0-9a-z]{4,}/;
 
   test.each([
-    ['single-node standalone', 'pg', () => [env], undefined],
+    ['single-node', 'pg', () => [env], undefined],
     ['replica identity full', 'pg', () => [env], 'FULL'],
     [
       'lazy single-node standalone',
@@ -533,62 +533,7 @@ describe('integration', {timeout: 30000}, () => {
       undefined,
     ],
     [
-      'single-node multi-tenant direct-dispatch',
-      'pg',
-      () => [
-        {
-          ['ZERO_PORT']: String(port - 3),
-          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
-          ['ZERO_TENANTS_JSON']: JSON.stringify({
-            tenants: [{id: 'tenant', path: '/zero', env}],
-          }),
-        },
-      ],
-      undefined,
-    ],
-    [
-      'single-node multi-tenant, double-dispatch',
-      'pg',
-      () => [
-        {
-          ['ZERO_PORT']: String(port),
-          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
-          ['ZERO_TENANTS_JSON']: JSON.stringify({
-            tenants: [
-              {
-                id: 'tenant',
-                path: '/zero',
-                env: {...env, ['ZERO_PORT']: String(port + 3)},
-              },
-            ],
-          }),
-        },
-      ],
-      undefined,
-    ],
-    [
-      'lazy single-node multi-tenant, double-dispatch',
-      'pg',
-      () => [
-        {
-          ['ZERO_PORT']: String(port),
-          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
-          ['ZERO_TENANTS_JSON']: JSON.stringify({
-            tenants: [
-              {
-                id: 'tenant',
-                path: '/zero',
-                env: {...env, ['ZERO_PORT']: String(port + 3)},
-              },
-            ],
-          }),
-          ['ZERO_LAZY_STARTUP']: 'true',
-        },
-      ],
-      undefined,
-    ],
-    [
-      'multi-node standalone',
+      'multi-node',
       'pg',
       () => [
         // The replication-manager must be started first for initial-sync
@@ -607,7 +552,7 @@ describe('integration', {timeout: 30000}, () => {
       undefined,
     ],
     [
-      'lazy view-syncer multi-node standalone',
+      'lazy view-syncer multi-node',
       'pg',
       () => [
         // The replication-manager must be started first for initial-sync
@@ -627,49 +572,7 @@ describe('integration', {timeout: 30000}, () => {
       undefined,
     ],
     [
-      'multi-node multi-tenant',
-      'pg',
-      () => [
-        // The replication-manager must be started first for initial-sync
-        {
-          ['ZERO_PORT']: String(port2),
-          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
-          ['ZERO_NUM_SYNC_WORKERS']: '0',
-          ['ZERO_TENANTS_JSON']: JSON.stringify({
-            tenants: [
-              {
-                id: 'tenant',
-                path: '/zero',
-                env: {
-                  ...env,
-                  ['ZERO_PORT']: String(port2 + 3),
-                  ['ZERO_NUM_SYNC_WORKERS']: '0',
-                },
-              },
-            ],
-          }),
-        },
-        // startZero() will then copy to replicaDbFile2 for the view-syncer
-        {
-          ['ZERO_PORT']: String(port),
-          ['ZERO_LOG_LEVEL']: LOG_LEVEL,
-          ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
-          ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
-          ['ZERO_TENANTS_JSON']: JSON.stringify({
-            tenants: [
-              {
-                id: 'tenant',
-                path: '/zero',
-                env: {...env, ['ZERO_PORT']: String(port + 3)},
-              },
-            ],
-          }),
-        },
-      ],
-      undefined,
-    ],
-    [
-      'single-node standalone',
+      'single-node',
       'custom',
       () => [
         {
@@ -760,7 +663,7 @@ describe('integration', {timeout: 30000}, () => {
                 b: true,
                 j1: {foo: 'bar\u0000'},
                 j2: true,
-                j3: 123,
+                ['j.3']: 123,
                 j4: 'string',
               },
             },
@@ -782,7 +685,7 @@ describe('integration', {timeout: 30000}, () => {
       // Trigger an upstream change and verify replication.
       if (backend === 'pg') {
         await upDB`
-          INSERT INTO foo(id, far_id, b, j1, j2, j3, j4) 
+          INSERT INTO foo(id, far_id, b, j1, j2, "j.3", j4) 
             VALUES ('voo', 'doo', null, '"foo"', 'false', '456.789', '{"bar":"baz"}');
           UPDATE foo SET far_id = 'not_baz' WHERE id = 'bar';
         `.simple();
@@ -805,7 +708,7 @@ describe('integration', {timeout: 30000}, () => {
                 b: null,
                 j1: '"foo"',
                 j2: 'false',
-                j3: '456.789',
+                ['j.3']: '456.789',
                 j4: '{"bar":"baz"}',
               },
             },
@@ -825,7 +728,7 @@ describe('integration', {timeout: 30000}, () => {
                 b: true,
                 j1: '{"foo":"bar\\u0000"}',
                 j2: 'true',
-                j3: '123',
+                ['j.3']: '123',
                 j4: '"string"',
               },
               key: null,
@@ -855,7 +758,7 @@ describe('integration', {timeout: 30000}, () => {
                   foo: 'bar\u0000',
                 },
                 j2: true,
-                j3: 123,
+                ['j.3']: 123,
                 j4: 'string',
               },
             },
@@ -874,7 +777,7 @@ describe('integration', {timeout: 30000}, () => {
                 b: null,
                 j1: 'foo',
                 j2: false,
-                j3: 456.789,
+                ['j.3']: 456.789,
                 j4: {bar: 'baz'},
               },
             },

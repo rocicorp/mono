@@ -65,6 +65,7 @@ export default $config({
       ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250319-00`,
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
       ZERO_APP_ID: process.env.ZERO_APP_ID || 'zero',
+      PGCONNECT_TIMEOUT: '60', // scale-from-zero dbs need more than 30 seconds
     };
 
     const ecsVolumeRole = IS_EBS_STAGE

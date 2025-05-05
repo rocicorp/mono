@@ -446,13 +446,6 @@ describe('change-source/pg', () => {
         CREATE TABLE issues ("issueID" INTEGER PRIMARY KEY, "column/with/slashes" INTEGER);
       `,
     },
-    {
-      error:
-        'Column "column.with.dots" in table "issues" has invalid characters',
-      setupUpstreamQuery: `
-        CREATE TABLE issues ("issueID" INTEGER PRIMARY KEY, "column.with.dots" INTEGER);
-      `,
-    },
   ];
 
   for (const c of invalidUpstreamCases) {

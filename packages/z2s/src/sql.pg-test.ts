@@ -57,7 +57,7 @@ describe('SQL builder with PostgreSQL', () => {
             ${sqlConvertArg('numeric', item.value)},
             ${sqlConvertArg('json', item.metadata)},
             ${sqlConvertArg('boolean', item.isActive)},
-            ${sqlConvertArg('timestamp', item.createdAt)},
+            ${sqlConvertArg('timestamptz', item.createdAt)},
             ${sqlConvertArg('text', item.tags, plural)}
           )
         `,
@@ -82,7 +82,7 @@ describe('SQL builder with PostgreSQL', () => {
         FROM test_items
         WHERE
           value = ANY (${sqlConvertArg('numeric', values, pluralComparison)})
-          AND "createdAt" = ANY (${sqlConvertArg('timestamp', timestamps, pluralComparison)})
+          AND "createdAt" = ANY (${sqlConvertArg('timestamptz', timestamps, pluralComparison)})
           AND "isActive" = ${sqlConvertArg('boolean', true, singularComparison)}
           AND metadata->>'key' = ${sqlConvertArg('text', 'value1', singularComparison)}
           AND 'tag1' = ANY(tags)

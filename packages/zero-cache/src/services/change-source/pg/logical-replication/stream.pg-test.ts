@@ -124,7 +124,7 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
         '{"zoo":"dar"}',
         '12345.678909876',
         ARRAY[1, 2, 3],
-        ARRAY['2019-01-12T00:30:35.654321'::timestamp, '2019-01-12T00:30:35.123456'::timestamp]
+        ARRAY['2019-01-12T00:30:35.654321Z'::timestamptz, '2019-01-12T00:30:35.123456Z'::timestamptz]
         );
 
     -- tag: "update"
