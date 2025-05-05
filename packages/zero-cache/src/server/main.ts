@@ -3,9 +3,6 @@ import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {must} from '../../../shared/src/must.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
-import {getSubscriberContext} from '../services/change-streamer/change-streamer-http.ts';
-import {Dispatcher} from '../services/dispatcher/dispatcher.ts';
-import {installWebSocketHandoff} from '../services/dispatcher/websocket-handoff.ts';
 import {
   exitAfter,
   ProcessManager,
@@ -16,7 +13,6 @@ import {
   restoreReplica,
   startReplicaBackupProcess,
 } from '../services/litestream/commands.ts';
-import type {Service} from '../services/service.ts';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/init.ts';
 import {pgClient} from '../types/pg.ts';
 import {
@@ -33,10 +29,11 @@ import {
   subscribeTo,
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
+import {WorkerDispatcher} from './worker-dispatcher.ts';
 const clientConnectionBifurcated = false;
 
 export default async function runWorker(
-  parent: Worker | null,
+  parent: Worker,
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
   const startMs = Date.now();
@@ -45,7 +42,7 @@ export default async function runWorker(
   const taskID = must(config.taskID, `main must set --task-id`);
   const shard = getShardID(config);
 
-  const processes = new ProcessManager(lc, parent ?? process);
+  const processes = new ProcessManager(lc, parent);
 
   const numSyncers =
     config.numSyncWorkers !== undefined
@@ -129,7 +126,7 @@ export default async function runWorker(
         'message',
         resolve,
       )
-    : resolve();
+    : (resolve() ?? undefined);
 
   if (numSyncers) {
     // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
@@ -198,28 +195,21 @@ export default async function runWorker(
   clearInterval(logWaiting);
   lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
 
-  const mainServices: Service[] = [];
-  const {port} = config;
-
-  if (numSyncers) {
-    mainServices.push(
-      new Dispatcher(config, lc, taskID, parent, syncers, mutator, {port}),
-    );
-  } else if (changeStreamer && parent) {
-    // When running as the replication-manager, the dispatcher process
-    // hands off websockets from the main (tenant) dispatcher to the
-    // change-streamer process.
-    installWebSocketHandoff(
-      lc,
-      req => ({payload: getSubscriberContext(req), receiver: changeStreamer}),
-      parent,
-    );
-  }
-
-  parent?.send(['ready', {ready: true}]);
+  parent.send(['ready', {ready: true}]);
 
   try {
-    await runUntilKilled(lc, parent ?? process, ...mainServices);
+    await runUntilKilled(
+      lc,
+      parent,
+      new WorkerDispatcher(
+        lc,
+        taskID,
+        parent,
+        syncers,
+        mutator,
+        changeStreamer,
+      ),
+    );
   } catch (err) {
     processes.logErrorAndExit(err, 'dispatcher');
   }
@@ -228,5 +218,5 @@ export default async function runWorker(
 }
 
 if (!singleProcessMode()) {
-  void exitAfter(() => runWorker(parentWorker, process.env));
+  void exitAfter(() => runWorker(must(parentWorker), process.env));
 }

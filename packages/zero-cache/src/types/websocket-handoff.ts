@@ -2,18 +2,15 @@ import type {LogContext} from '@rocicorp/logger';
 import {IncomingMessage, Server} from 'node:http';
 import {Socket} from 'node:net';
 import {WebSocketServer, type WebSocket} from 'ws';
-import {assert} from '../../../../shared/src/asserts.ts';
-import {
-  serializableSubset,
-  type IncomingMessageSubset,
-} from '../../types/http.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {serializableSubset, type IncomingMessageSubset} from './http.ts';
 import {
   MESSAGE_TYPES,
   type Receiver,
   type Sender,
   type Worker,
-} from '../../types/processes.ts';
-import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
+} from './processes.ts';
+import {closeWithError, PROTOCOL_ERROR} from './ws.ts';
 
 export type HandoffSpec<P> = {
   payload: P;
@@ -36,22 +33,23 @@ export type WebSocketHandoff<P> = (
 
 export type WebSocketReceiver<P> = (ws: WebSocket, payload: P) => void;
 
+export type WebSocketHandoffHandler = (
+  message: IncomingMessageSubset,
+  socket: Socket,
+  head: Buffer,
+) => void;
+
 /**
  * Installs websocket handoff logic from either an http.Server
  * receiving requests, or a parent Worker process
  * that is handing off requests to this process.
  */
-export function installWebSocketHandoff<P>(
+export function createWebSocketHandoffHandler<P>(
   lc: LogContext,
   handoff: WebSocketHandoff<P>,
-  source: Server | Worker,
-) {
+): WebSocketHandoffHandler {
   const wss = new WebSocketServer({noServer: true});
-  const handle = (
-    message: IncomingMessageSubset,
-    socket: Socket,
-    head: Buffer,
-  ) => {
+  return (message: IncomingMessageSubset, socket: Socket, head: Buffer) => {
     let sent = false;
 
     function send({payload, receiver}: HandoffSpec<P>) {
@@ -90,6 +88,19 @@ export function installWebSocketHandoff<P>(
       onError(error);
     }
   };
+}
+
+/**
+ * Installs websocket handoff logic from either an http.Server
+ * receiving requests, or a parent Worker process
+ * that is handing off requests to this process.
+ */
+export function installWebSocketHandoff<P>(
+  lc: LogContext,
+  handoff: WebSocketHandoff<P>,
+  source: Server | Worker,
+) {
+  const handle = createWebSocketHandoffHandler(lc, handoff);
 
   if (source instanceof Server) {
     // handoff messages from an HTTP server
@@ -129,7 +140,7 @@ export function installWebSocketReceiver<P>(
   });
 }
 
-type Handoff<P> = [
+export type Handoff<P> = [
   typeof MESSAGE_TYPES.handoff,
   {
     message: IncomingMessageSubset;
