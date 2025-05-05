@@ -22,7 +22,7 @@ const orderingElementSchema = v.readonly(
 );
 
 export const orderingSchema = v.readonlyArray(orderingElementSchema);
-export type System = 'permissions' | 'client';
+export type System = 'permissions' | 'client' | 'test';
 
 export const primitiveSchema = v.union(
   v.string(),
@@ -173,7 +173,9 @@ const correlationSchema = v.readonlyObject({
 export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
   correlation: correlationSchema,
   hidden: v.boolean().optional(),
-  system: v.union(v.literal('permissions'), v.literal('client')).optional(),
+  system: v
+    .union(v.literal('permissions'), v.literal('client'), v.literal('test'))
+    .optional(),
 });
 
 export const correlatedSubquerySchema: v.Type<CorrelatedSubquery> =

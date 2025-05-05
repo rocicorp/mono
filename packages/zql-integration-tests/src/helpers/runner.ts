@@ -19,7 +19,7 @@ import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
 import {
   ast,
   defaultFormat,
-  newQuery,
+  QueryImpl,
   type QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
@@ -223,8 +223,22 @@ function makeQueries<TSchema extends Schema>(
       {table},
       defaultFormat,
     );
-    ret.memory[table] = newQuery(delegates.memory, schema, table);
-    ret.sqlite[table] = newQuery(delegates.sqlite, schema, table);
+    ret.memory[table] = new QueryImpl(
+      delegates.memory,
+      schema,
+      table,
+      {table},
+      defaultFormat,
+      'test',
+    );
+    ret.sqlite[table] = new QueryImpl(
+      delegates.sqlite,
+      schema,
+      table,
+      {table},
+      defaultFormat,
+      'test',
+    );
   });
 
   return ret as QueriesBySource<TSchema>;
