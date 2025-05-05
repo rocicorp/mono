@@ -532,11 +532,6 @@ export const zeroOptions = {
       'Currently only supported in single-node mode.',
     ],
   },
-
-  serverVersion: {
-    type: v.string().optional(),
-    desc: [`The version string outputted to logs when the server starts up.`],
-  },
 };
 
 export type ZeroConfig = ReturnType<typeof getZeroConfig>;

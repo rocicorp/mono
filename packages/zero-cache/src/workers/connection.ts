@@ -17,9 +17,9 @@ import {
   PROTOCOL_VERSION,
 } from '../../../zero-protocol/src/protocol-version.ts';
 import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
+import type {ConnectParams} from '../services/dispatcher/connect-params.ts';
 import {findErrorForClient, getLogLevel} from '../types/error-for-client.ts';
 import type {Source} from '../types/streams.ts';
-import type {ConnectParams} from './connect-params.ts';
 
 export type HandlerResult =
   | {

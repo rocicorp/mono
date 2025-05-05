@@ -8,6 +8,7 @@ import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
+import type {ConnectParams} from '../services/dispatcher/connect-params.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
 import type {
@@ -15,7 +16,6 @@ import type {
   TokenData,
   ViewSyncer,
 } from '../services/view-syncer/view-syncer.ts';
-import type {ConnectParams} from './connect-params.ts';
 import type {HandlerResult, MessageHandler} from './connection.ts';
 
 const tracer = trace.getTracer('syncer-ws-server', version);
