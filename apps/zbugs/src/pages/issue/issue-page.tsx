@@ -65,6 +65,13 @@ import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
 import type {Mutators} from '../../../shared/mutators.ts';
 
+function softNavigate(path: string, state?: ZbugsHistoryState) {
+  navigate(path, {state});
+  requestAnimationFrame(() => {
+    window.scrollTo(0, 0);
+  });
+}
+
 const emojiToastShowDuration = 3_000;
 
 export const INITIAL_COMMENT_LIMIT = 100;
@@ -220,7 +227,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   );
   useKeypress('j', () => {
     if (next) {
-      navigate(links.issue(next), {state: zbugsHistoryState});
+      softNavigate(links.issue(next), zbugsHistoryState);
     }
   });
 
@@ -230,7 +237,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   );
   useKeypress('k', () => {
     if (prev) {
-      navigate(links.issue(prev), {state: zbugsHistoryState});
+      softNavigate(links.issue(prev), zbugsHistoryState);
     }
   });
 
