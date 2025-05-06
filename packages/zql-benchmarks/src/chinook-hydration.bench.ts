@@ -6,7 +6,7 @@ const pgContent = await getChinook();
 
 await runBenchmarks(
   {
-    suiteName: 'chinook_bench',
+    suiteName: 'chinook_bench_hydrate',
     type: 'hydration',
     pgContent,
     zqlSchema: schema,

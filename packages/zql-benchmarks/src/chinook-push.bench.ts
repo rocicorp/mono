@@ -21,7 +21,7 @@ function defaultTrack(id: number): PullRow<'track', typeof schema> {
 
 await runBenchmarks(
   {
-    suiteName: 'chinook_bench',
+    suiteName: 'chinook_bench_push',
     type: 'push',
     pgContent,
     zqlSchema: schema,
