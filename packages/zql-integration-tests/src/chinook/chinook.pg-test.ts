@@ -173,6 +173,22 @@ test.each(
             .limit(10),
       },
     ],
+    // primary key compare for each table
+    (() =>
+      tables.map(
+        table =>
+          ({
+            name: `${table} pk lookup`,
+            createQuery: q => {
+              const pk = schema.tables[table].primaryKey;
+              let ret = q[table] as AnyQuery;
+              for (const column of pk) {
+                ret = ret.where(column, '=', 1);
+              }
+              return ret;
+            },
+          }) as const,
+      ))(),
     // compare against primary key for each operator
     (() =>
       operators.map(

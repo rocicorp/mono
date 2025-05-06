@@ -4,5 +4,5 @@
     "lib": ["ESNext.Array", "ESNext", "DOM"],
     "outDir": "dist"
   },
-  "include": ["src/**/*.ts", "../zql-benchmarks/src/chinook.bench.ts"]
+  "include": ["src/**/*.ts"]
 }
