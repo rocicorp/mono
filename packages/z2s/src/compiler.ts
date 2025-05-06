@@ -400,9 +400,11 @@ export function any(
   condition: SimpleCondition,
   table: Table,
 ): SQLQuery {
-  return sql`${valueComparison(spec, condition.left, table, condition.right, false)} ${
-    condition.op === 'IN' ? sql`= ANY` : sql`!= ANY`
-  } (${valueComparison(spec, condition.right, table, condition.left, true)})`;
+  return sql`${condition.op === 'NOT IN' ? sql`NOT` : sql``}
+    (
+      ${valueComparison(spec, condition.left, table, condition.right, false)} = ANY 
+      (${valueComparison(spec, condition.right, table, condition.left, true)})
+    )`;
 }
 
 export function distinctFrom(

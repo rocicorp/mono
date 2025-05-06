@@ -2,6 +2,7 @@ import {resolver} from '@rocicorp/resolver';
 import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {must} from '../../../shared/src/must.ts';
+import {assertNormalized} from '../config/normalize.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {
   exitAfter,
@@ -38,9 +39,8 @@ export default async function runWorker(
 ): Promise<void> {
   const startMs = Date.now();
   const config = getZeroConfig(env);
+  assertNormalized(config);
   const lc = createLogContext(config, {worker: 'dispatcher'});
-  const taskID = must(config.taskID, `main must set --task-id`);
-  const shard = getShardID(config);
 
   const processes = new ProcessManager(lc, parent);
 
@@ -84,9 +84,14 @@ export default async function runWorker(
     return processes.addWorker(worker, type, name);
   }
 
-  const {backupURL} = config.litestream;
+  const shard = getShardID(config);
+  const {
+    taskID,
+    changeStreamerURI,
+    litestream: {backupURL, restoreDurationMsEstimate},
+  } = config;
   const litestream = backupURL?.length;
-  const runChangeStreamer = !config.changeStreamerURI;
+  const runChangeStreamer = !changeStreamerURI;
 
   if (litestream) {
     // For the replication-manager (i.e. authoritative replica), only attempt
@@ -99,7 +104,7 @@ export default async function runWorker(
         runChangeStreamer ? 1 : 10,
         3000,
       );
-      if (!config.litestream.restoreDurationMsEstimate && restoreElapsedMs) {
+      if (!restoreDurationMsEstimate && restoreElapsedMs) {
         internalFlags.push(
           '--litestream-restore-duration-ms-estimate',
           String(restoreElapsedMs),
@@ -132,8 +137,8 @@ export default async function runWorker(
     // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
     // but it is done here in the main thread because it is wasteful to have all of
     // the Syncers attempt the migration in parallel.
-    const {cvr, upstream} = config;
-    const cvrDB = pgClient(lc, cvr.db ?? upstream.db);
+    const {cvr} = config;
+    const cvrDB = pgClient(lc, cvr.db);
     await initViewSyncerSchema(lc, cvrDB, shard);
     void cvrDB.end();
   }

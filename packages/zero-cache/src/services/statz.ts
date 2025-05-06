@@ -1,15 +1,15 @@
+import auth from 'basic-auth';
+import type {FastifyReply, FastifyRequest} from 'fastify';
+import fs from 'fs';
+import os from 'os';
+import type {Writable} from 'stream';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {type ZeroConfig} from '../config/zero-config.ts';
-import {getShardID, upstreamSchema} from '../types/shards.ts';
-import {pgClient} from '../types/pg.ts';
-import type {Writable} from 'stream';
-import {BigIntJSON} from '../types/bigint-json.ts';
-import os from 'os';
-import fs from 'fs';
-import type {FastifyReply, FastifyRequest} from 'fastify';
 import {Database} from '../../../zqlite/src/db.ts';
-import auth from 'basic-auth';
+import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
+import {BigIntJSON} from '../types/bigint-json.ts';
+import {pgClient} from '../types/pg.ts';
+import {getShardID, upstreamSchema} from '../types/shards.ts';
 
 const lc = createSilentLogContext();
 
