@@ -122,7 +122,9 @@ export class Exists implements Operator {
   }
 
   push(change: Change) {
-    this.#inPush = true;
+    this.#inPush = !(
+      change as unknown as {syntheticFetch?: boolean | undefined}
+    ).syntheticFetch;
     try {
       switch (change.type) {
         // add, remove and edit cannot change the size of the

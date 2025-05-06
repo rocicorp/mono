@@ -1,7 +1,9 @@
 import {must} from '../../../shared/src/must.ts';
 import type {Change} from './change.ts';
 import type {FanIn} from './fan-in.ts';
+import type {Node} from './data.ts';
 import type {FetchRequest, Input, Operator, Output} from './operator.ts';
+import type {Stream} from './stream.ts';
 
 /**
  * Forks a stream into multiple streams.
@@ -42,8 +44,18 @@ export class FanOut implements Operator {
     return this.#input.getSchema();
   }
 
-  fetch(req: FetchRequest) {
-    return this.#input.fetch(req);
+  *fetch(req: FetchRequest): Stream<Node> {
+    for (const node of this.#input.fetch(req)) {
+      for (const out of this.#outputs) {
+        const syntheticChange = {
+          type: 'add',
+          node,
+          syntheticFetch: true,
+        } as const;
+        out.push(syntheticChange);
+      }
+      yield node;
+    }
   }
 
   cleanup(req: FetchRequest) {
