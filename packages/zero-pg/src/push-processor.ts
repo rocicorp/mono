@@ -166,12 +166,20 @@ export class PushProcessor<
         m,
         true,
       );
+
       if ('error' in ret.result) {
         this.#lc.error?.(
           `Error ${ret.result.error} processing mutation ${m.id} for client ${m.clientID}: ${ret.result.details}`,
+          e,
         );
         return ret;
       }
+
+      this.#lc.error?.(
+        `Unexpected error processing mutation ${m.id} for client ${m.clientID}`,
+        e,
+      );
+
       return {
         id: ret.id,
         result: {
