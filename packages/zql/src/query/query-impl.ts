@@ -609,6 +609,7 @@ export class QueryImpl<
   TReturn = PullRow<TTable, TSchema>,
 > extends AbstractQuery<TSchema, TTable, TReturn> {
   readonly #delegate: QueryDelegate;
+  readonly #system: System;
 
   constructor(
     delegate: QueryDelegate,
@@ -616,8 +617,10 @@ export class QueryImpl<
     tableName: TTable,
     ast: AST,
     format: Format,
+    system: System = 'client',
   ) {
-    super(schema, tableName, ast, format, 'client');
+    super(schema, tableName, ast, format, system);
+    this.#system = system;
     this.#delegate = delegate;
   }
 
@@ -635,7 +638,14 @@ export class QueryImpl<
     ast: AST,
     format: Format,
   ): QueryImpl<TSchema, TTable, TReturn> {
-    return new QueryImpl(this.#delegate, schema, tableName, ast, format);
+    return new QueryImpl(
+      this.#delegate,
+      schema,
+      tableName,
+      ast,
+      format,
+      this.#system,
+    );
   }
 
   materialize<T>(
