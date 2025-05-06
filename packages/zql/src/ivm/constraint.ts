@@ -104,7 +104,7 @@ export function primaryKeyConstraintFromFilters(
     if (subCondition.op === '=') {
       const column = extractColumn(subCondition);
       if (column !== undefined) {
-        if (primary.indexOf(column.name) === -1) {
+        if (!primary.includes(column.name)) {
           continue;
         }
         ret[column.name] = column.value;
