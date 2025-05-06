@@ -15,7 +15,8 @@ CREATE TABLE "user" (
     "name" VARCHAR,
     "avatar" VARCHAR,
     "role" VARCHAR DEFAULT 'user' NOT NULL,
-    "githubID" INTEGER NOT NULL
+    "githubID" INTEGER NOT NULL,
+    "email" VARCHAR
 );
 
 CREATE UNIQUE INDEX user_login_idx ON "user" (login);
@@ -122,3 +123,20 @@ CREATE TABLE IF NOT EXISTS zero."schemaVersions" (
 INSERT INTO zero."schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion")
 VALUES (true, 3, 5) ON CONFLICT DO NOTHING;
 
+CREATE PUBLICATION zero_zbugs
+  FOR TABLE
+    issue,
+    "viewState",
+    comment,
+    label,
+    "issueLabel",
+    emoji,
+    "userPref",
+    "user" (
+      id,
+      login,
+      name,
+      avatar,
+      role,
+      "githubID"
+    );
