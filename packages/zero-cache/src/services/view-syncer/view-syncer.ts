@@ -222,7 +222,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       // If all clients have disconnected, cancel all pending work.
       if (await this.#checkForShutdownConditionsInLock()) {
-        this.#lc.info?.('shutting down');
+        this.#lc.info?.(`closing clientGroupID=${this.id}`);
         this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
         return;
       }
@@ -1412,7 +1412,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (err) {
         client.fail(err);
       } else {
-        client.close('shutting down');
+        client.close(`closed clientGroupID=${this.id}`);
       }
     }
   }

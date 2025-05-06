@@ -349,7 +349,8 @@ class WebSocketCloser<T> {
   }
 
   #handleOpen = () => {
-    this.#lc.info?.('connected');
+    const {url} = this.#ws;
+    this.#lc.info?.('connected' + (url ? ` to ${url}` : ''));
     this.#connected.resolve();
   };
 
