@@ -397,9 +397,12 @@ test('any', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""user"."name" = ANY (ARRAY(
-              SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
-            ))",
+      "text": "(
+      "user"."name" = ANY 
+      (ARRAY(
+          SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
+        ))
+    )",
       "values": [
         "[1,2,3]",
       ],
@@ -424,9 +427,13 @@ test('any', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""user"."name" != ANY (ARRAY(
+      "text": "NOT
+        (
+          "user"."name" = ANY 
+          (ARRAY(
               SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
-            ))",
+            ))
+        )",
       "values": [
         "[1,2,3]",
       ],
@@ -915,9 +922,12 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""user"."id" = ANY (ARRAY(
-              SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
-            ))",
+      "text": "(
+      "user"."id" = ANY 
+      (ARRAY(
+          SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
+        ))
+    )",
       "values": [
         "[1,2,3]",
       ],
@@ -942,9 +952,13 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""user"."id" != ANY (ARRAY(
+      "text": "NOT
+        (
+          "user"."id" = ANY 
+          (ARRAY(
               SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
-            ))",
+            ))
+        )",
       "values": [
         "[1,2,3]",
       ],

@@ -2,6 +2,7 @@ import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {assertNormalized} from '../config/normalize.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
@@ -30,20 +31,21 @@ export default async function runWorker(
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
   const config = getZeroConfig(env, args.slice(1));
+  assertNormalized(config);
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;
   const lc = createLogContext(config, {worker: workerName});
 
   const replica = await setupReplica(lc, fileMode, config.replica);
 
-  const changeStreamerPort = config.changeStreamerPort ?? config.port + 1;
+  const {taskID, changeStreamerPort} = config;
   const changeStreamerURI =
     config.changeStreamerURI ?? `ws://localhost:${changeStreamerPort}`;
   const changeStreamer = new ChangeStreamerHttpClient(lc, changeStreamerURI);
 
   const replicator = new ReplicatorService(
     lc,
-    must(config.taskID, `main must set --task-id`),
+    taskID,
     `${workerName}-${pid}`,
     mode,
     changeStreamer,

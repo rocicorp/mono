@@ -395,6 +395,8 @@ function makeTest<TSchema extends Schema>(
       );
       const memoryResult = await queries.memory;
 
+      // - is PG
+      // + is SQLite / Memory
       expect(memoryResult).toEqualPg(pgResult);
       expect(sqliteResult).toEqualPg(pgResult);
       if (manualVerification) {

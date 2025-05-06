@@ -5,6 +5,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {assertNormalized} from '../config/normalize.ts';
 import {getZeroConfig} from '../config/zero-config.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
@@ -39,6 +40,7 @@ export default function runWorker(
   ...args: string[]
 ): Promise<void> {
   const config = getZeroConfig(env, args.slice(1));
+  assertNormalized(config);
   startOtel(config.log);
 
   const lc = createLogContext(config, {worker: 'syncer'});
@@ -52,7 +54,7 @@ export default function runWorker(
   const replicaFile = replicaFileName(config.replica.file, fileMode);
   lc.debug?.(`running view-syncer on ${replicaFile}`);
 
-  const cvrDB = pgClient(lc, cvr.db ?? upstream.db, {
+  const cvrDB = pgClient(lc, cvr.db, {
     max: cvr.maxConnsPerWorker,
     connection: {['application_name']: `zero-sync-worker-${pid}-cvr`},
   });
@@ -88,7 +90,7 @@ export default function runWorker(
     return new ViewSyncerService(
       logger,
       shard,
-      must(config.taskID, 'main must set --task-id'),
+      config.taskID,
       id,
       cvrDB,
       new PipelineDriver(

@@ -26,7 +26,6 @@ test.each(
     {
       suiteName: 'compiler_chinook',
       pgContent,
-      only: 'In operator',
       zqlSchema: schema,
       setRawData: r => {
         data = r;
@@ -168,7 +167,7 @@ test.each(
         createQuery: q =>
           q.album
             .where('title', 'NOT IN', [
-              'Riot Act',
+              'Restless and Wild',
               'For Those About To Rock We Salute You',
             ])
             .limit(10),

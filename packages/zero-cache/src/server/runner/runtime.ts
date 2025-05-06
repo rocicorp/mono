@@ -9,12 +9,23 @@ export async function getTaskID(lc: LogContext) {
   const containerURI = process.env['ECS_CONTAINER_METADATA_URI_V4'];
   if (containerURI) {
     try {
+      const resp = await fetch(`${containerURI}`);
+      const metadata = await resp.json();
+      // Logged purely for debugging.
+      lc.info?.(`Container metadata`, {metadata});
+    } catch (e) {
+      lc.warn?.('unable to lookup container metadata', e);
+    }
+
+    try {
       const resp = await fetch(`${containerURI}/task`);
-      const {TaskARN: taskID} = v.parse(
+      const metadata = v.parse(
         await resp.json(),
         containerMetadataSchema,
         'passthrough',
       );
+      lc.info?.(`Task metadata`, {metadata});
+      const {TaskARN: taskID} = metadata;
       // Task ARN's are long, e.g.
       // "arn:aws:ecs:us-east-1:712907626835:task/zbugs-prod-Cluster-vvNFcPUVpGHr/0042ea25bf534dc19975e26f61441737"
       // We only care about the unique ID, i.e. the last path component.
