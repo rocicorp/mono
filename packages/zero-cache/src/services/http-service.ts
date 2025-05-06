@@ -54,14 +54,16 @@ export class HttpService implements Service {
   async start(): Promise<string> {
     this.#fastify.get('/', (_req, res) => {
       if (this._respondToHealthCheck()) {
-        res.send('OK');
+        return res.send('OK');
       }
+      return;
     });
     this.#fastify.get('/keepalive', ({headers}, res) => {
       if (this._respondToKeepalive()) {
         this.#heartbeatMonitor.onHeartbeat(headers);
-        res.send('OK');
+        return res.send('OK');
       }
+      return;
     });
     await this.#init(this.#fastify);
     const address = await this.#fastify.listen({
