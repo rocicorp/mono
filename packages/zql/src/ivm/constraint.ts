@@ -1,5 +1,10 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {stringCompare} from '../../../shared/src/string-compare.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
+import type {
+  Condition,
+  SimpleCondition,
+} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {valuesEqual} from './data.ts';
@@ -40,6 +45,89 @@ export function constraintMatchesPrimaryKey(
     }
   }
   return true;
+}
+
+/**
+ * Pulls top level `and` components out of a condition tree.
+ * The resulting array of simple conditions would match a superset of
+ * values that the original condition would match.
+ *
+ * Examples:
+ * a AND b OR c
+ *
+ * In this case we cannot pull anything because the `or` is at the top level.
+ *
+ * a AND b AND c
+ * We can pull all three.
+ *
+ * a AND (b OR c)
+ * We can only pull `a`.
+ */
+export function pullSimpleAndComponents(
+  condition: Condition,
+): SimpleCondition[] {
+  if (condition.type === 'and') {
+    return condition.conditions.flatMap(pullSimpleAndComponents);
+  }
+
+  if (condition.type === 'simple') {
+    return [condition];
+  }
+
+  if (condition.type === 'or' && condition.conditions.length === 1) {
+    return pullSimpleAndComponents(condition.conditions[0]);
+  }
+
+  return [];
+}
+
+/**
+ * Checks if the supplied filters constitute a primary key lookup.
+ * If so, returns the constraint that would be used to look up the primary key.
+ * If not, returns undefined.
+ */
+export function primaryKeyConstraintFromFilters(
+  condition: Condition | undefined,
+  primary: PrimaryKey,
+): Constraint | undefined {
+  if (condition === undefined) {
+    return undefined;
+  }
+
+  const conditions = pullSimpleAndComponents(condition);
+  if (conditions.length === 0) {
+    return undefined;
+  }
+
+  const ret: Writable<Constraint> = {};
+  for (const subCondition of conditions) {
+    if (subCondition.op === '=') {
+      const column = extractColumn(subCondition);
+      if (column !== undefined) {
+        if (primary.indexOf(column.name) === -1) {
+          continue;
+        }
+        ret[column.name] = column.value;
+      }
+    }
+  }
+
+  if (Object.keys(ret).length !== primary.length) {
+    return undefined;
+  }
+
+  return ret;
+}
+
+function extractColumn(
+  condition: SimpleCondition,
+): {name: string; value: Value} | undefined {
+  if (condition.left.type === 'column') {
+    assert(condition.right.type === 'literal');
+    return {name: condition.left.name, value: condition.right.value};
+  }
+
+  return undefined;
 }
 
 declare const TESTING: boolean;

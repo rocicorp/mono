@@ -1,11 +1,12 @@
 import type {Faker} from '@faker-js/faker';
 import type {ValueType} from '../../../../zero-schema/src/table-schema.ts';
 import type {Query} from '../query.ts';
+import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 
 export type Rng = () => number;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyQuery = Query<any, any, any>;
+export type AnyQuery = Query<Schema, string, any>;
 
 export function selectRandom<T>(rng: Rng, values: readonly T[]): T {
   return values[Math.floor(rng() * values.length)];

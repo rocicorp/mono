@@ -19,6 +19,7 @@ import type {AddChange, Change, RemoveChange} from './change.ts';
 import {
   constraintMatchesPrimaryKey,
   constraintMatchesRow,
+  primaryKeyConstraintFromFilters,
   type Constraint,
 } from './constraint.ts';
 import {
@@ -257,13 +258,19 @@ export class MemorySource implements Source {
       }
     }
 
+    const pkConstraint = primaryKeyConstraintFromFilters(
+      conn.filters?.condition,
+      this.#primaryKey,
+    );
+
     // For the special case of constraining by PK, we don't need to worry about
     // any requested sort since there can only be one result. Otherwise we also
     // need the index sorted by the requested sort.
     if (
       this.#primaryKey.length > 1 ||
       !req.constraint ||
-      !constraintMatchesPrimaryKey(req.constraint, this.#primaryKey)
+      (!constraintMatchesPrimaryKey(req.constraint, this.#primaryKey) &&
+        !pkConstraint)
     ) {
       indexSort.push(...requestedSort);
     }
@@ -286,11 +293,14 @@ export class MemorySource implements Source {
     // comparator accomplishes this. The right thing is probably to teach the
     // btree library to support this concept.
     let scanStart: RowBound | undefined;
-    if (req.constraint) {
+    // The primary key constraint will be more limiting than the constraint
+    // so swap out to that if it exists.
+    const constraint = pkConstraint ?? req.constraint;
+    if (constraint) {
       scanStart = {};
       for (const [key, dir] of indexSort) {
-        if (hasOwn(req.constraint, key)) {
-          scanStart[key] = req.constraint[key];
+        if (hasOwn(constraint, key)) {
+          scanStart[key] = constraint[key];
         } else {
           if (req.reverse) {
             scanStart[key] = dir === 'asc' ? maxValue : minValue;
