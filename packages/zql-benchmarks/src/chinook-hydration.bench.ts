@@ -1,12 +1,13 @@
-import {runHydrationBenchmarks} from '../../zql-integration-tests/src/helpers/runner.ts';
+import {runBenchmarks} from '../../zql-integration-tests/src/helpers/runner.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 
 const pgContent = await getChinook();
 
-await runHydrationBenchmarks(
+await runBenchmarks(
   {
     suiteName: 'chinook_bench',
+    type: 'hydration',
     pgContent,
     zqlSchema: schema,
   },

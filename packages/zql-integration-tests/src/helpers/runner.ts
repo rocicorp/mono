@@ -46,6 +46,7 @@ import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import type {SourceChange} from '../../../zql/src/ivm/source.ts';
 
 const lc = createSilentLogContext();
 
@@ -259,12 +260,24 @@ type Options<TSchema extends Schema> = {
   ) => void;
 };
 
-type BenchOptions<TSchema extends Schema> = {
+type BenchOptionsBase<TSchema extends Schema> = {
   suiteName: string;
   zqlSchema: TSchema;
   only?: string;
   pgContent: string;
 };
+
+type BenchOptions<TSchema extends Schema> =
+  | HydrationOptions<TSchema>
+  | PushOptions<TSchema>;
+
+type HydrationOptions<TSchema extends Schema> = {
+  type: 'hydration';
+} & BenchOptionsBase<TSchema>;
+
+type PushOptions<TSchema extends Schema> = {
+  type: 'push';
+} & BenchOptionsBase<TSchema>;
 
 export async function createVitests<TSchema extends Schema>(
   {
@@ -304,46 +317,185 @@ export async function createVitests<TSchema extends Schema>(
     }));
 }
 
-export async function runHydrationBenchmarks<TSchema extends Schema>(
-  {suiteName, zqlSchema, pgContent, only}: BenchOptions<TSchema>,
+type PushGenerator = (
+  iteration: number,
+) => [source: string, change: SourceChange][];
+
+export async function runBenchmarks<TSchema extends Schema>(
+  {suiteName, type, zqlSchema, pgContent, only}: HydrationOptions<TSchema>,
   ...benchSpecs: (readonly {
     name: string;
     createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
   }[])[]
-) {
+): Promise<void>;
+export async function runBenchmarks<TSchema extends Schema>(
+  {suiteName, type, zqlSchema, pgContent, only}: PushOptions<TSchema>,
+  ...benchSpecs: (readonly {
+    name: string;
+    createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
+    generatePush: PushGenerator;
+  }[])[]
+): Promise<void>;
+export async function runBenchmarks<TSchema extends Schema>(
+  {suiteName, type, zqlSchema, pgContent, only}: BenchOptions<TSchema>,
+  ...benchSpecs: (readonly {
+    name: string;
+    createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
+    generatePush?: PushGenerator;
+  }[])[]
+): Promise<void> {
   const dbs = await makeDatabases(suiteName, zqlSchema, pgContent);
   const delegates = makeDelegates(dbs, zqlSchema);
   const queries = makeQueries(zqlSchema, delegates);
 
-  return benchSpecs
+  benchSpecs
     .flat()
     .filter(t => (only ? only.includes(t.name) : true))
-    .map(({name, createQuery}) =>
+    .map(({name, createQuery, generatePush}) =>
       describe(name, () => {
-        makeHydrationBenchmark({
+        makeBenchmark({
+          zqlSchema,
+          delegates,
+          dbs,
           createQuery,
+          type,
           queries,
+          generatePush,
         });
       }),
     );
 }
 
-function makeHydrationBenchmark<TSchema extends Schema>({
+function makeBenchmark<TSchema extends Schema>({
+  zqlSchema,
   createQuery,
+  type,
   queries,
+  delegates,
+  dbs,
+  generatePush,
 }: {
+  zqlSchema: TSchema;
   createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
+  type: 'hydration' | 'push';
   queries: QueriesBySource<TSchema>;
+  delegates: Delegates;
+  dbs: DBs<TSchema>;
+  generatePush: PushGenerator | undefined;
 }) {
-  const zql = createQuery(queries.memory);
-  const zqlite = createQuery(queries.sqlite);
-  const pg = createQuery(queries.pg);
-  return [doBench('zql', zql), doBench('zqlite', zqlite), doBench('zpg', pg)];
+  switch (type) {
+    case 'push': {
+      // isolate delegates to own transactions
+      // so push benchmarks are isolated from each other.
+      const newDelegates = {
+        ...delegates,
+        memory: new TestMemoryQueryDelegate({
+          sources: Object.fromEntries(
+            Object.entries(dbs.memory).map(([key, source]) => [
+              key,
+              source.fork(),
+            ]),
+          ),
+        }),
+        sqlite: newQueryDelegate(
+          lc,
+          testLogConfig,
+          (() => {
+            const db = new Database(lc, dbs.sqliteFile);
+            db.exec('BEGIN CONCURRENT');
+            return db;
+          })(),
+          zqlSchema,
+        ),
+      };
+      const queryBuilders = makeQueries(zqlSchema, newDelegates);
+      const zqlite = createQuery(queryBuilders.sqlite);
+      const zql = createQuery(queryBuilders.memory);
+
+      // materialize before starting the benchmark. We only want to time push
+      // and not the initial hydration.
+      const zqliteView = zqlite.materialize();
+      const zqlView = zql.materialize();
+      try {
+        benchPush('zql', newDelegates, must(generatePush));
+        benchPush('zqlite', newDelegates, must(generatePush));
+      } finally {
+        zqliteView.destroy();
+        zqlView.destroy();
+      }
+
+      break;
+    }
+    case 'hydration': {
+      const pg = createQuery(queries.pg);
+      const zql = createQuery(queries.memory);
+      const zqlite = createQuery(queries.sqlite);
+      benchHydration('zql', zql);
+      benchHydration('zqlite', zqlite);
+      benchHydration('zpg', pg);
+      break;
+    }
+  }
 }
 
-function doBench(name: string, q: AnyQuery) {
+function benchHydration(name: string, q: AnyQuery) {
   bench(name, async () => {
     await q;
+  });
+}
+
+function benchPush(
+  name: 'zql' | 'zqlite',
+  delegates: Delegates,
+  pushGenerator: PushGenerator,
+) {
+  let iteration = 0;
+  bench(name, () => {
+    let changes = pushGenerator(iteration++);
+    let sourceGetter;
+    if (name === 'zqlite') {
+      changes = changes.map(([source, change]): [string, SourceChange] => {
+        switch (change.type) {
+          case 'add':
+            return [
+              source,
+              {
+                ...change,
+                row: mapRow(change.row, source, delegates.mapper),
+              },
+            ];
+          case 'edit':
+            return [
+              source,
+              {
+                ...change,
+                oldRow: mapRow(change.oldRow, source, delegates.mapper),
+                row: mapRow(change.row, source, delegates.mapper),
+              },
+            ];
+          case 'remove':
+            return [
+              source,
+              {
+                ...change,
+                row: mapRow(change.row, source, delegates.mapper),
+              },
+            ];
+        }
+      });
+
+      sourceGetter = (source: string) =>
+        must(delegates.sqlite.getSource(delegates.mapper.tableName(source)));
+    } else {
+      sourceGetter = (source: string) =>
+        must(delegates.memory.getSource(source));
+    }
+
+    for (const change of changes) {
+      const [source, changeData] = change;
+      const sourceInstance = sourceGetter(source);
+      sourceInstance.push(changeData);
+    }
   });
 }
 
