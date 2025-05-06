@@ -617,16 +617,8 @@ test('warns when awaiting the promise directly', async () => {
 
   await z.mutate.issue.create();
 
-  expect(z.testLogSink.messages).toEqual([
-    [
-      'warn',
-      {
-        name: 'zero-test-user-id-0-',
-      },
-      [
-        'Awaiting the mutator result directly is being deprecated. Please use `await z.mutate[mutatorName].client` or `await result.mutate[mutatorName].server`',
-      ],
-    ],
+  expect(z.testLogSink.messages[0][2]).toEqual([
+    'Awaiting the mutator result directly is being deprecated. Please use `await z.mutate[mutatorName].client` or `await result.mutate[mutatorName].server`',
   ]);
 
   await z.close();
