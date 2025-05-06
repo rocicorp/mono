@@ -3,7 +3,10 @@ import {LogContext} from '@rocicorp/logger';
 import {IncomingMessage} from 'node:http';
 import WebSocket from 'ws';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {must} from '../../../../shared/src/must.ts';
+import type {PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
+import type {ShardID} from '../../types/shards.ts';
 import {streamIn, streamOut, type Source} from '../../types/streams.ts';
 import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
@@ -16,6 +19,7 @@ import {
   type Downstream,
   type SubscriberContext,
 } from './change-streamer.ts';
+import {discoverChangeStreamerAddress} from './schema/tables.ts';
 
 const MIN_SUPPORTED_PROTOCOL_VERSION = 1;
 
@@ -28,14 +32,9 @@ const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
 
 export class ChangeStreamerHttpServer extends HttpService {
   readonly id = 'change-streamer-http-server';
-  readonly #delegate: ChangeStreamer;
+  #delegate: ChangeStreamer | null = null;
 
-  constructor(
-    lc: LogContext,
-    delegate: ChangeStreamer,
-    opts: Options,
-    parent: Worker,
-  ) {
+  constructor(lc: LogContext, opts: Options, parent: Worker) {
     super('change-streamer-http-server', lc, opts, async fastify => {
       await fastify.register(websocket);
 
@@ -51,8 +50,24 @@ export class ChangeStreamerHttpServer extends HttpService {
         parent,
       );
     });
+  }
 
+  setDelegate(delegate: ChangeStreamer) {
+    assert(this.#delegate === null, 'delegate already set');
     this.#delegate = delegate;
+  }
+
+  // Only respond to LB health checks (on "/keepalive") if the delegate is
+  // initialized. Container health checks (on "/") are always acknowledged.
+  protected _respondToKeepalive(): boolean {
+    return this.#delegate !== null;
+  }
+
+  #mustDelegate() {
+    return must(
+      this.#delegate,
+      'received request before change-streamer is ready',
+    );
   }
 
   readonly #subscribe = async (ws: WebSocket, req: RequestHeaders) => {
@@ -70,29 +85,35 @@ export class ChangeStreamerHttpServer extends HttpService {
     ws: WebSocket,
     ctx: SubscriberContext,
   ) => {
-    const downstream = await this.#delegate.subscribe(ctx);
+    const downstream = await this.#mustDelegate().subscribe(ctx);
     await streamOut(this._lc, downstream, ws);
   };
 }
 
 export class ChangeStreamerHttpClient implements ChangeStreamer {
   readonly #lc: LogContext;
-  readonly #uri: string;
+  readonly #shardID: ShardID;
+  readonly #changeDB: PostgresDB;
 
-  constructor(lc: LogContext, uri: string) {
-    const url = new URL(uri);
-    url.pathname += url.pathname.endsWith('/')
-      ? CHANGES_PATH.substring(1)
-      : CHANGES_PATH;
-    uri = url.toString();
+  constructor(lc: LogContext, shardID: ShardID, changeDB: PostgresDB) {
     this.#lc = lc;
-    this.#uri = uri;
+    this.#shardID = shardID;
+    this.#changeDB = changeDB;
   }
 
-  subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
-    this.#lc.info?.(`connecting to change-streamer@${this.#uri}`);
+  async subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
+    const address = await discoverChangeStreamerAddress(
+      this.#shardID,
+      this.#changeDB,
+    );
+    if (!address) {
+      throw new Error(`no change-streamer is running`);
+    }
+    const uri = new URL(CHANGES_PATH, `http://${address}/`);
+
+    this.#lc.info?.(`connecting to change-streamer@${uri}`);
     const params = getParams(ctx);
-    const ws = new WebSocket(this.#uri + `?${params.toString()}`);
+    const ws = new WebSocket(uri + `?${params.toString()}`);
 
     return streamIn(this.#lc, ws, downstreamSchema);
   }

@@ -7,7 +7,10 @@ import type {ZeroConfig} from './zero-config.ts';
 /** {@link ZeroConfig} with defaults set per option documentation. */
 export type NormalizedZeroConfig = ZeroConfig & {
   taskID: string;
-  changeStreamerPort: number;
+  changeStreamer: {
+    port: number;
+    address: string;
+  };
   change: {
     db: string;
   };
@@ -23,7 +26,8 @@ export function assertNormalized(
   config: ZeroConfig,
 ): asserts config is NormalizedZeroConfig {
   assert(config.taskID, 'missing --task-id');
-  assert(config.changeStreamerPort, 'missing --change-streamer-port');
+  assert(config.changeStreamer.port, 'missing --change-streamer-port');
+  assert(config.changeStreamer.address, 'missing --change-streamer-address');
   assert(config.litestream.port, 'missing --litestream-port');
   assert(config.change.db, 'missing --change-db');
   assert(config.cvr.db, 'missing --cvr-db');
@@ -47,9 +51,9 @@ export function normalizeZeroConfig(
     config.taskID = taskID;
     env['ZERO_TASK_ID'] = taskID;
   }
-  if (!config.changeStreamerPort) {
+  if (!config.changeStreamer.port) {
     const port = config.port + 1;
-    config.changeStreamerPort = port;
+    config.changeStreamer.port = port;
     env['ZERO_CHANGE_STREAMER_PORT'] = String(port);
   }
   if (!config.litestream.port) {
@@ -58,22 +62,38 @@ export function normalizeZeroConfig(
     env['ZERO_LITESTREAM_PORT'] = String(port);
   }
 
+  const hostIP = getHostIp(
+    lc,
+    config.changeStreamer.discoveryInterfacePreferences,
+  );
+  if (!config.changeStreamer.address) {
+    const {port} = config.changeStreamer;
+    const address = `${hostIP}:${port}`;
+    config.changeStreamer.address = address;
+    env['ZERO_CHANGE_STREAMER_ADDRESS'] = address;
+  }
+
   if (!config.change.db) {
     config.change.db = config.upstream.db;
     env['ZERO_CHANGE_DB'] = config.upstream.db;
   }
+
   if (!config.cvr.db) {
     config.cvr.db = config.upstream.db;
     env['ZERO_CVR_DB'] = config.upstream.db;
   }
 
-  const hostIP = getHostIp(lc); // TODO: This will be used for change-streamer discovery.
   lc.info?.(`runtime env: taskID=${config.taskID}, hostIP=${hostIP}`);
 
   return {
     ...config,
     taskID: config.taskID,
-    changeStreamerPort: config.changeStreamerPort,
+
+    changeStreamer: {
+      ...config.changeStreamer,
+      port: config.changeStreamer.port,
+      address: config.changeStreamer.address,
+    },
 
     litestream: {
       ...config.litestream,
