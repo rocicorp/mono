@@ -111,7 +111,7 @@ export class BackupMonitor implements Service {
                   }
                 }, cleanupAt - now),
               );
-              this.#lc.debug?.('timers', [...this.#cleanupTimers.entries()]);
+              this.#lc.debug?.('timers', [...this.#cleanupTimers.keys()]);
             }
           }
         }
