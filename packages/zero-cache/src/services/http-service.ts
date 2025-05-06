@@ -37,13 +37,33 @@ export class HttpService implements Service {
     this.#heartbeatMonitor = new HeartbeatMonitor(this._lc);
   }
 
-  // start() is used in unit tests.
+  /** Override to delay responding to health checks on "/". */
+  protected _respondToHealthCheck(): boolean {
+    return true;
+  }
+
+  /** Override to delay responding to health checks on "/keepalive". */
+  protected _respondToKeepalive(): boolean {
+    return true;
+  }
+
+  // start() is used in unit tests, or to start the HttpService early,
+  // before the ServiceRunner runs all of the services.
+  //
   // run() is the lifecycle method called by the ServiceRunner.
   async start(): Promise<string> {
-    this.#fastify.get('/', (_req, res) => res.send('OK'));
+    this.#fastify.get('/', (_req, res) => {
+      if (this._respondToHealthCheck()) {
+        return res.send('OK');
+      }
+      return;
+    });
     this.#fastify.get('/keepalive', ({headers}, res) => {
-      this.#heartbeatMonitor.onHeartbeat(headers);
-      return res.send('OK');
+      if (this._respondToKeepalive()) {
+        this.#heartbeatMonitor.onHeartbeat(headers);
+        return res.send('OK');
+      }
+      return;
     });
     await this.#init(this.#fastify);
     const address = await this.#fastify.listen({
@@ -55,7 +75,10 @@ export class HttpService implements Service {
   }
 
   async run(): Promise<void> {
-    await this.start();
+    // Check if start() was already called.
+    if (this.#fastify.addresses().length === 0) {
+      await this.start();
+    }
     await this.#state.stopped();
   }
 

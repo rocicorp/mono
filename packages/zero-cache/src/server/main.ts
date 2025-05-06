@@ -87,11 +87,11 @@ export default async function runWorker(
   const shard = getShardID(config);
   const {
     taskID,
-    changeStreamerURI,
+    changeStreamer: {mode: changeStreamerMode},
     litestream: {backupURL, restoreDurationMsEstimate},
   } = config;
   const litestream = backupURL?.length;
-  const runChangeStreamer = !changeStreamerURI;
+  const runChangeStreamer = changeStreamerMode !== 'discover';
 
   if (litestream) {
     // For the replication-manager (i.e. authoritative replica), only attempt
