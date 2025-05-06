@@ -53,6 +53,7 @@ export default $config({
 
     // Common environment variables
     const commonEnv = {
+      ZERO_APP_PUBLICATIONS: process.env.ZERO_APP_PUBLICATIONS!,
       ZERO_UPSTREAM_DB: process.env.ZERO_UPSTREAM_DB!,
       ZERO_PUSH_URL: process.env.ZERO_PUSH_URL!,
       ZERO_CVR_DB: process.env.ZERO_CVR_DB!,
