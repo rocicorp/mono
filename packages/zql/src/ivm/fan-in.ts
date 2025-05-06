@@ -29,12 +29,14 @@ import type {Stream} from './stream.ts';
  *   |
  */
 export class FanIn implements Operator {
+  readonly #fanOut: FanOut;
   readonly #inputs: readonly Input[];
   readonly #schema: SourceSchema;
   #output: Output = throwOutput;
   #accumulatedPushes: Change[];
 
   constructor(fanOut: FanOut, inputs: Input[]) {
+    this.#fanOut = fanOut;
     this.#inputs = inputs;
     this.#schema = fanOut.getSchema();
     for (const input of inputs) {
@@ -58,8 +60,15 @@ export class FanIn implements Operator {
     return this.#schema;
   }
 
-  fetch(req: FetchRequest): Stream<Node> {
-    return this.#fetchOrCleanup(input => input.fetch(req));
+  *fetch(req: FetchRequest): Stream<Node> {
+    assert(this.#accumulatedPushes.length === 0);
+    for (const node of this.#fanOut.fetch(req)) {
+      // Did any of the branches push the synthetic add change through?
+      if (this.#accumulatedPushes.length) {
+        yield node;
+      }
+      this.#accumulatedPushes = [];
+    }
   }
 
   cleanup(req: FetchRequest): Stream<Node> {
