@@ -18,6 +18,7 @@ import type {
   ServerTableSchema,
 } from '../../z2s/src/schema.ts';
 import {getServerSchema} from './schema.ts';
+import {assert} from '../../shared/src/asserts.ts';
 
 interface ServerTransaction<S extends Schema, TWrappedTransaction>
   extends TransactionBase<S> {
@@ -286,6 +287,10 @@ function origAndServerNamesFor(
 
 function serverNameFor(originalName: string, schema: TableSchema): string {
   const col = schema.columns[originalName];
+  assert(
+    col,
+    `Column ${originalName} was not found in the Zero schema for the table ${schema.name}`,
+  );
   return col.serverName ?? originalName;
 }
 
