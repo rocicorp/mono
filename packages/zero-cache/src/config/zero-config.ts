@@ -327,15 +327,19 @@ export const zeroOptions = {
     },
 
     discoveryInterfacePreferences: {
-      type: v.array(v.string()).default(['eth', 'en']),
+      type: v.array(v.string()).default([
+        'eth', // linux
+        'en', // macbooks
+      ]),
       desc: [
         `The name prefixes to prefer when introspecting the network interfaces to determine`,
         `the externally reachable IP address for change-streamer discovery. This defaults`,
         `to commonly used names for standard ethernet interfaces in order to prevent selecting`,
         `special interfaces such as those for VPNs.`,
       ],
-      // More confusing than it's worth. The default heuristic should work; only use
-      // this as an emergency to unblock people with outlier network configurations.
+      // More confusing than it's worth to advertise this. The default list should be
+      // adjusted to make things work for all environments; it is controlled as a
+      // hidden flag as an emergency to unblock people with outlier network configs.
       hidden: true,
     },
   },
