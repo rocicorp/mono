@@ -1,4 +1,4 @@
-import {pid} from 'process';
+import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
