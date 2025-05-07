@@ -9,7 +9,7 @@ import type {Stream} from './stream.ts';
 /**
  * Input to an operator.
  */
-export interface Input {
+export interface InputBase {
   /** The schema of the data this input returns. */
   getSchema(): SourceSchema;
 
@@ -32,15 +32,17 @@ export interface Input {
    */
   cleanup(req: FetchRequest): Stream<Node>;
 
-  /** Tell the input where to send its output. */
-  setOutput(output: Output): void;
-
   /**
    * Completely destroy the input. Destroying an input
    * causes it to call destroy on its upstreams, fully
    * cleaning up a pipeline.
    */
   destroy(): void;
+}
+
+export interface Input extends InputBase {
+  /** Tell the input where to send its output. */
+  setOutput(output: Output): void;
 }
 
 export type FetchRequest = {

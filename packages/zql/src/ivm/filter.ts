@@ -1,14 +1,15 @@
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import {drainStreams} from './data.ts';
-import {filterPush} from './filter-push.ts';
 import {
-  throwOutput,
-  type FetchRequest,
-  type Input,
-  type Operator,
-  type Output,
-} from './operator.ts';
+  throwFilterOutput,
+  type FilterInput,
+  type FilterOperator,
+  type FilterOutput,
+} from './filter-operators.ts';
+import {filterPush} from './filter-push.ts';
+import {type FetchRequest} from './operator.ts';
+import {type Node} from './data.ts';
 import type {SourceSchema} from './schema.ts';
 
 /**
@@ -16,19 +17,25 @@ import type {SourceSchema} from './schema.ts';
  *
  * The predicate must be pure.
  */
-export class Filter implements Operator {
-  readonly #input: Input;
+export class Filter implements FilterOperator {
+  readonly #input: FilterInput;
   readonly #predicate: (row: Row) => boolean;
 
-  #output: Output = throwOutput;
+  #output: FilterOutput = throwFilterOutput;
 
-  constructor(input: Input, predicate: (row: Row) => boolean) {
+  constructor(input: FilterInput, predicate: (row: Row) => boolean) {
     this.#input = input;
     this.#predicate = predicate;
-    input.setOutput(this);
+    input.setFilterOutput(this);
   }
 
-  setOutput(output: Output) {
+  filter(node: Node) {
+    if (this.#predicate(node.row)) {
+      this.#output.filter(node);
+    }
+  }
+
+  setFilterOutput(output: FilterOutput) {
     this.#output = output;
   }
 
