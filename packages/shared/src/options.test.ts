@@ -764,27 +764,37 @@ test.each([
     'missing required flag',
     {requiredFlag: v.string()},
     [],
-    'Missing property requiredFlag',
+    'Missing required option ZORRO_REQUIRED_FLAG at requiredFlag. Got undefined',
   ],
   [
     'missing required multiple flag',
     {requiredFlag: v.array(v.string())},
     [],
-    'Missing property requiredFlag',
+    'Missing required option ZORRO_REQUIRED_FLAG at requiredFlag. Got undefined',
+  ],
+  [
+    'missing grouped flag',
+    {
+      group: {
+        requiredFlag: v.string(),
+      },
+    },
+    [],
+    'Missing required option ZORRO_GROUP_REQUIRED_FLAG at group.requiredFlag. Got undefined',
   ],
   [
     'mixed type union',
     // Options type forbids this, but cast to verify runtime check.
     {bad: v.union(v.literal('123'), v.literal(456))} as Options,
     [],
-    '--bad has mixed types string,number',
+    'ZORRO_BAD has mixed types string,number',
   ],
   [
     'mixed type tuple',
     // Options type forbids this, but cast to verify runtime check.
     {bad: v.tuple([v.number(), v.string()])} as Options,
     [],
-    '--bad has mixed types number,string',
+    'ZORRO_BAD has mixed types number,string',
   ],
   [
     'mixed type tuple of unions',
@@ -796,26 +806,26 @@ test.each([
       ]),
     } as Options,
     [],
-    '--bad has mixed types string,number',
+    'ZORRO_BAD has mixed types string,number',
   ],
   [
     'bad number',
     {num: v.number()},
     ['--num=foobar'],
-    'Invalid input for --num: "foobar"',
+    'Invalid input for ZORRO_NUM: "foobar"',
   ],
   [
     'bad bool',
     {bool: v.boolean()},
     ['--bool=yo'],
-    'Invalid input for --bool: "yo"',
+    'Invalid input for ZORRO_BOOL: "yo"',
   ],
 ] satisfies [string, Options, string[], string][])(
   'invalid config: %s',
   (_name, opts, argv, errorMsg) => {
     let message;
     try {
-      parseOptions(opts, argv, '', {}, new SilentLogger());
+      parseOptions(opts, argv, 'ZORRO_', {}, new SilentLogger());
     } catch (e) {
       expect(e).toBeInstanceOf(TypeError);
       message = (e as TypeError).message;

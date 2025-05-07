@@ -176,23 +176,43 @@ const defu = createDefu((obj, key, value) => {
 /**
  * Converts an Options instance into its corresponding {@link Config} schema.
  */
-function configSchema<T extends Options>(options: T): v.Type<Config<T>> {
-  function makeObjectType(options: Options | Group) {
+function configSchema<T extends Options>(
+  options: T,
+  envNamePrefix: string,
+): v.Type<Config<T>> {
+  function makeObjectType(options: Options | Group, group?: string) {
     return v.object(
       Object.fromEntries(
         Object.entries(options).map(
           ([name, value]): [string, OptionType | v.Type] => {
+            const addErrorMessage = (t: OptionType) => {
+              const {required} = getRequiredOrDefault(t);
+              if (required) {
+                // Adds an error message for required options that includes the
+                // actual name of the option.
+                const optionName = toSnakeCase(
+                  `${envNamePrefix}${group ? group + '_' : ''}${name}`,
+                ).toUpperCase();
+                return (t as v.Type<string>)
+                  .optional()
+                  .assert(
+                    val => val !== undefined,
+                    `Missing required option ${optionName}`,
+                  );
+              }
+              return t;
+            };
             // OptionType
             if (v.instanceOfAbstractType(value)) {
-              return [name, value];
+              return [name, addErrorMessage(value)];
             }
             // WrappedOptionType
             const {type} = value;
             if (v.instanceOfAbstractType(type)) {
-              return [name, type];
+              return [name, addErrorMessage(type)];
             }
             // OptionGroup
-            return [name, makeObjectType(value as Group)];
+            return [name, makeObjectType(value as Group, name)];
           },
         ),
       ),
@@ -321,13 +341,13 @@ export function parseOptionsAdvanced<T extends Options>(
           break;
       }
     }
+    const env = toSnakeCase(`${envNamePrefix}${flag}`).toUpperCase();
     if (terminalTypes.size > 1) {
-      throw new TypeError(`--${flag} has mixed types ${[...terminalTypes]}`);
+      throw new TypeError(`${env} has mixed types ${[...terminalTypes]}`);
     }
     assert(terminalTypes.size === 1);
     const terminalType = [...terminalTypes][0];
 
-    const env = toSnakeCase(`${envNamePrefix}${flag}`).toUpperCase();
     if (processEnv[env]) {
       if (multiple) {
         // Technically not water-tight; assumes values for the string[] flag don't contain commas.
@@ -361,7 +381,7 @@ export function parseOptionsAdvanced<T extends Options>(
     const opt = {
       name: flag,
       alias,
-      type: valueParser(flag, terminalType),
+      type: valueParser(env, terminalType),
       multiple,
       group,
       description: spec.join('\n') + '\n',
@@ -419,7 +439,7 @@ export function parseOptionsAdvanced<T extends Options>(
     const parsedArgs = defu(withoutDefaults, fromEnv, defaults);
     const env = {...env1, ...env2, ...env3};
 
-    let schema = configSchema(options);
+    let schema = configSchema(options, envNamePrefix);
     if (allowPartial) {
       // TODO: Type configSchema() to return a v.ObjectType<...>
       schema = v.deepPartial(schema as v.ObjectType) as v.Type<Config<T>>;
@@ -436,24 +456,24 @@ export function parseOptionsAdvanced<T extends Options>(
   }
 }
 
-function valueParser(flagName: string, typeName: string) {
+function valueParser(optionName: string, typeName: string) {
   return (input: string) => {
     switch (typeName) {
       case 'string':
         return input;
       case 'boolean':
-        return parseBoolean(flagName, input);
+        return parseBoolean(optionName, input);
       case 'number': {
         const val = Number(input);
         if (Number.isNaN(val)) {
-          throw new TypeError(`Invalid input for --${flagName}: "${input}"`);
+          throw new TypeError(`Invalid input for ${optionName}: "${input}"`);
         }
         return val;
       }
       default:
         // Should be impossible given the constraints of `Option`
         throw new TypeError(
-          `--${flagName} flag has unsupported type ${typeName}`,
+          `${optionName} option has unsupported type ${typeName}`,
         );
     }
   };
@@ -515,14 +535,14 @@ function parseArgs(
   return [result, envObj, unknown] as const;
 }
 
-export function parseBoolean(flagName: string, input: string) {
+export function parseBoolean(optionName: string, input: string) {
   const bool = input.toLowerCase();
   if (['true', '1'].includes(bool)) {
     return true;
   } else if (['false', '0'].includes(bool)) {
     return false;
   }
-  throw new TypeError(`Invalid input for --${flagName}: "${input}"`);
+  throw new TypeError(`Invalid input for ${optionName}: "${input}"`);
 }
 
 function showUsage(
