@@ -31,7 +31,11 @@ export type WebSocketHandoff<P> = (
   onerror: (reason: unknown) => void,
 ) => HandoffSpec<P> | void;
 
-export type WebSocketReceiver<P> = (ws: WebSocket, payload: P) => void;
+export type WebSocketReceiver<P> = (
+  ws: WebSocket,
+  payload: P,
+  msg: IncomingMessageSubset,
+) => void;
 
 export type WebSocketHandoffHandler = (
   message: IncomingMessageSubset,
@@ -135,7 +139,7 @@ export function installWebSocketReceiver<P>(
       message as IncomingMessage,
       socket as Socket,
       Buffer.from(head),
-      ws => receive(ws, payload),
+      ws => receive(ws, payload, message),
     );
   });
 }
