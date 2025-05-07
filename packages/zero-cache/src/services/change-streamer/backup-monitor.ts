@@ -207,6 +207,13 @@ export class BackupMonitor implements Service {
 
   stop(): Promise<void> {
     clearInterval(this.#checkMetricsTimer);
+    for (const {sub} of this.#reservations.values()) {
+      // Close any pending reservations. This commonly happens when a new
+      // replication-manager makes a `/snapshot` reservation on the existing
+      // replication-manager, and then shuts it down when it takes over the
+      // replication slot.
+      sub.cancel();
+    }
     this.#state.stop(this.#lc);
     return promiseVoid;
   }
