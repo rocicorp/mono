@@ -88,28 +88,14 @@ export default async function runWorker(
   const {
     taskID,
     changeStreamer: {mode: changeStreamerMode},
-    litestream: {backupURL, restoreDurationMsEstimate},
+    litestream,
   } = config;
-  const litestream = backupURL?.length;
   const runChangeStreamer = changeStreamerMode !== 'discover';
 
-  if (litestream) {
-    // For the replication-manager (i.e. authoritative replica), only attempt
-    // a restore once, allowing the backup to be absent.
-    // For view-syncers, attempt a restore for up to 10 times over 30 seconds.
+  let restoreStart = new Date();
+  if (litestream.backupURL || (litestream.executable && !runChangeStreamer)) {
     try {
-      const restoreElapsedMs = await restoreReplica(
-        lc,
-        config,
-        runChangeStreamer ? 1 : 10,
-        3000,
-      );
-      if (!restoreDurationMsEstimate && restoreElapsedMs) {
-        internalFlags.push(
-          '--litestream-restore-duration-ms-estimate',
-          String(restoreElapsedMs),
-        );
-      }
+      restoreStart = await restoreReplica(lc, config);
     } catch (e) {
       if (runChangeStreamer) {
         // If the restore failed, e.g. due to a corrupt backup, the
@@ -127,10 +113,12 @@ export default async function runWorker(
 
   const {promise: changeStreamerReady, resolve} = resolver();
   const changeStreamer = runChangeStreamer
-    ? loadWorker('./server/change-streamer.ts', 'supporting').once(
-        'message',
-        resolve,
-      )
+    ? loadWorker(
+        './server/change-streamer.ts',
+        'supporting',
+        undefined,
+        String(restoreStart.getTime()),
+      ).once('message', resolve)
     : (resolve() ?? undefined);
 
   if (numSyncers) {
@@ -147,7 +135,7 @@ export default async function runWorker(
   // file is present.
   await changeStreamerReady;
 
-  if (runChangeStreamer && litestream) {
+  if (runChangeStreamer && litestream.backupURL) {
     // Start a backup replicator and corresponding litestream backup process.
     const {promise: backupReady, resolve} = resolver();
     const mode: ReplicaFileMode = 'backup';
@@ -171,7 +159,7 @@ export default async function runWorker(
   const syncers: Worker[] = [];
   if (numSyncers) {
     const mode: ReplicaFileMode =
-      runChangeStreamer && litestream ? 'serving-copy' : 'serving';
+      runChangeStreamer && litestream.backupURL ? 'serving-copy' : 'serving';
     const replicator = loadWorker(
       './server/replicator.ts',
       'supporting',

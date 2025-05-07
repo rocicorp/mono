@@ -71,6 +71,7 @@ export class ReplicatorService implements Replicator, Service {
       .withContext('serviceID', this.id);
 
     this.#incrementalSyncer = new IncrementalSyncer(
+      taskID,
       `${taskID}/${id}`,
       changeStreamer,
       replica,
