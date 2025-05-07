@@ -18,7 +18,7 @@ type Reservation = {
 /**
  * The BackupMonitor polls the litestream "/metrics" endpoint to track the
  * watermark (label) value of the `litestream_replica_progress` gauge and
- * schedule cleanup of change log entries that can be purged as a result.
+ * schedules cleanup of change log entries that can be purged as a result.
  *
  * See: https: *github.com/rocicorp/litestream/pull/3
  *
