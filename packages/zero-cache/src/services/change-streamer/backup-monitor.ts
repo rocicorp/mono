@@ -22,7 +22,7 @@ type Reservation = {
  *
  * See: https: *github.com/rocicorp/litestream/pull/3
  *
- * Namely, it is not safe to simply purge change log entries as soon as they
+ * Note that change log entries cannot simply be purged as soon as they
  * have been applied and backed up by litestream. Consider the case in which
  * litestream backs up new wal segments every minute, but it takes 5 minutes
  * to restore a replica: if a zero-cache starts restoring a replica at
