@@ -4,7 +4,8 @@ import {IncomingMessage} from 'node:http';
 import WebSocket from 'ws';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
-import type {PostgresDB} from '../../types/pg.ts';
+import type {IncomingMessageSubset} from '../../types/http.ts';
+import {pgClient, type PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
 import type {ShardID} from '../../types/shards.ts';
 import {streamIn, streamOut, type Source} from '../../types/streams.ts';
@@ -12,6 +13,7 @@ import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
 import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
 import {HttpService, type Options} from '../http-service.ts';
+import type {BackupMonitor} from './backup-monitor.ts';
 import {
   downstreamSchema,
   PROTOCOL_VERSION,
@@ -20,73 +22,124 @@ import {
   type SubscriberContext,
 } from './change-streamer.ts';
 import {discoverChangeStreamerAddress} from './schema/tables.ts';
+import {snapshotMessageSchema, type SnapshotMessage} from './snapshot.ts';
 
 const MIN_SUPPORTED_PROTOCOL_VERSION = 1;
 
-const DIRECT_PATH_PATTERN = '/replication/:version/changes';
-const TENANT_PATH_PATTERN = '/:tenant' + DIRECT_PATH_PATTERN;
-const PATH_REGEX =
-  /(?<tenant>[^/]+\/)?\/replication\/v(?<version>\d+)\/changes$/;
+const SNAPSHOT_PATH_PATTERN = '/replication/:version/snapshot';
+const CHANGES_PATH_PATTERN = '/replication/:version/changes';
+const PATH_REGEX = /\/replication\/v(?<version>\d+)\/(changes|snapshot)$/;
 
+const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
 const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
 
 export class ChangeStreamerHttpServer extends HttpService {
   readonly id = 'change-streamer-http-server';
-  #delegate: ChangeStreamer | null = null;
+  #changeStreamer: ChangeStreamer | null = null;
+  #backupMonitor: BackupMonitor | null = null;
 
   constructor(lc: LogContext, opts: Options, parent: Worker) {
     super('change-streamer-http-server', lc, opts, async fastify => {
       await fastify.register(websocket);
 
-      // fastify does not support optional path components, so we just
-      // register both patterns.
-      fastify.get(DIRECT_PATH_PATTERN, {websocket: true}, this.#subscribe);
-      fastify.get(TENANT_PATH_PATTERN, {websocket: true}, this.#subscribe);
+      fastify.get(CHANGES_PATH_PATTERN, {websocket: true}, this.#subscribe);
+      fastify.get(
+        SNAPSHOT_PATH_PATTERN,
+        {websocket: true},
+        this.#reserveSnapshot,
+      );
 
-      installWebSocketReceiver<SubscriberContext>(
+      installWebSocketReceiver<'snapshot' | 'changes'>(
         lc,
         fastify.websocketServer,
-        this.#handleSubscription,
+        this.#receiveWebsocket,
         parent,
       );
     });
   }
 
-  setDelegate(delegate: ChangeStreamer) {
-    assert(this.#delegate === null, 'delegate already set');
-    this.#delegate = delegate;
+  setDelegates(
+    changeStreamer: ChangeStreamer,
+    backupMonitor: BackupMonitor | null,
+  ) {
+    assert(this.#changeStreamer === null, 'delegate already set');
+    this.#changeStreamer = changeStreamer;
+    this.#backupMonitor = backupMonitor;
   }
 
   // Only respond to LB health checks (on "/keepalive") if the delegate is
   // initialized. Container health checks (on "/") are always acknowledged.
   protected _respondToKeepalive(): boolean {
-    return this.#delegate !== null;
+    return this.#changeStreamer !== null;
   }
 
-  #mustDelegate() {
+  #getChangeStreamer() {
     return must(
-      this.#delegate,
+      this.#changeStreamer,
       'received request before change-streamer is ready',
     );
   }
 
-  readonly #subscribe = async (ws: WebSocket, req: RequestHeaders) => {
-    let ctx: SubscriberContext;
-    try {
-      ctx = getSubscriberContext(req);
-    } catch (err) {
-      closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
-      return;
+  #getBackupMonitor() {
+    return must(
+      this.#backupMonitor,
+      'received request before change-streamer is ready',
+    );
+  }
+
+  // Called when receiving a web socket via the main dispatcher handoff.
+  readonly #receiveWebsocket = (
+    ws: WebSocket,
+    action: 'changes' | 'snapshot',
+    msg: IncomingMessageSubset,
+  ) => {
+    switch (action) {
+      case 'snapshot':
+        return this.#reserveSnapshot(ws, msg);
+      case 'changes':
+        return this.#subscribe(ws, msg);
+      default:
+        closeWithError(
+          this._lc,
+          ws,
+          `invalid action "${action}" received in handoff`,
+        );
+        return;
     }
-    await this.#handleSubscription(ws, ctx);
   };
 
-  readonly #handleSubscription = async (
-    ws: WebSocket,
-    ctx: SubscriberContext,
-  ) => {
-    const downstream = await this.#mustDelegate().subscribe(ctx);
-    await streamOut(this._lc, downstream, ws);
+  readonly #reserveSnapshot = (ws: WebSocket, req: RequestHeaders) => {
+    try {
+      const url = new URL(
+        req.url ?? '',
+        req.headers.origin ?? 'http://localhost',
+      );
+      const taskID = url.searchParams.get('taskID');
+      if (!taskID) {
+        throw new Error('Missing taskID in snapshot request');
+      }
+      const downstream =
+        this.#getBackupMonitor().startSnapshotReservation(taskID);
+      void streamOut(this._lc, downstream, ws);
+    } catch (err) {
+      closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
+    }
+  };
+
+  readonly #subscribe = async (ws: WebSocket, req: RequestHeaders) => {
+    try {
+      const ctx = getSubscriberContext(req);
+
+      const downstream = await this.#getChangeStreamer().subscribe(ctx);
+      if (ctx.initial && ctx.taskID && this.#backupMonitor) {
+        // Now that the change-streamer knows about the subscriber and watermark,
+        // end the reservation to safely resume scheduling cleanup.
+        this.#backupMonitor.endReservation(ctx.taskID);
+      }
+      void streamOut(this._lc, downstream, ws);
+    } catch (err) {
+      closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
+    }
   };
 }
 
@@ -95,13 +148,19 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
   readonly #shardID: ShardID;
   readonly #changeDB: PostgresDB;
 
-  constructor(lc: LogContext, shardID: ShardID, changeDB: PostgresDB) {
+  constructor(lc: LogContext, shardID: ShardID, changeDB: string) {
     this.#lc = lc;
     this.#shardID = shardID;
-    this.#changeDB = changeDB;
+    // Create a pg client with a single short-lived connection for the purpose
+    // of change-streamer discovery (i.e. ChangeDB as DNS).
+    this.#changeDB = pgClient(lc, changeDB, {
+      max: 1,
+      ['idle_timeout']: 15,
+      connection: {['application_name']: 'change-streamer-discovery'},
+    });
   }
 
-  async subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
+  async #resolveChangeStreamer(path: string) {
     const address = await discoverChangeStreamerAddress(
       this.#shardID,
       this.#changeDB,
@@ -109,9 +168,23 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     if (!address) {
       throw new Error(`no change-streamer is running`);
     }
-    const uri = new URL(CHANGES_PATH, `http://${address}/`);
-
+    const uri = new URL(path, `http://${address}/`);
     this.#lc.info?.(`connecting to change-streamer@${uri}`);
+    return uri;
+  }
+
+  async reserveSnapshot(taskID: string): Promise<Source<SnapshotMessage>> {
+    const uri = await this.#resolveChangeStreamer(SNAPSHOT_PATH);
+
+    const params = new URLSearchParams({taskID});
+    const ws = new WebSocket(uri + `?${params.toString()}`);
+
+    return streamIn(this.#lc, ws, snapshotMessageSchema);
+  }
+
+  async subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
+    const uri = await this.#resolveChangeStreamer(CHANGES_PATH);
+
     const params = getParams(ctx);
     const ws = new WebSocket(uri + `?${params.toString()}`);
 
@@ -129,6 +202,7 @@ export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
   return {
     protocolVersion,
     id: params.get('id', true),
+    taskID: params.get('taskID', false),
     mode: params.get('mode', false) === 'backup' ? 'backup' : 'serving',
     replicaVersion: params.get('replicaVersion', true),
     watermark: params.get('watermark', true),
@@ -165,6 +239,7 @@ function getParams(ctx: SubscriberContext): URLSearchParams {
   );
   return new URLSearchParams({
     ...stringParams,
+    taskID: ctx.taskID ? ctx.taskID : '',
     initial: ctx.initial ? 'true' : 'false',
   });
 }

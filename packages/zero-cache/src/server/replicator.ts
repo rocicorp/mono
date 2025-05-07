@@ -10,7 +10,6 @@ import {
   ReplicatorService,
   type ReplicatorMode,
 } from '../services/replicator/replicator.ts';
-import {pgClient} from '../types/pg.ts';
 import {
   parentWorker,
   singleProcessMode,
@@ -42,14 +41,7 @@ export default async function runWorker(
 
   const shard = getShardConfig(config);
   const {taskID, change} = config;
-  // Create a pg client with a single short-lived connection for the purpose
-  // of change-streamer discovery (i.e. ChangeDB as DNS).
-  const changeDB = pgClient(lc, change.db, {
-    max: 1,
-    ['idle_timeout']: 15,
-    connection: {['application_name']: 'change-streamer-discovery'},
-  });
-  const changeStreamer = new ChangeStreamerHttpClient(lc, shard, changeDB);
+  const changeStreamer = new ChangeStreamerHttpClient(lc, shard, change.db);
 
   const replicator = new ReplicatorService(
     lc,

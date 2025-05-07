@@ -362,7 +362,9 @@ class WebSocketCloser<T> {
   };
 
   #handleError = ({message, error}: ErrorEvent) => {
-    this.#lc.error?.('connection error', message, error);
+    if (this.#ws.readyState === this.#ws.OPEN) {
+      this.#lc.error?.('connection error', message, error);
+    }
     this.#connected.reject(error);
   };
 
