@@ -2,17 +2,18 @@ import {must} from '../../../shared/src/must.ts';
 import type {Change} from './change.ts';
 import type {FanIn} from './fan-in.ts';
 import type {Node} from './data.ts';
-import type {FetchRequest, Input, Operator, Output} from './operator.ts';
+import type {FetchRequest, Input, Output} from './operator.ts';
 import type {Stream} from './stream.ts';
+import type {FilterInput, FilterOutput} from './filter-operators.ts';
 
 /**
  * Forks a stream into multiple streams.
  * Is meant to be paired with a `FanIn` operator which will
  * later merge the forks back together.
  */
-export class FanOut implements Operator {
+export class FanOut implements FilterInput, Output {
   readonly #input: Input;
-  readonly #outputs: Output[] = [];
+  readonly #outputs: FilterOutput[] = [];
   #fanIn: FanIn | undefined;
   #destroyCount: number = 0;
 
@@ -25,7 +26,7 @@ export class FanOut implements Operator {
     this.#fanIn = fanIn;
   }
 
-  setOutput(output: Output): void {
+  setFilterOutput(output: FilterOutput): void {
     this.#outputs.push(output);
   }
 
@@ -47,12 +48,7 @@ export class FanOut implements Operator {
   *fetch(req: FetchRequest): Stream<Node> {
     for (const node of this.#input.fetch(req)) {
       for (const out of this.#outputs) {
-        const syntheticChange = {
-          type: 'add',
-          node,
-          syntheticFetch: true,
-        } as const;
-        out.push(syntheticChange);
+        out.filter(node);
       }
       yield node;
     }

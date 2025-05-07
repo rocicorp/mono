@@ -1,14 +1,13 @@
 import {assert} from '../../../shared/src/asserts.ts';
-import {mergeIterables} from '../../../shared/src/iterables.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Change} from './change.ts';
-import type {Node} from './data.ts';
+import {drainStreams, type Node} from './data.ts';
 import type {FanOut} from './fan-out.ts';
+import type {FilterInput, FilterOutput} from './filter-operators.ts';
 import {
   throwOutput,
   type FetchRequest,
   type Input,
-  type Operator,
   type Output,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
@@ -28,22 +27,22 @@ import type {Stream} from './stream.ts';
  * fan-in
  *   |
  */
-export class FanIn implements Operator {
+export class FanIn implements Input, FilterOutput {
   readonly #fanOut: FanOut;
-  readonly #inputs: readonly Input[];
+  readonly #inputs: readonly FilterInput[];
   readonly #schema: SourceSchema;
   #output: Output = throwOutput;
-  #accumulatedPushes: Change[];
+  #accumulatedPushes: Change[] = [];
+  #accumulatedFilters: Node[] = [];
 
-  constructor(fanOut: FanOut, inputs: Input[]) {
+  constructor(fanOut: FanOut, inputs: FilterInput[]) {
     this.#fanOut = fanOut;
     this.#inputs = inputs;
     this.#schema = fanOut.getSchema();
     for (const input of inputs) {
-      input.setOutput(this);
+      input.setFilterOutput(this);
       assert(this.#schema === input.getSchema(), `Schema mismatch in fan-in`);
     }
-    this.#accumulatedPushes = [];
   }
 
   setOutput(output: Output): void {
@@ -61,27 +60,31 @@ export class FanIn implements Operator {
   }
 
   *fetch(req: FetchRequest): Stream<Node> {
-    assert(this.#accumulatedPushes.length === 0);
+    assert(this.#accumulatedFilters.length === 0);
     for (const node of this.#fanOut.fetch(req)) {
-      // Did any of the branches push the synthetic add change through?
-      if (this.#accumulatedPushes.length) {
+      if (this.#accumulatedFilters.length) {
+        this.#accumulatedFilters = [];
         yield node;
       }
-      this.#accumulatedPushes = [];
+      assert(this.#accumulatedFilters.length === 0);
     }
   }
 
-  cleanup(req: FetchRequest): Stream<Node> {
-    return this.#fetchOrCleanup(input => input.cleanup(req));
+  *cleanup(req: FetchRequest): Stream<Node> {
+    assert(this.#accumulatedFilters.length === 0);
+    for (const node of this.#fanOut.fetch(req)) {
+      if (this.#accumulatedFilters.length) {
+        this.#accumulatedFilters = [];
+        yield node;
+      } else {
+        drainStreams(node);
+      }
+      assert(this.#accumulatedFilters.length === 0);
+    }
   }
 
-  *#fetchOrCleanup(streamProvider: (input: Input) => Stream<Node>) {
-    const iterables = this.#inputs.map(input => streamProvider(input));
-    yield* mergeIterables(
-      iterables,
-      (l, r) => must(this.#schema).compareRows(l.row, r.row),
-      true,
-    );
+  filter(node: Node): void {
+    this.#accumulatedFilters.push(node);
   }
 
   push(change: Change) {

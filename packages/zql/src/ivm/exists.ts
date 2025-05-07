@@ -9,13 +9,12 @@ import {
   type NormalizedValue,
 } from './data.ts';
 import {
-  throwOutput,
-  type FetchRequest,
-  type Input,
-  type Operator,
-  type Output,
-  type Storage,
-} from './operator.ts';
+  throwFilterOutput,
+  type FilterInput,
+  type FilterOperator,
+  type FilterOutput,
+} from './filter-operators.ts';
+import {type FetchRequest, type Storage} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {first} from './stream.ts';
 
@@ -45,15 +44,15 @@ interface ExistsStorage {
  * The Exists operator filters data based on whether or not a relationship is
  * non-empty.
  */
-export class Exists implements Operator {
-  readonly #input: Input;
+export class Exists implements FilterOperator {
+  readonly #input: FilterInput;
   readonly #relationshipName: string;
   readonly #storage: ExistsStorage;
   readonly #not: boolean;
   readonly #parentJoinKey: CompoundKey;
   readonly #noSizeReuse: boolean;
 
-  #output: Output = throwOutput;
+  #output: FilterOutput = throwFilterOutput;
 
   /**
    * This instance variable is `true` when this operator is processing a `push`,
@@ -66,7 +65,7 @@ export class Exists implements Operator {
   #inPush = false;
 
   constructor(
-    input: Input,
+    input: FilterInput,
     storage: Storage,
     relationshipName: string,
     parentJoinKey: CompoundKey,
@@ -74,7 +73,7 @@ export class Exists implements Operator {
   ) {
     this.#input = input;
     this.#relationshipName = relationshipName;
-    this.#input.setOutput(this);
+    this.#input.setFilterOutput(this);
     this.#storage = storage as ExistsStorage;
     assert(
       this.#input.getSchema().relationships[relationshipName],
@@ -90,8 +89,14 @@ export class Exists implements Operator {
     );
   }
 
-  setOutput(output: Output) {
+  setFilterOutput(output: FilterOutput): void {
     this.#output = output;
+  }
+
+  filter(node: Node): void {
+    if (this.#filter(node)) {
+      this.#output.filter(node);
+    }
   }
 
   destroy(): void {
@@ -122,9 +127,8 @@ export class Exists implements Operator {
   }
 
   push(change: Change) {
-    this.#inPush = !(
-      change as unknown as {syntheticFetch?: boolean | undefined}
-    ).syntheticFetch;
+    assert(!this.#inPush, 'Unexpected re-entrancy');
+    this.#inPush = true;
     try {
       switch (change.type) {
         // add, remove and edit cannot change the size of the

@@ -21,6 +21,7 @@ import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {Exists} from '../ivm/exists.ts';
 import {FanIn} from '../ivm/fan-in.ts';
 import {FanOut} from '../ivm/fan-out.ts';
+import type {FilterInput} from '../ivm/filter-operators.ts';
 import {Filter} from '../ivm/filter.ts';
 import {Join} from '../ivm/join.ts';
 import type {Input, Storage} from '../ivm/operator.ts';
@@ -52,7 +53,7 @@ export interface BuilderDelegate {
    */
   createStorage(name: string): Storage;
 
-  decorateInput(input: Input, name: string): Input;
+  decorateInput<I extends Input | FilterInput>(input: I, name: string): I;
 
   /**
    * The AST is mapped on-the-wire between client and server names.
@@ -250,11 +251,11 @@ function applyWhere(
 }
 
 function applyAnd(
-  input: Input,
+  input: FilterInput,
   condition: Conjunction,
   delegate: BuilderDelegate,
   name: string,
-) {
+): FilterInput {
   for (const subCondition of condition.conditions) {
     input = applyWhere(input, subCondition, delegate, name);
   }
@@ -328,7 +329,10 @@ export function isNotAndDoesNotContainSubquery(
   return true;
 }
 
-function applySimpleCondition(input: Input, condition: SimpleCondition): Input {
+function applySimpleCondition(
+  input: FilterInput,
+  condition: SimpleCondition,
+): FilterInput {
   return new Filter(input, createPredicate(condition));
 }
 
@@ -360,11 +364,11 @@ function applyCorrelatedSubQuery(
 }
 
 function applyCorrelatedSubqueryCondition(
-  input: Input,
+  input: FilterInput,
   condition: CorrelatedSubqueryCondition,
   delegate: BuilderDelegate,
   name: string,
-): Input {
+): FilterInput {
   assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
   const existsName = `${name}:exists(${condition.related.subquery.alias})`;
   return delegate.decorateInput(
