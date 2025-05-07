@@ -63,7 +63,6 @@ export default $config({
       ZERO_REPLICA_FILE: IS_EBS_STAGE
         ? '/data/sync-replica.db'
         : 'sync-replica.db',
-      ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250319-00`,
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
       ZERO_APP_ID: process.env.ZERO_APP_ID || 'zero',
       PGCONNECT_TIMEOUT: '60', // scale-from-zero dbs need more than 30 seconds
@@ -170,6 +169,7 @@ export default $config({
       },
       environment: {
         ...commonEnv,
+        ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250319-00`,
         ZERO_CHANGE_MAX_CONNS: '3',
         ZERO_NUM_SYNC_WORKERS: '0',
       },
