@@ -11,7 +11,7 @@ import {ChangeStreamerHttpClient} from '../change-streamer/change-streamer-http.
 
 // Retry for up to 3 minutes (60 times with 3 second delay).
 // Beyond that, let the container runner restart the task.
-const MAX_RETRIES = 20;
+const MAX_RETRIES = 60;
 const RETRY_INTERVAL_MS = 3000;
 
 /**
