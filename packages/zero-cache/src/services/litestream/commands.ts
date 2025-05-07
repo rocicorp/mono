@@ -4,50 +4,46 @@ import {ChildProcess, spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import {must} from '../../../../shared/src/must.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
-import {assertNormalized} from '../../config/normalize.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
-import {getShardConfig} from '../../types/shards.ts';
-import {ChangeStreamerHttpClient} from '../change-streamer/change-streamer-http.ts';
 
-// Retry for up to 3 minutes (60 times with 3 second delay).
-// Beyond that, let the container runner restart the task.
-const MAX_RETRIES = 20;
-const RETRY_INTERVAL_MS = 3000;
+type ZeroLitestreamConfig = Pick<
+  ZeroConfig,
+  'port' | 'log' | 'replica' | 'litestream'
+>;
 
 /**
- * @returns The time at which the last restore started
+ * @returns The time in milliseconds it took for the successful restore
  *          (i.e. not counting failed attempts).
  */
 export async function restoreReplica(
   lc: LogContext,
-  config: ZeroConfig,
-): Promise<Date> {
-  const {changeStreamer} = config;
-
-  for (let i = 0; i < MAX_RETRIES; i++) {
+  config: ZeroLitestreamConfig,
+  maxRetries: number,
+  retryIntervalMs = 3000,
+): Promise<number | undefined> {
+  for (let i = 0; i < maxRetries; i++) {
     if (i > 0) {
       lc.info?.(
-        `replica not found. retrying in ${RETRY_INTERVAL_MS / 1000} seconds`,
+        `replica not found. retrying in ${retryIntervalMs / 1000} seconds`,
       );
-      await sleep(RETRY_INTERVAL_MS);
+      await sleep(retryIntervalMs);
     }
-    const start = new Date();
-    const restored = await tryRestore(lc, config);
+    const start = Date.now();
+    const restored = await tryRestore(config);
     if (restored) {
-      return start;
+      return Date.now() - start;
     }
-    if (changeStreamer.mode === 'dedicated') {
+    if (maxRetries === 1) {
       lc.info?.('no litestream backup found');
-      return start;
+      return undefined;
     }
   }
   throw new Error(`max attempts exceeded restoring replica`);
 }
 
 function getLitestream(
-  config: ZeroConfig,
+  config: ZeroLitestreamConfig,
   logLevelOverride?: LogLevel,
-  backupURLOverride?: string,
 ): {
   litestream: string;
   env: NodeJS.ProcessEnv;
@@ -74,7 +70,7 @@ function getLitestream(
     env: {
       ...process.env,
       ['ZERO_REPLICA_FILE']: config.replica.file,
-      ['ZERO_LITESTREAM_BACKUP_URL']: must(backupURLOverride ?? backupURL),
+      ['ZERO_LITESTREAM_BACKUP_URL']: must(backupURL),
       ['ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT']: String(
         minCheckpointPageCount,
       ),
@@ -95,30 +91,9 @@ function getLitestream(
   };
 }
 
-async function tryRestore(lc: LogContext, config: ZeroConfig) {
-  const {changeStreamer} = config;
-
-  // Fire off a snapshot reservation to the current replication-manager
-  // (if there is one).
-  const backupURL = reserveAndGetSnapshotLocation(lc, config);
-  let backupURLOverride: string | undefined;
-  if (changeStreamer.mode === 'discover') {
-    // The return value is required by view-syncers ...
-    backupURLOverride = await backupURL;
-    lc.info?.(`restoring backup from ${backupURLOverride}`);
-  } else {
-    // but it is also useful to pause change-log cleanup when a new
-    // replication-manager is starting up. In this case, the request is
-    // best-effort. In particular, there may not be a previous
-    // replication-manager running at all.
-    void backupURL.catch(e => lc.debug?.(e));
-  }
-
-  const {litestream, env} = getLitestream(
-    config,
-    'debug', // Include all output from `litestream restore`, as it's minimal.
-    backupURLOverride,
-  );
+async function tryRestore(config: ZeroLitestreamConfig) {
+  // The log output for litestream restore is minimal. Include it all.
+  const {litestream, env} = getLitestream(config, 'debug');
   const {
     restoreParallelism: parallelism,
     multipartConcurrency,
@@ -161,50 +136,13 @@ async function tryRestore(lc: LogContext, config: ZeroConfig) {
   return existsSync(config.replica.file);
 }
 
-export function startReplicaBackupProcess(config: ZeroConfig): ChildProcess {
+export function startReplicaBackupProcess(
+  config: ZeroLitestreamConfig,
+): ChildProcess {
   const {litestream, env} = getLitestream(config);
   return spawn(litestream, ['replicate'], {
     env,
     stdio: 'inherit',
     windowsHide: true,
   });
-}
-
-async function reserveAndGetSnapshotLocation(
-  lc: LogContext,
-  config: ZeroConfig,
-) {
-  const {promise: backupURL, resolve, reject} = resolver<string>();
-  try {
-    assertNormalized(config);
-    const {taskID, change} = config;
-    const shardID = getShardConfig(config);
-
-    const changeStreamerClient = new ChangeStreamerHttpClient(
-      lc,
-      shardID,
-      change.db,
-    );
-
-    const sub = await changeStreamerClient.reserveSnapshot(taskID);
-
-    // Capture the value of the status message that the change-streamer
-    // (i.e. BackupMonitor) returns, and hold the connection open to
-    // "reserve" the snapshot and prevent change log cleanup.
-    //
-    // The change-streamer itself will close the connection when the
-    // subscription is started (or the reservation retried).
-    void (async function () {
-      try {
-        for await (const msg of sub) {
-          resolve(msg[1].backupURL);
-        }
-      } catch (e) {
-        reject(e);
-      }
-    })();
-  } catch (e) {
-    reject(e);
-  }
-  return backupURL;
 }

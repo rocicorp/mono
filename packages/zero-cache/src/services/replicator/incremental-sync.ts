@@ -1,7 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import instruments from '../../observability/view-syncer-instruments.ts';
 import type {Source} from '../../types/streams.ts';
 import {
   PROTOCOL_VERSION,
@@ -13,6 +12,7 @@ import {ChangeProcessor, type TransactionMode} from './change-processor.ts';
 import {Notifier} from './notifier.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
+import instruments from '../../observability/view-syncer-instruments.ts';
 
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
@@ -21,7 +21,6 @@ import {getSubscriptionState} from './schema/replication-state.ts';
  * replication messages is done by the {@link ChangeProcessor}.
  */
 export class IncrementalSyncer {
-  readonly #taskID: string;
   readonly #id: string;
   readonly #changeStreamer: ChangeStreamer;
   readonly #replica: StatementRunner;
@@ -32,13 +31,11 @@ export class IncrementalSyncer {
   readonly #state = new RunningState('IncrementalSyncer');
 
   constructor(
-    taskID: string,
     id: string,
     changeStreamer: ChangeStreamer,
     replica: Database,
     mode: ReplicatorMode,
   ) {
-    this.#taskID = taskID;
     this.#id = id;
     this.#changeStreamer = changeStreamer;
     this.#replica = new StatementRunner(replica);
@@ -69,7 +66,6 @@ export class IncrementalSyncer {
       try {
         downstream = await this.#changeStreamer.subscribe({
           protocolVersion: PROTOCOL_VERSION,
-          taskID: this.#taskID,
           id: this.#id,
           mode: this.#mode,
           watermark,
