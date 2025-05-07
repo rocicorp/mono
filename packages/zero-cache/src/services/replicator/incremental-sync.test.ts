@@ -24,6 +24,7 @@ import {initChangeLog} from './schema/change-log.ts';
 import {initReplicationState} from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
 
+const TASK_ID = 'task-id';
 const REPLICA_ID = 'incremental_sync_test_id';
 
 describe('replicator/incremental-sync', () => {
@@ -41,6 +42,7 @@ describe('replicator/incremental-sync', () => {
     downstream = Subscription.create();
     subscribeFn = vi.fn();
     syncer = new IncrementalSyncer(
+      TASK_ID,
       REPLICA_ID,
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       replica,
@@ -84,6 +86,7 @@ describe('replicator/incremental-sync', () => {
     await versionReady.next(); // Get the initial nextStateVersion.
     expect(subscribeFn.mock.calls[0][0]).toEqual({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
       id: 'incremental_sync_test_id',
       mode: 'serving',
       replicaVersion: '02',
@@ -237,6 +240,7 @@ describe('replicator/incremental-sync', () => {
 
     const {promise: hasRetried, resolve: retried} = resolver<true>();
     const syncer = new IncrementalSyncer(
+      TASK_ID,
       REPLICA_ID,
       {
         subscribe: vi
@@ -263,6 +267,7 @@ describe('replicator/incremental-sync', () => {
 
     const {promise: hasRetried, resolve: retried} = resolver<true>();
     const syncer = new IncrementalSyncer(
+      TASK_ID,
       REPLICA_ID,
       {
         subscribe: vi

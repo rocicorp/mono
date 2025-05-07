@@ -26,8 +26,12 @@ import {createLogContext} from './logging.ts';
 export default async function runWorker(
   parent: Worker,
   env: NodeJS.ProcessEnv,
+  ...args: string[]
 ): Promise<void> {
-  const config = getZeroConfig(env);
+  assert(args.length > 0, `parent startMs not specified`);
+  const parentStartMs = parseInt(args[0]);
+
+  const config = getZeroConfig(env, args.slice(1));
   assertNormalized(config);
   const {
     taskID,
@@ -69,12 +73,10 @@ export default async function runWorker(
   const shard = getShardConfig(config);
 
   let changeStreamer: ChangeStreamerService | undefined;
-  let initialSyncTime: number | undefined;
 
   for (const first of [true, false]) {
     try {
       // Note: This performs initial sync of the replica if necessary.
-      const start = Date.now();
       const {changeSource, subscriptionState} =
         upstream.type === 'pg'
           ? await initializePostgresChangeSource(
@@ -90,7 +92,6 @@ export default async function runWorker(
               shard,
               replica.file,
             );
-      initialSyncTime = Date.now() - start;
 
       changeStreamer = await initializeStreamer(
         lc,
@@ -123,21 +124,31 @@ export default async function runWorker(
   // impossible: upstream must have advanced in order for replication to be stuck.
   assert(changeStreamer, `resetting replica did not advance replicaVersion`);
 
-  changeStreamerWebServer.setDelegate(changeStreamer);
+  const {backupURL, port: metricsPort} = litestream;
+  const backupMonitor = !backupURL
+    ? null
+    : new BackupMonitor(
+        lc,
+        backupURL,
+        `http://localhost:${metricsPort}/metrics`,
+        changeStreamer,
+        // The time between when the zero-cache was started to when the
+        // change-streamer is ready to start serves as the initial delay for
+        // watermark cleanup (as it either includes a similar replica
+        // restoration/preparation step, or an initial-sync, which
+        // generally takes longer).
+        //
+        // Consider: Also account for permanent volumes?
+        Date.now() - parentStartMs,
+      );
+
+  changeStreamerWebServer.setDelegates(changeStreamer, backupMonitor);
 
   parent.send(['ready', {ready: true}]);
 
   const services: Service[] = [changeStreamer, changeStreamerWebServer];
-  if (litestream.backupURL) {
-    const {port: metricsPort = config.port + 2} = litestream;
-    services.push(
-      new BackupMonitor(
-        lc,
-        `http://localhost:${metricsPort}/metrics`,
-        changeStreamer,
-        litestream.restoreDurationMsEstimate ?? initialSyncTime,
-      ),
-    );
+  if (backupMonitor) {
+    services.push(backupMonitor);
   }
 
   return runUntilKilled(lc, parent, ...services);
@@ -145,5 +156,7 @@ export default async function runWorker(
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() => runWorker(must(parentWorker), process.env));
+  void exitAfter(() =>
+    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
+  );
 }

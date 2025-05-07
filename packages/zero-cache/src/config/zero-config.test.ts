@@ -256,8 +256,7 @@ test('zero-cache --help', () => {
                                                                                                                                                                    
      --litestream-executable string                              optional                                                                                          
        ZERO_LITESTREAM_EXECUTABLE env                                                                                                                              
-                                                                 Path to the litestream executable. This option has no effect if                                   
-                                                                 litestream-backup-url is unspecified.                                                             
+                                                                 Path to the litestream executable.                                                                
                                                                                                                                                                    
      --litestream-config-path string                             default: "./src/services/litestream/config.yml"                                                   
        ZERO_LITESTREAM_CONFIG_PATH env                                                                                                                             
@@ -275,7 +274,8 @@ test('zero-cache --help', () => {
      --litestream-backup-url string                              optional                                                                                          
        ZERO_LITESTREAM_BACKUP_URL env                                                                                                                              
                                                                  The location of the litestream backup, usually an s3:// URL.                                      
-                                                                 If set, the litestream-executable must also be specified.                                         
+                                                                 This is only consulted by the replication-manager.                                                
+                                                                 view-syncers receive this information from the replication-manager.                               
                                                                                                                                                                    
      --litestream-port number                                    optional                                                                                          
        ZERO_LITESTREAM_PORT env                                                                                                                                    
@@ -327,16 +327,6 @@ test('zero-cache --help', () => {
                                                                  the snapshot from the backup.                                                                     
                                                                                                                                                                    
                                                                  This requires a custom build of litestream (version 0.3.13+z0.0.1+).                              
-                                                                                                                                                                   
-     --litestream-restore-duration-ms-estimate number            optional                                                                                          
-       ZERO_LITESTREAM_RESTORE_DURATION_MS_ESTIMATE env                                                                                                            
-                                                                 The estimated time required to restore the replica from backup. This duration                     
-                                                                 is used to determine when it is safe to purge change long entries; the                            
-                                                                 change-streamer waits for at least this duration before purging changes                           
-                                                                 that have been successfully backed up.                                                            
-                                                                                                                                                                   
-                                                                 This can generally be left unspecified, as the server will compute the estimate                   
-                                                                 based on an actual restore, using the initial-sync time for bootstrapping.                        
                                                                                                                                                                    
      --storage-db-tmp-dir string                                 optional                                                                                          
        ZERO_STORAGE_DB_TMP_DIR env                                                                                                                                 

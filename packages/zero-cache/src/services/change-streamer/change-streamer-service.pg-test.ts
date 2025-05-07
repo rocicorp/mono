@@ -116,6 +116,7 @@ describe('change-streamer/service', () => {
   test('immediate forwarding, transaction storage', async () => {
     const sub = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
       watermark: '01',
@@ -188,6 +189,7 @@ describe('change-streamer/service', () => {
     // Subscribe to the original watermark.
     const sub = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
       watermark: '01',
@@ -275,6 +277,7 @@ describe('change-streamer/service', () => {
     // Subscribe to the original watermark.
     const sub = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
       watermark: '01',
@@ -351,6 +354,7 @@ describe('change-streamer/service', () => {
     // Subscribe to a watermark from "the future".
     const sub = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
       watermark: '0b',
@@ -422,6 +426,7 @@ describe('change-streamer/service', () => {
   test('data types (forwarded and catchup)', async () => {
     const sub = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
       watermark: '01',
@@ -487,6 +492,7 @@ describe('change-streamer/service', () => {
     // Also verify when loading from the Store as opposed to direct forwarding.
     const catchupSub = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
       id: 'myid2',
       mode: 'serving',
       watermark: '01',
@@ -537,6 +543,7 @@ describe('change-streamer/service', () => {
     const sub04 = drainToQueue(
       await streamer.subscribe({
         protocolVersion: PROTOCOL_VERSION,
+        taskID: 'task-id',
         id: 'myid1',
         mode: 'serving',
         watermark: '04',
@@ -549,6 +556,7 @@ describe('change-streamer/service', () => {
     const sub08 = drainToQueue(
       await streamer.subscribe({
         protocolVersion: PROTOCOL_VERSION,
+        taskID: 'task-id',
         id: 'myid1',
         mode: 'serving',
         watermark: '08',
@@ -561,6 +569,7 @@ describe('change-streamer/service', () => {
     const sub02 = drainToQueue(
       await streamer.subscribe({
         protocolVersion: PROTOCOL_VERSION,
+        taskID: 'task-id',
         id: 'myid1',
         mode: 'serving',
         watermark: '02',
@@ -592,6 +601,7 @@ describe('change-streamer/service', () => {
     // Start two subscribers: one at 06 and one at 04
     await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
       id: 'myid1',
       mode: 'serving',
       watermark: '06',
@@ -601,6 +611,7 @@ describe('change-streamer/service', () => {
 
     const sub2 = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
       id: 'myid2',
       mode: 'serving',
       watermark: '04',
@@ -662,6 +673,7 @@ describe('change-streamer/service', () => {
     // New connections earlier than 06 should now be rejected.
     const sub3 = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
       id: 'myid2',
       mode: 'serving',
       watermark: '04',
@@ -682,6 +694,7 @@ describe('change-streamer/service', () => {
   test('wrong replica version', async () => {
     const sub = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
       id: 'myid1',
       mode: 'serving',
       watermark: '06',
@@ -897,6 +910,7 @@ describe('change-streamer/service', () => {
 
     const sub = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
       watermark: '01',
@@ -1046,6 +1060,7 @@ describe('change-streamer/service', () => {
 
     void streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
       id: 'backup-id',
       mode: 'backup',
       watermark: '02', // Too early

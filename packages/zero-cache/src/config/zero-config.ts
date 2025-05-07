@@ -395,10 +395,7 @@ export const zeroOptions = {
   litestream: {
     executable: {
       type: v.string().optional(),
-      desc: [
-        `Path to the {bold litestream} executable. This option has no effect if`,
-        `{bold litestream-backup-url} is unspecified.`,
-      ],
+      desc: [`Path to the {bold litestream} executable.`],
     },
 
     configPath: {
@@ -429,7 +426,8 @@ export const zeroOptions = {
       type: v.string().optional(),
       desc: [
         `The location of the litestream backup, usually an {bold s3://} URL.`,
-        `If set, the {bold litestream-executable} must also be specified.`,
+        `This is only consulted by the {bold replication-manager}.`,
+        `{bold view-syncers} receive this information from the {bold replication-manager}.`,
       ],
     },
 
@@ -502,19 +500,6 @@ export const zeroOptions = {
         `the snapshot from the backup.`,
         ``,
         `This requires a custom build of litestream (version 0.3.13+z0.0.1+).`,
-      ],
-    },
-
-    restoreDurationMsEstimate: {
-      type: v.number().optional(),
-      desc: [
-        `The estimated time required to restore the replica from backup. This duration`,
-        `is used to determine when it is safe to purge change long entries; the`,
-        `{bold change-streamer} waits for at least this duration before purging changes`,
-        `that have been successfully backed up.`,
-        ``,
-        `This can generally be left unspecified, as the server will compute the estimate`,
-        `based on an actual restore, using the initial-sync time for bootstrapping.`,
       ],
     },
   },

@@ -3,7 +3,6 @@ import type {Socket} from 'node:net';
 import UrlPattern from 'url-pattern';
 import {assert} from '../../../shared/src/asserts.ts';
 import {h32} from '../../../shared/src/hash.ts';
-import {getSubscriberContext} from '../services/change-streamer/change-streamer-http.ts';
 import {RunningState} from '../services/running-state.ts';
 import type {Service} from '../services/service.ts';
 import type {IncomingMessageSubset} from '../types/http.ts';
@@ -88,8 +87,14 @@ export class WorkerDispatcher implements Service {
         changeStreamer,
         'Received a change-streamer request without a change-streamer worker',
       );
+      const url = new URL(req.url ?? '', 'http://unused/');
+      const path = parsePath(url);
+      if (!path) {
+        throw new Error(`Invalid URL: ${req.url}`);
+      }
+
       return {
-        payload: getSubscriberContext(req),
+        payload: path.action,
         receiver: changeStreamer,
       };
     });
@@ -130,10 +135,13 @@ export class WorkerDispatcher implements Service {
 
 const URL_PATTERN = new UrlPattern('(/:base)/:worker/v:version/:action');
 
-export function parsePath(
-  url: URL,
-):
-  | {base?: string; worker: 'sync' | 'mutate' | 'replication'; version: string}
+export function parsePath(url: URL):
+  | {
+      base?: string;
+      worker: 'sync' | 'mutate' | 'replication';
+      version: string;
+      action: string;
+    }
   | undefined {
   // The match() returns both null and undefined.
   return URL_PATTERN.match(url.pathname) || undefined;

@@ -52,14 +52,22 @@ export interface ChangeStreamer {
 // v2: Adds the "status" message which is initially used to signal that the
 //     subscription is valid (i.e. starting at the requested watermark).
 //     Introduced in 0.19.
+// v3: Adds the "taskID" to the subscription context, and support for
+//     the BackupMonitor-mediated "/snapshot" request.
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 export type SubscriberContext = {
   /**
    * The supported change-streamer protocol version.
    */
   protocolVersion: number;
+
+  /**
+   * Task ID. This is used to link the request with a preceding snapshot
+   * reservation.
+   */
+  taskID: string | null; // TODO: Make required when v3 is min.
 
   /**
    * Subscriber id. This is only used for debugging.
