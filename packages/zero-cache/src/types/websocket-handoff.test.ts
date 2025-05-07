@@ -47,9 +47,11 @@ describe('types/websocket-handoff', () => {
     installWebSocketReceiver(
       lc,
       wss,
-      (ws, payload) => {
+      (ws, payload, m) => {
         ws.on('message', msg => {
-          ws.send(`Received "${msg}" and payload ${JSON.stringify(payload)}`);
+          ws.send(
+            `Received "${msg}" and payload ${JSON.stringify(payload)} at ${m.url}`,
+          );
           ws.close();
         });
       },
@@ -57,12 +59,12 @@ describe('types/websocket-handoff', () => {
     );
 
     const {promise: reply, resolve} = resolver<RawData>();
-    const ws = new WebSocket(`ws://localhost:${port}/`);
+    const ws = new WebSocket(`ws://localhost:${port}/foobar`);
     ws.on('open', () => ws.send('hello'));
     ws.on('message', msg => resolve(msg));
 
     expect(String(await reply)).toBe(
-      'Received "hello" and payload {"foo":"boo"}',
+      'Received "hello" and payload {"foo":"boo"} at /foobar',
     );
   });
 
