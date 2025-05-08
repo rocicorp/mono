@@ -1,7 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Change} from './change.ts';
-import {drainStreams, type Node} from './data.ts';
+import {type Node} from './data.ts';
 import type {FanOut} from './fan-out.ts';
 import {
   throwFilterOutput,
@@ -30,7 +30,6 @@ export class FanIn implements FilterOperator {
   readonly #schema: SourceSchema;
   #output: FilterOutput = throwFilterOutput;
   #accumulatedPushes: Change[] = [];
-  #accumulatedFilters: Node[] = [];
 
   constructor(fanOut: FanOut, inputs: FilterInput[]) {
     this.#inputs = inputs;
