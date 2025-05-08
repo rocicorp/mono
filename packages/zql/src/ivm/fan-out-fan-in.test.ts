@@ -11,7 +11,6 @@ import {
   FilterEnd,
   FilterStart,
 } from './filter-operators.ts';
-import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
 
 const lc = createSilentLogContext();
 
