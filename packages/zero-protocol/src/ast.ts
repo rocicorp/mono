@@ -289,6 +289,7 @@ export type LiteralValue =
   | number
   | boolean
   | null
+  | undefined
   | ReadonlyArray<string | number | boolean>;
 
 /**

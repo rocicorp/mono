@@ -7,7 +7,7 @@ import * as v from '../../../packages/shared/src/valita.ts';
 /** The contents of the zbugs JWT */
 export const authDataSchema = v.object({
   sub: v.string(),
-  role: v.union(v.literal('crew'), v.literal('user')),
+  role: v.union(v.literal('crew'), v.literal('user')).optional(),
   name: v.string(),
   iat: v.number(),
   exp: v.number(),
