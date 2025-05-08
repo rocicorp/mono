@@ -3,6 +3,7 @@ import type {Hash} from '../../../replicache/src/hash.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Input, Storage} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
@@ -107,6 +108,10 @@ export class ZeroContext implements QueryDelegate {
   }
 
   decorateInput(input: Input): Input {
+    return input;
+  }
+
+  decorateFilterInput(input: FilterInput): FilterInput {
     return input;
   }
 
