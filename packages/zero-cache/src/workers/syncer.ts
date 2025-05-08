@@ -115,10 +115,15 @@ export class Syncer implements SingletonService {
           `Received auth token ${auth} for clientID ${clientID}, decoded: ${JSON.stringify(decodedToken)}`,
         );
       } catch (e) {
-        sendError(this.#lc, ws, {
-          kind: ErrorKind.AuthInvalidated,
-          message: `Failed to decode auth token: ${String(e)}`,
-        });
+        sendError(
+          this.#lc,
+          ws,
+          {
+            kind: ErrorKind.AuthInvalidated,
+            message: `Failed to decode auth token: ${String(e)}`,
+          },
+          e,
+        );
         ws.close(3000, 'Failed to decode JWT');
         return;
       }
