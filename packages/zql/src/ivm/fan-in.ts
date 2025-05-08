@@ -3,15 +3,13 @@ import {must} from '../../../shared/src/must.ts';
 import type {Change} from './change.ts';
 import {drainStreams, type Node} from './data.ts';
 import type {FanOut} from './fan-out.ts';
-import type {FilterInput, FilterOutput} from './filter-operators.ts';
 import {
-  throwOutput,
-  type FetchRequest,
-  type Input,
-  type Output,
-} from './operator.ts';
+  throwFilterOutput,
+  type FilterInput,
+  type FilterOperator,
+  type FilterOutput,
+} from './filter-operators.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
 
 /**
  * The FanIn operator merges multiple streams into one.
@@ -27,16 +25,14 @@ import type {Stream} from './stream.ts';
  * fan-in
  *   |
  */
-export class FanIn implements Input, FilterOutput {
-  readonly #fanOut: FanOut;
+export class FanIn implements FilterOperator {
   readonly #inputs: readonly FilterInput[];
   readonly #schema: SourceSchema;
-  #output: Output = throwOutput;
+  #output: FilterOutput = throwFilterOutput;
   #accumulatedPushes: Change[] = [];
   #accumulatedFilters: Node[] = [];
 
   constructor(fanOut: FanOut, inputs: FilterInput[]) {
-    this.#fanOut = fanOut;
     this.#inputs = inputs;
     this.#schema = fanOut.getSchema();
     for (const input of inputs) {
@@ -45,7 +41,7 @@ export class FanIn implements Input, FilterOutput {
     }
   }
 
-  setOutput(output: Output): void {
+  setFilterOutput(output: FilterOutput): void {
     this.#output = output;
   }
 
@@ -59,36 +55,20 @@ export class FanIn implements Input, FilterOutput {
     return this.#schema;
   }
 
-  *fetch(req: FetchRequest): Stream<Node> {
-    assert(this.#accumulatedFilters.length === 0);
-    for (const node of this.#fanOut.fetch(req)) {
-      if (this.#accumulatedFilters.length) {
-        this.#accumulatedFilters = [];
-        yield node;
-      }
-      assert(this.#accumulatedFilters.length === 0);
-    }
-  }
-
-  *cleanup(req: FetchRequest): Stream<Node> {
-    assert(this.#accumulatedFilters.length === 0);
-    for (const node of this.#fanOut.fetch(req)) {
-      if (this.#accumulatedFilters.length) {
-        this.#accumulatedFilters = [];
-        yield node;
-      } else {
-        drainStreams(node);
-      }
-      assert(this.#accumulatedFilters.length === 0);
-    }
-  }
-
-  filter(node: Node): void {
+  filter(node: Node, _cleanup: boolean): void {
     this.#accumulatedFilters.push(node);
   }
 
   push(change: Change) {
     this.#accumulatedPushes.push(change);
+  }
+
+  fanOutDoneFilteringToAllBranches(node: Node, cleanup: boolean): void {
+    if (this.#accumulatedFilters.length) {
+      this.#output.filter(node, cleanup);
+    } else if (cleanup) {
+      drainStreams(node);
+    }
   }
 
   fanOutDonePushingToAllBranches(fanOutChangeType: Change['type']) {

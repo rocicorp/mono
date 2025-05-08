@@ -93,9 +93,12 @@ export class Exists implements FilterOperator {
     this.#output = output;
   }
 
-  filter(node: Node): void {
+  filter(node: Node, cleanup: boolean): void {
     if (this.#filter(node)) {
-      this.#output.filter(node);
+      this.#output.filter(node, cleanup);
+    }
+    if (cleanup) {
+      this.#delSize(node);
     }
   }
 
