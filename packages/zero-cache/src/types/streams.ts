@@ -348,22 +348,29 @@ class WebSocketCloser<T> {
     }
   }
 
+  get #conn(): string {
+    return 'connection' + (this.#ws.url ? ` to ${this.#ws.url}` : '');
+  }
+
   #handleOpen = () => {
-    const {url} = this.#ws;
-    this.#lc.info?.('connected' + (url ? ` to ${url}` : ''));
+    this.#lc.info?.(`${this.#conn} established`);
     this.#connected.resolve();
   };
 
   #handleClose = (e: CloseEvent) => {
     const {code, reason, wasClean} = e;
-    this.#lc.info?.('connection closed', {code, reason, wasClean});
+    this.#lc.info?.(`${this.#conn} closed`, {
+      code,
+      reason,
+      wasClean,
+    });
     this.close();
-    this.#connected.reject(`connection closed with code ${code}`);
+    this.#connected.reject(`${this.#conn} closed with code ${code}`);
   };
 
   #handleError = ({message, error}: ErrorEvent) => {
     if (this.#ws.readyState === this.#ws.OPEN) {
-      this.#lc.error?.('connection error', message, error);
+      this.#lc.error?.(`error in ${this.#conn}`, message, error);
     }
     this.#connected.reject(error);
   };
