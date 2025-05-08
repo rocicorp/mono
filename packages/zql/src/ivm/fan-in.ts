@@ -63,14 +63,6 @@ export class FanIn implements FilterOperator {
     this.#accumulatedPushes.push(change);
   }
 
-  fanOutDoneFilteringToAllBranches(node: Node, cleanup: boolean): void {
-    if (this.#accumulatedFilters.length) {
-      this.#output.filter(node, cleanup);
-    } else if (cleanup) {
-      drainStreams(node);
-    }
-  }
-
   fanOutDonePushingToAllBranches(fanOutChangeType: Change['type']) {
     if (this.#inputs.length === 0) {
       assert(
