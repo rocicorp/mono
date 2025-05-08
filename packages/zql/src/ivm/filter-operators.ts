@@ -1,9 +1,8 @@
 import type {FetchRequest, Input, InputBase, Output} from './operator.ts';
-import {type Node} from './data.ts';
+import {drainStreams, type Node} from './data.ts';
 import type {Change} from './change.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
-import {assert} from '../../../shared/src/asserts.ts';
 
 export interface FilterInput extends InputBase {
   /** Tell the input where to send its output. */
@@ -24,16 +23,15 @@ export const throwFilterOutput: FilterOutput = {
   push(_change: Change): void {
     throw new Error('Output not set');
   },
-  filter(_node: Node, _cleanup: boolean): boolean {
+
+  filter(_node: Node, _cleanup): boolean {
     throw new Error('Output not set');
   },
 };
 
 export class FilterStart implements FilterInput, Output {
   readonly #input: Input;
-
   #output: FilterOutput = throwFilterOutput;
-  #inFilterFetchOrCleanup = false;
 
   constructor(input: Input) {
     this.#input = input;
@@ -56,48 +54,52 @@ export class FilterStart implements FilterInput, Output {
     this.#output.push(change);
   }
 
-  *filterFetchOrCleanup(req: FetchRequest, cleanup: boolean): Stream<Node> {
-    assert(!this.#inFilterFetchOrCleanup);
-    this.#inFilterFetchOrCleanup = true;
-    try {
-      for (const node of this.#input.fetch(req)) {
-        this.#output.filter(node, cleanup);
+  *fetch(req: FetchRequest): Stream<Node> {
+    for (const node of this.#input.fetch(req)) {
+      if (this.#output.filter(node, false)) {
         yield node;
       }
-    } finally {
-      this.#inFilterFetchOrCleanup = false;
+    }
+  }
+
+  *cleanup(req: FetchRequest): Stream<Node> {
+    for (const node of this.#input.fetch(req)) {
+      if (this.#output.filter(node, true)) {
+        yield node;
+      } else {
+        drainStreams(node);
+      }
     }
   }
 }
 
 export class FilterEnd implements Input, FilterOutput {
   readonly #start: FilterStart;
-  readonly #input: Input;
+  readonly #input: FilterInput;
 
   #output: Output = throwFilterOutput;
-  #receivedNodeViaFilter: Node = undefined;
 
-  constructor(start: FilterStart, input: Input) {
+  constructor(start: FilterStart, input: FilterInput) {
     this.#start = start;
     this.#input = input;
-    input.setOutput(this);
+    input.setFilterOutput(this);
   }
 
-  fetch(req: FetchRequest): Stream<Node> {
-    assert(this.#receivedNodeViaFilter === undefined);
-    for (const node of this.#start.filterFetch(req)) {
-      if (this.#receivedNodeViaFilter) {
-        assert(this.#receivedNodeViaFilter === node);
-        yield node;
-      }
+  *fetch(req: FetchRequest): Stream<Node> {
+    for (const node of this.#start.fetch(req)) {
+      yield node;
     }
   }
 
-  cleanup(req: FetchRequest): Stream<Node> {
-    throw new Error('Method not implemented.');
+  *cleanup(req: FetchRequest): Stream<Node> {
+    for (const node of this.#start.fetch(req)) {
+      yield node;
+    }
   }
 
-  filter(node: Node, cleanup: boolean) {}
+  filter(_node: Node, _cleanup: boolean) {
+    return true;
+  }
 
   setOutput(output: Output) {
     this.#output = output;

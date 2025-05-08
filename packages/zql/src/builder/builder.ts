@@ -21,7 +21,11 @@ import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {Exists} from '../ivm/exists.ts';
 import {FanIn} from '../ivm/fan-in.ts';
 import {FanOut} from '../ivm/fan-out.ts';
-import type {FilterInput} from '../ivm/filter-operators.ts';
+import {
+  FilterEnd,
+  FilterStart,
+  type FilterInput,
+} from '../ivm/filter-operators.ts';
 import {Filter} from '../ivm/filter.ts';
 import {Join} from '../ivm/join.ts';
 import type {Input, Storage} from '../ivm/operator.ts';
@@ -238,6 +242,19 @@ function applyWhere(
   delegate: BuilderDelegate,
   name: string,
 ): Input {
+  const filterStart = new FilterStart(input);
+  return new FilterEnd(
+    filterStart,
+    applyFilter(filterStart, condition, delegate, name),
+  );
+}
+
+function applyFilter(
+  input: FilterInput,
+  condition: Condition,
+  delegate: BuilderDelegate,
+  name: string,
+) {
   switch (condition.type) {
     case 'and':
       return applyAnd(input, condition, delegate, name);
@@ -257,17 +274,17 @@ function applyAnd(
   name: string,
 ): FilterInput {
   for (const subCondition of condition.conditions) {
-    input = applyWhere(input, subCondition, delegate, name);
+    input = applyFilter(input, subCondition, delegate, name);
   }
   return input;
 }
 
 export function applyOr(
-  input: Input,
+  input: FilterInput,
   condition: Disjunction,
   delegate: BuilderDelegate,
   name: string,
-): Input {
+): FilterInput {
   const [subqueryConditions, otherConditions] =
     groupSubqueryConditions(condition);
   // if there are no subquery conditions, no fan-in / fan-out is needed
@@ -283,7 +300,7 @@ export function applyOr(
 
   const fanOut = new FanOut(input);
   const branches = subqueryConditions.map(subCondition =>
-    applyWhere(fanOut, subCondition, delegate, name),
+    applyFilter(fanOut, subCondition, delegate, name),
   );
   if (otherConditions.length > 0) {
     branches.push(

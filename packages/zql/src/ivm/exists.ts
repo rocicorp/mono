@@ -2,19 +2,14 @@ import {areEqual} from '../../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import {type Change} from './change.ts';
-import {
-  drainStreams,
-  normalizeUndefined,
-  type Node,
-  type NormalizedValue,
-} from './data.ts';
+import {normalizeUndefined, type Node, type NormalizedValue} from './data.ts';
 import {
   throwFilterOutput,
   type FilterInput,
   type FilterOperator,
   type FilterOutput,
 } from './filter-operators.ts';
-import {type FetchRequest, type Storage} from './operator.ts';
+import {type Storage} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {first} from './stream.ts';
 
@@ -93,13 +88,12 @@ export class Exists implements FilterOperator {
     this.#output = output;
   }
 
-  filter(node: Node, cleanup: boolean): void {
-    if (this.#filter(node)) {
-      this.#output.filter(node, cleanup);
-    }
+  filter(node: Node, cleanup: boolean): boolean {
+    const result = this.#filter(node) && this.#output.filter(node, cleanup);
     if (cleanup) {
       this.#delSize(node);
     }
+    return result;
   }
 
   destroy(): void {
@@ -108,25 +102,6 @@ export class Exists implements FilterOperator {
 
   getSchema(): SourceSchema {
     return this.#input.getSchema();
-  }
-
-  *fetch(req: FetchRequest) {
-    for (const node of this.#input.fetch(req)) {
-      if (this.#filter(node)) {
-        yield node;
-      }
-    }
-  }
-
-  *cleanup(req: FetchRequest) {
-    for (const node of this.#input.cleanup(req)) {
-      if (this.#filter(node)) {
-        yield node;
-      } else {
-        drainStreams(node);
-      }
-      this.#delSize(node);
-    }
   }
 
   push(change: Change) {

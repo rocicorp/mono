@@ -55,8 +55,8 @@ export class FanIn implements FilterOperator {
     return this.#schema;
   }
 
-  filter(node: Node, _cleanup: boolean): void {
-    this.#accumulatedFilters.push(node);
+  filter(node: Node, cleanup: boolean): boolean {
+    return this.#output.filter(node, cleanup);
   }
 
   push(change: Change) {
