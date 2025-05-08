@@ -44,6 +44,7 @@ import {
   runtimeDebugStats,
 } from '../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
+import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
 
 const options = {
   replicaFile: zeroOptions.replica.file,
@@ -178,6 +179,9 @@ const host: QueryDelegate = {
     return new MemoryStorage();
   },
   decorateInput(input: Input): Input {
+    return input;
+  },
+  decorateFilterInput(input: FilterInput): FilterInput {
     return input;
   },
   addServerQuery() {
