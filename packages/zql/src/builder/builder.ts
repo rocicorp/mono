@@ -56,7 +56,9 @@ export interface BuilderDelegate {
    */
   createStorage(name: string): Storage;
 
-  decorateInput<I extends Input | FilterInput>(input: I, name: string): I;
+  decorateInput(input: Input, name: string): Input;
+
+  decorateFilterInput(input: FilterInput, name: string): FilterInput;
 
   /**
    * The AST is mapped on-the-wire between client and server names.
@@ -385,7 +387,7 @@ function applyCorrelatedSubqueryCondition(
 ): FilterInput {
   assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
   const existsName = `${name}:exists(${condition.related.subquery.alias})`;
-  return delegate.decorateInput(
+  return delegate.decorateFilterInput(
     new Exists(
       input,
       delegate.createStorage(existsName),

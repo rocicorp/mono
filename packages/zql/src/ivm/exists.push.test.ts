@@ -190,32 +190,21 @@ suite('EXISTS 1 to many', () => {
           ],
           [
             ":exists(issue)",
-            "fetch",
+            "filter",
             {
-              "constraint": undefined,
-              "reverse": true,
-              "start": {
-                "basis": "after",
-                "row": {
-                  "id": "c2",
-                  "issueID": "i1",
-                },
-              },
+              "id": "c2",
+              "issueID": "i1",
             },
+            "fetch",
           ],
           [
             ":exists(issue)",
-            "fetch",
+            "filter",
             {
-              "constraint": undefined,
-              "start": {
-                "basis": "at",
-                "row": {
-                  "id": "c2",
-                  "issueID": "i1",
-                },
-              },
+              "id": "c3",
+              "issueID": "i1",
             },
+            "fetch",
           ],
           [
             ":exists(issue)",
@@ -230,32 +219,21 @@ suite('EXISTS 1 to many', () => {
           ],
           [
             ":exists(issue)",
-            "fetch",
+            "filter",
             {
-              "constraint": undefined,
-              "reverse": true,
-              "start": {
-                "basis": "after",
-                "row": {
-                  "id": "c3",
-                  "issueID": "i1",
-                },
-              },
+              "id": "c3",
+              "issueID": "i1",
             },
+            "fetch",
           ],
           [
             ":exists(issue)",
-            "fetch",
+            "filter",
             {
-              "constraint": undefined,
-              "start": {
-                "basis": "at",
-                "row": {
-                  "id": "c3",
-                  "issueID": "i1",
-                },
-              },
+              "id": "c4",
+              "issueID": "i2",
             },
+            "fetch",
           ],
           [
             ":exists(issue)",
@@ -270,32 +248,12 @@ suite('EXISTS 1 to many', () => {
           ],
           [
             ":exists(issue)",
-            "fetch",
+            "filter",
             {
-              "constraint": undefined,
-              "reverse": true,
-              "start": {
-                "basis": "after",
-                "row": {
-                  "id": "c4",
-                  "issueID": "i2",
-                },
-              },
+              "id": "c4",
+              "issueID": "i2",
             },
-          ],
-          [
-            ":exists(issue)",
             "fetch",
-            {
-              "constraint": undefined,
-              "start": {
-                "basis": "at",
-                "row": {
-                  "id": "c4",
-                  "issueID": "i2",
-                },
-              },
-            },
           ],
         ]
       `);
