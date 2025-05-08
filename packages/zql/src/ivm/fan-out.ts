@@ -48,13 +48,12 @@ export class FanOut implements FilterOperator {
   }
 
   filter(node: Node, cleanup: boolean): boolean {
+    let result = false;
+    // Forward to all outputs, don't short circuit.
     for (const output of this.#outputs) {
-      const result = output.filter(node, cleanup);
-      if (result) {
-        return true;
-      }
+      result = output.filter(node, cleanup) || result;
     }
-    return false;
+    return result;
   }
 
   push(change: Change) {
