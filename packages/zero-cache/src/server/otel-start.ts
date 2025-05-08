@@ -20,15 +20,11 @@ import {
   type LogRecordProcessor,
 } from '@opentelemetry/sdk-logs';
 import {logs} from '@opentelemetry/api-logs';
+import type {LogContext} from '@rocicorp/logger';
 
-export type OtelEndpoints = {
-  traceCollector?: string | undefined;
-  metricCollector?: string | undefined;
-  logCollector?: string | undefined;
-};
 
 let started = false;
-export function startOtel(endpoints: OtelEndpoints) {
+export function startOtel(lc: LogContext) {
   if (started) {
     return;
   }
@@ -40,14 +36,37 @@ export function startOtel(endpoints: OtelEndpoints) {
     [ATTR_SERVICE_VERSION]: version,
   });
 
-  if (endpoints.logCollector !== undefined) {
+  // Parse headers from environment variable
+  const headers: Record<string, string> = {};
+  if (process.env.OTEL_EXPORTER_OTLP_HEADERS) {
+    process.env.OTEL_EXPORTER_OTLP_HEADERS.split(',').forEach(header => {
+      const [key, value] = header.split('=');
+      if (key && value) {
+        headers[key.trim()] = value.trim();
+      }
+    });
+  }
+
+  const otlpEndpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+  if (!otlpEndpoint) {
+    lc.warn?.('OTEL_EXPORTER_OTLP_ENDPOINT is not set, using noop exporters');
+  }
+
+  const commonConfig = otlpEndpoint ? {
+    url: otlpEndpoint,
+    headers,
+  } : undefined;
+
+  const traceCollector = process.env.OTEL_TRACES_EXPORTER === 'otlp' && otlpEndpoint;
+  const metricCollector = process.env.OTEL_METRICS_EXPORTER === 'otlp' && otlpEndpoint;
+  const logCollector = process.env.OTEL_LOGS_EXPORTER === 'otlp' && otlpEndpoint;
+
+  if (logCollector && commonConfig) {
     const provider = new LoggerProvider({
       resource,
     });
     const processor = new BatchLogRecordProcessor(
-      new OTLPLogExporter({
-        url: endpoints.logCollector,
-      }),
+      new OTLPLogExporter(commonConfig),
     );
     logRecordProcessors.push(processor);
     provider.addLogRecordProcessor(processor);
@@ -57,25 +76,20 @@ export function startOtel(endpoints: OtelEndpoints) {
   const sdk = new NodeSDK({
     resource,
     traceExporter:
-      endpoints.traceCollector === undefined
+      !traceCollector || !commonConfig
         ? new NoopSpanExporter()
-        : new OTLPTraceExporter({
-            url: endpoints.traceCollector,
-          }),
+        : new OTLPTraceExporter(commonConfig),
     metricReader: new PeriodicExportingMetricReader({
       exportIntervalMillis: 5000,
       exporter: (() => {
-        if (endpoints.metricCollector === undefined) {
+        if (!metricCollector || !commonConfig) {
           if (process.env.NODE_ENV === 'dev') {
             return new ConsoleMetricExporter();
           }
-
           return new NoopMetricExporter();
         }
 
-        return new OTLPMetricExporter({
-          url: endpoints.metricCollector,
-        });
+        return new OTLPMetricExporter(commonConfig);
       })(),
     }),
     logRecordProcessors,
