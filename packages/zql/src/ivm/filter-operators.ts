@@ -63,7 +63,7 @@ export class FilterStart implements FilterInput, Output {
   }
 
   *cleanup(req: FetchRequest): Stream<Node> {
-    for (const node of this.#input.fetch(req)) {
+    for (const node of this.#input.cleanup(req)) {
       if (this.#output.filter(node, true)) {
         yield node;
       } else {
@@ -92,7 +92,7 @@ export class FilterEnd implements Input, FilterOutput {
   }
 
   *cleanup(req: FetchRequest): Stream<Node> {
-    for (const node of this.#start.fetch(req)) {
+    for (const node of this.#start.cleanup(req)) {
       yield node;
     }
   }
@@ -116,4 +116,12 @@ export class FilterEnd implements Input, FilterOutput {
   push(change: Change) {
     this.#output.push(change);
   }
+}
+
+export function buildFilterPipeline(
+  input: Input,
+  pipeline: (filterInput: FilterInput) => FilterInput,
+): Input {
+  const filterStart = new FilterStart(input);
+  return new FilterEnd(filterStart, pipeline(filterStart));
 }

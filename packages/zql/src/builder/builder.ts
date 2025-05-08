@@ -22,8 +22,7 @@ import {Exists} from '../ivm/exists.ts';
 import {FanIn} from '../ivm/fan-in.ts';
 import {FanOut} from '../ivm/fan-out.ts';
 import {
-  FilterEnd,
-  FilterStart,
+  buildFilterPipeline,
   type FilterInput,
 } from '../ivm/filter-operators.ts';
 import {Filter} from '../ivm/filter.ts';
@@ -242,10 +241,8 @@ function applyWhere(
   delegate: BuilderDelegate,
   name: string,
 ): Input {
-  const filterStart = new FilterStart(input);
-  return new FilterEnd(
-    filterStart,
-    applyFilter(filterStart, condition, delegate, name),
+  return buildFilterPipeline(input, filterInput =>
+    applyFilter(filterInput, condition, delegate, name),
   );
 }
 
