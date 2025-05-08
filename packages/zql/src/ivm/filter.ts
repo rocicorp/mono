@@ -1,6 +1,5 @@
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
-import {drainStreams} from './data.ts';
 import {
   throwFilterOutput,
   type FilterInput,
@@ -8,7 +7,6 @@ import {
   type FilterOutput,
 } from './filter-operators.ts';
 import {filterPush} from './filter-push.ts';
-import {type FetchRequest} from './operator.ts';
 import {type Node} from './data.ts';
 import type {SourceSchema} from './schema.ts';
 
@@ -29,10 +27,8 @@ export class Filter implements FilterOperator {
     input.setFilterOutput(this);
   }
 
-  filter(node: Node) {
-    if (this.#predicate(node.row)) {
-      this.#output.filter(node);
-    }
+  filter(node: Node, cleanup: boolean): boolean {
+    return this.#predicate(node.row) && this.#output.filter(node, cleanup);
   }
 
   setFilterOutput(output: FilterOutput) {
@@ -45,24 +41,6 @@ export class Filter implements FilterOperator {
 
   getSchema(): SourceSchema {
     return this.#input.getSchema();
-  }
-
-  *fetch(req: FetchRequest) {
-    for (const node of this.#input.fetch(req)) {
-      if (this.#predicate(node.row)) {
-        yield node;
-      }
-    }
-  }
-
-  *cleanup(req: FetchRequest) {
-    for (const node of this.#input.cleanup(req)) {
-      if (this.#predicate(node.row)) {
-        yield node;
-      } else {
-        drainStreams(node);
-      }
-    }
   }
 
   push(change: Change) {

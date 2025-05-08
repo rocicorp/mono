@@ -2,24 +2,27 @@ import {must} from '../../../shared/src/must.ts';
 import type {Change} from './change.ts';
 import type {FanIn} from './fan-in.ts';
 import type {Node} from './data.ts';
-import type {FetchRequest, Input, Output} from './operator.ts';
 import type {Stream} from './stream.ts';
-import type {FilterInput, FilterOutput} from './filter-operators.ts';
+import type {
+  FilterInput,
+  FilterOperator,
+  FilterOutput,
+} from './filter-operators.ts';
 
 /**
  * Forks a stream into multiple streams.
  * Is meant to be paired with a `FanIn` operator which will
  * later merge the forks back together.
  */
-export class FanOut implements FilterInput, Output {
-  readonly #input: Input;
+export class FanOut implements FilterOperator {
+  readonly #input: FilterInput;
   readonly #outputs: FilterOutput[] = [];
   #fanIn: FanIn | undefined;
   #destroyCount: number = 0;
 
-  constructor(input: Input) {
+  constructor(input: FilterInput) {
     this.#input = input;
-    input.setOutput(this);
+    input.setFilterOutput(this);
   }
 
   setFanIn(fanIn: FanIn) {
@@ -45,17 +48,14 @@ export class FanOut implements FilterInput, Output {
     return this.#input.getSchema();
   }
 
-  *fetch(req: FetchRequest): Stream<Node> {
-    for (const node of this.#input.fetch(req)) {
-      for (const out of this.#outputs) {
-        out.filter(node);
-      }
-      yield node;
+  filter(node: Node, cleanup: boolean): void {
+    for (const out of this.#outputs) {
+      out.filter(node, cleanup);
     }
-  }
-
-  cleanup(req: FetchRequest) {
-    return this.#input.cleanup(req);
+    must(
+      this.#fanIn,
+      'fan-out must have a corresponding fan-in set!',
+    ).fanOutDoneFilteringToAllBranches(node, cleanup);
   }
 
   push(change: Change) {

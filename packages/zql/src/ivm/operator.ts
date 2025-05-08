@@ -14,6 +14,18 @@ export interface InputBase {
   getSchema(): SourceSchema;
 
   /**
+   * Completely destroy the input. Destroying an input
+   * causes it to call destroy on its upstreams, fully
+   * cleaning up a pipeline.
+   */
+  destroy(): void;
+}
+
+export interface Input extends InputBase {
+  /** Tell the input where to send its output. */
+  setOutput(output: Output): void;
+
+  /**
    * Fetch data. May modify the data in place.
    * Returns nodes sorted in order of `SourceSchema.compareRows`.
    */
@@ -31,18 +43,6 @@ export interface InputBase {
    * propagate the cleanup message through the graph.
    */
   cleanup(req: FetchRequest): Stream<Node>;
-
-  /**
-   * Completely destroy the input. Destroying an input
-   * causes it to call destroy on its upstreams, fully
-   * cleaning up a pipeline.
-   */
-  destroy(): void;
-}
-
-export interface Input extends InputBase {
-  /** Tell the input where to send its output. */
-  setOutput(output: Output): void;
 }
 
 export type FetchRequest = {
