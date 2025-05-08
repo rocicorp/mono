@@ -4,6 +4,7 @@ import {Filter} from './filter.ts';
 import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {buildFilterPipeline} from './filter-operators.ts';
 
 const lc = createSilentLogContext();
 
@@ -20,7 +21,11 @@ test('basics', () => {
   ms.push({type: 'add', row: {a: 1, b: 'foo'}});
 
   const connector = ms.connect([['a', 'asc']]);
-  const filter = new Filter(connector, row => row.b === 'foo');
+  const filter = buildFilterPipeline(
+    connector,
+    filterInput => new Filter(filterInput, row => row.b === 'foo'),
+  );
+
   const out = new Catch(filter);
 
   expect(out.fetch()).toMatchInlineSnapshot(`
@@ -108,7 +113,10 @@ test('edit', () => {
   }
 
   const connector = ms.connect([['a', 'asc']]);
-  const filter = new Filter(connector, row => (row.x as number) % 2 === 0);
+  const filter = buildFilterPipeline(
+    connector,
+    filterInput => new Filter(filterInput, row => (row.x as number) % 2 === 0),
+  );
   const out = new Catch(filter);
 
   expect(out.fetch()).toMatchInlineSnapshot(`
