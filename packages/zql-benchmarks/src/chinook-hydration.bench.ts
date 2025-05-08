@@ -29,6 +29,16 @@ await runBenchmarks(
       createQuery: q => q.album.related('artist'),
     },
     {
+      name: 'all playlists',
+      createQuery: q =>
+        q.playlist.related('tracks', t =>
+          t
+            .related('mediaType')
+            .related('genre')
+            .related('album', a => a.related('artist')),
+        ),
+    },
+    {
       name: 'OR with empty branch and limit',
       createQuery: q =>
         q.track
@@ -48,16 +58,6 @@ await runBenchmarks(
             ),
           )
           .limit(5),
-    },
-    {
-      name: 'all playlists',
-      createQuery: q =>
-        q.playlist.related('tracks', t =>
-          t
-            .related('mediaType')
-            .related('genre')
-            .related('album', a => a.related('artist')),
-        ),
     },
   ],
 );
