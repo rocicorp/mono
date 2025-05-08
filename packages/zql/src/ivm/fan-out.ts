@@ -2,7 +2,6 @@ import {must} from '../../../shared/src/must.ts';
 import type {Change} from './change.ts';
 import type {FanIn} from './fan-in.ts';
 import type {Node} from './data.ts';
-import type {Stream} from './stream.ts';
 import type {
   FilterInput,
   FilterOperator,
@@ -48,14 +47,14 @@ export class FanOut implements FilterOperator {
     return this.#input.getSchema();
   }
 
-  filter(node: Node, cleanup: boolean): void {
-    for (const out of this.#outputs) {
-      out.filter(node, cleanup);
+  filter(node: Node, cleanup: boolean): boolean {
+    for (const output of this.#outputs) {
+      const result = output.filter(node, cleanup);
+      if (result) {
+        return true;
+      }
     }
-    must(
-      this.#fanIn,
-      'fan-out must have a corresponding fan-in set!',
-    ).fanOutDoneFilteringToAllBranches(node, cleanup);
+    return false;
   }
 
   push(change: Change) {
