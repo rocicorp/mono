@@ -49,9 +49,13 @@ export class FanOut implements FilterOperator {
 
   filter(node: Node, cleanup: boolean): boolean {
     let result = false;
-    // Forward to all outputs, don't short circuit.
     for (const output of this.#outputs) {
       result = output.filter(node, cleanup) || result;
+      // Cleanup needs to be forwarded to all outputs, don't short circuit
+      // cleanup.  For non-cleanup we can short-circuit on first true.
+      if (!cleanup && result) {
+        return true;
+      }
     }
     return result;
   }
