@@ -291,7 +291,8 @@ export async function createVitests<TSchema extends Schema>(
   }: Options<TSchema>,
   ...testSpecs: (readonly {
     name: string;
-    createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    createQuery: (q: Queries<TSchema>) => Query<TSchema, string, any>;
     manualVerification?: unknown;
   }[])[]
 ) {
