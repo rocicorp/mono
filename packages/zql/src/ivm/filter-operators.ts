@@ -16,8 +16,9 @@ export interface FilterOutput extends Output {
 export interface FilterOperator extends FilterInput, FilterOutput {}
 
 /**
- * An implementation of FilterOutput that throws if pushed to. It is used as the
- * initial value for for an operator's output before it is set.
+ * An implementation of FilterOutput that throws if push or filter is called.
+ * It is used as the initial value for for an operator's output before it is
+ * set.
  */
 export const throwFilterOutput: FilterOutput = {
   push(_change: Change): void {
