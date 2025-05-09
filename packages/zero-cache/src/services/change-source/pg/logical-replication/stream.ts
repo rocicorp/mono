@@ -72,15 +72,27 @@ export async function subscribe(
     }
   }, MANUAL_KEEPALIVE_TIMEOUT / 5);
 
+  let destroyed = false;
   const typeParsers = await getTypeParsers(lc, db);
   const parser = new PgoutputParser(typeParsers);
   const messages = Subscription.create<StreamMessage>({
     cleanup: () => {
+      destroyed = true;
       readable.destroyed || readable.destroy();
       clearInterval(ackTimer);
       return session.end();
     },
   });
+
+  readable.once(
+    'close',
+    () =>
+      // Only log a warning if the stream was not manually closed.
+      destroyed || lc.warn?.(`replication stream closed by ${db.options.host}`),
+  );
+  readable.once('error', err =>
+    lc.error?.(`error from ${db.options.host}`, err),
+  );
 
   pipe(readable, messages, buffer => parseStreamMessage(lc, buffer, parser));
 
