@@ -35,6 +35,34 @@ test.each(
       {
         name: 'compare primary key',
         createQuery: q => q.track.where('id', '=', 2941),
+        manualVerification: [
+          {
+            albumId: 233,
+            bytes: 9800861,
+            composer: 'Adam Clayton, Bono, Larry Mullen, The Edge',
+            genreId: 1,
+            id: 2941,
+            mediaTypeId: 1,
+            milliseconds: 296280,
+            name: 'Walk On',
+            unitPrice: 0.99,
+          },
+        ],
+      },
+      {
+        name: 'compare primary key and use `one`',
+        createQuery: q => q.track.where('id', '=', 2941).one(),
+        manualVerification: {
+          albumId: 233,
+          bytes: 9800861,
+          composer: 'Adam Clayton, Bono, Larry Mullen, The Edge',
+          genreId: 1,
+          id: 2941,
+          mediaTypeId: 1,
+          milliseconds: 296280,
+          name: 'Walk On',
+          unitPrice: 0.99,
+        },
       },
       {
         name: 'where equality',
