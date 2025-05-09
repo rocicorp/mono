@@ -393,7 +393,7 @@ export class Storer implements Service {
         for await (const entries of tx<ChangeEntry[]>`
           SELECT watermark, change FROM ${this.#cdc('changeLog')}
            WHERE watermark >= ${sub.watermark}
-           ORDER BY watermark, pos`.cursor(10000)) {
+           ORDER BY watermark, pos`.cursor(2000)) {
           for (const entry of entries) {
             if (entry.watermark === sub.watermark) {
               // This should be the first entry.
