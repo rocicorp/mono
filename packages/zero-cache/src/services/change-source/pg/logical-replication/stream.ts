@@ -65,10 +65,18 @@ export async function subscribe(
     writable.write(makeAck(lsn));
     lastAckTime = Date.now();
   }
-  const ackTimer = setInterval(() => {
-    if (Date.now() - lastAckTime > MANUAL_KEEPALIVE_TIMEOUT) {
+
+  let lastDataTime = 0;
+  const livenessTimer = setInterval(() => {
+    const now = Date.now();
+    if (now - lastAckTime > MANUAL_KEEPALIVE_TIMEOUT) {
       lc.warn?.(`sending postgres keepalive (replication stream backed up?)`);
       sendAck(0n);
+    }
+    if (now - lastDataTime > MANUAL_KEEPALIVE_TIMEOUT) {
+      lc.warn?.(
+        `no data received from ${db.options.host} since ${new Date(lastDataTime).toISOString()}`,
+      );
     }
   }, MANUAL_KEEPALIVE_TIMEOUT / 5);
 
@@ -79,11 +87,12 @@ export async function subscribe(
     cleanup: () => {
       destroyed = true;
       readable.destroyed || readable.destroy();
-      clearInterval(ackTimer);
+      clearInterval(livenessTimer);
       return session.end();
     },
   });
 
+  readable.on('data', () => (lastDataTime = Date.now()));
   readable.once(
     'close',
     () =>
