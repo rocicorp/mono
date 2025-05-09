@@ -17,7 +17,6 @@ import {sleep} from '../../../../../shared/src/sleep.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {mapPostgresToLiteColumn} from '../../../db/pg-to-lite.ts';
-import {ShortLivedClient} from '../../../db/short-lived-client.ts';
 import type {
   ColumnSpec,
   PublishedTableSpec,
@@ -430,7 +429,7 @@ class ChangeMaker {
   readonly #shardPrefix: string;
   readonly #shardConfig: InternalShardConfig;
   readonly #initialSchema: PublishedSchema;
-  readonly #upstream: ShortLivedClient;
+  readonly #upstreamDB: PostgresDB;
 
   #replicaIdentityTimer: NodeJS.Timeout | undefined;
   #error: ReplicationError | undefined;
@@ -447,11 +446,10 @@ class ChangeMaker {
     this.#shardPrefix = `${appID}/${shardNum}`;
     this.#shardConfig = shardConfig;
     this.#initialSchema = initialSchema;
-    this.#upstream = new ShortLivedClient(
-      lc,
-      upstreamURI,
-      'zero-schema-change-detector',
-    );
+    this.#upstreamDB = pgClient(lc, upstreamURI, {
+      ['idle_timeout']: 10, // only used occasionally
+      connection: {['application_name']: 'zero-schema-change-detector'},
+    });
   }
 
   async makeChanges(lsn: bigint, msg: Message): Promise<ChangeStreamMessage[]> {
@@ -579,7 +577,7 @@ class ChangeMaker {
     if (replicaIdentities) {
       this.#replicaIdentityTimer = setTimeout(async () => {
         try {
-          await replicaIdentities.apply(this.#lc, this.#upstream.db);
+          await replicaIdentities.apply(this.#lc, this.#upstreamDB);
         } catch (err) {
           this.#lc.warn?.(`error setting replica identities`, err);
         }
@@ -757,7 +755,7 @@ class ChangeMaker {
       return [];
     }
     const currentSchema = await getPublicationInfo(
-      this.#upstream.db,
+      this.#upstreamDB,
       publications,
     );
     if (schemasDifferent(this.#initialSchema, currentSchema, this.#lc)) {
