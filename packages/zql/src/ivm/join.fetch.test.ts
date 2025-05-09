@@ -2253,7 +2253,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
       for (let i = results.fetchMessages.length - 1; i >= 0; i--) {
         const [name, type, req] = results.fetchMessages[i];
         expect(type).toSatisfy(t => t === 'fetch' || t === 'cleanup');
-        assert(type !== 'push');
+        assert(type === 'fetch' || type === 'cleanup');
         if (!(req.constraint && seen.has(req.constraint))) {
           expectedMessages[i] = [name, 'cleanup', req];
         } else {

@@ -13,6 +13,7 @@ import {Snitch, type SnitchMessage} from './snitch.ts';
 import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {buildFilterPipeline} from './filter-operators.ts';
 
 const base = {
   columns: [
@@ -1449,7 +1450,8 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
   }
 
   const existsStorage = new MemoryStorage();
-  const exists = new Exists(
+
+  const filter = buildFilterPipeline(
     new Join({
       parent: sources[0].snitch,
       child: sources[1].snitch,
@@ -1464,10 +1466,14 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
       hidden: false,
       system: 'client',
     }),
-    existsStorage,
-    reverse ? 'from_' + t.join.relationshipName : t.join.relationshipName,
-    reverse ? t.join.childKey : t.join.parentKey,
-    t.existsType,
+    filterInput =>
+      new Exists(
+        filterInput,
+        existsStorage,
+        reverse ? 'from_' + t.join.relationshipName : t.join.relationshipName,
+        reverse ? t.join.childKey : t.join.parentKey,
+        t.existsType,
+      ),
   );
 
   const result: FetchTestResults = {
@@ -1486,7 +1492,7 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
   ] as const) {
     log.length = 0;
 
-    const c = new Catch(exists);
+    const c = new Catch(filter);
     const r = c[method]();
     expect(c.pushes).toEqual([]);
 
@@ -1503,7 +1509,6 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
       }
       case 'cleanup': {
         expect(r).toEqual(result.hydrate);
-
         expect(existsStorage.cloneData()).toEqual({});
         break;
       }

@@ -21,6 +21,7 @@ import type {QueryDelegate} from '../../../zql/src/query/query-impl.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
 import {TableSource, toSQLiteTypeName} from '../table-source.ts';
+import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 
 export const createSource: SourceFactory = (
   lc: LogContext,
@@ -165,6 +166,9 @@ export function newQueryDelegate(
       return new MemoryStorage();
     },
     decorateInput(input: Input): Input {
+      return input;
+    },
+    decorateFilterInput(input: FilterInput): FilterInput {
       return input;
     },
     addServerQuery() {

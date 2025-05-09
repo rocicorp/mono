@@ -49,6 +49,7 @@ import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import {transformQuery} from './read-authorizer.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
+import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 
 const zeroConfig = {
   log: testLogConfig,
@@ -524,6 +525,9 @@ beforeEach(() => {
       return new MemoryStorage();
     },
     decorateInput(input: Input): Input {
+      return input;
+    },
+    decorateFilterInput(input: FilterInput): FilterInput {
       return input;
     },
     addServerQuery() {

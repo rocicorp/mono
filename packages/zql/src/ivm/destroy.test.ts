@@ -7,6 +7,7 @@ import {Snitch} from './snitch.ts';
 import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {buildFilterPipeline} from './filter-operators.ts';
 
 const lc = createSilentLogContext();
 
@@ -72,13 +73,17 @@ test('destroy a pipeline that has forking', () => {
     ['a'],
   );
   const connector = ms.connect([['a', 'asc']]);
-  const fanOut = new FanOut(connector);
-  const filter1 = new Filter(fanOut, () => true);
-  const filter2 = new Filter(fanOut, () => true);
-  const filter3 = new Filter(fanOut, () => true);
-  const fanIn = new FanIn(fanOut, [filter1, filter2, filter3]);
-  fanOut.setFanIn(fanIn);
-  const out = new Catch(fanIn);
+  const pipeline = buildFilterPipeline(connector, filterInput => {
+    const fanOut = new FanOut(filterInput);
+    const filter1 = new Filter(fanOut, () => true);
+    const filter2 = new Filter(fanOut, () => true);
+    const filter3 = new Filter(fanOut, () => true);
+    const fanIn = new FanIn(fanOut, [filter1, filter2, filter3]);
+    fanOut.setFanIn(fanIn);
+    return fanIn;
+  });
+
+  const out = new Catch(pipeline);
 
   ms.push({type: 'add', row: {a: 1, b: 'foo'}});
 
