@@ -4,6 +4,7 @@ import type postgres from 'postgres';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {Queue} from '../../../shared/src/queue.ts';
+import {stringify} from '../types/bigint-json.ts';
 import type {PostgresDB, PostgresTransaction} from '../types/pg.ts';
 import * as Mode from './mode-enum.ts';
 
@@ -203,8 +204,13 @@ export class TransactionPool {
                     .execute()
                     .then(() => {
                       if (++stmts % 1000 === 0) {
+                        const q = stmt as unknown as Query;
                         lc.debug?.(
-                          `executed ${stmts} statements (${performance.now() - start} ms)`,
+                          `executed ${stmts}th statement (${performance.now() - start} ms)`,
+                          {
+                            statement: q.string,
+                            params: stringify(q.parameters),
+                          },
                         );
                       }
                     })
@@ -667,3 +673,7 @@ export const TIMEOUT_TASKS: TimeoutTasks = {
     task: 'done',
   },
 };
+
+// The slice of information from the Query object in Postgres.js that gets logged for debugging.
+// https://github.com/porsager/postgres/blob/f58cd4f3affd3e8ce8f53e42799672d86cd2c70b/src/connection.js#L219
+type Query = {string: string; parameters: object[]};
