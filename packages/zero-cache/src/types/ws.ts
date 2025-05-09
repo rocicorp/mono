@@ -28,21 +28,21 @@ export function sendPingsForLiveness(
   ws: WebSocket,
   intervalMs: number,
 ) {
-  let alive = true;
-  ws.on('pong', () => (alive = true));
+  let gotLivenessSignal = true;
 
-  let heartbeatTimer: NodeJS.Timeout | undefined;
+  let livenessTimer: NodeJS.Timeout | undefined;
   function startHeartBeats() {
-    heartbeatTimer = setInterval(() => {
-      if (!alive) {
+    livenessTimer = setInterval(() => {
+      if (!gotLivenessSignal) {
         lc.warn?.(
           `socket@${ws.url} did not respond to heartbeat. Terminating...`,
         );
         ws.terminate();
         return;
       }
-
-      alive = false;
+      // Reset gotLivenessSignal and expect another pong or message to arrive
+      // before the next interval elapses.
+      gotLivenessSignal = false;
       ws.ping();
     }, intervalMs);
   }
@@ -53,7 +53,13 @@ export function sendPingsForLiveness(
     startHeartBeats();
   }
 
-  ws.once('close', () => clearInterval(heartbeatTimer));
+  // Both pongs and messages are accepted as signs of liveness.
+  // Checking for pongs only risks false positives as pongs may be backed
+  // up behind a large stream of messages.
+  const signalAlive = () => (gotLivenessSignal = true);
+  ws.on('pong', () => signalAlive);
+  ws.on('message', signalAlive);
+  ws.once('close', () => clearInterval(livenessTimer));
 }
 
 export function expectPingsForLiveness(
@@ -70,11 +76,11 @@ export function expectPingsForLiveness(
         `socket@${ws.url} did not send heartbeat or messages. Terminating...`,
       );
       ws.terminate();
-    } else {
-      // Reset gotLivenessSignal and expect another ping or message to arrive
-      // before the next interval elapses.
-      gotLivenessSignal = false;
+      return;
     }
+    // Reset gotLivenessSignal and expect another ping or message to arrive
+    // before the next interval elapses.
+    gotLivenessSignal = false;
   }, intervalMs + timeoutBufferMs);
 
   // Both pings and messages are accepted as signs of liveness.
