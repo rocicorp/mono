@@ -4,6 +4,25 @@ import type {Change} from './change.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
 
+/**
+ * The `where` clause of a ZQL query is implemented using a sub-graph of
+ * `FilterOperators`.  This sub-graph starts with a `FilterStart` operator,
+ * that adapts from the normal `Operator` `Output`, to the
+ * `FilterOperator` `FilterInput`, and ends with a `FilterEnd` operator that
+ * adapts from a `FilterOperator` `FilterOutput` to a normal `Operator` `Input`.
+ * `FilterOperator'`s do not have `fetch` or `cleanup` instead they have a
+ * `filter(node: Node, cleanup: boolean): boolean` method.
+ * They also have `push` which is just like normal `Operator` push.
+ * Not having a `fetch` means these `FilterOperator`'s cannot modify
+ * `Node` `row`s or `relationship`s, but they shouldn't, they should just
+ * filter.
+ *
+ * This FilterOperator abstraction enable much more efficient processing of
+ * `fetch` for `where` clauses containing OR conditions.
+ *
+ * See https://github.com/rocicorp/mono/pull/4339
+ */
+
 export interface FilterInput extends InputBase {
   /** Tell the input where to send its output. */
   setFilterOutput(output: FilterOutput): void;
