@@ -342,6 +342,19 @@ export const zeroOptions = {
       // hidden flag as an emergency to unblock people with outlier network configs.
       hidden: true,
     },
+
+    uri: {
+      type: v
+        .string()
+        .assert(() => {
+          throw new Error(
+            `ZERO_CHANGE_STREAMER_URI is deprecated. Please see notes for ` +
+              `ZERO_CHANGE_STREAMER_MODE: https://github.com/rocicorp/mono/pull/4335`,
+          );
+        })
+        .optional(),
+      hidden: true,
+    },
   },
 
   taskID: {
