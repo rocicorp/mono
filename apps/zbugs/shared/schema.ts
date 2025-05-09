@@ -1,205 +1,73 @@
 import {
   ANYONE_CAN,
-  boolean,
   createSchema,
   definePermissions,
-  enumeration,
-  number,
   relationships,
-  string,
-  table,
   type ExpressionBuilder,
-  type Row,
 } from '@rocicorp/zero';
 import type {AuthData} from './auth.ts';
+import {
+  commentTable,
+  commentTableRelationships,
+  emojiTable,
+  emojiTableRelationships,
+  issueLabelTable,
+  issueLabelTableRelationships,
+  issueTable,
+  issueTableRelationships,
+  labelTable,
+  userPrefTable,
+  userTable,
+  userTableRelationships,
+  viewStateTable,
+} from './prisma/generated/schema.ts';
 
-// Table definitions
-const user = table('user')
-  .columns({
-    id: string(),
-    login: string(),
-    name: string().optional(),
-    avatar: string(),
-    role: enumeration<'user' | 'crew'>(),
-  })
-  .primaryKey('id');
+export type {
+  Comment as CommentRow,
+  Issue as IssueRow,
+  User as UserRow,
+} from './prisma/generated/schema.ts';
 
-const issue = table('issue')
-  .columns({
-    id: string(),
-    shortID: number().optional(),
-    title: string(),
-    open: boolean(),
-    modified: number(),
-    created: number(),
-    creatorID: string(),
-    assigneeID: string().optional(),
-    description: string(),
-    visibility: string(),
-  })
-  .primaryKey('id');
-
-const viewState = table('viewState')
-  .columns({
-    issueID: string(),
-    userID: string(),
-    viewed: number(),
-  })
-  .primaryKey('userID', 'issueID');
-
-const comment = table('comment')
-  .columns({
-    id: string(),
-    issueID: string(),
-    created: number(),
-    body: string(),
-    creatorID: string(),
-  })
-  .primaryKey('id');
-
-const label = table('label')
-  .columns({
-    id: string(),
-    name: string(),
-  })
-  .primaryKey('id');
-
-const issueLabel = table('issueLabel')
-  .columns({
-    issueID: string(),
-    labelID: string(),
-  })
-  .primaryKey('issueID', 'labelID');
-
-const emoji = table('emoji')
-  .columns({
-    id: string(),
-    value: string(),
-    annotation: string(),
-    subjectID: string(),
-    creatorID: string(),
-    created: number(),
-  })
-  .primaryKey('id');
-
-const userPref = table('userPref')
-  .columns({
-    key: string(),
-    userID: string(),
-    value: string(),
-  })
-  .primaryKey('userID', 'key');
-
-// Relationships
-const userRelationships = relationships(user, ({many}) => ({
-  createdIssues: many({
-    sourceField: ['id'],
-    destField: ['creatorID'],
-    destSchema: issue,
-  }),
-}));
-
-const issueRelationships = relationships(issue, ({many, one}) => ({
+// Prisma cannot generate the labels relationships because of the way
+// join/junction tables work there is different.
+const manualIssueTableRelationships = relationships(issueTable, ({many}) => ({
+  ...issueTableRelationships.relationships,
   labels: many(
     {
       sourceField: ['id'],
       destField: ['issueID'],
-      destSchema: issueLabel,
+      destSchema: issueLabelTable,
     },
     {
       sourceField: ['labelID'],
       destField: ['id'],
-      destSchema: label,
+      destSchema: labelTable,
     },
   ),
-  comments: many({
-    sourceField: ['id'],
-    destField: ['issueID'],
-    destSchema: comment,
-  }),
-  creator: one({
-    sourceField: ['creatorID'],
-    destField: ['id'],
-    destSchema: user,
-  }),
-  assignee: one({
-    sourceField: ['assigneeID'],
-    destField: ['id'],
-    destSchema: user,
-  }),
-  viewState: many({
-    sourceField: ['id'],
-    destField: ['issueID'],
-    destSchema: viewState,
-  }),
-  emoji: many({
-    sourceField: ['id'],
-    destField: ['subjectID'],
-    destSchema: emoji,
-  }),
-}));
-
-const commentRelationships = relationships(comment, ({one, many}) => ({
-  creator: one({
-    sourceField: ['creatorID'],
-    destField: ['id'],
-    destSchema: user,
-  }),
-  emoji: many({
-    sourceField: ['id'],
-    destField: ['subjectID'],
-    destSchema: emoji,
-  }),
-  issue: one({
-    sourceField: ['issueID'],
-    destField: ['id'],
-    destSchema: issue,
-  }),
-}));
-
-const issueLabelRelationships = relationships(issueLabel, ({one}) => ({
-  issue: one({
-    sourceField: ['issueID'],
-    destField: ['id'],
-    destSchema: issue,
-  }),
-}));
-
-const emojiRelationships = relationships(emoji, ({one}) => ({
-  creator: one({
-    sourceField: ['creatorID'],
-    destField: ['id'],
-    destSchema: user,
-  }),
-  issue: one({
-    sourceField: ['subjectID'],
-    destField: ['id'],
-    destSchema: issue,
-  }),
-  comment: one({
-    sourceField: ['subjectID'],
-    destField: ['id'],
-    destSchema: comment,
-  }),
 }));
 
 export const schema = createSchema({
-  tables: [user, issue, comment, label, issueLabel, viewState, emoji, userPref],
+  tables: [
+    userTable,
+    issueTable,
+    commentTable,
+    labelTable,
+    issueLabelTable,
+    viewStateTable,
+    emojiTable,
+    userPrefTable,
+  ],
   relationships: [
-    userRelationships,
-    issueRelationships,
-    commentRelationships,
-    issueLabelRelationships,
-    emojiRelationships,
+    userTableRelationships,
+    manualIssueTableRelationships,
+    commentTableRelationships,
+    issueLabelTableRelationships,
+    emojiTableRelationships,
   ],
 });
 
 export type Schema = typeof schema;
 type TableName = keyof Schema['tables'];
-
-export type IssueRow = Row<typeof schema.tables.issue>;
-export type CommentRow = Row<typeof schema.tables.comment>;
-export type UserRow = Row<typeof schema.tables.user>;
 
 export const permissions: ReturnType<typeof definePermissions> =
   definePermissions<AuthData, Schema>(schema, () => {
