@@ -667,7 +667,3 @@ export const TIMEOUT_TASKS: TimeoutTasks = {
     task: 'done',
   },
 };
-
-// The slice of information from the Query object in Postgres.js that gets logged for debugging.
-// https://github.com/porsager/postgres/blob/f58cd4f3affd3e8ce8f53e42799672d86cd2c70b/src/query.js#L6
-type Stmt = {strings: string[]};
