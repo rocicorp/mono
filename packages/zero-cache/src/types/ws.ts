@@ -57,7 +57,7 @@ export function sendPingsForLiveness(
   // Checking for pongs only risks false positives as pongs may be backed
   // up behind a large stream of messages.
   const signalAlive = () => (gotLivenessSignal = true);
-  ws.on('pong', () => signalAlive);
+  ws.on('pong', signalAlive);
   ws.on('message', signalAlive);
   ws.once('close', () => clearInterval(livenessTimer));
 }
