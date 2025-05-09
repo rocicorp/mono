@@ -1,4 +1,7 @@
-import {PG_OBJECT_IN_USE} from '@drdgvhbh/postgres-error-codes';
+import {
+  PG_ADMIN_SHUTDOWN,
+  PG_OBJECT_IN_USE,
+} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {defu} from 'defu';
 import postgres, {type Options, type PostgresType} from 'postgres';
@@ -99,8 +102,13 @@ export async function subscribe(
       // Only log a warning if the stream was not manually closed.
       destroyed || lc.warn?.(`replication stream closed by ${db.options.host}`),
   );
-  readable.once('error', err =>
-    lc.error?.(`error from ${db.options.host}`, err),
+  readable.once(
+    'error',
+    e =>
+      // Don't log the shutdown signal. This is the expected way for upstream
+      // to close the connection (and will be logged downstream).
+      (e instanceof postgres.PostgresError && e.code === PG_ADMIN_SHUTDOWN) ||
+      lc.error?.(`error from ${db.options.host}`, e),
   );
 
   pipe(readable, messages, buffer => parseStreamMessage(lc, buffer, parser));
