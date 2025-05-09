@@ -164,7 +164,8 @@ export class TransactionPool {
   }
 
   #addWorker(db: PostgresDB) {
-    const lc = this.#lc.withContext('worker', `#${this.#workers.length + 1}`);
+    const id = this.#workers.length + 1;
+    const lc = this.#lc.withContext('tx', id);
 
     const tt: TimeoutTask =
       this.#workers.length < this.#initialWorkers
@@ -176,10 +177,12 @@ export class TransactionPool {
 
     const worker = async (tx: PostgresTransaction) => {
       try {
-        lc.debug?.('started worker');
+        const start = performance.now();
+        lc.debug?.('started transaction');
 
         const pending: Promise<unknown>[] = [];
 
+        let stmts = 0;
         const executeTask = async (taskTracker: TaskTracker) => {
           const {task, resolver} = taskTracker;
 
@@ -194,17 +197,17 @@ export class TransactionPool {
               // Optimization: Fail immediately on rejections to prevent more tasks from
               // queueing up. This can save a lot of time if an initial task fails before
               // many subsequent tasks (e.g. transaction replay detection).
-              const start = Date.now();
               pending.push(
                 ...result.stmts.map(stmt =>
                   stmt
                     .execute()
-                    .then(() =>
-                      lc.debug?.(
-                        `Executed statement (${Date.now() - start} ms)`,
-                        (stmt as unknown as Stmt).strings,
-                      ),
-                    )
+                    .then(() => {
+                      if (++stmts % 1000 === 0) {
+                        lc.debug?.(
+                          `executed ${stmts} statements (${performance.now() - start} ms)`,
+                        );
+                      }
+                    })
                     .catch(e => this.fail(e)),
                 ),
               );
@@ -249,7 +252,7 @@ export class TransactionPool {
           }
         }
 
-        lc.debug?.('worker done');
+        lc.debug?.('closing transaction');
         return Promise.all(pending);
       } catch (e) {
         if (e !== this.#failure) {
@@ -267,6 +270,7 @@ export class TransactionPool {
           if (e instanceof RollbackSignal) {
             // A RollbackSignal is used to gracefully rollback the postgres.js
             // transaction block. It should not be thrown up to the application.
+            lc.debug?.('aborted transaction');
           } else {
             throw e;
           }
@@ -663,7 +667,3 @@ export const TIMEOUT_TASKS: TimeoutTasks = {
     task: 'done',
   },
 };
-
-// The slice of information from the Query object in Postgres.js that gets logged for debugging.
-// https://github.com/porsager/postgres/blob/f58cd4f3affd3e8ce8f53e42799672d86cd2c70b/src/query.js#L6
-type Stmt = {strings: string[]};
