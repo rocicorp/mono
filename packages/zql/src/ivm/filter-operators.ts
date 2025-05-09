@@ -17,7 +17,7 @@ import type {Stream} from './stream.ts';
  * `Node` `row`s or `relationship`s, but they shouldn't, they should just
  * filter.
  *
- * This FilterOperator abstraction enable much more efficient processing of
+ * This `FilterOperator` abstraction enables much more efficient processing of
  * `fetch` for `where` clauses containing OR conditions.
  *
  * See https://github.com/rocicorp/mono/pull/4339
