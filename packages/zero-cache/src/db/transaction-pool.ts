@@ -243,9 +243,10 @@ export class TransactionPool {
               task instanceof Error ||
               (task.task !== this.#init && this.#failure)
             ) {
+              // avoid unhandled rejections
               void Promise.allSettled(pending).then(() =>
                 lc.info?.(`aborted ${pending.length} statements`),
-              ); // avoid unhandled rejections
+              );
               throw this.#failure ?? task;
             }
             await executeTask(task);
