@@ -491,13 +491,6 @@ class ChangeMaker {
 
   // eslint-disable-next-line require-await
   async #makeChanges(msg: Message): Promise<ChangeStreamData[]> {
-    // Avoid sending the `columns` from the Postgres MessageRelation message.
-    // They are not used downstream and the message can be large.
-    function withoutColumns(relation: PostgresRelation): MessageRelation {
-      const {columns: _, ...rest} = relation;
-      return rest;
-    }
-
     switch (msg.tag) {
       case 'begin':
         return [
@@ -914,6 +907,13 @@ function columnsByID(
     colsByID.set(spec.pos, {...spec, name});
   }
   return colsByID;
+}
+
+// Avoid sending the `columns` from the Postgres MessageRelation message.
+// They are not used downstream and the message can be large.
+function withoutColumns(relation: PostgresRelation): MessageRelation {
+  const {columns: _, ...rest} = relation;
+  return rest;
 }
 
 export class UnsupportedSchemaChangeError extends Error {
