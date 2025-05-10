@@ -50,7 +50,7 @@ import {
 import type {
   DataChange,
   Identifier,
-  MessageDelete,
+  MessageRelation,
 } from '../protocol/current/data.ts';
 import type {
   ChangeStreamData,
@@ -61,7 +61,7 @@ import {type InitialSyncOptions} from './initial-sync.ts';
 import type {
   Message,
   MessageMessage,
-  MessageRelation,
+  MessageRelation as PostgresRelation,
 } from './logical-replication/pgoutput.types.ts';
 import {subscribe} from './logical-replication/stream.ts';
 import {fromBigInt, toLexiVersion, type LSN} from './lsn.ts';
@@ -507,20 +507,39 @@ class ChangeMaker {
             `Invalid DELETE msg (missing key): ${stringify(msg)}`,
           );
         }
-        // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-DELETE
         return [
-          ['data', msg.old ? {...msg, key: msg.old} : (msg as MessageDelete)],
+          [
+            'data',
+            {
+              ...msg,
+              relation: withoutColumns(msg.relation),
+              // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-DELETE
+              key: must(msg.old ?? msg.key),
+            },
+          ],
         ];
       }
 
       case 'update': {
-        // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-UPDATE
-        return [['data', msg.old ? {...msg, key: msg.old} : msg]];
+        return [
+          [
+            'data',
+            {
+              ...msg,
+              relation: withoutColumns(msg.relation),
+              // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html#PROTOCOL-LOGICALREP-MESSAGE-FORMATS-UPDATE
+              key: msg.old ?? msg.key,
+            },
+          ],
+        ];
       }
 
       case 'insert':
+        return [['data', {...msg, relation: withoutColumns(msg.relation)}]];
       case 'truncate':
-        return [['data', msg]];
+        return [
+          ['data', {...msg, relations: msg.relations.map(withoutColumns)}],
+        ];
 
       case 'message':
         if (msg.prefix !== this.#shardPrefix) {
@@ -749,7 +768,7 @@ class ChangeMaker {
    * this mechanism cannot be used to reliably *replicate* schema changes.
    * However, they serve the purpose determining if schemas have changed.
    */
-  async #handleRelation(rel: MessageRelation): Promise<ChangeStreamData[]> {
+  async #handleRelation(rel: PostgresRelation): Promise<ChangeStreamData[]> {
     const {publications, ddlDetection} = this.#shardConfig;
     if (ddlDetection) {
       return [];
@@ -832,7 +851,7 @@ export function tablesDifferent(a: PublishedTableSpec, b: PublishedTableSpec) {
   );
 }
 
-export function relationDifferent(a: PublishedTableSpec, b: MessageRelation) {
+export function relationDifferent(a: PublishedTableSpec, b: PostgresRelation) {
   if (a.oid !== b.relationOid || a.schema !== b.schema || a.name !== b.name) {
     return true;
   }
@@ -888,6 +907,13 @@ function columnsByID(
     colsByID.set(spec.pos, {...spec, name});
   }
   return colsByID;
+}
+
+// Avoid sending the `columns` from the Postgres MessageRelation message.
+// They are not used downstream and the message can be large.
+function withoutColumns(relation: PostgresRelation): MessageRelation {
+  const {columns: _, ...rest} = relation;
+  return rest;
 }
 
 export class UnsupportedSchemaChangeError extends Error {
