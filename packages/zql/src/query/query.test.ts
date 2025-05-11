@@ -614,13 +614,10 @@ describe('types', () => {
     // @ts-expect-error - IN cannot compare with undefined.
     q1.where('s', 'IN', [undefined]);
 
-    // IS and IS NOT can always compare with null
+    // IS and IS NOT can always compare with null and undefined
     q1.where('s', 'IS', null);
     q1.where('s', 'IS NOT', null);
-
-    // @ts-expect-error - IS cannot compare with undefined
     q1.where('s', 'IS', undefined);
-    // @ts-expect-error - same with IS NOT
     q1.where('s', 'IS NOT', undefined);
 
     const q2 = mockQuery as unknown as Query<Schema, 'testWithNulls'>;
@@ -636,11 +633,7 @@ describe('types', () => {
 
     q2.where('s', 'IS', null);
     q2.where('s', 'IS NOT', null);
-
-    // @ts-expect-error - IS cannot compare with undefined, even when field is
-    // optional.
     q2.where('s', 'IS', undefined);
-    // @ts-expect-error - Same with IS NOT
     q2.where('s', 'IS NOT', undefined);
   });
 
