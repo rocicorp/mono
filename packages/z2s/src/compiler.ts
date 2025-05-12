@@ -165,8 +165,10 @@ export function orderBy(
 
 function maybeCollate(serverColumnSchema: ServerColumnSchema): SQLQuery {
   if (
+    serverColumnSchema.type === 'bpchar' ||
+    serverColumnSchema.type === 'character' ||
     serverColumnSchema.type === 'text' ||
-    serverColumnSchema.type === 'char' ||
+    serverColumnSchema.type === 'character varying' ||
     serverColumnSchema.type === 'varchar'
   ) {
     return sql` COLLATE ${sql.ident(Z2S_COLLATION)}`;

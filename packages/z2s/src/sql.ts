@@ -33,6 +33,7 @@ type SqlConvertArg =
   | {
       [sqlConvert]: 'column';
       type: string;
+      castType: string;
       isEnum: boolean;
       value: unknown;
       plural: boolean;
@@ -82,12 +83,13 @@ export function sqlConvertColumnArg(
 ): SQLQuery {
   return sql.value({
     [sqlConvert]: 'column',
+    castType: serverColumnSchema.castType,
     type: serverColumnSchema.type,
     isEnum: serverColumnSchema.isEnum,
     value,
     plural,
     isComparison,
-  });
+  } satisfies SqlConvertArg);
 }
 
 class ReusingFormat implements FormatConfig {
@@ -205,14 +207,14 @@ class SQLConvertFormat implements FormatConfig {
         case 'character':
         case 'character varying':
         case 'varchar':
-          return `$${index}::text::${arg.type}${collate}`;
+          return `$${index}::text::${arg.castType}${collate}`;
         // uuid doesn't support collation, so we compare as text
         case 'uuid':
           return arg.isComparison
             ? `$${index}::text${collate}`
             : `$${index}::text::uuid`;
         default:
-          return `$${index}::text::${arg.type}`;
+          return `$${index}::text::${arg.castType}`;
       }
     }
 
@@ -220,7 +222,7 @@ class SQLConvertFormat implements FormatConfig {
       if (arg.isComparison) {
         return formatPlural(index, `value::text${collate}`);
       }
-      return formatPlural(index, `value::${arg.type}`);
+      return formatPlural(index, `value::${arg.castType}`);
     }
 
     switch (arg.type) {
@@ -235,14 +237,14 @@ class SQLConvertFormat implements FormatConfig {
       case 'character varying':
       case 'text':
       case 'varchar':
-        return formatPlural(index, `value::${arg.type}${collate}`);
+        return formatPlural(index, `value::${arg.castType}${collate}`);
       // uuid doesn't support collation, so we compare as text
       case 'uuid':
         return arg.isComparison
           ? formatPlural(index, `value::text${collate}`)
-          : formatPlural(index, `value::${arg.type}`);
+          : formatPlural(index, `value::${arg.castType}`);
       default:
-        return formatPlural(index, `value::${arg.type}`);
+        return formatPlural(index, `value::${arg.castType}`);
     }
   }
 }

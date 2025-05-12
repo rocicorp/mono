@@ -10,6 +10,9 @@ export type ServerSchemaRow = {
   table: string;
   column: string;
   type: string;
+  length: string | null;
+  precision: string | null;
+  scale: string | null;
   enum: string;
   enumtype: string;
 };
@@ -52,6 +55,9 @@ export async function getServerSchema<S extends Schema>(
           c.table_name::text AS table,
           c.column_name::text AS column,
           c.data_type::text AS type,
+          c.character_maximum_length AS length,
+          c.numeric_precision AS precision,
+          c.numeric_scale AS scale,
           (t.typtype = 'e')::text AS enum,
           t.typname::text AS enumtype
       FROM
@@ -80,8 +86,29 @@ export async function getServerSchema<S extends Schema>(
       serverSchema[tableName] = tableSchema;
     }
     const isEnum = row.enum.toLowerCase().startsWith('t');
+    let type = row.type.toLocaleLowerCase();
+    if (isEnum) {
+      type = row.enumtype;
+    }
+    let castType = type;
+    if (
+      (castType === 'character' ||
+        castType === 'bpchar' ||
+        castType === 'character varying') &&
+      row.length
+    ) {
+      castType = `${castType}(${row.length})`;
+    }
+    if (
+      (castType === 'numeric' || castType === 'decimal') &&
+      row.precision !== null &&
+      row.scale !== null
+    ) {
+      castType = `${castType}(${row.precision}, ${row.scale})`;
+    }
     tableSchema[row.column] = {
-      type: isEnum ? row.enumtype : row.type,
+      type,
+      castType,
       isEnum,
     };
   }
