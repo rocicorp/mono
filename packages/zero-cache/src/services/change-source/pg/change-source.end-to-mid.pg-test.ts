@@ -166,9 +166,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
       [
         {
-          columns: {id: 'ASC'},
-          name: 'my.baz_pkey',
           tableName: 'my.baz',
+          name: 'my.baz_pkey',
+          columns: {id: 'ASC'},
           unique: true,
         },
       ],
@@ -201,9 +201,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
       [
         {
-          columns: {id: 'ASC'},
-          name: 'my.baz_pkey',
           tableName: 'my.bar',
+          name: 'my.baz_pkey',
+          columns: {id: 'ASC'},
           unique: true,
         },
       ],
@@ -365,9 +365,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
       [
         {
-          columns: {handle: 'ASC'},
-          name: 'my.bar_pkey',
           tableName: 'my.bar',
+          name: 'my.bar_pkey',
+          columns: {handle: 'ASC'},
           unique: true,
         },
       ],
@@ -414,8 +414,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
       [
         {
-          name: 'my.bar_username_key',
           tableName: 'my.bar',
+          name: 'my.bar_username_key',
           columns: {username: 'ASC'},
           unique: true,
         },
@@ -463,8 +463,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
       [
         {
-          name: 'my.bar_username_key',
           tableName: 'my.bar',
+          name: 'my.bar_username_key',
           columns: {login: 'ASC'},
           unique: true,
         },
@@ -512,8 +512,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
       [
         {
-          name: 'my.bar_username_key',
           tableName: 'my.bar',
+          name: 'my.bar_username_key',
           columns: {login: 'ASC'},
           unique: true,
         },
@@ -563,8 +563,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
       [
         {
-          name: 'my.bar_username_key',
           tableName: 'my.bar',
+          name: 'my.bar_username_key',
           columns: {login: 'ASC'},
           unique: true,
         },
@@ -752,9 +752,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
       [
         {
-          columns: {handle: 'ASC'},
-          name: 'your.bar_pkey',
           tableName: 'your.bar',
+          name: 'your.bar_pkey',
+          columns: {handle: 'ASC'},
           unique: true,
         },
       ],
@@ -975,14 +975,14 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
       [
         {
-          name: 'boo_name_key',
           tableName: 'boo',
+          name: 'boo_name_key',
           columns: {name: 'ASC'},
           unique: true,
         },
         {
-          name: 'boo_pkey',
           tableName: 'boo',
+          name: 'boo_pkey',
           columns: {id: 'ASC'},
           unique: true,
         },
@@ -990,26 +990,35 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     ],
     [
       'create index',
-      'CREATE INDEX foo_flt ON foo (flt DESC);',
-      [{tag: 'create-index'}],
+      `
+      CREATE INDEX foo_flt1 ON foo (flt DESC, id ASC);
+      CREATE INDEX foo_flt2 ON foo (id DESC, flt DESC);
+      `,
+      [{tag: 'create-index'}, {tag: 'create-index'}],
       {foo: []},
       [],
       [
         {
-          name: 'foo_flt',
           tableName: 'foo',
-          columns: {flt: 'DESC'},
+          name: 'foo_flt1',
+          columns: {flt: 'DESC', id: 'ASC'},
+          unique: false,
+        },
+        {
+          tableName: 'foo',
+          name: 'foo_flt2',
+          columns: {id: 'DESC', flt: 'DESC'},
           unique: false,
         },
       ],
     ],
     [
       'drop index',
-      'DROP INDEX foo_flt;',
+      'DROP INDEX foo_flt1;',
       [
         {
           tag: 'drop-index',
-          id: {schema: 'public', name: 'foo_flt'},
+          id: {schema: 'public', name: 'foo_flt1'},
         },
       ],
       {foo: []},
@@ -1339,15 +1348,15 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
       [
         {
-          columns: {a: 'ASC'},
-          name: 'existing_pkey',
           tableName: 'existing',
+          name: 'existing_pkey',
+          columns: {a: 'ASC'},
           unique: true,
         },
         {
-          columns: {a: 'ASC'},
-          name: 'existing_full_pkey',
           tableName: 'existing_full',
+          name: 'existing_full_pkey',
+          columns: {a: 'ASC'},
           unique: true,
         },
       ],
@@ -1379,9 +1388,13 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       for (const table of expectedTables) {
         expect(tables).toContainEqual(table);
       }
-      const indexes = listIndexes(replica);
+      const indexes = new Map(listIndexes(replica).map(idx => [idx.name, idx]));
       for (const index of expectedIndexes) {
-        expect(indexes).toContainEqual(index);
+        expect(indexes.has(index.name));
+        // Check the stringified indexes to verify field ordering.
+        expect(JSON.stringify(indexes.get(index.name), null, 2)).toBe(
+          JSON.stringify(index, null, 2),
+        );
       }
     },
   );
