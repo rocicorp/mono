@@ -192,7 +192,6 @@ function formatCommonToSingularAndPlural(
   // as being text. Without the text cast the args are described as
   // being bool/json/numeric/whatever and the bindings try to coerce
   // the inputs to those types.
-  const collate = arg.isComparison ? ` COLLATE "${Z2S_COLLATION}"` : '';
   const valuePlaceholder = arg.plural ? 'value' : `$${index}`;
   switch (arg.type) {
     case 'date':
@@ -205,21 +204,32 @@ function formatCommonToSingularAndPlural(
     // uuid doesn't support collation, so we compare as text
     case 'uuid':
       return arg.isComparison
-        ? `${valuePlaceholder}::text${collate}`
+        ? `${valuePlaceholder}::text COLLATE "${Z2S_COLLATION}"`
         : `${valuePlaceholder}::text::uuid`;
   }
   if (arg.isEnum) {
-    if (arg.isComparison) {
-      return `${valuePlaceholder}::text${collate}`;
-    }
-    return `${valuePlaceholder}::text::"${arg.type}"`;
+    return arg.isComparison
+      ? `${valuePlaceholder}::text COLLATE "${Z2S_COLLATION}"`
+      : `${valuePlaceholder}::text::"${arg.type}"`;
   }
   if (isPgStringType(arg.type)) {
-    return `${valuePlaceholder}::text${collate}`;
+    // For comparison cast to the general `text` type, not the
+    // specific column type (i.e. `arg.type`), because we don't want to
+    // force the value being compared to the size/max-size of the column
+    // type before comparison.
+    return arg.isComparison
+      ? `${valuePlaceholder}::text COLLATE "${Z2S_COLLATION}"`
+      : `${valuePlaceholder}::text::${arg.type}`;
   }
   if (isPgNumberType(arg.type)) {
-    // `double precision` is same representation as JavaScript numbers IEEE 754
-    return `${valuePlaceholder}::text::double precision`;
+    // For comparison cast to `double precision` which uses IEEE 754 (the same
+    // representation as JavaScript numbers which will accurately
+    // represent any number value from zql)not the specific column type
+    // (i.e. `arg.type`), because we don't want to force the value being
+    // compared to the range and precision of the column type before comparison.
+    return arg.isComparison
+      ? `${valuePlaceholder}::text::double precision"`
+      : `${valuePlaceholder}::text::${arg.type}`;
   }
   return `${valuePlaceholder}::text::${arg.type}`;
 }
@@ -235,7 +245,9 @@ function pgTypeForLiteralType(type: Exclude<LiteralType, 'null'>) {
     case 'boolean':
       return 'boolean';
     case 'number':
-      // `double precision` is same representation as JavaScript numbers IEEE 754
+      // `double precision` uses IEEE 754, the same representation as JavaScript
+      // numbers, and so this will accurately represent any number value
+      // from zql
       return 'double precision';
     case 'string':
       return 'text';
