@@ -235,6 +235,7 @@ function pgTypeForLiteralType(type: Exclude<LiteralType, 'null'>) {
     case 'boolean':
       return 'boolean';
     case 'number':
+      // `double precision` is same representation as JavaScript numbers IEEE 754
       return 'double precision';
     case 'string':
       return 'text';
