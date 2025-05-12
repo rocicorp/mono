@@ -643,8 +643,8 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         },
         {
           columns: {
-            issueID: 'ASC',
             orgID: 'ASC',
+            issueID: 'ASC',
           },
           name: 'issues_pkey',
           schema: 'public',
@@ -1382,8 +1382,8 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         },
         {
           columns: {
-            issueID: 'ASC',
             orgID: 'ASC',
+            issueID: 'ASC',
           },
           name: 'issues_pkey',
           schema: 'public',
@@ -1778,9 +1778,14 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           new Set(c.resultingPublications),
         );
 
-        const syncedIndices = listIndexes(replica);
-        expect(syncedIndices).toEqual(
-          c.replicatedIndexes.map(idx => mapPostgresToLiteIndex(idx)),
+        const syncedIndexes = listIndexes(replica);
+        // Test stringified indexes to verify field ordering.
+        expect(JSON.stringify(syncedIndexes, null, 2)).toEqual(
+          JSON.stringify(
+            c.replicatedIndexes.map(idx => mapPostgresToLiteIndex(idx)),
+            null,
+            2,
+          ),
         );
 
         expectMatchingObjectsInTables(replica, c.replicatedData, 'bigint');

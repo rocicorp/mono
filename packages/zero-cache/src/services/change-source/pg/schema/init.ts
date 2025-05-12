@@ -165,6 +165,18 @@ function getIncrementalMigrations(
         lc.info?.(`Upgraded schema to support non-disruptive resyncs`);
       },
     },
+
+    // Fixes field ordering of compound indexes. This incremental migration
+    // only fixes indexes resulting from new schema changes. A full resync is
+    // required to fix existing indexes.
+    9: {
+      migrateSchema: async (lc, sql) => {
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(lc, sql, {...shard, publications});
+        lc.info?.(`Upgraded DDL event triggers`);
+      },
+    },
   };
 }
 
