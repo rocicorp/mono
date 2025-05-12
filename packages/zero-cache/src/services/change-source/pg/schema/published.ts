@@ -127,7 +127,8 @@ export function indexDefinitionsQuery(publications: readonly string[]) {
     ) as indexed ON true
     JOIN LATERAL (
       SELECT pg_attribute.attname as name, col.index_pos as pos
-        FROM UNNEST(pg_index.indkey) WITH ORDINALITY as col(table_pos, index_pos)
+        FROM UNNEST( (pg_index.indkey::smallint[])[:pg_index.indnkeyatts - 1] ) 
+          WITH ORDINALITY as col(table_pos, index_pos)
         JOIN pg_attribute ON attrelid = pg_index.indrelid AND attnum = col.table_pos
     ) AS index_column ON true
     LEFT JOIN pg_constraint ON pg_constraint.conindid = pc.oid
@@ -150,7 +151,7 @@ export function indexDefinitionsQuery(publications: readonly string[]) {
       'unique', "unique",
       'isReplicaIdentity', "isReplicaIdentity",
       'isImmediate', "isImmediate",
-      'columns', json_object_agg(DISTINCT "col", "dir")
+      'columns', json_object_agg("col", "dir")
     ) AS index FROM indexed_columns 
       GROUP BY "schema", "tableName", "name", "unique", "isReplicaIdentity", "isImmediate")
 
