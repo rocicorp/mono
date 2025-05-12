@@ -2,20 +2,14 @@ import {areEqual} from '../../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import {type Change} from './change.ts';
+import {normalizeUndefined, type Node, type NormalizedValue} from './data.ts';
 import {
-  drainStreams,
-  normalizeUndefined,
-  type Node,
-  type NormalizedValue,
-} from './data.ts';
-import {
-  throwOutput,
-  type FetchRequest,
-  type Input,
-  type Operator,
-  type Output,
-  type Storage,
-} from './operator.ts';
+  throwFilterOutput,
+  type FilterInput,
+  type FilterOperator,
+  type FilterOutput,
+} from './filter-operators.ts';
+import {type Storage} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {first} from './stream.ts';
 
@@ -45,15 +39,15 @@ interface ExistsStorage {
  * The Exists operator filters data based on whether or not a relationship is
  * non-empty.
  */
-export class Exists implements Operator {
-  readonly #input: Input;
+export class Exists implements FilterOperator {
+  readonly #input: FilterInput;
   readonly #relationshipName: string;
   readonly #storage: ExistsStorage;
   readonly #not: boolean;
   readonly #parentJoinKey: CompoundKey;
   readonly #noSizeReuse: boolean;
 
-  #output: Output = throwOutput;
+  #output: FilterOutput = throwFilterOutput;
 
   /**
    * This instance variable is `true` when this operator is processing a `push`,
@@ -66,7 +60,7 @@ export class Exists implements Operator {
   #inPush = false;
 
   constructor(
-    input: Input,
+    input: FilterInput,
     storage: Storage,
     relationshipName: string,
     parentJoinKey: CompoundKey,
@@ -74,7 +68,7 @@ export class Exists implements Operator {
   ) {
     this.#input = input;
     this.#relationshipName = relationshipName;
-    this.#input.setOutput(this);
+    this.#input.setFilterOutput(this);
     this.#storage = storage as ExistsStorage;
     assert(
       this.#input.getSchema().relationships[relationshipName],
@@ -90,8 +84,16 @@ export class Exists implements Operator {
     );
   }
 
-  setOutput(output: Output) {
+  setFilterOutput(output: FilterOutput): void {
     this.#output = output;
+  }
+
+  filter(node: Node, cleanup: boolean): boolean {
+    const result = this.#filter(node) && this.#output.filter(node, cleanup);
+    if (cleanup) {
+      this.#delSize(node);
+    }
+    return result;
   }
 
   destroy(): void {
@@ -102,26 +104,8 @@ export class Exists implements Operator {
     return this.#input.getSchema();
   }
 
-  *fetch(req: FetchRequest) {
-    for (const node of this.#input.fetch(req)) {
-      if (this.#filter(node)) {
-        yield node;
-      }
-    }
-  }
-
-  *cleanup(req: FetchRequest) {
-    for (const node of this.#input.cleanup(req)) {
-      if (this.#filter(node)) {
-        yield node;
-      } else {
-        drainStreams(node);
-      }
-      this.#delSize(node);
-    }
-  }
-
   push(change: Change) {
+    assert(!this.#inPush, 'Unexpected re-entrancy');
     this.#inPush = true;
     try {
       switch (change.type) {

@@ -1,29 +1,34 @@
 import {must} from '../../../shared/src/must.ts';
 import type {Change} from './change.ts';
 import type {FanIn} from './fan-in.ts';
-import type {FetchRequest, Input, Operator, Output} from './operator.ts';
+import type {Node} from './data.ts';
+import type {
+  FilterInput,
+  FilterOperator,
+  FilterOutput,
+} from './filter-operators.ts';
 
 /**
  * Forks a stream into multiple streams.
  * Is meant to be paired with a `FanIn` operator which will
  * later merge the forks back together.
  */
-export class FanOut implements Operator {
-  readonly #input: Input;
-  readonly #outputs: Output[] = [];
+export class FanOut implements FilterOperator {
+  readonly #input: FilterInput;
+  readonly #outputs: FilterOutput[] = [];
   #fanIn: FanIn | undefined;
   #destroyCount: number = 0;
 
-  constructor(input: Input) {
+  constructor(input: FilterInput) {
     this.#input = input;
-    input.setOutput(this);
+    input.setFilterOutput(this);
   }
 
   setFanIn(fanIn: FanIn) {
     this.#fanIn = fanIn;
   }
 
-  setOutput(output: Output): void {
+  setFilterOutput(output: FilterOutput): void {
     this.#outputs.push(output);
   }
 
@@ -42,12 +47,17 @@ export class FanOut implements Operator {
     return this.#input.getSchema();
   }
 
-  fetch(req: FetchRequest) {
-    return this.#input.fetch(req);
-  }
-
-  cleanup(req: FetchRequest) {
-    return this.#input.cleanup(req);
+  filter(node: Node, cleanup: boolean): boolean {
+    let result = false;
+    for (const output of this.#outputs) {
+      result = output.filter(node, cleanup) || result;
+      // Cleanup needs to be forwarded to all outputs, don't short circuit
+      // cleanup.  For non-cleanup we can short-circuit on first true.
+      if (!cleanup && result) {
+        return true;
+      }
+    }
+    return result;
   }
 
   push(change: Change) {

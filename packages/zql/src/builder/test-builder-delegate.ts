@@ -1,9 +1,10 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {JSONObject} from '../../../shared/src/json.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {FilterInput} from '../ivm/filter-operators.ts';
 import {MemoryStorage} from '../ivm/memory-storage.ts';
 import type {Storage, Input} from '../ivm/operator.ts';
-import {Snitch, type SnitchMessage} from '../ivm/snitch.ts';
+import {FilterSnitch, Snitch, type SnitchMessage} from '../ivm/snitch.ts';
 import type {Source} from '../ivm/source.ts';
 import type {BuilderDelegate} from './builder.ts';
 
@@ -45,6 +46,13 @@ export class TestBuilderDelegate implements BuilderDelegate {
       return input;
     }
     return new Snitch(input, name, this.#log);
+  }
+
+  decorateFilterInput(input: FilterInput, name: string): FilterInput {
+    if (!this.#shouldLog) {
+      return input;
+    }
+    return new FilterSnitch(input, name, this.#log);
   }
 
   clearLog() {
