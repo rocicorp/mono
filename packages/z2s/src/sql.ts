@@ -33,7 +33,6 @@ type SqlConvertArg =
   | {
       [sqlConvert]: 'column';
       type: string;
-      castType: string;
       isEnum: boolean;
       value: unknown;
       plural: boolean;
@@ -83,13 +82,12 @@ export function sqlConvertColumnArg(
 ): SQLQuery {
   return sql.value({
     [sqlConvert]: 'column',
-    castType: serverColumnSchema.castType,
     type: serverColumnSchema.type,
     isEnum: serverColumnSchema.isEnum,
     value,
     plural,
     isComparison,
-  } satisfies SqlConvertArg);
+  });
 }
 
 class ReusingFormat implements FormatConfig {
@@ -202,19 +200,18 @@ class SQLConvertFormat implements FormatConfig {
         case 'timestamp with time zone':
           return `to_timestamp($${index}::text::bigint / 1000.0)`;
         case 'text':
-          return `$${index}::text${collate}`;
         case 'bpchar':
         case 'character':
         case 'character varying':
         case 'varchar':
-          return `$${index}::text::${arg.castType}${collate}`;
+          return `$${index}::text${collate}`;
         // uuid doesn't support collation, so we compare as text
         case 'uuid':
           return arg.isComparison
             ? `$${index}::text${collate}`
             : `$${index}::text::uuid`;
         default:
-          return `$${index}::text::${arg.castType}`;
+          return `$${index}::text::${arg.type}`;
       }
     }
 
@@ -222,7 +219,7 @@ class SQLConvertFormat implements FormatConfig {
       if (arg.isComparison) {
         return formatPlural(index, `value::text${collate}`);
       }
-      return formatPlural(index, `value::${arg.castType}`);
+      return formatPlural(index, `value::${arg.type}`);
     }
 
     switch (arg.type) {
@@ -237,14 +234,14 @@ class SQLConvertFormat implements FormatConfig {
       case 'character varying':
       case 'text':
       case 'varchar':
-        return formatPlural(index, `value::${arg.castType}${collate}`);
+        return formatPlural(index, `value::text${collate}`);
       // uuid doesn't support collation, so we compare as text
       case 'uuid':
         return arg.isComparison
           ? formatPlural(index, `value::text${collate}`)
-          : formatPlural(index, `value::${arg.castType}`);
+          : formatPlural(index, `value::${arg.type}`);
       default:
-        return formatPlural(index, `value::${arg.castType}`);
+        return formatPlural(index, `value::${arg.type}`);
     }
   }
 }
