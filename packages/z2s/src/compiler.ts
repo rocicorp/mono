@@ -34,6 +34,7 @@ import {
   parse as parseBigIntJson,
 } from '../../zero-cache/src/types/bigint-json.ts';
 import {hasOwn} from '../../shared/src/has-own.ts';
+import {pgToZqlStringTypeMap} from '../../zero-cache/src/types/pg.ts';
 
 type Table = {
   zql: string;
@@ -164,17 +165,11 @@ export function orderBy(
 }
 
 function maybeCollate(serverColumnSchema: ServerColumnSchema): SQLQuery {
-  if (
-    serverColumnSchema.type === 'bpchar' ||
-    serverColumnSchema.type === 'character' ||
-    serverColumnSchema.type === 'text' ||
-    serverColumnSchema.type === 'character varying' ||
-    serverColumnSchema.type === 'varchar'
-  ) {
-    return sql` COLLATE ${sql.ident(Z2S_COLLATION)}`;
-  }
   if (serverColumnSchema.type === 'uuid' || serverColumnSchema.isEnum) {
     return sql`::text COLLATE ${sql.ident(Z2S_COLLATION)}`;
+  }
+  if (Object.hasOwn(pgToZqlStringTypeMap, serverColumnSchema.type)) {
+    return sql` COLLATE ${sql.ident(Z2S_COLLATION)}`;
   }
 
   return sql``;

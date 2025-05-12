@@ -178,7 +178,7 @@ beforeEach(() => {
 test('limit', () => {
   expect(formatPgInternalConvert(limit(10))).toMatchInlineSnapshot(`
     {
-      "text": "LIMIT $1::text::numeric",
+      "text": "LIMIT $1::text::double precision",
       "values": [
         "10",
       ],
@@ -722,7 +722,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""user"."age" > $1::text::numeric",
+      "text": ""user"."age" > $1::text::double precision",
       "values": [
         "21",
       ],
@@ -747,7 +747,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""user"."age" >= $1::text::numeric",
+      "text": ""user"."age" >= $1::text::double precision",
       "values": [
         "21",
       ],
@@ -772,7 +772,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""user"."age" < $1::text::numeric",
+      "text": ""user"."age" < $1::text::double precision",
       "values": [
         "21",
       ],
@@ -797,7 +797,7 @@ test('simple', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": ""user"."age" <= $1::text::numeric",
+      "text": ""user"."age" <= $1::text::double precision",
       "values": [
         "21",
       ],

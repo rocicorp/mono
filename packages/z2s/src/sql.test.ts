@@ -56,7 +56,7 @@ describe('string arg packing', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "user" WHERE "id" = $1::text::numeric",
+        "text": "SELECT * FROM "user" WHERE "id" = $1::text::double precision",
         "values": [
           "1",
         ],
@@ -88,7 +88,7 @@ describe('string arg packing', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "user" WHERE "id" = $1::text::numeric OR "other_id" = $1::text::numeric",
+        "text": "SELECT * FROM "user" WHERE "id" = $1::text::double precision OR "other_id" = $1::text::double precision",
         "values": [
           "1",
         ],
@@ -168,7 +168,7 @@ describe('string arg packing', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "foo" WHERE "jsonb" = $1::text::jsonb OR "numeric" = $2::text::numeric
+        "text": "SELECT * FROM "foo" WHERE "jsonb" = $1::text::jsonb OR "numeric" = $2::text::double precision
               OR "str" = $3::text COLLATE "ucs_basic" OR "boolean" = $4::text::boolean OR "uuid"::text = $5::text COLLATE "ucs_basic" OR "enum"::text = $6::text COLLATE "ucs_basic" OR "timestamp" = to_timestamp($7::text::bigint / 1000.0) AT TIME ZONE 'UTC' OR "timestampz" = to_timestamp($7::text::bigint / 1000.0)",
         "values": [
           "{}",
@@ -194,7 +194,7 @@ describe('string arg packing', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "SELECT * FROM "foo" WHERE $1::text::numeric AND $2::text::numeric AND $3::text::text COLLATE "ucs_basic" AND $4::text::boolean AND $5",
+        "text": "SELECT * FROM "foo" WHERE $1::text::double precision AND $2::text::double precision AND $3::text::text COLLATE "ucs_basic" AND $4::text::boolean AND $5",
         "values": [
           "1",
           "1.1",
@@ -249,7 +249,7 @@ describe('string arg packing', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "INSERT INTO "foo" VALUES ($1::text::numeric, $2::text::numeric, $3::text, $4::text::boolean)",
+        "text": "INSERT INTO "foo" VALUES ($1::text::double precision, $2::text::double precision, $3::text, $4::text::boolean)",
         "values": [
           "1",
           "1.1",

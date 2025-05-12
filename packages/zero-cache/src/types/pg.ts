@@ -202,8 +202,7 @@ export const typeNameByOID: Record<number, string> = Object.fromEntries(
 
 Object.freeze(typeNameByOID);
 
-export const pgToZqlTypeMap = Object.freeze({
-  // Numeric types
+export const pgToZqlNumericTypeMap = Object.freeze({
   'smallint': 'number',
   'integer': 'number',
   'int': 'number',
@@ -224,6 +223,28 @@ export const pgToZqlTypeMap = Object.freeze({
   'float': 'number',
   'float4': 'number',
   'float8': 'number',
+});
+
+export function isPgNumberType(type: string) {
+  return Object.hasOwn(pgToZqlNumericTypeMap, type);
+}
+
+export const pgToZqlStringTypeMap = Object.freeze({
+  'bpchar': 'string',
+  'character': 'string',
+  'character varying': 'string',
+  'text': 'string',
+  'uuid': 'string',
+  'varchar': 'string',
+});
+
+export function isPgStringType(type: string) {
+  return Object.hasOwn(pgToZqlStringTypeMap, type);
+}
+
+export const pgToZqlTypeMap = Object.freeze({
+  // Numeric types
+  ...pgToZqlNumericTypeMap,
 
   // Date/Time types
   'date': 'number',
@@ -233,12 +254,7 @@ export const pgToZqlTypeMap = Object.freeze({
   'timestamp without time zone': 'number',
 
   // String types
-  'bpchar': 'string',
-  'character': 'string',
-  'character varying': 'string',
-  'text': 'string',
-  'uuid': 'string',
-  'varchar': 'string',
+  ...pgToZqlStringTypeMap,
 
   // Boolean types
   'bool': 'boolean',

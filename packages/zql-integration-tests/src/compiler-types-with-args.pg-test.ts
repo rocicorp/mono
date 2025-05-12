@@ -85,7 +85,6 @@ type Schema = typeof schema;
 let serverSchema: ServerSchema;
 
 let issueQuery: Query<Schema, 'issue'>;
-let commentQuery: Query<Schema, 'comment'>;
 
 beforeAll(async () => {
   pg = await testDBs.create(DB_NAME, undefined, false);
@@ -94,8 +93,6 @@ beforeAll(async () => {
   serverSchema = await pg.begin(tx =>
     getServerSchema(new Transaction(tx), schema),
   );
-
-  console.log(serverSchema);
 
   sqlite = new Database(lc, ':memory:');
   const testData = {
@@ -137,7 +134,6 @@ beforeAll(async () => {
   const queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
 
   issueQuery = newQuery(queryDelegate, schema, 'issue');
-  commentQuery = newQuery(queryDelegate, schema, 'comment');
 
   // Check that PG, SQLite, and test data are in sync
   const [issuePgRows, commentPgRows] = await Promise.all([
@@ -203,7 +199,60 @@ describe('compiling ZQL to SQL', () => {
     runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
   ) {
     test('basic', async () => {
-      const query = commentQuery.related('comments').limit(2);
+      const query = issueQuery.related('comments').limit(2);
+      const c = compile(serverSchema, schema, completedAST(query));
+      const sqlQuery = formatPgInternalConvert(c);
+      const pgResult = extractZqlResult(
+        await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
+      );
+      const zqlResult = mapResultToClientNames(await query, schema, 'issue');
+      expect(zqlResult).toEqualPg(pgResult);
+      expect(zqlResult).toMatchInlineSnapshot(`
+        [
+          {
+            "comments": [
+              {
+                "hash": "hash-1",
+                "id": "comment1",
+                "issueId": "issue1",
+                "weight": 0,
+              },
+              {
+                "hash": "hash-2",
+                "id": "comment2",
+                "issueId": "issue1",
+                "weight": 1.1,
+              },
+            ],
+            "id": "issue1",
+            "title": "Test Issue 1",
+          },
+          {
+            "comments": [
+              {
+                "hash": "hash-3",
+                "id": "comment3",
+                "issueId": "issue2",
+                "weight": 2.2,
+              },
+              {
+                "hash": "hash-4",
+                "id": "comment4",
+                "issueId": "issue2",
+                "weight": 3.3,
+              },
+            ],
+            "id": "issue2",
+            "title": "Test Issue 2",
+          },
+        ]
+      `);
+    });
+
+    test('order by', async () => {
+      const query = issueQuery
+        .related('comments', q => q.orderBy('hash', 'asc'))
+        .limit(2);
       const c = compile(serverSchema, schema, completedAST(query));
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
@@ -254,17 +303,15 @@ describe('compiling ZQL to SQL', () => {
     });
 
     test('comparison operators', async () => {
-      const query = commentQuery.where('hash', '>=', 'hash-61');
+      const query = issueQuery.related('comments', q =>
+        q.where('hash', '>=', 'hash-61'),
+      );
       const c = compile(serverSchema, schema, completedAST(query));
       const sqlQuery = formatPgInternalConvert(c);
-      console.log(sqlQuery.text);
-      console.log(sqlQuery.values);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
       );
       const zqlResult = mapResultToClientNames(await query, schema, 'issue');
-      console.log('zqlResult', JSON.stringify(zqlResult, undefined, 2));
-      console.log('pgResult', JSON.stringify(pgResult, undefined, 2));
       expect(zqlResult).toEqualPg(pgResult);
       expect(zqlResult).toMatchInlineSnapshot(`
         [
