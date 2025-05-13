@@ -318,6 +318,18 @@ describe('checkSchemasAreCompatible', () => {
       };
     });
 
+    // Generate expected errors
+    const expectedErrors: SchemaIncompatibilityError[] = Object.entries(
+      pgToZqlTypeMap,
+    ).map(([pgType, zqlType]) => ({
+      type: 'typeError' as const,
+      table: 'test',
+      column: `${pgType.replace(/\s+/g, '_')}_col`,
+      pgType,
+      declaredType: getWrongType(zqlType).schema.type,
+      requiredType: zqlType,
+    }));
+
     // Add enum type separately since it's not in pgToZqlTypeMap
     const enumColName = 'enum_col';
     incompatibleColumns[enumColName] = boolean();
@@ -326,6 +338,77 @@ describe('checkSchemasAreCompatible', () => {
       type: 'test_enum',
       isEnum: true,
     };
+
+    // Add enum error
+    expectedErrors.push({
+      type: 'typeError' as const,
+      table: 'test',
+      column: 'enum_col',
+      pgType: 'test_enum',
+      declaredType: 'boolean',
+      requiredType: 'string',
+    });
+
+    // Add string type variants with args
+    for (const pgType of [
+      'bpchar',
+      'character',
+      'character varying',
+      'varchar',
+    ]) {
+      const pgTypeWithArg = `${pgType}(10)`;
+      const columnName = `${pgTypeWithArg.replace(/\s+/g, '_')}_col`;
+
+      // Add to incompatible schema with wrong type
+      const wrongType = getWrongType('string');
+      incompatibleColumns[columnName] = wrongType;
+
+      // Add to compatible schema with correct type
+      compatibleColumns[columnName] = getCorrectType('string');
+
+      // Add to server schema
+      serverColumns[columnName] = {
+        type: pgTypeWithArg,
+        isEnum: false,
+      };
+
+      expectedErrors.push({
+        type: 'typeError' as const,
+        table: 'test',
+        column: columnName,
+        pgType: pgTypeWithArg,
+        declaredType: wrongType.schema.type,
+        requiredType: 'string',
+      });
+    }
+
+    // Add number type variants with args
+    for (const pgType of ['numeric', 'decimal']) {
+      const pgTypeWithArg = `${pgType}(10, 5)`;
+      const columnName = `${pgTypeWithArg.replace(/\s+/g, '_')}_col`;
+
+      // Add to incompatible schema with wrong type
+      const wrongType = getWrongType('number');
+      incompatibleColumns[columnName] = wrongType;
+
+      // Add to compatible schema with correct type
+      compatibleColumns[columnName] = getCorrectType('number');
+
+      // Add to server schema
+      serverColumns[columnName] = {
+        type: pgTypeWithArg,
+        isEnum: false,
+      };
+
+      expectedErrors.push({
+        type: 'typeError' as const,
+        table: 'test',
+        column: columnName,
+        pgType: pgTypeWithArg,
+        declaredType: wrongType.schema.type,
+        requiredType: 'number',
+      });
+    }
 
     // Create schemas
     const incompatibleSchema = createSchema({
@@ -349,28 +432,6 @@ describe('checkSchemasAreCompatible', () => {
       incompatibleSchema,
       serverSchema,
     );
-
-    // Generate expected errors
-    const expectedErrors: SchemaIncompatibilityError[] = Object.entries(
-      pgToZqlTypeMap,
-    ).map(([pgType, zqlType]) => ({
-      type: 'typeError' as const,
-      table: 'test',
-      column: `${pgType.replace(/\s+/g, '_')}_col`,
-      pgType,
-      declaredType: getWrongType(zqlType).schema.type,
-      requiredType: zqlType,
-    }));
-
-    // Add enum error
-    expectedErrors.push({
-      type: 'typeError' as const,
-      table: 'test',
-      column: 'enum_col',
-      pgType: 'test_enum',
-      declaredType: 'boolean',
-      requiredType: 'string',
-    });
 
     expect(incompatibleErrors).toEqual(expectedErrors);
 

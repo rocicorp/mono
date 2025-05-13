@@ -7,11 +7,7 @@ import {
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import type {ServerColumnSchema} from './schema.ts';
 import type {LiteralValue} from '../../zero-protocol/src/ast.ts';
-import {
-  isPgNumberType,
-  isPgStringType,
-  pgToZqlStringTypeMap,
-} from '../../zero-cache/src/types/pg.ts';
+import {isPgNumberType, isPgStringType} from '../../zero-cache/src/types/pg.ts';
 
 export const Z2S_COLLATION = 'ucs_basic';
 
@@ -129,7 +125,7 @@ function stringify(arg: SqlConvertArg): string | null {
   }
   if (
     arg[sqlConvert] === 'column' &&
-    (arg.isEnum || Object.hasOwn(pgToZqlStringTypeMap, arg.type))
+    (arg.isEnum || isPgStringType(arg.type))
   ) {
     return arg.value as string;
   }
@@ -224,11 +220,11 @@ function formatCommonToSingularAndPlural(
   if (isPgNumberType(arg.type)) {
     // For comparison cast to `double precision` which uses IEEE 754 (the same
     // representation as JavaScript numbers which will accurately
-    // represent any number value from zql)not the specific column type
+    // represent any number value from zql) not the specific column type
     // (i.e. `arg.type`), because we don't want to force the value being
     // compared to the range and precision of the column type before comparison.
     return arg.isComparison
-      ? `${valuePlaceholder}::text::double precision"`
+      ? `${valuePlaceholder}::text::double precision`
       : `${valuePlaceholder}::text::${arg.type}`;
   }
   return `${valuePlaceholder}::text::${arg.type}`;

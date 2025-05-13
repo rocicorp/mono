@@ -56,6 +56,7 @@ describe('makeSchemaCRUD', () => {
     // char gets padded to 10
     char: 'hello'.padEnd(10),
     varchar: 'goodbye',
+    // NUMERIC(8, 3) gets truncated to 3 decimal places
     numeric: 10.123,
     decimal: 5.01,
   };

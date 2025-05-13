@@ -225,8 +225,8 @@ export const pgToZqlNumericTypeMap = Object.freeze({
   'float8': 'number',
 });
 
-export function isPgNumberType(type: string) {
-  return Object.hasOwn(pgToZqlNumericTypeMap, type);
+export function isPgNumberType(pgType: string) {
+  return Object.hasOwn(pgToZqlNumericTypeMap, formatTypeForLookup(pgType));
 }
 
 export const pgToZqlStringTypeMap = Object.freeze({
@@ -238,8 +238,8 @@ export const pgToZqlStringTypeMap = Object.freeze({
   'varchar': 'string',
 });
 
-export function isPgStringType(type: string) {
-  return Object.hasOwn(pgToZqlStringTypeMap, type);
+export function isPgStringType(pgType: string) {
+  return Object.hasOwn(pgToZqlStringTypeMap, formatTypeForLookup(pgType));
 }
 
 export const pgToZqlTypeMap = Object.freeze({
@@ -272,10 +272,19 @@ export function dataTypeToZqlValueType(
   isEnum: boolean,
 ): ValueType | undefined {
   const valueType = (pgToZqlTypeMap as Record<string, ValueType>)[
-    pgType.toLocaleLowerCase()
+    formatTypeForLookup(pgType)
   ];
   if (valueType === undefined && isEnum) {
     return 'string';
   }
   return valueType;
+}
+
+// Strips args (i.e. (32) in char(32)) and lowercases.
+function formatTypeForLookup(pgType: string): string {
+  const startOfArgs = pgType.indexOf('(');
+  if (startOfArgs === -1) {
+    return pgType.toLocaleLowerCase();
+  }
+  return pgType.toLocaleLowerCase().substring(0, startOfArgs);
 }
