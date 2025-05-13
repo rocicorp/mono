@@ -3,6 +3,7 @@ import {assert} from '../../../../shared/src/asserts.ts';
 import {deepEqual} from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {FilterInput} from '../../ivm/filter-operators.ts';
 import {MemoryStorage} from '../../ivm/memory-storage.ts';
 import type {Input} from '../../ivm/operator.ts';
 import type {Source} from '../../ivm/source.ts';
@@ -107,6 +108,10 @@ export class QueryDelegateImpl implements QueryDelegate {
   }
 
   decorateInput(input: Input, _description: string): Input {
+    return input;
+  }
+
+  decorateFilterInput(input: FilterInput, _description: string): FilterInput {
     return input;
   }
 

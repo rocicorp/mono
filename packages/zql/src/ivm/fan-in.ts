@@ -1,18 +1,15 @@
 import {assert} from '../../../shared/src/asserts.ts';
-import {mergeIterables} from '../../../shared/src/iterables.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Change} from './change.ts';
-import type {Node} from './data.ts';
+import {type Node} from './data.ts';
 import type {FanOut} from './fan-out.ts';
 import {
-  throwOutput,
-  type FetchRequest,
-  type Input,
-  type Operator,
-  type Output,
-} from './operator.ts';
+  throwFilterOutput,
+  type FilterInput,
+  type FilterOperator,
+  type FilterOutput,
+} from './filter-operators.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
 
 /**
  * The FanIn operator merges multiple streams into one.
@@ -28,23 +25,22 @@ import type {Stream} from './stream.ts';
  * fan-in
  *   |
  */
-export class FanIn implements Operator {
-  readonly #inputs: readonly Input[];
+export class FanIn implements FilterOperator {
+  readonly #inputs: readonly FilterInput[];
   readonly #schema: SourceSchema;
-  #output: Output = throwOutput;
-  #accumulatedPushes: Change[];
+  #output: FilterOutput = throwFilterOutput;
+  #accumulatedPushes: Change[] = [];
 
-  constructor(fanOut: FanOut, inputs: Input[]) {
+  constructor(fanOut: FanOut, inputs: FilterInput[]) {
     this.#inputs = inputs;
     this.#schema = fanOut.getSchema();
     for (const input of inputs) {
-      input.setOutput(this);
+      input.setFilterOutput(this);
       assert(this.#schema === input.getSchema(), `Schema mismatch in fan-in`);
     }
-    this.#accumulatedPushes = [];
   }
 
-  setOutput(output: Output): void {
+  setFilterOutput(output: FilterOutput): void {
     this.#output = output;
   }
 
@@ -58,21 +54,8 @@ export class FanIn implements Operator {
     return this.#schema;
   }
 
-  fetch(req: FetchRequest): Stream<Node> {
-    return this.#fetchOrCleanup(input => input.fetch(req));
-  }
-
-  cleanup(req: FetchRequest): Stream<Node> {
-    return this.#fetchOrCleanup(input => input.cleanup(req));
-  }
-
-  *#fetchOrCleanup(streamProvider: (input: Input) => Stream<Node>) {
-    const iterables = this.#inputs.map(input => streamProvider(input));
-    yield* mergeIterables(
-      iterables,
-      (l, r) => must(this.#schema).compareRows(l.row, r.row),
-      true,
-    );
+  filter(node: Node, cleanup: boolean): boolean {
+    return this.#output.filter(node, cleanup);
   }
 
   push(change: Change) {

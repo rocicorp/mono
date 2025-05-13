@@ -38,5 +38,26 @@ await runBenchmarks(
             .related('album', a => a.related('artist')),
         ),
     },
+    {
+      name: 'OR with empty branch and limit',
+      createQuery: q =>
+        q.track
+          .where(({or, cmp}) =>
+            or(cmp('milliseconds', -1), cmp('mediaTypeId', 1)),
+          )
+          .limit(5),
+    },
+    {
+      name: 'OR with empty branch and limit with exists',
+      createQuery: q =>
+        q.track
+          .where(({or, cmp, exists}) =>
+            or(
+              cmp('milliseconds', -1),
+              exists('mediaType', q => q.where('id', 1)),
+            ),
+          )
+          .limit(5),
+    },
   ],
 );

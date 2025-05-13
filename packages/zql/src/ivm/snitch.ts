@@ -1,7 +1,12 @@
-import {unreachable} from '../../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
+import type {
+  FilterInput,
+  FilterOperator,
+  FilterOutput,
+} from './filter-operators.ts';
 import {
   type FetchRequest,
   type Input,
@@ -105,16 +110,74 @@ function toChangeRecord(change: Change): ChangeRecord {
   }
 }
 
+/**
+ * Snitch is an Operator that records all messages it receives. Useful for
+ * debugging.
+ */
+export class FilterSnitch implements FilterOperator {
+  readonly #input: FilterInput;
+  readonly #name: string;
+  readonly #logTypes: LogType[];
+  readonly log: SnitchMessage[];
+
+  #output: FilterOutput | undefined;
+
+  constructor(
+    input: FilterInput,
+    name: string,
+    log: SnitchMessage[] = [],
+    logTypes: LogType[] = ['filter', 'push', 'cleanup'],
+  ) {
+    this.#input = input;
+    this.#name = name;
+    this.log = log;
+    this.#logTypes = logTypes;
+    input.setFilterOutput(this);
+  }
+
+  setFilterOutput(output: FilterOutput): void {
+    this.#output = output;
+  }
+
+  filter(node: Node, cleanup: boolean): boolean {
+    this.#log([this.#name, 'filter', node.row, cleanup ? 'cleanup' : 'fetch']);
+    assert(this.#output);
+    return this.#output.filter(node, cleanup);
+  }
+
+  destroy(): void {
+    this.#input.destroy();
+  }
+
+  getSchema(): SourceSchema {
+    return this.#input.getSchema();
+  }
+
+  #log(message: SnitchMessage) {
+    if (!this.#logTypes.includes(message[1])) {
+      return;
+    }
+    this.log.push(message);
+  }
+
+  push(change: Change) {
+    this.#log([this.#name, 'push', toChangeRecord(change)]);
+    this.#output?.push(change);
+  }
+}
+
 export type SnitchMessage =
   | FetchMessage
   | FetchCountMessage
   | CleanupMessage
-  | PushMessage;
+  | PushMessage
+  | FilterMessage;
 
 export type FetchCountMessage = [string, 'fetchCount', FetchRequest, number];
 export type FetchMessage = [string, 'fetch', FetchRequest];
 export type CleanupMessage = [string, 'cleanup', FetchRequest];
 export type PushMessage = [string, 'push', ChangeRecord];
+export type FilterMessage = [string, 'filter', Row, 'fetch' | 'cleanup'];
 
 export type ChangeRecord =
   | AddChangeRecord
@@ -146,4 +209,4 @@ export type EditChangeRecord = {
   oldRow: Row;
 };
 
-export type LogType = 'fetch' | 'push' | 'cleanup' | 'fetchCount';
+export type LogType = 'fetch' | 'push' | 'cleanup' | 'fetchCount' | 'filter';
