@@ -31,7 +31,7 @@ export const logOptions = {
     desc: [
       `How often to collect IVM metrics. 1 out of N requests will be sampled where N is this value.`,
     ],
-  }
+  },
 };
 
 export type LogConfig = Config<typeof logOptions>;
