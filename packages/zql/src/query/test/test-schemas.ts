@@ -152,7 +152,7 @@ const labelRelationships = relationships(label, ({many}) => ({
   ),
 }));
 
-export const schema = createSchema({
+export const schemaOptions = {
   tables: [issue, user, comment, revision, label, issueLabel],
   relationships: [
     issueRelationships,
@@ -161,7 +161,9 @@ export const schema = createSchema({
     revisionRelationships,
     labelRelationships,
   ],
-});
+};
+
+export const schema = createSchema(schemaOptions);
 
 export const issueSchema = schema.tables.issue;
 export const commentSchema = schema.tables.comment;

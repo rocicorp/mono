@@ -59,6 +59,16 @@ export const schema = createSchema({
       })
       .primaryKey('str'),
     table('jsonbCases').columns(jsonCols).primaryKey('str'),
+    table('typesWithParams')
+      .from('types_with_params')
+      .columns({
+        id: string(),
+        char: string(),
+        varchar: string(),
+        numeric: number(),
+        decimal: number(),
+      })
+      .primaryKey('id'),
     table('uuidAndEnum')
       .columns({
         id: string(),
@@ -130,6 +140,15 @@ CREATE TABLE "jsonCases" (
   "arr" JSON,
   PRIMARY KEY ("str")
 );
+
+CREATE TABLE types_with_params (
+  id TEXT PRIMARY KEY,
+  char CHAR(10),
+  varchar VARCHAR(20),
+  numeric NUMERIC(8, 3),
+  decimal DECIMAL(10, 5)
+);
+
 
 CREATE TYPE "statusEnum" AS ENUM ('active', 'inactive', 'pending');
 CREATE TYPE type_enum AS ENUM ('user', 'system', 'admin');

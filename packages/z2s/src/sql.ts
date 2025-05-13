@@ -7,6 +7,7 @@ import {
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import type {ServerColumnSchema} from './schema.ts';
 import type {LiteralValue} from '../../zero-protocol/src/ast.ts';
+import {isPgNumberType, isPgStringType} from '../../zero-cache/src/types/pg.ts';
 
 export const Z2S_COLLATION = 'ucs_basic';
 
@@ -29,15 +30,17 @@ const sqlConvert = Symbol('fromJson');
 export type LiteralType = 'boolean' | 'number' | 'string' | 'null';
 export type PluralLiteralType = Exclude<LiteralType, 'null'>;
 
+type ColumnSqlConvertArg = {
+  [sqlConvert]: 'column';
+  type: string;
+  isEnum: boolean;
+  value: unknown;
+  plural: boolean;
+  isComparison: boolean;
+};
+
 type SqlConvertArg =
-  | {
-      [sqlConvert]: 'column';
-      type: string;
-      isEnum: boolean;
-      value: unknown;
-      plural: boolean;
-      isComparison: boolean;
-    }
+  | ColumnSqlConvertArg
   | {
       [sqlConvert]: 'literal';
       type: LiteralType;
@@ -122,13 +125,7 @@ function stringify(arg: SqlConvertArg): string | null {
   }
   if (
     arg[sqlConvert] === 'column' &&
-    (arg.isEnum ||
-      arg.type === 'uuid' ||
-      arg.type === 'bpchar' ||
-      arg.type === 'character' ||
-      arg.type === 'text' ||
-      arg.type === 'character varying' ||
-      arg.type === 'varchar')
+    (arg.isEnum || isPgStringType(arg.type))
   ) {
     return arg.value as string;
   }
@@ -148,103 +145,89 @@ class SQLConvertFormat implements FormatConfig {
     const key = value.value;
     if (this.#seen.has(key)) {
       return {
-        placeholder: this.#createPlaceholder(this.#seen.get(key)!, value),
+        placeholder: createPlaceholder(this.#seen.get(key)!, value),
         value: PREVIOUSLY_SEEN_VALUE,
       };
     }
     this.#seen.set(key, this.#seen.size + 1);
     return {
-      placeholder: this.#createPlaceholder(this.#seen.size, value),
+      placeholder: createPlaceholder(this.#seen.size, value),
       value: stringify(value),
     };
   };
+}
 
-  #createPlaceholder(index: number, arg: SqlConvertArg) {
-    // Ok, so what is with all the `::text` casts
-    // before the final cast?
-    // This is to force the statement to describe its arguments
-    // as being text. Without the text cast the args are described as
-    // being bool/json/numeric/whatever and the bindings try to coerce
-    // the inputs to those types.
-    if (arg.type === 'null') {
-      assert(arg.value === null, "Args of type 'null' must have value null");
-      assert(!arg.plural, "Args of type 'null' must not be plural");
-      return `$${index}`;
-    }
-
-    if (arg[sqlConvert] === 'literal') {
-      const collate =
-        arg.type === 'string' ? ` COLLATE "${Z2S_COLLATION}"` : '';
-      const {value} = arg;
-      if (Array.isArray(value)) {
-        const elType = pgTypeForLiteralType(arg.type);
-        return formatPlural(index, `value::${elType}${collate}`);
-      }
-      return `$${index}::text::${pgTypeForLiteralType(arg.type)}${collate}`;
-    }
-
-    const collate = arg.isComparison ? ` COLLATE "${Z2S_COLLATION}"` : '';
-    if (!arg.plural) {
-      if (arg.isEnum) {
-        if (arg.isComparison) {
-          return `$${index}::text${collate}`;
-        }
-        return `$${index}::text::"${arg.type}"`;
-      }
-      switch (arg.type) {
-        case 'date':
-        case 'timestamp':
-        case 'timestamp without time zone':
-          return `to_timestamp($${index}::text::bigint / 1000.0) AT TIME ZONE 'UTC'`;
-        case 'timestamptz':
-        case 'timestamp with time zone':
-          return `to_timestamp($${index}::text::bigint / 1000.0)`;
-        case 'text':
-          return `$${index}::text${collate}`;
-        case 'bpchar':
-        case 'character':
-        case 'character varying':
-        case 'varchar':
-          return `$${index}::text::${arg.type}${collate}`;
-        // uuid doesn't support collation, so we compare as text
-        case 'uuid':
-          return arg.isComparison
-            ? `$${index}::text${collate}`
-            : `$${index}::text::uuid`;
-        default:
-          return `$${index}::text::${arg.type}`;
-      }
-    }
-
-    if (arg.isEnum && arg.isComparison) {
-      if (arg.isComparison) {
-        return formatPlural(index, `value::text${collate}`);
-      }
-      return formatPlural(index, `value::${arg.type}`);
-    }
-
-    switch (arg.type) {
-      case 'date':
-      case 'timestamp':
-      case 'timestamptz':
-      case 'timestamp with time zone':
-      case 'timestamp without time zone':
-        return formatPlural(index, `to_timestamp(value::bigint / 1000.0)`);
-      case 'bpchar':
-      case 'character':
-      case 'character varying':
-      case 'text':
-      case 'varchar':
-        return formatPlural(index, `value::${arg.type}${collate}`);
-      // uuid doesn't support collation, so we compare as text
-      case 'uuid':
-        return arg.isComparison
-          ? formatPlural(index, `value::text${collate}`)
-          : formatPlural(index, `value::${arg.type}`);
-      default:
-        return formatPlural(index, `value::${arg.type}`);
-    }
+function createPlaceholder(index: number, arg: SqlConvertArg) {
+  if (arg.type === 'null') {
+    assert(arg.value === null, "Args of type 'null' must have value null");
+    assert(!arg.plural, "Args of type 'null' must not be plural");
+    return `$${index}`;
   }
+
+  if (arg[sqlConvert] === 'literal') {
+    const collate = arg.type === 'string' ? ` COLLATE "${Z2S_COLLATION}"` : '';
+    const {value} = arg;
+    if (Array.isArray(value)) {
+      const elType = pgTypeForLiteralType(arg.type);
+      return formatPlural(index, `value::${elType}${collate}`);
+    }
+    return `$${index}::text::${pgTypeForLiteralType(arg.type)}${collate}`;
+  }
+
+  const common = formatCommonToSingularAndPlural(index, arg);
+  return arg.plural ? formatPlural(index, common) : common;
+}
+
+function formatCommonToSingularAndPlural(
+  index: number,
+  arg: ColumnSqlConvertArg,
+) {
+  // Ok, so what is with all the `::text` casts
+  // before the final cast?
+  // This is to force the statement to describe its arguments
+  // as being text. Without the text cast the args are described as
+  // being bool/json/numeric/whatever and the bindings try to coerce
+  // the inputs to those types.
+  const valuePlaceholder = arg.plural ? 'value' : `$${index}`;
+  switch (arg.type) {
+    case 'date':
+    case 'timestamp':
+    case 'timestamp without time zone':
+      return `to_timestamp(${valuePlaceholder}::text::bigint / 1000.0) AT TIME ZONE 'UTC'`;
+    case 'timestamptz':
+    case 'timestamp with time zone':
+      return `to_timestamp(${valuePlaceholder}::text::bigint / 1000.0)`;
+    // uuid doesn't support collation, so we compare as text
+    case 'uuid':
+      return arg.isComparison
+        ? `${valuePlaceholder}::text COLLATE "${Z2S_COLLATION}"`
+        : `${valuePlaceholder}::text::uuid`;
+  }
+  if (arg.isEnum) {
+    return arg.isComparison
+      ? `${valuePlaceholder}::text COLLATE "${Z2S_COLLATION}"`
+      : `${valuePlaceholder}::text::"${arg.type}"`;
+  }
+  if (isPgStringType(arg.type)) {
+    // For comparison cast to the general `text` type, not the
+    // specific column type (i.e. `arg.type`), because we don't want to
+    // force the value being compared to the size/max-size of the column
+    // type before comparison.
+    return arg.isComparison
+      ? `${valuePlaceholder}::text COLLATE "${Z2S_COLLATION}"`
+      : `${valuePlaceholder}::text::${arg.type}`;
+  }
+  if (isPgNumberType(arg.type)) {
+    // For comparison cast to `double precision` which uses IEEE 754 (the same
+    // representation as JavaScript numbers which will accurately
+    // represent any number value from zql) not the specific column type
+    // (i.e. `arg.type`), because we don't want to force the value being
+    // compared to the range and precision of the column type before comparison.
+    return arg.isComparison
+      ? `${valuePlaceholder}::text::double precision`
+      : `${valuePlaceholder}::text::${arg.type}`;
+  }
+  return `${valuePlaceholder}::text::${arg.type}`;
 }
 
 function formatPlural(index: number, select: string) {
@@ -258,7 +241,10 @@ function pgTypeForLiteralType(type: Exclude<LiteralType, 'null'>) {
     case 'boolean':
       return 'boolean';
     case 'number':
-      return 'numeric';
+      // `double precision` uses IEEE 754, the same representation as JavaScript
+      // numbers, and so this will accurately represent any number value
+      // from zql
+      return 'double precision';
     case 'string':
       return 'text';
     default:

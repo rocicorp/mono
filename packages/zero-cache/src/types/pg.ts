@@ -202,8 +202,7 @@ export const typeNameByOID: Record<number, string> = Object.fromEntries(
 
 Object.freeze(typeNameByOID);
 
-export const pgToZqlTypeMap = Object.freeze({
-  // Numeric types
+export const pgToZqlNumericTypeMap = Object.freeze({
   'smallint': 'number',
   'integer': 'number',
   'int': 'number',
@@ -224,6 +223,28 @@ export const pgToZqlTypeMap = Object.freeze({
   'float': 'number',
   'float4': 'number',
   'float8': 'number',
+});
+
+export function isPgNumberType(pgType: string) {
+  return Object.hasOwn(pgToZqlNumericTypeMap, formatTypeForLookup(pgType));
+}
+
+export const pgToZqlStringTypeMap = Object.freeze({
+  'bpchar': 'string',
+  'character': 'string',
+  'character varying': 'string',
+  'text': 'string',
+  'uuid': 'string',
+  'varchar': 'string',
+});
+
+export function isPgStringType(pgType: string) {
+  return Object.hasOwn(pgToZqlStringTypeMap, formatTypeForLookup(pgType));
+}
+
+export const pgToZqlTypeMap = Object.freeze({
+  // Numeric types
+  ...pgToZqlNumericTypeMap,
 
   // Date/Time types
   'date': 'number',
@@ -233,12 +254,7 @@ export const pgToZqlTypeMap = Object.freeze({
   'timestamp without time zone': 'number',
 
   // String types
-  'bpchar': 'string',
-  'character': 'string',
-  'character varying': 'string',
-  'text': 'string',
-  'uuid': 'string',
-  'varchar': 'string',
+  ...pgToZqlStringTypeMap,
 
   // Boolean types
   'bool': 'boolean',
@@ -256,10 +272,19 @@ export function dataTypeToZqlValueType(
   isEnum: boolean,
 ): ValueType | undefined {
   const valueType = (pgToZqlTypeMap as Record<string, ValueType>)[
-    pgType.toLocaleLowerCase()
+    formatTypeForLookup(pgType)
   ];
   if (valueType === undefined && isEnum) {
     return 'string';
   }
   return valueType;
+}
+
+// Strips args (i.e. (32) in char(32)) and lowercases.
+function formatTypeForLookup(pgType: string): string {
+  const startOfArgs = pgType.indexOf('(');
+  if (startOfArgs === -1) {
+    return pgType.toLocaleLowerCase();
+  }
+  return pgType.toLocaleLowerCase().substring(0, startOfArgs);
 }
