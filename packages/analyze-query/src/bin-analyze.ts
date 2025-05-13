@@ -145,9 +145,6 @@ const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const serverToClientMapper = serverToClient(schema.tables);
 const host: QueryDelegate = {
-  mapAst(ast: AST): AST {
-    return mapAST(ast, clientToServerMapper);
-  },
   getSource: (serverTableName: string) => {
     const clientTableName = serverToClientMapper.tableName(serverTableName);
     let source = sources.get(serverTableName);
@@ -220,6 +217,10 @@ async function runAst(
   ast: AST,
   isTransformed: boolean,
 ): Promise<[number, number]> {
+  if (!isTransformed) {
+    // map the AST to server names if not already transformed
+    ast = mapAST(ast, clientToServerMapper);
+  }
   if (config.applyPermissions) {
     const authData = config.authData ? JSON.parse(config.authData) : {};
     if (!config.authData) {
@@ -234,15 +235,7 @@ async function runAst(
     console.log(await formatOutput(ast.table + astToZQL(ast)));
   }
 
-  const pipeline = buildPipeline(
-    ast,
-    isTransformed
-      ? {
-          ...host,
-          mapAst: (ast: AST) => ast,
-        }
-      : host,
-  );
+  const pipeline = buildPipeline(ast, host);
   const output = new Catch(pipeline);
 
   const start = performance.now();
