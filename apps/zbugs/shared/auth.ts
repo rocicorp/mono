@@ -1,13 +1,13 @@
 import type {Query, Transaction} from '@rocicorp/zero';
-import type {schema} from './schema.ts';
-import {must} from '../../../packages/shared/src/must.ts';
 import {assert} from '../../../packages/shared/src/asserts.ts';
+import {must} from '../../../packages/shared/src/must.ts';
 import * as v from '../../../packages/shared/src/valita.ts';
+import type {schema} from './schema.ts';
 
 /** The contents of the zbugs JWT */
 export const authDataSchema = v.object({
   sub: v.string(),
-  role: v.union(v.literal('crew'), v.literal('user')),
+  role: v.literalUnion('crew', 'user'),
   name: v.string(),
   iat: v.number(),
   exp: v.number(),

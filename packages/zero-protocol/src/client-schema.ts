@@ -3,12 +3,12 @@ import * as v from '../../shared/src/valita.ts';
 
 export type ValueType = 'string' | 'number' | 'boolean' | 'null' | 'json';
 
-export const valueTypeSchema: v.Type<ValueType> = v.union(
-  v.literal('string'),
-  v.literal('number'),
-  v.literal('boolean'),
-  v.literal('null'),
-  v.literal('json'),
+export const valueTypeSchema: v.Type<ValueType> = v.literalUnion(
+  'string',
+  'number',
+  'boolean',
+  'null',
+  'json',
 );
 
 export const columnSchemaSchema = v.object({

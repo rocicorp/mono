@@ -18,7 +18,7 @@ export const selectorSchema = v.string();
 export const toStaticParam = Symbol();
 
 const orderingElementSchema = v.readonly(
-  v.tuple([selectorSchema, v.union(v.literal('asc'), v.literal('desc'))]),
+  v.tuple([selectorSchema, v.literalUnion('asc', 'desc')]),
 );
 
 export const orderingSchema = v.readonlyArray(orderingElementSchema);
@@ -31,28 +31,18 @@ export const primitiveSchema = v.union(
   v.null(),
 );
 
-export const equalityOpsSchema = v.union(
-  v.literal('='),
-  v.literal('!='),
-  v.literal('IS'),
-  v.literal('IS NOT'),
+export const equalityOpsSchema = v.literalUnion('=', '!=', 'IS', 'IS NOT');
+
+export const orderOpsSchema = v.literalUnion('<', '>', '<=', '>=');
+
+export const likeOpsSchema = v.literalUnion(
+  'LIKE',
+  'NOT LIKE',
+  'ILIKE',
+  'NOT ILIKE',
 );
 
-export const orderOpsSchema = v.union(
-  v.literal('<'),
-  v.literal('>'),
-  v.literal('<='),
-  v.literal('>='),
-);
-
-export const likeOpsSchema = v.union(
-  v.literal('LIKE'),
-  v.literal('NOT LIKE'),
-  v.literal('ILIKE'),
-  v.literal('NOT ILIKE'),
-);
-
-export const inOpsSchema = v.union(v.literal('IN'), v.literal('NOT IN'));
+export const inOpsSchema = v.literalUnion('IN', 'NOT IN');
 
 export const simpleOperatorSchema = v.union(
   equalityOpsSchema,
@@ -100,7 +90,7 @@ const parameterReferenceSchema = v.readonlyObject({
   // prior to the mutation being run (preMutationRow).
   // Read and write authorization will both send the
   // current authentication data (authData).
-  anchor: v.union(v.literal('authData'), v.literal('preMutationRow')),
+  anchor: v.literalUnion('authData', 'preMutationRow'),
   field: v.union(v.string(), v.array(v.string())),
 });
 
@@ -122,7 +112,7 @@ export const simpleConditionSchema: v.Type<SimpleCondition> = v.readonlyObject({
 type ConditionValue = v.Infer<typeof conditionValueSchema>;
 
 export const correlatedSubqueryConditionOperatorSchema: v.Type<CorrelatedSubqueryConditionOperator> =
-  v.union(v.literal('EXISTS'), v.literal('NOT EXISTS'));
+  v.literalUnion('EXISTS', 'NOT EXISTS');
 
 export const correlatedSubqueryConditionSchema: v.Type<CorrelatedSubqueryCondition> =
   v.readonlyObject({
@@ -173,9 +163,7 @@ const correlationSchema = v.readonlyObject({
 export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
   correlation: correlationSchema,
   hidden: v.boolean().optional(),
-  system: v
-    .union(v.literal('permissions'), v.literal('client'), v.literal('test'))
-    .optional(),
+  system: v.literalUnion('permissions', 'client', 'test').optional(),
 });
 
 export const correlatedSubquerySchema: v.Type<CorrelatedSubquery> =

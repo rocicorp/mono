@@ -2,15 +2,15 @@ import type {LogContext} from '@rocicorp/logger';
 import {basename, dirname, join, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {tsImport} from 'tsx/esm/api';
+import {logOptions} from '../../../otel/src/log-options.ts';
 import * as v from '../../../shared/src/valita.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   permissionsConfigSchema,
   type PermissionsConfig,
 } from '../../../zero-schema/src/compiled-permissions.ts';
 import {isSchemaConfig} from '../../../zero-schema/src/schema-config.ts';
 import {appOptions, shardOptions, zeroOptions} from '../config/zero-config.ts';
-import {logOptions} from '../../../otel/src/log-options.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 
 export const deployPermissionsOptions = {
   schema: {
@@ -51,9 +51,7 @@ export const deployPermissionsOptions = {
     },
 
     format: {
-      type: v
-        .union(v.literal('sql'), v.literal('json'), v.literal('pretty'))
-        .default('sql'),
+      type: v.literalUnion('sql', 'json', 'pretty').default('sql'),
       desc: [
         `The desired format of the output file.`,
         ``,
