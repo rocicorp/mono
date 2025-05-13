@@ -270,7 +270,7 @@ export class TransactionPool {
     return r.promise;
   }
 
-  readonly #start = Date.now();
+  readonly #start = performance.now();
   #stmts = 0;
 
   /**
@@ -312,7 +312,7 @@ export class TransactionPool {
                 if (++this.#stmts % 1000 === 0) {
                   const q = stmt as unknown as Query;
                   lc.debug?.(
-                    `executed ${stmts}th statement (${performance.now() - this.#start} ms)`,
+                    `executed ${this.#stmts}th statement (${(performance.now() - this.#start).toFixed(3)} ms)`,
                     {
                       statement: q.string,
                       params: stringify(q.parameters),
