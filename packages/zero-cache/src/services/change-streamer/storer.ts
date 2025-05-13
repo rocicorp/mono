@@ -297,10 +297,17 @@ export class Storer implements Service {
         change: change as unknown as JSONValue,
       };
 
-      void tx.pool.process(tx => [
+      const processed = tx.pool.process(tx => [
         tx`
         INSERT INTO ${this.#cdc('changeLog')} ${tx(entry)}`,
       ]);
+
+      if (tag === 'data' && tx.pos % 10_000 === 0) {
+        // Backpressure is exerted on commit when awaiting tx.pool.done().
+        // However, backpressure checks need to be regularly done for
+        // very large transactions in order to avoid memory blowup.
+        await processed;
+      }
 
       if (tag === 'commit') {
         const {owner} = await tx.startingReplicationState;
