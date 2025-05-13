@@ -5,21 +5,21 @@ import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import * as PostgresReplicaIdentity from './postgres-replica-identity-enum.ts';
 import * as PostgresTypeClass from './postgres-type-class-enum.ts';
 
-export const pgTypeClassSchema = v.union(
-  v.literal(PostgresTypeClass.Base),
-  v.literal(PostgresTypeClass.Composite),
-  v.literal(PostgresTypeClass.Domain),
-  v.literal(PostgresTypeClass.Enum),
-  v.literal(PostgresTypeClass.Pseudo),
-  v.literal(PostgresTypeClass.Range),
-  v.literal(PostgresTypeClass.Multirange),
+export const pgTypeClassSchema = v.literalUnion(
+  PostgresTypeClass.Base,
+  PostgresTypeClass.Composite,
+  PostgresTypeClass.Domain,
+  PostgresTypeClass.Enum,
+  PostgresTypeClass.Pseudo,
+  PostgresTypeClass.Range,
+  PostgresTypeClass.Multirange,
 );
 
-export const pgReplicaIdentitySchema = v.union(
-  v.literal(PostgresReplicaIdentity.Default),
-  v.literal(PostgresReplicaIdentity.Nothing),
-  v.literal(PostgresReplicaIdentity.Full),
-  v.literal(PostgresReplicaIdentity.Index),
+export const pgReplicaIdentitySchema = v.literalUnion(
+  PostgresReplicaIdentity.Default,
+  PostgresReplicaIdentity.Nothing,
+  PostgresReplicaIdentity.Full,
+  PostgresReplicaIdentity.Index,
 );
 
 export const columnSpec = v.object({
@@ -83,7 +83,7 @@ export type TableSpec = Readonly<v.Infer<typeof tableSpec>>;
 
 export type PublishedTableSpec = Readonly<v.Infer<typeof publishedTableSpec>>;
 
-export const directionSchema = v.union(v.literal('ASC'), v.literal('DESC'));
+export const directionSchema = v.literalUnion('ASC', 'DESC');
 
 export const liteIndexSpec = v.object({
   name: v.string(),

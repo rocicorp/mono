@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, expectTypeOf, test} from 'vitest';
 import {assert} from './asserts.ts';
 import * as v from './valita.ts';
 import {parse} from './valita.ts';
@@ -317,4 +317,18 @@ test('deepPartial', () => {
 
   expect(v.parse({}, s)).toEqual({});
   expect(v.parse({a: {}}, s)).toEqual({a: {}});
+});
+
+test('literalUnion', () => {
+  const s = v.literalUnion('a', 'b', 1, true, 42n);
+  expectTypeOf(s).toEqualTypeOf<v.Type<'a' | 'b' | 1 | true | 42n>>();
+
+  expect(v.parse('a', s)).toBe('a');
+  expect(v.parse('b', s)).toBe('b');
+  expect(v.parse(1, s)).toBe(1);
+  expect(v.parse(true, s)).toBe(true);
+  expect(v.parse(42n, s)).toBe(42n);
+  expect(() => v.parse('c', s)).toThrow(
+    new TypeError(`Expected literal value "a", "b", 1, true or 42n Got "c"`),
+  );
 });

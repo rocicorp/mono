@@ -18,7 +18,7 @@ const relationshipPart = v.readonlyObject({
   sourceField: compoundKeySchema,
   destField: compoundKeySchema,
   destSchema: v.string(),
-  cardinality: v.union(v.literal('one'), v.literal('many')),
+  cardinality: v.literalUnion('one', 'many'),
 });
 
 export const relationshipSchema: v.Type<Relationship> = v.union(

@@ -175,8 +175,8 @@ export abstract class AbstractQuery<
     format: Format,
   ): AbstractQuery<TSchema, TTable, TReturn>;
 
-  one(): Query<TSchema, TTable, TReturn | undefined> {
-    return this[newQuerySymbol](
+  one = (): Query<TSchema, TTable, TReturn | undefined> =>
+    this[newQuerySymbol](
       this.#schema,
       this.#tableName,
       {
@@ -188,16 +188,17 @@ export abstract class AbstractQuery<
         singular: true,
       },
     );
-  }
 
-  whereExists(
+  whereExists = (
     relationship: string,
     cb?: (q: AnyQuery) => AnyQuery,
-  ): Query<TSchema, TTable, TReturn> {
-    return this.where(({exists}) => exists(relationship, cb));
-  }
+  ): Query<TSchema, TTable, TReturn> =>
+    this.where(({exists}) => exists(relationship, cb));
 
-  related(relationship: string, cb?: (q: AnyQuery) => AnyQuery): AnyQuery {
+  related = (
+    relationship: string,
+    cb?: (q: AnyQuery) => AnyQuery,
+  ): AnyQuery => {
     if (relationship.startsWith(SUBQ_PREFIX)) {
       throw new Error(
         `Relationship names may not start with "${SUBQ_PREFIX}". That is a reserved prefix.`,
@@ -341,13 +342,13 @@ export abstract class AbstractQuery<
     }
 
     throw new Error(`Invalid relationship ${relationship}`);
-  }
+  };
 
-  where(
+  where = (
     fieldOrExpressionFactory: string | ExpressionFactory<TSchema, TTable>,
     opOrValue?: SimpleOperator | GetFilterType<any, any, any> | Parameter,
     value?: GetFilterType<any, any, any> | Parameter,
-  ): Query<TSchema, TTable, TReturn> {
+  ): Query<TSchema, TTable, TReturn> => {
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
@@ -384,13 +385,13 @@ export abstract class AbstractQuery<
       },
       this.format,
     );
-  }
+  };
 
-  start(
+  start = (
     row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean} | undefined,
-  ): Query<TSchema, TTable, TReturn> {
-    return this[newQuerySymbol](
+  ): Query<TSchema, TTable, TReturn> =>
+    this[newQuerySymbol](
       this.#schema,
       this.#tableName,
       {
@@ -402,9 +403,8 @@ export abstract class AbstractQuery<
       },
       this.format,
     );
-  }
 
-  limit(limit: number): Query<TSchema, TTable, TReturn> {
+  limit = (limit: number): Query<TSchema, TTable, TReturn> => {
     if (limit < 0) {
       throw new Error('Limit must be non-negative');
     }
@@ -421,13 +421,13 @@ export abstract class AbstractQuery<
       },
       this.format,
     );
-  }
+  };
 
-  orderBy<TSelector extends keyof TSchema['tables'][TTable]['columns']>(
+  orderBy = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TTable, TReturn> {
-    return this[newQuerySymbol](
+  ): Query<TSchema, TTable, TReturn> =>
+    this[newQuerySymbol](
       this.#schema,
       this.#tableName,
       {
@@ -436,7 +436,6 @@ export abstract class AbstractQuery<
       },
       this.format,
     );
-  }
 
   protected _exists = (
     relationship: string,
