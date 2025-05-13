@@ -249,7 +249,7 @@ describe('string arg packing', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "text": "INSERT INTO "foo" VALUES ($1::text::double precision, $2::text::double precision, $3::text, $4::text::boolean)",
+        "text": "INSERT INTO "foo" VALUES ($1::text::numeric, $2::text::numeric, $3::text::text, $4::text::boolean)",
         "values": [
           "1",
           "1.1",
