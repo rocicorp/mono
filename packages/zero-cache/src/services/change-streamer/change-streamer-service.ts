@@ -357,8 +357,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
           if (type === 'commit') {
             watermark = null;
-            // After each transaction, allow storer to exert back pressure.
-            await this.#storer.readyForMore();
+          }
+
+          // Allow the storer to exert back pressure.
+          const readyForMore = this.#storer.readyForMore();
+          if (readyForMore) {
+            await readyForMore;
           }
         }
       } catch (e) {
