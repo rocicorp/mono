@@ -8,16 +8,16 @@ import {
 import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
 import {errorOrObject} from './logging.ts';
 import {stringify} from '../types/bigint-json.ts';
-import {startOtel, type OtelEndpoints} from './otel-start.ts';
+import {startOtelAuto} from './otel-start.ts';
 
 export class OtelLogSink implements LogSink {
   readonly #logger: Logger;
 
-  constructor(endpoints: OtelEndpoints) {
+  constructor() {
     // start otel in case it was not started yet
     // this is a no-op if already started
-    startOtel(endpoints);
     this.#logger = logs.getLogger('zero-cache');
+    startOtelAuto();
   }
 
   log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
