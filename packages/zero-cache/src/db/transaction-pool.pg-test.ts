@@ -90,10 +90,10 @@ describe('db/transaction-pool', () => {
     single.run(db);
     expect(single.isRunning()).toBe(true);
 
-    single.process(task(`INSERT INTO foo (id) VALUES (1)`));
-    single.process(task(`INSERT INTO foo (id) VALUES (6)`));
-    single.process(task(`UPDATE foo SET val = 'foo' WHERE id < 5`));
-    single.process(task(`INSERT INTO foo (id) VALUES (3)`));
+    void single.process(task(`INSERT INTO foo (id) VALUES (1)`));
+    void single.process(task(`INSERT INTO foo (id) VALUES (6)`));
+    void single.process(task(`UPDATE foo SET val = 'foo' WHERE id < 5`));
+    void single.process(task(`INSERT INTO foo (id) VALUES (3)`));
     single.setDone();
     expect(single.isRunning()).toBe(false);
 
@@ -160,12 +160,12 @@ describe('db/transaction-pool', () => {
     pool.run(db);
     expect(pool.isRunning()).toBe(true);
 
-    pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
     pool.setDone();
 
     expect(pool.isRunning()).toBe(false);
@@ -194,12 +194,12 @@ describe('db/transaction-pool', () => {
       5,
     );
 
-    pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
     pool.setDone();
 
     await pool.run(db).done();
@@ -239,17 +239,21 @@ describe('db/transaction-pool', () => {
 
     pool.run(db);
 
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
-    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
+    void pool.process(
+      blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`),
+    );
 
     for (let i = 0; i < 2; i++) {
       await processing.dequeue();
     }
 
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (3)`));
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (2)`));
-    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (5)`));
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (3)`));
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (2)`));
+    void pool.process(
+      blockingTask(`INSERT INTO foo (id, val) VALUES (8, 'foo')`),
+    );
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (5)`));
     pool.setDone();
 
     for (let i = 2; i < 5; i++) {
@@ -308,16 +312,20 @@ describe('db/transaction-pool', () => {
 
     pool.run(db);
 
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
-    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
+    void pool.process(
+      blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`),
+    );
 
     for (let i = 0; i < 2; i++) {
       await processing.dequeue();
     }
 
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (3)`));
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (2)`));
-    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (3)`));
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (2)`));
+    void pool.process(
+      blockingTask(`INSERT INTO foo (id, val) VALUES (8, 'foo')`),
+    );
 
     // Ensure all tasks get a worker.
     for (let i = 2; i < 5; i++) {
@@ -337,16 +345,20 @@ describe('db/transaction-pool', () => {
     });
 
     // Repeat to spawn more workers.
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (10)`));
-    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (60, 'foo')`));
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (10)`));
+    void pool.process(
+      blockingTask(`INSERT INTO foo (id, val) VALUES (60, 'foo')`),
+    );
 
     for (let i = 0; i < 2; i++) {
       await processing.dequeue();
     }
 
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (30)`));
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (20)`));
-    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (80, 'foo')`));
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (30)`));
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (20)`));
+    void pool.process(
+      blockingTask(`INSERT INTO foo (id, val) VALUES (80, 'foo')`),
+    );
 
     for (let i = 2; i < 5; i++) {
       await processing.dequeue();
@@ -424,12 +436,12 @@ describe('db/transaction-pool', () => {
       3,
     );
 
-    pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
     pool.setDone();
 
     // Set the failure before running.
@@ -451,7 +463,7 @@ describe('db/transaction-pool', () => {
     });
   });
 
-  test('pool resizing for sequential read readTasks', async () => {
+  test('pool not resized for sequential read readTasks', async () => {
     await db`
     INSERT INTO foo (id) VALUES (1);
     INSERT INTO foo (id) VALUES (2);
@@ -481,6 +493,42 @@ describe('db/transaction-pool', () => {
     });
   });
 
+  test('pool not resized for sequential writes', async () => {
+    await db`
+    INSERT INTO foo (id) VALUES (1);
+    INSERT INTO foo (id) VALUES (2);
+    INSERT INTO foo (id) VALUES (3);
+    `.simple();
+
+    const pool = newTransactionPool(
+      Mode.SERIALIZABLE,
+      initTask,
+      cleanupTask,
+      1,
+      3,
+    );
+    pool.run(db);
+
+    await pool.process(task(`INSERT INTO foo (id) VALUES (4)`));
+    await pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
+    await pool.process(task(`INSERT INTO foo (id) VALUES (6)`));
+
+    pool.setDone();
+    await pool.done();
+    await expectTables(db, {
+      ['public.workers']: [{id: 1}],
+      ['public.cleaned']: [{id: 1}],
+      ['public.foo']: [
+        {id: 1, val: null},
+        {id: 2, val: null},
+        {id: 3, val: null},
+        {id: 4, val: null},
+        {id: 5, val: null},
+        {id: 6, val: null},
+      ],
+    });
+  });
+
   test('external failure while running', async () => {
     const pool = newTransactionPool(
       Mode.SERIALIZABLE,
@@ -490,12 +538,12 @@ describe('db/transaction-pool', () => {
       3,
     );
 
-    pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
 
     const result = pool
       .run(db)
@@ -525,12 +573,12 @@ describe('db/transaction-pool', () => {
 
     const readError = new Error('doh');
 
-    pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
-    pool.process(() => Promise.reject(readError));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
+    void pool.process(() => Promise.reject(readError));
 
     const result = await pool
       .run(db)
@@ -557,11 +605,11 @@ describe('db/transaction-pool', () => {
       3,
     );
 
-    pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
     pool.abort();
 
     await pool.run(db).done();
@@ -584,14 +632,14 @@ describe('db/transaction-pool', () => {
     );
 
     // With a total of 4 insert statements with id = 1, at least one tx is guaranteed to fail.
-    pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (1, 'bad')`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (1, 'double')`));
-    pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
-    pool.process(task(`INSERT INTO foo (id, val) VALUES (1, 'oof')`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (1)`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (1, 'bad')`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (3)`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (1, 'double')`));
+    void pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
+    void pool.process(task(`INSERT INTO foo (id, val) VALUES (1, 'oof')`));
     pool.setDone();
 
     const result = await pool
@@ -627,17 +675,19 @@ describe('db/transaction-pool', () => {
 
     pool.run(db);
 
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
-    pool.process(blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`));
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
+    void pool.process(
+      blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`),
+    );
 
     for (let i = 0; i < 2; i++) {
       await processing.dequeue();
     }
 
     // For the last of the new tasks, induce an error with a unique key violation.
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (3)`));
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (2)`));
-    pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (3)`));
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (2)`));
+    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
 
     // Set done so that the workers exit as soon as they've processed their task.
     // This means that the initial two workers will likely exit successfully.
@@ -696,9 +746,9 @@ describe('db/transaction-pool', () => {
     follower.run(db);
 
     // Process some writes on follower.
-    follower.process(blockingTask(`INSERT INTO foo (id) VALUES (4);`));
-    follower.process(blockingTask(`INSERT INTO foo (id) VALUES (5);`));
-    follower.process(blockingTask(`INSERT INTO foo (id) VALUES (6);`));
+    void follower.process(blockingTask(`INSERT INTO foo (id) VALUES (4);`));
+    void follower.process(blockingTask(`INSERT INTO foo (id) VALUES (5);`));
+    void follower.process(blockingTask(`INSERT INTO foo (id) VALUES (6);`));
 
     // Verify that at least one task is processed, which guarantees that
     // the snapshot was exported.
@@ -869,7 +919,7 @@ describe('db/transaction-pool', () => {
     processed.push(pool.processReadTask(readTask()));
 
     // Do some writes on the pool.
-    pool.process(tx => [
+    void pool.process(tx => [
       tx`
     INSERT INTO foo (id) VALUES (4);
     INSERT INTO foo (id) VALUES (5);

@@ -277,7 +277,7 @@ export class Storer implements Service {
         tx.pool.run(this.#db);
         // Pipeline a read of the current ReplicationState,
         // which will be checked before committing.
-        tx.pool.process(tx => {
+        void tx.pool.process(tx => {
           tx<ReplicationState[]>`
           SELECT * FROM ${this.#cdc('replicationState')}`.then(
             ([result]) => resolve(result),
@@ -297,7 +297,7 @@ export class Storer implements Service {
         change: change as unknown as JSONValue,
       };
 
-      tx.pool.process(tx => [
+      void tx.pool.process(tx => [
         tx`
         INSERT INTO ${this.#cdc('changeLog')} ${tx(entry)}`,
       ]);
@@ -312,7 +312,7 @@ export class Storer implements Service {
         } else {
           // Update the replication state.
           const lastWatermark = watermark;
-          tx.pool.process(tx => [
+          void tx.pool.process(tx => [
             tx`
             UPDATE ${this.#cdc('replicationState')} SET ${tx({lastWatermark})}`,
           ]);
