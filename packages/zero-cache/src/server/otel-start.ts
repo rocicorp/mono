@@ -42,14 +42,10 @@ export function startOtelAuto() {
     logs.setGlobalLoggerProvider(provider);
   }
 
-  const logger = logs.getLogger('otel-start');
+  const logger = logs.getLogger('zero-cache');
   logger.emit({
     severityText: 'INFO',
     body: 'Starting OpenTelemetry with configuration',
-    attributes: {
-      serviceName: process.env.OTEL_SERVICE_NAME ?? 'zero-cache',
-      serviceVersion: process.env.OTEL_SERVICE_VERSION ?? '0.0.1',
-    },
   });
 
   const sdk = new NodeSDK({

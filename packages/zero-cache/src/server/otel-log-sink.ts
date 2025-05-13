@@ -1,10 +1,4 @@
-import {
-  logs,
-  type Logger,
-  SeverityNumber,
-  type LogRecord,
-  type AnyValueMap,
-} from '@opentelemetry/api-logs';
+import {logs, type Logger, type LogRecord} from '@opentelemetry/api-logs';
 import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
 import {errorOrObject} from './logging.ts';
 import {stringify} from '../types/bigint-json.ts';
@@ -16,11 +10,15 @@ export class OtelLogSink implements LogSink {
   constructor() {
     // start otel in case it was not started yet
     // this is a no-op if already started
-    this.#logger = logs.getLogger('zero-cache');
     startOtelAuto();
+    this.#logger = logs.getLogger('zero-cache');
   }
 
-  log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
+  log(
+    level: LogLevel,
+    _context: Context | undefined,
+    ...args: unknown[]
+  ): void {
     const lastObj = errorOrObject(args.at(-1));
     if (lastObj) {
       args.pop();
@@ -35,30 +33,11 @@ export class OtelLogSink implements LogSink {
     }
 
     const payload: LogRecord = {
-      severityNumber: toErrorNum(level),
       severityText: level,
       body: message,
-      timestamp: Date.now() * 1_000_000, // nanoseconds
     };
-    if (context) {
-      payload.attributes = context as AnyValueMap;
-    }
 
+    // eslint-disable-next-line no-console
     this.#logger.emit(payload);
-  }
-}
-
-function toErrorNum(level: LogLevel): SeverityNumber {
-  switch (level) {
-    case 'error':
-      return SeverityNumber.ERROR;
-    case 'warn':
-      return SeverityNumber.WARN;
-    case 'info':
-      return SeverityNumber.INFO;
-    case 'debug':
-      return SeverityNumber.DEBUG;
-    default:
-      throw new Error(`Unknown log level: ${level}`);
   }
 }
