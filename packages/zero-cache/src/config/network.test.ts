@@ -533,6 +533,61 @@ test.each([
       ],
     },
   ],
+  [
+    'ipv6',
+    '[2605:4c40:104:c6d5:0:c8e8:6899:1]',
+    ['eth', 'en'],
+    {
+      lo: [
+        {
+          address: '127.0.0.1',
+          netmask: '255.0.0.0',
+          family: 'IPv4',
+          mac: '00:00:00:00:00:00',
+          internal: true,
+          cidr: '127.0.0.1/8',
+        },
+        {
+          address: '::1',
+          netmask: 'ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff',
+          family: 'IPv6',
+          mac: '00:00:00:00:00:00',
+          internal: true,
+          cidr: '::1/128',
+          scopeid: 0,
+        },
+      ],
+      eth0: [
+        {
+          address: '2605:4c40:104:c6d5:0:c8e8:6899:1',
+          netmask: 'ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffe',
+          family: 'IPv6',
+          mac: '41:06:c1:4f:c1:d3',
+          internal: false,
+          cidr: '2605:4c40:104:c6d5:0:c8e8:6899:1/127',
+          scopeid: 0,
+        },
+        {
+          address: 'fdaa:b:e473:a7b:7d18:c8e8:6899:2',
+          netmask: 'ffff:ffff:ffff:ffff:ffff:ffff:ffff:0',
+          family: 'IPv6',
+          mac: '41:06:c1:4f:c1:d3',
+          internal: false,
+          cidr: 'fdaa:b:e473:a7b:7d18:c8e8:6899:2/112',
+          scopeid: 0,
+        },
+        {
+          address: 'fe80::dcad:15ff:fef1:100',
+          netmask: 'ffff:ffff:ffff:ffff::',
+          family: 'IPv6',
+          mac: '41:06:c1:4f:c1:d3',
+          internal: false,
+          cidr: 'fe80::dcad:15ff:fef1:100/64',
+          scopeid: 3,
+        },
+      ],
+    },
+  ],
 ] satisfies [string, string, string[], NodeJS.Dict<NetworkInterfaceInfo[]>][])(
   '%s',
   (_name, preferred, prefixes, interfaces) => {
