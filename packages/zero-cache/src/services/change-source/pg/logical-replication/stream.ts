@@ -21,7 +21,12 @@ const DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE = 5;
 // a wal_sender. It is possible that these keepalives are not received
 // if there is back-pressure in the replication stream. To keep the
 // connection alive anyway, explicitly send keepalives if none have been sent.
-const MANUAL_KEEPALIVE_TIMEOUT = 32_000;
+//
+// Note that although the default wal_sender timeout is 60 seconds
+// (https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-SENDER-TIMEOUT)
+// this shorter timeout accounts for Neon, which appears to run its instances with
+// a 30 second timeout.
+const MANUAL_KEEPALIVE_TIMEOUT = 20_000;
 
 export type StreamMessage = [lsn: bigint, Message | {tag: 'keepalive'}];
 
@@ -69,17 +74,11 @@ export async function subscribe(
     lastAckTime = Date.now();
   }
 
-  let lastDataTime = 0;
   const livenessTimer = setInterval(() => {
     const now = Date.now();
     if (now - lastAckTime > MANUAL_KEEPALIVE_TIMEOUT) {
-      lc.warn?.(`sending postgres keepalive (replication stream backed up?)`);
+      lc.debug?.(`sending postgres keepalive`);
       sendAck(0n);
-    }
-    if (now - lastDataTime > MANUAL_KEEPALIVE_TIMEOUT) {
-      lc.warn?.(
-        `no data received from ${db.options.host} since ${new Date(lastDataTime).toISOString()}`,
-      );
     }
   }, MANUAL_KEEPALIVE_TIMEOUT / 5);
 
@@ -95,7 +94,6 @@ export async function subscribe(
     },
   });
 
-  readable.on('data', () => (lastDataTime = Date.now()));
   readable.once(
     'close',
     () =>
