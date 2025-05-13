@@ -47,7 +47,7 @@ import {TableSource} from '../../zqlite/src/table-source.ts';
 import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
 
 const options = {
-  replicaFile: zeroOptions.replica.file,
+  replica: zeroOptions.replica,
   ast: {
     type: v.string().optional(),
     desc: [
@@ -70,7 +70,7 @@ const options = {
       `configuration required. The .env file should contain the connection URL to the CVR database.`,
     ],
   },
-  schema: {
+  schemaPath: {
     type: v.string().default('./schema.ts'),
     desc: ['Path to the schema file.'],
   },
@@ -136,8 +136,11 @@ runtimeDebugFlags.trackRowsVended = true;
 
 const lc = createSilentLogContext();
 
-const db = new Database(lc, config.replicaFile);
-const {schema, permissions} = await loadSchemaAndPermissions(lc, config.schema);
+const db = new Database(lc, config.replica.file);
+const {schema, permissions} = await loadSchemaAndPermissions(
+  lc,
+  config.schemaPath,
+);
 const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const serverToClientMapper = serverToClient(schema.tables);
