@@ -26,7 +26,14 @@ export function getPreferredIp(
   };
 
   const sorted = Object.entries(interfaces)
-    .map(([name, infos]) => (infos ?? []).map(info => ({...info, name})))
+    .map(([name, infos]) =>
+      (infos ?? []).map(info => ({
+        ...info,
+        // Enclose IPv6 addresses in square brackets for use in a URL.
+        address: info.family === 'IPv4' ? info.address : `[${info.address}]`,
+        name,
+      })),
+    )
     .flat()
     .sort((a, b) => {
       if (a.internal !== b.internal) {
