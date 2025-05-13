@@ -77,7 +77,7 @@ export async function subscribe(
   const livenessTimer = setInterval(() => {
     const now = Date.now();
     if (now - lastAckTime > MANUAL_KEEPALIVE_TIMEOUT) {
-      lc.debug?.(`sending manual postgres keepalive`);
+      lc.debug?.(`sending postgres keepalive`);
       sendAck(0n);
     }
   }, MANUAL_KEEPALIVE_TIMEOUT / 5);
