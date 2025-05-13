@@ -231,8 +231,8 @@ export const rowRecordSchema = cvrRecordSchema.extend({
 export type RowRecord = v.Infer<typeof rowRecordSchema>;
 
 export const patchSchema = v.object({
-  type: v.union(v.literal('row'), v.literal('query')),
-  op: v.union(v.literal('put'), v.literal('del')),
+  type: v.literalUnion('row', 'query'),
+  op: v.literalUnion('put', 'del'),
 });
 
 export const putRowPatchSchema = patchSchema.extend({

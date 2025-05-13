@@ -76,12 +76,7 @@ export const changeLogEntrySchema = v
     stateVersion: v.string(),
     table: v.string(),
     rowKey: v.string().nullable(),
-    op: v.union(
-      v.literal(SET_OP),
-      v.literal(DEL_OP),
-      v.literal(TRUNCATE_OP),
-      v.literal(RESET_OP),
-    ),
+    op: v.literalUnion(SET_OP, DEL_OP, TRUNCATE_OP, RESET_OP),
   })
   .map(val => ({
     ...val,

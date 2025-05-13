@@ -307,3 +307,11 @@ export function deepPartial<Shape extends ObjectShape>(
   }
   return v.object(shape as {[K in keyof Shape]: v.Optional<v.Infer<Shape[K]>>});
 }
+
+type Literal = string | number | bigint | boolean;
+
+export function literalUnion<T extends [...Literal[]]>(
+  ...literals: T
+): v.Type<T[number]> {
+  return v.union(...literals.map(v.literal));
+}

@@ -237,8 +237,8 @@ export type UpdateNeededReason =
   | {type: UpdateNeededReasonType.SchemaVersionNotSupported};
 
 export const updateNeededReasonTypeSchema: v.Type<UpdateNeededReason['type']> =
-  v.union(
-    v.literal(UpdateNeededReasonType.NewClientGroup),
-    v.literal(UpdateNeededReasonType.VersionNotSupported),
-    v.literal(UpdateNeededReasonType.SchemaVersionNotSupported),
+  v.literalUnion(
+    UpdateNeededReasonType.NewClientGroup,
+    UpdateNeededReasonType.VersionNotSupported,
+    UpdateNeededReasonType.SchemaVersionNotSupported,
   );

@@ -24,7 +24,7 @@ export const beginSchema = v.object({
   //   change-streamer and 25~30% in the replicator.
   //
   // If absent, the format is assumed to be 'p' (parsed JSON objects/values).
-  json: v.union(v.literal('p'), v.literal('s')).optional(),
+  json: v.literalUnion('p', 's').optional(),
 });
 
 export const commitSchema = v.object({
@@ -47,12 +47,7 @@ export const relationSchema = v.object({
   // The replicator handles these tables by extracting a row key from
   // the full row based on the table's PRIMARY KEY or UNIQUE INDEX.
   replicaIdentity: v
-    .union(
-      v.literal('default'),
-      v.literal('nothing'),
-      v.literal('full'),
-      v.literal('index'),
-    )
+    .literalUnion('default', 'nothing', 'full', 'index')
     .optional(),
 });
 

@@ -16,10 +16,10 @@ import {
 } from '../services/replicator/schema/replication-state.ts';
 import type {Worker} from '../types/processes.ts';
 
-export const replicaFileModeSchema = v.union(
-  v.literal('serving'),
-  v.literal('serving-copy'),
-  v.literal('backup'),
+export const replicaFileModeSchema = v.literalUnion(
+  'serving',
+  'serving-copy',
+  'backup',
 );
 
 export type ReplicaFileMode = v.Infer<typeof replicaFileModeSchema>;

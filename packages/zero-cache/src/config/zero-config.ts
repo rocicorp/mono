@@ -166,7 +166,7 @@ export const zeroOptions = {
     },
 
     type: {
-      type: v.union(v.literal('pg'), v.literal('custom')).default('pg'),
+      type: v.literalUnion('pg', 'custom').default('pg'),
       desc: [
         `The meaning of the {bold upstream-db} depends on the upstream type:`,
         `* {bold pg}: The connection database string, e.g. "postgres://..."`,
@@ -282,9 +282,7 @@ export const zeroOptions = {
 
   changeStreamer: {
     mode: {
-      type: v
-        .union(v.literal('dedicated'), v.literal('discover'))
-        .default('dedicated'),
+      type: v.literalUnion('dedicated', 'discover').default('dedicated'),
       desc: [
         `The mode for running or connecting to the change-streamer:`,
         `* {bold dedicated}: runs the change-streamer and shuts down when another`,
@@ -425,14 +423,7 @@ export const zeroOptions = {
     },
 
     logLevel: {
-      type: v
-        .union(
-          v.literal('debug'),
-          v.literal('info'),
-          v.literal('warn'),
-          v.literal('error'),
-        )
-        .default('warn'),
+      type: v.literalUnion('debug', 'info', 'warn', 'error').default('warn'),
     },
 
     backupURL: {

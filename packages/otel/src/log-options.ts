@@ -1,18 +1,11 @@
-import * as v from '../../shared/src/valita.ts';
 import {type Config} from '../../shared/src/options.ts';
+import * as v from '../../shared/src/valita.ts';
 
 export const logOptions = {
-  level: v
-    .union(
-      v.literal('debug'),
-      v.literal('info'),
-      v.literal('warn'),
-      v.literal('error'),
-    )
-    .default('info'),
+  level: v.literalUnion('debug', 'info', 'warn', 'error').default('info'),
 
   format: {
-    type: v.union(v.literal('text'), v.literal('json')).default('text'),
+    type: v.literalUnion('text', 'json').default('text'),
     desc: [
       `Use {bold text} for developer-friendly console logging`,
       `and {bold json} for consumption by structured-logging services`,

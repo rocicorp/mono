@@ -1,21 +1,21 @@
 import * as v from '../../shared/src/valita.ts';
 import {ErrorKind} from './error-kind.ts';
 
-const basicErrorKindSchema = v.union(
-  v.literal(ErrorKind.AuthInvalidated),
-  v.literal(ErrorKind.ClientNotFound),
-  v.literal(ErrorKind.InvalidConnectionRequest),
-  v.literal(ErrorKind.InvalidConnectionRequestBaseCookie),
-  v.literal(ErrorKind.InvalidConnectionRequestLastMutationID),
-  v.literal(ErrorKind.InvalidConnectionRequestClientDeleted),
-  v.literal(ErrorKind.InvalidMessage),
-  v.literal(ErrorKind.InvalidPush),
-  v.literal(ErrorKind.MutationRateLimited),
-  v.literal(ErrorKind.MutationFailed),
-  v.literal(ErrorKind.Unauthorized),
-  v.literal(ErrorKind.VersionNotSupported),
-  v.literal(ErrorKind.SchemaVersionNotSupported),
-  v.literal(ErrorKind.Internal),
+const basicErrorKindSchema = v.literalUnion(
+  ErrorKind.AuthInvalidated,
+  ErrorKind.ClientNotFound,
+  ErrorKind.InvalidConnectionRequest,
+  ErrorKind.InvalidConnectionRequestBaseCookie,
+  ErrorKind.InvalidConnectionRequestLastMutationID,
+  ErrorKind.InvalidConnectionRequestClientDeleted,
+  ErrorKind.InvalidMessage,
+  ErrorKind.InvalidPush,
+  ErrorKind.MutationRateLimited,
+  ErrorKind.MutationFailed,
+  ErrorKind.Unauthorized,
+  ErrorKind.VersionNotSupported,
+  ErrorKind.SchemaVersionNotSupported,
+  ErrorKind.Internal,
 );
 
 const basicErrorBodySchema = v.object({
@@ -23,10 +23,10 @@ const basicErrorBodySchema = v.object({
   message: v.string(),
 });
 
-const backoffErrorKindSchema = v.union(
-  v.literal(ErrorKind.Rebalance),
-  v.literal(ErrorKind.Rehome),
-  v.literal(ErrorKind.ServerOverloaded),
+const backoffErrorKindSchema = v.literalUnion(
+  ErrorKind.Rebalance,
+  ErrorKind.Rehome,
+  ErrorKind.ServerOverloaded,
 );
 
 const backoffBodySchema = v.object({
