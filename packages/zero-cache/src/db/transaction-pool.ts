@@ -4,6 +4,7 @@ import type postgres from 'postgres';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {Queue} from '../../../shared/src/queue.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {stringify} from '../types/bigint-json.ts';
 import type {PostgresDB, PostgresTransaction} from '../types/pg.ts';
 import * as Mode from './mode-enum.ts';
@@ -48,9 +49,9 @@ export type ReadTask<T> = (
 export class TransactionPool {
   #lc: LogContext;
   readonly #mode: Mode;
-  readonly #init: QueuedTask | undefined;
-  readonly #cleanup: QueuedTask | undefined;
-  readonly #tasks = new Queue<TaskTracker | Error | 'done'>();
+  readonly #init: TaskRunner | undefined;
+  readonly #cleanup: TaskRunner | undefined;
+  readonly #tasks = new Queue<TaskRunner | Error | 'done'>();
   readonly #workers: Promise<unknown>[] = [];
   readonly #initialWorkers: number;
   readonly #maxWorkers: number;
@@ -93,8 +94,8 @@ export class TransactionPool {
 
     this.#lc = lc;
     this.#mode = mode;
-    this.#init = init ? queuedStmt(init) : undefined;
-    this.#cleanup = cleanup ? queuedStmt(cleanup) : undefined;
+    this.#init = init ? this.#stmtRunner(init) : undefined;
+    this.#cleanup = cleanup ? this.#stmtRunner(cleanup) : undefined;
     this.#initialWorkers = initialWorkers;
     this.#numWorkers = initialWorkers;
     this.#maxWorkers = maxWorkers;
@@ -173,80 +174,31 @@ export class TransactionPool {
         ? this.#timeoutTask.forInitialWorkers
         : this.#timeoutTask.forExtraWorkers;
     const {timeoutMs} = tt;
-    const timeoutTask =
-      tt.task === 'done' ? 'done' : {task: queuedStmt(tt.task)};
+    const timeoutTask = tt.task === 'done' ? 'done' : this.#stmtRunner(tt.task);
 
     const worker = async (tx: PostgresTransaction) => {
       try {
-        const start = performance.now();
         lc.debug?.('started transaction');
 
-        const pending: Promise<unknown>[] = [];
+        let last: Promise<void> = promiseVoid;
 
-        let stmts = 0;
-        const executeTask = async (taskTracker: TaskTracker) => {
-          const {task, resolver} = taskTracker;
-
-          task !== this.#init && this.#numWorking++;
-          let result;
-          try {
-            result = await task(tx, lc);
-            if (result instanceof Statements) {
-              // Execute the statements (i.e. send to the db) immediately and add them to
-              // `pending` for the final await.
-              //
-              // Optimization: Fail immediately on rejections to prevent more tasks from
-              // queueing up. This can save a lot of time if an initial task fails before
-              // many subsequent tasks (e.g. transaction replay detection).
-              pending.push(
-                ...result.stmts.map(stmt =>
-                  stmt
-                    .execute()
-                    .then(() => {
-                      if (++stmts % 1000 === 0) {
-                        const q = stmt as unknown as Query;
-                        lc.debug?.(
-                          `executed ${stmts}th statement (${performance.now() - start} ms)`,
-                          {
-                            statement: q.string,
-                            params: stringify(q.parameters),
-                          },
-                        );
-                      }
-                    })
-                    .catch(e => this.fail(e)),
-                ),
-              );
-            }
-          } catch (e) {
-            if (resolver) {
-              resolver.reject(e); // Reject the ReadTask only.
-            } else {
-              throw e; // Fail the pool for (write) Tasks.
-            }
-          } finally {
-            task !== this.#init && this.#numWorking--;
-            resolver?.resolve(
-              // Note: This must be a ReadResult because of the TaskTracker type.
-              result instanceof ReadResult ? result.result : result?.stmts,
-            );
-          }
+        const executeTask = async (runner: TaskRunner) => {
+          runner !== this.#init && this.#numWorking++;
+          const {pending} = await runner.run(tx, lc, () => {
+            runner !== this.#init && this.#numWorking--;
+          });
+          last = pending ?? last;
         };
 
-        let task: TaskTracker | Error | 'done' = this.#init
-          ? {task: this.#init}
-          : await this.#tasks.dequeue(timeoutTask, timeoutMs);
+        let task: TaskRunner | Error | 'done' =
+          this.#init ?? (await this.#tasks.dequeue(timeoutTask, timeoutMs));
 
         try {
           while (task !== 'done') {
             if (
               task instanceof Error ||
-              (task.task !== this.#init && this.#failure)
+              (task !== this.#init && this.#failure)
             ) {
-              // avoid unhandled rejections
-              void Promise.allSettled(pending).then(() =>
-                lc.info?.(`aborted ${pending.length} statements`),
-              );
               throw this.#failure ?? task;
             }
             await executeTask(task);
@@ -257,12 +209,14 @@ export class TransactionPool {
         } finally {
           // Execute the cleanup task even on failure.
           if (this.#cleanup) {
-            await executeTask({task: this.#cleanup});
+            await executeTask(this.#cleanup);
           }
         }
 
         lc.debug?.('closing transaction');
-        return Promise.all(pending);
+        // Given the semantics of a Postgres transaction, the last statement
+        // will only succeed if all of the preceding statements succeeded.
+        return last;
       } catch (e) {
         if (e !== this.#failure) {
           lc.error?.('error from worker', e);
@@ -298,18 +252,130 @@ export class TransactionPool {
     }
   }
 
-  process(task: Task): void {
-    this.#trackAndProcess({task: queuedStmt(task)});
+  /**
+   * Processes the statements produced by the specified {@link Task},
+   * returning a Promise that resolves when the statements are either processed
+   * by the database or rejected.
+   *
+   * Note that statement failures will result in failing the entire
+   * TransactionPool (per transaction semantics). However, the returned Promise
+   * itself will resolve rather than reject. As such, it is fine to ignore
+   * returned Promises in order to pipeline requests to the database. It is
+   * recommended to occasionally await them (e.g. after some threshold) in
+   * order to avoid memory blowup in the case of database slowness.
+   */
+  process(task: Task): Promise<void> {
+    const r = resolver<void>();
+    this.#process(this.#stmtRunner(task, r));
+    return r.promise;
   }
 
-  #trackAndProcess(taskTracker: TaskTracker): void {
+  readonly #start = Date.now();
+  #stmts = 0;
+
+  /**
+   * Implements the semantics specified in {@link process()}.
+   *
+   * Specifically:
+   * * `freeWorker()` is called as soon as the statements are produced,
+   *   allowing them to be pipelined to the database.
+   * * Statement errors result in failing the transaction pool.
+   * * The client-supplied Resolver resolves on success or failure;
+   *   it is never rejected.
+   */
+  #stmtRunner(task: Task, r: {resolve: () => void} = resolver()): TaskRunner {
+    return {
+      run: async (tx, lc, freeWorker) => {
+        let stmts: Statement[];
+        try {
+          stmts = await task(tx, lc);
+        } catch (e) {
+          r.resolve();
+          throw e;
+        } finally {
+          freeWorker();
+        }
+
+        if (stmts.length === 0) {
+          r.resolve();
+          return {pending: null};
+        }
+
+        // Execute the statements (i.e. send to the db) immediately.
+        // The last result is returned for the worker to await before
+        // closing the transaction.
+        const last = stmts.reduce(
+          (_, stmt) =>
+            stmt
+              .execute()
+              .then(() => {
+                if (++this.#stmts % 1000 === 0) {
+                  const q = stmt as unknown as Query;
+                  lc.debug?.(
+                    `executed ${stmts}th statement (${performance.now() - this.#start} ms)`,
+                    {
+                      statement: q.string,
+                      params: stringify(q.parameters),
+                    },
+                  );
+                }
+              })
+              .catch(e => this.fail(e)),
+          promiseVoid,
+        );
+        return {pending: last.then(r.resolve)};
+      },
+      rejected: r.resolve,
+    };
+  }
+
+  /**
+   * Processes and returns the result of executing the {@link ReadTask} from
+   * within the transaction. An error thrown by the task will result in
+   * rejecting the returned Promise, but will not affect the transaction pool
+   * itself.
+   */
+  processReadTask<T>(readTask: ReadTask<T>): Promise<T> {
+    const r = resolver<T>();
+    this.#process(this.#readRunner(readTask, r));
+    return r.promise;
+  }
+
+  /**
+   * Implements the semantics specified in {@link processReadTask()}.
+   *
+   * Specifically:
+   * * `freeWorker()` is called as soon as the result is produced,
+   *   before resolving the client-supplied Resolver.
+   * * Errors result in rejecting the client-supplied Resolver but
+   *   do not affect transaction pool.
+   */
+  #readRunner<T>(readTask: ReadTask<T>, r: Resolver<T>): TaskRunner {
+    return {
+      run: async (tx, lc, freeWorker) => {
+        let result: T;
+        try {
+          result = await readTask(tx, lc);
+          freeWorker();
+          r.resolve(result);
+        } catch (e) {
+          freeWorker();
+          r.reject(e);
+        }
+        return {pending: null};
+      },
+      rejected: r.reject,
+    };
+  }
+
+  #process(runner: TaskRunner): void {
     assert(!this.#done, 'already set done');
     if (this.#failure) {
-      taskTracker.resolver?.reject(this.#failure);
+      runner.rejected(this.#failure);
       return;
     }
 
-    this.#tasks.enqueue(taskTracker);
+    this.#tasks.enqueue(runner);
 
     // Check if the pool size can and should be increased.
     if (this.#numWorkers < this.#maxWorkers) {
@@ -321,15 +387,6 @@ export class TransactionPool {
         this.#lc.debug?.(`Increased pool size to ${this.#numWorkers}`);
       }
     }
-  }
-
-  processReadTask<T>(readTask: ReadTask<T>): Promise<T> {
-    const r = resolver<T>();
-    this.#trackAndProcess({
-      task: queuedRead(readTask) as QueuedTask<ReadResult<unknown>>,
-      resolver: r as Resolver<unknown>,
-    });
-    return r.promise;
   }
 
   /**
@@ -371,6 +428,7 @@ export class TransactionPool {
    * On the other hand, a transaction pool that fails with a runtime error can still be ref'ed;
    * attempts to use the pool will result in the runtime error as expected.
    */
+  // TODO: Get rid of the ref-counting stuff. It's no longer needed.
   ref(count = 1) {
     assert(
       this.#db !== undefined && !this.#done,
@@ -611,44 +669,42 @@ function ensureError(err: unknown): Error {
   return error;
 }
 
-// Internal classes for handling read and write tasks in the same queue.
-class Statements {
-  readonly stmts: readonly Statement[];
-  constructor(stmts: readonly Statement[]) {
-    this.stmts = stmts;
-  }
+interface TaskRunner {
+  /**
+   * Manages the running of a Task or ReadTask in two phases:
+   *
+   * - If the task involves blocking, this is done in the worker. Once the
+   *   blocking is done, `freeWorker()` is invoked to signal that the worker
+   *   is available to run another task. Note that this should be invoked
+   *   *before* resolving the result to the calling thread so that a
+   *   subsequent task can reuse the same worker.
+   *
+   * - Task statements are executed on the database asynchronously. The final
+   *   result of this processing is encapsulated in the returned `pending`
+   *   Promise. The worker will await the last pending Promise before closing
+   *   the transaction.
+   *
+   * @param freeWorker should be called as soon as all blocking operations are
+   *             completed in order to return the transaction to the pool.
+   * @returns A `pending` Promise indicating when the statements have been
+   *          processed by the database, allowing the transaction to be closed.
+   *          This should be `null` if there are no transaction-dependent
+   *          statements to await.
+   */
+  run(
+    tx: PostgresTransaction,
+    lc: LogContext,
+    freeWorker: () => void,
+  ): Promise<{pending: Promise<void> | null}>;
+
+  /**
+   * Invoked if the TransactionPool is already in a failed state when the task
+   * is requested.
+   */
+  rejected(reason: unknown): void;
 }
 
-class ReadResult<T> {
-  readonly result: T;
-  constructor(result: T) {
-    this.result = result;
-  }
-}
-
-function queuedStmt(task: Task): QueuedTask {
-  return async (tx, lc) => new Statements(await task(tx, lc));
-}
-
-function queuedRead<T>(task: ReadTask<T>): QueuedTask<T> {
-  return async (tx, lc) => new ReadResult<T>(await task(tx, lc));
-}
-
-type QueuedTask<T = unknown> = (
-  tx: PostgresTransaction,
-  lc: LogContext,
-) => MaybePromise<Statements | ReadResult<T>>;
-
-type TaskTracker<T = unknown> =
-  | {
-      readonly task: QueuedTask;
-      readonly resolver?: undefined;
-    }
-  | {
-      readonly task: QueuedTask<ReadResult<T>>;
-      readonly resolver: Resolver<T>;
-    };
-
+// TODO: Get rid of the timeout stuff. It's no longer needed.
 const IDLE_TIMEOUT_MS = 5_000;
 
 const KEEPALIVE_TIMEOUT_MS = 60_000;
