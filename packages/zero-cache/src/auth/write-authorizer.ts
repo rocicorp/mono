@@ -102,7 +102,6 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       createStorage: () => cgStorage.createStorage(),
       decorateInput: input => input,
       decorateFilterInput: input => input,
-      mapAst: ast => ast,
     };
     this.#tableSpecs = computeZqlSpecs(this.#lc, replica);
     this.#statementRunner = new StatementRunner(replica);
