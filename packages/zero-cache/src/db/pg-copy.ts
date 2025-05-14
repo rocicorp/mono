@@ -21,9 +21,13 @@ export class TextTransform extends Transform {
   }
 
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  _transform(chunk: string, _encoding: string, callback: (e?: Error) => void) {
+  _transform(
+    chunk: Buffer,
+    encoding: BufferEncoding,
+    callback: (e?: Error) => void,
+  ) {
     try {
-      const text: string = chunk.toString();
+      const text = chunk.toString(encoding);
 
       let l = 0;
       let r = 0;
