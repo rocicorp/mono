@@ -4,7 +4,6 @@
 require('@dotenvx/dotenvx').config();
 import {createDefu} from 'defu';
 import {join} from 'node:path';
-import {addServiceWithOtel} from './otel';
 const defu = createDefu((obj, key, value) => {
   // Don't merge functions, just use the last one
   if (typeof obj[key] === 'function' || typeof value === 'function') {
@@ -169,7 +168,7 @@ export default $config({
       },
       environment: {
         ...commonEnv,
-        ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250319-00`,
+        ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250514-00`,
         ZERO_CHANGE_MAX_CONNS: '3',
         ZERO_NUM_SYNC_WORKERS: '0',
       },
