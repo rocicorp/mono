@@ -15,6 +15,7 @@ const harness = await bootstrap({
   zqlSchema: schema,
   pgContent,
 });
+const edit = makeEdit();
 
 log`
 # Point Queries
@@ -38,21 +39,16 @@ could be a few pages of a list or table view.
 const hydrate100PointQueries = new B('hydrate 100 point queries', function* () {
   yield async () => {
     await Promise.all(
-      Array.from({length: 100}, (_, i) => {
-        const query = harness.queries.memory.track.where('id', i + 1);
-        return query.run();
-      }),
+      Array.from({length: 100}, (_, i) =>
+        harness.queries.memory.track.where('id', i + 1),
+      ),
     );
   };
 });
 
 const ptTrial = await hydrate100PointQueries.run();
 const ptMs = p99(ptTrial);
-log`
-- Hydrate 100 point queries: \`${ptMs}\`ms.
-- Frame budget: 16ms
-- Total frames: ${stat(ptMs / 16)}
-- FPS: ${stat(1 / (ptMs / 16))}`;
+log`${frameStats(ptTrial)}`;
 
 log`
 ### Findings
@@ -94,7 +90,6 @@ const maintain100PointQueries = new B(
     const views = Array.from({length: 100}, (_, i) =>
       harness.queries.memory.track.where('id', i + 1).materialize(),
     );
-    const edit = makeEdit();
     let count = 0;
     yield () => {
       harness.delegates.memory
@@ -107,16 +102,245 @@ const maintain100PointQueries = new B(
     });
   },
 );
-const maintainTrial = await maintain100PointQueries.run();
-const maintainMs = p99(maintainTrial);
+const maintain100PointTrial = await maintain100PointQueries.run();
 log`
-- Maintain 100 point queries over 1 write: ${stat(maintainMs)}ms.
-- Frame budget: 16ms
-- Writes per frame: ${stat(16 / maintainMs, 10)}`;
+${frameMaintStats(maintain100PointTrial)}`;
+
+log`
+# Range Queries
+
+Single table range queries may or may not be common, depending on how the user structures their app.
+A user may do everything as range queries if queries are colocated with components thus pushing the
+"join" into the UI.
+
+10 range queries seems like a reasonable number for an app to have open at once.
+- A list of tracks
+- A list of albums
+- A list of artists
+- A list of playlists
+- A list of liked things
+- A list of genres
+etc.
+
+The limit on each range query would vary from 10 -> 100.
+100 for a main list view, ~10 for all the auxiliary lists.
+
+## Hydrate 10 Range Queries
+`;
+
+const hydrate10RangeQueries = new B('hydrate 10 range queries', function* () {
+  const zql = harness.queries.memory;
+  yield async () => {
+    await Promise.all([
+      zql.track.limit(100),
+      zql.album.limit(10),
+      zql.artist.limit(10),
+      zql.playlist.limit(10),
+      zql.mediaType.limit(10),
+      zql.genre.limit(10),
+      zql.invoice.limit(10),
+      zql.invoiceLine.limit(10),
+      zql.customer.limit(10),
+      zql.employee.limit(10),
+    ]);
+  };
+});
+
+const rangeTrial = await hydrate10RangeQueries.run();
+log`
+${frameStats(rangeTrial)}
+
+**Interestingly range query hydration is faster than point query hydration.**
+Even if we scaled this up to 100 range queries it would still be faster?
+
+Alternatives to test:
+1. Range queries will not always start at the beginning of the table.
+2. Range queries will not always be sorted by primary key
+
+## Hydrate 10 Range Queries, Order By Alternate Fields`;
+
+const hydrate10RangeQueriesAltField = new B(
+  'hydrate 10 range queries by alternate fields',
+  function* () {
+    const zql = harness.queries.memory;
+    yield async () => {
+      await Promise.all([
+        zql.track.orderBy('name', 'asc').limit(100),
+        zql.album.orderBy('title', 'asc').limit(10),
+        zql.artist.orderBy('name', 'asc').limit(10),
+        zql.playlist.orderBy('name', 'asc').limit(10),
+        zql.mediaType.orderBy('name', 'asc').limit(10),
+        zql.genre.orderBy('name', 'asc').limit(10),
+        zql.invoice.orderBy('invoiceDate', 'desc').limit(10),
+        zql.invoiceLine.orderBy('unitPrice', 'desc').limit(10),
+        zql.customer.orderBy('lastName', 'asc').limit(10),
+        zql.employee.orderBy('lastName', 'asc').limit(10),
+      ]);
+    };
+  },
+);
+
+const rangeAltFieldTrial = await hydrate10RangeQueriesAltField.run();
+log`
+${frameStats(rangeAltFieldTrial)}
+
+Surprisingly this is not much slower than order by primary key. That is likely
+due to the cost of index creation being paid once up front.
+
+Starting in the middle of a table could still be expensive. The feeling is that it must be
+because point queries are so slow.
+
+## Hydrate 10 Range Queries, Start in the Middle of the Table
+`;
+
+const hydrate10RangeQueriesMiddle = new B(
+  'hydrate 10 range queries, start in the middle of the table',
+  function* () {
+    const zql = harness.queries.memory;
+    yield async () => {
+      await Promise.all([
+        zql.track.start(middle('track')).limit(100),
+        zql.album.start(middle('album')).limit(10),
+        zql.artist.start(middle('artist')).limit(10),
+        zql.playlist.start(middle('playlist')).limit(10),
+        zql.mediaType.start(middle('mediaType')).limit(10),
+        zql.genre.start(middle('genre')).limit(10),
+        zql.invoice.start(middle('invoice')).limit(10),
+        zql.invoiceLine.start(middle('invoiceLine')).limit(10),
+        zql.customer.start(middle('customer')).limit(10),
+        zql.employee.start(middle('employee')).limit(10),
+      ]);
+    };
+  },
+);
+
+const rangeMiddleTrial = await hydrate10RangeQueriesMiddle.run();
+log`
+${frameStats(rangeMiddleTrial)}
+
+Something strange. This is still much faster than point queries.
+## Scale to 100 Range Queries
+`;
+
+const hydrate100RangeQueries = new B('hydrate 100 range queries', function* () {
+  const zql = harness.queries.memory;
+  yield async () => {
+    await Promise.all(Array.from({length: 100}, _ => zql.track.limit(100)));
+  };
+});
+const range100Trial = await hydrate100RangeQueries.run();
+const avgRange100 = avg(range100Trial);
+const avgPoint100 = avg(ptTrial);
+log`
+${frameStats(range100Trial)}
+
+Weird. Point query is on average ${avgPoint100 / avgRange100} times slower than the range query.
+
+Maybe point query is doing something wrong with limits?`;
+
+const limitedPoint100 = new B('point 100', function* () {
+  yield async () => {
+    await Promise.all(
+      Array.from({length: 100}, (_, i) =>
+        harness.queries.memory.track.where('id', i + 1).limit(1),
+      ),
+    );
+  };
+});
+const limitedPoint100Trial = await limitedPoint100.run();
+log`
+## 100 Point Queries, Limit 1
+${frameStats(limitedPoint100Trial)}
+
+**TODO: Oops, we're not limiting to 1 by default when we do a point query.**
+
+Now to check maintenance of range queries during writes.`;
+
+const maintain10RangeQueriesAltField = new B(
+  'hydrate 10 range queries by alternate fields',
+  function* () {
+    const zql = harness.queries.memory;
+    const tables = [
+      'track',
+      'album',
+      'artist',
+      'playlist',
+      'mediaType',
+      'genre',
+      'customer',
+      'employee',
+    ] as const;
+    const views = [
+      zql.track.orderBy('name', 'asc').limit(100),
+      zql.album.orderBy('title', 'asc').limit(10),
+      zql.artist.orderBy('name', 'asc').limit(10),
+      zql.playlist.orderBy('name', 'asc').limit(10),
+      zql.mediaType.orderBy('name', 'asc').limit(10),
+      zql.genre.orderBy('name', 'asc').limit(10),
+      zql.invoice.orderBy('invoiceDate', 'desc').limit(10),
+      zql.invoiceLine.orderBy('unitPrice', 'desc').limit(10),
+      zql.customer.orderBy('lastName', 'asc').limit(10),
+      zql.employee.orderBy('lastName', 'asc').limit(10),
+    ].map(q => q.materialize());
+    let count = 0;
+    yield () => {
+      const table = tables[count % tables.length];
+      const cols = schema.tables[table].columns;
+      // TODO: update to edit a thing that is in range...
+      harness.delegates.memory
+        .getSource(table)!
+        .push(
+          edit(
+            table,
+            count % 8,
+            'name' in cols ? 'name' : 'title' in cols ? 'title' : 'lastName',
+            `new name ${count}`,
+          ),
+        );
+      count++;
+    };
+    views.forEach(view => {
+      view.destroy();
+    });
+  },
+);
+const maintainRangeAltFieldTrial = await maintain10RangeQueriesAltField.run();
+log`
+## Maintain 10 Range Queries, Order By Alternate Fields
+${frameMaintStats(maintainRangeAltFieldTrial)}
+
+Well this is surprisingly faster than maintaining point queries (w/o limit)!!!
+- p99 ${stat(p99(maintain100PointTrial) / p99(maintainRangeAltFieldTrial))}x faster than point queries
+- avg ${stat(avg(maintain100PointTrial) / avg(maintainRangeAltFieldTrial))}x faster than point queries
+
+Some other bugs still exist in point queries?`;
+
+function frameStats(trial: trial) {
+  const p99ms = p99(trial);
+  const avgms = avg(trial);
+  return `
+  - Total time: ${stat(p99ms)}p99, ${stat(avgms)}avg
+  - Frame budget: 16ms
+  - FPS: ${stat(1 / (p99ms / 16))}p99, ${stat(1 / (avgms / 16))}avg`;
+}
+
+function frameMaintStats(trial: trial) {
+  const p99ms = p99(trial);
+  const avgms = avg(trial);
+  return `
+  - Maintain queries over 1 write: ${stat(p99ms)}ms p99 ${stat(avgms)}ms avg.
+  - Frame budget: 16ms
+  - Writes per frame: ${stat(16 / p99ms, 10)}p99, ${stat(16 / avgms, 10)}avg`;
+}
 
 function p99(trial: trial) {
   const stats = must(trial.runs[0].stats);
   return nanosToMs(stats.p99);
+}
+
+function avg(trial: trial) {
+  const stats = must(trial.runs[0].stats);
+  return nanosToMs(stats.avg);
 }
 
 function nanosToMs(nanos: number) {
@@ -170,4 +394,9 @@ function makeEdit() {
       row: newRow,
     } as const;
   };
+}
+
+function middle(table: keyof (typeof schema)['tables']) {
+  const dataset = must(harness.dbs.raw.get(table));
+  return dataset[Math.floor(dataset.length / 2)];
 }
