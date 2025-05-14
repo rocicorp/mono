@@ -5,9 +5,8 @@ import {
 import type {LogContext} from '@rocicorp/logger';
 import {defu} from 'defu';
 import postgres, {type Options, type PostgresType} from 'postgres';
-import {assert} from '../../../../../../shared/src/asserts.ts';
-import {mapValues} from '../../../../../../shared/src/objects.ts';
 import {sleep} from '../../../../../../shared/src/sleep.ts';
+import {getTypeParsers} from '../../../../db/pg-type-parser.ts';
 import {type PostgresDB} from '../../../../types/pg.ts';
 import {pipe, type Sink, type Source} from '../../../../types/streams.ts';
 import {Subscription} from '../../../../types/subscription.ts';
@@ -83,7 +82,7 @@ export async function subscribe(
   }, MANUAL_KEEPALIVE_TIMEOUT / 5);
 
   let destroyed = false;
-  const typeParsers = await getTypeParsers(lc, db);
+  const typeParsers = await getTypeParsers(db);
   const parser = new PgoutputParser(typeParsers);
   const messages = Subscription.create<StreamMessage>({
     cleanup: () => {
@@ -187,42 +186,4 @@ function makeAck(lsn: bigint): Buffer {
   x.writeBigInt64BE(lsn, 17);
   x.writeBigInt64BE(microNow, 25);
   return x;
-}
-
-// Arbitrary array type to test if the PostgresDB client has fetched types.
-const INT4_ARRAY_TYPE = 1007;
-
-// postgres.js has default type parsers with user-defined overrides
-// configurable per-client (see `postgresTypeConfig` in types/pg.ts).
-//
-// From these, the postgres.js client will automatically derive parsers
-// for array versions of these types, provided that the client was
-// configured with `fetch_types: true` (which is the default).
-//
-// A replication session (with `database: replication`), however, does
-// not support this type fetching, so it is done on a connection from
-// a default client.
-async function getTypeParsers(lc: LogContext, db: PostgresDB) {
-  if (!db.options.parsers[INT4_ARRAY_TYPE]) {
-    assert(db.options.fetch_types, `Supplied db must fetch_types`);
-    lc.debug?.('fetching array types');
-
-    // Execute a query to ensure that fetchArrayTypes() gets executed:
-    // https://github.com/porsager/postgres/blob/089214e85c23c90cf142d47fb30bd03f42874984/src/connection.js#L536
-    await db`SELECT 1`.simple();
-    assert(
-      db.options.parsers[INT4_ARRAY_TYPE],
-      `array types not fetched ${Object.keys(db.options.parsers)}`,
-    );
-  }
-  return mapValues(db.options.parsers, parse => {
-    // The postgres.js library tags parsers for array types with an `array: true` field.
-    // https://github.com/porsager/postgres/blob/089214e85c23c90cf142d47fb30bd03f42874984/src/connection.js#L760
-    const isArrayType = (parse as unknown as {array?: boolean}).array;
-
-    // And then skips the first character when parsing the string,
-    // e.g. an array parser will parse '{1,2,3}' from '1,2,3}'.
-    // https://github.com/porsager/postgres/blob/089214e85c23c90cf142d47fb30bd03f42874984/src/connection.js#L496
-    return isArrayType ? (val: string) => parse(val.substring(1)) : parse;
-  });
 }

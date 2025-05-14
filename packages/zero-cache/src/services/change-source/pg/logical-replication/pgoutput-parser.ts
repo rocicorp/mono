@@ -8,6 +8,7 @@
 
 export type TypeParser = (val: string) => unknown;
 
+import type {TypeParsers} from '../../../../db/pg-type-parser.ts';
 import {BinaryReader} from './binary-reader.ts';
 import type {
   Message,
@@ -29,15 +30,12 @@ export class PgoutputParser {
   _relationCache = new Map<number, MessageRelation>();
 
   // Replaces "pg-types" library.
-  #typeParsers: Record<number, TypeParser>;
-  constructor(typeParsers: Record<number, TypeParser>) {
+  #typeParsers: TypeParsers;
+  constructor(typeParsers: TypeParsers) {
     this.#typeParsers = typeParsers;
   }
   #getTypeParser(typeOid: number): TypeParser {
-    // The absence of a TypeParser defaults to "noParse", mimicking
-    // the behavior in pg-types:
-    // https://github.com/brianc/node-pg-types/blob/5b26b826466cff4a9092b8c9e31960fe293ef3d9/index.js#L15
-    return this.#typeParsers[typeOid] ?? String;
+    return this.#typeParsers.getTypeParser(typeOid);
   }
   // Replaced "pg-types" library.
 
