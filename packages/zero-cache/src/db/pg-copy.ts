@@ -145,7 +145,7 @@ export class RowTransform extends Transform {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   _transform(row: string[], _encoding: string, callback: (e?: Error) => void) {
     try {
-      assertArray(row); // Sanity check that the pipeline is preceded by a TsvTransform.
+      assertArray(row); // Sanity check that the pipeline is preceded by a TextTransform.
       assert(
         row.length === this.#columnParsers.length,
         `Expected row to have ${this.#columnParsers.length} values but found ${row.length}`,
