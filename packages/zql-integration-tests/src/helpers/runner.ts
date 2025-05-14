@@ -356,9 +356,11 @@ export async function runBenchmarks<TSchema extends Schema>(
     generatePush?: PushGenerator;
   }[])[]
 ): Promise<void> {
-  const dbs = await makeDatabases(suiteName, zqlSchema, pgContent);
-  const delegates = makeDelegates(dbs, zqlSchema);
-  const queries = makeQueries(zqlSchema, delegates);
+  const {dbs, delegates, queries} = await bootstrap({
+    suiteName,
+    zqlSchema,
+    pgContent,
+  });
   if (setRawData) {
     setRawData(dbs.raw);
   }
@@ -366,25 +368,79 @@ export async function runBenchmarks<TSchema extends Schema>(
   benchSpecs
     .flat()
     .filter(t => (only ? only.includes(t.name) : true))
-    .map(
-      ({name, createQuery, generatePush}) =>
-        // boxplot(() =>
-        summary(() => {
-          makeBenchmark({
-            name,
-            zqlSchema,
-            delegates,
-            dbs,
-            createQuery,
-            type,
-            queries,
-            generatePush,
-          });
-        }),
-      // ),
+    .map(({name, createQuery, generatePush}) =>
+      summary(() => {
+        makeBenchmark({
+          name,
+          zqlSchema,
+          delegates,
+          dbs,
+          createQuery,
+          type,
+          queries,
+          generatePush,
+        });
+      }),
     );
 
   await run();
+}
+
+export async function bootstrap<TSchema extends Schema>({
+  suiteName,
+  zqlSchema,
+  pgContent,
+}: {
+  suiteName: string;
+  zqlSchema: TSchema;
+  pgContent: string;
+}) {
+  const dbs = await makeDatabases(suiteName, zqlSchema, pgContent);
+  const delegates = makeDelegates(dbs, zqlSchema);
+  const queries = makeQueries(zqlSchema, delegates);
+
+  async function transact(cb: (delegates: Delegates) => Promise<void>) {
+    await dbs.pg.begin(async tx => {
+      const scopedDelegates: Delegates = {
+        ...delegates,
+        pg: {
+          transaction: {
+            query(query: string, args: unknown[]) {
+              return tx.unsafe(query, args as JSONValue[]);
+            },
+            wrappedTransaction: tx,
+          },
+          serverSchema: dbs.pgSchema,
+        },
+        memory: new TestMemoryQueryDelegate({
+          sources: Object.fromEntries(
+            Object.entries(dbs.memory).map(([key, source]) => [
+              key,
+              source.fork(),
+            ]),
+          ),
+        }),
+        sqlite: newQueryDelegate(
+          lc,
+          testLogConfig,
+          (() => {
+            const db = new Database(lc, dbs.sqliteFile);
+            db.exec('BEGIN CONCURRENT');
+            return db;
+          })(),
+          zqlSchema,
+        ),
+      };
+      await cb(scopedDelegates);
+    });
+  }
+
+  return {
+    dbs,
+    delegates,
+    queries,
+    transact,
+  };
 }
 
 function makeBenchmark<TSchema extends Schema>({
