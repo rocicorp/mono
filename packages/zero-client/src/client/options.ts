@@ -28,15 +28,22 @@ export interface ZeroOptions<
   server?: string | null | undefined;
 
   /**
-   * A string token to identify and authenticate the user, a function that
-   * returns such a token, or undefined if there is no logged in user.
+   * A JWT to identify and authenticate the user. Can be provided as either:
+   * - A string containing the JWT token
+   * - A function that returns a JWT token
+   * - `undefined` if there is no logged in user
    *
-   * If the zero-cache determines the token is invalid (expired, can't be
-   * decoded, bad signature, etc):
-   * 1. if a function was provided Zero will call the function to get a new
-   *    token with the error argument set to `'invalid-token'`.
-   * 2. if a string token was provided Zero will continue to retry with the
-   *    provided token.
+   * Token validation behavior:
+   * 1. **For function providers:**
+   *    When zero-cache reports that a token is invalid (expired, malformed,
+   *    or has an invalid signature), Zero will call the function again with
+   *    `error='invalid-token'` to obtain a new token.
+   *
+   * 2. **For string tokens:**
+   *    Zero will continue to use the provided token even if zero-cache initially
+   *    reports it as invalid. This is because zero-cache may be able to validate
+   *    the token after fetching new public keys from its configured JWKS URL
+   *    (if `ZERO_AUTH_JWKS_URL` is set).
    */
   auth?:
     | string
@@ -49,7 +56,7 @@ export interface ZeroOptions<
    * Each userID gets its own client-side storage so that the app can switch
    * between users without losing state.
    *
-   * This must match the user identified by the `auth` token if
+   * This must match the `sub` claim of the `auth` token if
    * `auth` is provided.
    */
   userID: string;
