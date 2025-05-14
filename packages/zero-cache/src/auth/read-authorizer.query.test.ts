@@ -486,10 +486,6 @@ beforeEach(() => {
 
   const sources = new Map<string, Source>();
   queryDelegate = {
-    mapAst(ast) {
-      return ast;
-    },
-
     getSource: (name: string) => {
       let source = sources.get(name);
       if (source) {

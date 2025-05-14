@@ -47,7 +47,7 @@ import {TableSource} from '../../zqlite/src/table-source.ts';
 import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
 
 const options = {
-  replicaFile: zeroOptions.replica.file,
+  replica: zeroOptions.replica,
   ast: {
     type: v.string().optional(),
     desc: [
@@ -70,7 +70,7 @@ const options = {
       `configuration required. The .env file should contain the connection URL to the CVR database.`,
     ],
   },
-  schema: {
+  schemaPath: {
     type: v.string().default('./schema.ts'),
     desc: ['Path to the schema file.'],
   },
@@ -136,15 +136,15 @@ runtimeDebugFlags.trackRowsVended = true;
 
 const lc = createSilentLogContext();
 
-const db = new Database(lc, config.replicaFile);
-const {schema, permissions} = await loadSchemaAndPermissions(lc, config.schema);
+const db = new Database(lc, config.replica.file);
+const {schema, permissions} = await loadSchemaAndPermissions(
+  lc,
+  config.schemaPath,
+);
 const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const serverToClientMapper = serverToClient(schema.tables);
 const host: QueryDelegate = {
-  mapAst(ast: AST): AST {
-    return mapAST(ast, clientToServerMapper);
-  },
   getSource: (serverTableName: string) => {
     const clientTableName = serverToClientMapper.tableName(serverTableName);
     let source = sources.get(serverTableName);
@@ -217,6 +217,10 @@ async function runAst(
   ast: AST,
   isTransformed: boolean,
 ): Promise<[number, number]> {
+  if (!isTransformed) {
+    // map the AST to server names if not already transformed
+    ast = mapAST(ast, clientToServerMapper);
+  }
   if (config.applyPermissions) {
     const authData = config.authData ? JSON.parse(config.authData) : {};
     if (!config.authData) {
@@ -231,15 +235,7 @@ async function runAst(
     console.log(await formatOutput(ast.table + astToZQL(ast)));
   }
 
-  const pipeline = buildPipeline(
-    ast,
-    isTransformed
-      ? {
-          ...host,
-          mapAst: (ast: AST) => ast,
-        }
-      : host,
-  );
+  const pipeline = buildPipeline(ast, host);
   const output = new Catch(pipeline);
 
   const start = performance.now();

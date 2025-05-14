@@ -66,7 +66,7 @@ export interface BuilderDelegate {
    * There is no "wire" for zqlite tests so this function is provided
    * to allow tests to remap the AST.
    */
-  mapAst(ast: AST): AST;
+  mapAst?: ((ast: AST) => AST) | undefined;
 }
 
 /**
@@ -94,7 +94,11 @@ export interface BuilderDelegate {
  * ```
  */
 export function buildPipeline(ast: AST, delegate: BuilderDelegate): Input {
-  return buildPipelineInternal(delegate.mapAst(ast), delegate, '');
+  return buildPipelineInternal(
+    delegate.mapAst ? delegate.mapAst(ast) : ast,
+    delegate,
+    '',
+  );
 }
 
 export function bindStaticParameters(
