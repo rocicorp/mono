@@ -3,14 +3,18 @@ import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
 import {OTLPLogExporter} from '@opentelemetry/exporter-logs-otlp-http';
 import {NodeSDK} from '@opentelemetry/sdk-node';
 import {
-  ATTR_SERVICE_NAME,
-  ATTR_SERVICE_VERSION,
-} from '@opentelemetry/semantic-conventions';
+  detectResources,
+  envDetector,
+  processDetector,
+  hostDetector,
+  resourceFromAttributes,
+  defaultResource,
+} from '@opentelemetry/resources';
+import {ATTR_SERVICE_VERSION} from '@opentelemetry/semantic-conventions';
 import {
   PeriodicExportingMetricReader,
   ConsoleMetricExporter,
 } from '@opentelemetry/sdk-metrics';
-import {resourceFromAttributes} from '@opentelemetry/resources';
 import {version} from '../../../otel/src/version.ts';
 import {
   BatchLogRecordProcessor,
@@ -20,56 +24,71 @@ import {
 import {logs} from '@opentelemetry/api-logs';
 import {getNodeAutoInstrumentations} from '@opentelemetry/auto-instrumentations-node';
 
-let started = false;
-export function startOtelAuto() {
-  if (started) {
-    return;
-  }
-  started = true;
+class OtelManager {
+  private static _instance: OtelManager;
+  private _started = false;
 
-  const logRecordProcessors: LogRecordProcessor[] = [];
-  const resource = resourceFromAttributes({
-    [ATTR_SERVICE_NAME]: 'syncer',
-    [ATTR_SERVICE_VERSION]: version,
-  });
+  private constructor() {}
 
-  // Initialize logger provider if not already set
-  if (!logs.getLoggerProvider()) {
-    const provider = new LoggerProvider({resource});
-    const processor = new BatchLogRecordProcessor(new OTLPLogExporter());
-    logRecordProcessors.push(processor);
-    provider.addLogRecordProcessor(processor);
-    logs.setGlobalLoggerProvider(provider);
+  static getInstance(): OtelManager {
+    if (!OtelManager._instance) {
+      OtelManager._instance = new OtelManager();
+    }
+    return OtelManager._instance;
   }
 
-  const logger = logs.getLogger('zero-cache');
-  logger.emit({
-    severityText: 'INFO',
-    body: 'Starting OpenTelemetry with configuration',
-  });
+  startOtelAuto() {
+    if (this._started) {
+      return;
+    }
+    this._started = true;
 
-  const sdk = new NodeSDK({
-    resource,
-    // Automatically instruments all supported modules
-    instrumentations: [getNodeAutoInstrumentations()],
-    traceExporter: new OTLPTraceExporter(),
-    metricReader: new PeriodicExportingMetricReader({
-      exportIntervalMillis: 5000,
-      exporter: (() => {
-        if (process.env.NODE_ENV === 'dev') {
-          return new ConsoleMetricExporter();
-        }
-        return new OTLPMetricExporter();
-      })(),
-    }),
-    logRecordProcessors,
-  });
+    const logRecordProcessors: LogRecordProcessor[] = [];
+    const envResource = detectResources({
+      detectors: [envDetector, processDetector, hostDetector],
+    });
 
-  // Start SDK: will deploy Trace, Metrics, and Logs pipelines as per env vars
-  sdk.start();
+    const customResource = resourceFromAttributes({
+      [ATTR_SERVICE_VERSION]: version,
+    });
 
-  logger.emit({
-    severityText: 'INFO',
-    body: 'OpenTelemetry SDK started successfully',
-  });
+    const resource = defaultResource().merge(envResource).merge(customResource);
+
+    // Initialize logger provider if not already set
+    if (!logs.getLoggerProvider()) {
+      const provider = new LoggerProvider({resource});
+      const processor = new BatchLogRecordProcessor(new OTLPLogExporter());
+      logRecordProcessors.push(processor);
+      provider.addLogRecordProcessor(processor);
+      logs.setGlobalLoggerProvider(provider);
+    }
+
+    const logger = logs.getLogger('zero-cache');
+    const sdk = new NodeSDK({
+      resource,
+      // Automatically instruments all supported modules
+      instrumentations: [getNodeAutoInstrumentations()],
+      traceExporter: new OTLPTraceExporter(),
+      metricReader: new PeriodicExportingMetricReader({
+        exportIntervalMillis: 5000,
+        exporter: (() => {
+          if (process.env.NODE_ENV === 'dev') {
+            return new ConsoleMetricExporter();
+          }
+          return new OTLPMetricExporter();
+        })(),
+      }),
+      logRecordProcessors,
+    });
+
+    // Start SDK: will deploy Trace, Metrics, and Logs pipelines as per env vars
+    sdk.start();
+
+    logger.emit({
+      severityText: 'INFO',
+      body: 'OpenTelemetry SDK started successfully',
+    });
+  }
 }
+
+export const startOtelAuto = () => OtelManager.getInstance().startOtelAuto();
