@@ -35,13 +35,13 @@ export interface ZeroOptions<
    *
    * Token validation behavior:
    * 1. **For function providers:**  
-   *    When Zero-cache reports that a token is invalid (expired, malformed,
+   *    When zero-cache reports that a token is invalid (expired, malformed,
    *    or has an invalid signature), Zero will call the function again with
    *    `error='invalid-token'` to obtain a new token.
    * 
    * 2. **For string tokens:**  
-   *    Zero will continue to use the provided token even if Zero-cache initially
-   *    reports it as invalid. This is because Zero-cache may be able to validate
+   *    Zero will continue to use the provided token even if zero-cache initially
+   *    reports it as invalid. This is because zero-cache may be able to validate
    *    the token after fetching new public keys from its configured JWKS URL
    *    (if `ZERO_AUTH_JWKS_URL` is set).
    */
