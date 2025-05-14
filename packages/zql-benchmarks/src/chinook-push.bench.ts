@@ -1,7 +1,13 @@
-import {runBenchmarks} from '../../zql-integration-tests/src/helpers/runner.ts';
+import {
+  runBenchmarks,
+  type PushGenerator,
+} from '../../zql-integration-tests/src/helpers/runner.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import type {PullRow} from '../../zql/src/query/query.ts';
+import type {Row} from '../../zero-protocol/src/data.ts';
+import type {JSONValue} from '../../shared/src/json.ts';
+import {must} from '../../shared/src/must.ts';
 
 const pgContent = await getChinook();
 
@@ -19,12 +25,16 @@ function defaultTrack(id: number): PullRow<'track', typeof schema> {
   };
 }
 
+let rawData: ReadonlyMap<string, readonly Row[]> = new Map();
 await runBenchmarks(
   {
     suiteName: 'chinook_bench_push',
     type: 'push',
     pgContent,
     zqlSchema: schema,
+    setRawData(raw) {
+      rawData = raw;
+    },
   },
   [
     {
@@ -66,36 +76,69 @@ await runBenchmarks(
         ],
       ],
     },
-    // For some reason tinybench is not respecting limits on number of
-    // iterations and warmups to run. It is blowing past the track table size
-    // and removing all rows during test warmup.
-    // We should switch to https://github.com/evanwashere/mitata as
-    // tinybench also has bugs in `setup` and `teardown`: https://github.com/rocicorp/mono/pull/4313
-    // {
-    //   name: 'remove from limited query, outside the bound',
-    //   createQuery: q => q.track.limit(100),
-    //   generatePush: i => [
-    //     [
-    //       'track',
-    //       {
-    //         type: 'remove',
-    //         row: defaultTrack(i + 1_000),
-    //       },
-    //     ],
-    //   ],
-    // },
-    // {
-    //   name: 'remove from limited query, inside the bound',
-    //   createQuery: q => q.track.limit(100),
-    //   generatePush: i => [
-    //     [
-    //       'track',
-    //       {
-    //         type: 'remove',
-    //         row: defaultTrack(i + 1),
-    //       },
-    //     ],
-    //   ],
-    // },
+    {
+      name: 'edit for limited query, outside the bound',
+      createQuery: q => q.track.limit(100),
+      generatePush: (() => {
+        const edit = makeEdit();
+        return (i: number) => {
+          const change = edit(
+            'track',
+            // prettier does not respect order of operations below and formats
+            // to the wrong equation.
+            // prettier-ignore
+            (i % ((must(rawData.get('track')).length - 100))) + 100,
+            'name',
+            Math.floor(Math.random() * 10_000) + '',
+          );
+          return [['track', change]];
+        };
+      })() satisfies PushGenerator,
+    },
+    {
+      name: 'edit for limited query, inside the bound',
+      createQuery: q => q.track.limit(100),
+      generatePush: (() => {
+        const edit = makeEdit();
+        return (i: number) => [
+          [
+            'track',
+            edit(
+              'track',
+              i % 100,
+              'name',
+              Math.floor(Math.random() * 10_000) + '',
+            ),
+          ],
+        ];
+      })(),
+    },
   ],
 );
+
+function makeEdit() {
+  const currentValues = new Map<string, Row>();
+  return (table: string, index: number, column: string, value: JSONValue) => {
+    const key = `${table}-${index}`;
+    const dataset = rawData.get(table);
+    if (!dataset) {
+      throw new Error(`No dataset for table ${table}`);
+    }
+    const row = currentValues.get(key) ?? dataset[index];
+    if (!row) {
+      throw new Error(
+        `No row for table ${table} at index ${index} ds length ${dataset.length}`,
+      );
+    }
+    const newRow = {
+      ...row,
+      [column]: value,
+    };
+    currentValues.set(key, newRow);
+    return {
+      type: 'edit',
+      oldRow: row,
+      row: newRow,
+    } as const;
+  };
+}

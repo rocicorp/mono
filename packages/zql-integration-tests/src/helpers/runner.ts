@@ -266,6 +266,9 @@ type BenchOptionsBase<TSchema extends Schema> = {
   zqlSchema: TSchema;
   only?: string;
   pgContent: string;
+  setRawData?: (
+    raw: ReadonlyMap<keyof TSchema['tables'], readonly Row[]>,
+  ) => void;
 };
 
 type BenchOptions<TSchema extends Schema> =
@@ -319,7 +322,7 @@ export async function createVitests<TSchema extends Schema>(
     }));
 }
 
-type PushGenerator = (
+export type PushGenerator = (
   iteration: number,
 ) => [source: string, change: SourceChange][];
 
@@ -339,7 +342,14 @@ export async function runBenchmarks<TSchema extends Schema>(
   }[])[]
 ): Promise<void>;
 export async function runBenchmarks<TSchema extends Schema>(
-  {suiteName, type, zqlSchema, pgContent, only}: BenchOptions<TSchema>,
+  {
+    suiteName,
+    type,
+    zqlSchema,
+    pgContent,
+    only,
+    setRawData,
+  }: BenchOptions<TSchema>,
   ...benchSpecs: (readonly {
     name: string;
     createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
@@ -349,6 +359,9 @@ export async function runBenchmarks<TSchema extends Schema>(
   const dbs = await makeDatabases(suiteName, zqlSchema, pgContent);
   const delegates = makeDelegates(dbs, zqlSchema);
   const queries = makeQueries(zqlSchema, delegates);
+  if (setRawData) {
+    setRawData(dbs.raw);
+  }
 
   benchSpecs
     .flat()
