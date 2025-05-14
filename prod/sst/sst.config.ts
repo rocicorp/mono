@@ -155,7 +155,7 @@ export default $config({
           },
         };
 
-    const replicationManager = addServiceWithOtel(`replication-manager`, {
+    const replicationManager = new sst.aws.Service(`replication-manager`, {
       cluster,
       cpu: '2 vCPU',
       memory: '8 GB',
@@ -190,7 +190,7 @@ export default $config({
     });
 
     // View Syncer Service
-    const viewSyncer = addServiceWithOtel(`view-syncer`, {
+    const viewSyncer = new sst.aws.Service(`view-syncer`, {
       cluster,
       cpu: '8 vCPU',
       memory: '16 GB',
