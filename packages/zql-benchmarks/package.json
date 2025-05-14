@@ -13,7 +13,7 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "bench": "vitest bench",
+    "bench": "vitest bench --run --silent=false --disable-console-intercept",
     "test-types": "vitest run --typecheck.only --no-browser.enabled",
     "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled"
   },
@@ -27,5 +27,8 @@
   "eslintConfig": {
     "extends": "../../eslint-config.json"
   },
-  "prettier": "@rocicorp/prettier-config"
+  "prettier": "@rocicorp/prettier-config",
+  "dependencies": {
+    "mitata": "^1.0.34"
+  }
 }

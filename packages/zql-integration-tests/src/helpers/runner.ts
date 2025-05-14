@@ -1,4 +1,4 @@
-import {afterAll, bench, describe, expect} from 'vitest';
+import {afterAll, expect} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
@@ -47,6 +47,7 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import type {SourceChange} from '../../../zql/src/ivm/source.ts';
+import {run, bench, summary} from 'mitata';
 
 const lc = createSilentLogContext();
 
@@ -352,22 +353,29 @@ export async function runBenchmarks<TSchema extends Schema>(
   benchSpecs
     .flat()
     .filter(t => (only ? only.includes(t.name) : true))
-    .map(({name, createQuery, generatePush}) =>
-      describe(name, () => {
-        makeBenchmark({
-          zqlSchema,
-          delegates,
-          dbs,
-          createQuery,
-          type,
-          queries,
-          generatePush,
-        });
-      }),
+    .map(
+      ({name, createQuery, generatePush}) =>
+        // boxplot(() =>
+        summary(() => {
+          makeBenchmark({
+            name,
+            zqlSchema,
+            delegates,
+            dbs,
+            createQuery,
+            type,
+            queries,
+            generatePush,
+          });
+        }),
+      // ),
     );
+
+  await run();
 }
 
 function makeBenchmark<TSchema extends Schema>({
+  name,
   zqlSchema,
   createQuery,
   type,
@@ -376,6 +384,7 @@ function makeBenchmark<TSchema extends Schema>({
   dbs,
   generatePush,
 }: {
+  name: string;
   zqlSchema: TSchema;
   createQuery: (q: Queries<TSchema>) => Query<TSchema, string>;
   type: 'hydration' | 'push';
@@ -415,15 +424,8 @@ function makeBenchmark<TSchema extends Schema>({
 
       // materialize before starting the benchmark. We only want to time push
       // and not the initial hydration.
-      const zqliteView = zqlite.materialize();
-      const zqlView = zql.materialize();
-      try {
-        benchPush('zql', newDelegates, must(generatePush));
-        benchPush('zqlite', newDelegates, must(generatePush));
-      } finally {
-        zqliteView.destroy();
-        zqlView.destroy();
-      }
+      benchPush(name, 'zql', zql, newDelegates, must(generatePush));
+      benchPush(name, 'zqlite', zqlite, newDelegates, must(generatePush));
 
       break;
     }
@@ -431,9 +433,9 @@ function makeBenchmark<TSchema extends Schema>({
       const pg = createQuery(queries.pg);
       const zql = createQuery(queries.memory);
       const zqlite = createQuery(queries.sqlite);
-      benchHydration('zql', zql);
-      benchHydration('zqlite', zqlite);
-      benchHydration('zpg', pg);
+      benchHydration(`zql: ${name}`, zql);
+      benchHydration(`zqlite: ${name}`, zqlite);
+      benchHydration(`zpg: ${name}`, pg);
       break;
     }
   }
@@ -446,57 +448,68 @@ function benchHydration(name: string, q: AnyQuery) {
 }
 
 function benchPush(
-  name: 'zql' | 'zqlite',
+  name: string,
+  type: 'zql' | 'zqlite',
+  query: AnyQuery,
   delegates: Delegates,
   pushGenerator: PushGenerator,
 ) {
   let iteration = 0;
-  bench(name, () => {
-    let changes = pushGenerator(iteration++);
-    let sourceGetter;
-    if (name === 'zqlite') {
-      changes = changes.map(([source, change]): [string, SourceChange] => {
-        switch (change.type) {
-          case 'add':
-            return [
-              source,
-              {
-                ...change,
-                row: mapRow(change.row, source, delegates.mapper),
-              },
-            ];
-          case 'edit':
-            return [
-              source,
-              {
-                ...change,
-                oldRow: mapRow(change.oldRow, source, delegates.mapper),
-                row: mapRow(change.row, source, delegates.mapper),
-              },
-            ];
-          case 'remove':
-            return [
-              source,
-              {
-                ...change,
-                row: mapRow(change.row, source, delegates.mapper),
-              },
-            ];
-        }
-      });
+  bench(`${type}: ${name}`, function* () {
+    // setup
+    const view = query.materialize();
 
-      sourceGetter = (source: string) =>
-        must(delegates.sqlite.getSource(delegates.mapper.tableName(source)));
-    } else {
-      sourceGetter = (source: string) =>
-        must(delegates.memory.getSource(source));
-    }
+    // benchmark
+    yield () => {
+      let changes = pushGenerator(iteration++);
+      let sourceGetter;
+      if (type === 'zqlite') {
+        changes = changes.map(([source, change]): [string, SourceChange] => {
+          switch (change.type) {
+            case 'add':
+              return [
+                source,
+                {
+                  ...change,
+                  row: mapRow(change.row, source, delegates.mapper),
+                },
+              ];
+            case 'edit':
+              return [
+                source,
+                {
+                  ...change,
+                  oldRow: mapRow(change.oldRow, source, delegates.mapper),
+                  row: mapRow(change.row, source, delegates.mapper),
+                },
+              ];
+            case 'remove':
+              return [
+                source,
+                {
+                  ...change,
+                  row: mapRow(change.row, source, delegates.mapper),
+                },
+              ];
+          }
+        });
 
-    for (const change of changes) {
-      const [source, changeData] = change;
-      const sourceInstance = sourceGetter(source);
-      sourceInstance.push(changeData);
-    }
+        sourceGetter = (source: string) =>
+          must(delegates.sqlite.getSource(delegates.mapper.tableName(source)));
+      } else {
+        sourceGetter = (source: string) =>
+          must(delegates.memory.getSource(source));
+      }
+
+      for (const change of changes) {
+        const [source, changeData] = change;
+        const sourceInstance = sourceGetter(source);
+        sourceInstance.push(changeData);
+      }
+    };
+
+    // tear down
+    view.destroy();
   });
 }
 
