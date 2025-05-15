@@ -83,13 +83,6 @@ class OtelManager {
 
     // Start SDK: will deploy Trace, Metrics, and Logs pipelines as per env vars
     sdk.start();
-    // @eslint-disable-next-line no-console
-    console.log('sdk', sdk);
-    // @eslint-disable-next-line no-console
-    console.log('resource', resource);
-    // @eslint-disable-next-line no-console
-    console.log('logRecordProcessors', logRecordProcessors);
-
     logger.emit({
       severityText: 'INFO',
       body: 'OpenTelemetry SDK started successfully',
