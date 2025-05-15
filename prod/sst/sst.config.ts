@@ -180,16 +180,6 @@ export default $config({
       logging: {
         retention: '1 month',
       },
-      // TODO: Remove.
-      loadBalancer: {
-        public: false,
-        ports: [
-          {
-            listen: '80/http',
-            forward: '4849/http',
-          },
-        ],
-      },
       transform: defu(EBS_TRANSFORM, BASE_TRANSFORM),
     });
 
