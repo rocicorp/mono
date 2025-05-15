@@ -134,7 +134,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
         shardNum: SHARD_NUM,
       },
       replicaDbFile.path,
-      {tableCopyWorkers: 5, rowBatchSize: 10000},
+      {tableCopyWorkers: 5},
     ));
 
     [{slot: replicationSlot}] = await upstream<{slot: string}[]>`
@@ -823,7 +823,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
         shardNum: SHARD_NUM,
       },
       replicaFile2.path,
-      {tableCopyWorkers: 5, rowBatchSize: 10000},
+      {tableCopyWorkers: 5},
     );
 
     // Initial sync should have created a second replication slot.
@@ -867,7 +867,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
         shardNum: SHARD_NUM,
       },
       replicaFile3.path,
-      {tableCopyWorkers: 5, rowBatchSize: 10000},
+      {tableCopyWorkers: 5},
     );
 
     // There should now be 3 replication slot2.
@@ -935,7 +935,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
           publications: ['zero_different_publication'],
         },
         replicaDbFile.path,
-        {tableCopyWorkers: 5, rowBatchSize: 10000},
+        {tableCopyWorkers: 5},
       );
     } catch (e) {
       err = e;

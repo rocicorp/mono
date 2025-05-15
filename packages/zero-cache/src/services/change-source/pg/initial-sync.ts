@@ -1,14 +1,16 @@
 import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
+import {Writable} from 'node:stream';
+import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
-import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
+import type {JSONValue} from '../../../../../shared/src/json.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createIndexStatement,
   createTableStatement,
 } from '../../../db/create.ts';
 import * as Mode from '../../../db/mode-enum.ts';
+import {RowTransform, TextTransform} from '../../../db/pg-copy.ts';
 import {
   mapPostgresToLite,
   mapPostgresToLiteIndex,
@@ -22,7 +24,11 @@ import {
   type LiteValueType,
 } from '../../../types/lite.ts';
 import {liteTableName} from '../../../types/names.ts';
-import {pgClient, type PostgresDB} from '../../../types/pg.ts';
+import {
+  pgClient,
+  type PostgresDB,
+  type PostgresTransaction,
+} from '../../../types/pg.ts';
 import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
@@ -44,7 +50,6 @@ import {
 
 export type InitialSyncOptions = {
   tableCopyWorkers: number;
-  rowBatchSize: number;
 };
 
 export async function initialSync(
@@ -59,7 +64,7 @@ export async function initialSync(
       'The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
   }
-  const {tableCopyWorkers: numWorkers, rowBatchSize} = syncOptions;
+  const {tableCopyWorkers: numWorkers} = syncOptions;
   const sql = pgClient(lc, upstreamURI);
   const copyPool = pgClient(
     lc,
@@ -110,7 +115,7 @@ export async function initialSync(
     initChangeLog(tx);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
-    const start = Date.now();
+    const start = performance.now();
     let numTables: number;
     let numRows: number;
     const copiers = startTableCopyWorkers(lc, copyPool, snapshot, numWorkers);
@@ -132,15 +137,17 @@ export async function initialSync(
       const rowCounts = await Promise.all(
         tables.map(table =>
           copiers.processReadTask(db =>
-            copy(lc, table, db, tx, initialVersion, rowBatchSize),
+            copy(lc, table, copyPool, db, tx, initialVersion),
           ),
         ),
       );
       numRows = rowCounts.reduce((sum, count) => sum + count, 0);
 
-      const indexStart = Date.now();
+      const indexStart = performance.now();
       createLiteIndices(tx, indexes);
-      lc.info?.(`Created indexes (${Date.now() - indexStart} ms)`);
+      lc.info?.(
+        `Created indexes (${(performance.now() - indexStart).toFixed(3)} ms)`,
+      );
     } finally {
       copiers.setDone();
       await copiers.done();
@@ -149,9 +156,9 @@ export async function initialSync(
     await addReplica(sql, shard, slotName, initialVersion, published);
 
     lc.info?.(
-      `Synced ${numRows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} (${
-        Date.now() - start
-      } ms)`,
+      `Synced ${numRows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} (${(
+        performance.now() - start
+      ).toFixed(3)} ms)`,
     );
   } catch (e) {
     // If initial-sync did not succeed, make a best effort to drop the
@@ -286,18 +293,20 @@ export const INSERT_BATCH_SIZE = 50;
 async function copy(
   lc: LogContext,
   table: PublishedTableSpec,
-  from: PostgresDB,
+  dbClient: PostgresDB,
+  from: PostgresTransaction,
   to: Database,
   initialVersion: LexiVersion,
-  rowBatchSize: number,
 ) {
+  const start = performance.now();
   let totalRows = 0;
   const tableName = liteTableName(table);
-  const selectColumns = Object.keys(table.columns)
-    .map(c => id(c))
-    .join(',');
+  const orderedColumns = Object.entries(table.columns);
+
+  const columnSpecs = orderedColumns.map(([_name, spec]) => spec);
+  const selectColumns = orderedColumns.map(([c]) => id(c)).join(',');
   const insertColumns = [
-    ...Object.keys(table.columns),
+    ...orderedColumns.map(([c]) => c),
     ZERO_VERSION_COLUMN_NAME,
   ];
   const insertColumnList = insertColumns.map(c => id(c)).join(',');
@@ -322,56 +331,70 @@ async function copy(
       ? ''
       : /*sql*/ ` WHERE ${filterConditions.join(' OR ')}`);
 
-  lc.info?.(`Starting copy of ${tableName}:`, selectStmt);
+  lc.info?.(`Starting copy stream of ${tableName}:`, selectStmt);
 
-  const cursor = from.unsafe(selectStmt).cursor(rowBatchSize);
-  let prevBatch = promiseVoid;
+  const valuesPerRow = columnSpecs.length + 1; // includes _0_version column
+  // Accumulates row values up to INSERT_BATCH_SIZE batchedRows.
+  let values: LiteValueType[] = [];
+  let batchedRows = 0;
 
-  for await (const rows of cursor) {
-    await prevBatch;
+  await pipeline(
+    await from.unsafe(`COPY (${selectStmt}) TO STDOUT`).readable(),
+    new TextTransform(),
+    await RowTransform.create(dbClient, columnSpecs),
+    new Writable({
+      objectMode: true,
 
-    // Parallelize the reading from postgres (`cursor`) with the processing
-    // of the results (`prevBatch`) by running the latter after I/O events.
-    // This allows the cursor to query the next batch from postgres before
-    // the CPU is consumed by the previous batch (of inserts).
-    prevBatch = runAfterIO(() => {
-      let i = 0;
-      for (; i + INSERT_BATCH_SIZE < rows.length; i += INSERT_BATCH_SIZE) {
-        const values: LiteValueType[] = [];
-        for (let j = i; j < i + INSERT_BATCH_SIZE; j++) {
+      write: (
+        row: JSONValue[],
+        _encoding: string,
+        callback: (error?: Error) => void,
+      ) => {
+        try {
           values.push(
-            ...liteValues(rows[j], table, JSON_STRINGIFIED),
+            ...liteValues(row, columnSpecs, JSON_STRINGIFIED),
             initialVersion,
           );
+          if (++batchedRows === INSERT_BATCH_SIZE) {
+            insertBatchStmt.run(values);
+            values = [];
+            totalRows += batchedRows;
+            batchedRows = 0;
+
+            if (totalRows % 10_000 === 0) {
+              lc.debug?.(
+                `Copied ${totalRows} rows from ${table.schema}.${table.name} (${(
+                  performance.now() - start
+                ).toFixed(3)} ms)`,
+              );
+            }
+          }
+          callback();
+        } catch (e) {
+          callback(e instanceof Error ? e : new Error(String(e)));
         }
-        insertBatchStmt.run(values);
-      }
-      // Remaining set of rows is < INSERT_BATCH_SIZE
-      for (; i < rows.length; i++) {
-        insertStmt.run([
-          ...liteValues(rows[i], table, JSON_STRINGIFIED),
-          initialVersion,
-        ]);
-      }
-      totalRows += rows.length;
-      lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);
-    });
-  }
-  await prevBatch;
+      },
 
-  lc.info?.(`Finished copying ${totalRows} rows into ${tableName}`);
+      final: (callback: (error?: Error) => void) => {
+        try {
+          // Remaining set of rows is < INSERT_BATCH_SIZE
+          for (let i = 0; i < batchedRows; i++) {
+            const l = i * valuesPerRow;
+            insertStmt.run(values.slice(l, l + valuesPerRow));
+          }
+          totalRows += batchedRows;
+          callback();
+        } catch (e) {
+          callback(e instanceof Error ? e : new Error(String(e)));
+        }
+      },
+    }),
+  );
+
+  lc.info?.(
+    `Finished copying ${totalRows} rows into ${tableName} (${(
+      performance.now() - start
+    ).toFixed(3)} ms)`,
+  );
   return totalRows;
-}
-
-function runAfterIO(fn: () => void): Promise<void> {
-  const {promise, resolve, reject} = resolver();
-  setTimeout(() => {
-    try {
-      fn();
-      resolve();
-    } catch (e) {
-      reject(e);
-    }
-  }, 0);
-  return promise;
 }
