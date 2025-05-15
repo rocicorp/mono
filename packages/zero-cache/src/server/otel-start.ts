@@ -25,8 +25,8 @@ import {logs} from '@opentelemetry/api-logs';
 import {getNodeAutoInstrumentations} from '@opentelemetry/auto-instrumentations-node';
 
 class OtelManager {
-  private static _instance: OtelManager;
-  private _started = false;
+  static #instance: OtelManager;
+  #started = false;
 
   private constructor() {}
 
