@@ -31,17 +31,17 @@ class OtelManager {
   private constructor() {}
 
   static getInstance(): OtelManager {
-    if (!OtelManager._instance) {
-      OtelManager._instance = new OtelManager();
+    if (!OtelManager.#instance) {
+      OtelManager.#instance = new OtelManager();
     }
-    return OtelManager._instance;
+    return OtelManager.#instance;
   }
 
   startOtelAuto() {
-    if (this._started) {
+    if (this.#started) {
       return;
     }
-    this._started = true;
+    this.#started = true;
 
     const logRecordProcessors: LogRecordProcessor[] = [];
     const envResource = detectResources({
