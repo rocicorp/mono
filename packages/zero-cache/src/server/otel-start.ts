@@ -38,7 +38,7 @@ class OtelManager {
   }
 
   startOtelAuto() {
-    if (this.#started) {
+    if (this.#started || !process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
       return;
     }
     this.#started = true;
@@ -83,6 +83,12 @@ class OtelManager {
 
     // Start SDK: will deploy Trace, Metrics, and Logs pipelines as per env vars
     sdk.start();
+    // @eslint-disable-next-line no-console
+    console.log('sdk', sdk);
+    // @eslint-disable-next-line no-console
+    console.log('resource', resource);
+    // @eslint-disable-next-line no-console
+    console.log('logRecordProcessors', logRecordProcessors);
 
     logger.emit({
       severityText: 'INFO',
