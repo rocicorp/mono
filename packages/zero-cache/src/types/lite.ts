@@ -3,11 +3,11 @@ import type {
   SchemaValue,
   ValueType,
 } from '../../../zero-schema/src/table-schema.ts';
-import type {LiteTableSpec} from '../db/specs.ts';
+import type {ColumnSpec, LiteTableSpec} from '../db/specs.ts';
 import {stringify, type JSONValue} from './bigint-json.ts';
 import {
-  type PostgresValueType,
   dataTypeToZqlValueType as upstreamDataTypeToZqlValueType,
+  type PostgresValueType,
 } from './pg.ts';
 import type {RowValue} from './row-key.ts';
 
@@ -63,13 +63,15 @@ export function liteRow(
 }
 
 export function liteValues(
-  row: RowValue,
-  table: LiteTableSpec,
+  vals: JSONValue[],
+  cols: ColumnSpec[],
   jsonFormat: JSONFormat,
 ): LiteValueType[] {
-  return Object.entries(row).map(([col, val]) =>
-    liteValue(val, columnType(col, table), jsonFormat),
+  assert(
+    vals.length === cols.length,
+    `Expected ${cols.length} values but got ${vals.length}`,
   );
+  return vals.map((val, i) => liteValue(val, cols[i].dataType, jsonFormat));
 }
 
 /**
