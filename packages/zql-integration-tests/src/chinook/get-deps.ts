@@ -42,6 +42,6 @@ export async function writeChinook(pg: PostgresDB, replica: Database) {
     {appID: 'chinook_test', shardNum: 0, publications: []},
     replica,
     getConnectionURI(pg),
-    {tableCopyWorkers: 1, rowBatchSize: 10000},
+    {tableCopyWorkers: 1},
   );
 }
