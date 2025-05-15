@@ -5,6 +5,7 @@ import type {
   SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import {simplifyCondition} from '../query/expression.ts';
 import {getLikePredicate} from './like.ts';
 
 export type NonNullValue = Exclude<Value, null | undefined>;
@@ -173,47 +174,27 @@ export function transformFilters(filters: Condition | undefined): {
       return {filters, conditionsRemoved: false};
     case 'correlatedSubquery':
       return {filters: undefined, conditionsRemoved: true};
-    case 'and': {
-      const transformedConditions = [];
-      for (const cond of filters.conditions) {
-        assert(cond.type === 'simple' || cond.type === 'correlatedSubquery');
-        if (cond.type === 'simple') {
-          transformedConditions.push(cond);
-        }
-      }
-      const conditionsRemoved =
-        transformedConditions.length !== filters.conditions.length;
-      if (transformedConditions.length === 0) {
-        return {filters: undefined, conditionsRemoved};
-      }
-      if (transformedConditions.length === 1) {
-        return {
-          filters: transformedConditions[0],
-          conditionsRemoved,
-        };
-      }
-      return {
-        filters: {
-          type: 'and',
-          conditions: transformedConditions,
-        },
-        conditionsRemoved,
-      };
-    }
+    case 'and':
     case 'or': {
       const transformedConditions: NoSubqueryCondition[] = [];
       let conditionsRemoved = false;
       for (const cond of filters.conditions) {
-        assert(cond.type !== 'or');
         const transformed = transformFilters(cond);
-        if (transformed.filters === undefined) {
+        // If any branch of the OR ends up empty, the entire OR needs
+        // to be removed.
+        if (transformed.filters === undefined && filters.type === 'or') {
           return {filters: undefined, conditionsRemoved: true};
         }
         conditionsRemoved = conditionsRemoved || transformed.conditionsRemoved;
-        transformedConditions.push(transformed.filters);
+        if (transformed.filters) {
+          transformedConditions.push(transformed.filters);
+        }
       }
       return {
-        filters: {type: 'or', conditions: transformedConditions},
+        filters: simplifyCondition({
+          type: filters.type,
+          conditions: transformedConditions,
+        }) as NoSubqueryCondition,
         conditionsRemoved,
       };
     }

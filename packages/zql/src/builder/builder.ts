@@ -196,7 +196,9 @@ function buildPipelineInternal(
   const splitEditKeys: Set<string> = partitionKey
     ? new Set(partitionKey)
     : new Set();
+  const aliases = new Set<string>();
   for (const csq of csqsFromCondition) {
+    aliases.add(csq.subquery.alias || '');
     for (const key of csq.correlation.parentField) {
       splitEditKeys.add(key);
     }
@@ -342,11 +344,10 @@ export function isNotAndDoesNotContainSubquery(
   if (condition.type === 'correlatedSubquery') {
     return false;
   }
-  if (condition.type === 'and') {
-    return condition.conditions.every(isNotAndDoesNotContainSubquery);
+  if (condition.type === 'simple') {
+    return true;
   }
-  assert(condition.type !== 'or', 'where conditions are expected to be in DNF');
-  return true;
+  return condition.conditions.every(isNotAndDoesNotContainSubquery);
 }
 
 function applySimpleCondition(
@@ -457,6 +458,7 @@ export function assertOrderingIncludesPK(
     );
   }
 }
+
 function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
   if (!ast.where) {
     return ast;
@@ -465,8 +467,8 @@ function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
   if (where.type !== 'and' && where.type !== 'or') {
     return ast;
   }
-  let count = 0;
 
+  let count = 0;
   const uniquifyCorrelatedSubquery = (csqc: CorrelatedSubqueryCondition) => ({
     ...csqc,
     related: {
@@ -478,42 +480,25 @@ function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
     },
   });
 
-  const uniquifyAnd = (and: Conjunction) => {
-    const conds = [];
-    for (const cond of and.conditions) {
-      if (cond.type === 'correlatedSubquery') {
-        conds.push(uniquifyCorrelatedSubquery(cond));
-      } else {
-        conds.push(cond);
-      }
-    }
-    return {
-      ...and,
-      conditions: conds,
-    };
-  };
-  if (where.type === 'and') {
-    return {
-      ...ast,
-      where: uniquifyAnd(where),
-    };
-  }
-  // or
-  const conds = [];
-  for (const cond of where.conditions) {
+  const uniquify = (cond: Condition): Condition => {
     if (cond.type === 'simple') {
-      conds.push(cond);
+      return cond;
     } else if (cond.type === 'correlatedSubquery') {
-      conds.push(uniquifyCorrelatedSubquery(cond));
-    } else if (cond.type === 'and') {
-      conds.push(uniquifyAnd(cond));
+      return uniquifyCorrelatedSubquery(cond);
     }
-  }
-  return {
-    ...ast,
-    where: {
-      ...where,
-      conditions: conds,
-    },
+    const conditions = [];
+    for (const c of cond.conditions) {
+      conditions.push(uniquify(c));
+    }
+    return {
+      type: cond.type,
+      conditions,
+    };
   };
+
+  const result = {
+    ...ast,
+    where: uniquify(where),
+  };
+  return result;
 }
