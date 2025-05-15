@@ -9,6 +9,8 @@ import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import {getServerSchema} from '../../zero-pg/src/schema.ts';
+import {Transaction} from '../../zero-pg/src/test/util.ts';
 import {type Row} from '../../zero-protocol/src/data.ts';
 import {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
@@ -27,8 +29,6 @@ import {
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
 import './helpers/comparePg.ts';
-import {getServerSchema} from '../../zero-pg/src/schema.ts';
-import {Transaction} from '../../zero-pg/src/test/util.ts';
 
 const lc = createSilentLogContext();
 
@@ -124,7 +124,7 @@ beforeAll(async () => {
     {appID: 'compiler_pg_test', shardNum: 0, publications: []},
     sqlite,
     getConnectionURI(pg),
-    {tableCopyWorkers: 1, rowBatchSize: 10000},
+    {tableCopyWorkers: 1},
   );
 
   const queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);

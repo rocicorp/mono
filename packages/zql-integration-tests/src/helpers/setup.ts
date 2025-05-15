@@ -38,7 +38,7 @@ export async function fillPgAndSync(
     {appID: 'collate_test', shardNum: 0, publications: []},
     sqlite,
     getConnectionURI(pg),
-    {tableCopyWorkers: 1, rowBatchSize: 10000},
+    {tableCopyWorkers: 1},
   );
 
   return {pg, sqlite};
