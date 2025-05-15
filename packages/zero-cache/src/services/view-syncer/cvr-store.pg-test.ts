@@ -801,6 +801,7 @@ describe('view-syncer/cvr-store', () => {
             "transformationVersion": {
               "stateVersion": "01",
             },
+            "type": "client",
           },
         },
         "replicaVersion": "01",

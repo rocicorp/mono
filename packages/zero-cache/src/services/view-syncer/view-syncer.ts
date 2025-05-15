@@ -769,7 +769,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     for (const [hash, query] of gotQueries) {
       const {ast, transformationHash} = query;
       if (
-        !query.internal &&
+        query.type !== 'internal' &&
         Object.values(query.clientState).every(
           ({inactivatedAt}) => inactivatedAt !== undefined,
         )
@@ -785,7 +785,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             tables: {},
           },
           this.#authData,
-          query.internal,
+          query.type === 'internal',
         );
       if (newTransformationHash !== transformationHash) {
         continue; // Query results may have changed.
@@ -856,7 +856,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             tables: {},
           },
           this.#authData,
-          q.internal,
+          q.type === 'internal',
         );
         const ids = hashToIDs.get(transformationHash);
         if (ids) {
@@ -1326,7 +1326,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         const {hash} = inactiveQuery;
         const q = cvr.queries[hash];
         assert(q, 'query not found in CVR');
-        assert(!q.internal, 'internal queries should not be evicted');
+        assert(q.type !== 'internal', 'internal queries should not be evicted');
 
         const rowCountBeforeCurrentEviction = this.#cvrStore.rowCount;
 
@@ -1532,11 +1532,9 @@ export function pickToken(
 
 function expired(
   now: number,
-  q:
-    | Pick<InternalQueryRecord, 'internal'>
-    | Pick<ClientQueryRecord, 'internal' | 'clientState'>,
+  q: InternalQueryRecord | ClientQueryRecord,
 ): boolean {
-  if (q.internal) {
+  if (q.type === 'internal') {
     return false;
   }
   const {clientState} = q;
