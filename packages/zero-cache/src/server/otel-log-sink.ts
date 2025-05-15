@@ -1,22 +1,22 @@
 import {
   logs,
-  type Logger,
   SeverityNumber,
-  type LogRecord,
   type AnyValueMap,
+  type Logger,
+  type LogRecord,
 } from '@opentelemetry/api-logs';
 import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
 import {errorOrObject} from './logging.ts';
 import {stringify} from '../types/bigint-json.ts';
-import {startOtel, type OtelEndpoints} from './otel-start.ts';
+import {startOtelAuto} from './otel-start.ts';
 
 export class OtelLogSink implements LogSink {
   readonly #logger: Logger;
 
-  constructor(endpoints: OtelEndpoints) {
+  constructor() {
     // start otel in case it was not started yet
     // this is a no-op if already started
-    startOtel(endpoints);
+    startOtelAuto();
     this.#logger = logs.getLogger('zero-cache');
   }
 
@@ -35,15 +35,13 @@ export class OtelLogSink implements LogSink {
     }
 
     const payload: LogRecord = {
-      severityNumber: toErrorNum(level),
       severityText: level,
+      severityNumber: toErrorNum(level),
       body: message,
-      timestamp: Date.now() * 1_000_000, // nanoseconds
     };
     if (context) {
       payload.attributes = context as AnyValueMap;
     }
-
     this.#logger.emit(payload);
   }
 }

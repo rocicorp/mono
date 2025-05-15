@@ -44,6 +44,10 @@ ENV ZERO_LITESTREAM_CONFIG_PATH=/etc/litestream.yml
 ENV ZERO_LOG_FORMAT=json
 ENV ZERO_SERVER_VERSION=${ZERO_VERSION}
 
+# Install OpenTelemetry instrumentation
+ENV NODE_PATH=/usr/local/lib/node_modules
+RUN npm install -g @opentelemetry/auto-instrumentations-node
+
 EXPOSE 4848 4849
 ENTRYPOINT ["/bin/sh", "-c"]
-CMD ["npx zero-cache"]
+CMD ["NODE_OPTIONS='--require=@opentelemetry/auto-instrumentations-node/register' npx zero-cache"]

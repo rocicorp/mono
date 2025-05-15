@@ -12,30 +12,6 @@ export const logOptions = {
     ],
   },
 
-  traceCollector: {
-    type: v.string().optional(),
-    desc: [
-      `The URL of the trace collector to which to send trace data. Traces are sent over http.`,
-      `Port defaults to 4318 for most collectors.`,
-    ],
-  },
-
-  metricCollector: {
-    type: v.string().optional(),
-    desc: [
-      `The URL of the metric collector to which to send metric data. Metrics are sent over http.`,
-      `Port defaults to 4318 for most collectors.`,
-    ],
-  },
-
-  logCollector: {
-    type: v.string().optional(),
-    desc: [
-      `The URL of the log collector to which to send log data. Logs are sent over http.`,
-      `Port defaults to 4318 for most collectors.`,
-    ],
-  },
-
   slowRowThreshold: {
     type: v.number().default(2),
     desc: [

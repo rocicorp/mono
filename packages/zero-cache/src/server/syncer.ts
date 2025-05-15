@@ -28,7 +28,7 @@ import {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
 import {createLogContext} from './logging.ts';
-import {startOtel} from './otel-start.ts';
+import {startOtelAuto} from './otel-start.ts';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -41,7 +41,7 @@ export default function runWorker(
 ): Promise<void> {
   const config = getZeroConfig(env, args.slice(1));
   assertNormalized(config);
-  startOtel(config.log);
+  startOtelAuto();
 
   const lc = createLogContext(config, {worker: 'syncer'});
   assert(args.length > 0, `replicator mode not specified`);

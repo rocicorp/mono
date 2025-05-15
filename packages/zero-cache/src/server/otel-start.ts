@@ -3,16 +3,18 @@ import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
 import {OTLPLogExporter} from '@opentelemetry/exporter-logs-otlp-http';
 import {NodeSDK} from '@opentelemetry/sdk-node';
 import {
-  ATTR_SERVICE_NAME,
-  ATTR_SERVICE_VERSION,
-} from '@opentelemetry/semantic-conventions';
+  detectResources,
+  envDetector,
+  processDetector,
+  hostDetector,
+  resourceFromAttributes,
+  defaultResource,
+} from '@opentelemetry/resources';
+import {ATTR_SERVICE_VERSION} from '@opentelemetry/semantic-conventions';
 import {
   PeriodicExportingMetricReader,
   ConsoleMetricExporter,
 } from '@opentelemetry/sdk-metrics';
-import {resourceFromAttributes} from '@opentelemetry/resources';
-import {NoopSpanExporter} from '../../../otel/src/noop-span-exporter.ts';
-import {NoopMetricExporter} from '../../../otel/src/noop-metric-exporter.ts';
 import {version} from '../../../otel/src/version.ts';
 import {
   BatchLogRecordProcessor,
@@ -20,65 +22,72 @@ import {
   type LogRecordProcessor,
 } from '@opentelemetry/sdk-logs';
 import {logs} from '@opentelemetry/api-logs';
+import {getNodeAutoInstrumentations} from '@opentelemetry/auto-instrumentations-node';
 
-export type OtelEndpoints = {
-  traceCollector?: string | undefined;
-  metricCollector?: string | undefined;
-  logCollector?: string | undefined;
-};
+class OtelManager {
+  static #instance: OtelManager;
+  #started = false;
 
-let started = false;
-export function startOtel(endpoints: OtelEndpoints) {
-  if (started) {
-    return;
+  private constructor() {}
+
+  static getInstance(): OtelManager {
+    if (!OtelManager.#instance) {
+      OtelManager.#instance = new OtelManager();
+    }
+    return OtelManager.#instance;
   }
-  started = true;
 
-  const logRecordProcessors: LogRecordProcessor[] = [];
-  const resource = resourceFromAttributes({
-    [ATTR_SERVICE_NAME]: 'syncer',
-    [ATTR_SERVICE_VERSION]: version,
-  });
+  startOtelAuto() {
+    if (this.#started || !process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+      return;
+    }
+    this.#started = true;
 
-  if (endpoints.logCollector !== undefined) {
-    const provider = new LoggerProvider({
-      resource,
+    const logRecordProcessors: LogRecordProcessor[] = [];
+    const envResource = detectResources({
+      detectors: [envDetector, processDetector, hostDetector],
     });
-    const processor = new BatchLogRecordProcessor(
-      new OTLPLogExporter({
-        url: endpoints.logCollector,
-      }),
-    );
-    logRecordProcessors.push(processor);
-    provider.addLogRecordProcessor(processor);
-    logs.setGlobalLoggerProvider(provider);
-  }
 
-  const sdk = new NodeSDK({
-    resource,
-    traceExporter:
-      endpoints.traceCollector === undefined
-        ? new NoopSpanExporter()
-        : new OTLPTraceExporter({
-            url: endpoints.traceCollector,
-          }),
-    metricReader: new PeriodicExportingMetricReader({
-      exportIntervalMillis: 5000,
-      exporter: (() => {
-        if (endpoints.metricCollector === undefined) {
+    const customResource = resourceFromAttributes({
+      [ATTR_SERVICE_VERSION]: version,
+    });
+
+    const resource = defaultResource().merge(envResource).merge(customResource);
+
+    // Initialize logger provider if not already set
+    if (!logs.getLoggerProvider()) {
+      const provider = new LoggerProvider({resource});
+      const processor = new BatchLogRecordProcessor(new OTLPLogExporter());
+      logRecordProcessors.push(processor);
+      provider.addLogRecordProcessor(processor);
+      logs.setGlobalLoggerProvider(provider);
+    }
+
+    const logger = logs.getLogger('zero-cache');
+    const sdk = new NodeSDK({
+      resource,
+      // Automatically instruments all supported modules
+      instrumentations: [getNodeAutoInstrumentations()],
+      traceExporter: new OTLPTraceExporter(),
+      metricReader: new PeriodicExportingMetricReader({
+        exportIntervalMillis: 5000,
+        exporter: (() => {
           if (process.env.NODE_ENV === 'dev') {
             return new ConsoleMetricExporter();
           }
+          return new OTLPMetricExporter();
+        })(),
+      }),
+      logRecordProcessors,
+    });
 
-          return new NoopMetricExporter();
-        }
-
-        return new OTLPMetricExporter({
-          url: endpoints.metricCollector,
-        });
-      })(),
-    }),
-    logRecordProcessors,
-  });
-  sdk.start();
+    // Start SDK: will deploy Trace, Metrics, and Logs pipelines as per env vars
+    sdk.start();
+    logger.emit({
+      severityText: 'INFO',
+      body: 'OpenTelemetry SDK started successfully',
+    });
+  }
 }
+
+export const startOtelAuto = () => OtelManager.getInstance().startOtelAuto();

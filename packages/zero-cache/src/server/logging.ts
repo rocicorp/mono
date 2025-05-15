@@ -13,11 +13,10 @@ import {OtelLogSink} from './otel-log-sink.ts';
 function createLogSink(config: LogConfig): LogSink {
   const consoleSink =
     config.format === 'json' ? consoleJsonLogSink : consoleLogSink;
-  if (config.logCollector) {
-    const otelSink = new OtelLogSink(config);
+  if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+    const otelSink = new OtelLogSink();
     return new CompositeLogSink([otelSink, consoleSink]);
   }
-
   return consoleSink;
 }
 
