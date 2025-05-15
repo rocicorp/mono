@@ -150,7 +150,6 @@ export async function initialSync(
       );
     } finally {
       copiers.setDone();
-      await copiers.done();
     }
 
     await addReplica(sql, shard, slotName, initialVersion, published);
@@ -173,7 +172,12 @@ export async function initialSync(
   } finally {
     await replicationSession.end();
     await sql.end();
-    await copyPool.end();
+    // Postgres sometimes hangs on COMMIT after running COPY TO, even though
+    // the latter successfully completes. The completion of the COMMIT is
+    // unimportant for a READONLY transaction, especially given that the
+    // copiers have all completed their work. As a workaround, avoid
+    // blocking on closing this client. The connection do eventually close.
+    void copyPool.end().catch(e => lc.error?.('error closing copyPool', e));
   }
 }
 
