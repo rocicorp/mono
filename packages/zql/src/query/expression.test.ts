@@ -5,13 +5,11 @@ import {
   type Condition,
   type Conjunction,
   type Disjunction,
-  type SimpleCondition,
 } from '../../../zero-protocol/src/ast.ts';
 import {parse, stringify} from './expression-test-util.ts';
 import {
   and,
   ExpressionBuilder,
-  flatten,
   not,
   or,
   simplifyCondition,

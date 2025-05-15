@@ -5,6 +5,7 @@ import type {
   SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import {simplifyCondition} from '../query/expression.ts';
 import {getLikePredicate} from './like.ts';
 
 export type NonNullValue = Exclude<Value, null | undefined>;
@@ -190,40 +191,14 @@ export function transformFilters(filters: Condition | undefined): {
         }
       }
       return {
-        filters: unwrap({
+        filters: simplifyCondition({
           type: filters.type,
           conditions: transformedConditions,
-        }),
+        }) as NoSubqueryCondition,
         conditionsRemoved,
       };
     }
     default:
       unreachable(filters);
   }
-}
-
-export function unwrap(c: NoSubqueryCondition): NoSubqueryCondition {
-  if (c.type === 'simple') {
-    return c;
-  }
-  if (c.conditions.length === 1) {
-    return unwrap(c.conditions[0]);
-  }
-  return {type: c.type, conditions: flatten(c.type, c.conditions.map(unwrap))};
-}
-
-export function flatten(
-  type: 'and' | 'or',
-  conditions: NoSubqueryCondition[],
-): NoSubqueryCondition[] {
-  const flattened: NoSubqueryCondition[] = [];
-  for (const c of conditions) {
-    if (c.type === type) {
-      flattened.push(...c.conditions);
-    } else {
-      flattened.push(c);
-    }
-  }
-
-  return flattened;
 }
