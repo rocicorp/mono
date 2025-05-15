@@ -65,6 +65,11 @@ export default $config({
       ZERO_IMAGE_URL: process.env.ZERO_IMAGE_URL!,
       ZERO_APP_ID: process.env.ZERO_APP_ID || 'zero',
       PGCONNECT_TIMEOUT: '60', // scale-from-zero dbs need more than 30 seconds
+      OTEL_TRACES_EXPORTER: 'otlp',
+      OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+      OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
+      OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
+      OTEL_NODE_RESOURCE_DETECTORS: 'env,host,os',
     };
 
     const ecsVolumeRole = IS_EBS_STAGE
@@ -262,30 +267,30 @@ export default $config({
 
     if ($app.stage === 'sandbox') {
       // In sandbox, deploy permissions in a Lambda.
-      const permissionsDeployer = new sst.aws.Function(
-        'zero-permissions-deployer',
-        {
-          handler: '../functions/src/permissions.deploy',
-          vpc,
-          environment: {
-            ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
-            ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
-          },
-          copyFiles: [
-            {from: '../../apps/zbugs/shared/schema.ts', to: './schema.ts'},
-          ],
-          nodejs: {install: ['@rocicorp/zero']},
-        },
-      );
-      new aws.lambda.Invocation(
-        'invoke-zero-permissions-deployer',
-        {
-          // Invoke the Lambda on every deploy.
-          input: Date.now().toString(),
-          functionName: permissionsDeployer.name,
-        },
-        {dependsOn: viewSyncer},
-      );
+      // const permissionsDeployer = new sst.aws.Function(
+      //   'zero-permissions-deployer',
+      //   {
+      //     handler: '../functions/src/permissions.deploy',
+      //     vpc,
+      //     environment: {
+      //       ['ZERO_UPSTREAM_DB']: process.env.ZERO_UPSTREAM_DB,
+      //       ['ZERO_APP_ID']: process.env.ZERO_APP_ID,
+      //     },
+      //     copyFiles: [
+      //       {from: '../../apps/zbugs/shared/schema.ts', to: './schema.ts'},
+      //     ],
+      //     nodejs: {install: ['@rocicorp/zero']},
+      //   },
+      // );
+      // new aws.lambda.Invocation(
+      //   'invoke-zero-permissions-deployer',
+      //   {
+      //     // Invoke the Lambda on every deploy.
+      //     input: Date.now().toString(),
+      //     functionName: permissionsDeployer.name,
+      //   },
+      //   {dependsOn: viewSyncer},
+      // );
     } else {
       // In prod, deploy permissions via a local Command, to exercise both approaches.
       new command.local.Command(
