@@ -218,41 +218,22 @@ const rangeMiddleTrial = await hydrate10RangeQueriesMiddle.run();
 log`
 ${frameStats(rangeMiddleTrial)}
 
-Something strange. This is still much faster than point queries.
-## Scale to 100 Range Queries
+Something strange. This is still faster than point queries.
+## Scale to 100 Range Queries (limit 20 each)
 `;
 
-const hydrate100RangeQueries = new B('hydrate 100 range queries', function* () {
-  const zql = harness.queries.memory;
-  yield async () => {
-    await Promise.all(Array.from({length: 100}, _ => zql.track.limit(100)));
-  };
-});
+const hydrate100RangeQueries = new B(
+  'hydrate 100 range queries (limit 20 each)',
+  function* () {
+    const zql = harness.queries.memory;
+    yield async () => {
+      await Promise.all(Array.from({length: 100}, _ => zql.track.limit(20)));
+    };
+  },
+);
 const range100Trial = await hydrate100RangeQueries.run();
-const avgRange100 = avg(range100Trial);
-const avgPoint100 = avg(ptTrial);
 log`
 ${frameStats(range100Trial)}
-
-Weird. Point query is on average ${avgPoint100 / avgRange100} times slower than the range query.
-
-Maybe point query is doing something wrong with limits?`;
-
-const limitedPoint100 = new B('point 100', function* () {
-  yield async () => {
-    await Promise.all(
-      Array.from({length: 100}, (_, i) =>
-        harness.queries.memory.track.where('id', i + 1).limit(1),
-      ),
-    );
-  };
-});
-const limitedPoint100Trial = await limitedPoint100.run();
-log`
-## 100 Point Queries, Limit 1
-${frameStats(limitedPoint100Trial)}
-
-**TODO: Oops, we're not limiting to 1 by default when we do a point query.**
 
 Now to check maintenance of range queries during writes.`;
 
@@ -309,11 +290,11 @@ log`
 ## Maintain 10 Range Queries, Order By Alternate Fields
 ${frameMaintStats(maintainRangeAltFieldTrial)}
 
-Well this is surprisingly faster than maintaining point queries (w/o limit)!!!
+Well this is surprisingly faster than maintaining point queries!!!
 - p99 ${stat(p99(maintain100PointTrial) / p99(maintainRangeAltFieldTrial))}x faster than point queries
 - avg ${stat(avg(maintain100PointTrial) / avg(maintainRangeAltFieldTrial))}x faster than point queries
 
-Some other bugs still exist in point queries?`;
+The time is dominated by number of pipelines to visit?`;
 
 function frameStats(trial: trial) {
   const p99ms = p99(trial);

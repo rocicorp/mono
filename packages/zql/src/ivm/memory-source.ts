@@ -44,6 +44,7 @@ import type {
   SourceInput,
 } from './source.ts';
 import type {Stream} from './stream.ts';
+import {once} from '../../../shared/src/iterables.ts';
 
 export type Overlay = {
   outputIndex: number;
@@ -313,9 +314,10 @@ export class MemorySource implements Source {
       scanStart = startAt;
     }
 
+    const rowsIterable = generateRows(data, scanStart, req.reverse);
     const withOverlay = generateWithOverlay(
       startAt,
-      generateRows(data, scanStart, req.reverse),
+      pkConstraint ? once(rowsIterable) : rowsIterable,
       req.constraint,
       this.#overlay,
       this.#splitEditOverlay,

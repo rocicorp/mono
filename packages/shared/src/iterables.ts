@@ -35,6 +35,15 @@ export function first<T>(stream: Iterable<T>): T | undefined {
   return value;
 }
 
+export function* once<T>(stream: Iterable<T>): Iterable<T> {
+  const it = stream[Symbol.iterator]();
+  const {value} = it.next();
+  if (value !== undefined) {
+    yield value;
+  }
+  it.return?.();
+}
+
 // TODO(arv): Use ES2024 Iterable.from when available
 // https://github.com/tc39/proposal-iterator-helpers
 
