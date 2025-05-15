@@ -1,9 +1,5 @@
 import {Transform} from 'node:stream';
-import {
-  assert,
-  assertArray,
-  assertNotUndefined,
-} from '../../../shared/src/asserts.ts';
+import {assert, assertArray} from '../../../shared/src/asserts.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import {getTypeParsers, type TypeParser} from './pg-type-parser.ts';
 
@@ -12,8 +8,8 @@ import {getTypeParsers, type TypeParser} from './pg-type-parser.ts';
  * into arrays of string / null values.
  */
 export class TextTransform extends Transform {
-  #currRow: (string | null)[] | undefined;
-  #currCol: string | null | undefined;
+  #currRow: (string | null)[] = [];
+  #currCol: string = '';
   #escaped = false;
 
   constructor() {
@@ -32,91 +28,76 @@ export class TextTransform extends Transform {
       let l = 0;
       let r = 0;
 
-      const append = (text: string) => {
-        this.#currCol ??= '';
-        this.#currCol += text;
-      };
-
-      const flushSegmentIf = (condition: boolean) => {
-        if (condition) {
-          append(text.substring(l, r));
-        }
-        l = r + 1;
-      };
-
       for (; r < text.length; r++) {
-        const ch = text[r];
+        const ch = text.charCodeAt(r);
         if (this.#escaped) {
-          switch (ch) {
-            case 'N':
-              // \N is the NULL character.
-              if (this.#currCol !== undefined) {
-                throw new Error(
-                  `\\N escape sequence found in the middle of a column "${this.#currCol}"`,
-                );
-              }
-              this.#currCol = null;
-              break;
-            case '\\':
-              append('\\');
-              break;
-            case 'b':
-              append('\b');
-              break;
-            case 'f':
-              append('\f');
-              break;
-            case 'n':
-              append('\n');
-              break;
-            case 'r':
-              append('\r');
-              break;
-            case 't':
-              append('\t');
-              break;
-            case 'v':
-              append('\v');
-              break;
-            default:
-              // Not one of the escaped characters specified in https://www.postgresql.org/docs/current/sql-copy.html
-              throw new Error(`Unexpected escape character \\${ch}`);
+          const escapedChar = ESCAPED_CHARACTERS[ch];
+          if (escapedChar === undefined) {
+            throw new Error(
+              `Unexpected escape character \\${String.fromCharCode(ch)}`,
+            );
           }
+          this.#currCol += escapedChar;
           l = r + 1;
           this.#escaped = false;
           continue;
         }
         switch (ch) {
-          case '\\':
-            flushSegmentIf(l < r);
+          case 0x5c: // '\'
+            // flush segment
+            l < r && (this.#currCol += text.substring(l, r));
+            l = r + 1;
             this.#escaped = true;
             break;
 
-          case '\t':
-          case '\n':
-            // Flush a possibly empty string unless #currCol was set to null via the \N escape.
-            flushSegmentIf(this.#currCol !== null);
-            assertNotUndefined(this.#currCol);
+          case 0x09: // '\t'
+          case 0x0a: // '\n'
+            // flush segment
+            l < r && (this.#currCol += text.substring(l, r));
+            l = r + 1;
 
             // Column is done in both cases.
-            (this.#currRow ??= []).push(this.#currCol);
-            this.#currCol = undefined;
+            this.#currRow.push(
+              // The lone NULL byte signifies that the column value is `null`.
+              // (Postgres does not permit NULL bytes in TEXT values).
+              //
+              // Note that although NULL bytes can appear in JSON strings,
+              // those will always be represented within double-quotes,
+              // and thus never as a lone NULL byte.
+              this.#currCol === NULL_BYTE ? null : this.#currCol,
+            );
+            this.#currCol = '';
 
-            if (ch === '\n') {
+            if (ch === 0x0a /* \n */) {
               // Row is also done on \n
               this.push(this.#currRow);
-              this.#currRow = undefined;
+              this.#currRow = [];
             }
             break;
         }
       }
-      flushSegmentIf(l < r);
+      // flush segment
+      l < r && (this.#currCol += text.substring(l, r));
       callback();
     } catch (e) {
       callback(e instanceof Error ? e : new Error(String(e)));
     }
   }
 }
+
+const NULL_BYTE = '\u0000';
+
+// escaped characters used in https://www.postgresql.org/docs/current/sql-copy.html
+const ESCAPED_CHARACTERS: Record<number, string | undefined> = {
+  0x4e: NULL_BYTE, // \N signifies the NULL character.
+  0x5c: '\\',
+  0x62: '\b',
+  0x66: '\f',
+  0x6e: '\n',
+  0x72: '\r',
+  0x74: '\t',
+  0x76: '\v',
+} as const;
 
 /**
  * A stream Transform that transforms the array of strings outputted by
