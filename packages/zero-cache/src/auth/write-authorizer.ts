@@ -28,7 +28,6 @@ import {
   bindStaticParameters,
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
-import {dnf} from '../../../zql/src/query/dnf.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {StaticQuery, staticQuery} from '../../../zql/src/query/static-query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -48,6 +47,7 @@ import {
   reloadPermissionsIfChanged,
   type LoadedPermissions,
 } from './load-permissions.ts';
+import {simplifyCondition} from '../../../zql/src/query/expression.ts';
 
 type Phase = 'preMutation' | 'postMutation';
 
@@ -503,7 +503,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
 function updateWhere(where: Condition | undefined, policy: Policy) {
   assert(where, 'A where condition must exist for RowQuery');
 
-  return dnf({
+  return simplifyCondition({
     type: 'and',
     conditions: [
       where,

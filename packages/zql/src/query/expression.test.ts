@@ -3,11 +3,19 @@ import {describe, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {
   type Condition,
+  type Conjunction,
+  type Disjunction,
   type SimpleCondition,
 } from '../../../zero-protocol/src/ast.ts';
-import {dnf} from './dnf.ts';
 import {parse, stringify} from './expression-test-util.ts';
-import {and, ExpressionBuilder, not, or} from './expression.ts';
+import {
+  and,
+  ExpressionBuilder,
+  flatten,
+  not,
+  or,
+  simplifyCondition,
+} from './expression.ts';
 
 type TestCondition =
   | {
@@ -180,7 +188,7 @@ test('compare test framework to real framework', () => {
       });
 
       const actualConditions = conditions.map(convertTestCondition);
-      const actual = dnf(
+      const actual = simplifyCondition(
         actualConditions.reduce((acc, value, i) => {
           if (acc === undefined) {
             return value;
@@ -191,27 +199,13 @@ test('compare test framework to real framework', () => {
 
       expect(evaluate(actual as TestCondition)).toBe(evaluate(expected));
 
-      // check that the real framework produced a DNF
+      // check that the real framework produced a flattened condition
       // console.log(toStr(actual));
-      if (actual.type === 'and') {
-        // all conditions should be simple as nothing can nest
-        // under an `AND` in DNF
-        expect(actual.conditions.every(c => c.type === 'simple')).toBe(true);
-      } else if (actual.type === 'or') {
-        // below an or can only be `ands` or `simple` conditions.
-        expect(
-          actual.conditions.every(c => c.type === 'and' || c.type === 'simple'),
-        ).toBe(true);
-        expect(
-          actual.conditions
-            .filter(c => c.type === 'and')
-            .every(c =>
-              // all conditions must be simple as nothing can nest
-              // under an `AND` in DNF
-              c.conditions.every(c => c.type === 'simple'),
-            ),
-        ).toBe(true);
-      }
+      const check = (c: Condition): boolean =>
+        c.type === 'simple' ||
+        c.type === 'correlatedSubquery' ||
+        c.conditions.every(child => child.type !== c.type && check(child));
+      expect(check(actual)).toBe(true);
     }),
   );
 
@@ -230,49 +224,6 @@ test('compare test framework to real framework', () => {
       },
     };
   }
-});
-
-describe('flattening', () => {
-  let id = 0;
-  function t(): SimpleCondition {
-    return {
-      type: 'simple',
-      right: {
-        type: 'literal',
-        value: ++id,
-      },
-      op: '=',
-      left: {
-        type: 'column',
-        name: 'n/a',
-      },
-    };
-  }
-
-  test('and chain', () => {
-    expect(stringify(and(t(), t()))).toBe('1 & 2');
-    id = 0;
-
-    expect(stringify(dnf(and(t(), and(t(), and(t(), t())))))).toBe(
-      '1 & 2 & 3 & 4',
-    );
-    id = 0;
-  });
-
-  test('and with nested ors', () => {
-    expect(stringify(dnf(and(t(), or(t(), t()))))).toBe('(1 & 2) | (1 & 3)');
-    id = 0;
-
-    expect(stringify(dnf(and(t(), or(t(), or(t(), t())))))).toBe(
-      '(1 & 2) | (1 & 3) | (1 & 4)',
-    );
-    id = 0;
-
-    expect(stringify(dnf(and(t(), and(t(), or(t(), and(t(), t()))))))).toBe(
-      '(1 & 2 & 3) | (1 & 2 & 4 & 5)',
-    );
-    id = 0;
-  });
 });
 
 describe('simplify', () => {
@@ -407,4 +358,52 @@ test('bound methods/properties', () => {
     right: {type: 'literal', value: 'b'},
     op: '!=',
   });
+});
+
+function simple(value: number | string): Condition {
+  return {
+    type: 'simple',
+    right: {
+      type: 'literal',
+      value,
+    },
+    op: '=',
+    left: {
+      type: 'column',
+      name: 'n/a',
+    },
+  };
+}
+
+test('simplify', () => {
+  const A = simple('A');
+  const B = simple('B');
+  const C = simple('C');
+  const D = simple('D');
+  const E = simple('E');
+
+  const and = (...conditions: Condition[]): Conjunction => ({
+    type: 'and',
+    conditions,
+  });
+  const or = (...conditions: Condition[]): Disjunction => ({
+    type: 'or',
+    conditions,
+  });
+  expect(simplifyCondition(A)).toEqual(A);
+  expect(simplifyCondition(and(A, B))).toEqual(and(A, B));
+  expect(simplifyCondition(or(A, B))).toEqual(or(A, B));
+  expect(simplifyCondition(and(or(A)))).toEqual(A);
+  expect(simplifyCondition(or(and(or(A))))).toEqual(A);
+  expect(simplifyCondition(and(A, or(B), or(or(C))))).toEqual(and(A, B, C));
+
+  // A & (B & C) & (D | E) -> A & B & C & (D | E)
+  expect(simplifyCondition(and(A, and(B, C), or(D, E)))).toEqual(
+    and(A, B, C, or(D, E)),
+  );
+
+  // A | (B & C) | (D | E) -> A | B & C | D | E
+  expect(simplifyCondition(or(A, and(B, C), or(D, E)))).toEqual(
+    or(A, and(B, C), D, E),
+  );
 });

@@ -735,13 +735,13 @@ test('where expressions', () => {
   `);
 });
 
-// DNF conversion is pretty extensively tested in `expression.test.ts`
+// flatten is pretty extensively tested in `expression.test.ts`
 // but we should double-check that `where` uses `expression` rather than trying to
 // mutate the AST itself.
 test('where to dnf', () => {
   const issueQuery = newQuery(mockDelegate, schema, 'issue');
-  let dnf = issueQuery.where('id', '=', '1').where('closed', true);
-  expect(ast(dnf).where).toMatchInlineSnapshot(`
+  let flatten = issueQuery.where('id', '=', '1').where('closed', true);
+  expect(ast(flatten).where).toMatchInlineSnapshot(`
     {
       "conditions": [
         {
@@ -773,8 +773,8 @@ test('where to dnf', () => {
     }
   `);
 
-  dnf = issueQuery.where('id', '=', '1');
-  expect(ast(dnf).where).toMatchInlineSnapshot(`
+  flatten = issueQuery.where('id', '=', '1');
+  expect(ast(flatten).where).toMatchInlineSnapshot(`
     {
       "left": {
         "name": "id",
@@ -789,10 +789,10 @@ test('where to dnf', () => {
     }
   `);
 
-  dnf = issueQuery.where(({cmp, or}) =>
+  flatten = issueQuery.where(({cmp, or}) =>
     or(cmp('id', '=', '1'), cmp('closed', true)),
   );
-  expect(ast(dnf).where).toMatchInlineSnapshot(`
+  expect(ast(flatten).where).toMatchInlineSnapshot(`
     {
       "conditions": [
         {
@@ -824,10 +824,10 @@ test('where to dnf', () => {
     }
   `);
 
-  dnf = issueQuery.where(({and, cmp}) =>
+  flatten = issueQuery.where(({and, cmp}) =>
     and(cmp('id', '=', '1'), cmp('closed', true)),
   );
-  expect(ast(dnf).where).toMatchInlineSnapshot(`
+  expect(ast(flatten).where).toMatchInlineSnapshot(`
     {
       "conditions": [
         {
@@ -859,26 +859,26 @@ test('where to dnf', () => {
     }
   `);
 
-  dnf = issueQuery.where(({and, cmp, or}) =>
+  flatten = issueQuery.where(({and, cmp, or}) =>
     and(cmp('id', '=', '1'), or(cmp('closed', true), cmp('id', '2'))),
   );
-  expect(ast(dnf).where).toMatchInlineSnapshot(`
+  expect(ast(flatten).where).toMatchInlineSnapshot(`
     {
       "conditions": [
         {
+          "left": {
+            "name": "id",
+            "type": "column",
+          },
+          "op": "=",
+          "right": {
+            "type": "literal",
+            "value": "1",
+          },
+          "type": "simple",
+        },
+        {
           "conditions": [
-            {
-              "left": {
-                "name": "id",
-                "type": "column",
-              },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": "1",
-              },
-              "type": "simple",
-            },
             {
               "left": {
                 "name": "closed",
@@ -888,23 +888,6 @@ test('where to dnf', () => {
               "right": {
                 "type": "literal",
                 "value": true,
-              },
-              "type": "simple",
-            },
-          ],
-          "type": "and",
-        },
-        {
-          "conditions": [
-            {
-              "left": {
-                "name": "id",
-                "type": "column",
-              },
-              "op": "=",
-              "right": {
-                "type": "literal",
-                "value": "1",
               },
               "type": "simple",
             },
@@ -921,10 +904,10 @@ test('where to dnf', () => {
               "type": "simple",
             },
           ],
-          "type": "and",
+          "type": "or",
         },
       ],
-      "type": "or",
+      "type": "and",
     }
   `);
 });

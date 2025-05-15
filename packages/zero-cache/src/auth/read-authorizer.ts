@@ -4,8 +4,8 @@ import {hashOfAST} from '../../../zero-protocol/src/ast-hash.ts';
 import type {AST, Condition} from '../../../zero-protocol/src/ast.ts';
 import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import {bindStaticParameters} from '../../../zql/src/builder/builder.ts';
-import {dnf} from '../../../zql/src/query/dnf.ts';
 import type {LogContext} from '@rocicorp/logger';
+import {simplifyCondition} from '../../../zql/src/query/expression.ts';
 
 export type TransformedAndHashed = {
   query: AST;
@@ -88,7 +88,7 @@ function transformQueryInternal(
   );
   return {
     ...query,
-    where: dnf(updatedWhere),
+    where: simplifyCondition(updatedWhere),
     related: query.related?.map(sq => {
       const subquery = transformQueryInternal(lc, sq.subquery, permissionRules);
       return {

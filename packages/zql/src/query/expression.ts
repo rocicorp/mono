@@ -225,9 +225,29 @@ function isAlwaysFalse(condition: Condition): boolean {
   return condition.type === 'or' && condition.conditions.length === 0;
 }
 
+export function simplifyCondition(c: Condition): Condition {
+  if (c.type === 'simple' || c.type === 'correlatedSubquery') {
+    return c;
+  }
+  if (c.conditions.length === 1) {
+    return simplifyCondition(c.conditions[0]);
+  }
+  const conditions = flatten(c.type, c.conditions.map(simplifyCondition));
+  if (c.type === 'and' && conditions.some(isAlwaysFalse)) {
+    return FALSE;
+  }
+  if (c.type === 'or' && conditions.some(isAlwaysTrue)) {
+    return TRUE;
+  }
+  return {
+    type: c.type,
+    conditions,
+  };
+}
+
 export function flatten(
   type: 'and' | 'or',
-  conditions: Condition[],
+  conditions: readonly Condition[],
 ): Condition[] {
   const flattened: Condition[] = [];
   for (const c of conditions) {

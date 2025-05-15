@@ -173,51 +173,57 @@ export function transformFilters(filters: Condition | undefined): {
       return {filters, conditionsRemoved: false};
     case 'correlatedSubquery':
       return {filters: undefined, conditionsRemoved: true};
-    case 'and': {
-      const transformedConditions = [];
-      for (const cond of filters.conditions) {
-        assert(cond.type === 'simple' || cond.type === 'correlatedSubquery');
-        if (cond.type === 'simple') {
-          transformedConditions.push(cond);
-        }
-      }
-      const conditionsRemoved =
-        transformedConditions.length !== filters.conditions.length;
-      if (transformedConditions.length === 0) {
-        return {filters: undefined, conditionsRemoved};
-      }
-      if (transformedConditions.length === 1) {
-        return {
-          filters: transformedConditions[0],
-          conditionsRemoved,
-        };
-      }
-      return {
-        filters: {
-          type: 'and',
-          conditions: transformedConditions,
-        },
-        conditionsRemoved,
-      };
-    }
+    case 'and':
     case 'or': {
       const transformedConditions: NoSubqueryCondition[] = [];
       let conditionsRemoved = false;
       for (const cond of filters.conditions) {
-        assert(cond.type !== 'or');
         const transformed = transformFilters(cond);
-        if (transformed.filters === undefined) {
+        // If any branch of the OR ends up empty, the entire OR needs
+        // to be removed.
+        if (transformed.filters === undefined && filters.type === 'or') {
           return {filters: undefined, conditionsRemoved: true};
         }
         conditionsRemoved = conditionsRemoved || transformed.conditionsRemoved;
-        transformedConditions.push(transformed.filters);
+        if (transformed.filters) {
+          transformedConditions.push(transformed.filters);
+        }
       }
       return {
-        filters: {type: 'or', conditions: transformedConditions},
+        filters: unwrap({
+          type: filters.type,
+          conditions: transformedConditions,
+        }),
         conditionsRemoved,
       };
     }
     default:
       unreachable(filters);
   }
+}
+
+export function unwrap(c: NoSubqueryCondition): NoSubqueryCondition {
+  if (c.type === 'simple') {
+    return c;
+  }
+  if (c.conditions.length === 1) {
+    return unwrap(c.conditions[0]);
+  }
+  return {type: c.type, conditions: flatten(c.type, c.conditions.map(unwrap))};
+}
+
+export function flatten(
+  type: 'and' | 'or',
+  conditions: NoSubqueryCondition[],
+): NoSubqueryCondition[] {
+  const flattened: NoSubqueryCondition[] = [];
+  for (const c of conditions) {
+    if (c.type === type) {
+      flattened.push(...c.conditions);
+    } else {
+      flattened.push(c);
+    }
+  }
+
+  return flattened;
 }

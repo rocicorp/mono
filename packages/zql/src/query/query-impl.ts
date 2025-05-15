@@ -25,11 +25,11 @@ import {ArrayView} from '../ivm/array-view.ts';
 import type {Input} from '../ivm/operator.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import {assertNoNotExists} from './assert-no-not-exists.ts';
-import {dnf} from './dnf.ts';
 import {
   and,
   cmp,
   ExpressionBuilder,
+  simplifyCondition,
   type ExpressionFactory,
 } from './expression.ts';
 import {
@@ -368,7 +368,7 @@ export abstract class AbstractQuery<
       cond = and(existingWhere, cond);
     }
 
-    const where = dnf(cond);
+    const where = simplifyCondition(cond);
 
     if (this.#system === 'client') {
       // We need to do this after the DNF since the DNF conversion might change
