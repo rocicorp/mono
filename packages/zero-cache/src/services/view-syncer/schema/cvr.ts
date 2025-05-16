@@ -96,7 +96,9 @@ export type QueriesRow = {
   clientGroupID: string;
   queryHash: string;
   // This is the client AST _AFTER_ applying server name transformations.
-  clientAST: JSONValue;
+  clientAST: JSONValue | null;
+  queryName: string | null;
+  queryArgs: JSONValue | null;
   patchVersion: string | null;
   transformationHash: string | null;
   transformationVersion: string | null;
@@ -108,8 +110,10 @@ function createQueriesTable(shard: ShardID) {
   return `
 CREATE TABLE ${schema(shard)}.queries (
   "clientGroupID"         TEXT,
-  "queryHash"             TEXT,
-  "clientAST"             JSONB NOT NULL,
+  "queryHash"             TEXT, -- this is the hash of the client query AST
+  "clientAST"             JSONB, -- this is nullable as custom queries will not persist an AST
+  "queryName"             TEXT, -- the name of the query if it is a custom query
+  "queryArgs"             JSONB, -- the arguments of the query if it is a custom query
   "patchVersion"          TEXT,  -- NULL if only desired but not yet "got"
   "transformationHash"    TEXT,
   "transformationVersion" TEXT,

@@ -407,6 +407,8 @@ export class CVRStore {
             clientGroupID: this.#id,
             queryHash: query.id,
             clientAST: query.ast,
+            queryName: null,
+            queryArgs: null,
             patchVersion: null,
             transformationHash: query.transformationHash ?? null,
             transformationVersion: maybeVersionString(
@@ -419,6 +421,8 @@ export class CVRStore {
             clientGroupID: this.#id,
             queryHash: query.id,
             clientAST: query.ast,
+            queryName: null,
+            queryArgs: null,
             patchVersion: maybeVersionString(query.patchVersion),
             transformationHash: query.transformationHash ?? null,
             transformationVersion: maybeVersionString(
