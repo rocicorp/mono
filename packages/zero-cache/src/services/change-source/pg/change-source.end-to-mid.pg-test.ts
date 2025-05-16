@@ -77,7 +77,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           shardNum: 0,
         },
         replicaDbFile.path,
-        {tableCopyWorkers: 5},
+        {tableCopyWorkers: 5, rowBatchSize: 10000},
       )
     ).changeSource;
     const stream = await source.startStream('00');

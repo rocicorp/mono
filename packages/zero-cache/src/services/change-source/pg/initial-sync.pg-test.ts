@@ -1725,7 +1725,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           },
           replica,
           getConnectionURI(upstream),
-          {tableCopyWorkers: 5},
+          {tableCopyWorkers: 5, rowBatchSize: 10000},
         );
 
         const config = await upstream.unsafe(
@@ -1825,6 +1825,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     try {
       await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
         tableCopyWorkers: 5,
+        rowBatchSize: 10000,
       });
     } catch (e) {
       result = e;
@@ -1860,6 +1861,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
     await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
       tableCopyWorkers: 5,
+      rowBatchSize: 10000,
     });
 
     expectMatchingObjectsInTables(replica, {
@@ -1883,7 +1885,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         {appID, shardNum: 0, publications: []},
         replica,
         getConnectionURI(upstream),
-        {tableCopyWorkers: 5},
+        {tableCopyWorkers: 5, rowBatchSize: 10000},
       );
     } catch (e) {
       result = e;

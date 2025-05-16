@@ -193,15 +193,26 @@ describe('types/lite', () => {
   test('values', () => {
     expect(
       liteValues(
-        [1, 'two', true, false, null, 12313214123432n],
-        [
-          {dataType: 'int', pos: 1},
-          {dataType: 'string', pos: 2},
-          {dataType: 'bool', pos: 3},
-          {dataType: 'bool', pos: 4},
-          {dataType: 'float', pos: 5},
-          {dataType: 'int8', pos: 6},
-        ],
+        {
+          a: 1,
+          b: 'two',
+          c: true,
+          d: false,
+          e: null,
+          f: 12313214123432n,
+        },
+        {
+          name: 'tableName',
+          primaryKey: ['a'],
+          columns: {
+            a: {dataType: 'int', pos: 1},
+            b: {dataType: 'string', pos: 2},
+            c: {dataType: 'bool', pos: 3},
+            d: {dataType: 'bool', pos: 4},
+            e: {dataType: 'float', pos: 5},
+            f: {dataType: 'int8', pos: 6},
+          },
+        },
         JSON_PARSED,
       ),
     ).toEqual([1, 'two', 1, 0, null, 12313214123432n]);

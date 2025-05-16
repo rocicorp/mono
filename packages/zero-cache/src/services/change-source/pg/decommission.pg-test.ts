@@ -42,7 +42,7 @@ describe('decommission', () => {
       },
       replica,
       getConnectionURI(upstream),
-      {tableCopyWorkers: 5},
+      {tableCopyWorkers: 5, rowBatchSize: 10000},
     );
 
     expect(await upstream`SELECT pubname FROM pg_publication`.values()).toEqual(
