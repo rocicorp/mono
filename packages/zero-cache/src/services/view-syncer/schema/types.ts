@@ -161,7 +161,7 @@ export const baseQueryRecordSchema = v.object({
  * size-based quota logic for client-requested queries.
  */
 export const internalQueryRecordSchema = baseQueryRecordSchema.extend({
-  internal: v.literal(true),
+  type: v.literal('internal'),
 });
 
 export type InternalQueryRecord = v.Infer<typeof internalQueryRecordSchema>;
@@ -189,7 +189,7 @@ const clientStateSchema = v.object({
 });
 
 export const clientQueryRecordSchema = baseQueryRecordSchema.extend({
-  internal: v.literal(false).optional(),
+  type: v.literal('client'),
 
   /**
    * The client state for this query, which includes the inactivatedAt, ttl and

@@ -784,6 +784,7 @@ describe('view-syncer/service', () => {
       queries: {
         'query-hash1': {
           ast: ISSUES_QUERY,
+          type: 'client',
           clientState: {foo: {version: {stateVersion: '00', minorVersion: 1}}},
           id: 'query-hash1',
         },
@@ -841,11 +842,12 @@ describe('view-syncer/service', () => {
       queries: {
         'lmids': {
           ast: EXPECTED_LMIDS_AST,
-          internal: true,
+          type: 'internal',
           id: 'lmids',
         },
         'query-hash1': {
           ast: ISSUES_QUERY,
+          type: 'client',
           clientState: {
             foo: {
               inactivatedAt,
@@ -857,6 +859,7 @@ describe('view-syncer/service', () => {
         },
         'query-hash2': {
           ast: USERS_QUERY,
+          type: 'client',
           clientState: {
             foo: {
               inactivatedAt: undefined,

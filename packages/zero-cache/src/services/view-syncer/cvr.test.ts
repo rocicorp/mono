@@ -35,6 +35,7 @@ function makeCVR(clients: Record<string, QueryDef[]>): CVR {
         ast: {
           table: 'issues',
         },
+        type: 'client',
         clientState: {},
         id: hash,
         patchVersion: undefined,
