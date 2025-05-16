@@ -67,13 +67,14 @@ function asQuery(row: QueriesRow): QueryRecord {
     s === null ? undefined : versionFromString(s);
   return row.internal
     ? ({
+        type: 'internal',
         id: row.queryHash,
         ast,
         transformationHash: row.transformationHash ?? undefined,
         transformationVersion: maybeVersion(row.transformationVersion),
-        internal: true,
       } satisfies InternalQueryRecord)
     : ({
+        type: 'client',
         id: row.queryHash,
         ast,
         patchVersion: maybeVersion(row.patchVersion),
@@ -305,7 +306,7 @@ export class CVRStore {
       const query = cvr.queries[row.queryHash];
       if (
         query &&
-        !query.internal &&
+        query.type !== 'internal' &&
         (!row.deleted || row.inactivatedAt !== null)
       ) {
         query.clientState[row.clientID] = {
@@ -400,31 +401,32 @@ export class CVRStore {
     const maybeVersionString = (v: CVRVersion | undefined) =>
       v ? versionString(v) : null;
 
-    const change: QueriesRow = query.internal
-      ? {
-          clientGroupID: this.#id,
-          queryHash: query.id,
-          clientAST: query.ast,
-          patchVersion: null,
-          transformationHash: query.transformationHash ?? null,
-          transformationVersion: maybeVersionString(
-            query.transformationVersion,
-          ),
-          internal: true,
-          deleted: false, // put vs del "got" query
-        }
-      : {
-          clientGroupID: this.#id,
-          queryHash: query.id,
-          clientAST: query.ast,
-          patchVersion: maybeVersionString(query.patchVersion),
-          transformationHash: query.transformationHash ?? null,
-          transformationVersion: maybeVersionString(
-            query.transformationVersion,
-          ),
-          internal: null,
-          deleted: false, // put vs del "got" query
-        };
+    const change: QueriesRow =
+      query.type === 'internal'
+        ? {
+            clientGroupID: this.#id,
+            queryHash: query.id,
+            clientAST: query.ast,
+            patchVersion: null,
+            transformationHash: query.transformationHash ?? null,
+            transformationVersion: maybeVersionString(
+              query.transformationVersion,
+            ),
+            internal: true,
+            deleted: false, // put vs del "got" query
+          }
+        : {
+            clientGroupID: this.#id,
+            queryHash: query.id,
+            clientAST: query.ast,
+            patchVersion: maybeVersionString(query.patchVersion),
+            transformationHash: query.transformationHash ?? null,
+            transformationVersion: maybeVersionString(
+              query.transformationVersion,
+            ),
+            internal: null,
+            deleted: false, // put vs del "got" query
+          };
     this.#writes.add({
       stats: {queries: 1},
       write: tx => tx`INSERT INTO ${this.#cvr('queries')} ${tx(change)}
@@ -444,9 +446,10 @@ export class CVRStore {
       | 'transformationVersion'
       | 'deleted'
     > = {
-      patchVersion: query.internal
-        ? null
-        : maybeVersionString(query.patchVersion),
+      patchVersion:
+        query.type === 'internal'
+          ? null
+          : maybeVersionString(query.patchVersion),
       transformationHash: query.transformationHash ?? null,
       transformationVersion: maybeVersionString(query.transformationVersion),
       deleted: false,

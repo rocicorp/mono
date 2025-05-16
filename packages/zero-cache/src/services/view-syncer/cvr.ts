@@ -69,7 +69,7 @@ const CLIENT_LMID_QUERY_ID = 'lmids';
 function assertNotInternal(
   query: QueryRecord,
 ): asserts query is ClientQueryRecord {
-  if (query.internal) {
+  if (query.type === 'internal') {
     // This should never happen for behaving clients, as query ids should be hashes.
     throw new Error(`Query ID ${query.id} is reserved for internal use`);
   }
@@ -202,7 +202,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
             ['clientID', 'asc'],
           ],
         },
-        internal: true,
+        type: 'internal',
       };
       this._cvr.queries[CLIENT_LMID_QUERY_ID] = lmidsQuery;
       this._cvrStore.putQuery(lmidsQuery);
@@ -249,7 +249,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         needed.add(hash);
         continue;
       }
-      if (query.internal) {
+      if (query.type === 'internal') {
         continue;
       }
 
@@ -277,6 +277,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         this._cvr.queries[id] ??
         ({
           id,
+          type: 'client',
           ast,
           clientState: {},
         } satisfies ClientQueryRecord);
@@ -577,7 +578,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     if (query.transformationHash !== transformationHash) {
       const transformationVersion = this._ensureNewVersion();
 
-      if (!query.internal && query.patchVersion === undefined) {
+      if (query.type !== 'internal' && query.patchVersion === undefined) {
         // client query: desired -> gotten
         query.patchVersion = transformationVersion;
         gotQueryPatch = {
@@ -877,7 +878,7 @@ export function getInactiveQueries(cvr: CVR): {
     }
   > = new Map();
   for (const [queryID, query] of Object.entries(cvr.queries)) {
-    if (query.internal) {
+    if (query.type === 'internal') {
       continue;
     }
     for (const clientState of Object.values(query.clientState)) {
