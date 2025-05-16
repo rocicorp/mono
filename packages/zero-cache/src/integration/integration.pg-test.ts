@@ -634,7 +634,7 @@ describe('integration', {timeout: 30000}, () => {
         {
           pokeID: '00:01',
           desiredQueriesPatches: {
-            def: [{op: 'put', hash: 'query-hash1', ast: FOO_QUERY}],
+            def: [{op: 'put', hash: 'query-hash1'}],
           },
         },
       ]);
@@ -652,7 +652,7 @@ describe('integration', {timeout: 30000}, () => {
         'pokePart',
         {
           pokeID: contentPokeID,
-          gotQueriesPatch: [{op: 'put', hash: 'query-hash1', ast: FOO_QUERY}],
+          gotQueriesPatch: [{op: 'put', hash: 'query-hash1'}],
           rowsPatch: [
             {
               op: 'put',
@@ -909,7 +909,7 @@ describe('integration', {timeout: 30000}, () => {
         {
           pokeID: WATERMARK_REGEX,
           desiredQueriesPatches: {
-            def: [{op: 'put', hash: 'query-hash2', ast: NOPK_QUERY}],
+            def: [{op: 'put', hash: 'query-hash2'}],
           },
         },
       ]);

@@ -10,7 +10,6 @@ import {
   deepEqual,
   type ReadonlyJSONValue,
 } from '../../../../shared/src/json.ts';
-import {must} from '../../../../shared/src/must.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../zero-protocol/src/ast.ts';
@@ -594,14 +593,12 @@ export class CVRStore {
         ]),
       );
 
-      const ast = (id: string) => must(upToCVR.queries[id]).ast;
-
       const patches: PatchToVersion[] = [];
       for (const row of queryRows) {
         const {queryHash: id} = row;
         const patch: Patch = row.deleted
           ? {type: 'query', op: 'del', id}
-          : {type: 'query', op: 'put', id, ast: ast(id)};
+          : {type: 'query', op: 'put', id};
         const v = row.patchVersion;
         assert(v);
         patches.push({patch, toVersion: versionFromString(v)});
@@ -610,7 +607,7 @@ export class CVRStore {
         const {clientID, queryHash: id} = row;
         const patch: Patch = row.deleted
           ? {type: 'query', op: 'del', id, clientID}
-          : {type: 'query', op: 'put', id, clientID, ast: ast(id)};
+          : {type: 'query', op: 'put', id, clientID};
         patches.push({patch, toVersion: versionFromString(row.patchVersion)});
       }
 
