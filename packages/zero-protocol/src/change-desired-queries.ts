@@ -1,8 +1,8 @@
 import * as v from '../../shared/src/valita.ts';
-import {queriesPatchSchema} from './queries-patch.ts';
+import {upQueriesPatchSchema} from './queries-patch.ts';
 
 const changeDesiredQueriesBodySchema = v.object({
-  desiredQueriesPatch: queriesPatchSchema,
+  desiredQueriesPatch: upQueriesPatchSchema,
 });
 
 export const changeDesiredQueriesMessageSchema = v.tuple([

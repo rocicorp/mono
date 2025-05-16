@@ -65,7 +65,7 @@ import type {
   PushMessage,
 } from '../../../zero-protocol/src/push.ts';
 import {CRUD_MUTATION_NAME, mapCRUD} from '../../../zero-protocol/src/push.ts';
-import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
+import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
@@ -303,7 +303,7 @@ export class Zero<
    * If this is set to `undefined` that means no queries were sent inside the `sec-protocol` header
    * and an `initConnection` message must be sent to the server after receiving the `connected` message.
    */
-  #initConnectionQueries: Map<string, QueriesPatchOp> | undefined;
+  #initConnectionQueries: Map<string, UpQueriesPatchOp> | undefined;
 
   /**
    * We try to send the deleted clients and (client groups) as part of the
@@ -1904,7 +1904,7 @@ export async function createSocket(
 ): Promise<
   [
     WebSocket,
-    Map<string, QueriesPatchOp> | undefined,
+    Map<string, UpQueriesPatchOp> | undefined,
     DeleteClientsBody | undefined,
   ]
 > {
@@ -1943,7 +1943,7 @@ export async function createSocket(
   const queriesPatchP = rep.query(tx => queryManager.getQueriesPatch(tx));
   let deletedClients: DeleteClientsBody | undefined =
     await deleteClientsManager.getDeletedClients();
-  let queriesPatch: Map<string, QueriesPatchOp> | undefined =
+  let queriesPatch: Map<string, UpQueriesPatchOp> | undefined =
     await queriesPatchP;
 
   let secProtocol = encodeSecProtocols(
