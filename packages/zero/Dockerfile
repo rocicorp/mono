@@ -10,7 +10,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 	--mount=type=cache,target=/go/pkg \
 	go build -ldflags "-s -w -X 'main.Version=${LITESTREAM_VERSION}' -extldflags '-static'" -tags osusergo,netgo,sqlite_omit_load_extension -o /usr/local/bin/litestream ./cmd/litestream
 
-FROM node:22.15.0-alpine3.20
+FROM node:22.11.0-alpine3.20
 
 ARG ZERO_VERSION
 
@@ -44,10 +44,6 @@ ENV ZERO_LITESTREAM_CONFIG_PATH=/etc/litestream.yml
 ENV ZERO_LOG_FORMAT=json
 ENV ZERO_SERVER_VERSION=${ZERO_VERSION}
 
-# Install OpenTelemetry instrumentation
-ENV NODE_PATH=/usr/local/lib/node_modules
-RUN npm install -g @opentelemetry/auto-instrumentations-node
-
 EXPOSE 4848 4849
 ENTRYPOINT ["/bin/sh", "-c"]
-CMD ["NODE_OPTIONS='--require=@opentelemetry/auto-instrumentations-node/register' npx zero-cache"]
+CMD ["npx zero-cache"]
