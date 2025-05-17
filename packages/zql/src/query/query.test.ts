@@ -123,6 +123,20 @@ const schemaWithJson = table('testWithJson')
   })
   .primaryKey('a');
 
+const schemaWithArray = table('testWithArray')
+  .columns({
+    id: string(),
+
+    arrayOfNumber: json<number[]>(),
+    arrayOfString: json<string[]>(),
+    arrayOfBoolean: json<boolean[]>(),
+
+    optionalArrayOfNumber: json<number[]>().optional(),
+    optionalArrayOfString: json<string[]>().optional(),
+    optionalArrayOfBoolean: json<boolean[]>().optional(),
+  })
+  .primaryKey('id');
+
 const testWithRelationships = table('testWithRelationships')
   .columns({
     s: string(),
@@ -196,6 +210,7 @@ const schema = createSchema({
     testSchemaWithNulls,
     schemaWithEnums,
     schemaWithJson,
+    schemaWithArray,
     schemaWithAdvancedTypes,
     testWithRelationships,
     testWithMoreRelationships,
@@ -771,6 +786,47 @@ test('json type', () => {
   query.where('j', '=', {foo: 'bar'});
   // @ts-expect-error - json fields cannot be used in cmp yet
   query.where(({cmp}) => cmp('j', '=', {foo: 'bar'}));
+});
+
+test('array type', () => {
+  const query = mockQuery as unknown as Query<Schema, 'testWithArray'>;
+  const datum = query.one().materialize().data;
+  const {data} = query.materialize();
+
+  expectTypeOf(datum).toMatchTypeOf<
+    | {
+        readonly id: string;
+
+        readonly arrayOfNumber: number[];
+        readonly arrayOfString: string[];
+        readonly arrayOfBoolean: boolean[];
+
+        readonly optionalArrayOfNumber: number[] | null;
+        readonly optionalArrayOfString: string[] | null;
+        readonly optionalArrayOfBoolean: boolean[] | null;
+      }
+    | undefined
+  >();
+
+  expectTypeOf(data).toMatchTypeOf<
+    {
+      readonly id: string;
+
+      readonly arrayOfNumber: number[];
+      readonly arrayOfString: string[];
+      readonly arrayOfBoolean: boolean[];
+
+      readonly optionalArrayOfNumber: number[] | null;
+      readonly optionalArrayOfString: string[] | null;
+      readonly optionalArrayOfBoolean: boolean[] | null;
+    }[]
+  >();
+
+  //  @ts-expect-error - Cannot compare json/arrays. Should we allow this... Maybe in a follow up PR?
+  query.where('arrayOfNumber', '=', [1, 2]);
+
+  //  @ts-expect-error - Cannot compare json/arrays. Should we allow this... Maybe in a follow up PR?
+  query.where(({cmp}) => cmp('arrayOfString', '=', ['a', 'b']));
 });
 
 function takeSchema(x: TableSchema) {

@@ -1,13 +1,13 @@
-import type {SQLQuery, FormatConfig, SQLItem} from '@databases/sql';
-import baseSql, {SQLItemType} from '@databases/sql';
 import {
   escapePostgresIdentifier,
   escapeSQLiteIdentifier,
 } from '@databases/escape-identifier';
+import type {FormatConfig, SQLItem, SQLQuery} from '@databases/sql';
+import baseSql, {SQLItemType} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
-import type {ServerColumnSchema} from './schema.ts';
-import type {LiteralValue} from '../../zero-protocol/src/ast.ts';
 import {isPgNumberType, isPgStringType} from '../../zero-cache/src/types/pg.ts';
+import type {LiteralValue} from '../../zero-protocol/src/ast.ts';
+import type {ServerColumnSchema} from './schema.ts';
 
 export const Z2S_COLLATION = 'ucs_basic';
 
@@ -27,15 +27,16 @@ export function formatSqlite(sql: SQLQuery) {
 }
 
 const sqlConvert = Symbol('fromJson');
+
 export type LiteralType = 'boolean' | 'number' | 'string' | 'null';
 export type PluralLiteralType = Exclude<LiteralType, 'null'>;
 
 type ColumnSqlConvertArg = {
   [sqlConvert]: 'column';
   type: string;
-  isEnum: boolean;
   value: unknown;
   plural: boolean;
+  isEnum: boolean;
   isComparison: boolean;
 };
 
@@ -88,7 +89,7 @@ export function sqlConvertColumnArg(
     type: serverColumnSchema.type,
     isEnum: serverColumnSchema.isEnum,
     value,
-    plural,
+    plural: plural || serverColumnSchema.isArray,
     isComparison,
   });
 }
@@ -255,6 +256,7 @@ function pgTypeForLiteralType(type: Exclude<LiteralType, 'null'>) {
 export const sql = baseSql.default;
 
 const PREVIOUSLY_SEEN_VALUE = Symbol('PREVIOUSLY_SEEN_VALUE');
+
 function formatFn(
   items: readonly SQLItem[],
   {escapeIdentifier, formatValue}: FormatConfig,

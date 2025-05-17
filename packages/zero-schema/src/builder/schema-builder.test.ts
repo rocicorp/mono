@@ -2,7 +2,7 @@ import {expect, expectTypeOf, test} from 'vitest';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {relationships} from './relationship-builder.ts';
 import {clientSchemaFrom, createSchema} from './schema-builder.ts';
-import {boolean, number, string, table} from './table-builder.ts';
+import {boolean, json, number, string, table} from './table-builder.ts';
 
 const mockQuery = {
   select() {
@@ -653,6 +653,56 @@ test('clientSchemaFrom', () => {
         }
       },
       "hash": "qw9u2r398f0z"
+    }"
+  `);
+});
+
+test('array column', () => {
+  const schema = createSchema({
+    tables: [
+      table('issue')
+        .from('issues')
+        .columns({
+          id: string(),
+          stringArray: json<string[]>(),
+          numberArray: json<number[]>(),
+          booleanArray: json<boolean[]>(),
+          jsonArray: json(),
+          enumArray: json<('A' | 'B')[]>(),
+        })
+        .primaryKey('id'),
+    ],
+  });
+
+  expect(stringify(clientSchemaFrom(schema))).toMatchInlineSnapshot(`
+    "{
+      "clientSchema": {
+        "tables": {
+          "issues": {
+            "columns": {
+              "booleanArray": {
+                "type": "json"
+              },
+              "enumArray": {
+                "type": "json"
+              },
+              "id": {
+                "type": "string"
+              },
+              "jsonArray": {
+                "type": "json"
+              },
+              "numberArray": {
+                "type": "json"
+              },
+              "stringArray": {
+                "type": "json"
+              }
+            }
+          }
+        }
+      },
+      "hash": "qeez7tx1u29h"
     }"
   `);
 });

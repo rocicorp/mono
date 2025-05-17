@@ -21,7 +21,8 @@ WITH published_columns AS (SELECT
   attname AS "col", 
   pt.typname AS "type", 
   atttypid::int8 AS "typeOID", 
-  typtype,
+  pt.typtype,
+  elem_pt.typtype AS "elemTyptype",
   NULLIF(atttypmod, -1) AS "maxLen", 
   attndims "arrayDims", 
   attnotnull AS "notNull",
@@ -33,6 +34,7 @@ FROM pg_attribute
 JOIN pg_class pc ON pc.oid = attrelid
 JOIN pg_namespace pns ON pns.oid = relnamespace
 JOIN pg_type pt ON atttypid = pt.oid
+LEFT JOIN pg_type elem_pt ON elem_pt.oid = pt.typelem
 JOIN pg_publication_tables as pb ON 
   pb.schemaname = nspname AND 
   pb.tablename = pc.relname AND
@@ -56,6 +58,7 @@ tables AS (SELECT json_build_object(
                        THEN "type" 
                        ELSE substring("type" from 2) || repeat('[]', "arrayDims") END,
       'pgTypeClass', "typtype",
+      'elemPgTypeClass', "elemTyptype",
       'typeOID', "typeOID",
       -- https://stackoverflow.com/a/52376230
       'characterMaximumLength', CASE WHEN "typeOID" = 1043 OR "typeOID" = 1042 

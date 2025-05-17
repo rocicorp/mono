@@ -32,6 +32,7 @@ describe('tables/create', () => {
             dataType: 'varchar',
             characterMaximumLength: 180,
             notNull: true,
+            elemPgTypeClass: null,
             dflt: null,
           },
           lastMutationID: {
@@ -39,6 +40,7 @@ describe('tables/create', () => {
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
+            elemPgTypeClass: null,
             dflt: null,
           },
         },
@@ -59,6 +61,7 @@ describe('tables/create', () => {
             dataType: 'varchar',
             characterMaximumLength: 180,
             notNull: true,
+            elemPgTypeClass: null,
             dflt: null,
           },
           lastMutationID: {
@@ -66,6 +69,7 @@ describe('tables/create', () => {
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
+            elemPgTypeClass: null,
             dflt: null,
           },
         },
@@ -79,6 +83,7 @@ describe('tables/create', () => {
             dataType: 'varchar|NOT_NULL',
             characterMaximumLength: null,
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
           lastMutationID: {
@@ -86,6 +91,7 @@ describe('tables/create', () => {
             dataType: 'int8|NOT_NULL',
             characterMaximumLength: null,
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
           ['_0_version']: {
@@ -94,6 +100,7 @@ describe('tables/create', () => {
             characterMaximumLength: null,
             dflt: null,
             notNull: false,
+            elemPgTypeClass: null,
           },
         },
       },
@@ -109,6 +116,7 @@ describe('tables/create', () => {
             dataType: 'varchar',
             characterMaximumLength: 180,
             notNull: true,
+            elemPgTypeClass: null,
             dflt: null,
           },
           lastMutationID: {
@@ -116,6 +124,7 @@ describe('tables/create', () => {
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
+            elemPgTypeClass: null,
             dflt: null,
           },
         },
@@ -136,6 +145,7 @@ describe('tables/create', () => {
             dataType: 'varchar',
             characterMaximumLength: 180,
             notNull: true,
+            elemPgTypeClass: null,
             dflt: null,
           },
           lastMutationID: {
@@ -143,6 +153,7 @@ describe('tables/create', () => {
             dataType: 'int8',
             characterMaximumLength: null,
             notNull: true,
+            elemPgTypeClass: null,
             dflt: null,
           },
         },
@@ -156,6 +167,7 @@ describe('tables/create', () => {
             dataType: 'varchar|NOT_NULL',
             characterMaximumLength: null,
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
           lastMutationID: {
@@ -163,6 +175,7 @@ describe('tables/create', () => {
             dataType: 'int8|NOT_NULL',
             characterMaximumLength: null,
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
           ['_0_version']: {
@@ -170,6 +183,7 @@ describe('tables/create', () => {
             dataType: 'TEXT',
             dflt: null,
             notNull: false,
+            elemPgTypeClass: null,
             pos: 3,
           },
         },
@@ -186,6 +200,7 @@ describe('tables/create', () => {
             dataType: 'int4',
             characterMaximumLength: null,
             notNull: true,
+            elemPgTypeClass: null,
             dflt: null,
           },
           handle: {
@@ -193,6 +208,7 @@ describe('tables/create', () => {
             characterMaximumLength: 40,
             dataType: 'varchar',
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
           rank: {
@@ -200,6 +216,7 @@ describe('tables/create', () => {
             characterMaximumLength: null,
             dataType: 'int8',
             notNull: false,
+            elemPgTypeClass: null,
             dflt: '1',
           },
           admin: {
@@ -207,6 +224,7 @@ describe('tables/create', () => {
             dataType: 'bool',
             characterMaximumLength: null,
             notNull: false,
+            elemPgTypeClass: null,
             dflt: 'false',
           },
           bigint: {
@@ -214,6 +232,7 @@ describe('tables/create', () => {
             characterMaximumLength: null,
             dataType: 'int8',
             notNull: false,
+            elemPgTypeClass: null,
             dflt: "'2147483648'::bigint",
           },
           enumnum: {
@@ -222,6 +241,7 @@ describe('tables/create', () => {
             dataType: 'my_type',
             pgTypeClass: PostgresTypeClass.Enum,
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
         },
@@ -246,6 +266,7 @@ describe('tables/create', () => {
             dataType: 'int4',
             characterMaximumLength: null,
             notNull: true,
+            elemPgTypeClass: null,
             dflt: null,
           },
           handle: {
@@ -253,6 +274,7 @@ describe('tables/create', () => {
             characterMaximumLength: 40,
             dataType: 'varchar',
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
           rank: {
@@ -260,6 +282,7 @@ describe('tables/create', () => {
             characterMaximumLength: null,
             dataType: 'int8',
             notNull: false,
+            elemPgTypeClass: null,
             dflt: '1',
           },
           admin: {
@@ -267,6 +290,7 @@ describe('tables/create', () => {
             dataType: 'bool',
             characterMaximumLength: null,
             notNull: false,
+            elemPgTypeClass: null,
             dflt: 'false',
           },
           bigint: {
@@ -274,6 +298,7 @@ describe('tables/create', () => {
             characterMaximumLength: null,
             dataType: 'int8',
             notNull: false,
+            elemPgTypeClass: null,
             dflt: "'2147483648'::bigint",
           },
           enumnum: {
@@ -282,6 +307,7 @@ describe('tables/create', () => {
             dataType: 'my_type',
             pgTypeClass: PostgresTypeClass.Enum,
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
         },
@@ -295,6 +321,7 @@ describe('tables/create', () => {
             dataType: 'int4|NOT_NULL',
             characterMaximumLength: null,
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
           handle: {
@@ -302,6 +329,7 @@ describe('tables/create', () => {
             characterMaximumLength: null,
             dataType: 'varchar',
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
           rank: {
@@ -309,6 +337,7 @@ describe('tables/create', () => {
             characterMaximumLength: null,
             dataType: 'int8',
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
           admin: {
@@ -316,6 +345,7 @@ describe('tables/create', () => {
             dataType: 'bool',
             characterMaximumLength: null,
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
           bigint: {
@@ -323,6 +353,7 @@ describe('tables/create', () => {
             characterMaximumLength: null,
             dataType: 'int8',
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
           enumnum: {
@@ -330,6 +361,7 @@ describe('tables/create', () => {
             characterMaximumLength: null,
             dataType: 'my_type|TEXT_ENUM',
             notNull: false,
+            elemPgTypeClass: null,
             dflt: null,
           },
           ['_0_version']: {
@@ -337,7 +369,142 @@ describe('tables/create', () => {
             dataType: 'TEXT',
             dflt: null,
             notNull: false,
+            elemPgTypeClass: null,
             pos: 7,
+          },
+        },
+      },
+    },
+    {
+      name: 'array types',
+      srcTableSpec: {
+        schema: 'public',
+        name: 'array_table',
+        columns: {
+          id: {
+            pos: 1,
+            dataType: 'int4',
+            characterMaximumLength: null,
+            notNull: true,
+            elemPgTypeClass: null,
+            dflt: null,
+          },
+          tags: {
+            pos: 2,
+            dataType: 'varchar',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'b',
+            dflt: null,
+          },
+          nums: {
+            pos: 3,
+            dataType: 'int4',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'b',
+            dflt: null,
+          },
+          enums: {
+            pos: 4,
+            dataType: 'my_type',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'e',
+            dflt: null,
+          },
+        },
+        primaryKey: ['id'],
+      },
+      createStatement: `
+      CREATE TABLE "public"."array_table" (
+        "id" "int4" NOT NULL,
+        "tags" "varchar"[],
+        "nums" "int4"[],
+        "enums" "my_type"[],
+        PRIMARY KEY ("id")
+      );`,
+      dstTableSpec: {
+        schema: 'public',
+        name: 'array_table',
+        columns: {
+          id: {
+            pos: 1,
+            dataType: 'int4',
+            characterMaximumLength: null,
+            notNull: true,
+            elemPgTypeClass: null,
+            dflt: null,
+          },
+          tags: {
+            pos: 2,
+            dataType: 'varchar[]',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'b',
+            dflt: null,
+          },
+          nums: {
+            pos: 3,
+            dataType: 'int4[]',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'b',
+            dflt: null,
+          },
+          enums: {
+            pos: 4,
+            dataType: 'my_type[]',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'e',
+            dflt: null,
+          },
+        },
+        primaryKey: ['id'],
+      },
+      liteTableSpec: {
+        name: 'array_table',
+        columns: {
+          id: {
+            pos: 1,
+            dataType: 'int4|NOT_NULL',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: null,
+            dflt: null,
+          },
+          tags: {
+            pos: 2,
+            dataType: 'varchar|TEXT_ARRAY',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'b',
+            dflt: null,
+          },
+          nums: {
+            pos: 3,
+            dataType: 'int4|TEXT_ARRAY',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'b',
+            dflt: null,
+          },
+          enums: {
+            pos: 4,
+            dataType: 'my_type|TEXT_ENUM|TEXT_ARRAY',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'e',
+            dflt: null,
+          },
+          ['_0_version']: {
+            pos: 5,
+            dataType: 'TEXT',
+            characterMaximumLength: null,
+            dflt: null,
+            notNull: false,
+            elemPgTypeClass: null,
           },
         },
       },
@@ -362,24 +529,22 @@ describe('tables/create', () => {
       await testDBs.end();
     });
 
-    for (const c of cases) {
-      test(c.name, async () => {
-        const createStatement = createTableStatement(c.srcTableSpec);
-        expect(stripCommentsAndWhitespace(createStatement)).toBe(
-          stripCommentsAndWhitespace(c.createStatement),
-        );
-        await db.unsafe(createStatement);
+    test.each(cases)('$name', async c => {
+      const createStatement = createTableStatement(c.srcTableSpec);
+      expect(stripCommentsAndWhitespace(createStatement)).toBe(
+        stripCommentsAndWhitespace(c.createStatement),
+      );
+      await db.unsafe(createStatement);
 
-        const published = await getPublicationInfo(db, ['zero_all']);
-        expect(published.tables).toMatchObject([
-          {
-            ...(c.dstTableSpec ?? c.srcTableSpec),
-            oid: expect.any(Number),
-            publications: {['zero_all']: {rowFilter: null}},
-          },
-        ]);
-      });
-    }
+      const published = await getPublicationInfo(db, ['zero_all']);
+      expect(published.tables).toMatchObject([
+        {
+          ...(c.dstTableSpec ?? c.srcTableSpec),
+          oid: expect.any(Number),
+          publications: {['zero_all']: {rowFilter: null}},
+        },
+      ]);
+    });
   });
 
   describe('sqlite', () => {
@@ -389,14 +554,12 @@ describe('tables/create', () => {
       db = new Database(createSilentLogContext(), ':memory:');
     });
 
-    for (const c of cases) {
-      test(c.name, () => {
-        const liteTableSpec = mapPostgresToLite(c.srcTableSpec);
-        db.exec(createTableStatement(liteTableSpec));
+    test.each(cases)('$name', c => {
+      const liteTableSpec = mapPostgresToLite(c.srcTableSpec);
+      db.exec(createTableStatement(liteTableSpec));
 
-        const tables = listTables(db);
-        expect(tables).toEqual(expect.arrayContaining([c.liteTableSpec]));
-      });
-    }
+      const tables = listTables(db);
+      expect(tables).toEqual(expect.arrayContaining([c.liteTableSpec]));
+    });
   });
 });

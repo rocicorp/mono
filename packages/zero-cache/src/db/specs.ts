@@ -26,6 +26,12 @@ export const columnSpec = v.object({
   pos: v.number(),
   dataType: v.string(),
   pgTypeClass: pgTypeClassSchema.optional(),
+
+  // If the column is an array, this will be the type of the
+  // elements in the array. If the column is not an array,
+  // this will be null.
+  elemPgTypeClass: pgTypeClassSchema.nullable().optional(),
+
   characterMaximumLength: v.number().nullable().optional(),
   notNull: v.boolean().nullable().optional(),
   dflt: v.string().nullable().optional(),

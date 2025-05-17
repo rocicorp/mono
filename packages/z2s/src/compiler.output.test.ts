@@ -1,15 +1,15 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {beforeEach, expect, test} from 'vitest';
-import {formatPgInternalConvert} from './sql.ts';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   enumeration,
+  json,
   number,
   string,
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
-import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {ServerSchema} from './schema.ts';
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import {
   any,
   compile,
@@ -22,7 +22,8 @@ import {
   simple,
   type Spec,
 } from './compiler.ts';
-import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import type {ServerSchema} from './schema.ts';
+import {formatPgInternalConvert} from './sql.ts';
 
 // Tests the output of basic primitives.
 // Top-level things like `SELECT` are tested by actually executing the SQL as inspecting
@@ -33,7 +34,9 @@ const user = table('user')
   .columns({
     id: string(),
     name: string(),
+    nameArray: json<string[]>(),
     age: number(),
+    ageArray: json<number[]>(),
   })
   .primaryKey('id');
 
@@ -82,6 +85,7 @@ const enumTable = table('enumTable')
   .columns({
     id: string(),
     status: enumeration<'active' | 'inactive'>(),
+    statusArray: json<('active' | 'inactive')[]>(),
   })
   .primaryKey('id');
 
@@ -89,7 +93,9 @@ const timestampsTable = table('timestampsTable')
   .columns({
     id: string(),
     timestampWithTz: number(),
+    timestampWithTzArray: json<number[]>(),
     timestampWithoutTz: number(),
+    timestampWithoutTzArray: json<number[]>(),
   })
   .primaryKey('id');
 
@@ -118,48 +124,53 @@ const schema = createSchema({
 
 const serverSchema: ServerSchema = {
   'user': {
-    id: {type: 'text', isEnum: false},
-    name: {type: 'text', isEnum: false},
-    age: {type: 'numeric', isEnum: false},
+    id: {type: 'text', isArray: false, isEnum: false},
+    name: {type: 'text', isArray: false, isEnum: false},
+    nameArray: {type: 'text', isArray: true, isEnum: false},
+    age: {type: 'numeric', isArray: false, isEnum: false},
+    ageArray: {type: 'numeric', isArray: true, isEnum: false},
   },
   'issue': {
-    id: {type: 'text', isEnum: false},
-    title: {type: 'text', isEnum: false},
-    description: {type: 'text', isEnum: false},
-    closed: {type: 'boolean', isEnum: false},
-    ownerId: {type: 'text', isEnum: false},
-    created: {type: 'timestamp', isEnum: false},
+    id: {type: 'text', isArray: false, isEnum: false},
+    title: {type: 'text', isArray: false, isEnum: false},
+    description: {type: 'text', isArray: false, isEnum: false},
+    closed: {type: 'boolean', isArray: false, isEnum: false},
+    ownerId: {type: 'text', isArray: false, isEnum: false},
+    created: {type: 'timestamp', isArray: false, isEnum: false},
   },
   'issueLabel': {
-    issue_id: {type: 'text', isEnum: false},
-    label_id: {type: 'text', isEnum: false},
+    issue_id: {type: 'text', isArray: false, isEnum: false},
+    label_id: {type: 'text', isArray: false, isEnum: false},
   },
   'label': {
-    id: {type: 'text', isEnum: false},
-    name: {type: 'text', isEnum: false},
+    id: {type: 'text', isArray: false, isEnum: false},
+    name: {type: 'text', isArray: false, isEnum: false},
   },
   'parentTable': {
-    id: {type: 'text', isEnum: false},
-    other_id: {type: 'text', isEnum: false},
+    id: {type: 'text', isArray: false, isEnum: false},
+    other_id: {type: 'text', isArray: false, isEnum: false},
   },
   'childTable': {
-    id: {type: 'text', isEnum: false},
-    parent_id: {type: 'text', isEnum: false},
-    parent_other_id: {type: 'text', isEnum: false},
+    id: {type: 'text', isArray: false, isEnum: false},
+    parent_id: {type: 'text', isArray: false, isEnum: false},
+    parent_other_id: {type: 'text', isArray: false, isEnum: false},
   },
   'enumTable': {
-    id: {type: 'text', isEnum: false},
-    status: {type: 'statusEnum', isEnum: true},
+    id: {type: 'text', isArray: false, isEnum: false},
+    status: {type: 'statusEnum', isArray: false, isEnum: true},
+    statusArray: {type: 'statusEnum', isArray: true, isEnum: true},
   },
   'timestampsTable': {
-    id: {type: 'text', isEnum: false},
-    timestampWithoutTz: {type: 'timestamp', isEnum: false},
-    timestampWithTz: {type: 'timestamptz', isEnum: false},
+    id: {type: 'text', isArray: false, isEnum: false},
+    timestampWithoutTz: {type: 'timestamp', isArray: false, isEnum: false},
+    timestampWithoutTzArray: {type: 'timestamp', isArray: true, isEnum: false},
+    timestampWithTz: {type: 'timestamptz', isArray: false, isEnum: false},
+    timestampWithTzArray: {type: 'timestamptz', isArray: true, isEnum: false},
   },
   'alternate_schema.user': {
-    id: {type: 'text', isEnum: false},
-    name: {type: 'text', isEnum: false},
-    age: {type: 'numeric', isEnum: false},
+    id: {type: 'text', isArray: false, isEnum: false},
+    name: {type: 'text', isArray: false, isEnum: false},
+    age: {type: 'numeric', isArray: false, isEnum: false},
   },
 };
 
@@ -209,7 +220,7 @@ test('select from different schema', () => {
          
          
         
-        )"root"",
+        ) "root"",
       "values": [],
     }
   `);
@@ -303,14 +314,47 @@ test('compile with enum', () => {
     {
       "text": "SELECT 
         COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
-        FROM (SELECT "enumTable_0"."id" as "id","enumTable_0"."status" as "status"
+        FROM (SELECT "enumTable_0"."id" as "id","enumTable_0"."status" as "status","enumTable_0"."statusArray" as "statusArray"
         FROM "enumTable" AS "enumTable_0"
         WHERE "enumTable_0"."status"::text = $1::text COLLATE "ucs_basic"
          
         
-        )"root"",
+        ) "root"",
       "values": [
         "active",
+      ],
+    }
+  `);
+});
+
+test('compile with enumArray', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'enumTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'statusArray'},
+          right: {type: 'literal', value: ['active']},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "enumTable_0"."id" as "id","enumTable_0"."status" as "status","enumTable_0"."statusArray" as "statusArray"
+        FROM "enumTable" AS "enumTable_0"
+        WHERE "enumTable_0"."statusArray"::text = ARRAY(
+              SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
+            )
+         
+        
+        ) "root"",
+      "values": [
+        "["active"]",
       ],
     }
   `);
@@ -334,12 +378,45 @@ test('compile with timestamp (with timezone)', () => {
     {
       "text": "SELECT 
         COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
-        FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz"
+        FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithTz" = to_timestamp($1::text::bigint / 1000.0)
          
         
-        )"root"",
+        ) "root"",
+      "values": [
+        ""abc"",
+      ],
+    }
+  `);
+});
+
+test('compile with timestamp array (with timezone)', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'timestampsTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'timestampWithTzArray'},
+          right: {type: 'literal', value: 'abc'},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
+        FROM "timestampsTable" AS "timestampsTable_0"
+        WHERE "timestampsTable_0"."timestampWithTzArray" = ARRAY(
+              SELECT to_timestamp(value::text::bigint / 1000.0) FROM jsonb_array_elements_text($1::text::jsonb)
+            )
+         
+        
+        ) "root"",
       "values": [
         ""abc"",
       ],
@@ -365,12 +442,45 @@ test('compile with timestamp (without timezone)', () => {
     {
       "text": "SELECT 
         COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
-        FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz"
+        FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithoutTz" = to_timestamp($1::text::bigint / 1000.0) AT TIME ZONE 'UTC'
          
         
-        )"root"",
+        ) "root"",
+      "values": [
+        ""abc"",
+      ],
+    }
+  `);
+});
+
+test('compile with timestamp (without timezone) array', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'timestampsTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'timestampWithoutTzArray'},
+          right: {type: 'literal', value: 'abc'},
+        },
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT "timestampsTable_0"."id" as "id",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithTz") * 1000 as "timestampWithTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithTzArray")) * 1000) as "timestampWithTzArray",EXTRACT(EPOCH FROM "timestampsTable_0"."timestampWithoutTz") * 1000 as "timestampWithoutTz",ARRAY(SELECT EXTRACT(EPOCH FROM unnest("timestampsTable_0"."timestampWithoutTzArray")) * 1000) as "timestampWithoutTzArray"
+        FROM "timestampsTable" AS "timestampsTable_0"
+        WHERE "timestampsTable_0"."timestampWithoutTzArray" = ARRAY(
+              SELECT to_timestamp(value::text::bigint / 1000.0) AT TIME ZONE 'UTC' FROM jsonb_array_elements_text($1::text::jsonb)
+            )
+         
+        
+        ) "root"",
       "values": [
         ""abc"",
       ],
@@ -1153,7 +1263,7 @@ test('related thru junction edge', () => {
          
          
         
-        )"root"",
+        ) "root"",
       "values": [],
     }
   `);
@@ -1183,7 +1293,7 @@ test('related w/o junction edge', () => {
       "text": "SELECT 
         COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT (
-          SELECT COALESCE(json_agg(row_to_json("inner_owner")), '[]'::json) FROM (SELECT "user_1"."id" as "id","user_1"."name" as "name","user_1"."age" as "age"
+          SELECT COALESCE(json_agg(row_to_json("inner_owner")), '[]'::json) FROM (SELECT "user_1"."id" as "id","user_1"."name" as "name","user_1"."nameArray" as "nameArray","user_1"."age" as "age","user_1"."ageArray" as "ageArray"
         FROM "user" AS "user_1"
          
         WHERE "issue_0"."ownerId" = "user_1"."id"
@@ -1194,7 +1304,7 @@ test('related w/o junction edge', () => {
          
          
         
-        )"root"",
+        ) "root"",
       "values": [],
     }
   `);

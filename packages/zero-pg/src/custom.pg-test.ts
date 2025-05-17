@@ -1,14 +1,14 @@
 /* eslint-disable @typescript-eslint/naming-convention */
-import {testDBs} from '../../zero-cache/src/test/db.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 
-import {makeSchemaCRUD} from './custom.ts';
-import {Transaction} from './test/util.ts';
-import type {DBTransaction, SchemaCRUD} from '../../zql/src/mutate/custom.ts';
-import {schema, schemaSql} from './test/schema.ts';
-import {getServerSchema} from './schema.ts';
 import type {ServerSchema} from '../../z2s/src/schema.ts';
+import type {DBTransaction, SchemaCRUD} from '../../zql/src/mutate/custom.ts';
+import {makeSchemaCRUD} from './custom.ts';
+import {getServerSchema} from './schema.ts';
+import {schema, schemaSql} from './test/schema.ts';
+import {Transaction} from './test/util.ts';
 
 describe('makeSchemaCRUD', () => {
   let pg: PostgresDB;

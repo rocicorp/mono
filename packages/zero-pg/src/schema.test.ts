@@ -1,5 +1,8 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {describe, expect, test} from 'vitest';
+import {unreachable} from '../../shared/src/asserts.ts';
+import type {ServerColumnSchema, ServerSchema} from '../../z2s/src/schema.ts';
+import {pgToZqlTypeMap} from '../../zero-cache/src/types/pg.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
@@ -9,17 +12,14 @@ import {
   table,
   type ColumnBuilder,
 } from '../../zero-schema/src/builder/table-builder.ts';
-import {
-  checkSchemasAreCompatible,
-  type SchemaIncompatibilityError,
-} from './schema.ts';
-import type {ServerColumnSchema, ServerSchema} from '../../z2s/src/schema.ts';
-import {pgToZqlTypeMap} from '../../zero-cache/src/types/pg.ts';
 import type {
   SchemaValue,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
-import {unreachable} from '../../shared/src/asserts.ts';
+import {
+  checkSchemasAreCompatible,
+  type SchemaIncompatibilityError,
+} from './schema.ts';
 
 describe('checkSchemasAreCompatible', () => {
   test('should return empty array when schemas are compatible', () => {
@@ -37,8 +37,8 @@ describe('checkSchemasAreCompatible', () => {
 
     const serverSchema: ServerSchema = {
       test: {
-        id: {type: 'text', isEnum: false},
-        value: {type: 'integer', isEnum: false},
+        id: {type: 'text', isEnum: false, isArray: false},
+        value: {type: 'integer', isEnum: false, isArray: false},
       },
     };
 
@@ -85,7 +85,7 @@ describe('checkSchemasAreCompatible', () => {
 
     const serverSchema: ServerSchema = {
       test: {
-        id: {type: 'text', isEnum: false},
+        id: {type: 'text', isEnum: false, isArray: false},
       },
     };
 
@@ -114,8 +114,8 @@ describe('checkSchemasAreCompatible', () => {
 
     const serverSchema: ServerSchema = {
       test: {
-        id: {type: 'text', isEnum: false},
-        value: {type: 'integer', isEnum: false}, // PostgreSQL has it as integer
+        id: {type: 'text', isEnum: false, isArray: false},
+        value: {type: 'integer', isEnum: false, isArray: false}, // PostgreSQL has it as integer
       },
     };
 
@@ -147,8 +147,8 @@ describe('checkSchemasAreCompatible', () => {
 
     const serverSchema: ServerSchema = {
       test: {
-        id: {type: 'text', isEnum: false},
-        status: {type: 'status_enum', isEnum: true}, // PostgreSQL has it as enum
+        id: {type: 'text', isEnum: false, isArray: false},
+        status: {type: 'status_enum', isEnum: true, isArray: false}, // PostgreSQL has it as enum
       },
     };
 
@@ -177,11 +177,11 @@ describe('checkSchemasAreCompatible', () => {
 
     const serverSchema: ServerSchema = {
       test1: {
-        id: {type: 'text', isEnum: false},
+        id: {type: 'text', isEnum: false, isArray: false},
       },
       test2: {
-        id: {type: 'text', isEnum: false},
-        value: {type: 'integer', isEnum: false}, // PostgreSQL has it as integer
+        id: {type: 'text', isEnum: false, isArray: false},
+        value: {type: 'integer', isEnum: false, isArray: false}, // PostgreSQL has it as integer
       },
     };
 
@@ -220,8 +220,8 @@ describe('checkSchemasAreCompatible', () => {
     const serverSchema: ServerSchema = {
       // eslint-disable-next-line @typescript-eslint/naming-convention
       server_test: {
-        id: {type: 'text', isEnum: false},
-        value: {type: 'integer', isEnum: false},
+        id: {type: 'text', isEnum: false, isArray: false},
+        value: {type: 'integer', isEnum: false, isArray: false},
       },
     };
 
@@ -245,8 +245,8 @@ describe('checkSchemasAreCompatible', () => {
 
     const serverSchema: ServerSchema = {
       'custom_schema.test': {
-        id: {type: 'text', isEnum: false},
-        value: {type: 'integer', isEnum: false},
+        id: {type: 'text', isEnum: false, isArray: false},
+        value: {type: 'integer', isEnum: false, isArray: false},
       },
     };
 
@@ -315,6 +315,7 @@ describe('checkSchemasAreCompatible', () => {
       serverColumns[columnName] = {
         type: pgType,
         isEnum: false,
+        isArray: false,
       };
     });
 
@@ -337,6 +338,7 @@ describe('checkSchemasAreCompatible', () => {
     serverColumns[enumColName] = {
       type: 'test_enum',
       isEnum: true,
+      isArray: false,
     };
 
     // Add enum error
@@ -370,6 +372,7 @@ describe('checkSchemasAreCompatible', () => {
       serverColumns[columnName] = {
         type: pgTypeWithArg,
         isEnum: false,
+        isArray: false,
       };
 
       expectedErrors.push({
@@ -398,6 +401,7 @@ describe('checkSchemasAreCompatible', () => {
       serverColumns[columnName] = {
         type: pgTypeWithArg,
         isEnum: false,
+        isArray: false,
       };
 
       expectedErrors.push({

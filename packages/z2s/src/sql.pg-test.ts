@@ -1,9 +1,9 @@
-import {testDBs} from '../../zero-cache/src/test/db.ts';
-import {beforeAll, describe, expect, test} from 'vitest';
-import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import type {JSONValue} from 'postgres';
-import {formatPgInternalConvert, sqlConvertColumnArg, sql} from './sql.ts';
 import type {SQLQuery} from '@databases/sql';
+import type {JSONValue} from 'postgres';
+import {beforeAll, describe, expect, test} from 'vitest';
+import {testDBs} from '../../zero-cache/src/test/db.ts';
+import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import {formatPgInternalConvert, sql, sqlConvertColumnArg} from './sql.ts';
 
 const DB_NAME = 'sql-test';
 
@@ -122,6 +122,7 @@ function sqlConvertArg(
 ): SQLQuery {
   return sqlConvertColumnArg(
     {
+      isArray: false,
       isEnum: false,
       type,
     },

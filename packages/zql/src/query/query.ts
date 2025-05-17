@@ -5,6 +5,7 @@ import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema
 import type {
   LastInTuple,
   SchemaValueToTSType,
+  SchemaValueWithCustomType,
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
@@ -13,12 +14,21 @@ import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 type Selector<E extends TableSchema> = keyof E['columns'];
-export type NoJsonSelector<T extends TableSchema> = Exclude<
+export type NoCompoundTypeSelector<T extends TableSchema> = Exclude<
   Selector<T>,
-  JsonSelectors<T>
+  JsonSelectors<T> | ArraySelectors<T>
 >;
+
 type JsonSelectors<E extends TableSchema> = {
   [K in keyof E['columns']]: E['columns'][K] extends {type: 'json'} ? K : never;
+}[keyof E['columns']];
+
+type ArraySelectors<E extends TableSchema> = {
+  [K in keyof E['columns']]: E['columns'][K] extends SchemaValueWithCustomType<
+    any[]
+  >
+    ? K
+    : never;
 }[keyof E['columns']];
 
 export type GetFilterType<
@@ -227,7 +237,7 @@ export interface Query<
    * ```
    */
   where<
-    TSelector extends NoJsonSelector<PullTableSchema<TTable, TSchema>>,
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
     TOperator extends SimpleOperator,
   >(
     field: TSelector,
@@ -252,7 +262,9 @@ export interface Query<
    *  .where('age', 18)
    * ```
    */
-  where<TSelector extends NoJsonSelector<PullTableSchema<TTable, TSchema>>>(
+  where<
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
+  >(
     field: TSelector,
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
@@ -348,7 +360,7 @@ export interface Query<
    * needed if you want to access to lower level APIs of the view.
    *
    * @param ttl Time To Live. This is the amount of time to keep the rows
-   *            associated with this query after {@linkcode TypedView.destroy}
+   *            associated with this query after `TypedView.destroy`
    *            has been called.
    */
   materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;

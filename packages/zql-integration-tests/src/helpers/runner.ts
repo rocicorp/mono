@@ -1,7 +1,15 @@
+import {bench, run, summary} from 'mitata';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import {afterAll, expect} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import {wrapIterable} from '../../../shared/src/iterables.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
 import {compile, extractZqlResult} from '../../../z2s/src/compiler.ts';
 import type {ServerSchema} from '../../../z2s/src/schema.ts';
 import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
@@ -14,7 +22,18 @@ import {getServerSchema} from '../../../zero-pg/src/schema.ts';
 import {Transaction} from '../../../zero-pg/src/test/util.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  clientToServer,
+  type NameMapper,
+} from '../../../zero-schema/src/name-mapper.ts';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import type {Change} from '../../../zql/src/ivm/change.ts';
+import type {Node} from '../../../zql/src/ivm/data.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
+import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
+import type {SourceChange} from '../../../zql/src/ivm/source.ts';
+import type {Format} from '../../../zql/src/ivm/view.ts';
 import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
 import {
   ast,
@@ -30,24 +49,6 @@ import {
   newQueryDelegate,
 } from '../../../zqlite/src/test/source-factory.ts';
 import '../helpers/comparePg.ts';
-import {wrapIterable} from '../../../shared/src/iterables.ts';
-import type {Input} from '../../../zql/src/ivm/operator.ts';
-import type {Format} from '../../../zql/src/ivm/view.ts';
-import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
-import type {Node} from '../../../zql/src/ivm/data.ts';
-import type {Change} from '../../../zql/src/ivm/change.ts';
-import {must} from '../../../shared/src/must.ts';
-import {
-  clientToServer,
-  type NameMapper,
-} from '../../../zero-schema/src/name-mapper.ts';
-import type {Writable} from '../../../shared/src/writable.ts';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import os from 'node:os';
-import path from 'node:path';
-import fs from 'node:fs/promises';
-import type {SourceChange} from '../../../zql/src/ivm/source.ts';
-import {run, bench, summary} from 'mitata';
 
 const lc = createSilentLogContext();
 
@@ -1001,6 +1002,8 @@ function assignRandomValues(schema: TableSchema, row: Row): Row {
       case 'null':
         newRow[col] = null;
         break;
+      default:
+        unreachable(colSchema);
     }
   }
   return newRow;

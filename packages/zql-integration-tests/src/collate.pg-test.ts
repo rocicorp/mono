@@ -68,10 +68,10 @@ type Schema = typeof schema;
 
 const serverSchema: ServerSchema = {
   item: {
-    id: {type: 'text', isEnum: false},
-    name: {type: 'text', isEnum: false},
-    uuid: {type: 'uuid', isEnum: false},
-    size: {type: 'size', isEnum: true},
+    id: {type: 'text', isEnum: false, isArray: false},
+    name: {type: 'text', isEnum: false, isArray: false},
+    uuid: {type: 'uuid', isEnum: false, isArray: false},
+    size: {type: 'size', isEnum: true, isArray: false},
   },
 } as const;
 

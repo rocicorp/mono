@@ -924,6 +924,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'varchar',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 1,
             },
             count: {
@@ -931,6 +932,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'int8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 2,
             },
             bool: {
@@ -938,6 +940,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'bool',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 3,
             },
             serial: {
@@ -945,6 +948,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'int4|NOT_NULL',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 4,
             },
             ['_0_version']: {
@@ -952,6 +956,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 5,
             },
           },
@@ -1010,6 +1015,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'INT8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 1,
             },
             ['_0_version']: {
@@ -1017,6 +1023,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 2,
             },
           },
@@ -1123,6 +1130,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'INT8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 1,
             },
             ['_0_version']: {
@@ -1130,6 +1138,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 2,
             },
             newInt: {
@@ -1137,6 +1146,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'int8',
               dflt: '123',
               notNull: false,
+              elemPgTypeClass: null,
               pos: 3,
             },
             newBool: {
@@ -1144,6 +1154,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'bool',
               dflt: '1',
               notNull: false,
+              elemPgTypeClass: null,
               pos: 4,
             },
             newJSON: {
@@ -1151,6 +1162,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'json',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 5,
             },
           },
@@ -1204,6 +1216,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'INT8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 1,
             },
             ['_0_version']: {
@@ -1211,6 +1224,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 2,
             },
           },
@@ -1272,6 +1286,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'INT8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 1,
             },
             newName: {
@@ -1279,6 +1294,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 2,
             },
             ['_0_version']: {
@@ -1286,6 +1302,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 3,
             },
           },
@@ -1354,6 +1371,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'INT8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 1,
             },
             nolz: {
@@ -1361,6 +1379,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT|NOT_NULL',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 3,
             },
             ['_0_version']: {
@@ -1368,6 +1387,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 2,
             },
           },
@@ -1439,6 +1459,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'INT8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 1,
             },
             nolz: {
@@ -1446,6 +1467,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT|NOT_NULL',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 3,
             },
             ['_0_version']: {
@@ -1453,6 +1475,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 2,
             },
           },
@@ -1522,6 +1545,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'INT8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 1,
             },
             newName: {
@@ -1529,6 +1553,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 2,
             },
             ['_0_version']: {
@@ -1536,6 +1561,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 3,
             },
           },
@@ -1610,6 +1636,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'INT8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 1,
             },
             num: {
@@ -1617,6 +1644,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'INT8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 3,
             },
             ['_0_version']: {
@@ -1624,6 +1652,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 2,
             },
           },
@@ -1694,6 +1723,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'INT8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 1,
             },
             num: {
@@ -1701,6 +1731,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'INT8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 3,
             },
             ['_0_version']: {
@@ -1708,6 +1739,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 2,
             },
           },
@@ -1788,6 +1820,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'INT8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 1,
             },
             number: {
@@ -1795,6 +1828,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'INT8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 3,
             },
             ['_0_version']: {
@@ -1802,6 +1836,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 2,
             },
           },
@@ -1985,6 +2020,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'int8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 1,
             },
             index: {
@@ -1992,6 +2028,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'int8',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 3,
             },
             ['_0_version']: {
@@ -1999,6 +2036,7 @@ describe('replicator/incremental-sync', () => {
               dataType: 'TEXT',
               dflt: null,
               notNull: false,
+              elemPgTypeClass: null,
               pos: 2,
             },
           },
