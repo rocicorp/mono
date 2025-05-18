@@ -179,8 +179,17 @@ export function pgClient(
     }
   };
   const url = new URL(connectionURI);
-  const ssl =
+  const sslFlag =
     url.searchParams.get('ssl') ?? url.searchParams.get('sslmode') ?? 'prefer';
+
+  let ssl: boolean | 'prefer' | {rejectUnauthorized: boolean};
+  if (sslFlag === 'disable' || sslFlag === 'false') {
+    ssl = false;
+  } else if (sslFlag === 'no-verify') {
+    ssl = {rejectUnauthorized: false};
+  } else {
+    ssl = sslFlag as 'prefer';
+  }
 
   // Set connections to expire between 5 and 10 minutes to free up state on PG.
   const maxLifetimeSeconds = randInt(5 * 60, 10 * 60);
@@ -188,7 +197,7 @@ export function pgClient(
     ...postgresTypeConfig(jsonAsString),
     onnotice,
     ['max_lifetime']: maxLifetimeSeconds,
-    ssl: ssl === 'disable' || ssl === 'false' ? false : (ssl as 'prefer'),
+    ssl,
     ...options,
   });
 }
