@@ -103,6 +103,14 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migrateV9ToV10: Migration = {
+    migrateSchema: async (_, tx) => {
+      await tx`ALTER TABLE ${tx(schema)}.queries ADD "queryName" TEXT`;
+      await tx`ALTER TABLE ${tx(schema)}.queries ADD "queryArgs" JSONB`;
+      await tx`ALTER TABLE ${tx(schema)}.queries ALTER COLUMN "clientAST" DROP NOT NULL`;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -114,6 +122,10 @@ export async function initViewSyncerSchema(
     7: migrateV6ToV7,
     8: migrateV7ToV8,
     9: migrateV8ToV9,
+    // v10 adds queryName and queryArgs to the queries table to support
+    // custom queries. clientAST is now optional to support migrating
+    // off client queries.
+    10: migrateV9ToV10,
   };
 
   await runSchemaMigrations(
