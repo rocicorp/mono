@@ -108,10 +108,10 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const [issue, issueResult] = useQuery(q, CACHE_AWHILE);
   useEffect(() => {
-    if (issue) {
+    if (issue || issueResult.type === 'complete') {
       onReady();
     }
-  }, [issue, onReady]);
+  }, [issue, onReady, issueResult.type]);
 
   const login = useLogin();
 
