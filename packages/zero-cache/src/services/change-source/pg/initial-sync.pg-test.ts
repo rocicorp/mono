@@ -1,3 +1,4 @@
+import {nanoid} from 'nanoid/non-secure';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
@@ -1694,6 +1695,165 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         ],
       },
     },
+    {
+      name: 'multiple copy commands per copy worker',
+      setupUpstreamQuery: Array.from({length: 10}, (_, i) =>
+        [
+          // This is a carefully crafted test that hits a bug in Postgres in which
+          // the database stops responding to commands after a certain type/sequence
+          // of COPY streams.
+          //
+          // The following conditions appear to be necessary to trigger the bug:
+          // - Sufficient table data streamed from the COPY (hence the 400 rows and `b` column)
+          // - A randomly ordered primary key column (the `a` column)
+          // - More tables than copy workers, to exercise post-COPY commands (hence the 10 tables).
+          //
+          // A failure manifests as a "Test timed out" error as Postgres becomes unresponsive.
+          `CREATE TABLE t${i} (a TEXT PRIMARY KEY, b TEXT, val INT);`,
+          ...Array.from(
+            {length: 400},
+            (_, r) =>
+              `INSERT INTO t${i} (a, b, val) VALUES ('${nanoid()}', '0000000000000000', ${r});`,
+          ),
+        ].join('\n'),
+      ).join('\n'),
+      published: {
+        [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
+        ...Object.fromEntries(
+          Array.from({length: 10}, (_, i) => [
+            `public.t${i}`,
+            {
+              columns: {
+                a: {
+                  pos: 1,
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  notNull: true,
+                  dflt: null,
+                },
+                b: {
+                  pos: 2,
+                  characterMaximumLength: null,
+                  dataType: 'text',
+                  typeOID: 25,
+                  notNull: false,
+                  dflt: null,
+                },
+                val: {
+                  pos: 3,
+                  characterMaximumLength: null,
+                  dataType: 'int4',
+                  typeOID: 23,
+                  notNull: false,
+                  dflt: null,
+                },
+              },
+              oid: expect.any(Number),
+              name: `t${i}`,
+              primaryKey: ['a'],
+              schema: 'public',
+              publications: {
+                [`_${APP_ID}_public_${SHARD_NUM}`]: {rowFilter: null},
+              },
+            },
+          ]),
+        ),
+      },
+      replicatedSchema: {
+        [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        ...Object.fromEntries(
+          Array.from({length: 10}, (_, i) => [
+            `t${i}`,
+            {
+              columns: {
+                a: {
+                  pos: 1,
+                  characterMaximumLength: null,
+                  dataType: 'text|NOT_NULL',
+                  notNull: false,
+                  dflt: null,
+                },
+                b: {
+                  pos: 2,
+                  characterMaximumLength: null,
+                  dataType: 'TEXT',
+                  notNull: false,
+                  dflt: null,
+                },
+                val: {
+                  pos: 3,
+                  characterMaximumLength: null,
+                  dataType: 'int4',
+                  notNull: false,
+                  dflt: null,
+                },
+                ['_0_version']: {
+                  pos: 4,
+                  characterMaximumLength: null,
+                  dataType: 'TEXT',
+                  notNull: false,
+                  dflt: null,
+                },
+              },
+              name: `t${i}`,
+            },
+          ]),
+        ),
+      },
+      replicatedIndexes: [
+        {
+          columns: {lock: 'ASC'},
+          name: 'permissions_pkey',
+          schema: APP_ID,
+          tableName: 'permissions',
+          unique: true,
+        },
+        {
+          columns: {lock: 'ASC'},
+          name: 'schemaVersions_pkey',
+          schema: APP_ID,
+          tableName: 'schemaVersions',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+          },
+          name: 'clients_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'clients',
+          unique: true,
+        },
+        ...Array.from(
+          {length: 10},
+          (_, i) =>
+            ({
+              columns: {a: 'ASC'},
+              name: `t${i}_pkey`,
+              schema: 'public',
+              tableName: `t${i}`,
+              unique: true,
+            }) as const,
+        ),
+      ],
+      resultingPublications: [
+        `_${APP_ID}_metadata_${SHARD_NUM}`,
+        `_${APP_ID}_public_${SHARD_NUM}`,
+      ],
+      replicatedData: Object.fromEntries(
+        Array.from({length: 10}, (_, i) => [
+          `t${i}`,
+          Array.from({length: 400}, (_, i) => ({
+            b: '0000000000000000',
+            val: BigInt(i),
+          })),
+        ]),
+      ),
+    },
   ];
 
   let upstream: PostgresDB;
@@ -1725,7 +1885,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           },
           replica,
           getConnectionURI(upstream),
-          {tableCopyWorkers: 5, rowBatchSize: 10000},
+          {tableCopyWorkers: 3, rowBatchSize: 10000},
         );
 
         const config = await upstream.unsafe(
