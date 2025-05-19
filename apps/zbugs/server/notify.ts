@@ -91,7 +91,7 @@ export async function notify(
       };
       for (const recipient of recipients) {
         postCommitTasks.push(async () => {
-          await sendEmail({tx, email: recipient, ...payload});
+          await sendEmail({tx, email: recipient, ...payload, issue});
         });
       }
       postCommitTasks.push(() => postToDiscord(payload));
@@ -113,7 +113,7 @@ export async function notify(
         };
         for (const recipient of recipients) {
           postCommitTasks.push(async () => {
-            await sendEmail({tx, email: recipient, ...payload});
+            await sendEmail({tx, email: recipient, ...payload, issue});
           });
         }
         postCommitTasks.push(() => postToDiscord(payload));
@@ -141,6 +141,12 @@ export async function notify(
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
       };
 
+      for (const recipient of recipients) {
+        postCommitTasks.push(async () => {
+          await sendEmail({tx, email: recipient, ...payload, issue});
+        });
+      }
+
       postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
@@ -157,6 +163,12 @@ export async function notify(
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
       };
 
+      for (const recipient of recipients) {
+        postCommitTasks.push(async () => {
+          await sendEmail({tx, email: recipient, ...payload, issue});
+        });
+      }
+
       postCommitTasks.push(() => postToDiscord(payload));
       break;
     }
@@ -172,7 +184,7 @@ export async function notify(
 
       for (const recipient of recipients) {
         postCommitTasks.push(async () => {
-          await sendEmail({tx, email: recipient, ...payload});
+          await sendEmail({tx, email: recipient, ...payload, issue});
         });
       }
       postCommitTasks.push(() => postToDiscord(payload));
@@ -188,6 +200,12 @@ export async function notify(
         message: [issue.title, clip(comment)].join('\n'),
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}#comment-${commentID}`,
       };
+
+      for (const recipient of recipients) {
+        postCommitTasks.push(async () => {
+          await sendEmail({tx, email: recipient, ...payload, issue});
+        });
+      }
 
       postCommitTasks.push(() => postToDiscord(payload));
       break;
