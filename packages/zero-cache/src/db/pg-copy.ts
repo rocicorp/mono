@@ -1,11 +1,15 @@
 import {Transform} from 'node:stream';
 import {assert, assertArray} from '../../../shared/src/asserts.ts';
+import type {JSONValue} from '../types/bigint-json.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import {getTypeParsers, type TypeParser} from './pg-type-parser.ts';
 
 /**
  * A stream Transform that parses a Postgres `COPY ... TO` text stream
  * into arrays of string / null values.
+ *
+ * The outputs (i.e. arrays of `string|null`s) are not referenced by the
+ * transform, so the next step in the pipeline is free to modify it directly.
  */
 export class TextTransform extends Transform {
   #currRow: (string | null)[] = [];
@@ -99,6 +103,11 @@ const ESCAPED_CHARACTERS: Record<number, string | undefined> = {
   0x76: '\v',
 } as const;
 
+export type RowTransformOutput = {
+  values: JSONValue[];
+  size: number;
+};
+
 /**
  * A stream Transform that transforms the array of strings outputted by
  * the {@link TextTransform} and parses them to their Javascript values
@@ -133,10 +142,18 @@ export class RowTransform extends Transform {
         `Expected row to have ${this.#columnParsers.length} values but found ${row.length}`,
       );
 
-      const parsed = row.map((val, pos) =>
-        val === null ? null : this.#columnParsers[pos](val),
-      );
-      this.push(parsed);
+      // Optimization: Reuse the array for the output to reduce array allocations.
+      const values = row as JSONValue[];
+      let size = 0;
+      for (let i = 0; i < row.length; i++) {
+        const val = row[i];
+        // Give every column a min size of 4 bytes, even if null or empty.
+        size += 4 + (val?.length ?? 0);
+        values[i] =
+          val === null ? null : (this.#columnParsers[i](val) as JSONValue);
+      }
+
+      this.push({values, size} satisfies RowTransformOutput);
       callback();
     } catch (e) {
       callback(e instanceof Error ? e : new Error(String(e)));
