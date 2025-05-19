@@ -142,6 +142,7 @@ function mapLiteDataTypeToZqlValueType(dataType: LiteTypeString): ValueType {
 // Note: Includes the "TEXT" substring for SQLite type affinity
 const TEXT_ENUM_ATTRIBUTE = '|TEXT_ENUM';
 const NOT_NULL_ATTRIBUTE = '|NOT_NULL';
+const TEXT_ARRAY_ATTRIBUTE = '|TEXT_ARRAY';
 
 /**
  * The `LiteTypeString` utilizes SQLite's loose type system to encode
@@ -154,6 +155,7 @@ const NOT_NULL_ATTRIBUTE = '|NOT_NULL';
  * The current list of attributes are:
  * * `|NOT_NULL` to indicate that the upstream column does not allow nulls
  * * `|TEXT_ENUM` to indicate an enum that should be treated as a string
+ * * `|TEXT_ARRAY` to indicate an array which is stored as a JSON string
  *
  * Examples:
  * * `int8`
@@ -162,6 +164,8 @@ const NOT_NULL_ATTRIBUTE = '|NOT_NULL';
  * * `timestamp with time zone|NOT_NULL`
  * * `nomz|TEXT_ENUM`
  * * `nomz|NOT_NULL|TEXT_ENUM`
+ * * `int8|TEXT_ARRAY`
+ * * `nomz|TEXT_ARRAY|TEXT_ENUM`
  */
 export type LiteTypeString = string;
 
@@ -172,6 +176,7 @@ export function liteTypeString(
   upstreamDataType: string,
   notNull: boolean | null | undefined,
   textEnum: boolean,
+  textArray: boolean,
 ): LiteTypeString {
   let typeString = upstreamDataType;
   if (notNull) {
@@ -179,6 +184,9 @@ export function liteTypeString(
   }
   if (textEnum) {
     typeString += TEXT_ENUM_ATTRIBUTE;
+  }
+  if (textArray) {
+    typeString += TEXT_ARRAY_ATTRIBUTE;
   }
   return typeString;
 }
@@ -204,5 +212,14 @@ export function dataTypeToZqlValueType(
   return upstreamDataTypeToZqlValueType(
     upstreamDataType(liteTypeString).toLowerCase(),
     liteTypeString.includes(TEXT_ENUM_ATTRIBUTE),
+    liteTypeString.includes(TEXT_ARRAY_ATTRIBUTE),
   );
+}
+
+export function isEnum(liteTypeString: LiteTypeString) {
+  return liteTypeString.includes(TEXT_ENUM_ATTRIBUTE);
+}
+
+export function isArray(liteTypeString: LiteTypeString) {
+  return liteTypeString.includes(TEXT_ARRAY_ATTRIBUTE);
 }

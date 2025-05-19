@@ -6,9 +6,12 @@ import {primaryKeySchema} from '../../../zero-protocol/src/primary-key.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {
   dataTypeToZqlValueType,
+  isArray,
+  isEnum,
   mapLiteDataTypeToZqlSchemaValue,
   nullableUpstream,
 } from '../types/lite.ts';
+import * as PostgresTypeClass from './postgres-type-class-enum.ts';
 import type {
   LiteAndZqlSpec,
   LiteIndexSpec,
@@ -60,12 +63,19 @@ export function listTables(db: Database): LiteTableSpec[] {
       tables.push(table);
     }
 
+    const elemPgTypeClass = isArray(col.type)
+      ? isEnum(col.type)
+        ? PostgresTypeClass.Enum
+        : PostgresTypeClass.Base
+      : null;
+
     table.columns[col.name] = {
       pos: Object.keys(table.columns).length + 1,
       dataType: col.type,
       characterMaximumLength: null,
       notNull: col.notNull !== 0,
       dflt: col.dflt,
+      elemPgTypeClass,
     };
     if (col.keyPos) {
       table.primaryKey ??= [];

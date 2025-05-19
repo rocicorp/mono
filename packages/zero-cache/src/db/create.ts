@@ -7,17 +7,20 @@ import type {
 } from './specs.ts';
 
 export function columnDef(spec: ColumnSpec) {
-  const parts = [id(spec.dataType)];
+  let def = id(spec.dataType);
   if (spec.characterMaximumLength) {
-    parts.push(`(${spec.characterMaximumLength})`);
+    def += `(${spec.characterMaximumLength})`;
+  }
+  if (spec.elemPgTypeClass !== null) {
+    def += '[]';
   }
   if (spec.notNull) {
-    parts.push(' NOT NULL');
+    def += ' NOT NULL';
   }
   if (spec.dflt) {
-    parts.push(` DEFAULT ${spec.dflt}`);
+    def += ` DEFAULT ${spec.dflt}`;
   }
-  return parts.join('');
+  return def;
 }
 
 /**

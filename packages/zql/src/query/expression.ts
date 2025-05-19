@@ -12,7 +12,7 @@ import type {
   AvailableRelationships,
   DestTableName,
   GetFilterType,
-  NoJsonSelector,
+  NoCompoundTypeSelector,
   PullTableSchema,
   Query,
 } from './query.ts';
@@ -68,7 +68,7 @@ export class ExpressionBuilder<
   }
 
   cmp<
-    TSelector extends NoJsonSelector<PullTableSchema<TTable, TSchema>>,
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
     TOperator extends SimpleOperator,
   >(
     field: TSelector,
@@ -77,7 +77,9 @@ export class ExpressionBuilder<
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
       | ParameterReference,
   ): Condition;
-  cmp<TSelector extends NoJsonSelector<PullTableSchema<TTable, TSchema>>>(
+  cmp<
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
+  >(
     field: TSelector,
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>

@@ -1,18 +1,14 @@
 import type {SQLQuery} from '@databases/sql';
+import {last, zip} from '../../shared/src/arrays.ts';
+import {assert, unreachable} from '../../shared/src/asserts.ts';
+import {hasOwn} from '../../shared/src/has-own.ts';
+import {type JSONValue} from '../../shared/src/json.ts';
+import {must} from '../../shared/src/must.ts';
 import {
-  sql,
-  sqlConvertColumnArg,
-  sqlConvertPluralLiteralArg,
-  sqlConvertSingularLiteralArg,
-  Z2S_COLLATION,
-  type PluralLiteralType,
-} from './sql.ts';
-import {
-  clientToServer,
-  type NameMapper,
-} from '../../zero-schema/src/name-mapper.ts';
-import type {ServerColumnSchema, ServerSchema} from './schema.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+  parse as parseBigIntJson,
+  type JSONValue as BigIntJSONValue,
+} from '../../zero-cache/src/types/bigint-json.ts';
+import {pgToZqlStringTypeMap} from '../../zero-cache/src/types/pg.ts';
 import type {
   AST,
   Condition,
@@ -24,17 +20,21 @@ import type {
   SimpleCondition,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
-import type {Format} from '../../zql/src/ivm/view.ts';
-import {must} from '../../shared/src/must.ts';
-import {last, zip} from '../../shared/src/arrays.ts';
-import {assert, unreachable} from '../../shared/src/asserts.ts';
-import {type JSONValue} from '../../shared/src/json.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
-  type JSONValue as BigIntJSONValue,
-  parse as parseBigIntJson,
-} from '../../zero-cache/src/types/bigint-json.ts';
-import {hasOwn} from '../../shared/src/has-own.ts';
-import {pgToZqlStringTypeMap} from '../../zero-cache/src/types/pg.ts';
+  clientToServer,
+  type NameMapper,
+} from '../../zero-schema/src/name-mapper.ts';
+import type {Format} from '../../zql/src/ivm/view.ts';
+import type {ServerColumnSchema, ServerSchema} from './schema.ts';
+import {
+  sql,
+  sqlConvertColumnArg,
+  sqlConvertPluralLiteralArg,
+  sqlConvertSingularLiteralArg,
+  Z2S_COLLATION,
+  type PluralLiteralType,
+} from './sql.ts';
 
 type Table = {
   zql: string;
@@ -77,7 +77,7 @@ export function compile(
   };
   return sql`SELECT 
     ${toJSON('root', format?.singular)}::text AS ${ZQL_RESULT_KEY_IDENT}
-    FROM (${select(spec, ast, format)})${sql.ident('root')}`;
+    FROM (${select(spec, ast, format)}) ${sql.ident('root')}`;
 }
 
 function select(
@@ -602,6 +602,10 @@ function selectIdent(server: ServerSpec, column: QualifiedColumn): SQLQuery {
       serverType === 'timestamptz' ||
       serverType === 'timestamp with time zone')
   ) {
+    if (serverColumnSchema.isArray) {
+      // Map EXTRACT(EPOCH FROM ...) * 1000 over array elements
+      return sql`ARRAY(SELECT EXTRACT(EPOCH FROM unnest(${colIdent(server, column)})) * 1000) as ${sql.ident(column.zql)}`;
+    }
     return sql`EXTRACT(EPOCH FROM ${colIdent(server, column)}) * 1000 as ${sql.ident(column.zql)}`;
   }
   return sql`${colIdent(server, column)} as ${sql.ident(column.zql)}`;

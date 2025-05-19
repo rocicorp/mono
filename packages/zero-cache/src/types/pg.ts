@@ -202,14 +202,14 @@ export function pgClient(
   });
 }
 
-export const typeNameByOID: Record<number, string> = Object.fromEntries(
-  Object.entries(OID).map(([name, oid]) => [
-    oid,
-    name.startsWith('_') ? `${name.substring(1)}[]` : name,
-  ]),
+export const typeNameByOID: Record<number, string> = Object.freeze(
+  Object.fromEntries(
+    Object.entries(OID).map(([name, oid]) => [
+      oid,
+      name.startsWith('_') ? `${name.substring(1)}[]` : name,
+    ]),
+  ),
 );
-
-Object.freeze(typeNameByOID);
 
 export const pgToZqlNumericTypeMap = Object.freeze({
   'smallint': 'number',
@@ -279,12 +279,20 @@ export const pgToZqlTypeMap = Object.freeze({
 export function dataTypeToZqlValueType(
   pgType: string,
   isEnum: boolean,
+  isArray: boolean,
 ): ValueType | undefined {
+  // We treat pg arrays as JSON values.
+  if (isArray) {
+    return 'json';
+  }
+
   const valueType = (pgToZqlTypeMap as Record<string, ValueType>)[
     formatTypeForLookup(pgType)
   ];
-  if (valueType === undefined && isEnum) {
-    return 'string';
+  if (valueType === undefined) {
+    if (isEnum) {
+      return 'string';
+    }
   }
   return valueType;
 }
