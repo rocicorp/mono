@@ -257,12 +257,12 @@ export class MemorySource implements Source {
     );
     // The primary key constraint will be more limiting than the constraint
     // so swap out to that if it exists.
-    const constraint = pkConstraint ?? req.constraint;
+    const fetchOrPkConstraint = pkConstraint ?? req.constraint;
 
     // If there is a constraint, we need an index sorted by it first.
     const indexSort: OrderPart[] = [];
-    if (constraint) {
-      for (const key of Object.keys(constraint)) {
+    if (fetchOrPkConstraint) {
+      for (const key of Object.keys(fetchOrPkConstraint)) {
         indexSort.push([key, 'asc']);
       }
     }
@@ -272,8 +272,8 @@ export class MemorySource implements Source {
     // need the index sorted by the requested sort.
     if (
       this.#primaryKey.length > 1 ||
-      !constraint ||
-      !constraintMatchesPrimaryKey(constraint, this.#primaryKey)
+      !fetchOrPkConstraint ||
+      !constraintMatchesPrimaryKey(fetchOrPkConstraint, this.#primaryKey)
     ) {
       indexSort.push(...requestedSort);
     }
@@ -297,11 +297,11 @@ export class MemorySource implements Source {
     // btree library to support this concept.
     let scanStart: RowBound | undefined;
 
-    if (constraint) {
+    if (fetchOrPkConstraint) {
       scanStart = {};
       for (const [key, dir] of indexSort) {
-        if (hasOwn(constraint, key)) {
-          scanStart[key] = constraint[key];
+        if (hasOwn(fetchOrPkConstraint, key)) {
+          scanStart[key] = fetchOrPkConstraint[key];
         } else {
           if (req.reverse) {
             scanStart[key] = dir === 'asc' ? maxValue : minValue;
@@ -318,7 +318,10 @@ export class MemorySource implements Source {
     const withOverlay = generateWithOverlay(
       startAt,
       pkConstraint ? once(rowsIterable) : rowsIterable,
-      constraint,
+      // use `req.constraint` here and not `fetchOrPkConstraint` since `fetchOrPkConstraint` could be the
+      // primary key constraint. The primary key constraint comes from filters and is acting as a filter
+      // rather than as the fetch constraint.
+      req.constraint,
       this.#overlay,
       this.#splitEditOverlay,
       callingConnectionIndex,
@@ -328,7 +331,9 @@ export class MemorySource implements Source {
 
     const withConstraint = generateWithConstraint(
       generateWithStart(withOverlay, req.start, comparator),
-      constraint,
+      // we use `req.constraint` and not `fetchOrPkConstraint` here because we need to
+      // AND the constraint with what could have been the primary key constraint
+      req.constraint,
     );
 
     yield* conn.filters
