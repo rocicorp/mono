@@ -251,27 +251,29 @@ export class MemorySource implements Source {
     const conn = this.#connections[callingConnectionIndex];
     const {sort: requestedSort} = conn;
 
-    // If there is a constraint, we need an index sorted by it first.
-    const indexSort: OrderPart[] = [];
-    if (req.constraint) {
-      for (const key of Object.keys(req.constraint)) {
-        indexSort.push([key, 'asc']);
-      }
-    }
-
     const pkConstraint = primaryKeyConstraintFromFilters(
       conn.filters?.condition,
       this.#primaryKey,
     );
+    // The primary key constraint will be more limiting than the constraint
+    // so swap out to that if it exists.
+    const constraint = pkConstraint ?? req.constraint;
+
+    // If there is a constraint, we need an index sorted by it first.
+    const indexSort: OrderPart[] = [];
+    if (constraint) {
+      for (const key of Object.keys(constraint)) {
+        indexSort.push([key, 'asc']);
+      }
+    }
 
     // For the special case of constraining by PK, we don't need to worry about
     // any requested sort since there can only be one result. Otherwise we also
     // need the index sorted by the requested sort.
     if (
       this.#primaryKey.length > 1 ||
-      !req.constraint ||
-      (!constraintMatchesPrimaryKey(req.constraint, this.#primaryKey) &&
-        !pkConstraint)
+      !constraint ||
+      !constraintMatchesPrimaryKey(constraint, this.#primaryKey)
     ) {
       indexSort.push(...requestedSort);
     }
@@ -294,9 +296,7 @@ export class MemorySource implements Source {
     // comparator accomplishes this. The right thing is probably to teach the
     // btree library to support this concept.
     let scanStart: RowBound | undefined;
-    // The primary key constraint will be more limiting than the constraint
-    // so swap out to that if it exists.
-    const constraint = pkConstraint ?? req.constraint;
+
     if (constraint) {
       scanStart = {};
       for (const [key, dir] of indexSort) {
@@ -318,7 +318,7 @@ export class MemorySource implements Source {
     const withOverlay = generateWithOverlay(
       startAt,
       pkConstraint ? once(rowsIterable) : rowsIterable,
-      req.constraint,
+      constraint,
       this.#overlay,
       this.#splitEditOverlay,
       callingConnectionIndex,
@@ -328,7 +328,7 @@ export class MemorySource implements Source {
 
     const withConstraint = generateWithConstraint(
       generateWithStart(withOverlay, req.start, comparator),
-      req.constraint,
+      constraint,
     );
 
     yield* conn.filters

@@ -164,6 +164,18 @@ const invoiceLineRelationships = relationships(invoiceLine, ({one}) => ({
     destField: ['id'],
     destSchema: invoice,
   }),
+  customer: one(
+    {
+      sourceField: ['invoiceId'],
+      destField: ['id'],
+      destSchema: invoice,
+    },
+    {
+      sourceField: ['customerId'],
+      destField: ['id'],
+      destSchema: customer,
+    },
+  ),
 }));
 
 const customerRelationships = relationships(customer, ({one}) => ({

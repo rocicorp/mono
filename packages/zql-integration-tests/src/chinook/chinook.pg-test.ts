@@ -200,6 +200,69 @@ test.each(
             ])
             .limit(10),
       },
+      {
+        name: 'Related with where',
+        createQuery: q =>
+          q.playlist
+            .where('id', 17)
+            .related('tracks', t => t.where('id', 1).one()),
+        manualVerification: [
+          {
+            id: 17,
+            name: 'Heavy Metal Classic',
+            tracks: {
+              albumId: 1,
+              bytes: 11170334,
+              composer: 'Angus Young, Malcolm Young, Brian Johnson',
+              genreId: 1,
+              id: 1,
+              mediaTypeId: 1,
+              milliseconds: 343719,
+              name: 'For Those About To Rock (We Salute You)',
+              unitPrice: 0.99,
+            },
+          },
+        ],
+      },
+      {
+        name: 'Permission check (via exists) against parent row',
+        createQuery: q =>
+          q.invoice
+            .where('id', 1)
+            .where('customerId', 2)
+            .related('lines', t =>
+              t.whereExists('invoice', eb => eb.where('customerId', '=', 2)),
+            ),
+        manualVerification: [
+          {
+            billingAddress: 'Theodor-Heuss-Straße 34',
+            billingCity: 'Stuttgart',
+            billingCountry: 'Germany',
+            billingPostalCode: '70174',
+            billingState: null,
+            customerId: 2,
+            id: 1,
+            invoiceDate: 1609459200000,
+            lines: [
+              {
+                id: 1,
+                invoiceId: 1,
+                quantity: 1,
+                trackId: 2,
+                unitPrice: 0.99,
+              },
+              {
+                id: 2,
+                invoiceId: 1,
+                quantity: 1,
+                trackId: 4,
+                unitPrice: 0.99,
+              },
+            ],
+            total: 1.98,
+          },
+        ],
+      },
     ],
     // primary key compare for each table
     (() =>

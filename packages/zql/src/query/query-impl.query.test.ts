@@ -903,6 +903,243 @@ test('run', async () => {
   `);
 });
 
+// These tests would normally go into `chinook.pg-test` but for some reason
+// these tests passed when run in the chinook harness. Need to figure that out next,
+// especially given chinook flexes the push (add/remove/edit) paths.
+describe('pk lookup optimization', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  addData(queryDelegate);
+
+  test('pk lookup', async () => {
+    expect(
+      await newQuery(queryDelegate, schema, 'issue').where('id', '=', '0001'),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "closed": false,
+          "createdAt": 1,
+          "description": "description 1",
+          "id": "0001",
+          "ownerId": "0001",
+          "title": "issue 1",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+    expect(
+      await newQuery(queryDelegate, schema, 'user').where('id', '=', '0001'),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "0001",
+          "metadata": {
+            "login": "alicegh",
+            "registrar": "github",
+          },
+          "name": "Alice",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+  });
+
+  test('pk lookup with sort applied for whatever reason', async () => {
+    expect(
+      await newQuery(queryDelegate, schema, 'issue')
+        .where('id', '=', '0001')
+        .orderBy('id', 'desc'),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "closed": false,
+          "createdAt": 1,
+          "description": "description 1",
+          "id": "0001",
+          "ownerId": "0001",
+          "title": "issue 1",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+
+    expect(
+      await newQuery(queryDelegate, schema, 'user')
+        .where('id', '=', '0001')
+        .orderBy('name', 'desc'),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "0001",
+          "metadata": {
+            "login": "alicegh",
+            "registrar": "github",
+          },
+          "name": "Alice",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+  });
+
+  test('related with pk constraint', async () => {
+    expect(
+      await newQuery(queryDelegate, schema, 'issue')
+        .where('id', '=', '0001')
+        .related('comments', q => q.where('id', '=', '0001')),
+    ).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "comments": [
+          {
+            "authorId": "0001",
+            "createdAt": 1,
+            "id": "0001",
+            "issueId": "0001",
+            "text": "comment 1",
+            Symbol(rc): 1,
+          },
+        ],
+        "createdAt": 1,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
+  });
+
+  test('exists with pk constraint', async () => {
+    expect(
+      await newQuery(queryDelegate, schema, 'issue')
+        .where('id', '=', '0001')
+        .whereExists('comments', q => q.where('id', '=', '0001')),
+    ).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "createdAt": 1,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
+  });
+
+  test('junction with pk constraint', async () => {
+    expect(
+      await newQuery(queryDelegate, schema, 'issue')
+        .where('id', '=', '0001')
+        .related('labels', q => q.where('id', '=', '0001')),
+    ).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "createdAt": 1,
+        "description": "description 1",
+        "id": "0001",
+        "labels": [
+          {
+            "id": "0001",
+            "name": "label 1",
+            Symbol(rc): 1,
+          },
+        ],
+        "ownerId": "0001",
+        "title": "issue 1",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
+  });
+
+  test('junction with exists with pk constraint', async () => {
+    expect(
+      await newQuery(queryDelegate, schema, 'issue')
+        .where('id', '=', '0001')
+        .whereExists('labels', q => q.where('id', '=', '0001')),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "closed": false,
+          "createdAt": 1,
+          "description": "description 1",
+          "id": "0001",
+          "ownerId": "0001",
+          "title": "issue 1",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+  });
+
+  test('pk constraints in or branches', async () => {
+    expect(
+      await newQuery(queryDelegate, schema, 'issue').where(({or, exists}) =>
+        or(
+          exists('comments', q => q.where('id', '=', '0001')),
+          exists('labels', q => q.where('id', '=', '0001')),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "closed": false,
+          "createdAt": 1,
+          "description": "description 1",
+          "id": "0001",
+          "ownerId": "0001",
+          "title": "issue 1",
+          Symbol(rc): 1,
+        },
+        {
+          "closed": false,
+          "createdAt": 2,
+          "description": "description 2",
+          "id": "0002",
+          "ownerId": "0002",
+          "title": "issue 2",
+          Symbol(rc): 1,
+        },
+        {
+          "closed": false,
+          "createdAt": 3,
+          "description": "description 3",
+          "id": "0003",
+          "ownerId": null,
+          "title": "issue 3",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+  });
+
+  test('pk exists anded', async () => {
+    expect(
+      await newQuery(queryDelegate, schema, 'issue')
+        .whereExists('comments', q => q.where('id', '=', '0001'))
+        .whereExists('labels', q => q.where('id', '=', '0001')),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "closed": false,
+          "createdAt": 1,
+          "description": "description 1",
+          "id": "0001",
+          "ownerId": "0001",
+          "title": "issue 1",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+  });
+});
+
 test('run with options', async () => {
   const queryDelegate = new QueryDelegateImpl();
   const {issueSource} = addData(queryDelegate);
