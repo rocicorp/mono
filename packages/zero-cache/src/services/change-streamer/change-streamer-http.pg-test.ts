@@ -88,9 +88,10 @@ describe('change-streamer/http', () => {
 
     // Run the server for real instead of using `injectWS()`, as that has a
     // different behavior for ws.close().
-    const server = new ChangeStreamerHttpServer(lc, {port: 0}, parent);
-
-    server.setDelegates(
+    const server = new ChangeStreamerHttpServer(
+      lc,
+      {port: 0},
+      parent,
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       {
         startSnapshotReservation: snapshotFn.mockReturnValue(snapshotStream),
@@ -132,27 +133,19 @@ describe('change-streamer/http', () => {
 
   test('health checks and keepalives', async () => {
     const [parent] = inProcChannel();
-    const server = new ChangeStreamerHttpServer(lc, {port: 0}, parent);
+    const server = new ChangeStreamerHttpServer(
+      lc,
+      {port: 0},
+      parent,
+      {subscribe: vi.fn()},
+      null,
+    );
     const baseURL = await server.start();
 
     let res = await fetch(`${baseURL}/`);
     expect(res.ok).toBe(true);
 
     res = await fetch(`${baseURL}/?foo=bar`);
-    expect(res.ok).toBe(true);
-
-    await expect(() =>
-      fetch(`${baseURL}/keepalive`, {
-        signal: AbortSignal.timeout(10),
-      }),
-    ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[TimeoutError: The operation was aborted due to timeout]`,
-    );
-
-    // Setting the delegate should result in responding to /keepalive
-    server.setDelegates({subscribe: vi.fn()}, null);
-
-    res = await fetch(`${baseURL}/`);
     expect(res.ok).toBe(true);
 
     res = await fetch(`${baseURL}/keepalive`);
