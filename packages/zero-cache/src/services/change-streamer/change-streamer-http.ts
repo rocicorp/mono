@@ -35,10 +35,16 @@ const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
 
 export class ChangeStreamerHttpServer extends HttpService {
   readonly id = 'change-streamer-http-server';
-  #changeStreamer: ChangeStreamer | null = null;
-  #backupMonitor: BackupMonitor | null = null;
+  readonly #changeStreamer: ChangeStreamer;
+  readonly #backupMonitor: BackupMonitor | null;
 
-  constructor(lc: LogContext, opts: Options, parent: Worker) {
+  constructor(
+    lc: LogContext,
+    opts: Options,
+    parent: Worker,
+    changeStreamer: ChangeStreamer,
+    backupMonitor: BackupMonitor | null,
+  ) {
     super('change-streamer-http-server', lc, opts, async fastify => {
       await fastify.register(websocket);
 
@@ -56,34 +62,15 @@ export class ChangeStreamerHttpServer extends HttpService {
         parent,
       );
     });
-  }
 
-  setDelegates(
-    changeStreamer: ChangeStreamer,
-    backupMonitor: BackupMonitor | null,
-  ) {
-    assert(this.#changeStreamer === null, 'delegate already set');
     this.#changeStreamer = changeStreamer;
     this.#backupMonitor = backupMonitor;
-  }
-
-  // Only respond to LB health checks (on "/keepalive") if the delegate is
-  // initialized. Container health checks (on "/") are always acknowledged.
-  protected _respondToKeepalive(): boolean {
-    return this.#changeStreamer !== null;
-  }
-
-  #getChangeStreamer() {
-    return must(
-      this.#changeStreamer,
-      'received request before change-streamer is ready',
-    );
   }
 
   #getBackupMonitor() {
     return must(
       this.#backupMonitor,
-      'received request before change-streamer is ready',
+      'replication-manager is not configured with a ZERO_LITESTREAM_BACKUP_URL',
     );
   }
 
@@ -130,7 +117,7 @@ export class ChangeStreamerHttpServer extends HttpService {
     try {
       const ctx = getSubscriberContext(req);
 
-      const downstream = await this.#getChangeStreamer().subscribe(ctx);
+      const downstream = await this.#changeStreamer.subscribe(ctx);
       if (ctx.initial && ctx.taskID && this.#backupMonitor) {
         // Now that the change-streamer knows about the subscriber and watermark,
         // end the reservation to safely resume scheduling cleanup.

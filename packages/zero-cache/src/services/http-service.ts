@@ -47,23 +47,13 @@ export class HttpService implements Service {
     return true;
   }
 
-  // start() is used in unit tests, or to start the HttpService early,
-  // before the ServiceRunner runs all of the services.
-  //
+  // start() is used in unit tests.
   // run() is the lifecycle method called by the ServiceRunner.
   async start(): Promise<string> {
-    this.#fastify.get('/', (_req, res) => {
-      if (this._respondToHealthCheck()) {
-        return res.send('OK');
-      }
-      return;
-    });
+    this.#fastify.get('/', (_req, res) => res.send('OK'));
     this.#fastify.get('/keepalive', ({headers}, res) => {
-      if (this._respondToKeepalive()) {
-        this.#heartbeatMonitor.onHeartbeat(headers);
-        return res.send('OK');
-      }
-      return;
+      this.#heartbeatMonitor.onHeartbeat(headers);
+      return res.send('OK');
     });
     await this.#init(this.#fastify);
     const address = await this.#fastify.listen({
@@ -75,10 +65,7 @@ export class HttpService implements Service {
   }
 
   async run(): Promise<void> {
-    // Check if start() was already called.
-    if (this.#fastify.addresses().length === 0) {
-      await this.start();
-    }
+    await this.start();
     await this.#state.stopped();
   }
 

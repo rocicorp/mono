@@ -51,24 +51,6 @@ export default async function runWorker(
   });
   void warmupConnections(lc, changeDB, 'change');
 
-  // Start the web server immediately to respond to container health checks
-  // on 4849. This prevents the container from being considered unhealthy if
-  // initial sync takes a long time (the max container grace period is only
-  // 5 minutes), and since the server explicitly advertises readiness via the
-  // Change DB, the container health check is more of a "liveness" signal than
-  // a "serving" signal.
-  //
-  // Load-balancer health checks (on /keepalive), on the other hand, have
-  // an unlimited grace period. In case those are being used, the server
-  // will not respond to /keepalives until the change-streamer is ready to
-  // serve.
-  const changeStreamerWebServer = new ChangeStreamerHttpServer(
-    lc,
-    {port},
-    parent,
-  );
-  void changeStreamerWebServer.start();
-
   const {autoReset} = config;
   const shard = getShardConfig(config);
 
@@ -142,7 +124,13 @@ export default async function runWorker(
         Date.now() - parentStartMs,
       );
 
-  changeStreamerWebServer.setDelegates(changeStreamer, backupMonitor);
+  const changeStreamerWebServer = new ChangeStreamerHttpServer(
+    lc,
+    {port},
+    parent,
+    changeStreamer,
+    backupMonitor,
+  );
 
   parent.send(['ready', {ready: true}]);
 
