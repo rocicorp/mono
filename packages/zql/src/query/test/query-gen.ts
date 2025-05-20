@@ -1,4 +1,4 @@
-import type {Faker} from '@faker-js/faker';
+import {type Faker} from '@faker-js/faker';
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {ast} from '../query-impl.ts';
 import {staticQuery} from '../static-query.ts';
@@ -24,21 +24,36 @@ export function generateQuery(
   return augmentQuery(schema, data, rng, faker, staticQuery(schema, rootTable));
 }
 
+const maxDepth = 10;
 function augmentQuery(
   schema: Schema,
   data: Dataset,
   rng: Rng,
   faker: Faker,
   query: AnyQuery,
+  depth = 0,
+  inExists = false,
 ) {
-  return addLimit(addOrderBy(addWhere(query)));
+  if (depth > maxDepth) {
+    return query;
+  }
+  return addLimit(
+    addOrderBy(
+      addWhere(
+        addExists(
+          // If we are in exists, adding `related` makes no sense.
+          inExists ? query : addRelated(query),
+        ),
+      ),
+    ),
+  );
 
   function addLimit(query: AnyQuery) {
-    if (rng() < 0.5) {
+    if (rng() < 0.2) {
       return query;
     }
 
-    return query.limit(Math.floor(rng() * 10_000));
+    return query.limit(Math.floor(rng() * 200));
   }
 
   function addOrderBy(query: AnyQuery) {
@@ -92,8 +107,62 @@ function augmentQuery(
     return query;
   }
 
-  // addRelated
-  // addExists
+  function addRelated(query: AnyQuery) {
+    // the deeper we go, the less likely we are to add a related table
+    if (rng() * maxDepth < depth / 1.5) {
+      return query;
+    }
+
+    const relationships = Object.keys(schema.relationships[ast(query).table]);
+    const relationshipsToAdd = Math.floor(rng() * 4);
+    if (relationshipsToAdd === 0) {
+      return query;
+    }
+    const shuffledRelationships = shuffle(rng, relationships);
+    const relationshipsToAddNames = shuffledRelationships.slice(
+      0,
+      relationshipsToAdd,
+    );
+    relationshipsToAddNames.forEach(relationshipName => {
+      query = query.related(relationshipName, q =>
+        augmentQuery(schema, data, rng, faker, q, depth + 1, inExists),
+      );
+    });
+
+    return query;
+  }
+
+  function addExists(query: AnyQuery) {
+    // the deeper we go, the less likely we are to add an exists check
+    if (rng() * maxDepth < depth / 1.5) {
+      return query;
+    }
+
+    const relationships = Object.keys(schema.relationships[ast(query).table]);
+    const existsToAdd = Math.floor(rng() * 4);
+    if (existsToAdd === 0) {
+      return query;
+    }
+    const shuffledRelationships = shuffle(rng, relationships);
+    const existsToAddNames = shuffledRelationships.slice(0, existsToAdd);
+    existsToAddNames.forEach(relationshipName => {
+      if (rng() < 0.5) {
+        query = query.where(({not, exists}) =>
+          not(
+            exists(relationshipName, q =>
+              augmentQuery(schema, data, rng, faker, q, depth + 1, true),
+            ),
+          ),
+        );
+      } else {
+        query = query.whereExists(relationshipName, q =>
+          augmentQuery(schema, data, rng, faker, q, depth + 1, true),
+        );
+      }
+    });
+
+    return query;
+  }
 }
 
 const operatorsByType = {
