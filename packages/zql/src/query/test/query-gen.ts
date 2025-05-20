@@ -11,6 +11,8 @@ import {
   type Rng,
 } from './util.ts';
 import {NotImplementedError} from '../../error.ts';
+import type {ServerSchema} from '../../../../z2s/src/schema.ts';
+import {getDataForType} from '../../../../zql-integration-tests/src/helpers/data-gen.ts';
 export type Dataset = {
   [table: string]: Row[];
 };
@@ -20,9 +22,16 @@ export function generateQuery(
   data: Dataset,
   rng: Rng,
   faker: Faker,
+  serverSchema?: ServerSchema | undefined,
 ): AnyQuery {
-  const rootTable = selectRandom(rng, Object.keys(schema.tables));
-  return augmentQuery(schema, data, rng, faker, staticQuery(schema, rootTable));
+  return augmentQuery(
+    schema,
+    data,
+    rng,
+    faker,
+    staticQuery(schema, selectRandom(rng, Object.keys(schema.tables))),
+    serverSchema,
+  );
 }
 
 const maxDepth = 10;
@@ -32,6 +41,7 @@ function augmentQuery(
   rng: Rng,
   faker: Faker,
   query: AnyQuery,
+  serverSchema?: ServerSchema | undefined,
   depth = 0,
   inExists = false,
 ) {
@@ -113,11 +123,30 @@ function augmentQuery(
       if (!operator) {
         continue;
       }
+
+      let detailedType: string | undefined;
+      if (serverSchema) {
+        const tableName = ast(query).table;
+        const serverTable = schema.tables[tableName].serverName ?? tableName;
+        const serverColumn =
+          schema.tables[tableName].columns[columnName].serverName ?? columnName;
+
+        detailedType = serverSchema[serverTable]?.[serverColumn]?.type;
+      }
+
       const value =
         // TODO: all these constants should be tunable.
         rng() > 0.1 && tableData && tableData.length > 0
           ? selectRandom(rng, tableData)[columnName]
-          : randomValueForType(rng, faker, column.type, column.optional);
+          : detailedType
+            ? getDataForType(faker, rng, {
+                optional: !!column.optional,
+                pgType: detailedType,
+                isEnum: false,
+                isPrimaryKey: false,
+                name: columnName,
+              })
+            : randomValueForType(rng, faker, column.type, column.optional);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       query = query.where(columnName as any, operator, value);
     }
@@ -131,7 +160,9 @@ function augmentQuery(
       return query;
     }
 
-    const relationships = Object.keys(schema.relationships[ast(query).table]);
+    const relationships = Object.keys(
+      schema.relationships[ast(query).table] ?? {},
+    );
     const relationshipsToAdd = Math.floor(rng() * 4);
     if (relationshipsToAdd === 0) {
       return query;
@@ -143,7 +174,16 @@ function augmentQuery(
     );
     relationshipsToAddNames.forEach(relationshipName => {
       query = query.related(relationshipName, q =>
-        augmentQuery(schema, data, rng, faker, q, depth + 1, inExists),
+        augmentQuery(
+          schema,
+          data,
+          rng,
+          faker,
+          q,
+          serverSchema,
+          depth + 1,
+          inExists,
+        ),
       );
     });
 
@@ -156,7 +196,9 @@ function augmentQuery(
       return query;
     }
 
-    const relationships = Object.keys(schema.relationships[ast(query).table]);
+    const relationships = Object.keys(
+      schema.relationships[ast(query).table] ?? {},
+    );
     const existsToAdd = Math.floor(rng() * 4);
     if (existsToAdd === 0) {
       return query;
@@ -168,13 +210,31 @@ function augmentQuery(
         query = query.where(({not, exists}) =>
           not(
             exists(relationshipName, q =>
-              augmentQuery(schema, data, rng, faker, q, depth + 1, true),
+              augmentQuery(
+                schema,
+                data,
+                rng,
+                faker,
+                q,
+                serverSchema,
+                depth + 1,
+                true,
+              ),
             ),
           ),
         );
       } else {
         query = query.whereExists(relationshipName, q =>
-          augmentQuery(schema, data, rng, faker, q, depth + 1, true),
+          augmentQuery(
+            schema,
+            data,
+            rng,
+            faker,
+            q,
+            serverSchema,
+            depth + 1,
+            true,
+          ),
         );
       }
     });

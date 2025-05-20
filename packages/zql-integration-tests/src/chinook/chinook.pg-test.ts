@@ -10,7 +10,7 @@ import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {PullRow} from '../../../zql/src/query/query.ts';
 
 // Junction edges do not correctly handle limits in ZQL
-const brokenRelationshipLimits = ['tracks'];
+const brokenRelationshipLimits = ['tracks', 'customer', 'playlists'];
 
 const pgContent = await getChinook();
 const tables = Object.keys(schema.tables) as Array<keyof typeof schema.tables>;

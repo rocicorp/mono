@@ -89,14 +89,16 @@ export function generateData(
   return ret;
 }
 
-function getDataForType(faker: Faker, rng: Rng, column: ColumnInfo) {
+export function getDataForType(faker: Faker, rng: Rng, column: ColumnInfo) {
   if (column.optional) {
     if (rng() < 0.1) {
       return null;
     }
   }
 
-  switch (column.pgType) {
+  // remove the length of the type e.g., char(10) -> char
+  const type = column.pgType.replace(/\(.*\)/, '');
+  switch (type) {
     case 'smallint':
     case 'int2':
       return faker.number.int({min: -32768, max: 32767});
