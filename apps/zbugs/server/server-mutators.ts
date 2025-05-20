@@ -40,20 +40,36 @@ export function createServerMutators(
         );
       },
 
-      async update(tx, update: UpdateValue<typeof schema.tables.issue>) {
+      async update(
+        tx,
+        args: {id: string} & UpdateValue<typeof schema.tables.issue>,
+      ) {
+        const oldIssue = await tx.query.issue.where('id', args.id).one();
+        assert(oldIssue);
+
+        const isAssigneeChange =
+          args.assigneeID !== undefined &&
+          args.assigneeID !== oldIssue.assigneeID;
+        const previousAssigneeID = isAssigneeChange
+          ? oldIssue.assigneeID
+          : undefined;
+
         await mutators.issue.update(tx, {
-          ...update,
+          ...args,
           modified: Date.now(),
         });
+
         await notify(
           tx,
           authData,
           {
             kind: 'update-issue',
-            issueID: update.id,
-            update,
+            issueID: args.id,
+            update: args,
           },
           postCommitTasks,
+          isAssigneeChange,
+          previousAssigneeID,
         );
       },
 

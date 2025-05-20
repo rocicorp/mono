@@ -24,7 +24,7 @@ export async function sendEmail({
 }) {
   const apiKey = process.env.LOOPS_EMAIL_API_KEY;
   const transactionalId = process.env.LOOPS_TRANSACTIONAL_ID;
-  const idempotencyKey = `${tx.clientID}:${tx.mutationID}`;
+  const idempotencyKey = `${tx.clientID}:${tx.mutationID}:${email}`;
 
   if (!apiKey || !transactionalId) {
     console.log(
@@ -33,7 +33,7 @@ export async function sendEmail({
     return;
   }
 
-  const titleMessage = title + '\n\n' + message;
+  const titleMessage = [title, message].filter(Boolean).join('\n');
   // --- headers for threading ---
   const threadId = `<issue-${issue.id}@bugs.rocicorp.dev>`;
   const messageId = `<${tx.clientID}-${tx.mutationID}-issue-${issue.id}@bugs.rocicorp.dev>`;
