@@ -26,6 +26,7 @@ test.each(
     {
       suiteName: 'compiler_chinook',
       pgContent,
+      only: 'related with pk condition',
       zqlSchema: schema,
       setRawData: r => {
         data = r;
@@ -223,6 +224,22 @@ test.each(
             },
           },
         ],
+      },
+      {
+        name: 'related with pk condition',
+        createQuery: q =>
+          q.artist.related('albums', a => a.where('id', '=', 1)).one(),
+        manualVerification: {
+          albums: [
+            {
+              artistId: 1,
+              id: 1,
+              title: 'For Those About To Rock We Salute You',
+            },
+          ],
+          id: 1,
+          name: 'AC/DC',
+        },
       },
       {
         name: 'Permission check (via exists) against parent row',

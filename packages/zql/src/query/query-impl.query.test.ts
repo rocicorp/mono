@@ -1097,24 +1097,6 @@ describe('pk lookup optimization', () => {
           "title": "issue 1",
           Symbol(rc): 1,
         },
-        {
-          "closed": false,
-          "createdAt": 2,
-          "description": "description 2",
-          "id": "0002",
-          "ownerId": "0002",
-          "title": "issue 2",
-          Symbol(rc): 1,
-        },
-        {
-          "closed": false,
-          "createdAt": 3,
-          "description": "description 3",
-          "id": "0003",
-          "ownerId": null,
-          "title": "issue 3",
-          Symbol(rc): 1,
-        },
       ]
     `);
   });

@@ -795,6 +795,7 @@ async function checkRemove(
     const rows = must(queryRows.get(table));
     const rowIndex = Math.floor(Math.random() * rows.length);
     const row = must(rows[rowIndex]);
+
     rows.splice(rowIndex, 1);
 
     if (rows.length === 0) {
