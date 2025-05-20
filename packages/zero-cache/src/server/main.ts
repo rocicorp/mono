@@ -160,12 +160,18 @@ export default async function runWorker(
   if (numSyncers) {
     const mode: ReplicaFileMode =
       runChangeStreamer && litestream.backupURL ? 'serving-copy' : 'serving';
+    const {promise: replicaReady, resolve} = resolver();
     const replicator = loadWorker(
       './server/replicator.ts',
       'supporting',
       mode,
       mode,
-    ).once('message', () => subscribeTo(lc, replicator));
+    ).once('message', () => {
+      subscribeTo(lc, replicator);
+      resolve();
+    });
+    await replicaReady;
+
     const notifier = createNotifierFrom(lc, replicator);
     for (let i = 0; i < numSyncers; i++) {
       syncers.push(
