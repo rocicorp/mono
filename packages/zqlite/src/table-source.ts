@@ -801,12 +801,12 @@ export function fromSQLiteTypes(
         ).sort()}`,
       );
     }
-    newRow[key] = fromSQLiteType(valueType.type, row[key]);
+    newRow[key] = fromSQLiteType(valueType.type, row[key], key);
   }
   return newRow;
 }
 
-function fromSQLiteType(valueType: ValueType, v: Value): Value {
+function fromSQLiteType(valueType: ValueType, v: Value, column: string): Value {
   if (v === null) {
     return null;
   }
@@ -819,7 +819,7 @@ function fromSQLiteType(valueType: ValueType, v: Value): Value {
       if (typeof v === 'bigint') {
         if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
           throw new UnsupportedValueError(
-            `value ${v} is outside of supported bounds`,
+            `value ${v} (in column ${column}) is outside of supported bounds`,
           );
         }
         return Number(v);
