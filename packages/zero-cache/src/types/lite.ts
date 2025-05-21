@@ -3,7 +3,7 @@ import type {
   SchemaValue,
   ValueType,
 } from '../../../zero-schema/src/table-schema.ts';
-import type {ColumnSpec, LiteTableSpec} from '../db/specs.ts';
+import type {LiteTableSpec} from '../db/specs.ts';
 import {stringify, type JSONValue} from './bigint-json.ts';
 import {
   dataTypeToZqlValueType as upstreamDataTypeToZqlValueType,
@@ -60,18 +60,6 @@ export function liteRow(
     converted[key] = liteValue(row[key], columnType(key, table), jsonFormat);
   }
   return {row: converted, numCols};
-}
-
-export function liteValues(
-  vals: JSONValue[],
-  cols: ColumnSpec[],
-  jsonFormat: JSONFormat,
-): LiteValueType[] {
-  assert(
-    vals.length === cols.length,
-    `Expected ${cols.length} values but got ${vals.length}`,
-  );
-  return vals.map((val, i) => liteValue(val, cols[i].dataType, jsonFormat));
 }
 
 /**
