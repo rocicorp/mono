@@ -1,9 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
+import {isIPv6, isPrivate, isReserved} from 'is-in-subnet';
 import {networkInterfaces, type NetworkInterfaceInfo} from 'os';
-
-function isLinkLocal(addr: string) {
-  return addr.startsWith('169.254.') || addr.startsWith('fe80::');
-}
 
 export function getHostIp(lc: LogContext, preferredPrefixes: string[]) {
   const interfaces = networkInterfaces();
@@ -26,23 +23,20 @@ export function getPreferredIp(
   };
 
   const sorted = Object.entries(interfaces)
-    .map(([name, infos]) =>
-      (infos ?? []).map(info => ({
-        ...info,
-        // Enclose IPv6 addresses in square brackets for use in a URL.
-        address: info.family === 'IPv4' ? info.address : `[${info.address}]`,
-        name,
-      })),
-    )
+    .map(([name, infos]) => (infos ?? []).map(info => ({...info, name})))
     .flat()
     .sort((a, b) => {
+      const ap =
+        (isIPv6(a.address) && isPrivate(a.address)) || isReserved(a.address);
+      const bp =
+        (isIPv6(b.address) && isPrivate(b.address)) || isReserved(b.address);
+      if (ap !== bp) {
+        // Avoid link-local, site-local, or otherwise private addresses
+        return ap ? 1 : -1;
+      }
       if (a.internal !== b.internal) {
         // Prefer non-internal addresses.
         return a.internal ? 1 : -1;
-      }
-      if (isLinkLocal(a.address) !== isLinkLocal(b.address)) {
-        // Prefer non link-local addresses
-        return isLinkLocal(a.address) ? 1 : -1;
       }
       if (a.family !== b.family) {
         // Prefer IPv4.
@@ -57,6 +51,8 @@ export function getPreferredIp(
       return a.address.localeCompare(b.address);
     });
 
-  const preferred = sorted[0].address;
+  // Enclose IPv6 addresses in square brackets for use in a URL.
+  const preferred =
+    sorted[0].family === 'IPv4' ? sorted[0].address : `[${sorted[0].address}]`;
   return preferred;
 }
