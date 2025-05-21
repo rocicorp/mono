@@ -8,7 +8,9 @@ import type {AnyQuery} from '../../../zql/src/query/test/util.ts';
 import {StaticQuery} from '../../../zql/src/query/static-query.ts';
 import {staticToRunnable} from '../helpers/static.ts';
 
-const QUERY_STRING = `customer`;
+const QUERY_STRING = `customer
+  .orderBy('company', 'desc')
+  .limit(2)`;
 
 const pgContent = await getChinook();
 

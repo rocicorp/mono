@@ -40,6 +40,50 @@ test('where condition with non-equality operator', () => {
   expect(astToZQL(ast)).toMatchInlineSnapshot(`".where('priority', '>', 2)"`);
 });
 
+test('not exists over a junction edge', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      op: 'NOT EXISTS',
+      related: {
+        correlation: {
+          childField: ['issueId'],
+          parentField: ['id'],
+        },
+        subquery: {
+          alias: 'zsubq_labels',
+          orderBy: [
+            ['issueId', 'asc'],
+            ['labelId', 'asc'],
+          ],
+          table: 'issueLabel',
+          where: {
+            op: 'EXISTS',
+            related: {
+              correlation: {
+                childField: ['id'],
+                parentField: ['labelId'],
+              },
+              subquery: {
+                alias: 'zsubq_labels',
+                orderBy: [['id', 'asc']],
+                table: 'label',
+              },
+              system: 'permissions',
+            },
+            type: 'correlatedSubquery',
+          },
+        },
+        system: 'permissions',
+      },
+      type: 'correlatedSubquery',
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".where(({exists, not}) => not(exists('labels', q => q.orderBy('id', 'asc'))))"`,
+  );
+});
+
 test('simple where condition with single AND', () => {
   const ast: AST = {
     table: 'issue',
