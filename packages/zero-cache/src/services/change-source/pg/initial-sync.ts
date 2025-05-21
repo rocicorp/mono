@@ -122,10 +122,9 @@ export async function initialSync(
       () =>
         pgClient(lc, upstreamURI, {
           // No need to fetch array types for these connections, as pgClient
-          // streams the COPY data as text, and type parsing is done in the
-          // the RowTransform, which gets its types from the typeClient.
-          // This eliminates one round trip when each db
-          // connection is established.
+          // streams the COPY data as plain text; type parsing is done in the
+          // copy worker, which gets its types from the typeClient. This
+          // eliminates one round trip when each db connection is established.
           ['fetch_types']: false,
           connection: {['application_name']: 'initial-sync-copy-worker'},
         }),
