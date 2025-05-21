@@ -26,7 +26,6 @@ test.each(
     {
       suiteName: 'compiler_chinook',
       pgContent,
-      only: 'related with pk condition',
       zqlSchema: schema,
       setRawData: r => {
         data = r;
@@ -202,7 +201,7 @@ test.each(
             .limit(10),
       },
       {
-        name: 'Related with where',
+        name: 'Junction related with where',
         createQuery: q =>
           q.playlist
             .where('id', 17)
@@ -240,6 +239,61 @@ test.each(
           id: 1,
           name: 'AC/DC',
         },
+      },
+
+      {
+        name: 'Junction related with where, no limits',
+        createQuery: q =>
+          q.playlist.where('id', 17).related('tracks', t => t.where('id', 1)),
+        manualVerification: [
+          {
+            id: 17,
+            name: 'Heavy Metal Classic',
+            tracks: [
+              {
+                albumId: 1,
+                bytes: 11170334,
+                composer: 'Angus Young, Malcolm Young, Brian Johnson',
+                genreId: 1,
+                id: 1,
+                mediaTypeId: 1,
+                milliseconds: 343719,
+                name: 'For Those About To Rock (We Salute You)',
+                unitPrice: 0.99,
+              },
+            ],
+          },
+        ],
+      },
+      // zql and zqlite are currently unable to order over junction edges
+      // {
+      //   name: 'Junction related order by',
+      //   createQuery: q =>
+      //     q.playlist
+      //       .where('id', 17)
+      //       .related('tracks', t => t.orderBy('name', 'asc')),
+      // },
+      // zql and zqlite are currently unable to limit on junction edges
+      // {
+      //   name: 'Junction related order by with limit',
+      //   createQuery: q =>
+      //     q.playlist
+      //       .where('id', 17)
+      //       .related('tracks', t => t.orderBy('name', 'asc').limit(1)),
+      // },
+      {
+        name: 'Junction related where on non primary key',
+        createQuery: q =>
+          q.playlist
+            .where('id', 17)
+            .related('tracks', t => t.where('name', 'For Those About To Rock')),
+        manualVerification: [
+          {
+            id: 17,
+            name: 'Heavy Metal Classic',
+            tracks: [],
+          },
+        ],
       },
       {
         name: 'Permission check (via exists) against parent row',

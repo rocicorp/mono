@@ -309,7 +309,7 @@ export async function createVitests<TSchema extends Schema>(
 
   return testSpecs
     .flat()
-    .filter(t => (only ? only.includes(t.name) : true))
+    .filter(t => (only ? t.name.includes(only) : true))
     .map(({name, createQuery, manualVerification}) => ({
       name,
       fn: makeTest(
