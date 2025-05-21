@@ -256,7 +256,7 @@ test('orderBy', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "ORDER BY "user"."name" COLLATE "ucs_basic" ASC, "user"."age" DESC",
+      "text": "ORDER BY "user"."name" COLLATE "ucs_basic" ASC NULLS FIRST, "user"."age" DESC NULLS LAST",
       "values": [],
     }
   `);
@@ -277,7 +277,7 @@ test('orderBy', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "ORDER BY "user"."name" COLLATE "ucs_basic" ASC, "user"."age" DESC, "user"."id" COLLATE "ucs_basic" ASC",
+      "text": "ORDER BY "user"."name" COLLATE "ucs_basic" ASC NULLS FIRST, "user"."age" DESC NULLS LAST, "user"."id" COLLATE "ucs_basic" ASC NULLS FIRST",
       "values": [],
     }
   `);
