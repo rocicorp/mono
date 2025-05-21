@@ -14,6 +14,101 @@ describe('building the AST', () => {
     });
   });
 
+  test('exists over junction with extra conditions', () => {
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
+    const notExists = issueQuery.where(({exists}) =>
+      exists('labels', q => q.where('id', '=', '1').where('name', '=', 'foo')),
+    );
+    expect(ast(notExists)).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": [
+                "issueId",
+              ],
+              "parentField": [
+                "id",
+              ],
+            },
+            "subquery": {
+              "alias": "zsubq_labels",
+              "orderBy": [
+                [
+                  "issueId",
+                  "asc",
+                ],
+                [
+                  "labelId",
+                  "asc",
+                ],
+              ],
+              "table": "issueLabel",
+              "where": {
+                "op": "EXISTS",
+                "related": {
+                  "correlation": {
+                    "childField": [
+                      "id",
+                    ],
+                    "parentField": [
+                      "labelId",
+                    ],
+                  },
+                  "subquery": {
+                    "alias": "zsubq_labels",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "table": "label",
+                    "where": {
+                      "conditions": [
+                        {
+                          "left": {
+                            "name": "id",
+                            "type": "column",
+                          },
+                          "op": "=",
+                          "right": {
+                            "type": "literal",
+                            "value": "1",
+                          },
+                          "type": "simple",
+                        },
+                        {
+                          "left": {
+                            "name": "name",
+                            "type": "column",
+                          },
+                          "op": "=",
+                          "right": {
+                            "type": "literal",
+                            "value": "foo",
+                          },
+                          "type": "simple",
+                        },
+                      ],
+                      "type": "and",
+                    },
+                  },
+                  "system": "client",
+                },
+                "type": "correlatedSubquery",
+              },
+            },
+            "system": "client",
+          },
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
+  });
+
   test('where inserts a condition', () => {
     const issueQuery = newQuery(mockDelegate, schema, 'issue');
     const where = issueQuery.where('id', '=', '1');

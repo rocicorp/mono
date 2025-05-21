@@ -152,12 +152,14 @@ function transformExistsCondition(
   const {related, op} = condition;
   const relationship = extractRelationshipName(related);
 
+  const nextSubquery = getNextExistsSubquery(related);
+
   // Check if subquery has additional properties
   const hasSubQueryProps =
-    related.subquery.where ||
-    (related.subquery.related && related.subquery.related.length > 0) ||
-    related.subquery.orderBy ||
-    related.subquery.limit;
+    nextSubquery.where ||
+    (nextSubquery.related && nextSubquery.related.length > 0) ||
+    nextSubquery.orderBy ||
+    nextSubquery.limit;
 
   if (op === 'EXISTS') {
     if (!hasSubQueryProps) {
@@ -169,13 +171,11 @@ function transformExistsCondition(
     }
 
     if (prefix === '.where') {
-      return `.whereExists('${relationship}', q => q${astToZQL(
-        related.subquery,
-      )})`;
+      return `.whereExists('${relationship}', q => q${astToZQL(nextSubquery)})`;
     }
     prefix satisfies 'cmp';
     args.add('exists');
-    return `exists('${relationship}', q => q${astToZQL(related.subquery)})`;
+    return `exists('${relationship}', q => q${astToZQL(nextSubquery)})`;
   }
 
   op satisfies 'NOT EXISTS';
@@ -183,15 +183,13 @@ function transformExistsCondition(
   if (hasSubQueryProps) {
     if (prefix === '.where') {
       return `.where(({exists, not}) => not(exists('${relationship}', q => q${astToZQL(
-        related.subquery,
+        nextSubquery,
       )})))`;
     }
     prefix satisfies 'cmp';
     args.add('not');
     args.add('exists');
-    return `not(exists('${relationship}', q => q${astToZQL(
-      related.subquery,
-    )}))`;
+    return `not(exists('${relationship}', q => q${astToZQL(nextSubquery)}))`;
   }
 
   if (prefix === '.where') {
@@ -201,6 +199,18 @@ function transformExistsCondition(
   args.add('exists');
 
   return `not(exists('${relationship}')))`;
+}
+
+// If the `exists` is applied against a junction edge, both hops will have the same alias and both hops will be exists conditions.
+function getNextExistsSubquery(related: CorrelatedSubquery): AST {
+  if (
+    related.subquery.where?.type === 'correlatedSubquery' &&
+    related.subquery.where.related.subquery.alias === related.subquery.alias
+  ) {
+    return getNextExistsSubquery(related.subquery.where.related);
+  }
+
+  return related.subquery;
 }
 
 function extractRelationshipName(related: CorrelatedSubquery): string {
