@@ -123,7 +123,7 @@ function select(
 }
 
 export function limit(limit: number | undefined): SQLQuery {
-  if (!limit) {
+  if (limit === undefined) {
     return sql``;
   }
   return sql`LIMIT ${sqlConvertSingularLiteralArg(limit)}`;
