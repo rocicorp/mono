@@ -131,9 +131,9 @@ export default $config({
               name: 'replication-data',
               managedEbsVolume: {
                 roleArn: ecsVolumeRole?.arn,
-                volumeType: 'io2',
+                volumeType: 'gp3',
                 sizeInGb: 20,
-                iops: 3000,
+                iops: 15000,
                 fileSystemType: 'ext4',
               },
             },
@@ -161,8 +161,8 @@ export default $config({
 
     const replicationManager = new sst.aws.Service(`replication-manager`, {
       cluster,
-      cpu: '2 vCPU',
-      memory: '8 GB',
+      cpu: IS_EBS_STAGE ? '16 vCPU' : '2 vCPU',
+      memory: IS_EBS_STAGE ? '32 GB' : '8 GB',
       image: commonEnv.ZERO_IMAGE_URL,
       link: [replicationBucket],
       health: {
