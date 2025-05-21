@@ -92,7 +92,7 @@ export async function notify(
     case 'create-issue': {
       const payload = {
         title: `${modifierUser.login} reported an issue`,
-        message: [issue.title, clip(issue.description ?? '')]
+        message: [issue.title, clip(await issue.description ?? '')]
           .filter(Boolean)
           .join('\n'),
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
@@ -138,7 +138,7 @@ export async function notify(
       }
 
       const title = `${modifierUser.login} updated an issue`;
-      const message = [issue.title, ...changes, clip(issue.description ?? '')]
+      const message = [issue.title, ...changes, clip(await issue.description ?? '')]
         .filter(Boolean)
         .join('\n');
 
@@ -190,7 +190,7 @@ export async function notify(
       const payload = {
         recipients,
         title: `${modifierUser.login} reacted to a comment`,
-        message: [clip(comment.body), emoji].filter(Boolean).join('\n'),
+        message: [clip(await comment.body), emoji].filter(Boolean).join('\n'),
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
       };
 
@@ -211,7 +211,7 @@ export async function notify(
       const payload = {
         recipients,
         title: `${modifierUser.login} commented on an issue`,
-        message: [issue.title, clip(comment)].join('\n'),
+        message: [issue.title, clip(await comment)].join('\n'),
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}#comment-${commentID}`,
       };
 
@@ -233,7 +233,7 @@ export async function notify(
       const payload = {
         recipients,
         title: `${modifierUser.login} edited a comment`,
-        message: [issue.title, clip(comment)].join('\n'),
+        message: [issue.title, clip(await comment)].join('\n'),
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}#comment-${commentID}`,
       };
 
@@ -255,7 +255,7 @@ function clip(s: string) {
   return s.length > 255 ? s.slice(0, 252) + '...' : s;
 }
 
-async function gatherRecipients(
+export async function gatherRecipients(
   tx: ServerTransaction<Schema, postgres.TransactionSql>,
   issueID: string,
   isAssigneeChange = false,

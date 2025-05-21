@@ -8,5 +8,6 @@ export default mergeConfig(config, {
       enabled: false,
       name: '',
     },
+    include: ['src/**/*.{test,spec}.?(c|m)[jt]s?(x)', 'server/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
   },
 });
