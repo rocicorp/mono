@@ -42,6 +42,7 @@ import {
 } from './query.ts';
 import {DEFAULT_TTL, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
+import {NotImplementedError} from '../error.ts';
 
 type AnyQuery = Query<Schema, string, any>;
 
@@ -137,6 +138,7 @@ export abstract class AbstractQuery<
   readonly format: Format;
   #hash: string = '';
   readonly #system: System;
+  readonly #currentJunction: string | undefined;
 
   constructor(
     schema: TSchema,
@@ -144,12 +146,14 @@ export abstract class AbstractQuery<
     ast: AST,
     format: Format,
     system: System,
+    currentJunction?: string | undefined,
   ) {
     this.#schema = schema;
     this.#tableName = tableName;
     this.#ast = ast;
     this.format = format;
     this.#system = system;
+    this.#currentJunction = currentJunction;
   }
 
   get [astSymbol](): AST {
@@ -173,6 +177,7 @@ export abstract class AbstractQuery<
     table: TTable,
     ast: AST,
     format: Format,
+    currentJunction: string | undefined,
   ): AbstractQuery<TSchema, TTable, TReturn>;
 
   one = (): Query<TSchema, TTable, TReturn | undefined> =>
@@ -187,6 +192,7 @@ export abstract class AbstractQuery<
         ...this.format,
         singular: true,
       },
+      this.#currentJunction,
     );
 
   whereExists = (
@@ -221,6 +227,7 @@ export abstract class AbstractQuery<
           relationships: {},
           singular: cardinality === 'one',
         },
+        undefined,
       );
       if (cardinality === 'one') {
         q = q.one();
@@ -266,6 +273,7 @@ export abstract class AbstractQuery<
             [relationship]: sq.format,
           },
         },
+        this.#currentJunction,
       );
     }
 
@@ -285,6 +293,7 @@ export abstract class AbstractQuery<
             relationships: {},
             singular: secondRelation.cardinality === 'one',
           },
+          relationship,
         ),
       ) as unknown as QueryImpl<Schema, string>;
 
@@ -338,6 +347,7 @@ export abstract class AbstractQuery<
             [relationship]: sq.format,
           },
         },
+        this.#currentJunction,
       );
     }
 
@@ -384,6 +394,7 @@ export abstract class AbstractQuery<
         where,
       },
       this.format,
+      this.#currentJunction,
     );
   };
 
@@ -402,6 +413,7 @@ export abstract class AbstractQuery<
         },
       },
       this.format,
+      this.#currentJunction,
     );
 
   limit = (limit: number): Query<TSchema, TTable, TReturn> => {
@@ -410,6 +422,12 @@ export abstract class AbstractQuery<
     }
     if ((limit | 0) !== limit) {
       throw new Error('Limit must be an integer');
+    }
+    if (this.#currentJunction) {
+      throw new NotImplementedError(
+        'Limit is not supported in junction relationships yet. Junction relationship being limited: ' +
+          this.#currentJunction,
+      );
     }
 
     return this[newQuerySymbol](
@@ -420,14 +438,21 @@ export abstract class AbstractQuery<
         limit,
       },
       this.format,
+      this.#currentJunction,
     );
   };
 
   orderBy = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TTable, TReturn> =>
-    this[newQuerySymbol](
+  ): Query<TSchema, TTable, TReturn> => {
+    if (this.#currentJunction) {
+      throw new NotImplementedError(
+        'Order by is not supported in junction relationships yet. Junction relationship being ordered: ' +
+          this.#currentJunction,
+      );
+    }
+    return this[newQuerySymbol](
       this.#schema,
       this.#tableName,
       {
@@ -435,7 +460,9 @@ export abstract class AbstractQuery<
         orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
       },
       this.format,
+      this.#currentJunction,
     );
+  };
 
   protected _exists = (
     relationship: string,
@@ -458,6 +485,7 @@ export abstract class AbstractQuery<
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
           defaultFormat,
+          undefined,
         ),
       ) as unknown as QueryImpl<any, any>;
       return {
@@ -494,6 +522,7 @@ export abstract class AbstractQuery<
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
           defaultFormat,
+          relationship,
         ),
       );
 
@@ -617,8 +646,9 @@ export class QueryImpl<
     ast: AST,
     format: Format,
     system: System = 'client',
+    currentJunction?: string | undefined,
   ) {
-    super(schema, tableName, ast, format, system);
+    super(schema, tableName, ast, format, system, currentJunction);
     this.#system = system;
     this.#delegate = delegate;
   }
@@ -636,6 +666,7 @@ export class QueryImpl<
     tableName: TTable,
     ast: AST,
     format: Format,
+    currentJunction: string | undefined,
   ): QueryImpl<TSchema, TTable, TReturn> {
     return new QueryImpl(
       this.#delegate,
@@ -644,6 +675,7 @@ export class QueryImpl<
       ast,
       format,
       this.#system,
+      currentJunction,
     );
   }
 
