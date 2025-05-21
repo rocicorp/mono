@@ -1,28 +1,34 @@
 import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
+import {Writable} from 'node:stream';
+import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
-import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createIndexStatement,
   createTableStatement,
 } from '../../../db/create.ts';
 import * as Mode from '../../../db/mode-enum.ts';
+import {NULL_BYTE, TextTransform} from '../../../db/pg-copy.ts';
 import {
   mapPostgresToLite,
   mapPostgresToLiteIndex,
 } from '../../../db/pg-to-lite.ts';
+import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
-import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import type {LexiVersion} from '../../../types/lexi-version.ts';
 import {
   JSON_STRINGIFIED,
-  liteValues,
+  liteValue,
   type LiteValueType,
 } from '../../../types/lite.ts';
 import {liteTableName} from '../../../types/names.ts';
-import {pgClient, type PostgresDB} from '../../../types/pg.ts';
+import {
+  pgClient,
+  type PostgresDB,
+  type PostgresTransaction,
+  type PostgresValueType,
+} from '../../../types/pg.ts';
 import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
@@ -31,9 +37,10 @@ import {
   initReplicationState,
   ZERO_VERSION_COLUMN_NAME,
 } from '../../replicator/schema/replication-state.ts';
+import {CopyRunner} from './copy-runner.ts';
 import {toLexiVersion} from './lsn.ts';
 import {ensureShardSchema} from './schema/init.ts';
-import {getPublicationInfo, type PublicationInfo} from './schema/published.ts';
+import {getPublicationInfo} from './schema/published.ts';
 import {
   addReplica,
   dropShard,
@@ -44,7 +51,6 @@ import {
 
 export type InitialSyncOptions = {
   tableCopyWorkers: number;
-  rowBatchSize: number;
 };
 
 export async function initialSync(
@@ -59,14 +65,14 @@ export async function initialSync(
       'The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
   }
-  const {tableCopyWorkers: numWorkers, rowBatchSize} = syncOptions;
+  const {tableCopyWorkers: numWorkers} = syncOptions;
   const sql = pgClient(lc, upstreamURI);
-  const copyPool = pgClient(
-    lc,
-    upstreamURI,
-    {max: numWorkers},
-    'json-as-string',
-  );
+  // The typeClient's reason for existence is to configure the type
+  // parsing for the copy workers, which skip JSON parsing for efficiency.
+  const typeClient = pgClient(lc, upstreamURI, {}, 'json-as-string');
+  // Fire off an innocuous request to initialize a connection and thus fetch
+  // the array types that will be used to parse the COPY stream.
+  void typeClient`SELECT 1`.execute();
   const replicationSession = pgClient(lc, upstreamURI, {
     ['fetch_types']: false, // Necessary for the streaming protocol
     connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
@@ -110,14 +116,24 @@ export async function initialSync(
     initChangeLog(tx);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
-    const start = Date.now();
-    let numTables: number;
-    let numRows: number;
-    const copiers = startTableCopyWorkers(lc, copyPool, snapshot, numWorkers);
-    let published: PublicationInfo;
+    const start = performance.now();
+    const copyRunner = new CopyRunner(
+      lc,
+      () =>
+        pgClient(lc, upstreamURI, {
+          // No need to fetch array types for these connections, as pgClient
+          // streams the COPY data as plain text; type parsing is done in the
+          // copy worker, which gets its types from the typeClient. This
+          // eliminates one round trip when each db connection is established.
+          ['fetch_types']: false,
+          connection: {['application_name']: 'initial-sync-copy-worker'},
+        }),
+      numWorkers,
+      snapshot,
+    );
     try {
       // Retrieve the published schema at the consistent_point.
-      published = await sql.begin(Mode.READONLY, async tx => {
+      const published = await sql.begin(Mode.READONLY, async tx => {
         await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
         return getPublicationInfo(tx, publications);
       });
@@ -126,32 +142,39 @@ export async function initialSync(
 
       // Now that tables have been validated, kick off the copiers.
       const {tables, indexes} = published;
-      numTables = tables.length;
+      const numTables = tables.length;
       createLiteTables(tx, tables);
 
       const rowCounts = await Promise.all(
         tables.map(table =>
-          copiers.processReadTask(db =>
-            copy(lc, table, db, tx, initialVersion, rowBatchSize),
+          copyRunner.run((db, lc) =>
+            copy(lc, table, typeClient, db, tx, initialVersion),
           ),
         ),
       );
-      numRows = rowCounts.reduce((sum, count) => sum + count, 0);
+      const total = rowCounts.reduce(
+        (acc, curr) => ({
+          rows: acc.rows + curr.rows,
+          flushTime: acc.flushTime + curr.flushTime,
+        }),
+        {rows: 0, flushTime: 0},
+      );
 
-      const indexStart = Date.now();
+      const indexStart = performance.now();
       createLiteIndices(tx, indexes);
-      lc.info?.(`Created indexes (${Date.now() - indexStart} ms)`);
+      const index = performance.now() - indexStart;
+      lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
+
+      await addReplica(sql, shard, slotName, initialVersion, published);
+
+      const elapsed = performance.now() - start;
+      lc.info?.(
+        `Synced ${total.rows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} ` +
+          `(flush: ${total.flushTime.toFixed(3)}, index: ${index.toFixed(3)}, total: ${elapsed.toFixed(3)} ms)`,
+      );
     } finally {
-      copiers.setDone();
+      copyRunner.close();
     }
-
-    await addReplica(sql, shard, slotName, initialVersion, published);
-
-    lc.info?.(
-      `Synced ${numRows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} (${
-        Date.now() - start
-      } ms)`,
-    );
   } catch (e) {
     // If initial-sync did not succeed, make a best effort to drop the
     // orphaned replication slot to avoid running out of slots in
@@ -165,12 +188,7 @@ export async function initialSync(
   } finally {
     await replicationSession.end();
     await sql.end();
-    // Postgres sometimes hangs on COMMIT after running COPY TO, even though
-    // the latter successfully completes. The completion of the COMMIT is
-    // unimportant for a READONLY transaction, especially given that the
-    // copiers have all completed their work. As a workaround, avoid
-    // blocking on closing this client. The connection do eventually close.
-    void copyPool.end().catch(e => lc.error?.('error closing copyPool', e));
+    await typeClient.end();
   }
 }
 
@@ -249,26 +267,6 @@ async function createReplicationSlot(
   return slot;
 }
 
-function startTableCopyWorkers(
-  lc: LogContext,
-  db: PostgresDB,
-  snapshot: string,
-  numWorkers: number,
-): TransactionPool {
-  const {init} = importSnapshot(snapshot);
-  const tableCopiers = new TransactionPool(
-    lc,
-    Mode.READONLY,
-    init,
-    undefined,
-    numWorkers,
-  );
-  tableCopiers.run(db);
-
-  lc.info?.(`Started ${numWorkers} workers to copy tables`);
-  return tableCopiers;
-}
-
 function createLiteTables(tx: Database, tables: PublishedTableSpec[]) {
   for (const t of tables) {
     tx.exec(createTableStatement(mapPostgresToLite(t)));
@@ -287,21 +285,29 @@ function createLiteIndices(tx: Database, indices: IndexSpec[]) {
 // Exported for testing.
 export const INSERT_BATCH_SIZE = 50;
 
+const MB = 1024 * 1024;
+const MAX_BUFFERED_ROWS = 10_000;
+const BUFFERED_SIZE_THRESHOLD = 8 * MB;
+
 async function copy(
   lc: LogContext,
   table: PublishedTableSpec,
-  from: PostgresDB,
+  dbClient: PostgresDB,
+  from: PostgresTransaction,
   to: Database,
   initialVersion: LexiVersion,
-  rowBatchSize: number,
 ) {
-  let totalRows = 0;
+  const start = performance.now();
+  let rows = 0;
+  let flushTime = 0;
+
   const tableName = liteTableName(table);
-  const selectColumns = Object.keys(table.columns)
-    .map(c => id(c))
-    .join(',');
+  const orderedColumns = Object.entries(table.columns);
+
+  const columnSpecs = orderedColumns.map(([_name, spec]) => spec);
+  const selectColumns = orderedColumns.map(([c]) => id(c)).join(',');
   const insertColumns = [
-    ...Object.keys(table.columns),
+    ...orderedColumns.map(([c]) => c),
     ZERO_VERSION_COLUMN_NAME,
   ];
   const insertColumnList = insertColumns.map(c => id(c)).join(',');
@@ -326,56 +332,108 @@ async function copy(
       ? ''
       : /*sql*/ ` WHERE ${filterConditions.join(' OR ')}`);
 
-  lc.info?.(`Starting copy of ${tableName}:`, selectStmt);
+  const valuesPerRow = columnSpecs.length + 1; // includes _0_version column
+  const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
 
-  const cursor = from.unsafe(selectStmt).cursor(rowBatchSize);
-  let prevBatch = promiseVoid;
+  // Preallocate the buffer of values to reduce memory allocation churn.
+  const pendingValues: LiteValueType[] = Array.from({
+    length: MAX_BUFFERED_ROWS * valuesPerRow,
+  });
+  let pendingRows = 0;
+  let pendingSize = 0;
 
-  for await (const rows of cursor) {
-    await prevBatch;
+  function flush() {
+    const start = performance.now();
+    const flushedRows = pendingRows;
+    const flushedSize = pendingSize;
 
-    // Parallelize the reading from postgres (`cursor`) with the processing
-    // of the results (`prevBatch`) by running the latter after I/O events.
-    // This allows the cursor to query the next batch from postgres before
-    // the CPU is consumed by the previous batch (of inserts).
-    prevBatch = runAfterIO(() => {
-      let i = 0;
-      for (; i + INSERT_BATCH_SIZE < rows.length; i += INSERT_BATCH_SIZE) {
-        const values: LiteValueType[] = [];
-        for (let j = i; j < i + INSERT_BATCH_SIZE; j++) {
-          values.push(
-            ...liteValues(rows[j], table, JSON_STRINGIFIED),
-            initialVersion,
-          );
-        }
-        insertBatchStmt.run(values);
-      }
-      // Remaining set of rows is < INSERT_BATCH_SIZE
-      for (; i < rows.length; i++) {
-        insertStmt.run([
-          ...liteValues(rows[i], table, JSON_STRINGIFIED),
-          initialVersion,
-        ]);
-      }
-      totalRows += rows.length;
-      lc.debug?.(`Copied ${totalRows} rows from ${table.schema}.${table.name}`);
-    });
-  }
-  await prevBatch;
-
-  lc.info?.(`Finished copying ${totalRows} rows into ${tableName}`);
-  return totalRows;
-}
-
-function runAfterIO(fn: () => void): Promise<void> {
-  const {promise, resolve, reject} = resolver();
-  setTimeout(() => {
-    try {
-      fn();
-      resolve();
-    } catch (e) {
-      reject(e);
+    let l = 0;
+    for (; pendingRows > INSERT_BATCH_SIZE; pendingRows -= INSERT_BATCH_SIZE) {
+      insertBatchStmt.run(pendingValues.slice(l, (l += valuesPerBatch)));
     }
-  }, 0);
-  return promise;
+    // Insert the remaining rows individually.
+    for (; pendingRows > 0; pendingRows--) {
+      insertStmt.run(pendingValues.slice(l, (l += valuesPerRow)));
+    }
+    for (let i = 0; i < flushedRows; i++) {
+      // Reuse the array and unreference the values to allow GC.
+      // This is faster than allocating a new array every time.
+      pendingValues[i] = undefined as unknown as LiteValueType;
+    }
+    pendingSize = 0;
+    rows += flushedRows;
+
+    const elapsed = performance.now() - start;
+    flushTime += elapsed;
+    lc.debug?.(
+      `flushed ${flushedRows} ${tableName} rows (${flushedSize} bytes) in ${elapsed.toFixed(3)} ms`,
+    );
+  }
+
+  lc.info?.(`Starting copy stream of ${tableName}:`, selectStmt);
+  const pgParsers = await getTypeParsers(dbClient);
+  const parsers = columnSpecs.map(c => {
+    const pgParse = pgParsers.getTypeParser(c.typeOID);
+    return (val: string) =>
+      val === NULL_BYTE
+        ? null
+        : liteValue(
+            pgParse(val) as PostgresValueType,
+            c.dataType,
+            JSON_STRINGIFIED,
+          );
+  });
+
+  let col = 0;
+
+  await pipeline(
+    await from.unsafe(`COPY (${selectStmt}) TO STDOUT`).readable(),
+    new TextTransform(),
+    new Writable({
+      objectMode: true,
+
+      write: (
+        text: string,
+        _encoding: string,
+        callback: (error?: Error) => void,
+      ) => {
+        try {
+          // Give every value at least 4 bytes.
+          pendingSize += 4 + (text === NULL_BYTE ? 0 : text.length);
+          pendingValues[pendingRows * valuesPerRow + col] = parsers[col](text);
+
+          if (++col === parsers.length) {
+            // The last column is the _0_version.
+            pendingValues[pendingRows * valuesPerRow + col] = initialVersion;
+            col = 0;
+            if (
+              ++pendingRows >= MAX_BUFFERED_ROWS - valuesPerRow ||
+              pendingSize >= BUFFERED_SIZE_THRESHOLD
+            ) {
+              flush();
+            }
+          }
+          callback();
+        } catch (e) {
+          callback(e instanceof Error ? e : new Error(String(e)));
+        }
+      },
+
+      final: (callback: (error?: Error) => void) => {
+        try {
+          flush();
+          callback();
+        } catch (e) {
+          callback(e instanceof Error ? e : new Error(String(e)));
+        }
+      },
+    }),
+  );
+
+  const elapsed = performance.now() - start;
+  lc.info?.(
+    `Finished copying ${rows} rows into ${tableName} ` +
+      `(flush: ${flushTime.toFixed(3)} ms) (total: ${elapsed.toFixed(3)} ms) `,
+  );
+  return {rows, flushTime};
 }

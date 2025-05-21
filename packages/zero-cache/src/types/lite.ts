@@ -6,8 +6,8 @@ import type {
 import type {LiteTableSpec} from '../db/specs.ts';
 import {stringify, type JSONValue} from './bigint-json.ts';
 import {
-  type PostgresValueType,
   dataTypeToZqlValueType as upstreamDataTypeToZqlValueType,
+  type PostgresValueType,
 } from './pg.ts';
 import type {RowValue} from './row-key.ts';
 
@@ -60,16 +60,6 @@ export function liteRow(
     converted[key] = liteValue(row[key], columnType(key, table), jsonFormat);
   }
   return {row: converted, numCols};
-}
-
-export function liteValues(
-  row: RowValue,
-  table: LiteTableSpec,
-  jsonFormat: JSONFormat,
-): LiteValueType[] {
-  return Object.entries(row).map(([col, val]) =>
-    liteValue(val, columnType(col, table), jsonFormat),
-  );
 }
 
 /**

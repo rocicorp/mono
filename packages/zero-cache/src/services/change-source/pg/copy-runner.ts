@@ -81,7 +81,9 @@ export class CopyRunner {
     const {copy, result} = task;
     const txDone = db.begin(READONLY, tx => {
       if (this.#snapshotID) {
-        void tx.unsafe(`SET TRANSACTION SNAPSHOT '${this.#snapshotID}'`);
+        void tx
+          .unsafe(`SET TRANSACTION SNAPSHOT '${this.#snapshotID}'`)
+          .execute();
       }
       return copy(tx, lc).then(result.resolve, result.reject);
     });
