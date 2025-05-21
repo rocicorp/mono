@@ -6,11 +6,11 @@ import {schema} from './schema.ts';
 import {test} from 'vitest';
 import {generateQuery} from '../../../zql/src/query/test/query-gen.ts';
 import '../helpers/comparePg.ts';
-import {ast, QueryImpl} from '../../../zql/src/query/query-impl.ts';
-import {ZPGQuery} from '../../../zero-pg/src/query.ts';
+import {ast} from '../../../zql/src/query/query-impl.ts';
 import type {AnyQuery} from '../../../zql/src/query/test/util.ts';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
+import {staticToRunnable} from '../helpers/static.ts';
 
 const pgContent = await getChinook();
 
@@ -18,12 +18,12 @@ const pgContent = await getChinook();
 const REPRO_SEED = undefined;
 
 const harness = await bootstrap({
-  suiteName: 'frontend_analysis',
+  suiteName: 'chinook_fuzz_hydration',
   zqlSchema: schema,
   pgContent,
 });
 
-test.each(Array.from({length: 30}, () => createCase()))(
+test.each(Array.from({length: 100}, () => createCase()))(
   'fuzz-hydration $seed',
   runCase,
 );
@@ -62,39 +62,14 @@ function createCase(seed?: number | undefined) {
 }
 
 async function runCase({query, seed}: {query: AnyQuery; seed: number}) {
-  // reconstruct the generated query
-  // for zql, zqlite and pg
-  const zql = new QueryImpl(
-    harness.delegates.memory,
-    schema,
-    ast(query).table as keyof typeof schema.tables,
-    ast(query),
-    query.format,
-  );
-  const zqlite = new QueryImpl(
-    harness.delegates.sqlite,
-    schema,
-    ast(query).table as keyof typeof schema.tables,
-    ast(query),
-    query.format,
-  );
-  const pg = new ZPGQuery(
-    schema,
-    harness.delegates.pg.serverSchema,
-    ast(query).table as keyof typeof schema.tables,
-    harness.delegates.pg.transaction,
-    ast(query),
-    query.format,
-  );
-
   try {
     await runAndCompare(
       schema,
-      {
-        memory: zql,
-        pg,
-        sqlite: zqlite,
-      },
+      staticToRunnable({
+        query,
+        schema,
+        harness,
+      }),
       undefined,
     );
   } catch (e) {
