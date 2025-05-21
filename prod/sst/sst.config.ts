@@ -132,6 +132,7 @@ export default $config({
               managedEbsVolume: {
                 roleArn: ecsVolumeRole?.arn,
                 volumeType: 'gp3',
+                // Note: The maximum allowed IOPS/GB ratio is 500.
                 sizeInGb: 30,
                 iops: 15000,
                 fileSystemType: 'ext4',
