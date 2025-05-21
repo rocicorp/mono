@@ -154,11 +154,11 @@ export function orderBy(
           sql`${colIdent(spec.server, {
             table,
             zql: col,
-          })}${maybeCollate(serverColumnSchema)} ASC`
+          })}${maybeCollate(serverColumnSchema)} ASC NULLS FIRST`
         : sql`${colIdent(spec.server, {
             table,
             zql: col,
-          })}${maybeCollate(serverColumnSchema)} DESC`;
+          })}${maybeCollate(serverColumnSchema)} DESC NULLS LAST`;
     }),
     ', ',
   )}`;
