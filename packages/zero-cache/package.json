@@ -48,6 +48,7 @@
     "defu": "^6.1.4",
     "eventemitter3": "^5.0.1",
     "fastify": "^5.0.0",
+    "is-in-subnet": "^4.0.1",
     "jose": "^5.9.3",
     "json-custom-numbers": "^3.1.1",
     "nanoid": "^5.1.2",
