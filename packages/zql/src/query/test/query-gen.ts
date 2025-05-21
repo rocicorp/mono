@@ -10,6 +10,7 @@ import {
   type AnyQuery,
   type Rng,
 } from './util.ts';
+import {NotImplementedError} from '../../error.ts';
 export type Dataset = {
   [table: string]: Row[];
 };
@@ -53,13 +54,22 @@ function augmentQuery(
       return query;
     }
 
-    return query.limit(Math.floor(rng() * 200));
+    try {
+      return query.limit(Math.floor(rng() * 200));
+    } catch (e) {
+      // junction tables don't support limit yet
+      if (e instanceof NotImplementedError) {
+        return query;
+      }
+      throw e;
+    }
   }
 
   function addOrderBy(query: AnyQuery) {
     const table = schema.tables[ast(query).table];
     const columnNames = Object.keys(table.columns);
-    const numCols = Math.floor(rng() * columnNames.length);
+    // we wouldn't really order by _every_ column, right?
+    const numCols = Math.floor((rng() * columnNames.length) / 2);
     if (numCols === 0) {
       return query;
     }
@@ -72,9 +82,17 @@ function augmentQuery(
           direction: rng() < 0.5 ? 'asc' : 'desc',
         }) as const,
     );
-    columns.forEach(({name, direction}) => {
-      query = query.orderBy(name, direction);
-    });
+    try {
+      columns.forEach(({name, direction}) => {
+        query = query.orderBy(name, direction);
+      });
+    } catch (e) {
+      // junction tables don't support order by yet
+      if (e instanceof NotImplementedError) {
+        return query;
+      }
+      throw e;
+    }
 
     return query;
   }

@@ -1745,3 +1745,94 @@ test('result type initially complete', () => {
   expect(rows).toEqual([]);
   expect(resultType).toEqual('complete');
 });
+
+describe('junction relationship limitations', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  const issueQuery = newQuery(queryDelegate, schema, 'issue');
+  const labelQuery = newQuery(queryDelegate, schema, 'label');
+  test('cannot limit a junction edge', () => {
+    expect(() => issueQuery.related('labels', q => q.limit(10))).toThrow(
+      'Limit is not supported in junction',
+    );
+  });
+
+  test('can apply limit after exiting the junction edge', () => {
+    expect(() =>
+      issueQuery.related('labels', q =>
+        q.related('issues', q => q.related('comments', q => q.limit(10))),
+      ),
+    ).not.toThrow();
+
+    expect(() =>
+      labelQuery.related('issues', q =>
+        q.related('comments', q => q.limit(10)),
+      ),
+    ).not.toThrow();
+  });
+
+  test('cannot limit exists junction', () => {
+    expect(() => issueQuery.whereExists('labels', q => q.limit(10))).toThrow(
+      'Limit is not supported in junction',
+    );
+  });
+
+  test('can limit exists after exiting the junction', () => {
+    expect(() =>
+      issueQuery.whereExists('labels', q =>
+        q.whereExists('issues', q =>
+          q.whereExists('comments', q => q.limit(10)),
+        ),
+      ),
+    ).not.toThrow();
+
+    expect(() =>
+      labelQuery.whereExists('issues', q =>
+        q.whereExists('comments', q => q.limit(10)),
+      ),
+    ).not.toThrow();
+  });
+
+  test('cannot order by a junction edge', () => {
+    expect(() =>
+      issueQuery.related('labels', q => q.orderBy('id', 'asc')),
+    ).toThrow('Order by is not supported in junction');
+  });
+
+  test('can order by after exiting the junction edge', () => {
+    expect(() =>
+      issueQuery.related('labels', q =>
+        q.related('issues', q =>
+          q.related('comments', q => q.orderBy('id', 'asc')),
+        ),
+      ),
+    ).not.toThrow();
+
+    expect(() =>
+      labelQuery.related('issues', q =>
+        q.related('comments', q => q.orderBy('id', 'asc')),
+      ),
+    ).not.toThrow();
+  });
+
+  test('cannot order by exists junction', () => {
+    expect(() =>
+      issueQuery.whereExists('labels', q => q.orderBy('id', 'asc')),
+    ).toThrow('Order by is not supported in junction');
+  });
+
+  test('can order by exists after exiting the junction', () => {
+    expect(() =>
+      issueQuery.whereExists('labels', q =>
+        q.whereExists('issues', q =>
+          q.whereExists('comments', q => q.orderBy('id', 'asc')),
+        ),
+      ),
+    ).not.toThrow();
+
+    expect(() =>
+      labelQuery.whereExists('issues', q =>
+        q.whereExists('comments', q => q.orderBy('id', 'asc')),
+      ),
+    ).not.toThrow();
+  });
+});

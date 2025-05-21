@@ -30,11 +30,10 @@ test('stable generation', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   expect((q as StaticQuery<any, any>).ast).toMatchInlineSnapshot(`
     {
-      "limit": 51,
       "orderBy": [
         [
-          "lawmaker",
-          "desc",
+          "archaeology",
+          "asc",
         ],
         [
           "schnitzel",
@@ -53,7 +52,7 @@ test('stable generation', () => {
           },
           "subquery": {
             "alias": "cleaner",
-            "limit": 85,
+            "limit": 60,
             "orderBy": [
               [
                 "amendment",
@@ -72,17 +71,10 @@ test('stable generation', () => {
                 },
                 "subquery": {
                   "alias": "cleaner",
+                  "limit": 62,
                   "orderBy": [
                     [
-                      "exploration",
-                      "asc",
-                    ],
-                    [
                       "amendment",
-                      "desc",
-                    ],
-                    [
-                      "petticoat",
                       "asc",
                     ],
                   ],
@@ -100,6 +92,7 @@ test('stable generation', () => {
                       },
                       "subquery": {
                         "alias": "zsubq_cleaner",
+                        "limit": 5,
                         "orderBy": [
                           [
                             "thorn",
@@ -107,10 +100,6 @@ test('stable generation', () => {
                           ],
                           [
                             "amendment",
-                            "asc",
-                          ],
-                          [
-                            "exploration",
                             "asc",
                           ],
                         ],
@@ -138,16 +127,97 @@ test('stable generation', () => {
             ],
             "table": "cleaner",
             "where": {
-              "left": {
-                "name": "amendment",
-                "type": "column",
+              "op": "NOT EXISTS",
+              "related": {
+                "correlation": {
+                  "childField": [
+                    "amendment",
+                  ],
+                  "parentField": [
+                    "amendment",
+                  ],
+                },
+                "subquery": {
+                  "alias": "zsubq_cleaner",
+                  "limit": 140,
+                  "orderBy": [
+                    [
+                      "petticoat",
+                      "asc",
+                    ],
+                    [
+                      "amendment",
+                      "asc",
+                    ],
+                  ],
+                  "table": "cleaner",
+                  "where": {
+                    "conditions": [
+                      {
+                        "op": "NOT EXISTS",
+                        "related": {
+                          "correlation": {
+                            "childField": [
+                              "amendment",
+                            ],
+                            "parentField": [
+                              "amendment",
+                            ],
+                          },
+                          "subquery": {
+                            "alias": "zsubq_cleaner",
+                            "limit": 22,
+                            "orderBy": [
+                              [
+                                "petticoat",
+                                "desc",
+                              ],
+                              [
+                                "thorn",
+                                "desc",
+                              ],
+                              [
+                                "amendment",
+                                "asc",
+                              ],
+                            ],
+                            "table": "cleaner",
+                            "where": {
+                              "left": {
+                                "name": "amendment",
+                                "type": "column",
+                              },
+                              "op": "IS NOT",
+                              "right": {
+                                "type": "literal",
+                                "value": false,
+                              },
+                              "type": "simple",
+                            },
+                          },
+                          "system": "permissions",
+                        },
+                        "type": "correlatedSubquery",
+                      },
+                      {
+                        "left": {
+                          "name": "disk",
+                          "type": "column",
+                        },
+                        "op": "IS",
+                        "right": {
+                          "type": "literal",
+                          "value": 4600402723137622,
+                        },
+                        "type": "simple",
+                      },
+                    ],
+                    "type": "and",
+                  },
+                },
+                "system": "permissions",
               },
-              "op": "IS NOT",
-              "right": {
-                "type": "literal",
-                "value": false,
-              },
-              "type": "simple",
+              "type": "correlatedSubquery",
             },
           },
           "system": "permissions",
@@ -157,106 +227,26 @@ test('stable generation', () => {
       "where": {
         "conditions": [
           {
-            "op": "NOT EXISTS",
-            "related": {
-              "correlation": {
-                "childField": [
-                  "thorn",
-                ],
-                "parentField": [
-                  "councilman",
-                ],
-              },
-              "subquery": {
-                "alias": "zsubq_cleaner",
-                "limit": 48,
-                "orderBy": [
-                  [
-                    "exploration",
-                    "asc",
-                  ],
-                  [
-                    "thorn",
-                    "asc",
-                  ],
-                  [
-                    "petticoat",
-                    "asc",
-                  ],
-                  [
-                    "amendment",
-                    "asc",
-                  ],
-                ],
-                "table": "cleaner",
-                "where": {
-                  "op": "NOT EXISTS",
-                  "related": {
-                    "correlation": {
-                      "childField": [
-                        "amendment",
-                      ],
-                      "parentField": [
-                        "amendment",
-                      ],
-                    },
-                    "subquery": {
-                      "alias": "zsubq_cleaner",
-                      "limit": 56,
-                      "orderBy": [
-                        [
-                          "amendment",
-                          "asc",
-                        ],
-                        [
-                          "exploration",
-                          "asc",
-                        ],
-                      ],
-                      "table": "cleaner",
-                    },
-                    "system": "permissions",
-                  },
-                  "type": "correlatedSubquery",
-                },
-              },
-              "system": "permissions",
-            },
-            "type": "correlatedSubquery",
-          },
-          {
             "left": {
-              "name": "mozzarella",
+              "name": "councilman",
               "type": "column",
             },
-            "op": "!=",
+            "op": "ILIKE",
             "right": {
               "type": "literal",
-              "value": "ratione recusandae facilis",
+              "value": "arbor deporto voro",
             },
             "type": "simple",
           },
           {
             "left": {
-              "name": "schnitzel",
+              "name": "councilman",
               "type": "column",
             },
-            "op": "IS",
+            "op": "LIKE",
             "right": {
               "type": "literal",
-              "value": 5322290477516843,
-            },
-            "type": "simple",
-          },
-          {
-            "left": {
-              "name": "mozzarella",
-              "type": "column",
-            },
-            "op": "=",
-            "right": {
-              "type": "literal",
-              "value": "similique ater studio",
+              "value": "capio suscipit corona",
             },
             "type": "simple",
           },
