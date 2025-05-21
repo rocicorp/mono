@@ -222,6 +222,7 @@ function relationshipSubquery(
         }),
       );
     }
+
     return sql`(
         SELECT ${toJSON(innerAlias, format?.singular)} FROM (SELECT ${sql.join(
           selectionSet,
@@ -234,22 +235,15 @@ function relationshipSubquery(
           })),
           relationship.correlation.childField,
         )(participatingTables[0].table)}) ${
-          relationship.subquery.where
-            ? sql`AND ${where(
-                spec,
-                relationship.subquery.where,
-                participatingTables[0].table,
-              )}`
+          nestedAst.where
+            ? sql`AND ${where(spec, nestedAst.where, lastTable)}`
             : sql``
-        } ${orderBy(
-          spec,
-          relationship.subquery.orderBy,
-          participatingTables[0].table,
-        )} ${
+        } ${orderBy(spec, nestedAst.orderBy, lastTable)} ${
           format?.singular ? limit(1) : limit(last(participatingTables)?.limit)
         } ) ${sql.ident(innerAlias)}
       ) as ${sql.ident(relationship.subquery.alias)}`;
   }
+
   return sql`(
       SELECT ${toJSON(innerAlias, format?.singular)} FROM (${select(
         spec,
