@@ -132,7 +132,7 @@ export default $config({
               managedEbsVolume: {
                 roleArn: ecsVolumeRole?.arn,
                 volumeType: 'gp3',
-                sizeInGb: 20,
+                sizeInGb: 30,
                 iops: 15000,
                 fileSystemType: 'ext4',
               },
