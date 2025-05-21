@@ -92,7 +92,7 @@ export async function notify(
     case 'create-issue': {
       const payload = {
         title: `${modifierUser.login} reported an issue`,
-        message: [issue.title, clip(await issue.description ?? '')]
+        message: [issue.title, clip((await issue.description) ?? '')]
           .filter(Boolean)
           .join('\n'),
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
@@ -138,7 +138,11 @@ export async function notify(
       }
 
       const title = `${modifierUser.login} updated an issue`;
-      const message = [issue.title, ...changes, clip(await issue.description ?? '')]
+      const message = [
+        issue.title,
+        ...changes,
+        clip((await issue.description) ?? ''),
+      ]
         .filter(Boolean)
         .join('\n');
 
