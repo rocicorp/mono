@@ -4,6 +4,48 @@ import {gatherRecipients} from './notify.ts';
 import type {ServerTransaction} from '@rocicorp/zero';
 import type postgres from 'postgres';
 
+// Mock database state
+const mockDB = {
+  users: [
+    {id: 'user1', email: 'user1@example.com', role: 'user'},
+    {id: 'user2', email: 'user2@example.com', role: 'user'},
+    {id: 'user3', email: 'user3@example.com', role: 'crew'},
+    {id: 'user4', email: 'user4@example.com', role: 'user'},
+  ],
+  issues: [
+    {
+      id: 'issue-123',
+      creatorID: 'user1',
+      assigneeID: 'user2',
+      visibility: 'public',
+    },
+    {
+      id: 'issue-456',
+      creatorID: 'user3',
+      assigneeID: 'user4',
+      visibility: 'private',
+    },
+  ],
+  comments: [
+    {
+      id: 'comment1',
+      issueID: 'issue-123',
+      creatorID: 'user2',
+      body: 'test comment',
+    },
+    {
+      id: 'comment2',
+      issueID: 'issue-456',
+      creatorID: 'user4',
+      body: 'test comment',
+    },
+  ],
+  emojis: [
+    {id: 'emoji1', subjectID: 'issue-123', creatorID: 'user3', unicode: '👍'},
+    {id: 'emoji2', subjectID: 'issue-456', creatorID: 'user1', unicode: '👍'},
+  ],
+};
+
 // Mock transaction object
 const createMockTx = (
   mockSql: any,
@@ -15,101 +57,140 @@ const createMockTx = (
   }) as any;
 
 describe('gatherRecipients', () => {
-  it('should include issue creator, commenters, emoji reactors, and assignees for public issues', async () => {
-    const mockSql = async () => [
-      {email: 'creator@example.com'},
-      {email: 'commenter@example.com'},
-      {email: 'emoji_reactor@example.com'},
-      {email: 'assignee@example.com'},
-    ];
+  const mockSql = async (strings: TemplateStringsArray, ...values: any[]) => {
+    // Extract parameters from the query
+    const issueID = values[0];
+    const isAssigneeChange = values[1];
+    const previousAssigneeID = values[2];
 
+    // Get issue info
+    const issue = mockDB.issues.find(i => i.id === issueID);
+    if (!issue) return [];
+
+    // Get all potential recipients
+    const recipients = new Set<string>();
+
+    // Add creator
+    const creator = mockDB.users.find(u => u.id === issue.creatorID);
+    if (creator?.email) recipients.add(creator.email);
+
+    // Add assignee
+    const assignee = mockDB.users.find(u => u.id === issue.assigneeID);
+    if (assignee?.email) recipients.add(assignee.email);
+
+    // Add commenters
+    mockDB.comments
+      .filter(c => c.issueID === issueID)
+      .forEach(comment => {
+        const commenter = mockDB.users.find(u => u.id === comment.creatorID);
+        if (commenter?.email) recipients.add(commenter.email);
+      });
+
+    // Add emoji reactors
+    mockDB.emojis
+      .filter(e => e.subjectID === issueID)
+      .forEach(emoji => {
+        const reactor = mockDB.users.find(u => u.id === emoji.creatorID);
+        if (reactor?.email) recipients.add(reactor.email);
+      });
+
+    // Add emoji reactors on comments
+    mockDB.comments
+      .filter(c => c.issueID === issueID)
+      .forEach(comment => {
+        mockDB.emojis
+          .filter(e => e.subjectID === comment.id)
+          .forEach(emoji => {
+            const reactor = mockDB.users.find(u => u.id === emoji.creatorID);
+            if (reactor?.email) recipients.add(reactor.email);
+          });
+      });
+
+    // Add previous assignee if this is an assignee change
+    if (isAssigneeChange && previousAssigneeID) {
+      const previousAssignee = mockDB.users.find(
+        u => u.id === previousAssigneeID,
+      );
+      if (previousAssignee?.email) recipients.add(previousAssignee.email);
+    }
+
+    // Filter based on visibility
+    if (issue.visibility !== 'public') {
+      return Array.from(recipients)
+        .filter(email => {
+          const user = mockDB.users.find(u => u.email === email);
+          return user?.role === 'crew';
+        })
+        .map(email => ({email}));
+    }
+
+    return Array.from(recipients).map(email => ({email}));
+  };
+
+  it('should include issue creator, commenters, emoji reactors, and assignees for public issues', async () => {
     const recipients = await gatherRecipients(
       createMockTx(mockSql),
       'issue-123',
       false,
     );
 
-    expect(recipients).toHaveLength(4);
-    expect(recipients).toContain('creator@example.com');
-    expect(recipients).toContain('commenter@example.com');
-    expect(recipients).toContain('emoji_reactor@example.com');
-    expect(recipients).toContain('assignee@example.com');
+    expect(recipients).toHaveLength(3);
+    expect(recipients).toContain('user1@example.com'); // creator
+    expect(recipients).toContain('user2@example.com'); // assignee and commenter
+    expect(recipients).toContain('user3@example.com'); // emoji reactor
   });
 
   it('should only include crew members for private issues', async () => {
-    // Mock the SQL query to return only crew members for private issues
-    const mockSql = async () => {
-      // Simulate the visibility check in the SQL query
-      const isPublic = false;
-      if (!isPublic) {
-        return [{email: 'crew@example.com', role: 'crew'}];
-      }
-      return [
-        {email: 'crew@example.com', role: 'crew'},
-        {email: 'non_crew@example.com', role: 'user'},
-      ];
-    };
-
     const recipients = await gatherRecipients(
       createMockTx(mockSql),
-      'issue-123',
+      'issue-456',
       false,
     );
 
     expect(recipients).toHaveLength(1);
-    expect(recipients).toContain('crew@example.com');
-    expect(recipients).not.toContain('non_crew@example.com');
+    expect(recipients).toContain('user3@example.com'); // only crew member
+    expect(recipients).not.toContain('user4@example.com'); // not crew
+    expect(recipients).not.toContain('user1@example.com'); // not crew
   });
 
   it('should include previous assignee when assignee changes', async () => {
-    const mockSql = async () => [
-      {email: 'previous_assignee@example.com'},
-      {email: 'other@example.com'},
-    ];
-
     const recipients = await gatherRecipients(
       createMockTx(mockSql),
       'issue-123',
       true,
-      'prev-assignee-id',
+      'user1',
     );
 
-    expect(recipients).toContain('previous_assignee@example.com');
+    expect(recipients).toContain('user1@example.com'); // previous assignee
   });
 
   it('should not include previous assignee when not an assignee change', async () => {
-    // Mock the SQL query to not include previous assignee when isAssigneeChange is false
-    const mockSql = async () => {
-      const isAssigneeChange = false;
-      if (!isAssigneeChange) {
-        return [{email: 'other@example.com'}];
-      }
-      return [
-        {email: 'previous_assignee@example.com'},
-        {email: 'other@example.com'},
-      ];
-    };
-
     const recipients = await gatherRecipients(
       createMockTx(mockSql),
       'issue-123',
       false,
-      'prev-assignee-id',
+      'user1',
     );
 
-    expect(recipients).not.toContain('previous_assignee@example.com');
+    expect(recipients).toHaveLength(3);
+    expect(recipients).toContain('user1@example.com'); // creator
+    expect(recipients).toContain('user2@example.com'); // assignee and commenter
+    expect(recipients).toContain('user3@example.com'); // emoji reactor
   });
 
   it('should filter out null emails', async () => {
-    // Mock the SQL query to filter out null emails
-    const mockSql = async () => {
-      const results = [
-        {email: 'valid@example.com'},
-        {email: null},
-        {email: 'another@example.com'},
-      ];
-      return results.filter(r => r.email !== null);
-    };
+    // Add a user with null email to test data
+    const originalUsers = [...mockDB.users];
+    mockDB.users.push({id: 'user5', email: null, role: 'user'});
+
+    // Add this user as a commenter
+    const originalComments = [...mockDB.comments];
+    mockDB.comments.push({
+      id: 'comment3',
+      issueID: 'issue-123',
+      creatorID: 'user5',
+      body: 'test comment',
+    });
 
     const recipients = await gatherRecipients(
       createMockTx(mockSql),
@@ -117,8 +198,13 @@ describe('gatherRecipients', () => {
       false,
     );
 
-    expect(recipients).toHaveLength(2);
-    expect(recipients).toContain('valid@example.com');
-    expect(recipients).toContain('another@example.com');
+    // Restore original data
+    mockDB.users = originalUsers;
+    mockDB.comments = originalComments;
+
+    expect(recipients).toHaveLength(3);
+    expect(recipients).toContain('user1@example.com');
+    expect(recipients).toContain('user2@example.com');
+    expect(recipients).toContain('user3@example.com');
   });
 });
