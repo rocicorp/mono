@@ -79,7 +79,7 @@ test.each(
         name: '3 level related: customer -> supportRep -> reportsTo',
         createQuery: q =>
           q.invoice.related('customer', c =>
-            c.related('supportRep', r => r.related('reportsTo')),
+            c.related('supportRep', r => r.related('reportsToEmployee')),
           ),
       },
       {

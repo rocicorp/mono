@@ -91,6 +91,11 @@ function checkRelationship(
   // TS should be able to check this for us but something is preventing it from happening.
   Object.entries(relationships).forEach(([name, rel]) => {
     let source = tables[tableName];
+    if (source.columns[name] !== undefined) {
+      throw new Error(
+        `Relationship "${tableName}"."${name}" cannot have the same name as the column "${name}" on the the table "${source.name}"`,
+      );
+    }
     rel.forEach(connection => {
       if (!tables[connection.destSchema]) {
         throw new Error(

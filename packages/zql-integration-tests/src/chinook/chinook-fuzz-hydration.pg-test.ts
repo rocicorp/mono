@@ -1,10 +1,11 @@
+/* eslint-disable no-console */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {bootstrap, runAndCompare} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 import {test} from 'vitest';
-import {generateQuery} from '../../../zql/src/query/test/query-gen.ts';
+import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
 import '../helpers/comparePg.ts';
 import {ast} from '../../../zql/src/query/query-impl.ts';
 import type {AnyQuery} from '../../../zql/src/query/test/util.ts';
@@ -32,10 +33,9 @@ if (REPRO_SEED) {
   // eslint-disable-next-line no-only-tests/no-only-tests
   test.only('repro', async () => {
     const {query} = createCase(REPRO_SEED);
-    // eslint-disable-next-line no-console
     console.log(
       'ZQL',
-      await formatOutput(ast(query).table + astToZQL(ast(query))),
+      await formatOutput(ast(query[0]).table + astToZQL(ast(query[0]))),
     );
   });
 }
@@ -50,7 +50,7 @@ function createCase(seed?: number | undefined) {
   });
   return {
     seed,
-    query: generateQuery(
+    query: generateShrinkableQuery(
       schema,
       {},
       rng,
@@ -60,21 +60,62 @@ function createCase(seed?: number | undefined) {
   };
 }
 
-async function runCase({query, seed}: {query: AnyQuery; seed: number}) {
+async function runCase({
+  query,
+  seed,
+}: {
+  query: [AnyQuery, AnyQuery[]];
+  seed: number;
+}) {
   try {
     await runAndCompare(
       schema,
       staticToRunnable({
-        query,
+        query: query[0],
         schema,
         harness,
       }),
       undefined,
     );
   } catch (e) {
+    const zql = await shrink(query[1], seed);
     if (seed === REPRO_SEED) {
       throw e;
     }
-    throw new Error('mismatch. repro seed: ' + seed);
+
+    throw new Error('Mismatch. Repro seed: ' + seed + '\nshrunk zql: ' + zql);
   }
+}
+
+async function shrink(generations: AnyQuery[], seed: number) {
+  console.log('Found failure at seed', seed);
+  console.log('Shrinking', generations.length, 'generations');
+  let low = 0;
+  let high = generations.length;
+  let lastFailure = -1;
+  while (low < high) {
+    const mid = low + ((high - low) >> 1);
+    try {
+      await runAndCompare(
+        schema,
+        staticToRunnable({
+          query: generations[mid],
+          schema,
+          harness,
+        }),
+        undefined,
+      );
+      low = mid + 1;
+    } catch (e) {
+      lastFailure = mid;
+      high = mid;
+    }
+  }
+  if (lastFailure === -1) {
+    throw new Error('no failure found');
+  }
+  const query = generations[lastFailure];
+  const ret = formatOutput(ast(query).table + astToZQL(ast(query)));
+  console.log('Shrunk to', ret);
+  return ret;
 }

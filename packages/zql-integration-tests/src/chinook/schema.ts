@@ -187,7 +187,7 @@ const customerRelationships = relationships(customer, ({one}) => ({
 }));
 
 const employeeRelationships = relationships(employee, ({one}) => ({
-  reportsTo: one({
+  reportsToEmployee: one({
     sourceField: ['reportsTo'],
     destField: ['id'],
     destSchema: employee,
