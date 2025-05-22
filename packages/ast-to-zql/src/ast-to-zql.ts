@@ -205,7 +205,9 @@ function transformExistsCondition(
 function getNextExistsSubquery(related: CorrelatedSubquery): AST {
   if (
     related.subquery.where?.type === 'correlatedSubquery' &&
-    related.subquery.where.related.subquery.alias === related.subquery.alias
+    related.subquery.where.related.subquery.alias?.includes(
+      SUBQ_PREFIX + 'zhidden_',
+    )
   ) {
     return getNextExistsSubquery(related.subquery.where.related);
   }

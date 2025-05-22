@@ -31,8 +31,14 @@ export class StaticQuery<
     return new ExpressionBuilder(this._exists);
   }
 
-  constructor(schema: TSchema, tableName: TTable, ast: AST, format: Format) {
-    super(schema, tableName, ast, format, 'permissions');
+  constructor(
+    schema: TSchema,
+    tableName: TTable,
+    ast: AST,
+    format: Format,
+    currentJunction?: string | undefined,
+  ) {
+    super(schema, tableName, ast, format, 'permissions', currentJunction);
   }
 
   protected [newQuerySymbol]<
@@ -44,8 +50,9 @@ export class StaticQuery<
     tableName: TTable,
     ast: AST,
     format: Format,
+    currentJunction: string | undefined,
   ): StaticQuery<TSchema, TTable, TReturn> {
-    return new StaticQuery(schema, tableName, ast, format);
+    return new StaticQuery(schema, tableName, ast, format, currentJunction);
   }
 
   get ast() {
