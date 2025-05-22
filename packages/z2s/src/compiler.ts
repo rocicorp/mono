@@ -119,10 +119,19 @@ function select(
     ${maybeWhere(ast.where)} ${where(spec, ast.where, table)}
     ${maybeWhere(correlate)} ${correlate ? correlate(table) : sql``}
     ${orderBy(spec, ast.orderBy, table)}
-    ${format?.singular ? limit(1) : limit(ast.limit)}`;
+    ${limit(ast.limit, format?.singular)}`;
 }
 
-export function limit(limit: number | undefined): SQLQuery {
+export function limit(
+  limit: number | undefined,
+  singular: boolean | undefined,
+): SQLQuery {
+  if (limit === 0) {
+    return sql`LIMIT 0`;
+  }
+  if (singular) {
+    return sql`LIMIT 1`;
+  }
   if (limit === undefined) {
     return sql``;
   }
@@ -238,9 +247,10 @@ function relationshipSubquery(
           nestedAst.where
             ? sql`AND ${where(spec, nestedAst.where, lastTable)}`
             : sql``
-        } ${orderBy(spec, nestedAst.orderBy, lastTable)} ${
-          format?.singular ? limit(1) : limit(last(participatingTables)?.limit)
-        } ) ${sql.ident(innerAlias)}
+        } ${orderBy(spec, nestedAst.orderBy, lastTable)} ${limit(
+          last(participatingTables)?.limit,
+          format?.singular,
+        )} ) ${sql.ident(innerAlias)}
       ) as ${sql.ident(relationship.subquery.alias)}`;
   }
 
