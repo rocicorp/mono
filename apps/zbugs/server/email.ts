@@ -1,5 +1,5 @@
-import {type Schema} from '../shared/schema.ts';
-import {type Transaction} from '@rocicorp/zero';
+import {schema, type Schema} from '../shared/schema.ts';
+import {type Transaction, type Row} from '@rocicorp/zero';
 
 export async function sendEmail({
   tx,
@@ -7,6 +7,7 @@ export async function sendEmail({
   title,
   message,
   link,
+  issue,
   attachments = [],
 }: {
   tx: Transaction<Schema>;
@@ -14,6 +15,7 @@ export async function sendEmail({
   title: string;
   message: string;
   link: string;
+  issue: Row<typeof schema.tables.issue>;
   attachments?: {
     filename: string;
     contentType: string;
@@ -22,6 +24,7 @@ export async function sendEmail({
 }) {
   const apiKey = process.env.LOOPS_EMAIL_API_KEY;
   const transactionalId = process.env.LOOPS_TRANSACTIONAL_ID;
+  const idempotencyKey = `${tx.clientID}:${tx.mutationID}:${email}`;
 
   if (!apiKey || !transactionalId) {
     console.log(
@@ -30,19 +33,31 @@ export async function sendEmail({
     return;
   }
 
+  const titleMessage = [title, message].filter(Boolean).join('\n');
+  // --- headers for threading ---
+  const threadId = `<issue-${issue.id}@bugs.rocicorp.dev>`;
+  const messageId = `<${tx.clientID}-${tx.mutationID}-issue-${issue.id}@bugs.rocicorp.dev>`;
+  const headers = {
+    'Message-ID': messageId,
+    'In-Reply-To': threadId,
+    'References': threadId,
+  };
+
+  const formattedSubject = `#${issue.shortID} ${issue.title.slice(0, 80)}${issue.title.length > 80 ? '...' : ''}`;
+
   const body = {
     email,
     transactionalId,
     addToAudience: true,
+    headers,
     dataVariables: {
-      subject: title,
-      message,
+      subject: formattedSubject,
+      message: titleMessage,
       link,
     },
     attachments,
   };
 
-  const idempotencyKey = `${tx.clientID}:${tx.mutationID}`;
   const options = {
     method: 'POST',
     headers: {

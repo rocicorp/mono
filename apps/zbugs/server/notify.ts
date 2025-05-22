@@ -58,17 +58,14 @@ export async function notify(
   authData: AuthData | undefined,
   args: NotificationArgs,
   postCommitTasks: PostCommitTask[],
+  isAssigneeChange?: boolean,
+  previousAssigneeID?: string | null | undefined,
 ): Promise<void> {
   assertIsLoggedIn(authData);
 
   const {issueID, kind} = args;
   const issue = await tx.query.issue.where('id', issueID).one();
   assert(issue);
-
-  if (issue.visibility !== 'public') {
-    console.log('Skipping notification for private issue', issueID);
-    return;
-  }
 
   const modifierUserID = authData.sub;
   const modifierUser = await tx.query.user.where('id', modifierUserID).one();
@@ -78,55 +75,91 @@ export async function notify(
     // TODO: we shouldn't have to assert and cast this given this is called from `server-mutators`.
     tx as ServerTransaction<Schema, postgres.TransactionSql>,
     issueID,
+    isAssigneeChange,
+    previousAssigneeID,
   );
+
+  // If no recipients, skip notification
+  if (recipients.length === 0) {
+    console.log('No recipients for notification', issueID);
+    return;
+  }
+
+  // Only send to Discord for public issues
+  const shouldSendToDiscord = issue.visibility === 'public';
 
   switch (kind) {
     case 'create-issue': {
       const payload = {
         title: `${modifierUser.login} reported an issue`,
-        message: [issue.title, clip(issue.description ?? '')]
+        message: [issue.title, clip((await issue.description) ?? '')]
           .filter(Boolean)
           .join('\n'),
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
       };
       for (const recipient of recipients) {
         postCommitTasks.push(async () => {
-          await sendEmail({tx, email: recipient, ...payload});
+          await sendEmail({tx, email: recipient, ...payload, issue});
         });
       }
-      postCommitTasks.push(() => postToDiscord(payload));
+      if (shouldSendToDiscord) {
+        postCommitTasks.push(() => postToDiscord(payload));
+      }
       break;
     }
 
     case 'update-issue': {
       const {update} = args;
+      const changes: string[] = [];
+
       if (update.open !== undefined) {
-        const title = `${modifierUser.login} ${
-          update.open ? 'reopened' : 'closed'
-        } an issue`;
-
-        const payload = {
-          recipients,
-          title,
-          message: issue.title,
-          link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
-        };
-        for (const recipient of recipients) {
-          postCommitTasks.push(async () => {
-            await sendEmail({tx, email: recipient, ...payload});
-          });
+        changes.push(`Status changed to ${update.open ? 'open' : 'closed'}`);
+      }
+      if (update.assigneeID !== undefined) {
+        if (update.assigneeID === null) {
+          changes.push('Assignee was removed');
+        } else {
+          const newAssignee = await tx.query.user
+            .where('id', update.assigneeID)
+            .one();
+          if (newAssignee) {
+            changes.push(`Assignee changed to ${newAssignee.login}`);
+          }
         }
-        postCommitTasks.push(() => postToDiscord(payload));
-      } else {
-        const payload = {
-          recipients,
-          title: `${modifierUser.login} updated an issue`,
-          message: [issue.title, clip(issue.description ?? '')]
-            .filter(Boolean)
-            .join('\n'),
-          link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
-        };
+      }
+      if (update.visibility !== undefined) {
+        changes.push(`Visibility changed to ${update.visibility}`);
+      }
+      if (update.title !== undefined) {
+        changes.push(`Title changed to "${update.title}"`);
+      }
+      if (update.description !== undefined) {
+        changes.push('Description was updated');
+      }
 
+      const title = `${modifierUser.login} updated an issue`;
+      const message = [
+        issue.title,
+        ...changes,
+        clip((await issue.description) ?? ''),
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const payload = {
+        recipients,
+        title,
+        message,
+        link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
+      };
+
+      for (const recipient of recipients) {
+        postCommitTasks.push(async () => {
+          await sendEmail({tx, email: recipient, ...payload, issue});
+        });
+      }
+
+      if (shouldSendToDiscord) {
         postCommitTasks.push(() => postToDiscord(payload));
       }
       break;
@@ -141,7 +174,15 @@ export async function notify(
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
       };
 
-      postCommitTasks.push(() => postToDiscord(payload));
+      for (const recipient of recipients) {
+        postCommitTasks.push(async () => {
+          await sendEmail({tx, email: recipient, ...payload, issue});
+        });
+      }
+
+      if (shouldSendToDiscord) {
+        postCommitTasks.push(() => postToDiscord(payload));
+      }
       break;
     }
 
@@ -153,11 +194,19 @@ export async function notify(
       const payload = {
         recipients,
         title: `${modifierUser.login} reacted to a comment`,
-        message: [clip(comment.body), emoji].filter(Boolean).join('\n'),
+        message: [clip(await comment.body), emoji].filter(Boolean).join('\n'),
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}`,
       };
 
-      postCommitTasks.push(() => postToDiscord(payload));
+      for (const recipient of recipients) {
+        postCommitTasks.push(async () => {
+          await sendEmail({tx, email: recipient, ...payload, issue});
+        });
+      }
+
+      if (shouldSendToDiscord) {
+        postCommitTasks.push(() => postToDiscord(payload));
+      }
       break;
     }
 
@@ -166,16 +215,19 @@ export async function notify(
       const payload = {
         recipients,
         title: `${modifierUser.login} commented on an issue`,
-        message: [issue.title, clip(comment)].join('\n'),
+        message: [issue.title, clip(await comment)].join('\n'),
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}#comment-${commentID}`,
       };
 
       for (const recipient of recipients) {
         postCommitTasks.push(async () => {
-          await sendEmail({tx, email: recipient, ...payload});
+          await sendEmail({tx, email: recipient, ...payload, issue});
         });
       }
-      postCommitTasks.push(() => postToDiscord(payload));
+
+      if (shouldSendToDiscord) {
+        postCommitTasks.push(() => postToDiscord(payload));
+      }
       break;
     }
 
@@ -185,11 +237,19 @@ export async function notify(
       const payload = {
         recipients,
         title: `${modifierUser.login} edited a comment`,
-        message: [issue.title, clip(comment)].join('\n'),
+        message: [issue.title, clip(await comment)].join('\n'),
         link: `https://bugs.rocicorp.dev/issue/${issue.shortID}#comment-${commentID}`,
       };
 
-      postCommitTasks.push(() => postToDiscord(payload));
+      for (const recipient of recipients) {
+        postCommitTasks.push(async () => {
+          await sendEmail({tx, email: recipient, ...payload, issue});
+        });
+      }
+
+      if (shouldSendToDiscord) {
+        postCommitTasks.push(() => postToDiscord(payload));
+      }
       break;
     }
   }
@@ -199,23 +259,83 @@ function clip(s: string) {
   return s.length > 255 ? s.slice(0, 252) + '...' : s;
 }
 
-async function gatherRecipients(
+export async function gatherRecipients(
   tx: ServerTransaction<Schema, postgres.TransactionSql>,
   issueID: string,
+  isAssigneeChange = false,
+  previousAssigneeID?: string | null | undefined,
 ): Promise<string[]> {
   const sql = tx.dbTransaction.wrappedTransaction;
 
-  const recipientRows = await sql`SELECT DISTINCT "user".email
-  FROM (
-      SELECT DISTINCT "creatorID" AS "userID" FROM "comment" WHERE "issueID" = ${issueID}
+  // Get all recipient candidates
+  const recipientRows = await sql`
+    WITH issue_info AS (
+      SELECT 
+        "creatorID",
+        "assigneeID",
+        "visibility"
+      FROM "issue"
+      WHERE id = ${issueID}
+    ),
+    recipient_candidates AS (
+      -- Issue creator
+      SELECT DISTINCT "user".id, "user".email, "user".role
+      FROM issue_info
+      JOIN "user" ON "user".id = issue_info."creatorID"
+      
       UNION
-      SELECT DISTINCT "creatorID" AS "userID" FROM "emoji" WHERE "subjectID" = ${issueID}
+      
+      -- Users with emojis on the issue
+      SELECT DISTINCT "user".id, "user".email, "user".role
+      FROM "emoji"
+      JOIN "user" ON "user".id = "emoji"."creatorID"
+      WHERE "emoji"."subjectID" = ${issueID}
+      
       UNION
-      SELECT "creatorID" AS "userID" FROM "issue" WHERE "id" = ${issueID}
+      
+      -- Users who have commented
+      SELECT DISTINCT "user".id, "user".email, "user".role
+      FROM "comment"
+      JOIN "user" ON "user".id = "comment"."creatorID"
+      WHERE "comment"."issueID" = ${issueID}
+      
       UNION
-      SELECT "assigneeID" AS "userID" FROM "issue" WHERE "id" = ${issueID}
-  ) AS combined
-  JOIN "user" ON "user".id = combined."userID" AND "user".email IS NOT NULL;`;
+      
+      -- Users with emojis on comments
+      SELECT DISTINCT "user".id, "user".email, "user".role
+      FROM "emoji"
+      JOIN "comment" ON "comment".id = "emoji"."subjectID"
+      JOIN "user" ON "user".id = "emoji"."creatorID"
+      WHERE "comment"."issueID" = ${issueID}
+      
+      UNION
+      
+      -- Current assignee (if exists)
+      SELECT DISTINCT "user".id, "user".email, "user".role
+      FROM issue_info
+      JOIN "user" ON "user".id = issue_info."assigneeID"
+      WHERE issue_info."assigneeID" IS NOT NULL
+      
+      UNION
+      
+      -- Previous assignee (if this is an assignee change and previous assignee exists)
+      SELECT DISTINCT "user".id, "user".email, "user".role
+      FROM "user"
+      WHERE ${isAssigneeChange} 
+        AND ${previousAssigneeID ? sql`"user".id = ${previousAssigneeID}` : sql`FALSE`}
+    )
+    SELECT DISTINCT email
+    FROM recipient_candidates
+    WHERE email IS NOT NULL
+    AND (
+      -- If issue is public, include all candidates
+      EXISTS (
+        SELECT 1 FROM issue_info WHERE visibility = 'public'
+      )
+      OR
+      -- If issue is not public, only include crew members
+      role = 'crew'
+    );`;
 
   return recipientRows.map(row => row.email);
 }
