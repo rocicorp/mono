@@ -133,8 +133,8 @@ export default $config({
                 roleArn: ecsVolumeRole?.arn,
                 volumeType: 'gp3',
                 // Note: The maximum allowed IOPS/GB ratio is 500.
-                sizeInGb: 30,
-                iops: 15000,
+                sizeInGb: process.env.EBS_SIZE_GB || 30,
+                iops: process.env.EBS_IOPS || 15000,
                 fileSystemType: 'ext4',
               },
             },
