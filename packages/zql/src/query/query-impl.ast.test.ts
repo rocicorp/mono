@@ -58,7 +58,7 @@ describe('building the AST', () => {
                     ],
                   },
                   "subquery": {
-                    "alias": "zsubq_labels",
+                    "alias": "zsubq_zhidden_labels",
                     "orderBy": [
                       [
                         "id",
@@ -1709,7 +1709,7 @@ describe('exists', () => {
                     ],
                   },
                   "subquery": {
-                    "alias": "zsubq_labels",
+                    "alias": "zsubq_zhidden_labels",
                     "orderBy": [
                       [
                         "id",
@@ -1895,7 +1895,7 @@ describe('exists', () => {
                     ],
                   },
                   "subquery": {
-                    "alias": "zsubq_labels",
+                    "alias": "zsubq_zhidden_labels",
                     "orderBy": [
                       [
                         "id",
@@ -2030,7 +2030,7 @@ describe('exists', () => {
                         ],
                       },
                       "subquery": {
-                        "alias": "zsubq_labels",
+                        "alias": "zsubq_zhidden_labels",
                         "orderBy": [
                           [
                             "id",

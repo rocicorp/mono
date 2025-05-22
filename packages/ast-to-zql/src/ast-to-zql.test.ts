@@ -65,7 +65,7 @@ test('not exists over a junction edge', () => {
                 parentField: ['labelId'],
               },
               subquery: {
-                alias: 'zsubq_labels',
+                alias: 'zsubq_zhidden_labels',
                 orderBy: [['id', 'asc']],
                 table: 'label',
               },

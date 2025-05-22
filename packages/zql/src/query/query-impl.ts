@@ -519,7 +519,7 @@ export abstract class AbstractQuery<
           destSchema,
           {
             table: destSchema,
-            alias: `${SUBQ_PREFIX}${relationship}`,
+            alias: `${SUBQ_PREFIX}zhidden_${relationship}`,
           },
           defaultFormat,
           relationship,

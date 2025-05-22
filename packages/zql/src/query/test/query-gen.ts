@@ -34,7 +34,7 @@ export function generateQuery(
   );
 }
 
-const maxDepth = 10;
+const maxDepth = 6;
 function augmentQuery(
   schema: Schema,
   data: Dataset,
