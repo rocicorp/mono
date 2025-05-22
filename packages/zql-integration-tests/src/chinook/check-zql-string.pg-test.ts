@@ -8,14 +8,11 @@ import type {AnyQuery} from '../../../zql/src/query/test/util.ts';
 import {StaticQuery} from '../../../zql/src/query/static-query.ts';
 import {staticToRunnable} from '../helpers/static.ts';
 
-const QUERY_STRING = `employee
-  .related('reportsToEmployee')
-  .orderBy('city', 'desc')
-  .orderBy('reportsTo', 'desc')
-  .orderBy('fax', 'desc')
-  .orderBy('id', 'asc')
-  .orderBy('state', 'desc')
-  .limit(154)`;
+const QUERY_STRING = `track
+  .whereExists('invoiceLines', q =>
+    q
+      .limit(0),
+  ).limit(1)`;
 
 const pgContent = await getChinook();
 
