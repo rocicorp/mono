@@ -108,6 +108,31 @@ const buildBranch = process.argv[2] ?? 'main';
 console.log(`Releasing from branch: ${buildBranch}`);
 
 try {
+  // Check that there are no uncommitted changes
+  const uncommittedChanges = execute('git status --porcelain', {
+    stdio: 'pipe',
+  });
+  if (uncommittedChanges) {
+    console.error(`There are uncommitted changes in the working directory.`);
+    console.error(`Perhaps you need to commit them?`);
+    process.exit(1);
+  }
+
+  // Check that root hash of working directory is the same as the root hash of the build branch
+  const rootHash = execute('git rev-parse HEAD', {stdio: 'pipe'});
+  const buildBranchRootHash = execute(`git rev-parse origin/${buildBranch}`, {
+    stdio: 'pipe',
+  });
+  if (rootHash !== buildBranchRootHash) {
+    console.error(
+      `Root hash of working directory does not match root hash of build branch`,
+    );
+    console.error(`Root hash: ${rootHash}`);
+    console.error(`Build branch root hash: ${buildBranchRootHash}`);
+    console.error(`Perhaps you need to push your changes to the build branch?`);
+    process.exit(1);
+  }
+
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
   // In order to be able to check out the release branch we have to do a full
   // clone. Only do the deep clone in this case though since in the common case
