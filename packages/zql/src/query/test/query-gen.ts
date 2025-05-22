@@ -31,8 +31,31 @@ export function generateQuery(
     faker,
     staticQuery(schema, selectRandom(rng, Object.keys(schema.tables))),
     serverSchema,
+    [],
   );
 }
+
+export function generateShrinkableQuery(
+  schema: Schema,
+  data: Dataset,
+  rng: Rng,
+  faker: Faker,
+  serverSchema?: ServerSchema | undefined,
+): [AnyQuery, Generation[]] {
+  const generations: Generation[] = [];
+  const q = augmentQuery(
+    schema,
+    data,
+    rng,
+    faker,
+    staticQuery(schema, selectRandom(rng, Object.keys(schema.tables))),
+    serverSchema,
+    generations,
+  );
+  return [q, generations];
+}
+
+type Generation = AnyQuery;
 
 const maxDepth = 6;
 function augmentQuery(
@@ -41,13 +64,15 @@ function augmentQuery(
   rng: Rng,
   faker: Faker,
   query: AnyQuery,
-  serverSchema?: ServerSchema | undefined,
+  serverSchema: ServerSchema | undefined,
+  generations: Generation[],
   depth = 0,
   inExists = false,
 ) {
   if (depth > maxDepth) {
     return query;
   }
+  generations.push(query);
   return addLimit(
     addOrderBy(
       addWhere(
@@ -65,7 +90,9 @@ function augmentQuery(
     }
 
     try {
-      return query.limit(Math.floor(rng() * 200));
+      query = query.limit(Math.floor(rng() * 200));
+      generations.push(query);
+      return query;
     } catch (e) {
       // junction tables don't support limit yet
       if (e instanceof NotImplementedError) {
@@ -95,6 +122,7 @@ function augmentQuery(
     try {
       columns.forEach(({name, direction}) => {
         query = query.orderBy(name, direction);
+        generations.push(query);
       });
     } catch (e) {
       // junction tables don't support order by yet
@@ -149,6 +177,7 @@ function augmentQuery(
             : randomValueForType(rng, faker, column.type, column.optional);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       query = query.where(columnName as any, operator, value);
+      generations.push(query);
     }
 
     return query;
@@ -173,6 +202,8 @@ function augmentQuery(
       relationshipsToAdd,
     );
     relationshipsToAddNames.forEach(relationshipName => {
+      const subGenerations: Generation[] = [];
+      const origQuery = query;
       query = query.related(relationshipName, q =>
         augmentQuery(
           schema,
@@ -181,10 +212,14 @@ function augmentQuery(
           faker,
           q,
           serverSchema,
+          subGenerations,
           depth + 1,
           inExists,
         ),
       );
+      for (const q of subGenerations) {
+        generations.push(origQuery.related(relationshipName, _ => q));
+      }
     });
 
     return query;
@@ -207,6 +242,8 @@ function augmentQuery(
     const existsToAddNames = shuffledRelationships.slice(0, existsToAdd);
     existsToAddNames.forEach(relationshipName => {
       if (rng() < 0.5) {
+        const subGenerations: Generation[] = [];
+        const origQuery = query;
         query = query.where(({not, exists}) =>
           not(
             exists(relationshipName, q =>
@@ -217,13 +254,23 @@ function augmentQuery(
                 faker,
                 q,
                 serverSchema,
+                subGenerations,
                 depth + 1,
                 true,
               ),
             ),
           ),
         );
+        for (const q of subGenerations) {
+          generations.push(
+            origQuery.where(({not, exists}) =>
+              not(exists(relationshipName, _ => q)),
+            ),
+          );
+        }
       } else {
+        const subGenerations: Generation[] = [];
+        const origQuery = query;
         query = query.whereExists(relationshipName, q =>
           augmentQuery(
             schema,
@@ -232,10 +279,14 @@ function augmentQuery(
             faker,
             q,
             serverSchema,
+            subGenerations,
             depth + 1,
             true,
           ),
         );
+        for (const q of subGenerations) {
+          generations.push(origQuery.whereExists(relationshipName, _ => q));
+        }
       }
     });
 
