@@ -9,6 +9,8 @@ dbs:
         retention: ${ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_MINUTES}m
         retention-check-interval: 1h
         sync-interval: ${ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES}m
+        multipart-concurrency: ${ZERO_LITESTREAM_MULTIPART_CONCURRENCY}
+        multipart-size: ${ZERO_LITESTREAM_MULTIPART_SIZE}
 
 logging:
   level: ${ZERO_LITESTREAM_LOG_LEVEL}

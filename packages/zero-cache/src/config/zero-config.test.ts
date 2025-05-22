@@ -300,18 +300,13 @@ test('zero-cache --help', () => {
      --litestream-multipart-concurrency number                   default: 48                                                                                       
        ZERO_LITESTREAM_MULTIPART_CONCURRENCY env                                                                                                                   
                                                                  The number of parts (of size --litestream-multipart-size bytes)                                   
-                                                                 to download in parallel when restoring the snapshot from the backup.                              
-                                                                                                                                                                   
-                                                                 This requires a custom build of litestream (version 0.3.13+z0.0.1+).                              
-                                                                 Set to 0 to disable.                                                                              
+                                                                 to upload or download in parallel when backing up or restoring the snapshot.                      
                                                                                                                                                                    
      --litestream-multipart-size number                          default: 16777216                                                                                 
        ZERO_LITESTREAM_MULTIPART_SIZE env                                                                                                                          
-                                                                 The size of each part when downloading the snapshot with --multipart-concurrency.                 
-                                                                 Multipart downloads require concurrency * size bytes of memory when restoring                     
-                                                                 the snapshot from the backup.                                                                     
-                                                                                                                                                                   
-                                                                 This requires a custom build of litestream (version 0.3.13+z0.0.1+).                              
+                                                                 The size of each part when uploading or downloading the snapshot with                             
+                                                                 --multipart-concurrency. Note that up to concurrency * size                                       
+                                                                 bytes of memory are used when backing up or restoring the snapshot.                               
                                                                                                                                                                    
      --storage-db-tmp-dir string                                 optional                                                                                          
        ZERO_STORAGE_DB_TMP_DIR env                                                                                                                                 
