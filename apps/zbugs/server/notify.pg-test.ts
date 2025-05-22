@@ -54,7 +54,7 @@ describe('notify', () => {
 
       INSERT INTO "issue" (id, "creatorID", "assigneeID", visibility) VALUES
         ('issue-123', 'user1', 'user2', 'public'),
-        ('issue-456', 'user3', 'user4', 'private');
+        ('issue-456', 'user3', 'user4', 'internal');
 
       INSERT INTO "comment" (id, "issueID", "creatorID", body) VALUES
         ('comment1', 'issue-123', 'user2', 'test comment'),
