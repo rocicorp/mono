@@ -187,7 +187,7 @@ beforeEach(() => {
 });
 
 test('limit', () => {
-  expect(formatPgInternalConvert(limit(10))).toMatchInlineSnapshot(`
+  expect(formatPgInternalConvert(limit(10, false))).toMatchInlineSnapshot(`
     {
       "text": "LIMIT $1::text::double precision",
       "values": [
@@ -195,7 +195,8 @@ test('limit', () => {
       ],
     }
   `);
-  expect(formatPgInternalConvert(limit(undefined))).toMatchInlineSnapshot(`
+  expect(formatPgInternalConvert(limit(undefined, undefined)))
+    .toMatchInlineSnapshot(`
     {
       "text": "",
       "values": [],
