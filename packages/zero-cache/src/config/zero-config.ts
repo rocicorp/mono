@@ -489,21 +489,16 @@ export const zeroOptions = {
       type: v.number().default(48),
       desc: [
         `The number of parts (of size {bold --litestream-multipart-size} bytes)`,
-        `to download in parallel when restoring the snapshot from the backup.`,
-        ``,
-        `This requires a custom build of litestream (version 0.3.13+z0.0.1+).`,
-        `Set to 0 to disable.`,
+        `to upload or download in parallel when backing up or restoring the snapshot.`,
       ],
     },
 
     multipartSize: {
       type: v.number().default(16 * 1024 * 1024),
       desc: [
-        `The size of each part when downloading the snapshot with {bold --multipart-concurrency}.`,
-        `Multipart downloads require {bold concurrency * size} bytes of memory when restoring`,
-        `the snapshot from the backup.`,
-        ``,
-        `This requires a custom build of litestream (version 0.3.13+z0.0.1+).`,
+        `The size of each part when uploading or downloading the snapshot with`,
+        `{bold --multipart-concurrency}. Note that up to {bold concurrency * size}`,
+        `bytes of memory are used when backing up or restoring the snapshot.`,
       ],
     },
   },
