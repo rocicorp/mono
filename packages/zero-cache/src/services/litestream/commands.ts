@@ -61,6 +61,8 @@ function getLitestream(
     checkpointThresholdMB,
     incrementalBackupIntervalMinutes,
     snapshotBackupIntervalHours,
+    multipartConcurrency,
+    multipartSize,
   } = config.litestream;
 
   // Set the snapshot interval to something smaller than x hours so that
@@ -88,6 +90,8 @@ function getLitestream(
       ['ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_MINUTES']: String(
         snapshotBackupIntervalMinutes,
       ),
+      ['ZERO_LITESTREAM_MULTIPART_CONCURRENCY']: String(multipartConcurrency),
+      ['ZERO_LITESTREAM_MULTIPART_SIZE']: String(multipartSize),
       ['ZERO_LOG_FORMAT']: config.log.format,
       ['LITESTREAM_CONFIG']: configPath,
       ['LITESTREAM_PORT']: String(port),
@@ -119,20 +123,7 @@ async function tryRestore(lc: LogContext, config: ZeroConfig) {
     'debug', // Include all output from `litestream restore`, as it's minimal.
     backupURLOverride,
   );
-  const {
-    restoreParallelism: parallelism,
-    multipartConcurrency,
-    multipartSize,
-  } = config.litestream;
-  const multipartArgs =
-    multipartConcurrency === 0 || multipartSize === 0
-      ? []
-      : [
-          '-multipart-concurrency',
-          multipartConcurrency.toString(),
-          '-multipart-size',
-          multipartSize.toString(),
-        ];
+  const {restoreParallelism: parallelism} = config.litestream;
   const proc = spawn(
     litestream,
     [
@@ -141,7 +132,6 @@ async function tryRestore(lc: LogContext, config: ZeroConfig) {
       '-if-replica-exists',
       '-parallelism',
       String(parallelism),
-      ...multipartArgs,
       config.replica.file,
     ],
     {env, stdio: 'inherit', windowsHide: true},
