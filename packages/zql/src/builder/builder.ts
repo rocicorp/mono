@@ -219,7 +219,7 @@ function buildPipelineInternal(
   }
 
   for (const csq of csqsFromCondition) {
-    end = applyCorrelatedSubQuery(csq, delegate, end, name);
+    end = applyCorrelatedSubQuery(csq, delegate, end, name, true);
   }
 
   if (ast.where && !fullyAppliedFilters) {
@@ -236,7 +236,7 @@ function buildPipelineInternal(
 
   if (ast.related) {
     for (const csq of ast.related) {
-      end = applyCorrelatedSubQuery(csq, delegate, end, name);
+      end = applyCorrelatedSubQuery(csq, delegate, end, name, false);
     }
   }
 
@@ -362,7 +362,14 @@ function applyCorrelatedSubQuery(
   delegate: BuilderDelegate,
   end: Input,
   name: string,
+  fromCondition: boolean,
 ) {
+  // TODO: we only omit the join if the CSQ if from a condition since
+  // we want to create an empty array for `related` fields that are `limit(0)`
+  if (sq.subquery.limit === 0 && fromCondition) {
+    return end;
+  }
+
   assert(sq.subquery.alias, 'Subquery must have an alias');
   const child = buildPipelineInternal(
     sq.subquery,
@@ -391,6 +398,12 @@ function applyCorrelatedSubqueryCondition(
   name: string,
 ): FilterInput {
   assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
+  if (condition.related.subquery.limit === 0) {
+    if (condition.op === 'EXISTS') {
+      return new Filter(input, () => false);
+    }
+    return new Filter(input, () => true);
+  }
   const existsName = `${name}:exists(${condition.related.subquery.alias})`;
   return delegate.decorateFilterInput(
     new Exists(

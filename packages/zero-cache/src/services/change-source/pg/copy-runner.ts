@@ -6,7 +6,7 @@ import type {PostgresDB, PostgresTransaction} from '../../../types/pg.ts';
 import {orTimeoutWith} from '../../../types/timeout.ts';
 
 const CONNECTION_REUSE_TIMEOUT = 100;
-const TIMED_OUT = {};
+const TIMED_OUT = {reason: 'commit timed out'};
 
 type Task<T> = {
   copy: (tx: PostgresTransaction, lc: LogContext) => Promise<T>;
@@ -74,7 +74,7 @@ export class CopyRunner {
     }
   }
 
-  #run(task: Task<unknown>): Promise<unknown> {
+  async #run(task: Task<unknown>): Promise<unknown> {
     const {db, connID} = this.#getConnection();
     const lc = this.#lc.withContext('conn', connID.toString());
 
@@ -96,11 +96,18 @@ export class CopyRunner {
     // and the connection is healthy, so the connection can be reused.
     // If the transaction does not complete within a timeout, it is considered
     // hung and the connection is closed.
-    void orTimeoutWith(txDone, CONNECTION_REUSE_TIMEOUT, TIMED_OUT).then(
-      done =>
-        done === TIMED_OUT ? closeConnection() : this.#pool.push({db, connID}),
-      closeConnection,
-    );
+    const committed = await orTimeoutWith(
+      txDone,
+      CONNECTION_REUSE_TIMEOUT,
+      TIMED_OUT,
+    ).catch(e => (e instanceof Error ? e : new Error(String(e))));
+
+    if (committed === TIMED_OUT || committed instanceof Error) {
+      lc.debug?.(`closing connection`, committed);
+      closeConnection();
+    } else {
+      this.#pool.push({db, connID});
+    }
 
     return result.promise;
   }

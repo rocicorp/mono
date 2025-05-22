@@ -8,13 +8,11 @@ import type {AnyQuery} from '../../../zql/src/query/test/util.ts';
 import {StaticQuery} from '../../../zql/src/query/static-query.ts';
 import {staticToRunnable} from '../helpers/static.ts';
 
-const QUERY_STRING = `playlist
-  .where('id', 3)
-  .related('tracks', q =>
+const QUERY_STRING = `track
+  .whereExists('invoiceLines', q =>
     q
-      .related('invoiceLines')
-  )
-  .limit(1)`;
+      .limit(0),
+  ).limit(1)`;
 
 const pgContent = await getChinook();
 
