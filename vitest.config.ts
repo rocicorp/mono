@@ -17,6 +17,6 @@ function getPackages() {
 
 export default defineConfig({
   test: {
-    workspace: [...getPackages(), 'apps/*', 'tools/*'],
+    workspace: [...getPackages(), 'apps/zbugs/vitest.config.*.ts','tools/*'],
   },
 });
