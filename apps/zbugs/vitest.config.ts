@@ -1,5 +1,8 @@
 import {defineConfig, mergeConfig} from 'vitest/config';
 import config from '../../packages/shared/src/tool/vitest-config.ts';
+import tsconfigPaths from 'vite-tsconfig-paths';
+import {fileURLToPath} from 'url';
+import {dirname, resolve} from 'path';
 
 const ci = process.env['CI'] === 'true' || process.env['CI'] === '1';
 
@@ -9,7 +12,19 @@ function nameFromURL(url: string) {
 
 export function configForVersion(version: number, url: string) {
   const name = nameFromURL(url);
+  const rootDir = dirname(fileURLToPath(url));
+  const packagesDir = resolve(rootDir, '../../packages');
+
   return mergeConfig(config, {
+    plugins: [tsconfigPaths()],
+    resolve: {
+      alias: [
+        {
+          find: '@rocicorp/zero',
+          replacement: resolve(packagesDir, 'zero/src/zero.ts'),
+        },
+      ],
+    },
     test: {
       name: `${name}/pg-${version}`,
       browser: {enabled: false},
