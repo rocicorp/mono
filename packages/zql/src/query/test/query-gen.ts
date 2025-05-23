@@ -11,7 +11,7 @@ import {
   type Rng,
 } from './util.ts';
 import {NotImplementedError} from '../../error.ts';
-import type {ServerSchema} from '../../../../z2s/src/schema.ts';
+import type {ServerSchema} from '../../../../zero-schema/src/server-schema.ts';
 import {getDataForType} from '../../../../zql-integration-tests/src/helpers/data-gen.ts';
 export type Dataset = {
   [table: string]: Row[];

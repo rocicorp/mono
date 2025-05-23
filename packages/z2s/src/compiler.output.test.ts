@@ -22,7 +22,7 @@ import {
   simple,
   type Spec,
 } from './compiler.ts';
-import type {ServerSchema} from './schema.ts';
+import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {formatPgInternalConvert} from './sql.ts';
 
 // Tests the output of basic primitives.

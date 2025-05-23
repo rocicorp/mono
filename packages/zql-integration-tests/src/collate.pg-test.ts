@@ -4,7 +4,7 @@ import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
-import type {ServerSchema} from '../../z2s/src/schema.ts';
+import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {type Row} from '../../zero-protocol/src/data.ts';

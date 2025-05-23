@@ -16,7 +16,7 @@ import type {
   ServerColumnSchema,
   ServerSchema,
   ServerTableSchema,
-} from '../../z2s/src/schema.ts';
+} from '../../zero-schema/src/server-schema.ts';
 import {getServerSchema} from './schema.ts';
 import {assert} from '../../shared/src/asserts.ts';
 

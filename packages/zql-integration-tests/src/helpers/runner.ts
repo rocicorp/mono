@@ -11,7 +11,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {must} from '../../../shared/src/must.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {compile, extractZqlResult} from '../../../z2s/src/compiler.ts';
-import type {ServerSchema} from '../../../z2s/src/schema.ts';
+import type {ServerSchema} from '../../../zero-schema/src/server-schema.ts';
 import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
 import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
