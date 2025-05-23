@@ -10,6 +10,11 @@ function nameFromURL(url: string) {
 export function configForVersion(version: number, url: string) {
   const name = nameFromURL(url);
   return mergeConfig(config, {
+    resolve: {
+      alias: {
+        '@rocicorp/zero': '../../packages/zero/src/index.ts'
+      }
+    },
     test: {
       name: `${name}/pg-${version}`,
       browser: {enabled: false},
