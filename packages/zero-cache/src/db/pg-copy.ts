@@ -21,17 +21,15 @@ export class TextTransform extends Transform {
   // eslint-disable-next-line @typescript-eslint/naming-convention
   _transform(
     chunk: Buffer,
-    encoding: BufferEncoding,
+    _encoding: BufferEncoding,
     callback: (e?: Error) => void,
   ) {
     try {
-      const text = chunk.toString(encoding);
-
       let l = 0;
       let r = 0;
 
-      for (; r < text.length; r++) {
-        const ch = text.charCodeAt(r);
+      for (; r < chunk.length; r++) {
+        const ch = chunk[r];
         if (this.#escaped) {
           const escapedChar = ESCAPED_CHARACTERS[ch];
           if (escapedChar === undefined) {
@@ -47,7 +45,7 @@ export class TextTransform extends Transform {
         switch (ch) {
           case 0x5c: // '\'
             // flush segment
-            l < r && (this.#currVal += text.substring(l, r));
+            l < r && (this.#currVal += chunk.subarray(l, r).toString('utf8'));
             l = r + 1;
             this.#escaped = true;
             break;
@@ -55,7 +53,7 @@ export class TextTransform extends Transform {
           case 0x09: // '\t'
           case 0x0a: // '\n'
             // flush segment
-            l < r && (this.#currVal += text.substring(l, r));
+            l < r && (this.#currVal += chunk.subarray(l, r).toString('utf8'));
             l = r + 1;
 
             // Value is done in both cases.
@@ -65,7 +63,7 @@ export class TextTransform extends Transform {
         }
       }
       // flush segment
-      l < r && (this.#currVal += text.substring(l, r));
+      l < r && (this.#currVal += chunk.subarray(l, r).toString('utf8'));
       callback();
     } catch (e) {
       callback(e instanceof Error ? e : new Error(String(e)));
