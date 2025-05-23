@@ -3,7 +3,7 @@ import {beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 
-import type {ServerSchema} from '../../z2s/src/schema.ts';
+import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import type {DBTransaction, SchemaCRUD} from '../../zql/src/mutate/custom.ts';
 import {makeSchemaCRUD} from './custom.ts';
 import {getServerSchema} from './schema.ts';

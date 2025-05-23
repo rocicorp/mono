@@ -1,7 +1,10 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import {describe, expect, test} from 'vitest';
 import {unreachable} from '../../shared/src/asserts.ts';
-import type {ServerColumnSchema, ServerSchema} from '../../z2s/src/schema.ts';
+import type {
+  ServerColumnSchema,
+  ServerSchema,
+} from '../../zero-schema/src/server-schema.ts';
 import {pgToZqlTypeMap} from '../../zero-cache/src/types/pg.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
