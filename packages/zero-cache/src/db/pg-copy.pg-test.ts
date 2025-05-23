@@ -98,11 +98,11 @@ describe('pg-copy', () => {
             // Direct from postgres
             await sql`COPY foo TO stdout`.readable(),
             // All in one string (no chunking)
-            Readable.from(rawResponse),
+            Readable.from(Buffer.from(rawResponse)),
             // One character chunks
-            Readable.from(rawResponse.split('')),
+            Readable.from(rawResponse.split('').map(s => Buffer.from(s))),
             // Random splits
-            Readable.from(randomSplits(rawResponse)),
+            Readable.from(randomSplits(rawResponse).map(s => Buffer.from(s))),
           );
 
     expect(textOutput).toEqual(input.flatMap(toStrings));
