@@ -297,10 +297,11 @@ export async function processMutationWithTx(
   if (!errorMode) {
     const {ops} = mutation.args[0];
     const normalizedOps = authorizer.normalizeOps(ops);
-    if (
-      authorizer.canPreMutation(authData, normalizedOps) &&
-      authorizer.canPostMutation(authData, normalizedOps)
-    ) {
+    const [canPre, canPost] = await Promise.all([
+      authorizer.canPreMutation(authData, normalizedOps),
+      authorizer.canPostMutation(authData, normalizedOps),
+    ]);
+    if (canPre && canPost) {
       for (const op of ops) {
         switch (op.op) {
           case 'insert':

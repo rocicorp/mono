@@ -556,7 +556,7 @@ beforeEach(() => {
 });
 const lc = createSilentLogContext();
 
-test('cannot create an issue with the wrong creatorId, even if admin', () => {
+test('cannot create an issue with the wrong creatorId, even if admin', async () => {
   const ops = [
     {
       op: 'insert',
@@ -578,8 +578,8 @@ test('cannot create an issue with the wrong creatorId, even if admin', () => {
     role: 'admin',
   };
   expect(
-    writeAuthorizer.canPreMutation(authData, ops) &&
-      writeAuthorizer.canPostMutation(authData, ops),
+    (await writeAuthorizer.canPreMutation(authData, ops)) &&
+      (await writeAuthorizer.canPostMutation(authData, ops)),
   ).toBe(false);
 
   authData = {
@@ -587,8 +587,8 @@ test('cannot create an issue with the wrong creatorId, even if admin', () => {
     role: 'admin',
   };
   expect(
-    writeAuthorizer.canPreMutation(authData, ops) &&
-      writeAuthorizer.canPostMutation(authData, ops),
+    (await writeAuthorizer.canPreMutation(authData, ops)) &&
+      (await writeAuthorizer.canPostMutation(authData, ops)),
   ).toBe(true);
 });
 
@@ -658,7 +658,7 @@ function addViewState(viewState: Row<Schema['tables']['viewState']>) {
   });
 }
 
-test('cannot create an issue unless you are a project member', () => {
+test('cannot create an issue unless you are a project member', async () => {
   addUser({id: '001', name: 'Alice', role: 'user'});
   addUser({id: '002', name: 'Bob', role: 'user'});
   // project 1
@@ -685,8 +685,8 @@ test('cannot create an issue unless you are a project member', () => {
   let authData = {sub: '001', role: 'user'};
   // user 1 is a member of project 1 and creator of the issue
   expect(
-    writeAuthorizer.canPreMutation(authData, [op]) &&
-      writeAuthorizer.canPostMutation(authData, [op]),
+    (await writeAuthorizer.canPreMutation(authData, [op])) &&
+      (await writeAuthorizer.canPostMutation(authData, [op])),
   ).toBe(true);
 
   // user 2 is not a member of project 1
@@ -696,8 +696,8 @@ test('cannot create an issue unless you are a project member', () => {
   };
   authData = {sub: '002', role: 'user'};
   expect(
-    writeAuthorizer.canPreMutation(authData, [op2]) &&
-      writeAuthorizer.canPostMutation(authData, [op2]),
+    (await writeAuthorizer.canPreMutation(authData, [op2])) &&
+      (await writeAuthorizer.canPostMutation(authData, [op2])),
   ).toBe(false);
 
   // user 2 is a member of project 2
@@ -706,8 +706,8 @@ test('cannot create an issue unless you are a project member', () => {
     value: {...op2.value, projectId: '002'},
   };
   expect(
-    writeAuthorizer.canPreMutation(authData, [op3]) &&
-      writeAuthorizer.canPostMutation(authData, [op3]),
+    (await writeAuthorizer.canPreMutation(authData, [op3])) &&
+      (await writeAuthorizer.canPostMutation(authData, [op3])),
   ).toBe(true);
 });
 
@@ -757,7 +757,7 @@ describe('issue permissions', () => {
     });
   });
 
-  test('update as project member', () => {
+  test('update as project member', async () => {
     const op: UpdateOp = {
       op: 'update',
       tableName: 'issue',
@@ -767,19 +767,19 @@ describe('issue permissions', () => {
     let authData = {sub: '001', role: 'user'};
     // user 1 is a member of project 1 so they can update the issue
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(true);
 
     // user 2 is not a project member (or owner or creator) of issue 1 so they cannot update the issue
     authData = {sub: '002', role: 'user'};
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(false);
   });
 
-  test('update as creator', () => {
+  test('update as creator', async () => {
     const op: UpdateOp = {
       op: 'update',
       tableName: 'issue',
@@ -790,19 +790,19 @@ describe('issue permissions', () => {
     let authData = {sub: '001', role: 'user'};
     // user 1 is the creator of issue 2 so they can update the issue
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(true);
 
     // user 2 is not a creator (or owner or project member) of issue 2 so they cannot update the issue
     authData = {sub: '002', role: 'user'};
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(false);
   });
 
-  test('update as owner', () => {
+  test('update as owner', async () => {
     const op: UpdateOp = {
       op: 'update',
       tableName: 'issue',
@@ -813,19 +813,19 @@ describe('issue permissions', () => {
     let authData = {sub: '001', role: 'user'};
     // user 1 is the owner of issue 3 so they can update the issue
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(true);
 
     // user 2 is not a owner (or creator or project member) of issue 3 so they cannot update the issue
     authData = {sub: '002', role: 'user'};
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(false);
   });
 
-  test('update as admin', () => {
+  test('update as admin', async () => {
     const op: UpdateOp = {
       op: 'update',
       tableName: 'issue',
@@ -835,8 +835,8 @@ describe('issue permissions', () => {
 
     const authData = {sub: '005', role: 'admin'};
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(true);
   });
 
@@ -892,7 +892,7 @@ describe('issue permissions', () => {
     ).toEqual(['002', '003']);
   });
 
-  test('cannot delete an issue', () => {
+  test('cannot delete an issue', async () => {
     const op: DeleteOp = {
       op: 'delete',
       tableName: 'issue',
@@ -903,15 +903,15 @@ describe('issue permissions', () => {
     for (const sub of ['001', '002', '003']) {
       const authData = {sub, role: 'user'};
       expect(
-        writeAuthorizer.canPreMutation(authData, [op]) &&
-          writeAuthorizer.canPostMutation(authData, [op]),
+        (await writeAuthorizer.canPreMutation(authData, [op])) &&
+          (await writeAuthorizer.canPostMutation(authData, [op])),
       ).toBe(false);
     }
 
     const authData = {sub: '005', role: 'admin'};
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(false);
   });
 });
@@ -988,7 +988,7 @@ describe('comment & issueLabel permissions', () => {
     });
   });
 
-  test('cannot set authorId to another user for a comment on insert', () => {
+  test('cannot set authorId to another user for a comment on insert', async () => {
     let op: InsertOp = {
       op: 'insert',
       tableName: 'comment',
@@ -1004,8 +1004,8 @@ describe('comment & issueLabel permissions', () => {
 
     // sub and author mismatch
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(false);
 
     // sub and author match
@@ -1024,12 +1024,12 @@ describe('comment & issueLabel permissions', () => {
     };
     authData = {sub: '002', role: 'user'};
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(true);
   });
 
-  test('cannot create a comment for an issue you cannot see', () => {
+  test('cannot create a comment for an issue you cannot see', async () => {
     const op: InsertOp = {
       op: 'insert',
       tableName: 'comment',
@@ -1045,19 +1045,19 @@ describe('comment & issueLabel permissions', () => {
     let authData = {sub: '004', role: 'user'};
     // user 4 cannot see the issue so this fails
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(false);
 
     // upgrading user 4 to admin should allow them to see the issue and write the comment
     authData = {sub: '004', role: 'admin'};
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(true);
   });
 
-  test('cannot update a comment unless you created the comment or are the admin', () => {
+  test('cannot update a comment unless you created the comment or are the admin', async () => {
     let op: UpdateOp = {
       op: 'update',
       tableName: 'comment',
@@ -1067,8 +1067,8 @@ describe('comment & issueLabel permissions', () => {
     // user 2 did not create comment 1
     const authData = {sub: '002', role: 'user'};
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(false);
 
     // user 2 did create comment 2
@@ -1079,12 +1079,12 @@ describe('comment & issueLabel permissions', () => {
       value: {id: '002', text: 'updated comment'},
     };
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(true);
   });
 
-  test('cannot delete a comment unless you are the admin or the author of the comment', () => {
+  test('cannot delete a comment unless you are the admin or the author of the comment', async () => {
     let op: DeleteOp = {
       op: 'delete',
       tableName: 'comment',
@@ -1094,8 +1094,8 @@ describe('comment & issueLabel permissions', () => {
     let authData = {sub: '002', role: 'user'};
     // user 2 did not create comment 1
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(false);
 
     // user 2 did create comment 2
@@ -1106,8 +1106,8 @@ describe('comment & issueLabel permissions', () => {
       value: {id: '002'},
     };
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(true);
 
     // user 5 is an admin so they can delete any comment
@@ -1119,8 +1119,8 @@ describe('comment & issueLabel permissions', () => {
       value: {id: '001'},
     };
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(true);
   });
 
@@ -1144,7 +1144,7 @@ describe('comment & issueLabel permissions', () => {
     ).toEqual([]);
   });
 
-  test('cannot insert an issueLabel if not admin/project-member/issue-creator/issue-owner', () => {
+  test('cannot insert an issueLabel if not admin/project-member/issue-creator/issue-owner', async () => {
     for (const opType of ['insert', 'delete'] as const) {
       const op: InsertOp | UpdateOp | DeleteOp = {
         op: opType,
@@ -1156,29 +1156,29 @@ describe('comment & issueLabel permissions', () => {
       let authData = {sub: '004', role: 'user'};
       // user 4 cannot see the issue so this fails
       expect(
-        writeAuthorizer.canPreMutation(authData, [op]) &&
-          writeAuthorizer.canPostMutation(authData, [op]),
+        (await writeAuthorizer.canPreMutation(authData, [op])) &&
+          (await writeAuthorizer.canPostMutation(authData, [op])),
       ).toBe(false);
 
       // upgrading user 4 to admin should allow them to see the issue and write the issueLabel
       authData = {sub: '004', role: 'admin'};
       expect(
-        writeAuthorizer.canPreMutation(authData, [op]) &&
-          writeAuthorizer.canPostMutation(authData, [op]),
+        (await writeAuthorizer.canPreMutation(authData, [op])) &&
+          (await writeAuthorizer.canPostMutation(authData, [op])),
       ).toBe(true);
 
       for (const sub of ['001', '002', '003']) {
         authData = {sub, role: 'user'};
         expect(
-          writeAuthorizer.canPreMutation(authData, [op]) &&
-            writeAuthorizer.canPostMutation(authData, [op]),
+          (await writeAuthorizer.canPreMutation(authData, [op])) &&
+            (await writeAuthorizer.canPostMutation(authData, [op])),
         ).toBe(true);
       }
     }
   });
 });
 
-test('can only insert a viewState if you are the owner', () => {
+test('can only insert a viewState if you are the owner', async () => {
   addViewState({userId: '001', issueId: '001', lastRead: 1234});
   for (const opType of ['insert', 'update', 'delete'] as const) {
     const op: InsertOp | UpdateOp | DeleteOp = {
@@ -1195,15 +1195,15 @@ test('can only insert a viewState if you are the owner', () => {
     let authData = {sub: '001', role: 'user'};
     // user 1 can insert/update/delete a viewState for user 1
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(true);
 
     // user 2 cannot insert/update/delete a viewState for user 1
     authData = {sub: '002', role: 'user'};
     expect(
-      writeAuthorizer.canPreMutation(authData, [op]) &&
-        writeAuthorizer.canPostMutation(authData, [op]),
+      (await writeAuthorizer.canPreMutation(authData, [op])) &&
+        (await writeAuthorizer.canPostMutation(authData, [op])),
     ).toBe(false);
   }
 });

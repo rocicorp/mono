@@ -25,11 +25,11 @@ const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 
 class MockWriteAuthorizer implements WriteAuthorizer {
   canPreMutation() {
-    return true;
+    return Promise.resolve(true);
   }
   reloadPermissions(): void {}
   canPostMutation() {
-    return true;
+    return Promise.resolve(true);
   }
   normalizeOps(ops: CRUDOp[]) {
     return ops as Exclude<CRUDOp, UpsertOp>[];

@@ -48,6 +48,7 @@ import {
   type LoadedPermissions,
 } from './load-permissions.ts';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
+import type {MaybePromise} from '@opentelemetry/resources';
 
 type Phase = 'preMutation' | 'postMutation';
 
@@ -55,11 +56,11 @@ export interface WriteAuthorizer {
   canPreMutation(
     authData: JWTPayload | undefined,
     ops: Exclude<CRUDOp, UpsertOp>[],
-  ): boolean;
+  ): Promise<boolean>;
   canPostMutation(
     authData: JWTPayload | undefined,
     ops: Exclude<CRUDOp, UpsertOp>[],
-  ): boolean;
+  ): Promise<boolean>;
   reloadPermissions(): void;
   normalizeOps(ops: CRUDOp[]): Exclude<CRUDOp, UpsertOp>[];
 }
@@ -117,7 +118,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     ).permissions;
   }
 
-  canPreMutation(
+  async canPreMutation(
     authData: JWTPayload | undefined,
     ops: Exclude<CRUDOp, UpsertOp>[],
   ) {
@@ -127,12 +128,12 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
           // insert does not run pre-mutation checks
           break;
         case 'update':
-          if (!this.#canUpdate('preMutation', authData, op)) {
+          if (!(await this.#canUpdate('preMutation', authData, op))) {
             return false;
           }
           break;
         case 'delete':
-          if (!this.#canDelete('preMutation', authData, op)) {
+          if (!(await this.#canDelete('preMutation', authData, op))) {
             return false;
           }
           break;
@@ -141,7 +142,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     return true;
   }
 
-  canPostMutation(
+  async canPostMutation(
     authData: JWTPayload | undefined,
     ops: Exclude<CRUDOp, UpsertOp>[],
   ) {
@@ -183,12 +184,12 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       for (const op of ops) {
         switch (op.op) {
           case 'insert':
-            if (!this.#canInsert('postMutation', authData, op)) {
+            if (!(await this.#canInsert('postMutation', authData, op))) {
               return false;
             }
             break;
           case 'update':
-            if (!this.#canUpdate('postMutation', authData, op)) {
+            if (!(await this.#canUpdate('postMutation', authData, op))) {
               return false;
             }
             break;
@@ -269,7 +270,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     return source;
   }
 
-  #timedCanDo<A extends keyof ActionOpMap>(
+  async #timedCanDo<A extends keyof ActionOpMap>(
     phase: Phase,
     action: A,
     authData: JWTPayload | undefined,
@@ -277,7 +278,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   ) {
     const start = performance.now();
     try {
-      const ret = this.#canDo(phase, action, authData, op);
+      const ret = await this.#canDo(phase, action, authData, op);
       return ret;
     } finally {
       this.#lc.info?.(
@@ -303,7 +304,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
    *
    * All steps must allow for the operation to be allowed.
    */
-  #canDo<A extends keyof ActionOpMap>(
+  async #canDo<A extends keyof ActionOpMap>(
     phase: Phase,
     action: A,
     authData: JWTPayload | undefined,
@@ -374,12 +375,12 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     }
 
     if (
-      !this.#passesPolicyGroup(
+      !(await this.#passesPolicyGroup(
         applicableRowPolicy,
         applicableCellPolicies,
         authData,
         rowQuery,
-      )
+      ))
     ) {
       this.#lc.warn?.(
         `Permission check failed for ${JSON.stringify(
@@ -437,18 +438,18 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     return ret;
   }
 
-  #passesPolicyGroup(
+  async #passesPolicyGroup(
     applicableRowPolicy: Policy | undefined,
     applicableCellPolicies: Policy[],
     authData: JWTPayload | undefined,
     rowQuery: Query<Schema, string>,
   ) {
-    if (!this.#passesPolicy(applicableRowPolicy, authData, rowQuery)) {
+    if (!(await this.#passesPolicy(applicableRowPolicy, authData, rowQuery))) {
       return false;
     }
 
     for (const policy of applicableCellPolicies) {
-      if (!this.#passesPolicy(policy, authData, rowQuery)) {
+      if (!(await this.#passesPolicy(policy, authData, rowQuery))) {
         return false;
       }
     }
@@ -464,7 +465,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     policy: Policy | undefined,
     authData: JWTPayload | undefined,
     rowQuery: Query<Schema, string>,
-  ) {
+  ): MaybePromise<boolean> {
     if (policy === undefined) {
       return false;
     }
@@ -482,6 +483,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
         preMutationRow: undefined,
       },
     );
+
+    // call the compiler directly
+    // run the sql against upstream.
+    // remove the collecting into json? just need to know if a row comes back.
 
     const input = buildPipeline(rowQueryAst, this.#builderDelegate);
     try {

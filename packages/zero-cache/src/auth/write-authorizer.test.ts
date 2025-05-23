@@ -125,7 +125,7 @@ describe('normalize ops', () => {
 });
 
 describe('default deny', () => {
-  test('deny', () => {
+  test('deny', async () => {
     setPermissions({
       tables: {},
     });
@@ -139,30 +139,30 @@ describe('default deny', () => {
     );
 
     expect(
-      authorizer.canPostMutation({sub: '2'}, [
+      await authorizer.canPostMutation({sub: '2'}, [
         {op: 'insert', primaryKey: ['id'], tableName: 'foo', value: {id: '2'}},
       ]),
     ).toBe(false);
 
     expect(
-      authorizer.canPreMutation({sub: '1'}, [
+      await authorizer.canPreMutation({sub: '1'}, [
         {op: 'update', primaryKey: ['id'], tableName: 'foo', value: {id: '1'}},
       ]),
     ).toBe(false);
     expect(
-      authorizer.canPostMutation({sub: '1'}, [
+      await authorizer.canPostMutation({sub: '1'}, [
         {op: 'update', primaryKey: ['id'], tableName: 'foo', value: {id: '1'}},
       ]),
     ).toBe(false);
 
     expect(
-      authorizer.canPreMutation({sub: '1'}, [
+      await authorizer.canPreMutation({sub: '1'}, [
         {op: 'delete', primaryKey: ['id'], tableName: 'foo', value: {id: '1'}},
       ]),
     ).toBe(false);
   });
 
-  test('insert is run post-mutation', () => {
+  test('insert is run post-mutation', async () => {
     setPermissions({
       tables: {
         foo: {
@@ -189,15 +189,15 @@ describe('default deny', () => {
     };
 
     // insert does not run pre-mutation checks so it'll return true.
-    expect(authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
+    expect(await authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
     // insert checks are run post mutation.
-    expect(authorizer.canPostMutation({sub: '1'}, [op])).toBe(false);
+    expect(await authorizer.canPostMutation({sub: '1'}, [op])).toBe(false);
 
     // passes the rule since the subject is correct.
-    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(true);
+    expect(await authorizer.canPostMutation({sub: '2'}, [op])).toBe(true);
   });
 
-  test('update is run pre-mutation when specified', () => {
+  test('update is run pre-mutation when specified', async () => {
     setPermissions({
       tables: {
         foo: {
@@ -226,14 +226,14 @@ describe('default deny', () => {
     };
 
     // subject is not correct and there is a pre-mutation rule
-    expect(authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
+    expect(await authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
     // no post-mutation rule, default to false
-    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(false);
+    expect(await authorizer.canPostMutation({sub: '2'}, [op])).toBe(false);
 
-    expect(authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
+    expect(await authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
   });
 
-  test('update is run post-mutation when specified', () => {
+  test('update is run post-mutation when specified', async () => {
     setPermissions({
       tables: {
         foo: {
@@ -262,16 +262,16 @@ describe('default deny', () => {
     };
 
     // no pre-mutation rule so disallowed.
-    expect(authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
+    expect(await authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
     // subject doesn't match
-    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(false);
+    expect(await authorizer.canPostMutation({sub: '2'}, [op])).toBe(false);
     // subject does match the updated value of `a`
-    expect(authorizer.canPostMutation({sub: 'b'}, [op])).toBe(true);
+    expect(await authorizer.canPostMutation({sub: 'b'}, [op])).toBe(true);
   });
 });
 
 describe('pre & post mutation', () => {
-  test('delete is run pre-mutation', () => {
+  test('delete is run pre-mutation', async () => {
     setPermissions({
       tables: {
         foo: {
@@ -297,16 +297,16 @@ describe('pre & post mutation', () => {
       value: {id: '1'},
     };
 
-    expect(authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
+    expect(await authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
     // there is nothing to check post-mutation for delete so it will always pass post-mutation checks.
     // post mutation checks are anded with pre-mutation checks so this is correct.
-    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(true);
+    expect(await authorizer.canPostMutation({sub: '2'}, [op])).toBe(true);
 
     // this passes the rule since the subject is correct
-    expect(authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
+    expect(await authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
   });
 
-  test('insert is run post-mutation', () => {
+  test('insert is run post-mutation', async () => {
     setPermissions({
       tables: {
         foo: {
@@ -333,15 +333,15 @@ describe('pre & post mutation', () => {
     };
 
     // insert does not run pre-mutation checks so it'll return true.
-    expect(authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
+    expect(await authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
     // insert checks are run post mutation.
-    expect(authorizer.canPostMutation({sub: '1'}, [op])).toBe(false);
+    expect(await authorizer.canPostMutation({sub: '1'}, [op])).toBe(false);
 
     // passes the rule since the subject is correct.
-    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(true);
+    expect(await authorizer.canPostMutation({sub: '2'}, [op])).toBe(true);
   });
 
-  test('update is run pre-mutation when specified', () => {
+  test('update is run pre-mutation when specified', async () => {
     setPermissions({
       tables: {
         foo: {
@@ -370,14 +370,14 @@ describe('pre & post mutation', () => {
     };
 
     // subject is not correct and there is a pre-mutation rule
-    expect(authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
+    expect(await authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
     // no post-mutation rule, default to false
-    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(false);
+    expect(await authorizer.canPostMutation({sub: '2'}, [op])).toBe(false);
 
-    expect(authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
+    expect(await authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
   });
 
-  test('update is run post-mutation when specified', () => {
+  test('update is run post-mutation when specified', async () => {
     setPermissions({
       tables: {
         foo: {
@@ -406,10 +406,10 @@ describe('pre & post mutation', () => {
     };
 
     // no pre-mutation rule so disallowed.
-    expect(authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
+    expect(await authorizer.canPreMutation({sub: '2'}, [op])).toBe(false);
     // subject doesn't match
-    expect(authorizer.canPostMutation({sub: '2'}, [op])).toBe(false);
+    expect(await authorizer.canPostMutation({sub: '2'}, [op])).toBe(false);
     // subject does match the updated value of `a`
-    expect(authorizer.canPostMutation({sub: 'b'}, [op])).toBe(true);
+    expect(await authorizer.canPostMutation({sub: 'b'}, [op])).toBe(true);
   });
 });
