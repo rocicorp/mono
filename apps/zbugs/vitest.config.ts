@@ -12,8 +12,8 @@ export function configForVersion(version: number, url: string) {
   return mergeConfig(config, {
     resolve: {
       alias: {
-        '@rocicorp/zero': '../../packages/zero/src/index.ts'
-      }
+        '@rocicorp/zero': '../../packages/zero/src/index.ts',
+      },
     },
     test: {
       name: `${name}/pg-${version}`,
