@@ -191,7 +191,6 @@ describe('view-syncer/client-handler', () => {
         op: 'put',
         id: 'foohash',
         clientID: 'foo',
-        ast: {table: 'issues'},
       },
     });
     await pokers.addPatch({
@@ -222,7 +221,6 @@ describe('view-syncer/client-handler', () => {
         type: 'query',
         op: 'put',
         id: 'bazhash',
-        ast: {table: 'labels'},
       },
     });
 
@@ -318,9 +316,7 @@ describe('view-syncer/client-handler', () => {
           desiredQueriesPatches: {
             foo: [{op: 'del', hash: 'barhash'}],
           },
-          gotQueriesPatch: [
-            {op: 'put', hash: 'bazhash', ast: {table: 'labels'}},
-          ],
+          gotQueriesPatch: [{op: 'put', hash: 'bazhash'}],
           rowsPatch: [
             {
               op: 'put',
@@ -361,13 +357,11 @@ describe('view-syncer/client-handler', () => {
           },
           desiredQueriesPatches: {
             foo: [
-              {op: 'put', hash: 'foohash', ast: {table: 'issues'}},
+              {op: 'put', hash: 'foohash'},
               {op: 'del', hash: 'barhash'},
             ],
           },
-          gotQueriesPatch: [
-            {op: 'put', hash: 'bazhash', ast: {table: 'labels'}},
-          ],
+          gotQueriesPatch: [{op: 'put', hash: 'bazhash'}],
           rowsPatch: [
             {
               op: 'put',

@@ -17,7 +17,7 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
-import {putOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
+import {upPutOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import type {TTL} from '../../../zql/src/query/ttl.ts';
 import {toGotQueriesKey} from './keys.ts';
@@ -743,7 +743,7 @@ describe('getQueriesPatch', () => {
       const patch = await queryManager.getQueriesPatch(testReadTransaction);
       expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
       const op = patch.get('1hydj1t7t5yv4');
-      v.assert(op, putOpSchema);
+      v.assert(op, upPutOpSchema);
       return op.ttl;
     }
 

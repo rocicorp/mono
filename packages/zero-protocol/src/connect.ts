@@ -1,7 +1,7 @@
 import * as v from '../../shared/src/valita.ts';
 import {clientSchemaSchema} from './client-schema.ts';
 import {deleteClientsBodySchema} from './delete-clients.ts';
-import {queriesPatchSchema} from './queries-patch.ts';
+import {upQueriesPatchSchema} from './queries-patch.ts';
 
 /**
  * After opening a websocket the client waits for a `connected` message
@@ -26,7 +26,7 @@ const userPushParamsSchema = v.object({
 });
 
 const initConnectionBodySchema = v.object({
-  desiredQueriesPatch: queriesPatchSchema,
+  desiredQueriesPatch: upQueriesPatchSchema,
   clientSchema: clientSchemaSchema.optional(),
   deleted: deleteClientsBodySchema.optional(),
   userPushParams: userPushParamsSchema.optional(),

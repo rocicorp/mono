@@ -834,39 +834,33 @@ describe('view-syncer/cvr', () => {
         {hash: 'threeHash', ast: {table: 'comments'}, ttl: undefined},
       ]),
     ).toMatchInlineSnapshot(`
-        [
-          {
-            "patch": {
-              "ast": {
-                "table": "users",
-              },
-              "clientID": "fooClient",
-              "id": "fourHash",
-              "op": "put",
-              "type": "query",
-            },
-            "toVersion": {
-              "minorVersion": 1,
-              "stateVersion": "1aa",
-            },
+      [
+        {
+          "patch": {
+            "clientID": "fooClient",
+            "id": "fourHash",
+            "op": "put",
+            "type": "query",
           },
-          {
-            "patch": {
-              "ast": {
-                "table": "comments",
-              },
-              "clientID": "fooClient",
-              "id": "threeHash",
-              "op": "put",
-              "type": "query",
-            },
-            "toVersion": {
-              "minorVersion": 1,
-              "stateVersion": "1aa",
-            },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
           },
-        ]
-      `);
+        },
+        {
+          "patch": {
+            "clientID": "fooClient",
+            "id": "threeHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        },
+      ]
+    `);
 
     // This adds a new barClient with desired queries.
     expect(
@@ -878,9 +872,6 @@ describe('view-syncer/cvr', () => {
       [
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "clientID": "barClient",
             "id": "oneHash",
             "op": "put",
@@ -893,9 +884,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "ast": {
-              "table": "comments",
-            },
             "clientID": "barClient",
             "id": "threeHash",
             "op": "put",
@@ -1239,9 +1227,6 @@ describe('view-syncer/cvr', () => {
       [
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "clientID": "fooClient",
             "id": "oneHash",
             "op": "put",
@@ -1525,9 +1510,6 @@ describe('view-syncer/cvr', () => {
       [
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "id": "oneHash",
             "op": "put",
             "type": "query",
@@ -1667,9 +1649,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "clientID": "fooClient",
             "id": "oneHash",
             "op": "put",
@@ -2110,9 +2089,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "id": "oneHash",
             "op": "put",
             "type": "query",
@@ -2124,9 +2100,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "clientID": "fooClient",
             "id": "oneHash",
             "op": "put",
@@ -2687,9 +2660,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "id": "oneHash",
             "op": "put",
             "type": "query",
@@ -2701,9 +2671,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "id": "twoHash",
             "op": "put",
             "type": "query",
@@ -2715,9 +2682,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "clientID": "fooClient",
             "id": "oneHash",
             "op": "put",
@@ -2730,9 +2694,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "clientID": "fooClient",
             "id": "twoHash",
             "op": "put",
@@ -3671,9 +3632,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "id": "oneHash",
             "op": "put",
             "type": "query",
@@ -3685,9 +3643,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "id": "twoHash",
             "op": "put",
             "type": "query",
@@ -3699,9 +3654,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "clientID": "fooClient",
             "id": "oneHash",
             "op": "put",
@@ -3714,9 +3666,6 @@ describe('view-syncer/cvr', () => {
         },
         {
           "patch": {
-            "ast": {
-              "table": "issues",
-            },
             "clientID": "fooClient",
             "id": "twoHash",
             "op": "put",
@@ -5675,9 +5624,6 @@ describe('view-syncer/cvr', () => {
         [
           {
             "patch": {
-              "ast": {
-                "table": "issues",
-              },
               "clientID": "fooClient",
               "id": "oneHash",
               "op": "put",

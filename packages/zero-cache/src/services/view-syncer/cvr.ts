@@ -293,7 +293,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       this._cvr.queries[id] = query;
       patches.push({
         toVersion: newVersion,
-        patch: {type: 'query', op: 'put', id, ast, clientID},
+        patch: {type: 'query', op: 'put', id, clientID},
       });
 
       this._cvrStore.putQuery(query);
@@ -585,7 +585,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           type: 'query',
           op: 'put',
           id: query.id,
-          ast: query.ast,
         };
       }
 

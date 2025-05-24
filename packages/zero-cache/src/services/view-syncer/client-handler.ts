@@ -7,7 +7,6 @@ import {
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Writable} from '../../../../shared/src/writable.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {rowSchema} from '../../../../zero-protocol/src/data.ts';
 import type {DeleteClientsBody} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
@@ -53,7 +52,7 @@ export type DeleteRowPatch = {
 };
 
 export type RowPatch = PutRowPatch | DeleteRowPatch;
-export type ConfigPatch = DelQueryPatch | (PutQueryPatch & {ast: AST});
+export type ConfigPatch = DelQueryPatch | PutQueryPatch;
 
 export type Patch = ConfigPatch | RowPatch;
 
@@ -231,8 +230,7 @@ export class ClientHandler {
             ? ((body.desiredQueriesPatches ??= {})[patch.clientID] ??= [])
             : (body.gotQueriesPatch ??= []);
           if (op === 'put') {
-            const {ast} = patch;
-            patches.push({op, hash: patch.id, ast});
+            patches.push({op, hash: patch.id});
           } else {
             patches.push({op, hash: patch.id});
           }
