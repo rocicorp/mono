@@ -15,7 +15,6 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
-import TextareaAutosize from 'react-textarea-autosize';
 import {toast, ToastContainer} from 'react-toastify';
 import {assert} from 'shared/src/asserts.js';
 import {useParams} from 'wouter';
@@ -51,10 +50,6 @@ import {useIsScrolling} from '../../hooks/use-is-scrolling.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
-import {
-  MAX_ISSUE_DESCRIPTION_LENGTH,
-  MAX_ISSUE_TITLE_LENGTH,
-} from '../../limits.ts';
 import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {CACHE_AWHILE} from '../../query-cache-policy.ts';
@@ -62,8 +57,8 @@ import {links, type ListContext, type ZbugsHistoryState} from '../../routes.ts';
 import {preload} from '../../zero-setup.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
-import {isCtrlEnter} from './is-ctrl-enter.ts';
 import type {Mutators} from '../../../shared/mutators.ts';
+import IssueEditor from './issue-editor.tsx';
 
 function softNavigate(path: string, state?: ZbugsHistoryState) {
   navigate(path, {state});
@@ -446,28 +441,14 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
         <div ref={issueDescriptionRef}>
           {!editing ? (
-            <h1 className="issue-detail-title">{rendering.title}</h1>
-          ) : (
-            <div className="edit-title-container">
-              <p className="issue-detail-label">Edit title</p>
-              <TextareaAutosize
-                value={rendering.title}
-                className="edit-title"
-                autoFocus
-                onChange={e => setEdits({...edits, title: e.target.value})}
-                onKeyDown={e => isCtrlEnter(e) && save()}
-                maxLength={MAX_ISSUE_TITLE_LENGTH}
-              />
-            </div>
-          )}
-          {/* These comments are actually github markdown which unfortunately has
-           HTML mixed in. We need to find some way to render them, or convert to
-           standard markdown? break-spaces makes it render a little better */}
-          {!editing ? (
             <>
+              <h1 className="issue-detail-title">{rendering.title}</h1>
               <div className="description-container markdown-container">
                 <Markdown>{rendering.description}</Markdown>
               </div>
+              {/* These comments are actually github markdown which unfortunately has
+              HTML mixed in. We need to find some way to render them, or convert to
+              standard markdown? break-spaces makes it render a little better */}
               <EmojiPanel
                 issueID={displayed.id}
                 ref={issueEmojiRef}
@@ -477,18 +458,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               />
             </>
           ) : (
-            <div className="edit-description-container">
-              <p className="issue-detail-label">Edit description</p>
-              <TextareaAutosize
-                className="edit-description"
-                value={rendering.description}
-                onChange={e =>
-                  setEdits({...edits, description: e.target.value})
-                }
-                onKeyDown={e => isCtrlEnter(e) && save()}
-                maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
-              />
-            </div>
+            <IssueEditor
+              issue={{ id: rendering.id, title: rendering.title, description: rendering.description }}
+              onSave={({ title, description }) => {
+                setEdits({ ...edits, title, description });
+                save();
+              }}
+            />
           )}
         </div>
 

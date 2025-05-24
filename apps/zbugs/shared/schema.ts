@@ -90,6 +90,13 @@ const userPref = table('userPref')
   })
   .primaryKey('userID', 'key');
 
+const document = table('document')
+  .columns({
+    id: string(),
+    snapshot: string(),
+  })
+  .primaryKey('id');
+
 // Relationships
 const userRelationships = relationships(user, ({many}) => ({
   createdIssues: many({
@@ -137,6 +144,11 @@ const issueRelationships = relationships(issue, ({many, one}) => ({
     destField: ['subjectID'],
     destSchema: emoji,
   }),
+  document: one({
+    sourceField: ['id'],
+    destField: ['id'],
+    destSchema: document,
+  }),
 }));
 
 const commentRelationships = relationships(comment, ({one, many}) => ({
@@ -183,14 +195,23 @@ const emojiRelationships = relationships(emoji, ({one}) => ({
   }),
 }));
 
+const documentRelationships = relationships(document, ({one}) => ({
+  issue: one({
+    sourceField: ['id'],
+    destField: ['id'],
+    destSchema: issue,
+  }),
+}));
+
 export const schema = createSchema({
-  tables: [user, issue, comment, label, issueLabel, viewState, emoji, userPref],
+  tables: [user, issue, comment, label, issueLabel, viewState, emoji, userPref, document],
   relationships: [
     userRelationships,
     issueRelationships,
     commentRelationships,
     issueLabelRelationships,
     emojiRelationships,
+    documentRelationships,
   ],
 });
 
@@ -267,6 +288,12 @@ export const permissions: ReturnType<typeof definePermissions> =
       userPref: {
         row: {
           select: [allowIfUserIDMatchesLoggedInUser],
+        },
+      },
+      document: {
+        row: {
+          select: [loggedInUserIsAdmin],
+          insert: [loggedInUserIsAdmin],
         },
       },
     };
