@@ -643,8 +643,8 @@ export class QueryImpl<
     delegate: QueryDelegate,
     schema: TSchema,
     tableName: TTable,
-    ast: AST,
-    format: Format,
+    ast: AST = {table: tableName},
+    format: Format = defaultFormat,
     system: System = 'client',
     currentJunction?: string | undefined,
   ) {

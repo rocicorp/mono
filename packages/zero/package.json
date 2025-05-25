@@ -120,6 +120,10 @@
     "./pg": {
       "types": "./out/zero-pg/src/mod.d.ts",
       "default": "./out/zero/src/pg.js"
+    },
+    "./zqlite": {
+      "types": "./out/zqlite/src/mod.d.ts",
+      "default": "./out/zero/src/zqlite.js"
     }
   },
   "bin": {
