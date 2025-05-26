@@ -11,9 +11,10 @@
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "bench": "vitest bench --run --project zero-cache/no-pg",
     "local": "tsx tool/local.ts",
     "start": "tsx ./src/server/runner/main.ts",
-    "bench": "tsx ./bench/bench.ts",
+    "benchdb": "tsx ./bench/bench.ts",
     "double": "tsx ./bench/double.ts",
     "wal_bench": "tsx ./bench/wal-bench.ts",
     "wal2_bench": "tsx ./bench/wal2-bench.ts"
