@@ -1,5 +1,5 @@
 import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
-import type {ServerSchema} from '../../z2s/src/schema.ts';
+import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';

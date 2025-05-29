@@ -2,7 +2,7 @@ import type {Faker} from '@faker-js/faker';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Rng} from '../../../zql/src/query/test/util.ts';
-import type {ServerSchema} from '../../../z2s/src/schema.ts';
+import type {ServerSchema} from '../../../zero-schema/src/server-schema.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
 

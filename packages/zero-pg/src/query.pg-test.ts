@@ -5,7 +5,7 @@ import {schema, schemaSql, seedDataSql} from './test/schema.ts';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import {makeSchemaQuery} from './query.ts';
 import {Transaction} from './test/util.ts';
-import type {ServerSchema} from '../../z2s/src/schema.ts';
+import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {getServerSchema} from './schema.ts';
 
 describe('makeSchemaQuery', () => {
