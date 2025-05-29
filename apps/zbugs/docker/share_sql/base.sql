@@ -5,6 +5,7 @@ DROP TABLE IF EXISTS "user",
     "issueLabel",
     "emoji",
     "userPref",
+    "document",
     "zero.schemaVersions" CASCADE;
 
 -- user
@@ -105,6 +106,15 @@ CREATE TABLE "userPref" (
     PRIMARY KEY ("userID", "key")
 );
 
+
+-- document
+
+CREATE TABLE "document" (
+    "id" VARCHAR PRIMARY KEY,
+    "snapshot" VARCHAR NOT NULL
+);
+
+
 -- zero.schemaVersions
 
 CREATE SCHEMA IF NOT EXISTS zero;
@@ -132,6 +142,7 @@ CREATE PUBLICATION zero_zbugs
     "issueLabel",
     emoji,
     "userPref",
+    "document",
     "user" (
       id,
       login,

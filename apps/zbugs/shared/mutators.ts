@@ -9,6 +9,7 @@ import {
   type AuthData,
   assertIsLoggedIn,
 } from './auth.ts';
+import * as Y from 'yjs';
 
 export type AddEmojiArgs = {
   id: string;
@@ -155,6 +156,23 @@ export function createMutators(authData: AuthData | undefined) {
         await tx.mutate.userPref.upsert({key, value, userID});
       },
     },
+
+    document: {
+      async applyUpdate(tx, {documentId, update}: {documentId: string; update: string}) {
+        assert(isAdmin(authData), 'Only admins can apply updates to documents');
+
+        const doc = await tx.query.document.where('id', documentId).one();
+        if (!doc) {
+          throw new Error(`Document ${documentId} not found`);
+        }
+
+        const stateBuffer = base64ToUint8Array(doc.snapshot);
+        const updateBuffer = base64ToUint8Array(update);
+        const newStateBuffer = Y.mergeUpdates([stateBuffer, updateBuffer]);
+        const newState = uint8ArrayToBase64(newStateBuffer);
+        await tx.mutate.document.update({id: documentId, snapshot: newState});
+      },
+    },
   } as const satisfies CustomMutatorDefs<typeof schema>;
 
   async function addEmoji(
@@ -179,6 +197,21 @@ export function createMutators(authData: AuthData | undefined) {
       creatorID,
       created,
     });
+  }
+
+  function base64ToUint8Array(base64: string) {
+    const binaryString = atob(base64);
+    const length = binaryString.length;
+    const uint8Array = new Uint8Array(length);
+    for (let i = 0; i < length; i++) {
+      uint8Array[i] = binaryString.charCodeAt(i);
+    }
+    return uint8Array;
+  }
+
+  function uint8ArrayToBase64(uint8Array: Uint8Array) {
+    const binaryString = String.fromCharCode(...uint8Array);
+    return btoa(binaryString);
   }
 }
 

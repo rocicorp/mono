@@ -53,7 +53,8 @@
     "remark-gfm": "^4.0.0",
     "use-debounce": "^10.0.4",
     "usehooks-ts": "^3.1.0",
-    "wouter": "^3.3.5"
+    "wouter": "^3.3.5",
+    "yjs": "^13.6.27"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
