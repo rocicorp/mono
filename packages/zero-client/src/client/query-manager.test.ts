@@ -46,7 +46,7 @@ test('add', () => {
     table: 'issue',
     orderBy: [['id', 'asc']],
   };
-  queryManager.add(ast, 'forever');
+  queryManager.add(ast, 'none');
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -60,13 +60,13 @@ test('add', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: 0,
         },
       ],
     },
   ]);
 
-  queryManager.add(ast, 'forever');
+  queryManager.add(ast, 'none');
   expect(send).toBeCalledTimes(1);
 });
 
@@ -135,7 +135,7 @@ test('add renamed fields', () => {
     },
   };
 
-  queryManager.add(ast, 'forever');
+  queryManager.add(ast, 'none');
   expect(send).toBeCalledTimes(1);
   expect(send.mock.calls[0][0]).toMatchInlineSnapshot(`
     [
@@ -258,7 +258,7 @@ test('remove, recent queries max size 0', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const remove1 = queryManager.add(ast, 'forever');
+  const remove1 = queryManager.add(ast, 'none');
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -272,13 +272,13 @@ test('remove, recent queries max size 0', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: 0,
         },
       ],
     },
   ]);
 
-  const remove2 = queryManager.add(ast, 'forever');
+  const remove2 = queryManager.add(ast, 'none');
   expect(send).toBeCalledTimes(1);
 
   remove1();
@@ -333,7 +333,7 @@ test('remove, max recent queries size 2', () => {
     orderBy: [['id', 'desc']],
   };
 
-  const remove1Ast1 = queryManager.add(ast1, 'forever');
+  const remove1Ast1 = queryManager.add(ast1, 'none');
   expect(send).toBeCalledTimes(1);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -347,16 +347,16 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: 0,
         },
       ],
     },
   ]);
 
-  const remove2Ast1 = queryManager.add(ast1, 'forever');
+  const remove2Ast1 = queryManager.add(ast1, 'none');
   expect(send).toBeCalledTimes(1);
 
-  const removeAst2 = queryManager.add(ast2, 'forever');
+  const removeAst2 = queryManager.add(ast2, 'none');
   expect(send).toBeCalledTimes(2);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -370,13 +370,13 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: 0,
         },
       ],
     },
   ]);
 
-  const removeAst3 = queryManager.add(ast3, 'forever');
+  const removeAst3 = queryManager.add(ast3, 'none');
   expect(send).toBeCalledTimes(3);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -390,13 +390,13 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: 0,
         },
       ],
     },
   ]);
 
-  const removeAst4 = queryManager.add(ast4, 'forever');
+  const removeAst4 = queryManager.add(ast4, 'none');
   expect(send).toBeCalledTimes(4);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -410,7 +410,7 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: 0,
         },
       ],
     },
@@ -485,7 +485,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
     orderBy: [['id', 'desc']],
   };
 
-  const remove1Ast1 = queryManager.add(ast1, 'forever');
+  const remove1Ast1 = queryManager.add(ast1, 'none');
   expect(send).toBeCalledTimes(1);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -499,13 +499,13 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: 0,
         },
       ],
     },
   ]);
 
-  const removeAst2 = queryManager.add(ast2, 'forever');
+  const removeAst2 = queryManager.add(ast2, 'none');
   expect(send).toBeCalledTimes(2);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -519,13 +519,13 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: 0,
         },
       ],
     },
   ]);
 
-  const removeAst3 = queryManager.add(ast3, 'forever');
+  const removeAst3 = queryManager.add(ast3, 'none');
   expect(send).toBeCalledTimes(3);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -539,13 +539,13 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: 0,
         },
       ],
     },
   ]);
 
-  const removeAst4 = queryManager.add(ast4, 'forever');
+  const removeAst4 = queryManager.add(ast4, 'none');
   expect(send).toBeCalledTimes(4);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -559,7 +559,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: 0,
         },
       ],
     },
@@ -568,7 +568,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
   remove1Ast1();
   expect(send).toBeCalledTimes(4);
 
-  const remove2Ast1 = queryManager.add(ast1, 'forever');
+  const remove2Ast1 = queryManager.add(ast1, 'none');
   expect(send).toBeCalledTimes(4);
 
   removeAst2();
@@ -675,13 +675,13 @@ describe('getQueriesPatch', () => {
       table: 'issue',
       orderBy: [['id', 'asc']],
     };
-    queryManager.add(ast1, 'forever');
+    queryManager.add(ast1, 'none');
     // hash 1hydj1t7t5yv4
     const ast2: AST = {
       table: 'issue',
       orderBy: [['id', 'desc']],
     };
-    queryManager.add(ast2, 'forever');
+    queryManager.add(ast2, 'none');
 
     const testReadTransaction = new TestTransaction();
     testReadTransaction.scanEntries = [
@@ -704,7 +704,7 @@ describe('getQueriesPatch', () => {
               table: 'issues',
               orderBy: [['id', 'desc']],
             } satisfies AST,
-            ttl: -1,
+            ttl: 0,
           },
         ].map(x => [x.hash, x] as const),
       ),
@@ -822,7 +822,7 @@ describe('getQueriesPatch', () => {
       expect(send).toBeCalledTimes(0);
 
       send.mockClear();
-      expect(await add('forever')).toBe(-1);
+      expect(await add('none')).toBe(-1);
       expect(send).toBeCalledTimes(1);
     });
 
@@ -901,7 +901,7 @@ describe('getQueriesPatch', () => {
       `);
 
       send.mockClear();
-      expect(await add('forever')).toBe(-1);
+      expect(await add('none')).toBe(-1);
       expect(send).toBeCalledTimes(1);
     });
   });
@@ -922,22 +922,22 @@ describe('getQueriesPatch', () => {
       table: 'issue',
       orderBy: [['id', 'asc']],
     };
-    const remove1 = queryManager.add(ast1, 'forever');
+    const remove1 = queryManager.add(ast1, 'none');
     const ast2: AST = {
       table: 'issue',
       orderBy: [['id', 'desc']],
     };
-    const remove2 = queryManager.add(ast2, 'forever');
+    const remove2 = queryManager.add(ast2, 'none');
     const ast3: AST = {
       table: 'user',
       orderBy: [['id', 'asc']],
     };
-    const remove3 = queryManager.add(ast3, 'forever');
+    const remove3 = queryManager.add(ast3, 'none');
     const ast4: AST = {
       table: 'user',
       orderBy: [['id', 'desc']],
     };
-    const remove4 = queryManager.add(ast4, 'forever');
+    const remove4 = queryManager.add(ast4, 'none');
     remove1();
     remove2();
     remove3();
@@ -1098,7 +1098,7 @@ test('gotCallback, query got after add', () => {
   };
 
   const gotCalback1 = vi.fn<(got: boolean) => void>();
-  const ttl = 'forever';
+  const ttl = 'none';
   queryManager.add(ast, ttl, gotCalback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
@@ -1118,7 +1118,7 @@ test('gotCallback, query got after add', () => {
             limit: undefined,
             schema: undefined,
           } satisfies AST,
-          ttl: -1,
+          ttl: 0,
         },
       ],
     },
@@ -1304,7 +1304,7 @@ describe('queriesPatch with lastPatch', () => {
         table: 'issue',
         orderBy: [['id', 'asc']],
       },
-      'forever',
+      'none',
     );
     const testReadTransaction = new TestTransaction();
     const patch = await queryManager.getQueriesPatch(testReadTransaction);
@@ -1317,7 +1317,7 @@ describe('queriesPatch with lastPatch', () => {
         },
         hash: '12hwg3ihkijhm',
         op: 'put',
-        ttl: -1,
+        ttl: 0,
       },
     ]);
   });
@@ -1341,7 +1341,7 @@ describe('queriesPatch with lastPatch', () => {
         table: 'issue',
         orderBy: [['id', 'asc']],
       },
-      'forever',
+      'none',
       undefined,
     );
     const testReadTransaction = new TestTransaction();
@@ -1438,7 +1438,7 @@ test('gotCallback, add same got callback twice', () => {
             orderBy: [['id', 'asc']],
             ...normalizingFields,
           } satisfies AST,
-          ttl: -1,
+          ttl: 0,
         },
       ],
     },

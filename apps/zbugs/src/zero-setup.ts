@@ -4,7 +4,7 @@ import {createMutators, type Mutators} from '../shared/mutators.ts';
 import {Atom} from './atom.ts';
 import {clearJwt, getJwt, getRawJwt} from './jwt.ts';
 import {mark} from './perf-log.ts';
-import {CACHE_FOREVER} from './query-cache-policy.ts';
+import {CACHE_AWHILE} from './query-cache-policy.ts';
 import type {AuthData} from '../shared/auth.ts';
 
 export type LoginState = {
@@ -72,10 +72,10 @@ export function preload(z: Zero<Schema, Mutators>) {
         .limit(10)
         .orderBy('created', 'desc'),
     )
-    .preload(CACHE_FOREVER);
+    .preload(CACHE_AWHILE);
 
-  z.query.user.preload(CACHE_FOREVER);
-  z.query.label.preload(CACHE_FOREVER);
+  z.query.user.preload(CACHE_AWHILE);
+  z.query.label.preload(CACHE_AWHILE);
 }
 
 // To enable accessing zero in the devtools easily.

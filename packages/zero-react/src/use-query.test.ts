@@ -44,13 +44,13 @@ describe('ViewStore', () => {
         'client1',
         newMockQuery('query1'),
         true,
-        'forever',
+        'none',
       );
       const view2 = viewStore.getView(
         'client1',
         newMockQuery('query1'),
         true,
-        'forever',
+        'none',
       );
 
       expect(view1).toBe(view2);
@@ -65,13 +65,13 @@ describe('ViewStore', () => {
         'client1',
         newMockQuery('query1'),
         true,
-        'forever',
+        'none',
       );
       const view2 = viewStore.getView(
         'client1',
         newMockQuery('query1'),
         true,
-        'forever',
+        'none',
       );
 
       const cleanup1 = view1.subscribeReactInternals(() => {});
@@ -135,13 +135,13 @@ describe('ViewStore', () => {
         'client1',
         newMockQuery('query1'),
         true,
-        'forever',
+        'none',
       );
       const view2 = viewStore.getView(
         'client1',
         newMockQuery('query1'),
         true,
-        'forever',
+        'none',
       );
 
       const cleanup1 = view1.subscribeReactInternals(() => {});
@@ -162,7 +162,7 @@ describe('ViewStore', () => {
         'client1',
         newMockQuery('query1'),
         true,
-        'forever',
+        'none',
       );
 
       const cleanup = view.subscribeReactInternals(() => {});
@@ -179,7 +179,7 @@ describe('ViewStore', () => {
         'client1',
         newMockQuery('query1'),
         true,
-        'forever',
+        'none',
       );
 
       const cleanup = view.subscribeReactInternals(() => {});
@@ -198,7 +198,7 @@ describe('ViewStore', () => {
         'client1',
         newMockQuery('query1'),
         true,
-        'forever',
+        'none',
       );
       const cleanup = view.subscribeReactInternals(() => {});
 
@@ -212,7 +212,7 @@ describe('ViewStore', () => {
         'client1',
         newMockQuery('query1'),
         true,
-        'forever',
+        'none',
       );
       const cleanup2 = view.subscribeReactInternals(() => {});
       vi.advanceTimersByTime(100);
@@ -232,7 +232,7 @@ describe('ViewStore', () => {
         'client1',
         newMockQuery('query1'),
         true,
-        'forever',
+        'none',
       );
       const cleanup = view.subscribeReactInternals(() => {});
 
@@ -252,13 +252,13 @@ describe('ViewStore', () => {
         'client1',
         newMockQuery('query1'),
         true,
-        'forever',
+        'none',
       );
       const view2 = viewStore.getView(
         'client2',
         newMockQuery('query1'),
         true,
-        'forever',
+        'none',
       );
 
       expect(view1).not.toBe(view2);
@@ -272,7 +272,7 @@ describe('ViewStore', () => {
       const {listeners} = q.materialize() as unknown as {
         listeners: Set<(data: unknown, resultType: ResultType) => void>;
       };
-      const view = viewStore.getView('client1', q, true, 'forever');
+      const view = viewStore.getView('client1', q, true, 'none');
 
       const cleanup = view.subscribeReactInternals(() => {});
 
@@ -308,7 +308,7 @@ describe('ViewStore', () => {
       const {listeners} = q.materialize() as unknown as {
         listeners: Set<(...args: unknown[]) => void>;
       };
-      const view = viewStore.getView('client1', q, true, 'forever');
+      const view = viewStore.getView('client1', q, true, 'none');
 
       const cleanup = view.subscribeReactInternals(() => {});
 
