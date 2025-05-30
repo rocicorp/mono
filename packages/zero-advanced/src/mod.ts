@@ -11,4 +11,4 @@ export {
 export type {Entry, Format, View, ViewFactory} from '../../zql/src/ivm/view.ts';
 export type {AdvancedQuery} from '../../zql/src/query/query-internal.ts';
 export type {HumanReadable, Query} from '../../zql/src/query/query.ts';
-export type {ResultType} from '../../zql/src/query/typed-view.js';
+export type {ResultType} from '../../zql/src/ivm/typed-view.js';

@@ -11,7 +11,7 @@ import {
   newQuerySymbol,
 } from '../../zql/src/query/query-impl.ts';
 import type {HumanReadable, PullRow, Query} from '../../zql/src/query/query.ts';
-import type {TypedView} from '../../zql/src/query/typed-view.ts';
+import type {TypedView} from '../../zql/src/ivm/typed-view.ts';
 
 export function makeSchemaQuery<S extends Schema>(
   schema: S,

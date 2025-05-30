@@ -41,7 +41,7 @@ import {
   type RunOptions,
 } from './query.ts';
 import {DEFAULT_TTL, type TTL} from './ttl.ts';
-import type {TypedView} from './typed-view.ts';
+import type {TypedView} from '../ivm/typed-view.ts';
 import {NotImplementedError} from '../error.ts';
 
 type AnyQuery = Query<Schema, string, any>;

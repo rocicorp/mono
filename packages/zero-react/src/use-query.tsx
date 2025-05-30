@@ -7,7 +7,7 @@ import type {Format} from '../../zql/src/ivm/view.ts';
 import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL, type TTL} from '../../zql/src/query/ttl.ts';
-import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
+import type {ResultType, TypedView} from '../../zql/src/ivm/typed-view.ts';
 import {useZero} from './use-zero.tsx';
 
 export type QueryResultDetails = Readonly<{

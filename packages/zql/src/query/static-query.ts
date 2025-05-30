@@ -4,7 +4,7 @@ import type {Format} from '../ivm/view.ts';
 import {ExpressionBuilder} from './expression.ts';
 import {AbstractQuery, defaultFormat, newQuerySymbol} from './query-impl.ts';
 import type {HumanReadable, PullRow, Query} from './query.ts';
-import type {TypedView} from './typed-view.ts';
+import type {TypedView} from '../ivm/typed-view.ts';
 
 export function staticQuery<
   TSchema extends Schema,

@@ -11,7 +11,7 @@ import type {
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {TTL} from './ttl.ts';
-import type {TypedView} from './typed-view.ts';
+import type {TypedView} from '../ivm/typed-view.ts';
 
 type Selector<E extends TableSchema> = keyof E['columns'];
 export type NoCompoundTypeSelector<T extends TableSchema> = Exclude<

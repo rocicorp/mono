@@ -1,6 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Immutable} from '../../../shared/src/immutable.ts';
-import type {Listener, TypedView} from '../query/typed-view.ts';
+import type {Listener, TypedView} from './typed-view.ts';
 import type {Change} from './change.ts';
 import type {Input, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
