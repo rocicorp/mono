@@ -1,4 +1,4 @@
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row} from './data.ts';
 import type {Change} from './change.ts';
 import {
   throwFilterOutput,

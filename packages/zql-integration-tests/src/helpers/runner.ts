@@ -20,7 +20,7 @@ import {makeSchemaCRUD} from '../../../zero-pg/src/custom.ts';
 import {ZPGQuery} from '../../../zero-pg/src/query.ts';
 import {getServerSchema} from '../../../zero-pg/src/schema.ts';
 import {Transaction} from '../../../zero-pg/src/test/util.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../zql/src/ivm/data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,

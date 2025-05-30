@@ -1,6 +1,6 @@
 import {describe, expect, suite, test} from 'vitest';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row} from './data.ts';
 import type {SourceChange} from './source.ts';
 import {runPushTest, type Sources} from './test/push-tests.ts';
 

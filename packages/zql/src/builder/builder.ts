@@ -16,7 +16,7 @@ import type {
   SimpleCondition,
   ValuePosition,
 } from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row} from '../ivm/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {Exists} from '../ivm/exists.ts';
 import {FanIn} from '../ivm/fan-in.ts';

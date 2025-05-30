@@ -11,7 +11,7 @@ import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {getServerSchema} from '../../zero-pg/src/schema.ts';
 import {Transaction} from '../../zero-pg/src/test/util.ts';
-import {type Row} from '../../zero-protocol/src/data.ts';
+import {type Row} from '../../zql/src/ivm/data.ts';
 import {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {

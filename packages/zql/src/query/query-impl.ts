@@ -13,7 +13,7 @@ import type {
   SimpleOperator,
   System,
 } from '../../../zero-protocol/src/ast.ts';
-import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
+import type {Row as IVMRow} from '../ivm/data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   isOneHop,

@@ -7,7 +7,7 @@ import type {Hash} from '../../../replicache/src/hash.ts';
 import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
 import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../zql/src/ivm/data.ts';
 import {diff, DiffsMap} from '../../../replicache/src/sync/diff.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {

@@ -2,7 +2,7 @@ import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../zql/src/ivm/data.ts';
 import {
   CRUD_MUTATION_NAME,
   type CRUDMutationArg,

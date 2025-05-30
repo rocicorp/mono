@@ -1,5 +1,5 @@
 import type {Faker} from '@faker-js/faker';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../zql/src/ivm/data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Rng} from '../../../zql/src/query/test/util.ts';
 import type {ServerSchema} from '../../../z2s/src/schema.ts';

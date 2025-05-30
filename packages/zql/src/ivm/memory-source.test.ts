@@ -1,7 +1,7 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {Ordering} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row} from './data.ts';
 import {Catch} from './catch.ts';
 import type {Change} from './change.ts';
 import {

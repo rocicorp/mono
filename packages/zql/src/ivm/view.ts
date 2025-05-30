@@ -1,4 +1,4 @@
-import type {Value} from '../../../zero-protocol/src/data.ts';
+import type {Value} from './data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Query} from '../query/query.ts';
 import type {TTL} from '../query/ttl.ts';

@@ -1,6 +1,6 @@
 import {expect} from 'vitest';
 import type {Ordering} from '../../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../../zql/src/ivm/data.ts';
 
 export function compareRowsTest(
   makeComparator: (order: Ordering) => (r1: Row, r2: Row) => number,

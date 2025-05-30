@@ -3,7 +3,7 @@ import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../../zql/src/ivm/data.ts';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../../zero-schema/src/table-schema.ts';
 import {buildPipeline} from '../../builder/builder.ts';

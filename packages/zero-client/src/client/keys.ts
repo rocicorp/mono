@@ -1,7 +1,7 @@
 import {h128} from '../../../shared/src/hash.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../zql/src/ivm/data.ts';
 import {primaryKeyValueSchema} from '../../../zero-protocol/src/primary-key.ts';
 
 export const DESIRED_QUERIES_KEY_PREFIX = 'd/';

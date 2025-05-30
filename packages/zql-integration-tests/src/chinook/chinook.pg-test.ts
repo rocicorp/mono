@@ -5,7 +5,7 @@ import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 import type {AnyQuery} from '../../../zql/src/query/test/util.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../zql/src/ivm/data.ts';
 import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {PullRow} from '../../../zql/src/query/query.ts';
 

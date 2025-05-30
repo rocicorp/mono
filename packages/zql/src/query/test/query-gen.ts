@@ -2,7 +2,7 @@ import {type Faker} from '@faker-js/faker';
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {ast} from '../query-impl.ts';
 import {staticQuery} from '../static-query.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../../zql/src/ivm/data.ts';
 import {
   randomValueForType,
   selectRandom,

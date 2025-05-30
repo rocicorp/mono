@@ -2,7 +2,7 @@ import {expect, suite, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import type {Ordering} from '../../../zero-protocol/src/ast.ts';
-import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {Row, Value} from './data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, type CaughtNode} from './catch.ts';

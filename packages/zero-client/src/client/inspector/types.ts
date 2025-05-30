@@ -1,6 +1,6 @@
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../../zql/src/ivm/data.ts';
 import type {TTL} from '../../../../zql/src/query/ttl.ts';
 
 export interface GetInspector {

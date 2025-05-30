@@ -15,7 +15,7 @@ import {assert} from '../../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import * as valita from '../../../../shared/src/valita.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../../zql/src/ivm/data.ts';
 import {
   inspectQueriesDownSchema,
   type InspectDownBody,

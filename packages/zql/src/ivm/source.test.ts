@@ -3,7 +3,7 @@ import type {
   Condition,
   SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row} from './data.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, expandNode, type CaughtNode} from './catch.ts';
 import type {Constraint} from './constraint.ts';

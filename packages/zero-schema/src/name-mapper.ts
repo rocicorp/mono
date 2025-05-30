@@ -1,5 +1,5 @@
 import type {JSONValue} from '../../shared/src/json.ts';
-import type {Value} from '../../zero-protocol/src/data.ts';
+import type {Value} from '../../zql/src/ivm/data.ts';
 import type {TableSchema} from './table-schema.ts';
 
 type ColumnNames = {[src: string]: string};

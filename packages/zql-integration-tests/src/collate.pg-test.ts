@@ -7,7 +7,7 @@ import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
 import type {ServerSchema} from '../../z2s/src/schema.ts';
 import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {type Row} from '../../zero-protocol/src/data.ts';
+import {type Row} from '../../zql/src/ivm/data.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   enumeration,

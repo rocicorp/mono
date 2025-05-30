@@ -1,7 +1,7 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {Row, Value} from './data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {assertOrderingIncludesPK} from '../builder/builder.ts';
 import {type Change, type EditChange, type RemoveChange} from './change.ts';

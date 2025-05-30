@@ -1,5 +1,5 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row} from './data.ts';
 import type {Change} from './change.ts';
 import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.ts';
 import type {Output} from './operator.ts';

@@ -5,7 +5,7 @@ import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {expect, test} from 'vitest';
 import {must} from '../../shared/src/must.ts';
-import type {Row} from '../../zero-protocol/src/data.ts';
+import type {Row} from '../../zql/src/ivm/data.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 
 const pgContent = await getChinook();

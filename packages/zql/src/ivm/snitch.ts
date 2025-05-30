@@ -1,5 +1,5 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row} from './data.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
 import type {

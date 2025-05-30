@@ -12,7 +12,7 @@ import type {
   SimpleCondition,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
-import type {Row, Value} from '../../zero-protocol/src/data.ts';
+import type {Row, Value} from '../../zql/src/ivm/data.ts';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
 import type {
   SchemaValue,

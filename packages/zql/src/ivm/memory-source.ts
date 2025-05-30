@@ -6,7 +6,7 @@ import type {
   Ordering,
   OrderPart,
 } from '../../../zero-protocol/src/ast.ts';
-import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {Row, Value} from './data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {assertOrderingIncludesPK} from '../builder/builder.ts';

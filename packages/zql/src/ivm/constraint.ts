@@ -5,7 +5,7 @@ import type {
   Condition,
   SimpleCondition,
 } from '../../../zero-protocol/src/ast.ts';
-import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {Row, Value} from './data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {valuesEqual} from './data.ts';
 

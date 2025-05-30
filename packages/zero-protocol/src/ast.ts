@@ -12,7 +12,8 @@ import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import * as v from '../../shared/src/valita.ts';
 import type {NameMapper} from '../../zero-schema/src/name-mapper.ts';
-import {rowSchema, type Row} from './data.ts';
+import {rowSchema} from './data.ts';
+import type {Row} from '../../zql/src/ivm/data.ts';
 
 export const selectorSchema = v.string();
 export const toStaticParam = Symbol();

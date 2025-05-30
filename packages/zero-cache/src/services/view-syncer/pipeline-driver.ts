@@ -4,7 +4,7 @@ import {deepEqual, type JSONValue} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../../zql/src/ivm/data.ts';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
 import {buildPipeline} from '../../../../zql/src/builder/builder.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
