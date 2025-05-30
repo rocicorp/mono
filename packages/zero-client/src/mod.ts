@@ -35,8 +35,6 @@ export type {
   Disjunction,
   LiteralReference,
   LiteralValue,
-  Ordering,
-  OrderPart,
   Parameter,
   SimpleCondition,
   ValuePosition,
@@ -48,6 +46,8 @@ export type {
   SimpleOperator,
   OrderOps,
   PrimaryKey,
+  Ordering,
+  OrderPart,
 } from '../../zql/src/ivm/constraint.ts';
 export {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 export {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';

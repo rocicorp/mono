@@ -28,6 +28,12 @@ export type EqualityOps = '=' | '!=' | 'IS' | 'IS NOT';
 export type OrderOps = '<' | '>' | '<=' | '>=';
 export type LikeOps = 'LIKE' | 'NOT LIKE' | 'ILIKE' | 'NOT ILIKE';
 export type InOps = 'IN' | 'NOT IN';
+/**
+ * As in SQL you can have multiple orderings. We don't currently
+ * support ordering on anything other than the root query.
+ */
+export type OrderPart = readonly [field: string, direction: 'asc' | 'desc'];
+export type Ordering = readonly OrderPart[];
 
 export function constraintMatchesRow(
   constraint: Constraint,

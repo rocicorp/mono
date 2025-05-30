@@ -1,6 +1,5 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from './data.ts';
 import {Catch} from './catch.ts';
 import type {Change} from './change.ts';
@@ -13,6 +12,7 @@ import {
 import {compareRowsTest} from './test/compare-rows-test.ts';
 import {createSource} from './test/source-factory.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import type {Ordering} from './constraint.ts';
 
 const lc = createSilentLogContext();
 

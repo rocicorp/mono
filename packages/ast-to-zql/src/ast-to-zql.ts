@@ -8,11 +8,11 @@ import type {
   CorrelatedSubqueryCondition,
   Disjunction,
   LiteralReference,
-  Ordering,
   Parameter,
   SimpleCondition,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
+import type {Ordering} from '../../zql/src/ivm/constraint.ts';
 import {SUBQ_PREFIX} from '../../zql/src/query/query-impl.ts';
 
 /**

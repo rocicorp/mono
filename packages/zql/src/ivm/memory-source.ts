@@ -1,13 +1,13 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
-import type {
-  Condition,
-  Ordering,
-  OrderPart,
-} from '../../../zero-protocol/src/ast.ts';
+import type {Condition} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from './data.ts';
-import type {PrimaryKey} from '../../../zql/src/ivm/constraint.ts';
+import type {
+  PrimaryKey,
+  OrderPart,
+  Ordering,
+} from '../../../zql/src/ivm/constraint.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {assertOrderingIncludesPK} from '../builder/builder.ts';
 import {

@@ -1,9 +1,9 @@
 import {expect, suite, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
-import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from './data.ts';
-import type {PrimaryKey} from '../../../zql/src/ivm/constraint.ts';
+import type {Ordering, PrimaryKey} from '../../../zql/src/ivm/constraint.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, type CaughtChange} from './catch.ts';
 import {Join} from './join.ts';

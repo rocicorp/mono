@@ -4,9 +4,9 @@ import {
   assertNumber,
   assertString,
 } from '../../../shared/src/asserts.ts';
-import type {Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Stream} from './stream.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import type {Ordering} from './constraint.ts';
 
 /**
  * A row flowing through the pipeline, plus its relationships.

@@ -4,6 +4,7 @@ import type {
   LikeOps,
   OrderOps,
   SimpleOperator,
+  Ordering,
 } from '../../zql/src/ivm/constraint.ts';
 import type {
   AST,
@@ -11,7 +12,6 @@ import type {
   CorrelatedSubquery,
   CorrelatedSubqueryCondition,
   CorrelatedSubqueryConditionOperator,
-  Ordering,
   astSchema,
   conditionSchema,
   correlatedSubqueryConditionOperatorSchema,

@@ -1,4 +1,5 @@
-import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {Condition} from '../../../zero-protocol/src/ast.ts';
+import type {Ordering} from './constraint.ts';
 import type {Row} from './data.ts';
 import type {Input} from './operator.ts';
 

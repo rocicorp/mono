@@ -8,12 +8,11 @@ import {difference} from '../../shared/src/set-utils.ts';
 import type {Writable} from '../../shared/src/writable.ts';
 import type {
   Condition,
-  Ordering,
   SimpleCondition,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zql/src/ivm/data.ts';
-import type {PrimaryKey} from '../../zql/src/ivm/constraint.ts';
+import type {Ordering, PrimaryKey} from '../../zql/src/ivm/constraint.ts';
 import type {
   SchemaValue,
   ValueType,

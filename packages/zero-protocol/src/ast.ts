@@ -14,7 +14,7 @@ import * as v from '../../shared/src/valita.ts';
 import type {NameMapper} from '../../zero-schema/src/name-mapper.ts';
 import {rowSchema} from './data.ts';
 import type {Row} from '../../zql/src/ivm/data.ts';
-import type {SimpleOperator} from '../../zql/src/ivm/constraint.ts';
+import type {Ordering, SimpleOperator} from '../../zql/src/ivm/constraint.ts';
 
 export const selectorSchema = v.string();
 export const toStaticParam = Symbol();
@@ -193,13 +193,6 @@ export type Bound = {
   row: Row;
   exclusive: boolean;
 };
-
-/**
- * As in SQL you can have multiple orderings. We don't currently
- * support ordering on anything other than the root query.
- */
-export type OrderPart = readonly [field: string, direction: 'asc' | 'desc'];
-export type Ordering = readonly OrderPart[];
 
 export type AST = {
   readonly schema?: string | undefined;

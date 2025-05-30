@@ -8,7 +8,6 @@ import type {
   AST,
   CompoundKey,
   Condition,
-  Ordering,
   Parameter,
   System,
 } from '../../../zero-protocol/src/ast.ts';
@@ -42,7 +41,7 @@ import {
 import {DEFAULT_TTL, type TTL} from './ttl.ts';
 import type {TypedView} from '../ivm/typed-view.ts';
 import {NotImplementedError} from '../error.ts';
-import type {SimpleOperator} from '../ivm/constraint.ts';
+import type {SimpleOperator, Ordering} from '../ivm/constraint.ts';
 
 type AnyQuery = Query<Schema, string, any>;
 
