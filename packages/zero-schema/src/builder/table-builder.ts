@@ -1,5 +1,5 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {PrimaryKey} from '../../../zql/src/ivm/constraint.ts';
 import type {SchemaValue, TableSchema} from '../table-schema.ts';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */

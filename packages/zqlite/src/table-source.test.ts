@@ -3,7 +3,7 @@ import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import type {Ordering} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zql/src/ivm/data.ts';
-import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
+import type {PrimaryKey} from '../../zql/src/ivm/constraint.ts';
 import {Catch} from '../../zql/src/ivm/catch.ts';
 import type {Change} from '../../zql/src/ivm/change.ts';
 import {makeComparator} from '../../zql/src/ivm/data.ts';

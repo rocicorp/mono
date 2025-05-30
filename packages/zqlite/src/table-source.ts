@@ -13,7 +13,7 @@ import type {
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zql/src/ivm/data.ts';
-import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
+import type {PrimaryKey} from '../../zql/src/ivm/constraint.ts';
 import type {
   SchemaValue,
   ValueType,

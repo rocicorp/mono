@@ -1,5 +1,5 @@
 import type {ValueType} from '../../zero-protocol/src/client-schema.ts';
-import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
+import type {PrimaryKey} from '../../zql/src/ivm/constraint.ts';
 
 export type {ValueType} from '../../zero-protocol/src/client-schema.ts';
 

@@ -4,8 +4,6 @@ export const primaryKeySchema = v.readonly(
   v.tuple([v.string()]).concat(v.array(v.string())),
 );
 
-export type PrimaryKey = v.Infer<typeof primaryKeySchema>;
-
 export const primaryKeyValueSchema = v.union(
   v.string(),
   v.number(),

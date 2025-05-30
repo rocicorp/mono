@@ -47,6 +47,7 @@ export type {
   LikeOps,
   SimpleOperator,
   OrderOps,
+  PrimaryKey,
 } from '../../zql/src/ivm/constraint.ts';
 export {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 export {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';

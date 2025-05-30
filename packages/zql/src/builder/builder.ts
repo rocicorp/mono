@@ -17,7 +17,7 @@ import type {
   ValuePosition,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../ivm/data.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {PrimaryKey} from '../../../zql/src/ivm/constraint.ts';
 import {Exists} from '../ivm/exists.ts';
 import {FanIn} from '../ivm/fan-in.ts';
 import {FanOut} from '../ivm/fan-out.ts';

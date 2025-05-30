@@ -6,12 +6,13 @@ import type {
   SimpleCondition,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from './data.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {valuesEqual} from './data.ts';
 
 export type Constraint = {
   readonly [key: string]: Value;
 };
+
+export type PrimaryKey = readonly [string, ...string[]];
 
 /**
  * When connecting to a source, an optional set of filters may

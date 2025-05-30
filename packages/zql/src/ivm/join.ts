@@ -1,7 +1,7 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from './data.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {PrimaryKey} from '../../../zql/src/ivm/constraint.ts';
 import type {Change, ChildChange} from './change.ts';
 import {compareValues, valuesEqual, type Node} from './data.ts';
 import {

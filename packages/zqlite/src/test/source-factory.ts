@@ -6,7 +6,7 @@ import {
   type AST,
   type CompoundKey,
 } from '../../../zero-protocol/src/ast.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {PrimaryKey} from '../../../zql/src/ivm/constraint.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,

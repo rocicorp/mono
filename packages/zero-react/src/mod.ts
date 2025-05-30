@@ -1,5 +1,5 @@
 export type {Expand} from '../../shared/src/expand.ts';
-export type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
+export type {PrimaryKey} from '../../zql/src/ivm/constraint.ts';
 export type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 export type {
   RelationshipsSchema,

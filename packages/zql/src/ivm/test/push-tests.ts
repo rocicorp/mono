@@ -4,7 +4,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zql/src/ivm/data.ts';
-import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
+import type {PrimaryKey} from '../../../../zql/src/ivm/constraint.ts';
 import type {SchemaValue} from '../../../../zero-schema/src/table-schema.ts';
 import {buildPipeline} from '../../builder/builder.ts';
 import {TestBuilderDelegate} from '../../builder/test-builder-delegate.ts';

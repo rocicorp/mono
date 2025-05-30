@@ -1,5 +1,5 @@
 import type {Ordering, System} from '../../../zero-protocol/src/ast.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {PrimaryKey} from '../../../zql/src/ivm/constraint.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import type {Comparator} from './data.ts';
 

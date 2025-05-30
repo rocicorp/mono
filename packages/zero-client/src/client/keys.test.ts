@@ -1,10 +1,8 @@
 import fc from 'fast-check';
 import {expect, test} from 'vitest';
-import type {
-  PrimaryKey,
-  PrimaryKeyValueRecord,
-} from '../../../zero-protocol/src/primary-key.ts';
+import type {PrimaryKeyValueRecord} from '../../../zero-protocol/src/primary-key.ts';
 import {toPrimaryKeyString as toPrimaryKeyStringImpl} from './keys.ts';
+import type {PrimaryKey} from '../../../zql/src/ivm/constraint.ts';
 
 test('toPrimaryKeyString', () => {
   function toPrimaryKeyString(

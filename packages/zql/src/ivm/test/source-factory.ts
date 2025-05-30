@@ -1,4 +1,4 @@
-import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
+import type {PrimaryKey} from '../../../../zql/src/ivm/constraint.ts';
 import type {SchemaValue} from '../../../../zero-schema/src/table-schema.ts';
 import {MemorySource} from '../memory-source.ts';
 import type {Source} from '../source.ts';
