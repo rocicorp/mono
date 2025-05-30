@@ -14,6 +14,7 @@ import * as v from '../../shared/src/valita.ts';
 import type {NameMapper} from '../../zero-schema/src/name-mapper.ts';
 import {rowSchema} from './data.ts';
 import type {Row} from '../../zql/src/ivm/data.ts';
+import type {SimpleOperator} from '../../zql/src/ivm/constraint.ts';
 
 export const selectorSchema = v.string();
 export const toStaticParam = Symbol();
@@ -200,12 +201,6 @@ export type Bound = {
 export type OrderPart = readonly [field: string, direction: 'asc' | 'desc'];
 export type Ordering = readonly OrderPart[];
 
-export type SimpleOperator = EqualityOps | OrderOps | LikeOps | InOps;
-export type EqualityOps = '=' | '!=' | 'IS' | 'IS NOT';
-export type OrderOps = '<' | '>' | '<=' | '>=';
-export type LikeOps = 'LIKE' | 'NOT LIKE' | 'ILIKE' | 'NOT ILIKE';
-export type InOps = 'IN' | 'NOT IN';
-
 export type AST = {
   readonly schema?: string | undefined;
   readonly table: string;
@@ -280,11 +275,6 @@ export type LiteralValue =
   | null
   | ReadonlyArray<string | number | boolean>;
 
-/**
- * Starting only with SimpleCondition for now.
- * ivm1 supports Conjunctions and Disjunctions.
- * We'll support them in the future.
- */
 export type Condition =
   | SimpleCondition
   | Conjunction

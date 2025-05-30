@@ -2,8 +2,8 @@ import {describe, test, expect} from 'vitest';
 import {
   pullSimpleAndComponents,
   primaryKeyConstraintFromFilters,
+  type SimpleOperator,
 } from './constraint.ts';
-import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 
 describe('constraint', () => {
   describe('pullSimpleAndComponents', () => {

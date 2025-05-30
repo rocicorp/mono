@@ -13,6 +13,21 @@ export type Constraint = {
   readonly [key: string]: Value;
 };
 
+/**
+ * When connecting to a source, an optional set of filters may
+ * be specified.
+ *
+ * The source can take these filters into account in order
+ * to perform index select during the `fetch` phase of
+ * pipeline hydration. The source can also ignore all filters
+ * if desired.
+ */
+export type SimpleOperator = EqualityOps | OrderOps | LikeOps | InOps;
+export type EqualityOps = '=' | '!=' | 'IS' | 'IS NOT';
+export type OrderOps = '<' | '>' | '<=' | '>=';
+export type LikeOps = 'LIKE' | 'NOT LIKE' | 'ILIKE' | 'NOT ILIKE';
+export type InOps = 'IN' | 'NOT IN';
+
 export function constraintMatchesRow(
   constraint: Constraint,
   row: Row,

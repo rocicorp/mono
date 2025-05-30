@@ -33,19 +33,21 @@ export type {
   CorrelatedSubqueryCondition,
   CorrelatedSubqueryConditionOperator,
   Disjunction,
-  EqualityOps,
-  InOps,
-  LikeOps,
   LiteralReference,
   LiteralValue,
   Ordering,
-  OrderOps,
   OrderPart,
   Parameter,
   SimpleCondition,
-  SimpleOperator,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
+export type {
+  EqualityOps,
+  InOps,
+  LikeOps,
+  SimpleOperator,
+  OrderOps,
+} from '../../zql/src/ivm/constraint.ts';
 export {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 export {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 export {

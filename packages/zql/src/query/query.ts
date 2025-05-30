@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
-import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import {type SimpleOperator} from '../../../zql/src/ivm/constraint.ts';
 import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   LastInTuple,

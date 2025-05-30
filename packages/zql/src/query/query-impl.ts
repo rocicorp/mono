@@ -10,7 +10,6 @@ import type {
   Condition,
   Ordering,
   Parameter,
-  SimpleOperator,
   System,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row as IVMRow} from '../ivm/data.ts';
@@ -43,6 +42,7 @@ import {
 import {DEFAULT_TTL, type TTL} from './ttl.ts';
 import type {TypedView} from '../ivm/typed-view.ts';
 import {NotImplementedError} from '../error.ts';
+import type {SimpleOperator} from '../ivm/constraint.ts';
 
 type AnyQuery = Query<Schema, string, any>;
 

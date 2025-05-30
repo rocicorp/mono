@@ -1,12 +1,9 @@
 import {describe, expect, suite, test} from 'vitest';
-import type {
-  Condition,
-  SimpleOperator,
-} from '../../../zero-protocol/src/ast.ts';
+import type {Condition} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from './data.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, expandNode, type CaughtNode} from './catch.ts';
-import type {Constraint} from './constraint.ts';
+import type {Constraint, SimpleOperator} from './constraint.ts';
 import type {FetchRequest, Input, Output, Start} from './operator.ts';
 import type {SourceChange} from './source.ts';
 import {createSource} from './test/source-factory.ts';

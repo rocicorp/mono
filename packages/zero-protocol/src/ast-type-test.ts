@@ -1,15 +1,17 @@
 import type * as v from '../../shared/src/valita.ts';
 import type {
+  EqualityOps,
+  LikeOps,
+  OrderOps,
+  SimpleOperator,
+} from '../../zql/src/ivm/constraint.ts';
+import type {
   AST,
   Condition,
   CorrelatedSubquery,
   CorrelatedSubqueryCondition,
   CorrelatedSubqueryConditionOperator,
-  EqualityOps,
-  LikeOps,
-  OrderOps,
   Ordering,
-  SimpleOperator,
   astSchema,
   conditionSchema,
   correlatedSubqueryConditionOperatorSchema,

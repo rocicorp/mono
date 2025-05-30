@@ -5,9 +5,9 @@ import {
   type Condition,
   type LiteralValue,
   type Parameter,
-  type SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {SimpleOperator} from '../ivm/constraint.ts';
 import type {
   AvailableRelationships,
   DestTableName,
