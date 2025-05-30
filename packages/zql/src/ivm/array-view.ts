@@ -1,6 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Immutable} from '../../../shared/src/immutable.ts';
-import type {TTL} from '../query/ttl.ts';
 import type {Listener, TypedView} from '../query/typed-view.ts';
 import type {Change} from './change.ts';
 import type {Input, Output} from './operator.ts';
@@ -19,7 +18,9 @@ import type {Entry, Format, View} from './view.ts';
  * Also the plain array view is more convenient for consumers since you can dump
  * it into console to see what it is, rather than having to iterate it.
  */
-export class ArrayView<V extends View> implements Output, TypedView<V> {
+export class ArrayView<V extends View, TOptions = unknown>
+  implements Output, TypedView<V>
+{
   readonly #input: Input;
   readonly #listeners = new Set<Listener<V>>();
   readonly #schema: SourceSchema;
@@ -33,18 +34,18 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   #dirty = false;
   #complete = false;
-  readonly #updateTTL: (ttl: TTL) => void;
+  readonly #updateOptions: (options: TOptions) => void;
 
   constructor(
     input: Input,
     format: Format,
     queryComplete: true | Promise<true>,
-    updateTTL: (ttl: TTL) => void,
+    updateOptions: (optons: TOptions) => void,
   ) {
     this.#input = input;
     this.#schema = input.getSchema();
     this.#format = format;
-    this.#updateTTL = updateTTL;
+    this.#updateOptions = updateOptions;
     this.#root = {'': format.singular ? undefined : []};
     input.setOutput(this);
 
@@ -118,7 +119,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     this.#fireListeners();
   }
 
-  updateTTL(ttl: TTL) {
-    this.#updateTTL(ttl);
+  updateOptions(options: TOptions) {
+    this.#updateOptions(options);
   }
 }

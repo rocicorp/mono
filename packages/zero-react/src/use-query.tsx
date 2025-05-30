@@ -343,6 +343,6 @@ class ViewWrapper<
 
   updateTTL(ttl: TTL): void {
     this.#ttl = ttl;
-    this.#view?.updateTTL(ttl);
+    this.#view?.updateOptions(ttl);
   }
 }

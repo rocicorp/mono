@@ -817,7 +817,7 @@ function arrayViewFactory<
   queryComplete: true | Promise<true>,
   updateTTL: (ttl: TTL) => void,
 ): TypedView<HumanReadable<TReturn>> {
-  const v = new ArrayView<HumanReadable<TReturn>>(
+  const v = new ArrayView<HumanReadable<TReturn>, TTL>(
     input,
     format,
     queryComplete,
