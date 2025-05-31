@@ -17,5 +17,6 @@ s.connect(
 3. Range jump in `memory-source` if filter matches prefix of order
 4. Docs, examples
 5. Indexed filters to skip pipelines on push
+6. Table source pull out?
 
 (5) is an optimization that sources are responsible for implementing.

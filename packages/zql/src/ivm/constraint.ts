@@ -1,10 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {stringCompare} from '../../../shared/src/string-compare.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
-import type {
-  Condition,
-  SimpleCondition,
-} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from './data.ts';
 import {valuesEqual} from './data.ts';
 
@@ -34,6 +30,53 @@ export type InOps = 'IN' | 'NOT IN';
  */
 export type OrderPart = readonly [field: string, direction: 'asc' | 'desc'];
 export type Ordering = readonly OrderPart[];
+
+export type Condition = SimpleCondition | Conjunction | Disjunction;
+export type SimpleCondition = {
+  readonly type: 'simple';
+  readonly op: SimpleOperator;
+  readonly left: ValuePosition;
+
+  /**
+   * `null` is absent since we do not have an `IS` or `IS NOT`
+   * operator defined and `null != null` in SQL.
+   */
+  readonly right: Exclude<ValuePosition, ColumnReference>;
+};
+
+export type Conjunction = {
+  type: 'and';
+  conditions: readonly Condition[];
+};
+
+export type Disjunction = {
+  type: 'or';
+  conditions: readonly Condition[];
+};
+
+export type ValuePosition = LiteralReference | ColumnReference;
+
+export type ColumnReference = {
+  readonly type: 'column';
+  /**
+   * Not a path yet as we're currently not allowing
+   * comparisons across tables. This will need to
+   * be a path through the tree in the near future.
+   */
+  readonly name: string;
+};
+
+export type LiteralReference = {
+  readonly type: 'literal';
+  readonly value: LiteralValue;
+};
+
+export type LiteralValue =
+  | string
+  | number
+  | boolean
+  | null
+  | ReadonlyArray<string | number | boolean>;
 
 export function constraintMatchesRow(
   constraint: Constraint,

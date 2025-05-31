@@ -14,7 +14,13 @@ import * as v from '../../shared/src/valita.ts';
 import type {NameMapper} from '../../zero-schema/src/name-mapper.ts';
 import {rowSchema} from './data.ts';
 import type {Row} from '../../zql/src/ivm/data.ts';
-import type {Ordering, SimpleOperator} from '../../zql/src/ivm/constraint.ts';
+import type {
+  Ordering,
+  SimpleOperator,
+  ValuePosition as IvmValuePosition,
+  LiteralReference,
+  ColumnReference,
+} from '../../zql/src/ivm/constraint.ts';
 
 export const selectorSchema = v.string();
 export const toStaticParam = Symbol();
@@ -101,6 +107,8 @@ const conditionValueSchema = v.union(
   columnReferenceSchema,
   parameterReferenceSchema,
 );
+
+export type ValuePosition = IvmValuePosition | Parameter;
 
 export type Parameter = v.Infer<typeof parameterReferenceSchema>;
 
@@ -244,35 +252,20 @@ export type CorrelatedSubquery = {
   readonly hidden?: boolean | undefined;
 };
 
-export type ValuePosition = LiteralReference | Parameter | ColumnReference;
-
-export type ColumnReference = {
-  readonly type: 'column';
-  /**
-   * Not a path yet as we're currently not allowing
-   * comparisons across tables. This will need to
-   * be a path through the tree in the near future.
-   */
-  readonly name: string;
-};
-
-export type LiteralReference = {
-  readonly type: 'literal';
-  readonly value: LiteralValue;
-};
-
-export type LiteralValue =
-  | string
-  | number
-  | boolean
-  | null
-  | ReadonlyArray<string | number | boolean>;
-
 export type Condition =
   | SimpleCondition
   | Conjunction
   | Disjunction
   | CorrelatedSubqueryCondition;
+export type Conjunction = {
+  type: 'and';
+  conditions: readonly Condition[];
+};
+
+export type Disjunction = {
+  type: 'or';
+  conditions: readonly Condition[];
+};
 
 export type SimpleCondition = {
   readonly type: 'simple';
@@ -284,16 +277,6 @@ export type SimpleCondition = {
    * operator defined and `null != null` in SQL.
    */
   readonly right: Exclude<ValuePosition, ColumnReference>;
-};
-
-export type Conjunction = {
-  type: 'and';
-  conditions: readonly Condition[];
-};
-
-export type Disjunction = {
-  type: 'or';
-  conditions: readonly Condition[];
 };
 
 export type CorrelatedSubqueryCondition = {
