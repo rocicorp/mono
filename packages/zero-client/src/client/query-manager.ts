@@ -9,7 +9,7 @@ import {
   type AST,
 } from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
-import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
+import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import {
   clientToServer,
   type NameMapper,
@@ -118,14 +118,14 @@ export class QueryManager {
    */
   async getQueriesPatch(
     tx: ReadTransaction,
-    lastPatch?: Map<string, QueriesPatchOp> | undefined,
-  ): Promise<Map<string, QueriesPatchOp>> {
+    lastPatch?: Map<string, UpQueriesPatchOp> | undefined,
+  ): Promise<Map<string, UpQueriesPatchOp>> {
     const existingQueryHashes = new Set<string>();
     const prefix = desiredQueriesPrefixForClient(this.#clientID);
     for await (const key of tx.scan({prefix}).keys()) {
       existingQueryHashes.add(key.substring(prefix.length, key.length));
     }
-    const patch: Map<string, QueriesPatchOp> = new Map();
+    const patch: Map<string, UpQueriesPatchOp> = new Map();
     for (const hash of existingQueryHashes) {
       if (!this.#queries.has(hash)) {
         patch.set(hash, {op: 'del', hash});

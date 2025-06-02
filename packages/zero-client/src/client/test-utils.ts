@@ -5,7 +5,6 @@ import type {Store} from '../../../replicache/src/dag/store.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
-import {mapAST} from '../../../zero-protocol/src/ast.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
@@ -29,8 +28,6 @@ import type {
 } from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
-import {ast} from '../../../zql/src/query/query-impl.ts';
 import type {PullRow, Query} from '../../../zql/src/query/query.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import type {CustomMutatorDefs} from './custom.ts';
@@ -88,7 +85,6 @@ export class TestZero<
   MD extends CustomMutatorDefs<S> | undefined = undefined,
 > extends Zero<S, MD> {
   pokeIDCounter = 0;
-  readonly #schema: S;
 
   #connectionStateResolvers: Set<{
     state: ConnectionState;
@@ -97,7 +93,6 @@ export class TestZero<
 
   constructor(options: ZeroOptions<S, MD>) {
     super(options);
-    this.#schema = options.schema;
   }
 
   get perdag(): Store {
@@ -270,7 +265,6 @@ export class TestZero<
       gotQueriesPatch: [
         {
           op: 'put',
-          ast: mapAST(ast(q), clientToServer(this.#schema.tables)),
           hash: q.hash(),
         },
       ],

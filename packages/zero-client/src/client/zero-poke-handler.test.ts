@@ -9,7 +9,6 @@ import {
   test,
   vi,
 } from 'vitest';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {serverToClient} from '../../../zero-schema/src/name-mapper.ts';
@@ -1224,10 +1223,6 @@ test('mergePokes with all optionals defined', () => {
                 {
                   op: 'put',
                   hash: 'h1',
-                  ast: {
-                    table: 'issues',
-                    orderBy: [['issue_id', 'asc']],
-                  },
                 },
               ],
             },
@@ -1235,10 +1230,6 @@ test('mergePokes with all optionals defined', () => {
               {
                 op: 'put',
                 hash: 'h1',
-                ast: {
-                  table: 'issues',
-                  orderBy: [['issue_id', 'asc']],
-                },
               },
             ],
             rowsPatch: [
@@ -1266,10 +1257,6 @@ test('mergePokes with all optionals defined', () => {
                 {
                   op: 'put',
                   hash: 'h2',
-                  ast: {
-                    table: 'labels',
-                    orderBy: [['label_id', 'asc']],
-                  },
                 },
               ],
             },
@@ -1277,10 +1264,6 @@ test('mergePokes with all optionals defined', () => {
               {
                 op: 'put',
                 hash: 'h2',
-                ast: {
-                  table: 'labels',
-                  orderBy: [['label_id', 'asc']],
-                },
               },
             ],
             rowsPatch: [
@@ -1350,18 +1333,12 @@ test('mergePokes with all optionals defined', () => {
         {
           op: 'put',
           key: 'd/c1/h1',
-          value: {
-            table: 'issue',
-            orderBy: [['id', 'asc']],
-          },
+          value: null,
         },
         {
           op: 'put',
           key: 'g/h1',
-          value: {
-            table: 'issue',
-            orderBy: [['id', 'asc']],
-          },
+          value: null,
         },
         {
           op: 'put',
@@ -1377,18 +1354,12 @@ test('mergePokes with all optionals defined', () => {
         {
           op: 'put',
           key: 'd/c1/h2',
-          value: {
-            table: 'label',
-            orderBy: [['id', 'asc']],
-          },
+          value: null,
         },
         {
           op: 'put',
           key: 'g/h2',
-          value: {
-            table: 'label',
-            orderBy: [['id', 'asc']],
-          },
+          value: null,
         },
         {
           op: 'put',
@@ -1429,10 +1400,6 @@ test('mergePokes sparse', () => {
               {
                 op: 'put',
                 hash: 'h1',
-                ast: {
-                  table: 'issues',
-                  orderBy: [['issue_id', 'asc']],
-                },
               },
             ],
             rowsPatch: [
@@ -1459,10 +1426,6 @@ test('mergePokes sparse', () => {
                 {
                   op: 'put',
                   hash: 'h2',
-                  ast: {
-                    table: 'labels',
-                    orderBy: [['label_id', 'asc']],
-                  },
                 },
               ],
             },
@@ -1515,10 +1478,7 @@ test('mergePokes sparse', () => {
         {
           op: 'put',
           key: 'g/h1',
-          value: {
-            table: 'issue',
-            orderBy: [['id', 'asc']],
-          } satisfies AST,
+          value: null,
         },
         {
           op: 'put',
@@ -1534,10 +1494,7 @@ test('mergePokes sparse', () => {
         {
           op: 'put',
           key: 'd/c1/h2',
-          value: {
-            table: 'label',
-            orderBy: [['id', 'asc']],
-          },
+          value: null,
         },
         {
           op: 'del',
