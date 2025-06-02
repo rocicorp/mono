@@ -10,7 +10,7 @@ import type {
   SchemaQuery,
 } from '../../zql/src/mutate/custom.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
-import type {ServerSchema} from '../../z2s/src/schema.ts';
+import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {makeSchemaQuery} from './query.ts';
 import {makeSchemaCRUD, TransactionImpl} from './custom.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';

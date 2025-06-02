@@ -26,7 +26,10 @@ import {
   type NameMapper,
 } from '../../zero-schema/src/name-mapper.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
-import type {ServerColumnSchema, ServerSchema} from './schema.ts';
+import type {
+  ServerColumnSchema,
+  ServerSchema,
+} from '../../zero-schema/src/server-schema.ts';
 import {
   sql,
   sqlConvertColumnArg,
