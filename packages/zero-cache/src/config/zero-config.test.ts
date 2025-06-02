@@ -42,7 +42,15 @@ test('zero-cache --help', () => {
                                                                                                                                                                    
      --push-api-key string                                       optional                                                                                          
        ZERO_PUSH_API_KEY env                                                                                                                                       
-                                                                 An optional secret used to authorize zero-cache to call the API server.                           
+                                                                 An optional secret used to authorize zero-cache to call the API server handling writes.           
+                                                                                                                                                                   
+     --pull-url string                                           optional                                                                                          
+       ZERO_PULL_URL env                                                                                                                                           
+                                                                 The URL of the API server to which zero-cache will send named queries.                            
+                                                                                                                                                                   
+     --pull-api-key string                                       optional                                                                                          
+       ZERO_PULL_API_KEY env                                                                                                                                       
+                                                                 An optional secret used to authorize zero-cache to call the API server handling reads.            
                                                                                                                                                                    
      --cvr-db string                                             optional                                                                                          
        ZERO_CVR_DB env                                                                                                                                             

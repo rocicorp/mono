@@ -22,7 +22,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- Version 14 removes 'timestamp' and 'date' types from the ClientSchema ValueType. (0.18)
 // -- Version 15 adds a `userPushParams` field to `initConnection`
 // -- Version 16 adds a new error type (alreadyProcessed) to mutation responses
-export const PROTOCOL_VERSION = 16;
+// -- Version 17 deprecates `AST` in downstream query puts. It was never used anyway.
+export const PROTOCOL_VERSION = 17;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

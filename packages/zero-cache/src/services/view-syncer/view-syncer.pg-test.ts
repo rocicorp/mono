@@ -23,7 +23,7 @@ import type {
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
-import type {QueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
 import {
   clientSchemaFrom,
@@ -574,7 +574,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
 
   function connectWithQueueAndSource(
     ctx: SyncContext,
-    desiredQueriesPatch: QueriesPatch,
+    desiredQueriesPatch: UpQueriesPatch,
     clientSchema: ClientSchema = defaultClientSchema,
   ): {queue: Queue<Downstream>; source: Source<Downstream>} {
     const source = vs.initConnection(ctx, [
@@ -598,7 +598,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
 
   function connect(
     ctx: SyncContext,
-    desiredQueriesPatch: QueriesPatch,
+    desiredQueriesPatch: UpQueriesPatch,
     clientSchema?: ClientSchema,
   ) {
     return connectWithQueueAndSource(ctx, desiredQueriesPatch, clientSchema)
@@ -688,12 +688,12 @@ describe('view-syncer/service', () => {
   let replicator: FakeReplicator;
   let connect: (
     ctx: SyncContext,
-    desiredQueriesPatch: QueriesPatch,
+    desiredQueriesPatch: UpQueriesPatch,
     clientSchema?: ClientSchema,
   ) => Queue<Downstream>;
   let connectWithQueueAndSource: (
     ctx: SyncContext,
-    desiredQueriesPatch: QueriesPatch,
+    desiredQueriesPatch: UpQueriesPatch,
     clientSchema?: ClientSchema,
   ) => {
     queue: Queue<Downstream>;
@@ -893,32 +893,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -956,32 +930,6 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -1538,75 +1486,14 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1.1",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                  },
                   "hash": "query-hash2",
                   "op": "put",
                 },
@@ -1644,75 +1531,14 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1.1",
                 "op": "put",
               },
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                },
                 "hash": "query-hash2",
                 "op": "put",
               },
@@ -1915,32 +1741,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -1992,32 +1792,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -2102,45 +1876,10 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                  },
                   "hash": "query-hash2",
                   "op": "put",
                 },
@@ -2495,32 +2234,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -2561,32 +2274,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "bar": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -2733,32 +2420,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -2898,32 +2559,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -3082,32 +2717,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -3210,32 +2819,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "bar": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -3292,32 +2875,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "bar": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -3391,64 +2948,12 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "bar": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
               ],
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -3456,32 +2961,6 @@ describe('view-syncer/service', () => {
             },
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -3618,32 +3097,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -3651,32 +3104,6 @@ describe('view-syncer/service', () => {
             },
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -4155,32 +3582,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -4196,32 +3597,6 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -4374,32 +3749,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -4415,32 +3764,6 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -4547,32 +3870,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -4675,32 +3972,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -4716,32 +3987,6 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -4819,32 +4064,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -4947,32 +4166,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -4988,32 +4181,6 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -5179,32 +4346,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -5220,32 +4361,6 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -5415,28 +4530,10 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "users",
-                  },
                   "hash": "user-query-hash",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "comments",
-                  },
                   "hash": "comment-query-hash",
                   "op": "put",
                 },
@@ -5452,28 +4549,10 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "users",
-                },
                 "hash": "user-query-hash",
                 "op": "put",
               },
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
                 "hash": "comment-query-hash",
                 "op": "put",
               },
@@ -5647,58 +4726,14 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "users",
-                  },
                   "hash": "user-query-hash",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "comments",
-                  },
                   "hash": "comment-query-hash",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "issue-query-hash",
                   "op": "put",
                 },
@@ -5714,58 +4749,14 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "users",
-                },
                 "hash": "user-query-hash",
                 "op": "put",
               },
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
                 "hash": "comment-query-hash",
                 "op": "put",
               },
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "issue-query-hash",
                 "op": "put",
               },
@@ -6042,58 +5033,14 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "users",
-                  },
                   "hash": "user-query-hash",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "comments",
-                  },
                   "hash": "comment-query-hash",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "issue-query-hash",
                   "op": "put",
                 },
@@ -6109,58 +5056,14 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "users",
-                },
                 "hash": "user-query-hash",
                 "op": "put",
               },
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
                 "hash": "comment-query-hash",
                 "op": "put",
               },
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "issue-query-hash",
                 "op": "put",
               },
@@ -6391,28 +5294,10 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "users",
-                  },
                   "hash": "user-query-hash",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "comments",
-                  },
                   "hash": "comment-query-hash",
                   "op": "put",
                 },
@@ -6428,28 +5313,10 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "users",
-                },
                 "hash": "user-query-hash",
                 "op": "put",
               },
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
                 "hash": "comment-query-hash",
                 "op": "put",
               },
@@ -6641,41 +5508,14 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "users",
-                  },
                   "hash": "user-query-hash",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "comments",
-                  },
                   "hash": "comment-query-hash",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                  },
                   "hash": "issue-query-hash",
                   "op": "put",
                 },
@@ -6691,41 +5531,14 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "users",
-                },
                 "hash": "user-query-hash",
                 "op": "put",
               },
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
                 "hash": "comment-query-hash",
                 "op": "put",
               },
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                },
                 "hash": "issue-query-hash",
                 "op": "put",
               },
@@ -7149,15 +5962,6 @@ describe('view-syncer/service', () => {
               "desiredQueriesPatches": {
                 "foo": [
                   {
-                    "ast": {
-                      "orderBy": [
-                        [
-                          "id",
-                          "asc",
-                        ],
-                      ],
-                      "table": "issues",
-                    },
                     "hash": "query-hash1",
                     "op": "put",
                   },
@@ -7185,15 +5989,6 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -7452,15 +6247,6 @@ describe('view-syncer/service', () => {
               "desiredQueriesPatches": {
                 "bar": [
                   {
-                    "ast": {
-                      "orderBy": [
-                        [
-                          "id",
-                          "asc",
-                        ],
-                      ],
-                      "table": "issues",
-                    },
                     "hash": "query-hash1",
                     "op": "put",
                   },
@@ -7474,15 +6260,6 @@ describe('view-syncer/service', () => {
               },
               "gotQueriesPatch": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -7610,15 +6387,6 @@ describe('view-syncer/service', () => {
               "desiredQueriesPatches": {
                 "bar": [
                   {
-                    "ast": {
-                      "orderBy": [
-                        [
-                          "id",
-                          "asc",
-                        ],
-                      ],
-                      "table": "issues",
-                    },
                     "hash": "query-hash1",
                     "op": "put",
                   },
@@ -7644,7 +6412,7 @@ describe('permissions', () => {
   let stateChanges: Subscription<ReplicaState>;
   let connect: (
     ctx: SyncContext,
-    desiredQueriesPatch: QueriesPatch,
+    desiredQueriesPatch: UpQueriesPatch,
   ) => Queue<Downstream>;
   let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
   let replicaDbFile: DbFile;
@@ -7712,32 +6480,6 @@ describe('permissions', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -7791,64 +6533,12 @@ describe('permissions', () => {
             "desiredQueriesPatches": {
               "bar": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
               ],
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -7856,32 +6546,6 @@ describe('permissions', () => {
             },
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -7978,32 +6642,6 @@ describe('permissions', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -8161,15 +6799,6 @@ describe('permissions', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -8225,15 +6854,6 @@ describe('permissions', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
                 "hash": "query-hash2",
                 "op": "put",
               },

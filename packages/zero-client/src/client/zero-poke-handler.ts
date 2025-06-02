@@ -7,7 +7,6 @@ import type {PatchOperation} from '../../../replicache/src/patch-operation.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {getBrowserGlobalMethod} from '../../../shared/src/browser-env.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
-import {mapAST} from '../../../zero-protocol/src/ast.ts';
 import type {
   PokeEndBody,
   PokePartBody,
@@ -241,10 +240,8 @@ export function mergePokes(
         )) {
           mergedPatch.push(
             ...queriesPatch.map(op =>
-              queryPatchOpToReplicachePatchOp(
-                op,
-                hash => toDesiredQueriesKey(clientID, hash),
-                serverToClient,
+              queryPatchOpToReplicachePatchOp(op, hash =>
+                toDesiredQueriesKey(clientID, hash),
               ),
             ),
           );
@@ -253,11 +250,7 @@ export function mergePokes(
       if (pokePart.gotQueriesPatch) {
         mergedPatch.push(
           ...pokePart.gotQueriesPatch.map(op =>
-            queryPatchOpToReplicachePatchOp(
-              op,
-              toGotQueriesKey,
-              serverToClient,
-            ),
+            queryPatchOpToReplicachePatchOp(op, toGotQueriesKey),
           ),
         );
       }
@@ -283,7 +276,6 @@ export function mergePokes(
 function queryPatchOpToReplicachePatchOp(
   op: QueriesPatchOp,
   toKey: (hash: string) => string,
-  serverToClient: NameMapper,
 ): PatchOperation {
   switch (op.op) {
     case 'clear':
@@ -298,7 +290,7 @@ function queryPatchOpToReplicachePatchOp(
       return {
         op: 'put',
         key: toKey(op.hash),
-        value: mapAST(op.ast, serverToClient),
+        value: null,
       };
   }
 }
