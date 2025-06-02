@@ -205,7 +205,22 @@ export const zeroOptions = {
     apiKey: {
       type: v.string().optional(),
       desc: [
-        `An optional secret used to authorize zero-cache to call the API server.`,
+        `An optional secret used to authorize zero-cache to call the API server handling writes.`,
+      ],
+    },
+  },
+
+  pull: {
+    url: {
+      type: v.string().optional(),
+      desc: [
+        `The URL of the API server to which zero-cache will send named queries.`,
+      ],
+    },
+    apiKey: {
+      type: v.string().optional(),
+      desc: [
+        `An optional secret used to authorize zero-cache to call the API server handling reads.`,
       ],
     },
   },
