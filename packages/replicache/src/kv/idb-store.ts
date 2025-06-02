@@ -53,7 +53,11 @@ export class IDBStore implements Store {
         assertNotNull(tx);
         tx.abort();
         this.#idbDeleted = true;
-        reject(new IDBNotFoundError(`Replicache IndexedDB not found: ${name}`));
+        reject(
+          new IDBNotFoundError(
+            `Expected IndexedDB not found: ${name}. This likely means that the user deleted IndexedDB instances while the app was running. This is non-fatal. The app will continue running in memory until reload.`,
+          ),
+        );
       };
 
       req.onsuccess = () => resolve(req.result);
@@ -88,7 +92,7 @@ export class IDBStore implements Store {
           this.#idbDeleted = true;
           mustGetBrowserGlobal('indexedDB').deleteDatabase(db.name);
           throw new IDBNotFoundError(
-            `Replicache IndexedDB ${db.name} missing object store. Deleting db.`,
+            `Expected IndexedDB ${db.name} missing object store. Deleting db. This is non-fatal, the app will continue working in memory until it is reloaded.`,
           );
         }
       }
