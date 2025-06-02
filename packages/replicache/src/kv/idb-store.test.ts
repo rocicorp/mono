@@ -101,7 +101,7 @@ describe('reopening IDB', () => {
     } catch (e) {
       ex = e;
     }
-    expect(ex as Error).to.match(/Replicache IndexedDB not found/);
+    expect(ex as Error).to.match(/Expected IndexedDB not found/);
 
     // ensure that any db creation during the reopening process was aborted
     const req = indexedDB.open(name);
@@ -141,7 +141,7 @@ describe('reopening IDB', () => {
       ex = e;
     }
     expect((ex as Error).message).to.match(
-      /Replicache IndexedDB .* missing object store/,
+      /Expected IndexedDB .* missing object store/,
     );
 
     // ensure that the corrupt db was deleted
@@ -175,5 +175,5 @@ test('Throws if IDB dropped while open', async () => {
     err = e;
   }
   expect(err).instanceOf(IDBNotFoundError);
-  expect((err as Error).message).to.match(/Replicache IndexedDB/);
+  expect((err as Error).message).to.match(/Expected IndexedDB/);
 });
