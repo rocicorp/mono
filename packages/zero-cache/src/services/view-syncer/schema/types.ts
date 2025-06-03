@@ -2,6 +2,7 @@ import * as v from '../../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../../zero-protocol/src/ast.ts';
 import {jsonValueSchema} from '../../../types/bigint-json.ts';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
+import type {QueriesRow} from './cvr.ts';
 
 export const cvrVersionSchema = v.object({
   /**
@@ -115,9 +116,6 @@ export const baseQueryRecordSchema = v.object({
   /** The client-specified ID used to identify this query. Typically a hash. */
   id: v.string(),
 
-  /** The original AST as supplied by the client. */
-  ast: astSchema,
-
   /**
    * The hash of the query after server-side transformations, which include:
    *
@@ -162,6 +160,7 @@ export const baseQueryRecordSchema = v.object({
  */
 export const internalQueryRecordSchema = baseQueryRecordSchema.extend({
   type: v.literal('internal'),
+  ast: astSchema,
 });
 
 export type InternalQueryRecord = v.Infer<typeof internalQueryRecordSchema>;
@@ -188,9 +187,7 @@ const clientStateSchema = v.object({
   version: cvrVersionSchema,
 });
 
-export const clientQueryRecordSchema = baseQueryRecordSchema.extend({
-  type: v.literal('client'),
-
+const externalQueryRecordSchema = baseQueryRecordSchema.extend({
   /**
    * The client state for this query, which includes the inactivatedAt, ttl and
    * version. The client state is stored in a record with the client ID as the
@@ -203,10 +200,26 @@ export const clientQueryRecordSchema = baseQueryRecordSchema.extend({
   patchVersion: cvrVersionSchema.optional(),
 });
 
+export const clientQueryRecordSchema = externalQueryRecordSchema.extend({
+  type: v.literal('client'),
+
+  /** The original AST as supplied by the client. */
+  ast: astSchema,
+});
+
 export type ClientQueryRecord = v.Infer<typeof clientQueryRecordSchema>;
+
+export const customQueryRecordSchema = externalQueryRecordSchema.extend({
+  type: v.literal('custom'),
+  name: v.string(),
+  args: jsonValueSchema,
+});
+
+export type CustomQueryRecord = v.Infer<typeof customQueryRecordSchema>;
 
 export const queryRecordSchema = v.union(
   clientQueryRecordSchema,
+  customQueryRecordSchema,
   internalQueryRecordSchema,
 );
 
@@ -300,3 +313,53 @@ export function versionFromString(str: string): CVRVersion {
       throw new TypeError(`Invalid version string ${str}`);
   }
 }
+
+export function queryRecordToQueryRow(
+  clientGroupID: string,
+  query: QueryRecord,
+): QueriesRow {
+  switch (query.type) {
+    case 'internal':
+      return {
+        clientGroupID,
+        queryHash: query.id,
+        clientAST: query.ast,
+        queryName: null,
+        queryArgs: null,
+        patchVersion: null,
+        transformationHash: query.transformationHash ?? null,
+        transformationVersion: maybeVersionString(query.transformationVersion),
+        internal: true,
+        deleted: false, // put vs del "got" query
+      };
+    case 'client':
+      return {
+        clientGroupID,
+        queryHash: query.id,
+        clientAST: query.ast,
+        queryName: null,
+        queryArgs: null,
+        patchVersion: maybeVersionString(query.patchVersion),
+        transformationHash: query.transformationHash ?? null,
+        transformationVersion: maybeVersionString(query.transformationVersion),
+        internal: null,
+        deleted: false, // put vs del "got" query
+      };
+    case 'custom':
+      return {
+        clientGroupID,
+        queryHash: query.id,
+        clientAST: null,
+        queryName: query.name,
+        queryArgs: query.args,
+        patchVersion: maybeVersionString(query.patchVersion),
+        transformationHash: query.transformationHash ?? null,
+        transformationVersion: maybeVersionString(query.transformationVersion),
+        internal: null,
+        deleted: false, // put vs del "got" query
+      };
+  }
+}
+
+export const maybeVersionString = (v: CVRVersion | undefined) =>
+  v ? versionString(v) : null;

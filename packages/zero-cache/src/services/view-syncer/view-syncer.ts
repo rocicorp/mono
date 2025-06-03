@@ -68,6 +68,7 @@ import {
   versionString,
   versionToCookie,
   type ClientQueryRecord,
+  type CustomQueryRecord,
   type CVRVersion,
   type InternalQueryRecord,
   type NullableCVRVersion,
@@ -768,6 +769,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
 
     for (const [hash, query] of gotQueries) {
+      assert(query.type !== 'custom', 'custom queries are not yet supported');
       const {ast, transformationHash} = query;
       if (
         query.type !== 'internal' &&
@@ -850,6 +852,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const hashToIDs = new Map<string, string[]>();
       const now = Date.now();
       const serverQueries = Object.entries(cvr.queries).map(([id, q]) => {
+        assert(
+          q.type !== 'custom',
+          'custom queries are not yet supported in syncQueryPipelineSet',
+        );
         const {query: ast, hash: transformationHash} = transformAndHashQuery(
           lc,
           q.ast,
@@ -887,11 +893,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       for (const q of addQueries) {
+        const orig = cvr.queries[q.id];
         lc.debug?.(
           'ViewSyncer adding query',
           q.ast,
           'transformed from',
-          cvr.queries[q.id].ast,
+          orig.type === 'custom' ? orig.name : orig.ast,
         );
       }
 
@@ -1328,6 +1335,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         const q = cvr.queries[hash];
         assert(q, 'query not found in CVR');
         assert(q.type !== 'internal', 'internal queries should not be evicted');
+        assert(q.type !== 'custom', 'custom queries are not supported yet');
 
         const rowCountBeforeCurrentEviction = this.#cvrStore.rowCount;
 
@@ -1533,7 +1541,7 @@ export function pickToken(
 
 function expired(
   now: number,
-  q: InternalQueryRecord | ClientQueryRecord,
+  q: InternalQueryRecord | ClientQueryRecord | CustomQueryRecord,
 ): boolean {
   if (q.type === 'internal') {
     return false;

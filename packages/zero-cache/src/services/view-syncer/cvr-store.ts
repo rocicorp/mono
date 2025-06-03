@@ -42,6 +42,7 @@ import {
   type NullableCVRVersion,
   type QueryPatch,
   type QueryRecord,
+  queryRecordToQueryRow,
   type RowID,
   type RowRecord,
   versionFromString,
@@ -397,39 +398,7 @@ export class CVRStore {
   }
 
   putQuery(query: QueryRecord): void {
-    const maybeVersionString = (v: CVRVersion | undefined) =>
-      v ? versionString(v) : null;
-
-    const change: QueriesRow =
-      query.type === 'internal'
-        ? {
-            clientGroupID: this.#id,
-            queryHash: query.id,
-            clientAST: query.ast,
-            queryName: null,
-            queryArgs: null,
-            patchVersion: null,
-            transformationHash: query.transformationHash ?? null,
-            transformationVersion: maybeVersionString(
-              query.transformationVersion,
-            ),
-            internal: true,
-            deleted: false, // put vs del "got" query
-          }
-        : {
-            clientGroupID: this.#id,
-            queryHash: query.id,
-            clientAST: query.ast,
-            queryName: null,
-            queryArgs: null,
-            patchVersion: maybeVersionString(query.patchVersion),
-            transformationHash: query.transformationHash ?? null,
-            transformationVersion: maybeVersionString(
-              query.transformationVersion,
-            ),
-            internal: null,
-            deleted: false, // put vs del "got" query
-          };
+    const change: QueriesRow = queryRecordToQueryRow(this.#id, query);
     this.#writes.add({
       stats: {queries: 1},
       write: tx => tx`INSERT INTO ${this.#cvr('queries')} ${tx(change)}
