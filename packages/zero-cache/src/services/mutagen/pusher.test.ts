@@ -333,7 +333,7 @@ describe('pusher service', () => {
     await pusher.stop();
 
     expect(fetch.mock.calls[0][0]).toMatchInlineSnapshot(
-      `"http://exmaple.com?schema=zero_0&appID=zero"`,
+      `"http://exmaple.com/?schema=zero_0&appID=zero"`,
     );
 
     fetch.mockReset();
@@ -464,7 +464,7 @@ describe('initConnection', () => {
 
     // Verify the custom URL was used
     expect(fetch.mock.calls[0][0]).toMatchInlineSnapshot(
-      `"http://example.com?workspace=1&user=2&foo=bar&schema=zero_0&appID=zero"`,
+      `"http://example.com/?workspace=1&user=2&foo=bar&schema=zero_0&appID=zero"`,
     );
 
     // Verify the headers were passed through
