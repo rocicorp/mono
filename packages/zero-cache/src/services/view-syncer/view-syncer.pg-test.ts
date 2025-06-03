@@ -877,6 +877,8 @@ describe('view-syncer/service', () => {
     });
   });
 
+  // TODO: respond to custom queries in patch
+
   test('initial hydration', async () => {
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
@@ -6906,8 +6908,11 @@ describe('pickToken', () => {
     expect(
       pickToken(lc, undefined, {decoded: {sub: 'foo', iat: 1}, raw: ''}),
     ).toEqual({
-      sub: 'foo',
-      iat: 1,
+      decoded: {
+        sub: 'foo',
+        iat: 1,
+      },
+      raw: '',
     });
   });
 
@@ -6941,8 +6946,11 @@ describe('pickToken', () => {
         {decoded: {sub: 'foo', iat: 2}, raw: ''},
       ),
     ).toEqual({
-      sub: 'foo',
-      iat: 2,
+      decoded: {
+        sub: 'foo',
+        iat: 2,
+      },
+      raw: '',
     });
 
     expect(
@@ -6952,8 +6960,11 @@ describe('pickToken', () => {
         {decoded: {sub: 'foo', iat: 1}, raw: ''},
       ),
     ).toEqual({
-      sub: 'foo',
-      iat: 2,
+      decoded: {
+        sub: 'foo',
+        iat: 2,
+      },
+      raw: '',
     });
   });
 
@@ -6971,12 +6982,18 @@ describe('pickToken', () => {
     expect(
       pickToken(lc, {decoded: {iat: 1}, raw: ''}, {decoded: {iat: 2}, raw: ''}),
     ).toEqual({
-      iat: 2,
+      decoded: {
+        iat: 2,
+      },
+      raw: '',
     });
     expect(
       pickToken(lc, {decoded: {iat: 2}, raw: ''}, {decoded: {iat: 1}, raw: ''}),
     ).toEqual({
-      iat: 2,
+      decoded: {
+        iat: 2,
+      },
+      raw: '',
     });
   });
 
@@ -6998,8 +7015,11 @@ describe('pickToken', () => {
         {decoded: {sub: 'foo', iat: 2}, raw: ''},
       ),
     ).toEqual({
-      sub: 'foo',
-      iat: 2,
+      decoded: {
+        sub: 'foo',
+        iat: 2,
+      },
+      raw: '',
     });
   });
 
@@ -7011,8 +7031,11 @@ describe('pickToken', () => {
         {decoded: {sub: 'foo', iat: 1}, raw: ''},
       ),
     ).toEqual({
-      sub: 'foo',
-      iat: 2,
+      decoded: {
+        sub: 'foo',
+        iat: 2,
+      },
+      raw: '',
     });
   });
 

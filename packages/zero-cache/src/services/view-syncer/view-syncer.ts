@@ -79,7 +79,7 @@ import {
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
-import {transformCustomQueries} from '../../custom-queries/transform-query.ts';
+import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
 
 export type TokenData = {
@@ -176,6 +176,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #expiredQueriesTimer: ReturnType<typeof setTimeout> | 0 = 0;
   #nextExpiredQueryTime: number = 0;
   readonly #setTimeout: SetTimeout;
+  readonly #customQueryTransformer: CustomQueryTransformer | undefined;
 
   constructor(
     pullConfig: ZeroConfig['pull'],
@@ -213,6 +214,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
     this.maxRowCount = maxRowCount;
     this.#setTimeout = setTimeoutFn;
+
+    if (pullConfig.url) {
+      this.#customQueryTransformer = new CustomQueryTransformer(
+        pullConfig.url,
+        shard,
+      );
+    }
 
     // Wait for the first connection to init.
     this.keepalive();
@@ -800,16 +808,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     const transformedQueries: TransformedAndHashed[] = [];
-    if (this.#pullConfig.url && customQueries.length > 0) {
-      const transformedCustomQueries = await transformCustomQueries(
-        this.#pullConfig.url,
-        this.#shard,
-        {
-          apiKey: this.#pullConfig.apiKey,
-          token: this.#authData?.raw,
-        },
-        customQueries,
-      );
+    if (this.#customQueryTransformer && customQueries.length > 0) {
+      const transformedCustomQueries =
+        await this.#customQueryTransformer.transform(
+          {
+            apiKey: this.#pullConfig.apiKey,
+            token: this.#authData?.raw,
+          },
+          customQueries,
+        );
 
       // TODO: collected errors need to make it downstream to the client.
       if (Array.isArray(transformedCustomQueries)) {
@@ -937,6 +944,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       for (const {id, query: origQuery} of otherQueries) {
+        // This should always match, no?
+        assert(id === origQuery.id, 'query id mismatch');
         const transformed = transformAndHashQuery(
           lc,
           origQuery.id,
@@ -954,16 +963,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         });
       }
 
-      if (this.#pullConfig.url && customQueries.size > 0) {
-        const transformedCustomQueries = await transformCustomQueries(
-          this.#pullConfig.url,
-          this.#shard,
-          {
-            apiKey: this.#pullConfig.apiKey,
-            token: this.#authData?.raw,
-          },
-          customQueries.values(),
-        );
+      if (this.#customQueryTransformer && customQueries.size > 0) {
+        const transformedCustomQueries =
+          await this.#customQueryTransformer.transform(
+            {
+              apiKey: this.#pullConfig.apiKey,
+              token: this.#authData?.raw,
+            },
+            customQueries.values(),
+          );
 
         // TODO: collected errors need to make it downstream to the client.
         if (Array.isArray(transformedCustomQueries)) {
