@@ -984,7 +984,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     cvr: CVRSnapshot,
     addQueries: {id: string; ast: AST; transformationHash: string}[],
-    removeQueries: {id: string; ast: AST; transformationHash: string}[],
+    removeQueries: {id: string; transformationHash: string}[],
     unhydrateQueries: string[],
     hashToIDs: Map<string, string[]>,
   ): Promise<void> {
@@ -1393,7 +1393,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         const q = cvr.queries[hash];
         assert(q, 'query not found in CVR');
         assert(q.type !== 'internal', 'internal queries should not be evicted');
-        assert(q.type !== 'custom', 'custom queries are not supported yet');
 
         const rowCountBeforeCurrentEviction = this.#cvrStore.rowCount;
 
@@ -1404,7 +1403,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           [
             {
               id: hash,
-              ast: q.ast,
               transformationHash: must(q.transformationHash),
             },
           ],
