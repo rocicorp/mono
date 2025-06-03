@@ -12,7 +12,8 @@ import {stringCompare} from '../../../../shared/src/string-compare.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {compareTTL} from '../../../../zql/src/query/ttl.ts';
-import instruments from '../../observability/view-syncer-instruments.ts';
+import * as counters from '../../observability/counters.ts';
+import * as histograms from '../../observability/histograms.ts';
 import {stringify, type JSONObject} from '../../types/bigint-json.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
@@ -148,8 +149,8 @@ export class CVRUpdater {
       `flushed cvr@${versionString(this._cvr.version)} ` +
         `${JSON.stringify(flushed)} in (${elapsed} ms)`,
     );
-    instruments.counters.cvrRowsFlushed.add(flushed.rows);
-    instruments.histograms.cvrFlushTime.record(elapsed);
+    counters.cvrRowsFlushed().add(flushed.rows);
+    histograms.cvrFlushTime().record(elapsed);
     return {cvr: this._cvr, flushed};
   }
 }

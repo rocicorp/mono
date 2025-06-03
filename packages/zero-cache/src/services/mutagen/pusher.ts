@@ -14,13 +14,13 @@ import {
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
+import * as counters from '../../observability/counters.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {Service} from '../service.ts';
-import instruments from '../../observability/view-syncer-instruments.ts';
 
 type Fatal = {
   error: 'forClient';
@@ -314,10 +314,10 @@ class PushWorker {
   }
 
   async #processPush(entry: PusherEntry): Promise<PushResponse | Fatal> {
-    instruments.counters.customMutations.add(entry.push.mutations.length, {
+    counters.customMutations().add(entry.push.mutations.length, {
       clientGroupID: entry.push.clientGroupID,
     });
-    instruments.counters.pushes.add(1, {
+    counters.pushes().add(1, {
       clientGroupID: entry.push.clientGroupID,
     });
 
