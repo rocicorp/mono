@@ -24,6 +24,7 @@ import {
 import type {LogConfig} from '../../config/zero-config.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
+import * as histograms from '../../observability/histograms.ts';
 import type {RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
 import type {ShardID} from '../../types/shards.ts';
@@ -35,7 +36,6 @@ import {
   Snapshotter,
   type SnapshotDiff,
 } from './snapshotter.ts';
-import instruments from '../../observability/view-syncer-instruments.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -445,7 +445,7 @@ export class PipelineDriver {
       }
 
       const elapsed = performance.now() - start;
-      instruments.histograms.changeAdvanceTime.record(elapsed, {
+      histograms.changeAdvanceTime().record(elapsed, {
         clientGroupID: this.#clientGroupID,
         table,
         type,

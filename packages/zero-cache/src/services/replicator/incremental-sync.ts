@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import instruments from '../../observability/view-syncer-instruments.ts';
+import * as counters from '../../observability/counters.ts';
 import type {Source} from '../../types/streams.ts';
 import {
   PROTOCOL_VERSION,
@@ -80,7 +80,7 @@ export class IncrementalSyncer {
         unregister = this.#state.cancelOnStop(downstream);
 
         for await (const message of downstream) {
-          instruments.counters.replicationEvents.add(1);
+          counters.replicationEvents().add(1);
           switch (message[0]) {
             case 'status':
               // Used for checking if a replica can be caught up. Not

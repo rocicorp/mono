@@ -17,6 +17,8 @@ import type {
 } from '../../../../zero-protocol/src/poke.ts';
 import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.ts';
 import type {RowPatchOp} from '../../../../zero-protocol/src/row-patch.ts';
+import * as counters from '../../observability/counters.ts';
+import * as histograms from '../../observability/histograms.ts';
 import type {JSONObject} from '../../types/bigint-json.ts';
 import {getLogLevel} from '../../types/error-for-client.ts';
 import {
@@ -36,7 +38,6 @@ import {
   type PutQueryPatch,
   type RowID,
 } from './schema/types.ts';
-import instruments from '../../observability/view-syncer-instruments.ts';
 
 export type PutRowPatch = {
   type: 'row';
@@ -80,7 +81,7 @@ export function startPoke(
   schemaVersions?: SchemaVersions, // absent for config-only pokes
 ): PokeHandler {
   const start = performance.now();
-  instruments.counters.pokeTransactions.add(1);
+  counters.pokeTransactions().add(1);
 
   const pokers = clients.map(c =>
     c.startPoke(tentativeVersion, schemaVersions),
@@ -91,7 +92,7 @@ export function startPoke(
   // rate (per client group) will be limited by the slowest connection.
   return {
     addPatch: async patch => {
-      instruments.counters.rowsPoked.add(1);
+      counters.rowsPoked().add(1);
       await Promise.allSettled(pokers.map(poker => poker.addPatch(patch)));
     },
     cancel: async () => {
@@ -99,7 +100,7 @@ export function startPoke(
     },
     end: async finalVersion => {
       const elapsed = performance.now() - start;
-      instruments.histograms.pokeTime.record(elapsed);
+      histograms.pokeTime().record(elapsed);
       await Promise.allSettled(pokers.map(poker => poker.end(finalVersion)));
     },
   };

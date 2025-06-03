@@ -31,7 +31,8 @@ import type {
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import type {Upstream} from '../../../../zero-protocol/src/up.ts';
 import {transformAndHashQuery} from '../../auth/read-authorizer.ts';
-import instruments from '../../observability/view-syncer-instruments.ts';
+import * as counters from '../../observability/counters.ts';
+import * as histograms from '../../observability/histograms.ts';
 import {stringify} from '../../types/bigint-json.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -817,12 +818,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       const elapsed = Date.now() - start;
-      instruments.counters.queryHydrations.add(1, {
+      counters.queryHydrations().add(1, {
         clientGroupID: this.id,
         hash,
         transformationHash,
       });
-      instruments.histograms.hydrationTime.record(elapsed, {
+      histograms.hydrationTime().record(elapsed, {
         clientGroupID: this.id,
         hash,
         transformationHash,
@@ -1291,7 +1292,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc.info?.(
         `finished processing advancement of ${numChanges} changes (${elapsed} ms)`,
       );
-      instruments.histograms.transactionAdvanceTime.record(elapsed, {
+      histograms.transactionAdvanceTime().record(elapsed, {
         clientGroupID: this.id,
       });
       return 'success';
