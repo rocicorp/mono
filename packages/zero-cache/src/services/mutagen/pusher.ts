@@ -16,11 +16,11 @@ import {
 import {type ZeroConfig} from '../../config/zero-config.ts';
 import * as counters from '../../observability/counters.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
-import {upstreamSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {Service} from '../service.ts';
+import {fetchFromAPIServer} from '../../custom/fetch.ts';
 
 type Fatal = {
   error: 'forClient';
@@ -44,7 +44,6 @@ export interface Pusher {
 }
 
 type Config = Pick<ZeroConfig, 'app' | 'shard'>;
-const reservedParams = ['schema', 'appID'];
 
 /**
  * Receives push messages from zero-client and forwards
@@ -333,66 +332,25 @@ class PushWorker {
     }
 
     try {
-      const params = new URLSearchParams(this.#pushURL.split('?')[1]);
-      for (const [key, value] of Object.entries(
-        this.#clients.get(entry.clientID)?.userParams?.queryParams ?? {},
-      )) {
-        params.append(key, value);
-      }
-
-      for (const reserved of reservedParams) {
-        assert(
-          !params.has(reserved),
-          `The push URL cannot contain the reserved query param "${reserved}"`,
-        );
-      }
-
-      params.append(
-        'schema',
-        upstreamSchema({
+      const response = await fetchFromAPIServer(
+        this.#pushURL,
+        {
           appID: this.#config.app.id,
           shardNum: this.#config.shard.num,
-        }),
+        },
+        {
+          apiKey: this.#apiKey,
+          token: entry.jwt,
+        },
+        this.#clients.get(entry.clientID)?.userParams?.queryParams,
+        entry.push,
       );
-      params.append('appID', this.#config.app.id);
 
-      this.#lc.debug?.(
-        'pushing custom mutators to',
-        this.#pushURL,
-        'with params',
-        params.toString(),
-        'and body',
-        JSON.stringify(entry.push),
-      );
-      const response = await fetch(`${this.#pushURL}?${params.toString()}`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(entry.push),
-      });
       if (!response.ok) {
-        const details = await response.text();
-
-        // Zero currently handles all auth errors this way (throws ErrorForClient).
-        // Continue doing that until we have an `onError` callback exposed on the top level Zero instance.
-        // This:
-        // 1. Keeps the API the same for those migrating to custom mutators from CRUD
-        // 2. Ensures we only churn the API once, when we have `onError` available.
-        //
-        // When switching to `onError`, we should stop disconnecting the websocket
-        // on auth errors and instead let the token be updated
-        // on the existing WS connection. This will give us the chance to skip
-        // re-hydrating queries that do not use the modified fields of the token.
-        if (response.status === 401) {
-          throw new ErrorForClient({
-            kind: ErrorKind.AuthInvalidated,
-            message: details,
-          });
-        }
-
         return {
           error: 'http',
           status: response.status,
-          details,
+          details: await response.text(),
           mutationIDs: entry.push.mutations.map(m => ({
             id: m.id,
             clientID: m.clientID,
