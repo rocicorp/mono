@@ -75,6 +75,7 @@ import {
   type CVRVersion,
   type InternalQueryRecord,
   type NullableCVRVersion,
+  type QueryRecord,
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
@@ -908,36 +909,102 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Convert queries to their transformed ast's and hashes
       const hashToIDs = new Map<string, string[]>();
       const now = Date.now();
-      const serverQueries = Object.entries(cvr.queries).map(([id, q]) => {
-        assert(
-          q.type !== 'custom',
-          'custom queries are not yet supported in syncQueryPipelineSet',
-        );
-        const {transformedAst: ast, transformationHash} = transformAndHashQuery(
+
+      // group cvr queries into:
+      // 1. custom queries
+      // 2. everything else
+      // Handle transformation appropriately
+      // Then hydrate as `serverQueries`
+      const cvrQueryEntires = Object.entries(cvr.queries);
+      const customQueries: Map<string, CustomQueryRecord> = new Map();
+      const otherQueries: {
+        id: string;
+        query: ClientQueryRecord | InternalQueryRecord;
+      }[] = [];
+      const transformedQueries: {
+        id: string;
+        origQuery: QueryRecord;
+        transformed: TransformedAndHashed;
+      }[] = [];
+      for (const [id, query] of cvrQueryEntires) {
+        if (query.type === 'custom') {
+          // This should always match, no?
+          assert(id === query.id, 'custom query id mismatch');
+          customQueries.set(id, query);
+        } else {
+          otherQueries.push({id, query});
+        }
+      }
+
+      for (const {id, query: origQuery} of otherQueries) {
+        const transformed = transformAndHashQuery(
           lc,
-          q.id,
-          q.ast,
+          origQuery.id,
+          origQuery.ast,
           must(this.#pipelines.currentPermissions()).permissions ?? {
             tables: {},
           },
           this.#authData?.decoded,
-          q.type === 'internal',
+          origQuery.type === 'internal',
         );
-        const ids = hashToIDs.get(transformationHash);
-        if (ids) {
-          ids.push(id);
-        } else {
-          hashToIDs.set(transformationHash, [id]);
-        }
-        return {
+        transformedQueries.push({
           id,
-          // TODO(mlaw): follow up to handle the case where we statically determine
-          // the query cannot be run and is `undefined`.
-          ast,
-          transformationHash,
-          remove: expired(now, q),
-        };
-      });
+          origQuery,
+          transformed,
+        });
+      }
+
+      if (this.#pullConfig.url && customQueries.size > 0) {
+        const transformedCustomQueries = await transformCustomQueries(
+          this.#pullConfig.url,
+          this.#shard,
+          {
+            apiKey: this.#pullConfig.apiKey,
+            token: this.#authData?.raw,
+          },
+          customQueries.values(),
+        );
+
+        // TODO: collected errors need to make it downstream to the client.
+        if (Array.isArray(transformedCustomQueries)) {
+          for (const q of transformedCustomQueries) {
+            if ('error' in q) {
+              lc.error?.(
+                `Error transforming custom query ${q.name}: ${q.error}`,
+              );
+              continue;
+            }
+            transformedQueries.push({
+              id: q.id,
+              origQuery: must(customQueries.get(q.id)),
+              transformed: q,
+            });
+          }
+        } else {
+          // If the result is not an array, it is an error.
+          lc.error?.(
+            'Error calling API server to transform custom queries',
+            transformedCustomQueries,
+          );
+        }
+      }
+
+      const serverQueries = transformedQueries.map(
+        ({id, origQuery, transformed}) => {
+          const ids = hashToIDs.get(transformed.transformationHash);
+          if (ids) {
+            ids.push(id);
+          } else {
+            hashToIDs.set(transformed.transformationHash, [id]);
+          }
+          return {
+            id,
+            ast: transformed.transformedAst,
+            transformationHash: transformed.transformationHash,
+            remove: expired(now, origQuery),
+          };
+        },
+      );
 
       const addQueries = serverQueries.filter(
         q => !q.remove && !hydratedQueries.has(q.transformationHash),
