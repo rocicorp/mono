@@ -5,7 +5,7 @@ import {ErrorForClient} from '../types/error-for-client.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 
 const reservedParams = ['schema', 'appID'];
-type HeaderOptions = {
+export type HeaderOptions = {
   apiKey?: string | undefined;
   token?: string | undefined;
 };
