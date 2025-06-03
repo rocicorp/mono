@@ -11,10 +11,7 @@ import {
   defaultResource,
 } from '@opentelemetry/resources';
 import {ATTR_SERVICE_VERSION} from '@opentelemetry/semantic-conventions';
-import {
-  PeriodicExportingMetricReader,
-  ConsoleMetricExporter,
-} from '@opentelemetry/sdk-metrics';
+import {PeriodicExportingMetricReader} from '@opentelemetry/sdk-metrics';
 import {version} from '../../../otel/src/version.ts';
 import {
   BatchLogRecordProcessor,
@@ -71,12 +68,7 @@ class OtelManager {
       traceExporter: new OTLPTraceExporter(),
       metricReader: new PeriodicExportingMetricReader({
         exportIntervalMillis: 5000,
-        exporter: (() => {
-          if (process.env.NODE_ENV === 'dev') {
-            return new ConsoleMetricExporter();
-          }
-          return new OTLPMetricExporter();
-        })(),
+        exporter: new OTLPMetricExporter(),
       }),
       logRecordProcessors,
     });

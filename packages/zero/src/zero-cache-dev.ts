@@ -117,27 +117,26 @@ async function main() {
       log(
         `Running ${zeroCacheScript} at\n\n\thttp://localhost:${config.port}\n`,
       );
-      zeroCacheProcess = spawn(
-        'npx',
-        [
-          '--node-options=--require=@opentelemetry/auto-instrumentations-node/register',
-          zeroCacheScript,
-          ...(zeroCacheArgs || []),
-        ],
-        {
-          env: {
-            // Set some low defaults so as to use fewer resources and not trip up,
-            // e.g. developers sharing a database.
-            ['ZERO_NUM_SYNC_WORKERS']: '3',
-            ['ZERO_CVR_MAX_CONNS']: '6',
-            ['ZERO_UPSTREAM_MAX_CONNS']: '6',
-            // But let the developer override any of these dev defaults.
-            ...process.env,
-          },
-          stdio: 'inherit',
-          shell: true,
-        },
-      );
+      const env: Record<string, string> = {
+        // Set some low defaults so as to use fewer resources and not trip up,
+        // e.g. developers sharing a database.
+        ['ZERO_NUM_SYNC_WORKERS']: '3',
+        ['ZERO_CVR_MAX_CONNS']: '6',
+        ['ZERO_UPSTREAM_MAX_CONNS']: '6',
+        // But let the developer override any of these dev defaults.
+        ...process.env,
+      };
+      if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+        log('Starting OpenTelemetry auto instrumentation.');
+        env['NODE_OPTIONS'] =
+          (env['NODE_OPTIONS'] || '') +
+          ' --require @opentelemetry/auto-instrumentations-node/register';
+      }
+      zeroCacheProcess = spawn(zeroCacheScript, zeroCacheArgs || [], {
+        env,
+        stdio: 'inherit',
+        shell: true,
+      });
       zeroCacheProcess.on('exit', () => {
         logError(`${zeroCacheScript} exited. Exiting.`);
         process.exit(-1);
