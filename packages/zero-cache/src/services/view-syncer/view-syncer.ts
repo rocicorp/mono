@@ -30,7 +30,10 @@ import type {
   InspectUpMessage,
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import type {Upstream} from '../../../../zero-protocol/src/up.ts';
-import {transformAndHashQuery} from '../../auth/read-authorizer.ts';
+import {
+  transformAndHashQuery,
+  type TransformedAndHashed,
+} from '../../auth/read-authorizer.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
 import {stringify} from '../../types/bigint-json.ts';
@@ -75,6 +78,8 @@ import {
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
+import {transformCustomQueries} from '../../custom-queries/transform-query.ts';
+import {type ZeroConfig} from '../../config/zero-config.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -132,6 +137,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
   readonly #slowHydrateThreshold: number;
+  readonly #pullConfig: ZeroConfig['pull'];
 
   // The ViewSyncerService is only started in response to a connection,
   // so #lastConnectTime is always initialized to now(). This is necessary
@@ -152,7 +158,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
-  #authData: JWTPayload | undefined;
+  #authData: TokenData | undefined;
 
   /**
    * The {@linkcode maxRowCount} is used for the eviction of inactive queries.
@@ -171,6 +177,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #setTimeout: SetTimeout;
 
   constructor(
+    pullConfig: ZeroConfig['pull'],
     lc: LogContext,
     shard: ShardID,
     taskID: string,
@@ -186,6 +193,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ) {
     this.id = clientGroupID;
     this.#shard = shard;
+    this.#pullConfig = pullConfig;
     this.#lc = lc;
     this.#pipelines = pipelineDriver;
     this.#stateChanges = versionChanges;
@@ -410,8 +418,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#lc.debug?.('viewSyncer.initConnection');
     return startSpan(tracer, 'vs.initConnection', () => {
       const {clientID, wsID, baseCookie, schemaVersion, tokenData} = ctx;
-      this.#authData = pickToken(this.#lc, this.#authData, tokenData?.decoded);
-      this.#lc.debug?.(`Picked auth token: ${JSON.stringify(this.#authData)}`);
+      this.#authData = pickToken(this.#lc, this.#authData, tokenData);
+      this.#lc.debug?.(
+        `Picked auth token: ${JSON.stringify(this.#authData?.decoded)}`,
+      );
 
       const lc = this.#lc
         .withContext('clientID', clientID)
@@ -768,9 +778,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       ([_, state]) => state.transformationHash !== undefined,
     );
 
-    for (const [hash, query] of gotQueries) {
-      assert(query.type !== 'custom', 'custom queries are not yet supported');
-      const {ast, transformationHash} = query;
+    const customQueries: CustomQueryRecord[] = [];
+    const otherQueries: (ClientQueryRecord | InternalQueryRecord)[] = [];
+
+    for (const [, query] of gotQueries) {
       if (
         query.type !== 'internal' &&
         Object.values(query.clientState).every(
@@ -780,20 +791,65 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         continue; // No longer desired.
       }
 
-      const {transformedAst, transformationHash: newTransformationHash} =
-        transformAndHashQuery(
-          lc,
-          hash,
-          ast,
-          must(this.#pipelines.currentPermissions()).permissions ?? {
-            tables: {},
-          },
-          this.#authData,
-          query.type === 'internal',
-        );
-      if (newTransformationHash !== transformationHash) {
-        continue; // Query results may have changed.
+      if (query.type === 'custom') {
+        customQueries.push(query);
+      } else {
+        otherQueries.push(query);
       }
+    }
+
+    const transformedQueries: TransformedAndHashed[] = [];
+    if (this.#pullConfig.url && customQueries.length > 0) {
+      const transformedCustomQueries = await transformCustomQueries(
+        this.#pullConfig.url,
+        this.#shard,
+        {
+          apiKey: this.#pullConfig.apiKey,
+          token: this.#authData?.raw,
+        },
+        customQueries,
+      );
+
+      // TODO: collected errors need to make it downstream to the client.
+      if (Array.isArray(transformedCustomQueries)) {
+        for (const q of transformedCustomQueries) {
+          if ('error' in q) {
+            lc.error?.(`Error transforming custom query ${q.name}: ${q.error}`);
+            continue;
+          }
+          transformedQueries.push(q);
+        }
+      } else {
+        // If the result is not an array, it is an error.
+        lc.error?.(
+          'Error calling API server to transform custom queries',
+          transformedCustomQueries,
+        );
+      }
+    }
+
+    for (const q of otherQueries) {
+      const transformed = transformAndHashQuery(
+        lc,
+        q.id,
+        q.ast,
+        must(this.#pipelines.currentPermissions()).permissions ?? {
+          tables: {},
+        },
+        this.#authData?.decoded,
+        q.type === 'internal',
+      );
+      if (transformed.transformationHash === q.transformationHash) {
+        // only processing unchanged queries here
+        transformedQueries.push(transformed);
+      }
+    }
+
+    for (const {
+      id: hash,
+      transformationHash,
+      transformedAst,
+    } of transformedQueries) {
       const start = Date.now();
       let count = 0;
       await startAsyncSpan(
@@ -802,7 +858,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         async span => {
           span.setAttribute('queryHash', hash);
           span.setAttribute('transformationHash', transformationHash);
-          span.setAttribute('table', ast.table);
+          span.setAttribute('table', transformedAst.table);
           const timer = new Timer();
           for (const _ of this.#pipelines.addQuery(
             transformationHash,
@@ -859,12 +915,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
         const {transformedAst: ast, transformationHash} = transformAndHashQuery(
           lc,
-          id,
+          q.id,
           q.ast,
           must(this.#pipelines.currentPermissions()).permissions ?? {
             tables: {},
           },
-          this.#authData,
+          this.#authData?.decoded,
           q.type === 'internal',
         );
         const ids = hashToIDs.get(transformationHash);
@@ -1491,8 +1547,8 @@ function checkClientAndCVRVersions(
 
 export function pickToken(
   lc: LogContext,
-  previousToken: JWTPayload | undefined,
-  newToken: JWTPayload | undefined,
+  previousToken: TokenData | undefined,
+  newToken: TokenData | undefined,
 ) {
   if (previousToken === undefined) {
     lc.debug?.(`No previous token, using new token`);
@@ -1500,7 +1556,7 @@ export function pickToken(
   }
 
   if (newToken) {
-    if (previousToken.sub !== newToken.sub) {
+    if (previousToken.decoded.sub !== newToken.decoded.sub) {
       throw new ErrorForClient({
         kind: ErrorKind.Unauthorized,
         message:
@@ -1508,13 +1564,13 @@ export function pickToken(
       });
     }
 
-    if (previousToken.iat === undefined) {
+    if (previousToken.decoded.iat === undefined) {
       lc.debug?.(`No issued at time for the existing token, using new token`);
       // No issued at time for the existing token? We take the most recently received token.
       return newToken;
     }
 
-    if (newToken.iat === undefined) {
+    if (newToken.decoded.iat === undefined) {
       throw new ErrorForClient({
         kind: ErrorKind.Unauthorized,
         message:
@@ -1523,7 +1579,7 @@ export function pickToken(
     }
 
     // The new token is newer, so we take it.
-    if (previousToken.iat < newToken.iat) {
+    if (previousToken.decoded.iat < newToken.decoded.iat) {
       lc.debug?.(`New token is newer, using it`);
       return newToken;
     }

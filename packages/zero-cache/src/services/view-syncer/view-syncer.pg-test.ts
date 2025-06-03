@@ -104,6 +104,8 @@ const ON_FAILURE = (e: unknown) => {
   throw e;
 };
 
+const pullConfig = {};
+
 const REPLICA_VERSION = '01';
 const TASK_ID = 'foo-task';
 const serviceID = '9876';
@@ -544,6 +546,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
     storageDB,
   ).createClientGroupStorage(serviceID);
   const vs = new ViewSyncerService(
+    pullConfig,
     lc,
     SHARD,
     TASK_ID,
@@ -6900,35 +6903,55 @@ describe('pickToken', () => {
   const lc = createSilentLogContext();
 
   test('previous token is undefined', () => {
-    expect(pickToken(lc, undefined, {sub: 'foo', iat: 1})).toEqual({
+    expect(
+      pickToken(lc, undefined, {decoded: {sub: 'foo', iat: 1}, raw: ''}),
+    ).toEqual({
       sub: 'foo',
       iat: 1,
     });
   });
 
   test('previous token exists, new token is undefined', () => {
-    expect(() => pickToken(lc, {sub: 'foo', iat: 1}, undefined)).toThrowError(
-      ErrorForClient,
-    );
+    expect(() =>
+      pickToken(lc, {decoded: {sub: 'foo', iat: 1}, raw: ''}, undefined),
+    ).toThrowError(ErrorForClient);
   });
 
   test('previous token has a subject, new token does not', () => {
-    expect(() => pickToken(lc, {sub: 'foo'}, {})).toThrowError(ErrorForClient);
+    expect(() =>
+      pickToken(lc, {decoded: {sub: 'foo'}, raw: ''}, {decoded: {}, raw: ''}),
+    ).toThrowError(ErrorForClient);
   });
 
   test('previous token has a subject, new token has a different subject', () => {
     expect(() =>
-      pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'bar', iat: 1}),
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 1}, raw: ''},
+        {decoded: {sub: 'bar', iat: 1}, raw: ''},
+      ),
     ).toThrowError(ErrorForClient);
   });
 
   test('previous token has a subject, new token has the same subject', () => {
-    expect(pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'foo', iat: 2})).toEqual({
+    expect(
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 1}, raw: ''},
+        {decoded: {sub: 'foo', iat: 2}, raw: ''},
+      ),
+    ).toEqual({
       sub: 'foo',
       iat: 2,
     });
 
-    expect(pickToken(lc, {sub: 'foo', iat: 2}, {sub: 'foo', iat: 1})).toEqual({
+    expect(
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 2}, raw: ''},
+        {decoded: {sub: 'foo', iat: 1}, raw: ''},
+      ),
+    ).toEqual({
       sub: 'foo',
       iat: 2,
     });
@@ -6936,56 +6959,113 @@ describe('pickToken', () => {
 
   test('previous token has no subject, new token has a subject', () => {
     expect(() =>
-      pickToken(lc, {sub: 'foo', iat: 123}, {iat: 123}),
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 123}, raw: ''},
+        {decoded: {iat: 123}, raw: ''},
+      ),
     ).toThrowError(ErrorForClient);
   });
 
   test('previous token has no subject, new token has no subject', () => {
-    expect(pickToken(lc, {iat: 1}, {iat: 2})).toEqual({
+    expect(
+      pickToken(lc, {decoded: {iat: 1}, raw: ''}, {decoded: {iat: 2}, raw: ''}),
+    ).toEqual({
       iat: 2,
     });
-    expect(pickToken(lc, {iat: 2}, {iat: 1})).toEqual({
+    expect(
+      pickToken(lc, {decoded: {iat: 2}, raw: ''}, {decoded: {iat: 1}, raw: ''}),
+    ).toEqual({
       iat: 2,
     });
   });
 
   test('previous token has an issued at time, new token does not', () => {
     expect(() =>
-      pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'foo'}),
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 1}, raw: ''},
+        {decoded: {sub: 'foo'}, raw: ''},
+      ),
     ).toThrowError(ErrorForClient);
   });
 
   test('previous token has an issued at time, new token has a greater issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'foo', iat: 2})).toEqual({
+    expect(
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 1}, raw: ''},
+        {decoded: {sub: 'foo', iat: 2}, raw: ''},
+      ),
+    ).toEqual({
       sub: 'foo',
       iat: 2,
     });
   });
 
   test('previous token has an issued at time, new token has a lesser issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo', iat: 2}, {sub: 'foo', iat: 1})).toEqual({
+    expect(
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 2}, raw: ''},
+        {decoded: {sub: 'foo', iat: 1}, raw: ''},
+      ),
+    ).toEqual({
       sub: 'foo',
       iat: 2,
     });
   });
 
   test('previous token has an issued at time, new token has the same issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo', iat: 2}, {sub: 'foo', iat: 2})).toEqual({
-      sub: 'foo',
-      iat: 2,
+    expect(
+      pickToken(
+        lc,
+        {
+          decoded: {sub: 'foo', iat: 2},
+          raw: '',
+        },
+        {
+          decoded: {sub: 'foo', iat: 2},
+          raw: '',
+        },
+      ),
+    ).toEqual({
+      decoded: {
+        sub: 'foo',
+        iat: 2,
+      },
+      raw: '',
     });
   });
 
   test('previous token has no issued at time, new token has an issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo'}, {sub: 'foo', iat: 2})).toEqual({
-      sub: 'foo',
-      iat: 2,
+    expect(
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo'}, raw: 'no-iat'},
+        {decoded: {sub: 'foo', iat: 2}, raw: 'iat'},
+      ),
+    ).toEqual({
+      decoded: {
+        sub: 'foo',
+        iat: 2,
+      },
+      raw: 'iat',
     });
   });
 
   test('previous token has no issued at time, new token has no issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo'}, {sub: 'foo'})).toEqual({
-      sub: 'foo',
+    expect(
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo'}, raw: ''},
+        {decoded: {sub: 'foo'}, raw: ''},
+      ),
+    ).toEqual({
+      decoded: {
+        sub: 'foo',
+      },
+      raw: '',
     });
   });
 });
