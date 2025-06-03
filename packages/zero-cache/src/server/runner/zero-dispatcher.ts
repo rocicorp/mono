@@ -8,6 +8,7 @@ import {
   installWebSocketHandoff,
   type HandoffSpec,
 } from '../../types/websocket-handoff.ts';
+import {handleHeapzRequest} from '../../services/heapz.ts';
 
 export class ZeroDispatcher extends HttpService {
   readonly id = 'zero-dispatcher';
@@ -20,7 +21,12 @@ export class ZeroDispatcher extends HttpService {
     getWorker: () => Promise<Worker>,
   ) {
     super(`zero-dispatcher`, lc, opts, fastify => {
-      fastify.get('/statz', (req, res) => handleStatzRequest(config, req, res));
+      fastify.get('/statz', (req, res) =>
+        handleStatzRequest(lc, config, req, res),
+      );
+      fastify.get('/heapz', (req, res) =>
+        handleHeapzRequest(lc, config, req, res),
+      );
       installWebSocketHandoff(lc, this.#handoff, fastify.server);
     });
     this.#getWorker = getWorker;
