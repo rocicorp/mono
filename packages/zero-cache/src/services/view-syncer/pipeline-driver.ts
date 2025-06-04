@@ -643,7 +643,7 @@ function getRowKey(cols: PrimaryKey, row: Row): RowKey {
 /**
  * Core hydration logic used by {@link PipelineDriver#addQuery}, extracted to a
  * function for reuse by bin-analyze so that bin-analyze's hydration logic
- * is as close as possible to the zero's real hydration logic.
+ * is as close as possible to zero-cache's real hydration logic.
  */
 export function* hydrate(
   input: Input,
