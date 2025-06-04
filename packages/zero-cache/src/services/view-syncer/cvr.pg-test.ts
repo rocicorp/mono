@@ -832,6 +832,7 @@ describe('view-syncer/cvr', () => {
       updater.putDesiredQueries('fooClient', [
         {hash: 'fourHash', ast: {table: 'users'}, ttl: undefined},
         {hash: 'threeHash', ast: {table: 'comments'}, ttl: undefined},
+        {hash: 'oneCustomHash', name: 'customQuery', args: [], ttl: undefined},
       ]),
     ).toMatchInlineSnapshot(`
       [
@@ -867,6 +868,7 @@ describe('view-syncer/cvr', () => {
       updater.putDesiredQueries('barClient', [
         {hash: 'oneHash', ast: {table: 'issues'}, ttl: undefined},
         {hash: 'threeHash', ast: {table: 'comments'}, ttl: undefined},
+        {hash: 'oneCustomHash', name: 'customQuery', args: [], ttl: undefined},
       ]),
     ).toMatchInlineSnapshot(`
       [
