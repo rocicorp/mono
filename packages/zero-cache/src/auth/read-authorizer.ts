@@ -1,6 +1,6 @@
 import type {JWTPayload} from 'jose';
 import type {JSONValue} from '../../../shared/src/json.ts';
-import {hashOfAST} from '../../../zero-protocol/src/ast-hash.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {AST, Condition} from '../../../zero-protocol/src/ast.ts';
 import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import {bindStaticParameters} from '../../../zql/src/builder/builder.ts';

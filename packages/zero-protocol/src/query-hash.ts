@@ -13,3 +13,11 @@ export function hashOfAST(ast: AST): string {
   hashCache.set(normalized, hash);
   return hash;
 }
+
+export function hashOfNameAndArgs(
+  name: string,
+  args: readonly unknown[],
+): string {
+  const argsString = JSON.stringify(args);
+  return h64(`${name}${argsString}`).toString(36);
+}

@@ -70,6 +70,48 @@ test('add', () => {
   expect(send).toBeCalledTimes(1);
 });
 
+test('add and remove a custom query', () => {
+  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+  const maxRecentQueriesSize = 0;
+  const mutationTracker = new MutationTracker(lc);
+  const queryManager = new QueryManager(
+    mutationTracker,
+    'client1',
+    schema.tables,
+    send,
+    () => () => {},
+    maxRecentQueriesSize,
+  );
+  const rm1 = queryManager.addCustom('customQuery', [1], 'forever');
+  expect(send).toBeCalledTimes(1);
+  expect(send).toBeCalledWith([
+    'changeDesiredQueries',
+    {
+      desiredQueriesPatch: [
+        {
+          op: 'put',
+          hash: '2tts1u0ojmujd',
+          name: 'customQuery',
+          args: [1],
+          ttl: -1,
+        },
+      ],
+    },
+  ]);
+
+  const rm2 = queryManager.addCustom('customQuery', [1], 'forever');
+  expect(send).toBeCalledTimes(1);
+
+  rm2();
+  const rm3 = queryManager.addCustom('customQuery', [1], 'forever');
+  expect(send).toBeCalledTimes(1);
+  rm1();
+  rm3();
+  queryManager.addCustom('customQuery', [1], 'forever');
+  // once for del, another for put
+  expect(send).toBeCalledTimes(3);
+});
+
 test('add renamed fields', () => {
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 0;
@@ -143,6 +185,7 @@ test('add renamed fields', () => {
       {
         "desiredQueriesPatch": [
           {
+            "args": undefined,
             "ast": {
               "alias": undefined,
               "limit": undefined,
@@ -232,6 +275,7 @@ test('add renamed fields', () => {
               },
             },
             "hash": "2courpv3kf7et",
+            "name": undefined,
             "op": "put",
             "ttl": -1,
           },
@@ -757,6 +801,7 @@ describe('getQueriesPatch', () => {
             {
               "desiredQueriesPatch": [
                 {
+                  "args": undefined,
                   "ast": {
                     "alias": undefined,
                     "limit": undefined,
@@ -773,6 +818,7 @@ describe('getQueriesPatch', () => {
                     "where": undefined,
                   },
                   "hash": "1hydj1t7t5yv4",
+                  "name": undefined,
                   "op": "put",
                   "ttl": 1000,
                 },
@@ -792,6 +838,7 @@ describe('getQueriesPatch', () => {
             {
               "desiredQueriesPatch": [
                 {
+                  "args": undefined,
                   "ast": {
                     "alias": undefined,
                     "limit": undefined,
@@ -808,6 +855,7 @@ describe('getQueriesPatch', () => {
                     "where": undefined,
                   },
                   "hash": "1hydj1t7t5yv4",
+                  "name": undefined,
                   "op": "put",
                   "ttl": 2000,
                 },
@@ -830,36 +878,38 @@ describe('getQueriesPatch', () => {
       expect(await add('none')).toBe(0);
       expect(send).toBeCalledTimes(1);
       expect(send.mock.calls[0]).toMatchInlineSnapshot(`
+      [
         [
-          [
-            "changeDesiredQueries",
-            {
-              "desiredQueriesPatch": [
-                {
-                  "ast": {
-                    "alias": undefined,
-                    "limit": undefined,
-                    "orderBy": [
-                      [
-                        "id",
-                        "desc",
-                      ],
+          "changeDesiredQueries",
+          {
+            "desiredQueriesPatch": [
+              {
+                "args": undefined,
+                "ast": {
+                  "alias": undefined,
+                  "limit": undefined,
+                  "orderBy": [
+                    [
+                      "id",
+                      "desc",
                     ],
-                    "related": undefined,
-                    "schema": undefined,
-                    "start": undefined,
-                    "table": "issues",
-                    "where": undefined,
-                  },
-                  "hash": "1hydj1t7t5yv4",
-                  "op": "put",
-                  "ttl": 0,
+                  ],
+                  "related": undefined,
+                  "schema": undefined,
+                  "start": undefined,
+                  "table": "issues",
+                  "where": undefined,
                 },
-              ],
-            },
-          ],
-        ]
-      `);
+                "hash": "1hydj1t7t5yv4",
+                "name": undefined,
+                "op": "put",
+                "ttl": 0,
+              },
+            ],
+          },
+        ],
+      ]
+    `);
 
       send.mockClear();
       expect(await add('none')).toBe(0);
@@ -875,6 +925,7 @@ describe('getQueriesPatch', () => {
             {
               "desiredQueriesPatch": [
                 {
+                  "args": undefined,
                   "ast": {
                     "alias": undefined,
                     "limit": undefined,
@@ -891,6 +942,7 @@ describe('getQueriesPatch', () => {
                     "where": undefined,
                   },
                   "hash": "1hydj1t7t5yv4",
+                  "name": undefined,
                   "op": "put",
                   "ttl": 1000,
                 },

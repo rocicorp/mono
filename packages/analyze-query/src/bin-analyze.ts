@@ -45,7 +45,7 @@ import {
 } from '../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
-import {hashOfAST} from '../../zero-protocol/src/ast-hash.ts';
+import {hashOfAST} from '../../zero-protocol/src/query-hash.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 
 const options = {
