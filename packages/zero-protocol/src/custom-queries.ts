@@ -28,6 +28,7 @@ export type ErroredQuery = v.Infer<typeof erroredQuerySchema>;
 export const transformResponseBodySchema = v.array(
   v.union(transformedQuerySchema, erroredQuerySchema),
 );
+export type TransformResponseBody = v.Infer<typeof transformResponseBodySchema>;
 
 export const transformRequestMessageSchema = v.tuple([
   v.literal('transform'),

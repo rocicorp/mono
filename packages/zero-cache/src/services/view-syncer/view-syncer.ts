@@ -783,6 +783,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const {transformedAst, transformationHash: newTransformationHash} =
         transformAndHashQuery(
           lc,
+          hash,
           ast,
           must(this.#pipelines.currentPermissions()).permissions ?? {
             tables: {},
@@ -858,6 +859,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
         const {transformedAst: ast, transformationHash} = transformAndHashQuery(
           lc,
+          id,
           q.ast,
           must(this.#pipelines.currentPermissions()).permissions ?? {
             tables: {},

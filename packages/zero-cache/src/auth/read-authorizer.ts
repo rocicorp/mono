@@ -8,6 +8,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
 
 export type TransformedAndHashed = {
+  id: string;
   transformedAst: AST;
   transformationHash: string;
 };
@@ -22,6 +23,7 @@ export type TransformedAndHashed = {
  */
 export function transformAndHashQuery(
   lc: LogContext,
+  id: string,
   query: AST,
   permissionRules: PermissionsConfig,
   authData: JWTPayload | undefined,
@@ -31,6 +33,7 @@ export function transformAndHashQuery(
     ? query // application permissions do not apply to internal queries
     : transformQuery(lc, query, permissionRules, authData);
   return {
+    id,
     transformedAst: transformed,
     transformationHash: hashOfAST(transformed),
   };
