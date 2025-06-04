@@ -244,8 +244,6 @@ async function runAst(
     console.log(await formatOutput(ast.table + astToZQL(ast)));
   }
 
-  console.log('using hydrate', JSON.stringify(ast, undefined, 2));
-
   const tableSpecs = computeZqlSpecs(lc, db);
   const pipeline = buildPipeline(ast, host);
 
