@@ -1,3 +1,4 @@
+import {jsonSchema} from '../../../../../shared/src/json-schema.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../../zero-protocol/src/ast.ts';
 import {jsonValueSchema} from '../../../types/bigint-json.ts';
@@ -212,7 +213,7 @@ export type ClientQueryRecord = v.Infer<typeof clientQueryRecordSchema>;
 export const customQueryRecordSchema = externalQueryRecordSchema.extend({
   type: v.literal('custom'),
   name: v.string(),
-  args: jsonValueSchema,
+  args: v.readonly(v.array(jsonSchema)),
 });
 
 export type CustomQueryRecord = v.Infer<typeof customQueryRecordSchema>;
