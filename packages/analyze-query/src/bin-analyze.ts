@@ -232,6 +232,7 @@ async function runAst(
     }
     ast = transformAndHashQuery(
       lc,
+      '',
       ast,
       permissions,
       authData,

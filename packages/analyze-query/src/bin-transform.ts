@@ -49,6 +49,7 @@ const rows =
 
 const queryAst = transformAndHashQuery(
   lc,
+  '',
   rows[0].clientAST,
   permissions,
   {},
