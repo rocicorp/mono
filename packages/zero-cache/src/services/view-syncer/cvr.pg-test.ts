@@ -860,6 +860,18 @@ describe('view-syncer/cvr', () => {
             "stateVersion": "1aa",
           },
         },
+        {
+          "patch": {
+            "clientID": "fooClient",
+            "id": "oneCustomHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        },
       ]
     `);
 
@@ -888,6 +900,18 @@ describe('view-syncer/cvr', () => {
           "patch": {
             "clientID": "barClient",
             "id": "threeHash",
+            "op": "put",
+            "type": "query",
+          },
+          "toVersion": {
+            "minorVersion": 1,
+            "stateVersion": "1aa",
+          },
+        },
+        {
+          "patch": {
+            "clientID": "barClient",
+            "id": "oneCustomHash",
             "op": "put",
             "type": "query",
           },
@@ -929,12 +953,12 @@ describe('view-syncer/cvr', () => {
     expect(flushed).toMatchInlineSnapshot(`
       {
         "clients": 2,
-        "desires": 6,
+        "desires": 8,
         "instances": 1,
-        "queries": 7,
+        "queries": 9,
         "rows": 0,
         "rowsDeferred": 0,
-        "statements": 17,
+        "statements": 21,
       }
     `);
     expect(updated).toEqual({
@@ -945,7 +969,7 @@ describe('view-syncer/cvr', () => {
       clients: {
         barClient: {
           id: 'barClient',
-          desiredQueryIDs: ['oneHash', 'threeHash'],
+          desiredQueryIDs: ['oneCustomHash', 'oneHash', 'threeHash'],
         },
         bonkClient: {
           id: 'bonkClient',
@@ -957,7 +981,7 @@ describe('view-syncer/cvr', () => {
         },
         fooClient: {
           id: 'fooClient',
-          desiredQueryIDs: ['fourHash', 'threeHash'],
+          desiredQueryIDs: ['fourHash', 'oneCustomHash', 'threeHash'],
         },
       },
       queries: {
@@ -984,6 +1008,30 @@ describe('view-syncer/cvr', () => {
               ['clientID', 'asc'],
             ],
           },
+        },
+        oneCustomHash: {
+          args: [],
+          clientState: {
+            barClient: {
+              inactivatedAt: undefined,
+              ttl: -1,
+              version: {
+                minorVersion: 1,
+                stateVersion: '1aa',
+              },
+            },
+            fooClient: {
+              inactivatedAt: undefined,
+              ttl: -1,
+              version: {
+                minorVersion: 1,
+                stateVersion: '1aa',
+              },
+            },
+          },
+          id: 'oneCustomHash',
+          name: 'customQuery',
+          type: 'custom',
         },
         oneHash: {
           id: 'oneHash',
@@ -1087,6 +1135,18 @@ describe('view-syncer/cvr', () => {
           transformationVersion: null,
         },
         {
+          clientAST: null,
+          clientGroupID: 'abc123',
+          deleted: false,
+          internal: null,
+          patchVersion: null,
+          queryArgs: [],
+          queryHash: 'oneCustomHash',
+          queryName: 'customQuery',
+          transformationHash: null,
+          transformationVersion: null,
+        },
+        {
           clientAST: {
             schema: '',
             table: `${APP_ID}_${SHARD_NUM}.clients`,
@@ -1169,6 +1229,15 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
           deleted: false,
+          inactivatedAt: null,
+          patchVersion: '1aa:01',
+          queryHash: 'oneCustomHash',
+          ttl: null,
+        },
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          deleted: false,
           patchVersion: '1aa:01',
           queryHash: 'threeHash',
           inactivatedAt: null,
@@ -1181,6 +1250,15 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
+          ttl: null,
+        },
+        {
+          clientGroupID: 'abc123',
+          clientID: 'barClient',
+          deleted: false,
+          inactivatedAt: null,
+          patchVersion: '1aa:01',
+          queryHash: 'oneCustomHash',
           ttl: null,
         },
         {

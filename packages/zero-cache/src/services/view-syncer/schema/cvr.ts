@@ -16,6 +16,7 @@ import {
   versionFromString,
   versionString,
 } from './types.ts';
+import type {ReadonlyJSONValue} from '../../../../../shared/src/json.ts';
 
 // For readability in the sql statements.
 function schema(shard: ShardID) {
@@ -98,7 +99,7 @@ export type QueriesRow = {
   // This is the client AST _AFTER_ applying server name transformations.
   clientAST: JSONValue | null;
   queryName: string | null;
-  queryArgs: JSONValue | null;
+  queryArgs: readonly ReadonlyJSONValue[] | null;
   patchVersion: string | null;
   transformationHash: string | null;
   transformationVersion: string | null;
