@@ -281,13 +281,7 @@ export class PipelineDriver {
       runtimeDebugStats.resetRowsVended(this.#clientGroupID);
     }
 
-    const res = input.fetch({});
-    const streamer = new Streamer(this.#tableSpecs).accumulate(
-      hash,
-      schema,
-      toAdds(res),
-    );
-    yield* streamer.stream();
+    yield* hydrate(input, hash, this.#tableSpecs);
 
     const hydrationTimeMs = timer.totalElapsed();
     if (runtimeDebugFlags.trackRowsVended) {
@@ -644,4 +638,23 @@ function* toAdds(nodes: Iterable<Node>): Iterable<Change> {
 
 function getRowKey(cols: PrimaryKey, row: Row): RowKey {
   return Object.fromEntries(cols.map(col => [col, must(row[col])]));
+}
+
+/**
+ * Core hydration logic used by {@link PipelineDriver#addQuery}, extracted to a
+ * function for reuse by bin-analyze so that bin-analyze's hydration logic
+ * is as close as possible to zero-cache's real hydration logic.
+ */
+export function* hydrate(
+  input: Input,
+  hash: string,
+  tableSpecs: Map<string, LiteAndZqlSpec>,
+) {
+  const res = input.fetch({});
+  const streamer = new Streamer(tableSpecs).accumulate(
+    hash,
+    input.getSchema(),
+    toAdds(res),
+  );
+  yield* streamer.stream();
 }

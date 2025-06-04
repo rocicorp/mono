@@ -17,6 +17,7 @@ import {
 } from '../../zero-cache/src/config/zero-config.ts';
 import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
 import {pgClient} from '../../zero-cache/src/types/pg.ts';
+import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 import {
   mapAST,
@@ -29,7 +30,6 @@ import {
   serverToClient,
 } from '../../zero-schema/src/name-mapper.ts';
 import {buildPipeline} from '../../zql/src/builder/builder.ts';
-import {Catch} from '../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../zql/src/ivm/operator.ts';
 import {
@@ -45,6 +45,8 @@ import {
 } from '../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
+import {hashOfAST} from '../../zero-protocol/src/ast-hash.ts';
+import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 
 const options = {
   replica: zeroOptions.replica,
@@ -242,11 +244,16 @@ async function runAst(
     console.log(await formatOutput(ast.table + astToZQL(ast)));
   }
 
+  const tableSpecs = computeZqlSpecs(lc, db);
   const pipeline = buildPipeline(ast, host);
-  const output = new Catch(pipeline);
 
   const start = performance.now();
-  output.fetch();
+
+  for (const rowChange of hydrate(pipeline, hashOfAST(ast), tableSpecs)) {
+    // no-op, just need to consume all of the iterable returned by hydrate.
+    rowChange;
+  }
+
   const end = performance.now();
   return [start, end];
 }
