@@ -1,7 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
-import {deepEqual} from '../../../../shared/src/json.ts';
+import {
+  deepEqual,
+  type ReadonlyJSONValue,
+} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {
   difference,
@@ -30,6 +33,7 @@ import {
   type CVRVersion,
   type ClientQueryRecord,
   type ClientRecord,
+  type CustomQueryRecord,
   type InternalQueryRecord,
   type QueryRecord,
   type RowID,
@@ -236,7 +240,13 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
   putDesiredQueries(
     clientID: string,
-    queries: Readonly<{hash: string; ast: AST; ttl?: number | undefined}>[],
+    queries: Readonly<{
+      hash: string;
+      ast?: AST | undefined;
+      name?: string | undefined;
+      args?: readonly ReadonlyJSONValue[] | undefined;
+      ttl?: number | undefined;
+    }>[],
   ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
     const client = this.ensureClient(clientID);
@@ -270,18 +280,18 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       return patches;
     }
     const newVersion = this._ensureNewVersion();
+    // why do we sort here?
     client.desiredQueryIDs = [...union(current, needed)].sort(stringCompare);
 
     for (const id of needed) {
-      const {ast, ttl = -1} = must(queries.find(({hash}) => hash === id));
+      const {
+        ast,
+        name,
+        args,
+        ttl = -1,
+      } = must(queries.find(({hash}) => hash === id));
       const query =
-        this._cvr.queries[id] ??
-        ({
-          id,
-          type: 'client',
-          ast,
-          clientState: {},
-        } satisfies ClientQueryRecord);
+        this._cvr.queries[id] ?? newQueryRecord(id, ast, name, args);
       assertNotInternal(query);
 
       const inactivatedAt = undefined;
@@ -942,4 +952,36 @@ export function nextEvictionTime(cvr: CVR): number | undefined {
 
 function normalizeTTL(ttl: number): number {
   return ttl < 0 ? -1 : ttl;
+}
+
+function newQueryRecord(
+  id: string,
+  ast: AST | undefined,
+  name: string | undefined,
+  args: readonly ReadonlyJSONValue[] | undefined,
+): ClientQueryRecord | CustomQueryRecord {
+  if (ast !== undefined) {
+    assert(
+      name === undefined && args === undefined,
+      'Cannot provide name or args with ast',
+    );
+    return {
+      id,
+      type: 'client',
+      ast,
+      clientState: {},
+    } satisfies ClientQueryRecord;
+  }
+
+  assert(
+    name !== undefined && args !== undefined,
+    'Must provide name and args',
+  );
+  return {
+    id,
+    type: 'custom',
+    name,
+    args,
+    clientState: {},
+  } satisfies CustomQueryRecord;
 }

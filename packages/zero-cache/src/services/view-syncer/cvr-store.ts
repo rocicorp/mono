@@ -36,6 +36,7 @@ import {
   type ClientQueryRecord,
   type ClientRecord,
   cmpVersions,
+  type CustomQueryRecord,
   type CVRVersion,
   EMPTY_CVR_VERSION,
   type InternalQueryRecord,
@@ -62,9 +63,28 @@ export type CVRFlushStats = {
 const tracer = trace.getTracer('cvr-store', version);
 
 function asQuery(row: QueriesRow): QueryRecord {
-  const ast = astSchema.parse(row.clientAST);
   const maybeVersion = (s: string | null) =>
     s === null ? undefined : versionFromString(s);
+
+  if (row.clientAST === null) {
+    // custom query
+    assert(
+      row.queryName !== null && row.queryArgs !== null,
+      'queryName and queryArgs must be set for custom queries',
+    );
+    return {
+      type: 'custom',
+      id: row.queryHash,
+      name: row.queryName,
+      args: row.queryArgs,
+      patchVersion: maybeVersion(row.patchVersion),
+      clientState: {},
+      transformationHash: row.transformationHash ?? undefined,
+      transformationVersion: maybeVersion(row.transformationVersion),
+    } satisfies CustomQueryRecord;
+  }
+
+  const ast = astSchema.parse(row.clientAST);
   return row.internal
     ? ({
         type: 'internal',
@@ -319,6 +339,8 @@ export class CVRStore {
     lc.debug?.(
       `loaded cvr@${versionString(cvr.version)} (${Date.now() - start} ms)`,
     );
+
+    // why do we not sort `desiredQueryIDs` here?
 
     return cvr;
   }
