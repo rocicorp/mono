@@ -571,7 +571,9 @@ class Streamer {
       switch (type) {
         case 'add':
         case 'remove': {
-          yield* this.#streamNodes(queryHash, schema, type, [change.node]);
+          yield* this.#streamNodes(queryHash, schema, type, () => [
+            change.node,
+          ]);
           break;
         }
         case 'child': {
@@ -584,7 +586,7 @@ class Streamer {
           break;
         }
         case 'edit':
-          yield* this.#streamNodes(queryHash, schema, type, [
+          yield* this.#streamNodes(queryHash, schema, type, () => [
             {row: change.node.row, relationships: {}},
           ]);
           break;
@@ -598,7 +600,7 @@ class Streamer {
     queryHash: string,
     schema: SourceSchema,
     op: 'add' | 'remove' | 'edit',
-    nodes: Iterable<Node>,
+    nodes: () => Iterable<Node>,
   ): Iterable<RowChange> {
     const {tableName: table, system} = schema;
 
@@ -614,7 +616,7 @@ class Streamer {
       return;
     }
 
-    for (const node of nodes) {
+    for (const node of nodes()) {
       const {relationships, row} = node;
       const rowKey = getRowKey(primaryKey, row);
 
@@ -628,7 +630,7 @@ class Streamer {
 
       for (const [relationship, children] of Object.entries(relationships)) {
         const childSchema = must(schema.relationships[relationship]);
-        yield* this.#streamNodes(queryHash, childSchema, op, children());
+        yield* this.#streamNodes(queryHash, childSchema, op, children);
       }
     }
   }
