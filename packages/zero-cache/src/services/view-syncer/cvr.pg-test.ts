@@ -832,7 +832,7 @@ describe('view-syncer/cvr', () => {
       updater.putDesiredQueries('fooClient', [
         {hash: 'fourHash', ast: {table: 'users'}, ttl: undefined},
         {hash: 'threeHash', ast: {table: 'comments'}, ttl: undefined},
-        {hash: 'oneCustomHash', name: 'customQuery', args: [], ttl: undefined},
+        {hash: 'xCustomHash', name: 'customQuery', args: [], ttl: undefined},
       ]),
     ).toMatchInlineSnapshot(`
       [
@@ -863,7 +863,7 @@ describe('view-syncer/cvr', () => {
         {
           "patch": {
             "clientID": "fooClient",
-            "id": "oneCustomHash",
+            "id": "xCustomHash",
             "op": "put",
             "type": "query",
           },
@@ -880,7 +880,7 @@ describe('view-syncer/cvr', () => {
       updater.putDesiredQueries('barClient', [
         {hash: 'oneHash', ast: {table: 'issues'}, ttl: undefined},
         {hash: 'threeHash', ast: {table: 'comments'}, ttl: undefined},
-        {hash: 'oneCustomHash', name: 'customQuery', args: [], ttl: undefined},
+        {hash: 'xCustomHash', name: 'customQuery', args: [], ttl: undefined},
       ]),
     ).toMatchInlineSnapshot(`
       [
@@ -911,7 +911,7 @@ describe('view-syncer/cvr', () => {
         {
           "patch": {
             "clientID": "barClient",
-            "id": "oneCustomHash",
+            "id": "xCustomHash",
             "op": "put",
             "type": "query",
           },
@@ -969,7 +969,7 @@ describe('view-syncer/cvr', () => {
       clients: {
         barClient: {
           id: 'barClient',
-          desiredQueryIDs: ['oneCustomHash', 'oneHash', 'threeHash'],
+          desiredQueryIDs: ['oneHash', 'threeHash', 'xCustomHash'],
         },
         bonkClient: {
           id: 'bonkClient',
@@ -981,7 +981,7 @@ describe('view-syncer/cvr', () => {
         },
         fooClient: {
           id: 'fooClient',
-          desiredQueryIDs: ['fourHash', 'oneCustomHash', 'threeHash'],
+          desiredQueryIDs: ['fourHash', 'threeHash', 'xCustomHash'],
         },
       },
       queries: {
@@ -1009,7 +1009,7 @@ describe('view-syncer/cvr', () => {
             ],
           },
         },
-        oneCustomHash: {
+        xCustomHash: {
           args: [],
           clientState: {
             barClient: {
@@ -1029,7 +1029,7 @@ describe('view-syncer/cvr', () => {
               },
             },
           },
-          id: 'oneCustomHash',
+          id: 'xCustomHash',
           name: 'customQuery',
           type: 'custom',
         },
@@ -1141,7 +1141,7 @@ describe('view-syncer/cvr', () => {
           internal: null,
           patchVersion: null,
           queryArgs: [],
-          queryHash: 'oneCustomHash',
+          queryHash: 'xCustomHash',
           queryName: 'customQuery',
           transformationHash: null,
           transformationVersion: null,
@@ -1231,7 +1231,7 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           inactivatedAt: null,
           patchVersion: '1aa:01',
-          queryHash: 'oneCustomHash',
+          queryHash: 'xCustomHash',
           ttl: null,
         },
         {
@@ -1258,7 +1258,7 @@ describe('view-syncer/cvr', () => {
           deleted: false,
           inactivatedAt: null,
           patchVersion: '1aa:01',
-          queryHash: 'oneCustomHash',
+          queryHash: 'xCustomHash',
           ttl: null,
         },
         {
