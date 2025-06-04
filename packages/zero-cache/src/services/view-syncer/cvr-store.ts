@@ -340,6 +340,8 @@ export class CVRStore {
       `loaded cvr@${versionString(cvr.version)} (${Date.now() - start} ms)`,
     );
 
+    // why do we not sort `desiredQueryIDs` here?
+
     return cvr;
   }
 
