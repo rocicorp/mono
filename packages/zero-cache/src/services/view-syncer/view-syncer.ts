@@ -780,7 +780,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         continue; // No longer desired.
       }
 
-      const {query: transformedAst, hash: newTransformationHash} =
+      const {transformedAst, transformationHash: newTransformationHash} =
         transformAndHashQuery(
           lc,
           ast,
@@ -856,7 +856,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           q.type !== 'custom',
           'custom queries are not yet supported in syncQueryPipelineSet',
         );
-        const {query: ast, hash: transformationHash} = transformAndHashQuery(
+        const {transformedAst: ast, transformationHash} = transformAndHashQuery(
           lc,
           q.ast,
           must(this.#pipelines.currentPermissions()).permissions ?? {

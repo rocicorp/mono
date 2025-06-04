@@ -9,6 +9,7 @@ import {
 import {fetchFromAPIServer, type HeaderOptions} from '../custom/fetch.ts';
 import type {ShardID} from '../types/shards.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {hashOfAST} from '../../../zero-protocol/src/ast-hash.ts';
 
 type HttpError = {
   error: 'http';
@@ -52,8 +53,8 @@ export async function transformCustomQueries(
       return transformed;
     }
     return {
-      query: transformed.ast,
-      hash: transformed.id,
+      transformedAst: transformed.ast,
+      transformationHash: hashOfAST(transformed.ast),
     } satisfies TransformedAndHashed;
   });
 }

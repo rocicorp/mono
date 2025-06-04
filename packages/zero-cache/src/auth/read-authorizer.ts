@@ -8,8 +8,8 @@ import type {LogContext} from '@rocicorp/logger';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
 
 export type TransformedAndHashed = {
-  query: AST;
-  hash: string;
+  transformedAst: AST;
+  transformationHash: string;
 };
 /**
  * Adds permission rules to the given query so it only returns rows that the
@@ -31,8 +31,8 @@ export function transformAndHashQuery(
     ? query // application permissions do not apply to internal queries
     : transformQuery(lc, query, permissionRules, authData);
   return {
-    query: transformed,
-    hash: hashOfAST(transformed),
+    transformedAst: transformed,
+    transformationHash: hashOfAST(transformed),
   };
 }
 

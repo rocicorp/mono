@@ -230,7 +230,13 @@ async function runAst(
         ),
       );
     }
-    ast = transformAndHashQuery(lc, ast, permissions, authData, false).query;
+    ast = transformAndHashQuery(
+      lc,
+      ast,
+      permissions,
+      authData,
+      false,
+    ).transformedAst;
     console.log(chalk.blue.bold('\n\n=== Query After Permissions: ===\n'));
     console.log(await formatOutput(ast.table + astToZQL(ast)));
   }

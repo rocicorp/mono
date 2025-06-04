@@ -114,7 +114,7 @@ describe('transformCustomQueries', () => {
     // Verify the result
     expect(result).toEqual([
       {
-        query: {
+        transformedAst: {
           table: 'users',
           where: {
             type: 'simple',
@@ -123,10 +123,10 @@ describe('transformCustomQueries', () => {
             right: {type: 'literal', value: 123},
           },
         },
-        hash: 'hash1',
+        transformationHash: '2q4jya9umt1i2',
       },
       {
-        query: {
+        transformedAst: {
           table: 'posts',
           where: {
             type: 'simple',
@@ -135,7 +135,7 @@ describe('transformCustomQueries', () => {
             right: {type: 'literal', value: 'user123'},
           },
         },
-        hash: 'hash2',
+        transformationHash: 'ofy7rz1vol9y',
       },
     ]);
   });
@@ -180,7 +180,7 @@ describe('transformCustomQueries', () => {
 
     expect(result).toEqual([
       {
-        query: {
+        transformedAst: {
           table: 'users',
           where: {
             type: 'simple',
@@ -189,7 +189,7 @@ describe('transformCustomQueries', () => {
             right: {type: 'literal', value: 123},
           },
         },
-        hash: 'hash1',
+        transformationHash: '2q4jya9umt1i2',
       },
       {
         error: 'app',

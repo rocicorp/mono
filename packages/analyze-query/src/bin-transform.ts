@@ -53,7 +53,7 @@ const queryAst = transformAndHashQuery(
   permissions,
   {},
   rows[0].internal,
-).query;
+).transformedAst;
 
 console.log('\n=== AST ===\n');
 console.log(JSON.stringify(queryAst, null, 2));
