@@ -17,6 +17,7 @@ import {
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {GotCallback} from '../../../zql/src/query/query-impl.ts';
 import {compareTTL, parseTTL, type TTL} from '../../../zql/src/query/ttl.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
@@ -24,7 +25,11 @@ import type {ReadTransaction} from './replicache-types.ts';
 type QueryHash = string;
 
 type Entry = {
-  normalized: AST;
+  // May be undefined if the entry is a custom (named) query.
+  // Will be removed when we no longer support ad-hoc queries that fall back to the server.
+  normalized: AST | undefined;
+  name: string | undefined;
+  args: readonly ReadonlyJSONValue[] | undefined;
   count: number;
   gotCallbacks: GotCallback[];
   ttl: TTL;
@@ -166,6 +171,8 @@ export class QueryManager {
       const serverAST = mapAST(normalized, this.#clientToServer);
       entry = {
         normalized: serverAST,
+        name: undefined,
+        args: undefined,
         count: 1,
         gotCallbacks: gotCallback ? [gotCallback] : [],
         ttl,
@@ -232,6 +239,8 @@ export class QueryManager {
               op: 'put',
               hash,
               ast: entry.normalized,
+              name: entry.name,
+              args: entry.args,
               ttl: parseTTL(ttl),
             },
           ],
