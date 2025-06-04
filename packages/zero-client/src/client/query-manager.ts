@@ -162,7 +162,11 @@ export class QueryManager {
     return patch;
   }
 
-  add(ast: AST, ttl: TTL, gotCallback?: GotCallback | undefined): () => void {
+  addLegacy(
+    ast: AST,
+    ttl: TTL,
+    gotCallback?: GotCallback | undefined,
+  ): () => void {
     const normalized = normalizeAST(ast);
     const astHash = hashOfAST(normalized);
     let entry = this.#queries.get(astHash);

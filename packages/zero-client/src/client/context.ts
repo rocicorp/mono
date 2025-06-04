@@ -18,7 +18,7 @@ import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 
-export type AddQuery = QueryManager['add'];
+export type AddQuery = QueryManager['addLegacy'];
 
 export type UpdateQuery = QueryManager['update'];
 

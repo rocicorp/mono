@@ -46,7 +46,7 @@ test('add', () => {
     table: 'issue',
     orderBy: [['id', 'asc']],
   };
-  queryManager.add(ast, 'forever');
+  queryManager.addLegacy(ast, 'forever');
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -66,7 +66,7 @@ test('add', () => {
     },
   ]);
 
-  queryManager.add(ast, 'forever');
+  queryManager.addLegacy(ast, 'forever');
   expect(send).toBeCalledTimes(1);
 });
 
@@ -135,7 +135,7 @@ test('add renamed fields', () => {
     },
   };
 
-  queryManager.add(ast, 'forever');
+  queryManager.addLegacy(ast, 'forever');
   expect(send).toBeCalledTimes(1);
   expect(send.mock.calls[0][0]).toMatchInlineSnapshot(`
     [
@@ -258,7 +258,7 @@ test('remove, recent queries max size 0', () => {
     orderBy: [['id', 'asc']],
   };
 
-  const remove1 = queryManager.add(ast, 'forever');
+  const remove1 = queryManager.addLegacy(ast, 'forever');
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -278,7 +278,7 @@ test('remove, recent queries max size 0', () => {
     },
   ]);
 
-  const remove2 = queryManager.add(ast, 'forever');
+  const remove2 = queryManager.addLegacy(ast, 'forever');
   expect(send).toBeCalledTimes(1);
 
   remove1();
@@ -333,7 +333,7 @@ test('remove, max recent queries size 2', () => {
     orderBy: [['id', 'desc']],
   };
 
-  const remove1Ast1 = queryManager.add(ast1, 'forever');
+  const remove1Ast1 = queryManager.addLegacy(ast1, 'forever');
   expect(send).toBeCalledTimes(1);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -353,10 +353,10 @@ test('remove, max recent queries size 2', () => {
     },
   ]);
 
-  const remove2Ast1 = queryManager.add(ast1, 'forever');
+  const remove2Ast1 = queryManager.addLegacy(ast1, 'forever');
   expect(send).toBeCalledTimes(1);
 
-  const removeAst2 = queryManager.add(ast2, 'forever');
+  const removeAst2 = queryManager.addLegacy(ast2, 'forever');
   expect(send).toBeCalledTimes(2);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -376,7 +376,7 @@ test('remove, max recent queries size 2', () => {
     },
   ]);
 
-  const removeAst3 = queryManager.add(ast3, 'forever');
+  const removeAst3 = queryManager.addLegacy(ast3, 'forever');
   expect(send).toBeCalledTimes(3);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -396,7 +396,7 @@ test('remove, max recent queries size 2', () => {
     },
   ]);
 
-  const removeAst4 = queryManager.add(ast4, 'forever');
+  const removeAst4 = queryManager.addLegacy(ast4, 'forever');
   expect(send).toBeCalledTimes(4);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -485,7 +485,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
     orderBy: [['id', 'desc']],
   };
 
-  const remove1Ast1 = queryManager.add(ast1, 'forever');
+  const remove1Ast1 = queryManager.addLegacy(ast1, 'forever');
   expect(send).toBeCalledTimes(1);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -505,7 +505,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
     },
   ]);
 
-  const removeAst2 = queryManager.add(ast2, 'forever');
+  const removeAst2 = queryManager.addLegacy(ast2, 'forever');
   expect(send).toBeCalledTimes(2);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -525,7 +525,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
     },
   ]);
 
-  const removeAst3 = queryManager.add(ast3, 'forever');
+  const removeAst3 = queryManager.addLegacy(ast3, 'forever');
   expect(send).toBeCalledTimes(3);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -545,7 +545,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
     },
   ]);
 
-  const removeAst4 = queryManager.add(ast4, 'forever');
+  const removeAst4 = queryManager.addLegacy(ast4, 'forever');
   expect(send).toBeCalledTimes(4);
   expect(send).toHaveBeenLastCalledWith([
     'changeDesiredQueries',
@@ -568,7 +568,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
   remove1Ast1();
   expect(send).toBeCalledTimes(4);
 
-  const remove2Ast1 = queryManager.add(ast1, 'forever');
+  const remove2Ast1 = queryManager.addLegacy(ast1, 'forever');
   expect(send).toBeCalledTimes(4);
 
   removeAst2();
@@ -675,13 +675,13 @@ describe('getQueriesPatch', () => {
       table: 'issue',
       orderBy: [['id', 'asc']],
     };
-    queryManager.add(ast1, 'forever');
+    queryManager.addLegacy(ast1, 'forever');
     // hash 1hydj1t7t5yv4
     const ast2: AST = {
       table: 'issue',
       orderBy: [['id', 'desc']],
     };
-    queryManager.add(ast2, 'forever');
+    queryManager.addLegacy(ast2, 'forever');
 
     const testReadTransaction = new TestTransaction();
     testReadTransaction.scanEntries = [
@@ -736,7 +736,7 @@ describe('getQueriesPatch', () => {
         table: 'issue',
         orderBy: [['id', 'desc']],
       };
-      queryManager.add(ast, ttl);
+      queryManager.addLegacy(ast, ttl);
 
       const testReadTransaction = new TestTransaction();
       testReadTransaction.scanEntries = [];
@@ -922,22 +922,22 @@ describe('getQueriesPatch', () => {
       table: 'issue',
       orderBy: [['id', 'asc']],
     };
-    const remove1 = queryManager.add(ast1, 'forever');
+    const remove1 = queryManager.addLegacy(ast1, 'forever');
     const ast2: AST = {
       table: 'issue',
       orderBy: [['id', 'desc']],
     };
-    const remove2 = queryManager.add(ast2, 'forever');
+    const remove2 = queryManager.addLegacy(ast2, 'forever');
     const ast3: AST = {
       table: 'user',
       orderBy: [['id', 'asc']],
     };
-    const remove3 = queryManager.add(ast3, 'forever');
+    const remove3 = queryManager.addLegacy(ast3, 'forever');
     const ast4: AST = {
       table: 'user',
       orderBy: [['id', 'desc']],
     };
-    const remove4 = queryManager.add(ast4, 'forever');
+    const remove4 = queryManager.addLegacy(ast4, 'forever');
     remove1();
     remove2();
     remove3();
@@ -1040,7 +1040,7 @@ test('gotCallback, query already got', () => {
 
   const gotCallback1 = vi.fn<(got: boolean) => void>();
   const ttl = 200;
-  queryManager.add(ast, ttl, gotCallback1);
+  queryManager.addLegacy(ast, ttl, gotCallback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -1068,7 +1068,7 @@ test('gotCallback, query already got', () => {
   expect(gotCallback1).nthCalledWith(1, true);
 
   const gotCallback2 = vi.fn<(got: boolean) => void>();
-  queryManager.add(ast, ttl, gotCallback2);
+  queryManager.addLegacy(ast, ttl, gotCallback2);
   expect(send).toBeCalledTimes(1);
 
   expect(gotCallback2).nthCalledWith(1, true);
@@ -1099,7 +1099,7 @@ test('gotCallback, query got after add', () => {
 
   const gotCalback1 = vi.fn<(got: boolean) => void>();
   const ttl = 'forever';
-  queryManager.add(ast, ttl, gotCalback1);
+  queryManager.addLegacy(ast, ttl, gotCalback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -1161,7 +1161,7 @@ test('gotCallback, query got after add then removed', () => {
 
   const gotCalback1 = vi.fn<(got: boolean) => void>();
   const ttl = 100;
-  queryManager.add(ast, ttl, gotCalback1);
+  queryManager.addLegacy(ast, ttl, gotCalback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -1233,7 +1233,7 @@ test('gotCallback, query got after subscription removed', () => {
 
   const gotCalback1 = vi.fn<(got: boolean) => void>();
   const ttl = 50;
-  const remove = queryManager.add(ast, ttl, gotCalback1);
+  const remove = queryManager.addLegacy(ast, ttl, gotCalback1);
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -1299,7 +1299,7 @@ describe('queriesPatch with lastPatch', () => {
       maxRecentQueriesSize,
     );
 
-    queryManager.add(
+    queryManager.addLegacy(
       {
         table: 'issue',
         orderBy: [['id', 'asc']],
@@ -1336,7 +1336,7 @@ describe('queriesPatch with lastPatch', () => {
       0,
     );
 
-    const clean = queryManager.add(
+    const clean = queryManager.addLegacy(
       {
         table: 'issue',
         orderBy: [['id', 'asc']],
@@ -1415,12 +1415,12 @@ test('gotCallback, add same got callback twice', () => {
   };
 
   const gotCallback = vi.fn<(got: boolean) => void>();
-  const rem1 = queryManager.add(ast, -1, gotCallback);
+  const rem1 = queryManager.addLegacy(ast, -1, gotCallback);
   expect(gotCallback).toBeCalledTimes(1);
   expect(gotCallback).toBeCalledWith(false);
   gotCallback.mockClear();
 
-  const rem2 = queryManager.add(ast, -1, gotCallback);
+  const rem2 = queryManager.addLegacy(ast, -1, gotCallback);
   expect(gotCallback).toBeCalledTimes(1);
   expect(gotCallback).toBeCalledWith(false);
   gotCallback.mockClear();
@@ -1488,7 +1488,7 @@ describe('query manager & mutator interaction', () => {
   });
 
   test('queries are not removed while there are pending mutations', () => {
-    const remove = queryManager.add(ast1, 0);
+    const remove = queryManager.addLegacy(ast1, 0);
     expect(send).toBeCalledTimes(1);
 
     const {ephemeralID} = mutationTracker.trackMutation();
@@ -1502,8 +1502,8 @@ describe('query manager & mutator interaction', () => {
   });
 
   test('queued queries are removed once the pending mutation count goes to 0', () => {
-    const remove1 = queryManager.add(ast1, 0);
-    const remove2 = queryManager.add(ast2, 0);
+    const remove1 = queryManager.addLegacy(ast1, 0);
+    const remove2 = queryManager.addLegacy(ast2, 0);
     // once for each add
     expect(send).toBeCalledTimes(2);
 
@@ -1522,8 +1522,8 @@ describe('query manager & mutator interaction', () => {
   });
 
   test('queries are removed immediately if there are no pending mutations', () => {
-    const remove1 = queryManager.add(ast1, 0);
-    const remove2 = queryManager.add(ast2, 0);
+    const remove1 = queryManager.addLegacy(ast1, 0);
+    const remove2 = queryManager.addLegacy(ast2, 0);
     expect(send).toBeCalledTimes(2);
     remove1();
     expect(send).toBeCalledTimes(3);
