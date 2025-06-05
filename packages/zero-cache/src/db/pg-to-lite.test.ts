@@ -191,6 +191,48 @@ test('postgres to lite table spec', () => {
       },
     },
   });
+
+  // Default version
+  expect(
+    mapPostgresToLite(
+      {
+        schema: 'public',
+        name: 'foo',
+        columns: {
+          a: {
+            pos: 1,
+            dataType: 'varchar',
+            characterMaximumLength: null,
+            notNull: true,
+            dflt: null,
+            elemPgTypeClass: null,
+          },
+        },
+        primaryKey: ['a'],
+      },
+      '136',
+    ),
+  ).toEqual({
+    name: 'foo',
+    columns: {
+      ['_0_version']: {
+        characterMaximumLength: null,
+        dataType: 'text',
+        dflt: "'136'",
+        elemPgTypeClass: null,
+        notNull: false,
+        pos: 9007199254740991,
+      },
+      a: {
+        characterMaximumLength: null,
+        dataType: 'varchar|NOT_NULL',
+        dflt: null,
+        elemPgTypeClass: null,
+        notNull: false,
+        pos: 1,
+      },
+    },
+  });
 });
 
 test.each([

@@ -33,10 +33,7 @@ import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
 import {initChangeLog} from '../../replicator/schema/change-log.ts';
-import {
-  initReplicationState,
-  ZERO_VERSION_COLUMN_NAME,
-} from '../../replicator/schema/replication-state.ts';
+import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {CopyRunner} from './copy-runner.ts';
 import {toLexiVersion} from './lsn.ts';
 import {ensureShardSchema} from './schema/init.ts';
@@ -143,7 +140,7 @@ export async function initialSync(
       // Now that tables have been validated, kick off the copiers.
       const {tables, indexes} = published;
       const numTables = tables.length;
-      createLiteTables(tx, tables);
+      createLiteTables(tx, tables, initialVersion);
 
       const rowCounts = await Promise.all(
         tables.map(table =>
@@ -267,9 +264,13 @@ async function createReplicationSlot(
   return slot;
 }
 
-function createLiteTables(tx: Database, tables: PublishedTableSpec[]) {
+function createLiteTables(
+  tx: Database,
+  tables: PublishedTableSpec[],
+  initialVersion: string,
+) {
   for (const t of tables) {
-    tx.exec(createTableStatement(mapPostgresToLite(t)));
+    tx.exec(createTableStatement(mapPostgresToLite(t, initialVersion)));
   }
 }
 
@@ -306,10 +307,7 @@ async function copy(
 
   const columnSpecs = orderedColumns.map(([_name, spec]) => spec);
   const selectColumns = orderedColumns.map(([c]) => id(c)).join(',');
-  const insertColumns = [
-    ...orderedColumns.map(([c]) => c),
-    ZERO_VERSION_COLUMN_NAME,
-  ];
+  const insertColumns = orderedColumns.map(([c]) => c);
   const insertColumnList = insertColumns.map(c => id(c)).join(',');
 
   // (?,?,?,?,?)
@@ -332,7 +330,7 @@ async function copy(
       ? ''
       : /*sql*/ ` WHERE ${filterConditions.join(' OR ')}`);
 
-  const valuesPerRow = columnSpecs.length + 1; // includes _0_version column
+  const valuesPerRow = columnSpecs.length;
   const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
 
   // Preallocate the buffer of values to reduce memory allocation churn.
@@ -403,8 +401,6 @@ async function copy(
           pendingValues[pendingRows * valuesPerRow + col] = parsers[col](text);
 
           if (++col === parsers.length) {
-            // The last column is the _0_version.
-            pendingValues[pendingRows * valuesPerRow + col] = initialVersion;
             col = 0;
             if (
               ++pendingRows >= MAX_BUFFERED_ROWS - valuesPerRow ||
