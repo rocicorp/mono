@@ -68,7 +68,8 @@ test('zero-cache --help', () => {
                                                                                                                                                                    
      --query-hydration-stats boolean                             optional                                                                                          
        ZERO_QUERY_HYDRATION_STATS env                                                                                                                              
-                                                                 Track and log the number of rows considered by each query in the system.                          
+                                                                 Track and log the number of rows considered by query hydrations which                             
+                                                                 take longer than log-slow-hydrate-threshold milliseconds.                                         
                                                                  This is useful for debugging and performance tuning.                                              
                                                                                                                                                                    
      --change-db string                                          optional                                                                                          
