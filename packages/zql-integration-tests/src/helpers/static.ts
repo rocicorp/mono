@@ -1,8 +1,9 @@
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {ast, QueryImpl} from '../../../zql/src/query/query-impl.ts';
+import {ast} from '../../../zql/src/query/query-impl.ts';
 import type {AnyQuery} from '../../../zql/src/query/test/util.ts';
 import {type bootstrap} from './runner.ts';
 import {ZPGQuery} from '../../../zero-pg/src/query.ts';
+import type {StaticQuery} from '../../../zql/src/query/static-query.ts';
 
 export function staticToRunnable<TSchema extends Schema>({
   query,
@@ -15,20 +16,10 @@ export function staticToRunnable<TSchema extends Schema>({
 }) {
   // reconstruct the generated query
   // for zql, zqlite and pg
-  const zql = new QueryImpl(
-    harness.delegates.memory,
-    schema,
-    ast(query).table,
-    ast(query),
-    query.format,
-  );
-  const zqlite = new QueryImpl(
-    harness.delegates.sqlite,
-    schema,
-    ast(query).table,
-    ast(query),
-    query.format,
-  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const casted = query as StaticQuery<any, any, any>;
+  const zql = casted.asRunnableQuery(harness.delegates.memory);
+  const zqlite = casted.asRunnableQuery(harness.delegates.sqlite);
   const pg = new ZPGQuery(
     schema,
     harness.delegates.pg.serverSchema,

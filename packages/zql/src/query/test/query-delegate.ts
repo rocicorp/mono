@@ -2,6 +2,7 @@ import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {deepEqual} from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {FilterInput} from '../../ivm/filter-operators.ts';
 import {MemoryStorage} from '../../ivm/memory-storage.ts';
@@ -176,5 +177,123 @@ function makeSources() {
       issueLabel.columns,
       issueLabel.primaryKey,
     ),
+  };
+}
+
+export function addData(queryDelegate: QueryDelegate) {
+  const userSource = must(queryDelegate.getSource('user'));
+  const issueSource = must(queryDelegate.getSource('issue'));
+  const commentSource = must(queryDelegate.getSource('comment'));
+  const revisionSource = must(queryDelegate.getSource('revision'));
+  const labelSource = must(queryDelegate.getSource('label'));
+  const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
+  userSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      name: 'Alice',
+      metadata: {
+        registrar: 'github',
+        login: 'alicegh',
+      },
+    },
+  });
+  userSource.push({
+    type: 'add',
+    row: {
+      id: '0002',
+      name: 'Bob',
+      metadata: {
+        registar: 'google',
+        login: 'bob@gmail.com',
+        altContacts: ['bobwave', 'bobyt', 'bobplus'],
+      },
+    },
+  });
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      title: 'issue 1',
+      description: 'description 1',
+      closed: false,
+      ownerId: '0001',
+      createdAt: 1,
+    },
+  });
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0002',
+      title: 'issue 2',
+      description: 'description 2',
+      closed: false,
+      ownerId: '0002',
+      createdAt: 2,
+    },
+  });
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0003',
+      title: 'issue 3',
+      description: 'description 3',
+      closed: false,
+      ownerId: null,
+      createdAt: 3,
+    },
+  });
+  commentSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      authorId: '0001',
+      issueId: '0001',
+      text: 'comment 1',
+      createdAt: 1,
+    },
+  });
+  commentSource.push({
+    type: 'add',
+    row: {
+      id: '0002',
+      authorId: '0002',
+      issueId: '0001',
+      text: 'comment 2',
+      createdAt: 2,
+    },
+  });
+  revisionSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      authorId: '0001',
+      commentId: '0001',
+      text: 'revision 1',
+    },
+  });
+
+  labelSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      name: 'label 1',
+    },
+  });
+  issueLabelSource.push({
+    type: 'add',
+    row: {
+      issueId: '0001',
+      labelId: '0001',
+    },
+  });
+
+  return {
+    userSource,
+    issueSource,
+    commentSource,
+    revisionSource,
+    labelSource,
+    issueLabelSource,
   };
 }

@@ -636,7 +636,7 @@ export class QueryImpl<
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
 > extends AbstractQuery<TSchema, TTable, TReturn> {
-  readonly #delegate: QueryDelegate;
+  #delegate: QueryDelegate;
   readonly #system: System;
 
   constructor(
@@ -679,6 +679,7 @@ export class QueryImpl<
     );
   }
 
+  materialize(): TypedView<HumanReadable<TReturn>>;
   materialize<T>(
     factoryOrTTL?: ViewFactory<TSchema, TTable, TReturn, T> | TTL,
     ttl: TTL = DEFAULT_TTL,
