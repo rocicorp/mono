@@ -17,7 +17,7 @@ export const upPutOpSchema = putOpSchema.extend({
   // - name and args are filled in for custom queries
   ast: astSchema.optional(),
   name: v.string().optional(),
-  args: v.array(jsonSchema).optional(),
+  args: v.readonly(v.array(jsonSchema)).optional(),
 });
 
 const delOpSchema = v.object({

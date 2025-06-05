@@ -552,7 +552,8 @@ export class Zero<
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
-      (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
+      (ast, ttl, gotCallback) =>
+        this.#queryManager.addLegacy(ast, ttl, gotCallback),
       (ast, ttl) => this.#queryManager.update(ast, ttl),
       batchViewUpdates,
       slowMaterializeThreshold,

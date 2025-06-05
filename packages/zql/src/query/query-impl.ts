@@ -3,7 +3,7 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
-import {hashOfAST} from '../../../zero-protocol/src/ast-hash.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {
   AST,
   CompoundKey,

@@ -2,7 +2,10 @@ import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
-import {hashOfAST} from '../../../zero-protocol/src/ast-hash.ts';
+import {
+  hashOfAST,
+  hashOfNameAndArgs,
+} from '../../../zero-protocol/src/query-hash.ts';
 import {
   mapAST,
   normalizeAST,
@@ -17,6 +20,7 @@ import {
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {GotCallback} from '../../../zql/src/query/query-impl.ts';
 import {compareTTL, parseTTL, type TTL} from '../../../zql/src/query/ttl.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
@@ -24,7 +28,11 @@ import type {ReadTransaction} from './replicache-types.ts';
 type QueryHash = string;
 
 type Entry = {
-  normalized: AST;
+  // May be undefined if the entry is a custom (named) query.
+  // Will be removed when we no longer support ad-hoc queries that fall back to the server.
+  normalized: AST | undefined;
+  name: string | undefined;
+  args: readonly ReadonlyJSONValue[] | undefined;
   count: number;
   gotCallbacks: GotCallback[];
   ttl: TTL;
@@ -157,31 +165,86 @@ export class QueryManager {
     return patch;
   }
 
-  add(ast: AST, ttl: TTL, gotCallback?: GotCallback | undefined): () => void {
+  addCustom(
+    name: string,
+    args: readonly ReadonlyJSONValue[],
+    ttl: TTL,
+    gotCallback?: GotCallback | undefined,
+  ): () => void {
+    const queryId = hashOfNameAndArgs(name, args);
+    return this.#add(
+      queryId,
+      undefined, // normalized is undefined for custom queries
+      name,
+      args,
+      ttl,
+      gotCallback,
+    );
+  }
+
+  addLegacy(
+    ast: AST,
+    ttl: TTL,
+    gotCallback?: GotCallback | undefined,
+  ): () => void {
     const normalized = normalizeAST(ast);
     const astHash = hashOfAST(normalized);
-    let entry = this.#queries.get(astHash);
-    this.#recentQueries.delete(astHash);
+    return this.#add(
+      astHash,
+      normalized,
+      undefined, // name is undefined for legacy queries
+      undefined, // args are undefined for legacy queries
+      ttl,
+      gotCallback,
+    );
+  }
+
+  #add(
+    queryId: string,
+    normalized: AST | undefined,
+    name: string | undefined,
+    args: readonly ReadonlyJSONValue[] | undefined,
+    ttl: TTL,
+    gotCallback?: GotCallback | undefined,
+  ) {
+    assert(
+      (normalized === undefined && name !== undefined && args !== undefined) ||
+        (normalized !== undefined && name === undefined && args === undefined),
+      'Either normalized or name and args must be defined, but not both.',
+    );
+    let entry = this.#queries.get(queryId);
+    this.#recentQueries.delete(queryId);
     if (!entry) {
-      const serverAST = mapAST(normalized, this.#clientToServer);
+      if (normalized !== undefined) {
+        normalized = mapAST(normalized, this.#clientToServer);
+      }
       entry = {
-        normalized: serverAST,
+        normalized,
+        name,
+        args,
         count: 1,
         gotCallbacks: gotCallback ? [gotCallback] : [],
         ttl,
       };
-      this.#queries.set(astHash, entry);
+      this.#queries.set(queryId, entry);
       this.#send([
         'changeDesiredQueries',
         {
           desiredQueriesPatch: [
-            {op: 'put', hash: astHash, ast: serverAST, ttl: parseTTL(ttl)},
+            {
+              op: 'put',
+              hash: queryId,
+              ast: normalized,
+              name,
+              args,
+              ttl: parseTTL(ttl),
+            },
           ],
         },
       ]);
     } else {
       ++entry.count;
-      this.#updateEntry(entry, astHash, ttl);
+      this.#updateEntry(entry, queryId, ttl);
 
       if (gotCallback) {
         entry.gotCallbacks.push(gotCallback);
@@ -189,7 +252,7 @@ export class QueryManager {
     }
 
     if (gotCallback) {
-      gotCallback(this.#gotQueries.has(astHash));
+      gotCallback(this.#gotQueries.has(queryId));
     }
 
     let removed = false;
@@ -203,12 +266,12 @@ export class QueryManager {
       // as that could take data out of scope that is needed in a rebase
       if (this.#mutationTracker.size > 0) {
         this.#pendingRemovals.push(() =>
-          this.#remove(entry, astHash, gotCallback),
+          this.#remove(entry, queryId, gotCallback),
         );
         return;
       }
 
-      this.#remove(entry, astHash, gotCallback);
+      this.#remove(entry, queryId, gotCallback);
     };
   }
 
@@ -232,6 +295,8 @@ export class QueryManager {
               op: 'put',
               hash,
               ast: entry.normalized,
+              name: entry.name,
+              args: entry.args,
               ttl: parseTTL(ttl),
             },
           ],
