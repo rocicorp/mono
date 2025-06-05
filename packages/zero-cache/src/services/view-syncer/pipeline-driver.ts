@@ -282,7 +282,7 @@ export class PipelineDriver {
     yield* hydrate(input, hash, this.#tableSpecs);
 
     const hydrationTimeMs = timer.totalElapsed();
-    if (runtimeDebugFlags.trackRowsVended) {
+    if (runtimeDebugFlags.trackRowCountsVended) {
       if (hydrationTimeMs > 200) {
         let totalRowsConsidered = 0;
         const lc = this.#lc
