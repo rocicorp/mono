@@ -537,6 +537,15 @@ export const zeroOptions = {
         `(i.e. IOPS), upstream CPU, and network bandwidth may also be bottlenecks.`,
       ],
     },
+
+    profileCopy: {
+      type: v.boolean().optional(),
+      hidden: true,
+      desc: [
+        `Takes a cpu profile during the copy phase initial-sync, storing it as a JSON file`,
+        `initial-copy.cpuprofile in the tmp directory.`,
+      ],
+    },
   },
 
   tenantID: {
