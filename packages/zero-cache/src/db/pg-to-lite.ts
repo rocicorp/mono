@@ -16,14 +16,16 @@ import {
   type TableSpec,
 } from './specs.ts';
 
-export const ZERO_VERSION_COLUMN_SPEC: ColumnSpec = {
-  pos: Number.MAX_SAFE_INTEGER, // i.e. last
-  characterMaximumLength: null,
-  dataType: 'text',
-  notNull: false,
-  dflt: null,
-  elemPgTypeClass: null,
-};
+function zeroVersionColumnSpec(defaultVersion: string | undefined): ColumnSpec {
+  return {
+    pos: Number.MAX_SAFE_INTEGER, // i.e. last
+    characterMaximumLength: null,
+    dataType: 'text',
+    notNull: false,
+    dflt: !defaultVersion ? null : `'${defaultVersion}'`,
+    elemPgTypeClass: null,
+  };
+}
 
 export function warnIfDataTypeSupported(
   lc: LogContext,
@@ -126,7 +128,10 @@ export function mapPostgresToLiteColumn(
   };
 }
 
-export function mapPostgresToLite(t: TableSpec): LiteTableSpec {
+export function mapPostgresToLite(
+  t: TableSpec,
+  defaultVersion?: string,
+): LiteTableSpec {
   // PRIMARY KEYS are not written to the replica. Instead, we rely
   // UNIQUE indexes, including those created for upstream PRIMARY KEYs.
   const {schema: _, primaryKey: _dropped, ...liteSpec} = t;
@@ -143,7 +148,7 @@ export function mapPostgresToLite(t: TableSpec): LiteTableSpec {
           mapPostgresToLiteColumn(name, {name: col, spec}, 'ignore-default'),
         ]),
       ),
-      [ZERO_VERSION_COLUMN_NAME]: ZERO_VERSION_COLUMN_SPEC,
+      [ZERO_VERSION_COLUMN_NAME]: zeroVersionColumnSpec(defaultVersion),
     },
   };
 }
