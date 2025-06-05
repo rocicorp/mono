@@ -587,7 +587,7 @@ export function getZeroConfig(
     loadedConfig = parseOptions(zeroOptions, argv, ZERO_ENV_VAR_PREFIX, env);
 
     if (loadedConfig.queryHydrationStats) {
-      runtimeDebugFlags.trackRowsVended = true;
+      runtimeDebugFlags.trackRowCountsVended = true;
     }
   }
   return loadedConfig;
