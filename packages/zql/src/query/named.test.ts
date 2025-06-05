@@ -4,6 +4,10 @@ import {schema} from './test/test-schemas.ts';
 import {query, type NamedQuery} from './named.ts';
 import {StaticQuery} from './static-query.ts';
 import {ast, defaultFormat} from './query-impl.ts';
+import {
+  hashOfAST,
+  hashOfNameAndArgs,
+} from '../../../zero-protocol/src/query-hash.ts';
 
 test('defining a named query', () => {
   const named = query(schema, 'issue', (tx, id: string) =>
@@ -30,9 +34,10 @@ function check(named: NamedQuery<typeof schema, [string]>) {
     '123',
   );
 
-  expect(r.name).toBe('issue');
-  expect(r.args).toEqual(['123']);
-  expect(ast(r.query)).toMatchInlineSnapshot(`
+  const id = r.customQueryID;
+  expect(id?.name).toBe('issue');
+  expect(id?.args).toEqual(['123']);
+  expect(ast(r)).toMatchInlineSnapshot(`
     {
       "table": "issue",
       "where": {
@@ -49,4 +54,10 @@ function check(named: NamedQuery<typeof schema, [string]>) {
       },
     }
   `);
+
+  // see comment on `r.hash()`
+  expect(r.hash()).not.toEqual(hashOfNameAndArgs('issue', ['123']));
+  expect(r.hash()).toEqual(
+    hashOfAST((r as StaticQuery<typeof schema, 'issue'>).ast),
+  );
 }
