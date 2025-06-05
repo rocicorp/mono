@@ -43,7 +43,7 @@ import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
-import {runtimeDebugFlags, runtimeDebugStats} from './runtime-debug.ts';
+import {runtimeDebugStats} from './runtime-debug.ts';
 
 type Statements = {
   readonly cache: StatementCache;
@@ -321,10 +321,14 @@ export class TableSource implements Source {
         if (result.done) {
           break;
         }
-        if (runtimeDebugFlags.trackRowsVended) {
-          runtimeDebugStats.rowVended(this.#clientGroupID, this.#table, query);
-        }
-        yield fromSQLiteTypes(valueTypes, result.value);
+        const row = fromSQLiteTypes(valueTypes, result.value);
+        runtimeDebugStats.rowVended(
+          this.#clientGroupID,
+          this.#table,
+          query,
+          row,
+        );
+        yield row;
       } while (!result.done);
     } finally {
       rowIterator.return?.();
