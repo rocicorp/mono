@@ -277,14 +277,12 @@ export class PipelineDriver {
       },
     });
 
-    if (runtimeDebugFlags.trackRowsVended) {
-      runtimeDebugStats.resetRowsVended(this.#clientGroupID);
-    }
+    runtimeDebugStats.resetRowsVended(this.#clientGroupID);
 
     yield* hydrate(input, hash, this.#tableSpecs);
 
     const hydrationTimeMs = timer.totalElapsed();
-    if (runtimeDebugFlags.trackRowsVended) {
+    if (runtimeDebugFlags.trackRowCountsVended) {
       if (hydrationTimeMs > 200) {
         let totalRowsConsidered = 0;
         const lc = this.#lc
@@ -293,7 +291,8 @@ export class PipelineDriver {
         for (const tableName of this.#tables.keys()) {
           const entires = [
             ...(runtimeDebugStats
-              .getRowsVended(this.#clientGroupID)
+              .getVendedRowCounts()
+              .get(this.#clientGroupID)
               ?.get(tableName)
               ?.entries() ?? []),
           ];
@@ -305,8 +304,8 @@ export class PipelineDriver {
         }
         lc.info?.(`Total rows considered: ${totalRowsConsidered}`);
       }
-      runtimeDebugStats.resetRowsVended(this.#clientGroupID);
     }
+    runtimeDebugStats.resetRowsVended(this.#clientGroupID);
 
     // Note: This hydrationTime is a wall-clock overestimate, as it does
     // not take time slicing into account. The view-syncer resets this
