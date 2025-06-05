@@ -1,4 +1,7 @@
+import type {Row} from '../../zero-protocol/src/data.ts';
+
 export const runtimeDebugFlags = {
+  trackRowCountsVended: false,
   trackRowsVended: false,
 };
 
@@ -6,40 +9,72 @@ type ClientGroupID = string;
 type SourceName = string;
 type SQL = string;
 
+type RowCountsByCg = Map<ClientGroupID, RowCountsBySource>;
+type RowCountsBySource = Map<SourceName, RowCountsByQuery>;
+type RowCountsByQuery = Map<SQL, number>;
+
 type RowsByCg = Map<ClientGroupID, RowsBySource>;
 type RowsBySource = Map<SourceName, RowsByQuery>;
-type RowsByQuery = Map<SQL, number>;
+type RowsByQuery = Map<SQL, Row[]>;
 
-const rowsVendedByCg: RowsByCg = new Map<
-  ClientGroupID,
-  Map<SourceName, Map<SQL, number>>
->();
+const rowCountsByCg: RowCountsByCg = new Map();
+const rowsByCg: RowsByCg = new Map();
 
 export const runtimeDebugStats = {
-  rowVended(clientGroupID: ClientGroupID, source: SourceName, query: SQL) {
-    let sourceMap = rowsVendedByCg.get(clientGroupID);
-    if (!sourceMap) {
-      sourceMap = new Map<SourceName, RowsByQuery>();
-      rowsVendedByCg.set(clientGroupID, sourceMap);
+  rowVended(
+    clientGroupID: ClientGroupID,
+    source: SourceName,
+    query: SQL,
+    row: Row,
+  ) {
+    if (runtimeDebugFlags.trackRowCountsVended) {
+      let sourceMap = rowCountsByCg.get(clientGroupID);
+      if (!sourceMap) {
+        sourceMap = new Map();
+        rowCountsByCg.set(clientGroupID, sourceMap);
+      }
+      let queryMap = sourceMap.get(source);
+      if (!queryMap) {
+        queryMap = new Map();
+        sourceMap.set(source, queryMap);
+      }
+      queryMap.set(query, (queryMap.get(query) ?? 0) + 1);
     }
-    let queryMap = sourceMap.get(source);
-    if (!queryMap) {
-      queryMap = new Map<SQL, number>();
-      sourceMap.set(source, queryMap);
+    if (runtimeDebugFlags.trackRowsVended) {
+      let sourceMap = rowsByCg.get(clientGroupID);
+      if (!sourceMap) {
+        sourceMap = new Map();
+        rowsByCg.set(clientGroupID, sourceMap);
+      }
+      let queryMap = sourceMap.get(source);
+      if (!queryMap) {
+        queryMap = new Map();
+        sourceMap.set(source, queryMap);
+      }
+      let rowArray = queryMap.get(query);
+      if (!rowArray) {
+        rowArray = [];
+        queryMap.set(query, rowArray);
+      }
+      rowArray.push(row);
     }
-
-    queryMap.set(query, (queryMap.get(query) ?? 0) + 1);
   },
 
   resetRowsVended(clientGroupID: ClientGroupID) {
-    rowsVendedByCg.delete(clientGroupID);
+    if (runtimeDebugFlags.trackRowCountsVended) {
+      rowCountsByCg.delete(clientGroupID);
+    }
+
+    if (runtimeDebugFlags.trackRowsVended) {
+      rowsByCg.delete(clientGroupID);
+    }
   },
 
-  getRowsVended(clientGroupID: ClientGroupID): RowsBySource | undefined {
-    return rowsVendedByCg.get(clientGroupID);
+  getVendedRowCounts() {
+    return rowCountsByCg;
   },
 
-  all() {
-    return rowsVendedByCg;
+  getVendedRows() {
+    return rowsByCg;
   },
 };

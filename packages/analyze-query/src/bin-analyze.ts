@@ -47,6 +47,8 @@ import {TableSource} from '../../zqlite/src/table-source.ts';
 import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
 import {hashOfAST} from '../../zero-protocol/src/query-hash.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
+import type {Row} from '../../zero-protocol/src/data.ts';
+import {assert} from '../../shared/src/asserts.ts';
 
 const options = {
   replica: zeroOptions.replica,
@@ -102,6 +104,19 @@ const options = {
   },
   app: appOptions,
   shard: shardOptions,
+  outputVendedRows: {
+    type: v.boolean().default(false),
+    desc: [
+      'Whether to output the rows which were read from the replica in order to execute the analyzed query. ',
+      'If the same row is read more than once it will be logged once for each time it was read.',
+    ],
+  },
+  outputSyncedRows: {
+    type: v.boolean().default(false),
+    desc: [
+      'Whether to output the rows which would be synced to the client for the analyzed query.',
+    ],
+  },
 
   // This args is hidden as it is only present to:
   // 1. Parse it out of the env if it exists
@@ -134,8 +149,10 @@ const config = {
   },
 };
 
-runtimeDebugFlags.trackRowsVended = true;
+runtimeDebugFlags.trackRowCountsVended = true;
+runtimeDebugFlags.trackRowsVended = config.outputVendedRows;
 
+const clientGroupID = 'clientGroupIDForAnalyze';
 const lc = createSilentLogContext();
 
 const db = new Database(lc, config.replica.file);
@@ -156,7 +173,7 @@ const host: QueryDelegate = {
     source = new TableSource(
       lc,
       testLogConfig,
-      '',
+      clientGroupID,
       db,
       serverTableName,
       Object.fromEntries(
@@ -234,7 +251,7 @@ async function runAst(
     }
     ast = transformAndHashQuery(
       lc,
-      '',
+      clientGroupID,
       ast,
       permissions,
       authData,
@@ -249,9 +266,28 @@ async function runAst(
 
   const start = performance.now();
 
+  if (config.outputSyncedRows) {
+    console.log(chalk.blue.bold('\n\n=== Synced rows: ===\n'));
+  }
+  let syncedRowCount = 0;
+  const rowsByTable: Record<string, Row[]> = {};
   for (const rowChange of hydrate(pipeline, hashOfAST(ast), tableSpecs)) {
-    // no-op, just need to consume all of the iterable returned by hydrate.
-    rowChange;
+    assert(rowChange.type === 'add');
+    syncedRowCount++;
+    if (config.outputSyncedRows) {
+      let rows: Row[] = rowsByTable[rowChange.table];
+      if (!rows) {
+        rows = [];
+        rowsByTable[rowChange.table] = rows;
+      }
+      rows.push(rowChange.row);
+    }
+  }
+  if (config.outputSyncedRows) {
+    for (const [source, rows] of Object.entries(rowsByTable)) {
+      console.log(chalk.bold(`${source}:`), rows);
+    }
+    console.log(chalk.bold('total synced rows:'), syncedRowCount);
   }
 
   const end = performance.now();
@@ -296,18 +332,37 @@ async function runHash(hash: string) {
 
 console.log(chalk.blue.bold('=== Query Stats: ===\n'));
 showStats();
+if (config.outputVendedRows) {
+  console.log(chalk.blue.bold('=== Vended Rows: ===\n'));
+  for (const source of sources.values()) {
+    const entries = [
+      ...(runtimeDebugStats
+        .getVendedRows()
+        .get(clientGroupID)
+        ?.get(source.table)
+        ?.entries() ?? []),
+    ];
+    console.log(chalk.bold(`${source.table}:`), Object.fromEntries(entries));
+  }
+}
 console.log(chalk.blue.bold('\n\n=== Query Plans: ===\n'));
 explainQueries();
 
 function showStats() {
   let totalRowsConsidered = 0;
   for (const source of sources.values()) {
-    const entires = [
-      ...(runtimeDebugStats.getRowsVended('')?.get(source.table)?.entries() ??
-        []),
+    const entries = [
+      ...(runtimeDebugStats
+        .getVendedRowCounts()
+        .get(clientGroupID)
+        ?.get(source.table)
+        ?.entries() ?? []),
     ];
-    totalRowsConsidered += entires.reduce((acc, entry) => acc + entry[1], 0);
-    console.log(chalk.bold(source.table + ' vended:'), entires);
+    totalRowsConsidered += entries.reduce((acc, entry) => acc + entry[1], 0);
+    console.log(
+      chalk.bold(source.table + ' vended:'),
+      Object.fromEntries(entries),
+    );
   }
 
   console.log(
@@ -320,7 +375,11 @@ function showStats() {
 function explainQueries() {
   for (const source of sources.values()) {
     const queries =
-      runtimeDebugStats.getRowsVended('')?.get(source.table)?.keys() ?? [];
+      runtimeDebugStats
+        .getVendedRowCounts()
+        .get(clientGroupID)
+        ?.get(source.table)
+        ?.keys() ?? [];
     for (const query of queries) {
       console.log(chalk.bold('query'), query);
       console.log(
