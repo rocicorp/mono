@@ -9,7 +9,7 @@ import {
   createTableStatement,
 } from '../../../db/create.ts';
 import * as Mode from '../../../db/mode-enum.ts';
-import {NULL_BYTE, TextTransform} from '../../../db/pg-copy.ts';
+import {TsvParser} from '../../../db/pg-copy.ts';
 import {
   mapPostgresToLite,
   mapPostgresToLiteIndex,
@@ -369,40 +369,40 @@ async function copy(
   const parsers = columnSpecs.map(c => {
     const pgParse = pgParsers.getTypeParser(c.typeOID);
     return (val: string) =>
-      val === NULL_BYTE
-        ? null
-        : liteValue(
-            pgParse(val) as PostgresValueType,
-            c.dataType,
-            JSON_STRINGIFIED,
-          );
+      liteValue(
+        pgParse(val) as PostgresValueType,
+        c.dataType,
+        JSON_STRINGIFIED,
+      );
   });
 
+  const tsvParser = new TsvParser();
   let col = 0;
 
   await pipeline(
     await from.unsafe(`COPY (${selectStmt}) TO STDOUT`).readable(),
-    new TextTransform(),
     new Writable({
-      objectMode: true,
+      highWaterMark: BUFFERED_SIZE_THRESHOLD,
 
-      write: (
-        text: string,
+      write(
+        chunk: Buffer,
         _encoding: string,
         callback: (error?: Error) => void,
-      ) => {
+      ) {
         try {
-          // Give every value at least 4 bytes.
-          pendingSize += 4 + (text === NULL_BYTE ? 0 : text.length);
-          pendingValues[pendingRows * valuesPerRow + col] = parsers[col](text);
+          for (const text of tsvParser.parse(chunk)) {
+            pendingSize += text === null ? 4 : text.length;
+            pendingValues[pendingRows * valuesPerRow + col] =
+              text === null ? null : parsers[col](text);
 
-          if (++col === parsers.length) {
-            col = 0;
-            if (
-              ++pendingRows >= MAX_BUFFERED_ROWS - valuesPerRow ||
-              pendingSize >= BUFFERED_SIZE_THRESHOLD
-            ) {
-              flush();
+            if (++col === parsers.length) {
+              col = 0;
+              if (
+                ++pendingRows >= MAX_BUFFERED_ROWS - valuesPerRow ||
+                pendingSize >= BUFFERED_SIZE_THRESHOLD
+              ) {
+                flush();
+              }
             }
           }
           callback();
