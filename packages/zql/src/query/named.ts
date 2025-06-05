@@ -5,32 +5,42 @@ import type {Query} from './query.ts';
 
 export type NamedQuery<
   S extends Schema,
-  TArg extends ReadonlyArray<ReadonlyJSONValue> = ReadonlyJSONValue[],
-> = (tx: SchemaQuery<S>, ...args: TArg) => Query<S, keyof S['tables'] & string>;
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<S, keyof S['tables'] & string>,
+> = (tx: SchemaQuery<S>, ...args: TArg) => TReturnQuery;
 
 export type CustomQueryID = {
   name: string;
   args: ReadonlyArray<ReadonlyJSONValue>;
 };
 
-type NamedQueryFunc<
+type NamedQueryImpl<
   S extends Schema,
-  TArg extends ReadonlyArray<ReadonlyJSONValue> = ReadonlyJSONValue[],
-> = (tx: SchemaQuery<S>, ...arg: TArg) => Query<S, keyof S['tables'] & string>;
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<S, keyof S['tables'] & string>,
+> = (tx: SchemaQuery<S>, ...arg: TArg) => TReturnQuery;
 
 export function query<
   S extends Schema,
-  TArg extends ReadonlyArray<ReadonlyJSONValue> = ReadonlyJSONValue[],
->(_s: S, name: string, fn: NamedQueryFunc<S, TArg>): NamedQuery<S, TArg> {
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<S, keyof S['tables'] & string>,
+>(
+  _s: S,
+  name: string,
+  fn: NamedQueryImpl<S, TArg, TReturnQuery>,
+): NamedQuery<S, TArg, TReturnQuery> {
   return function queryWrapper(tx: SchemaQuery<S>, ...args: TArg) {
     return fn(tx, ...args).nameAndArgs(name, args);
-  };
+  } as NamedQuery<S, TArg, TReturnQuery>;
 }
 
 query.bindTo =
   <S extends Schema>(s: S) =>
-  <TArg extends ReadonlyArray<ReadonlyJSONValue> = ReadonlyJSONValue[]>(
+  <
+    TArg extends ReadonlyArray<ReadonlyJSONValue>,
+    TReturnQuery extends Query<S, keyof S['tables'] & string>,
+  >(
     name: string,
-    fn: NamedQueryFunc<S, TArg>,
-  ): NamedQuery<S, TArg> =>
+    fn: NamedQueryImpl<S, TArg, TReturnQuery>,
+  ): NamedQuery<S, TArg, TReturnQuery> =>
     query(s, name, fn);
