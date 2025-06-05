@@ -67,6 +67,9 @@ export function bench(opts: Options) {
     addServerQuery() {
       return () => {};
     },
+    addCustomQuery() {
+      return () => {};
+    },
     updateServerQuery() {},
     onQueryMaterialized() {},
     onTransactionCommit() {

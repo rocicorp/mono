@@ -15,6 +15,11 @@ export type NamedQuery<
   query: Query<S, keyof S['tables'] & string>;
 };
 
+export type CustomQueryID = {
+  name: string;
+  args: ReadonlyArray<ReadonlyJSONValue>;
+};
+
 type NamedQueryFunc<
   S extends Schema,
   TArg extends ReadonlyArray<ReadonlyJSONValue> = ReadonlyJSONValue[],

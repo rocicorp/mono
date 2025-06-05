@@ -43,6 +43,7 @@ import {
 import {DEFAULT_TTL, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 import {NotImplementedError} from '../error.ts';
+import type {CustomQueryID} from './named.ts';
 
 type AnyQuery = Query<Schema, string, any>;
 
@@ -83,6 +84,11 @@ export interface NewQueryDelegate {
 export interface QueryDelegate extends BuilderDelegate {
   addServerQuery(
     ast: AST,
+    ttl: TTL,
+    gotCallback?: GotCallback | undefined,
+  ): () => void;
+  addCustomQuery(
+    customQueryID: CustomQueryID,
     ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ): () => void;
@@ -614,8 +620,15 @@ export abstract class AbstractQuery<
     return this.run().then(onFulfilled, onRejected);
   }
 
-  abstract materialize(): TypedView<HumanReadable<TReturn>>;
-  abstract materialize<T>(factory: ViewFactory<TSchema, TTable, TReturn, T>): T;
+  abstract materialize(
+    ttl?: TTL | undefined,
+    customQueryID?: CustomQueryID | undefined,
+  ): TypedView<HumanReadable<TReturn>>;
+  abstract materialize<T>(
+    factory: ViewFactory<TSchema, TTable, TReturn, T>,
+    ttl?: TTL | undefined,
+    customQueryID?: CustomQueryID | undefined,
+  ): T;
 
   abstract run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
 
@@ -680,27 +693,46 @@ export class QueryImpl<
   }
 
   materialize<T>(
-    factoryOrTTL?: ViewFactory<TSchema, TTable, TReturn, T> | TTL,
-    ttl: TTL = DEFAULT_TTL,
+    factoryOrTTL?: ViewFactory<TSchema, TTable, TReturn, T> | TTL | undefined,
+    ttlOrCustomQueryID?: TTL | CustomQueryID | undefined,
+    customQueryIDOrUndefined?: CustomQueryID | undefined,
   ): T {
     const t0 = Date.now();
     let factory: ViewFactory<TSchema, TTable, TReturn, T> | undefined;
+    let ttl: TTL = DEFAULT_TTL;
+    let customQueryID: CustomQueryID | undefined;
     if (typeof factoryOrTTL === 'function') {
       factory = factoryOrTTL;
     } else {
       ttl = factoryOrTTL ?? DEFAULT_TTL;
     }
+
+    if (typeof ttlOrCustomQueryID === 'object') {
+      customQueryID = ttlOrCustomQueryID;
+    } else {
+      ttl = ttlOrCustomQueryID ?? DEFAULT_TTL;
+    }
+
+    if (customQueryIDOrUndefined !== undefined) {
+      customQueryID = customQueryIDOrUndefined;
+    }
+
     const ast = this._completeAst();
     const queryCompleteResolver = resolver<true>();
     let queryComplete = this.#delegate.defaultQueryComplete;
-    const removeServerQuery = this.#delegate.addServerQuery(ast, ttl, got => {
+
+    const gotCb: GotCallback = got => {
       if (got) {
         const t1 = Date.now();
         this.#delegate.onQueryMaterialized(this.hash(), ast, t1 - t0);
         queryComplete = true;
         queryCompleteResolver.resolve(true);
       }
-    });
+    };
+    const removeServerQuery =
+      customQueryID !== undefined
+        ? this.#delegate.addCustomQuery(customQueryID, ttl, gotCb)
+        : this.#delegate.addServerQuery(ast, ttl, gotCb);
 
     const updateTTL = (newTTL: TTL) => {
       this.#delegate.updateServerQuery(ast, newTTL);

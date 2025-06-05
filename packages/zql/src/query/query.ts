@@ -10,6 +10,7 @@ import type {
 } from '../../../zero-schema/src/table-schema.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
+import type {CustomQueryID} from './named.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -363,7 +364,10 @@ export interface Query<
    *            associated with this query after `TypedView.destroy`
    *            has been called.
    */
-  materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
+  materialize(
+    ttl?: TTL,
+    customQueryID?: CustomQueryID | undefined,
+  ): TypedView<HumanReadable<TReturn>>;
   /**
    * Creates a custom materialized view using a provided factory function. This
    * allows framework-specific bindings (like SolidJS, Vue, etc.) to create
@@ -381,6 +385,7 @@ export interface Query<
   materialize<T>(
     factory: ViewFactory<TSchema, TTable, TReturn, T>,
     ttl?: TTL,
+    customQueryID?: CustomQueryID | undefined,
   ): T;
 
   /**
