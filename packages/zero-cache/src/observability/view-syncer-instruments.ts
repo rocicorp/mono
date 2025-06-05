@@ -10,3 +10,20 @@ export function getMeter() {
   }
   return meter;
 }
+
+export function cache<TRet>(): (
+  name: string,
+  creator: (name: string) => TRet,
+) => TRet {
+  const instruments = new Map<string, unknown>();
+  return (name: string, creator: (name: string) => TRet) => {
+    const existing = instruments.get(name);
+    if (existing) {
+      return existing as TRet;
+    }
+
+    const ret = creator(name);
+    instruments.set(name, ret);
+    return ret;
+  };
+}
