@@ -16,7 +16,6 @@ import {
 } from '../../../db/pg-to-lite.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
-import type {LexiVersion} from '../../../types/lexi-version.ts';
 import {
   JSON_STRINGIFIED,
   liteValue,
@@ -144,9 +143,7 @@ export async function initialSync(
 
       const rowCounts = await Promise.all(
         tables.map(table =>
-          copyRunner.run((db, lc) =>
-            copy(lc, table, typeClient, db, tx, initialVersion),
-          ),
+          copyRunner.run((db, lc) => copy(lc, table, typeClient, db, tx)),
         ),
       );
       const total = rowCounts.reduce(
@@ -296,7 +293,6 @@ async function copy(
   dbClient: PostgresDB,
   from: PostgresTransaction,
   to: Database,
-  initialVersion: LexiVersion,
 ) {
   const start = performance.now();
   let rows = 0;
