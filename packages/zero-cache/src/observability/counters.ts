@@ -1,4 +1,7 @@
-import {getMeter} from './view-syncer-instruments.ts';
+import type {Counter} from '@opentelemetry/api';
+import {cache, getMeter} from './view-syncer-instruments.ts';
+
+const getOrCreateCounter = cache<Counter>();
 
 function createCounter(name: string, options: {description: string}) {
   return getMeter().createCounter(name, {
@@ -7,49 +10,65 @@ function createCounter(name: string, options: {description: string}) {
 }
 
 export function replicationEvents() {
-  return createCounter('replication-events', {
-    description: 'Number of replication events processed',
-  });
+  return getOrCreateCounter('replication-events', name =>
+    createCounter(name, {
+      description: 'Number of replication events processed',
+    }),
+  );
 }
 
 export function crudMutations() {
-  return createCounter('crud-mutations', {
-    description: 'Number of CRUD mutations processed',
-  });
+  return getOrCreateCounter('crud-mutations', name =>
+    createCounter(name, {
+      description: 'Number of CRUD mutations processed',
+    }),
+  );
 }
 
 export function customMutations() {
-  return createCounter('custom-mutations', {
-    description: 'Number of custom mutations processed',
-  });
+  return getOrCreateCounter('custom-mutations', name =>
+    createCounter(name, {
+      description: 'Number of custom mutations processed',
+    }),
+  );
 }
 
 export function pushes() {
-  return createCounter('pushes', {
-    description: 'Number of pushes processed by the pusher',
-  });
+  return getOrCreateCounter('pushes', name =>
+    createCounter(name, {
+      description: 'Number of pushes processed by the pusher',
+    }),
+  );
 }
 
 export function queryHydrations() {
-  return createCounter('query-hydrations', {
-    description: 'Number of query hydrations',
-  });
+  return getOrCreateCounter('query-hydrations', name =>
+    createCounter(name, {
+      description: 'Number of query hydrations',
+    }),
+  );
 }
 
 export function cvrRowsFlushed() {
-  return createCounter('cvr-rows-flushed', {
-    description: 'Number of rows flushed to all CVRs',
-  });
+  return getOrCreateCounter('cvr-rows-flushed', name =>
+    createCounter(name, {
+      description: 'Number of rows flushed to all CVRs',
+    }),
+  );
 }
 
 export function rowsPoked() {
-  return createCounter('rows-poked', {
-    description: 'Number of rows poked',
-  });
+  return getOrCreateCounter('rows-poked', name =>
+    createCounter(name, {
+      description: 'Number of rows poked',
+    }),
+  );
 }
 
 export function pokeTransactions() {
-  return createCounter('poke-transactions', {
-    description: 'Number of poke transactions (pokeStart,pokeEnd) pairs',
-  });
+  return getOrCreateCounter('poke-transactions', name =>
+    createCounter(name, {
+      description: 'Number of poke transactions (pokeStart,pokeEnd) pairs',
+    }),
+  );
 }
