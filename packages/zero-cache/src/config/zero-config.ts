@@ -255,7 +255,8 @@ export const zeroOptions = {
   queryHydrationStats: {
     type: v.boolean().optional(),
     desc: [
-      `Track and log the number of rows considered by each query in the system.`,
+      `Track and log the number of rows considered by query hydrations which`,
+      `take longer than {bold log-slow-hydrate-threshold} milliseconds.`,
       `This is useful for debugging and performance tuning.`,
     ],
   },

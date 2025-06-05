@@ -283,7 +283,7 @@ export class PipelineDriver {
 
     const hydrationTimeMs = timer.totalElapsed();
     if (runtimeDebugFlags.trackRowCountsVended) {
-      if (hydrationTimeMs > 200) {
+      if (hydrationTimeMs > this.#logConfig.slowHydrateThreshold) {
         let totalRowsConsidered = 0;
         const lc = this.#lc
           .withContext('hash', hash)
