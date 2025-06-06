@@ -529,6 +529,9 @@ beforeEach(() => {
     addServerQuery() {
       return () => {};
     },
+    addCustomQuery() {
+      return () => {};
+    },
     updateServerQuery() {},
     onQueryMaterialized() {},
     onTransactionCommit() {

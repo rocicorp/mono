@@ -43,6 +43,8 @@ import {
 import {DEFAULT_TTL, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 import {NotImplementedError} from '../error.ts';
+import type {CustomQueryID} from './named.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 
 type AnyQuery = Query<Schema, string, any>;
 
@@ -60,7 +62,14 @@ export function newQuery<
   schema: TSchema,
   table: TTable,
 ): Query<TSchema, TTable> {
-  return new QueryImpl(delegate, schema, table, {table}, defaultFormat);
+  return new QueryImpl(
+    delegate,
+    schema,
+    table,
+    {table},
+    defaultFormat,
+    undefined,
+  );
 }
 
 export type CommitListener = () => void;
@@ -83,6 +92,11 @@ export interface NewQueryDelegate {
 export interface QueryDelegate extends BuilderDelegate {
   addServerQuery(
     ast: AST,
+    ttl: TTL,
+    gotCallback?: GotCallback | undefined,
+  ): () => void;
+  addCustomQuery(
+    customQueryID: CustomQueryID,
     ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ): () => void;
@@ -139,6 +153,7 @@ export abstract class AbstractQuery<
   #hash: string = '';
   readonly #system: System;
   readonly #currentJunction: string | undefined;
+  readonly customQueryID: CustomQueryID | undefined;
 
   constructor(
     schema: TSchema,
@@ -146,6 +161,7 @@ export abstract class AbstractQuery<
     ast: AST,
     format: Format,
     system: System,
+    customQueryID: CustomQueryID | undefined,
     currentJunction?: string | undefined,
   ) {
     this.#schema = schema;
@@ -154,6 +170,24 @@ export abstract class AbstractQuery<
     this.format = format;
     this.#system = system;
     this.#currentJunction = currentJunction;
+    this.customQueryID = customQueryID;
+  }
+
+  nameAndArgs(
+    name: string,
+    args: ReadonlyArray<ReadonlyJSONValue>,
+  ): Query<TSchema, TTable, TReturn> {
+    return this[newQuerySymbol](
+      this.#schema,
+      this.#tableName,
+      this.#ast,
+      this.format,
+      {
+        name,
+        args: args as ReadonlyArray<ReadonlyJSONValue>,
+      },
+      this.#currentJunction,
+    );
   }
 
   get [astSymbol](): AST {
@@ -177,6 +211,7 @@ export abstract class AbstractQuery<
     table: TTable,
     ast: AST,
     format: Format,
+    customQueryID: CustomQueryID | undefined,
     currentJunction: string | undefined,
   ): AbstractQuery<TSchema, TTable, TReturn>;
 
@@ -192,6 +227,7 @@ export abstract class AbstractQuery<
         ...this.format,
         singular: true,
       },
+      this.customQueryID,
       this.#currentJunction,
     );
 
@@ -227,6 +263,7 @@ export abstract class AbstractQuery<
           relationships: {},
           singular: cardinality === 'one',
         },
+        this.customQueryID,
         undefined,
       );
       if (cardinality === 'one') {
@@ -273,6 +310,7 @@ export abstract class AbstractQuery<
             [relationship]: sq.format,
           },
         },
+        this.customQueryID,
         this.#currentJunction,
       );
     }
@@ -293,6 +331,7 @@ export abstract class AbstractQuery<
             relationships: {},
             singular: secondRelation.cardinality === 'one',
           },
+          this.customQueryID,
           relationship,
         ),
       ) as unknown as QueryImpl<Schema, string>;
@@ -347,6 +386,7 @@ export abstract class AbstractQuery<
             [relationship]: sq.format,
           },
         },
+        this.customQueryID,
         this.#currentJunction,
       );
     }
@@ -394,6 +434,7 @@ export abstract class AbstractQuery<
         where,
       },
       this.format,
+      this.customQueryID,
       this.#currentJunction,
     );
   };
@@ -413,6 +454,7 @@ export abstract class AbstractQuery<
         },
       },
       this.format,
+      this.customQueryID,
       this.#currentJunction,
     );
 
@@ -438,6 +480,7 @@ export abstract class AbstractQuery<
         limit,
       },
       this.format,
+      this.customQueryID,
       this.#currentJunction,
     );
   };
@@ -460,6 +503,7 @@ export abstract class AbstractQuery<
         orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
       },
       this.format,
+      this.customQueryID,
       this.#currentJunction,
     );
   };
@@ -485,6 +529,7 @@ export abstract class AbstractQuery<
             alias: `${SUBQ_PREFIX}${relationship}`,
           },
           defaultFormat,
+          this.customQueryID,
           undefined,
         ),
       ) as unknown as QueryImpl<any, any>;
@@ -522,6 +567,7 @@ export abstract class AbstractQuery<
             alias: `${SUBQ_PREFIX}zhidden_${relationship}`,
           },
           defaultFormat,
+          this.customQueryID,
           relationship,
         ),
       );
@@ -614,8 +660,13 @@ export abstract class AbstractQuery<
     return this.run().then(onFulfilled, onRejected);
   }
 
-  abstract materialize(): TypedView<HumanReadable<TReturn>>;
-  abstract materialize<T>(factory: ViewFactory<TSchema, TTable, TReturn, T>): T;
+  abstract materialize(
+    ttl?: TTL | undefined,
+  ): TypedView<HumanReadable<TReturn>>;
+  abstract materialize<T>(
+    factory: ViewFactory<TSchema, TTable, TReturn, T>,
+    ttl?: TTL | undefined,
+  ): T;
 
   abstract run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
 
@@ -646,9 +697,18 @@ export class QueryImpl<
     ast: AST = {table: tableName},
     format: Format = defaultFormat,
     system: System = 'client',
+    customQueryID?: CustomQueryID | undefined,
     currentJunction?: string | undefined,
   ) {
-    super(schema, tableName, ast, format, system, currentJunction);
+    super(
+      schema,
+      tableName,
+      ast,
+      format,
+      system,
+      customQueryID,
+      currentJunction,
+    );
     this.#system = system;
     this.#delegate = delegate;
   }
@@ -666,6 +726,7 @@ export class QueryImpl<
     tableName: TTable,
     ast: AST,
     format: Format,
+    customQueryID: CustomQueryID | undefined,
     currentJunction: string | undefined,
   ): QueryImpl<TSchema, TTable, TReturn> {
     return new QueryImpl(
@@ -675,6 +736,7 @@ export class QueryImpl<
       ast,
       format,
       this.#system,
+      customQueryID,
       currentJunction,
     );
   }
@@ -693,14 +755,17 @@ export class QueryImpl<
     const ast = this._completeAst();
     const queryCompleteResolver = resolver<true>();
     let queryComplete = this.#delegate.defaultQueryComplete;
-    const removeServerQuery = this.#delegate.addServerQuery(ast, ttl, got => {
+    const gotCallback: GotCallback = got => {
       if (got) {
         const t1 = Date.now();
         this.#delegate.onQueryMaterialized(this.hash(), ast, t1 - t0);
         queryComplete = true;
         queryCompleteResolver.resolve(true);
       }
-    });
+    };
+    const removeServerQuery = this.customQueryID
+      ? this.#delegate.addCustomQuery(this.customQueryID, ttl, gotCallback)
+      : this.#delegate.addServerQuery(ast, ttl, gotCallback);
 
     const updateTTL = (newTTL: TTL) => {
       this.#delegate.updateServerQuery(ast, newTTL);

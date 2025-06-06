@@ -9,7 +9,12 @@ import {Catch} from '../../../zql/src/ivm/catch.ts';
 import {Join} from '../../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
-import {ZeroContext, type AddQuery, type UpdateQuery} from './context.ts';
+import {
+  ZeroContext,
+  type AddCustomQuery,
+  type AddQuery,
+  type UpdateQuery,
+} from './context.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 
@@ -40,6 +45,7 @@ test('getSource', () => {
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
     testBatchViewUpdates,
     5_000,
@@ -114,6 +120,7 @@ test('processChanges', () => {
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
     testBatchViewUpdates,
     5_000,
@@ -181,6 +188,7 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
     batchViewUpdates,
     5_000,
@@ -237,6 +245,7 @@ test('transactions', () => {
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
     testBatchViewUpdates,
     5_000,
@@ -314,6 +323,7 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
     batchViewUpdates,
     5_000,
@@ -335,6 +345,7 @@ test('batchViewUpdates returns value', () => {
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
     batchViewUpdates,
     5_000,

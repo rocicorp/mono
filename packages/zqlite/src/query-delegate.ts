@@ -74,6 +74,9 @@ export class QueryDelegateImpl implements QueryDelegate {
   addServerQuery() {
     return () => {};
   }
+  addCustomQuery() {
+    return () => {};
+  }
   updateServerQuery() {}
   onQueryMaterialized() {}
   onTransactionCommit(cb: CommitListener) {

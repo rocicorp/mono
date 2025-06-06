@@ -4,6 +4,7 @@ import {
   describe,
   expect,
   type Mock,
+  type MockedFunction,
   test,
   vi,
 } from 'vitest';
@@ -74,6 +75,11 @@ import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
+import type {
+  TransformResponseBody,
+  TransformResponseMessage,
+} from '../../../../zero-protocol/src/custom-queries.ts';
 
 const APP_ID = 'this_app';
 const SHARD_NUM = 2;
@@ -102,6 +108,10 @@ const EXPECTED_LMIDS_AST: AST = {
 
 const ON_FAILURE = (e: unknown) => {
   throw e;
+};
+
+const pullConfig: ZeroConfig['pull'] = {
+  url: 'http://my-pull-endpoint.dev/api/zero/pull',
 };
 
 const REPLICA_VERSION = '01';
@@ -544,6 +554,7 @@ async function setup(permissions: PermissionsConfig | undefined) {
     storageDB,
   ).createClientGroupStorage(serviceID);
   const vs = new ViewSyncerService(
+    pullConfig,
     lc,
     SHARD,
     TASK_ID,
@@ -1071,6 +1082,468 @@ describe('view-syncer/service', () => {
         },
       ]
     `);
+  });
+
+  describe('custom queries', () => {
+    const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
+    beforeEach(() => {
+      vi.stubGlobal('fetch', mockFetch);
+    });
+
+    afterEach(() => {
+      mockFetch.mockClear();
+      vi.unstubAllGlobals();
+    });
+
+    function mockFetchImpl(queryResponses: TransformResponseBody) {
+      mockFetch.mockImplementation(url => {
+        if (
+          url ===
+          'http://my-pull-endpoint.dev/api/zero/pull?schema=this_app_2&appID=this_app'
+        ) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify([
+                'transformed',
+                queryResponses,
+              ] satisfies TransformResponseMessage),
+            ),
+          );
+        }
+        return Promise.reject(new Error('Unexpected fetch call ' + url));
+      });
+    }
+
+    test('initial hydration of a custom query', async () => {
+      mockFetchImpl([
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-1',
+          name: 'named-query',
+        },
+      ]);
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query', args: ['thing']},
+      ]);
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+      ]
+    `);
+
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 9007199254740991,
+                    "id": "1",
+                    "json": null,
+                    "owner": "100",
+                    "parent": null,
+                    "title": "parent issue foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": -9007199254740991,
+                    "id": "2",
+                    "json": null,
+                    "owner": "101",
+                    "parent": null,
+                    "title": "parent issue bar",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 123,
+                    "id": "3",
+                    "json": null,
+                    "owner": "102",
+                    "parent": "1",
+                    "title": "foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 100,
+                    "id": "4",
+                    "json": null,
+                    "owner": "101",
+                    "parent": "2",
+                    "title": "bar",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+
+      expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+        .toMatchInlineSnapshot(`
+          Result [
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "lmids": 1,
+              },
+              "rowKey": {
+                "clientGroupID": "9876",
+                "clientID": "foo",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "this_app_2.clients",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "1",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "2",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "3",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "4",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+          ]
+        `);
+    });
+
+    test('different custom queries end up with the same query after transformation', async () => {
+      mockFetchImpl([
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-1',
+          name: 'named-query-1',
+        },
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-2',
+          name: 'named-query-2',
+        },
+      ]);
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": null,
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "foo": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+              },
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "00:01",
+              "pokeID": "00:01",
+            },
+          ],
+        ]
+      `);
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "put",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 9007199254740991,
+                    "id": "1",
+                    "json": null,
+                    "owner": "100",
+                    "parent": null,
+                    "title": "parent issue foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": -9007199254740991,
+                    "id": "2",
+                    "json": null,
+                    "owner": "101",
+                    "parent": null,
+                    "title": "parent issue bar",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 123,
+                    "id": "3",
+                    "json": null,
+                    "owner": "102",
+                    "parent": "1",
+                    "title": "foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 100,
+                    "id": "4",
+                    "json": null,
+                    "owner": "101",
+                    "parent": "2",
+                    "title": "bar",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+      expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+        .toMatchInlineSnapshot(`
+        Result [
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "lmids": 1,
+            },
+            "rowKey": {
+              "clientGroupID": "9876",
+              "clientID": "foo",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "this_app_2.clients",
+          },
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "custom-1": 1,
+              "custom-2": 1,
+            },
+            "rowKey": {
+              "id": "1",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "custom-1": 1,
+              "custom-2": 1,
+            },
+            "rowKey": {
+              "id": "2",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "custom-1": 1,
+              "custom-2": 1,
+            },
+            "rowKey": {
+              "id": "3",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "custom-1": 1,
+              "custom-2": 1,
+            },
+            "rowKey": {
+              "id": "4",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
+          },
+        ]
+      `);
+    });
+
+    // not yet supported: test('a single custom query that returns many queries' () => {});
   });
 
   test('delete client', async () => {
@@ -6900,92 +7373,190 @@ describe('pickToken', () => {
   const lc = createSilentLogContext();
 
   test('previous token is undefined', () => {
-    expect(pickToken(lc, undefined, {sub: 'foo', iat: 1})).toEqual({
-      sub: 'foo',
-      iat: 1,
+    expect(
+      pickToken(lc, undefined, {decoded: {sub: 'foo', iat: 1}, raw: ''}),
+    ).toEqual({
+      decoded: {
+        sub: 'foo',
+        iat: 1,
+      },
+      raw: '',
     });
   });
 
   test('previous token exists, new token is undefined', () => {
-    expect(() => pickToken(lc, {sub: 'foo', iat: 1}, undefined)).toThrowError(
-      ErrorForClient,
-    );
+    expect(() =>
+      pickToken(lc, {decoded: {sub: 'foo', iat: 1}, raw: ''}, undefined),
+    ).toThrowError(ErrorForClient);
   });
 
   test('previous token has a subject, new token does not', () => {
-    expect(() => pickToken(lc, {sub: 'foo'}, {})).toThrowError(ErrorForClient);
+    expect(() =>
+      pickToken(lc, {decoded: {sub: 'foo'}, raw: ''}, {decoded: {}, raw: ''}),
+    ).toThrowError(ErrorForClient);
   });
 
   test('previous token has a subject, new token has a different subject', () => {
     expect(() =>
-      pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'bar', iat: 1}),
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 1}, raw: ''},
+        {decoded: {sub: 'bar', iat: 1}, raw: ''},
+      ),
     ).toThrowError(ErrorForClient);
   });
 
   test('previous token has a subject, new token has the same subject', () => {
-    expect(pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'foo', iat: 2})).toEqual({
-      sub: 'foo',
-      iat: 2,
+    expect(
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 1}, raw: ''},
+        {decoded: {sub: 'foo', iat: 2}, raw: ''},
+      ),
+    ).toEqual({
+      decoded: {
+        sub: 'foo',
+        iat: 2,
+      },
+      raw: '',
     });
 
-    expect(pickToken(lc, {sub: 'foo', iat: 2}, {sub: 'foo', iat: 1})).toEqual({
-      sub: 'foo',
-      iat: 2,
+    expect(
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 2}, raw: ''},
+        {decoded: {sub: 'foo', iat: 1}, raw: ''},
+      ),
+    ).toEqual({
+      decoded: {
+        sub: 'foo',
+        iat: 2,
+      },
+      raw: '',
     });
   });
 
   test('previous token has no subject, new token has a subject', () => {
     expect(() =>
-      pickToken(lc, {sub: 'foo', iat: 123}, {iat: 123}),
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 123}, raw: ''},
+        {decoded: {iat: 123}, raw: ''},
+      ),
     ).toThrowError(ErrorForClient);
   });
 
   test('previous token has no subject, new token has no subject', () => {
-    expect(pickToken(lc, {iat: 1}, {iat: 2})).toEqual({
-      iat: 2,
+    expect(
+      pickToken(lc, {decoded: {iat: 1}, raw: ''}, {decoded: {iat: 2}, raw: ''}),
+    ).toEqual({
+      decoded: {
+        iat: 2,
+      },
+      raw: '',
     });
-    expect(pickToken(lc, {iat: 2}, {iat: 1})).toEqual({
-      iat: 2,
+    expect(
+      pickToken(lc, {decoded: {iat: 2}, raw: ''}, {decoded: {iat: 1}, raw: ''}),
+    ).toEqual({
+      decoded: {
+        iat: 2,
+      },
+      raw: '',
     });
   });
 
   test('previous token has an issued at time, new token does not', () => {
     expect(() =>
-      pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'foo'}),
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 1}, raw: ''},
+        {decoded: {sub: 'foo'}, raw: ''},
+      ),
     ).toThrowError(ErrorForClient);
   });
 
   test('previous token has an issued at time, new token has a greater issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'foo', iat: 2})).toEqual({
-      sub: 'foo',
-      iat: 2,
+    expect(
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 1}, raw: ''},
+        {decoded: {sub: 'foo', iat: 2}, raw: ''},
+      ),
+    ).toEqual({
+      decoded: {
+        sub: 'foo',
+        iat: 2,
+      },
+      raw: '',
     });
   });
 
   test('previous token has an issued at time, new token has a lesser issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo', iat: 2}, {sub: 'foo', iat: 1})).toEqual({
-      sub: 'foo',
-      iat: 2,
+    expect(
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo', iat: 2}, raw: ''},
+        {decoded: {sub: 'foo', iat: 1}, raw: ''},
+      ),
+    ).toEqual({
+      decoded: {
+        sub: 'foo',
+        iat: 2,
+      },
+      raw: '',
     });
   });
 
   test('previous token has an issued at time, new token has the same issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo', iat: 2}, {sub: 'foo', iat: 2})).toEqual({
-      sub: 'foo',
-      iat: 2,
+    expect(
+      pickToken(
+        lc,
+        {
+          decoded: {sub: 'foo', iat: 2},
+          raw: '',
+        },
+        {
+          decoded: {sub: 'foo', iat: 2},
+          raw: '',
+        },
+      ),
+    ).toEqual({
+      decoded: {
+        sub: 'foo',
+        iat: 2,
+      },
+      raw: '',
     });
   });
 
   test('previous token has no issued at time, new token has an issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo'}, {sub: 'foo', iat: 2})).toEqual({
-      sub: 'foo',
-      iat: 2,
+    expect(
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo'}, raw: 'no-iat'},
+        {decoded: {sub: 'foo', iat: 2}, raw: 'iat'},
+      ),
+    ).toEqual({
+      decoded: {
+        sub: 'foo',
+        iat: 2,
+      },
+      raw: 'iat',
     });
   });
 
   test('previous token has no issued at time, new token has no issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo'}, {sub: 'foo'})).toEqual({
-      sub: 'foo',
+    expect(
+      pickToken(
+        lc,
+        {decoded: {sub: 'foo'}, raw: ''},
+        {decoded: {sub: 'foo'}, raw: ''},
+      ),
+    ).toEqual({
+      decoded: {
+        sub: 'foo',
+      },
+      raw: '',
     });
   });
 });

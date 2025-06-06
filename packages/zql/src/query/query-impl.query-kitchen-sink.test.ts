@@ -334,6 +334,7 @@ describe('kitchen sink query', () => {
     expect(queryDelegate.addedServerQueries).toMatchInlineSnapshot(`
       [
         {
+          "args": undefined,
           "ast": {
             "limit": 6,
             "orderBy": [
@@ -511,6 +512,7 @@ describe('kitchen sink query', () => {
               "type": "and",
             },
           },
+          "name": undefined,
           "ttl": "none",
         },
       ]

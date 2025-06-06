@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
@@ -10,6 +11,7 @@ import type {
 } from '../../../zero-schema/src/table-schema.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
+import type {CustomQueryID} from './named.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -148,8 +150,26 @@ export interface Query<
   /**
    * A string that uniquely identifies this query. This can be used to determine
    * if two queries are the same.
+   *
+   * The hash of a custom query, on the client, is the hash of its AST.
+   * The hash of a custom query, on the server, is the hash of its name and args.
+   *
+   * The first allows many client-side queries to be pinned to the same backend query.
+   * The second ensures we do not invoke a named query on the backend more than once for the same `name:arg` pairing.
+   *
+   * If the query.hash was of `name:args` then `useQuery` would de-dupe
+   * queries with divergent ASTs.
+   *
+   * QueryManager will hash based on `name:args` since it is speaking with
+   * the server which tracks queries by `name:args`.
    */
   hash(): string;
+  readonly customQueryID: CustomQueryID | undefined;
+
+  nameAndArgs(
+    name: string,
+    args: ReadonlyArray<ReadonlyJSONValue>,
+  ): Query<TSchema, TTable, TReturn>;
 
   /**
    * Related is used to add a related query to the current query. This is used
