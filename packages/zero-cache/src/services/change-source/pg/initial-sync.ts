@@ -28,6 +28,7 @@ import {
   type PostgresTransaction,
   type PostgresValueType,
 } from '../../../types/pg.ts';
+import {CpuProfiler} from '../../../types/profiler.ts';
 import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
@@ -47,6 +48,7 @@ import {
 
 export type InitialSyncOptions = {
   tableCopyWorkers: number;
+  profileCopy?: boolean | undefined;
 };
 
 export async function initialSync(
@@ -61,7 +63,8 @@ export async function initialSync(
       'The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
   }
-  const {tableCopyWorkers: numWorkers} = syncOptions;
+  const {tableCopyWorkers: numWorkers, profileCopy} = syncOptions;
+  const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
   const sql = pgClient(lc, upstreamURI);
   // The typeClient's reason for existence is to configure the type
   // parsing for the copy workers, which skip JSON parsing for efficiency.
@@ -141,11 +144,14 @@ export async function initialSync(
       const numTables = tables.length;
       createLiteTables(tx, tables, initialVersion);
 
+      void copyProfiler?.start();
       const rowCounts = await Promise.all(
         tables.map(table =>
           copyRunner.run((db, lc) => copy(lc, table, typeClient, db, tx)),
         ),
       );
+      void copyProfiler?.stopAndDispose(lc, 'initial-copy');
+
       const total = rowCounts.reduce(
         (acc, curr) => ({
           rows: acc.rows + curr.rows,
