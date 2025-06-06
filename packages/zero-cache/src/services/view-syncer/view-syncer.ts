@@ -30,7 +30,10 @@ import type {
   InspectUpMessage,
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import type {Upstream} from '../../../../zero-protocol/src/up.ts';
-import {transformAndHashQuery} from '../../auth/read-authorizer.ts';
+import {
+  transformAndHashQuery,
+  type TransformedAndHashed,
+} from '../../auth/read-authorizer.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
 import {stringify} from '../../types/bigint-json.ts';
@@ -72,9 +75,12 @@ import {
   type CVRVersion,
   type InternalQueryRecord,
   type NullableCVRVersion,
+  type QueryRecord,
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
+import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
+import {type ZeroConfig} from '../../config/zero-config.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -132,6 +138,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
   readonly #slowHydrateThreshold: number;
+  readonly #pullConfig: ZeroConfig['pull'];
 
   // The ViewSyncerService is only started in response to a connection,
   // so #lastConnectTime is always initialized to now(). This is necessary
@@ -152,7 +159,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
-  #authData: JWTPayload | undefined;
+  #authData: TokenData | undefined;
 
   /**
    * The {@linkcode maxRowCount} is used for the eviction of inactive queries.
@@ -169,8 +176,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #expiredQueriesTimer: ReturnType<typeof setTimeout> | 0 = 0;
   #nextExpiredQueryTime: number = 0;
   readonly #setTimeout: SetTimeout;
+  readonly #customQueryTransformer: CustomQueryTransformer | undefined;
 
   constructor(
+    pullConfig: ZeroConfig['pull'],
     lc: LogContext,
     shard: ShardID,
     taskID: string,
@@ -186,6 +195,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ) {
     this.id = clientGroupID;
     this.#shard = shard;
+    this.#pullConfig = pullConfig;
     this.#lc = lc;
     this.#pipelines = pipelineDriver;
     this.#stateChanges = versionChanges;
@@ -204,6 +214,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
     this.maxRowCount = maxRowCount;
     this.#setTimeout = setTimeoutFn;
+
+    if (pullConfig.url) {
+      this.#customQueryTransformer = new CustomQueryTransformer(
+        pullConfig.url,
+        shard,
+      );
+    }
 
     // Wait for the first connection to init.
     this.keepalive();
@@ -410,8 +427,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#lc.debug?.('viewSyncer.initConnection');
     return startSpan(tracer, 'vs.initConnection', () => {
       const {clientID, wsID, baseCookie, schemaVersion, tokenData} = ctx;
-      this.#authData = pickToken(this.#lc, this.#authData, tokenData?.decoded);
-      this.#lc.debug?.(`Picked auth token: ${JSON.stringify(this.#authData)}`);
+      this.#authData = pickToken(this.#lc, this.#authData, tokenData);
+      this.#lc.debug?.(
+        `Picked auth token: ${JSON.stringify(this.#authData?.decoded)}`,
+      );
 
       const lc = this.#lc
         .withContext('clientID', clientID)
@@ -768,9 +787,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       ([_, state]) => state.transformationHash !== undefined,
     );
 
-    for (const [hash, query] of gotQueries) {
-      assert(query.type !== 'custom', 'custom queries are not yet supported');
-      const {ast, transformationHash} = query;
+    const customQueries: CustomQueryRecord[] = [];
+    const otherQueries: (ClientQueryRecord | InternalQueryRecord)[] = [];
+
+    for (const [, query] of gotQueries) {
       if (
         query.type !== 'internal' &&
         Object.values(query.clientState).every(
@@ -780,20 +800,69 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         continue; // No longer desired.
       }
 
-      const {transformedAst, transformationHash: newTransformationHash} =
-        transformAndHashQuery(
-          lc,
-          hash,
-          ast,
-          must(this.#pipelines.currentPermissions()).permissions ?? {
-            tables: {},
-          },
-          this.#authData,
-          query.type === 'internal',
-        );
-      if (newTransformationHash !== transformationHash) {
-        continue; // Query results may have changed.
+      if (query.type === 'custom') {
+        customQueries.push(query);
+      } else {
+        otherQueries.push(query);
       }
+    }
+
+    const transformedQueries: TransformedAndHashed[] = [];
+    if (customQueries.length > 0 && !this.#customQueryTransformer) {
+      lc.error?.(
+        'Custom/named queries were requested but no `pull.url` is configured for Zero Cache.',
+      );
+    }
+    if (this.#customQueryTransformer && customQueries.length > 0) {
+      const transformedCustomQueries =
+        await this.#customQueryTransformer.transform(
+          {
+            apiKey: this.#pullConfig.apiKey,
+            token: this.#authData?.raw,
+          },
+          customQueries,
+        );
+
+      // TODO: collected errors need to make it downstream to the client.
+      if (Array.isArray(transformedCustomQueries)) {
+        for (const q of transformedCustomQueries) {
+          if ('error' in q) {
+            lc.error?.(`Error transforming custom query ${q.name}: ${q.error}`);
+            continue;
+          }
+          transformedQueries.push(q);
+        }
+      } else {
+        // If the result is not an array, it is an error.
+        lc.error?.(
+          'Error calling API server to transform custom queries',
+          transformedCustomQueries,
+        );
+      }
+    }
+
+    for (const q of otherQueries) {
+      const transformed = transformAndHashQuery(
+        lc,
+        q.id,
+        q.ast,
+        must(this.#pipelines.currentPermissions()).permissions ?? {
+          tables: {},
+        },
+        this.#authData?.decoded,
+        q.type === 'internal',
+      );
+      if (transformed.transformationHash === q.transformationHash) {
+        // only processing unchanged queries here
+        transformedQueries.push(transformed);
+      }
+    }
+
+    for (const {
+      id: hash,
+      transformationHash,
+      transformedAst,
+    } of transformedQueries) {
       const start = Date.now();
       let count = 0;
       await startAsyncSpan(
@@ -802,7 +871,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         async span => {
           span.setAttribute('queryHash', hash);
           span.setAttribute('transformationHash', transformationHash);
-          span.setAttribute('table', ast.table);
+          span.setAttribute('table', transformedAst.table);
           const timer = new Timer();
           for (const _ of this.#pipelines.addQuery(
             transformationHash,
@@ -852,36 +921,103 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Convert queries to their transformed ast's and hashes
       const hashToIDs = new Map<string, string[]>();
       const now = Date.now();
-      const serverQueries = Object.entries(cvr.queries).map(([id, q]) => {
-        assert(
-          q.type !== 'custom',
-          'custom queries are not yet supported in syncQueryPipelineSet',
-        );
-        const {transformedAst: ast, transformationHash} = transformAndHashQuery(
+
+      // group cvr queries into:
+      // 1. custom queries
+      // 2. everything else
+      // Handle transformation appropriately
+      // Then hydrate as `serverQueries`
+      const cvrQueryEntires = Object.entries(cvr.queries);
+      const customQueries: Map<string, CustomQueryRecord> = new Map();
+      const otherQueries: {
+        id: string;
+        query: ClientQueryRecord | InternalQueryRecord;
+      }[] = [];
+      const transformedQueries: {
+        id: string;
+        origQuery: QueryRecord;
+        transformed: TransformedAndHashed;
+      }[] = [];
+      for (const [id, query] of cvrQueryEntires) {
+        if (query.type === 'custom') {
+          // This should always match, no?
+          assert(id === query.id, 'custom query id mismatch');
+          customQueries.set(id, query);
+        } else {
+          otherQueries.push({id, query});
+        }
+      }
+
+      for (const {id, query: origQuery} of otherQueries) {
+        // This should always match, no?
+        assert(id === origQuery.id, 'query id mismatch');
+        const transformed = transformAndHashQuery(
           lc,
-          id,
-          q.ast,
+          origQuery.id,
+          origQuery.ast,
           must(this.#pipelines.currentPermissions()).permissions ?? {
             tables: {},
           },
-          this.#authData,
-          q.type === 'internal',
+          this.#authData?.decoded,
+          origQuery.type === 'internal',
         );
-        const ids = hashToIDs.get(transformationHash);
-        if (ids) {
-          ids.push(id);
-        } else {
-          hashToIDs.set(transformationHash, [id]);
-        }
-        return {
+        transformedQueries.push({
           id,
-          // TODO(mlaw): follow up to handle the case where we statically determine
-          // the query cannot be run and is `undefined`.
-          ast,
-          transformationHash,
-          remove: expired(now, q),
-        };
-      });
+          origQuery,
+          transformed,
+        });
+      }
+
+      if (this.#customQueryTransformer && customQueries.size > 0) {
+        const transformedCustomQueries =
+          await this.#customQueryTransformer.transform(
+            {
+              apiKey: this.#pullConfig.apiKey,
+              token: this.#authData?.raw,
+            },
+            customQueries.values(),
+          );
+
+        // TODO: collected errors need to make it downstream to the client.
+        if (Array.isArray(transformedCustomQueries)) {
+          for (const q of transformedCustomQueries) {
+            if ('error' in q) {
+              lc.error?.(
+                `Error transforming custom query ${q.name}: ${q.error}`,
+              );
+              continue;
+            }
+            transformedQueries.push({
+              id: q.id,
+              origQuery: must(customQueries.get(q.id)),
+              transformed: q,
+            });
+          }
+        } else {
+          // If the result is not an array, it is an error.
+          lc.error?.(
+            'Error calling API server to transform custom queries',
+            transformedCustomQueries,
+          );
+        }
+      }
+
+      const serverQueries = transformedQueries.map(
+        ({id, origQuery, transformed}) => {
+          const ids = hashToIDs.get(transformed.transformationHash);
+          if (ids) {
+            ids.push(id);
+          } else {
+            hashToIDs.set(transformed.transformationHash, [id]);
+          }
+          return {
+            id,
+            ast: transformed.transformedAst,
+            transformationHash: transformed.transformationHash,
+            remove: expired(now, origQuery),
+          };
+        },
+      );
 
       const addQueries = serverQueries.filter(
         q => !q.remove && !hydratedQueries.has(q.transformationHash),
@@ -928,7 +1064,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     cvr: CVRSnapshot,
     addQueries: {id: string; ast: AST; transformationHash: string}[],
-    removeQueries: {id: string; ast: AST; transformationHash: string}[],
+    removeQueries: {id: string; transformationHash: string}[],
     unhydrateQueries: string[],
     hashToIDs: Map<string, string[]>,
   ): Promise<void> {
@@ -1337,7 +1473,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         const q = cvr.queries[hash];
         assert(q, 'query not found in CVR');
         assert(q.type !== 'internal', 'internal queries should not be evicted');
-        assert(q.type !== 'custom', 'custom queries are not supported yet');
 
         const rowCountBeforeCurrentEviction = this.#cvrStore.rowCount;
 
@@ -1348,7 +1483,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           [
             {
               id: hash,
-              ast: q.ast,
               transformationHash: must(q.transformationHash),
             },
           ],
@@ -1491,8 +1625,8 @@ function checkClientAndCVRVersions(
 
 export function pickToken(
   lc: LogContext,
-  previousToken: JWTPayload | undefined,
-  newToken: JWTPayload | undefined,
+  previousToken: TokenData | undefined,
+  newToken: TokenData | undefined,
 ) {
   if (previousToken === undefined) {
     lc.debug?.(`No previous token, using new token`);
@@ -1500,7 +1634,7 @@ export function pickToken(
   }
 
   if (newToken) {
-    if (previousToken.sub !== newToken.sub) {
+    if (previousToken.decoded.sub !== newToken.decoded.sub) {
       throw new ErrorForClient({
         kind: ErrorKind.Unauthorized,
         message:
@@ -1508,13 +1642,13 @@ export function pickToken(
       });
     }
 
-    if (previousToken.iat === undefined) {
+    if (previousToken.decoded.iat === undefined) {
       lc.debug?.(`No issued at time for the existing token, using new token`);
       // No issued at time for the existing token? We take the most recently received token.
       return newToken;
     }
 
-    if (newToken.iat === undefined) {
+    if (newToken.decoded.iat === undefined) {
       throw new ErrorForClient({
         kind: ErrorKind.Unauthorized,
         message:
@@ -1523,7 +1657,7 @@ export function pickToken(
     }
 
     // The new token is newer, so we take it.
-    if (previousToken.iat < newToken.iat) {
+    if (previousToken.decoded.iat < newToken.decoded.iat) {
       lc.debug?.(`New token is newer, using it`);
       return newToken;
     }

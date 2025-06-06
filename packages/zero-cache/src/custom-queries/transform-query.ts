@@ -113,6 +113,8 @@ export class CustomQueryTransformer {
 }
 
 function getCacheKey(headerOptions: HeaderOptions, queryID: string) {
-  // For custom queries, query.id is a hash of the name + args.
-  return `${headerOptions.apiKey}:${headerOptions.token}:${queryID}`;
+  // For custom queries, queryID is a hash of the name + args.
+  // the APIKey from headerOptions is static. Not needed for the cache key.
+  // The token is used to identify the user and should be included in the cache key.
+  return `${headerOptions.token}:${queryID}`;
 }
