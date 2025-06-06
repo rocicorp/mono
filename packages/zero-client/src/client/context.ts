@@ -7,6 +7,7 @@ import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Input, Storage} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
+import type {CustomQueryID} from '../../../zql/src/query/named.ts';
 import type {
   CommitListener,
   GotCallback,
@@ -19,6 +20,7 @@ import type {QueryManager} from './query-manager.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 
 export type AddQuery = QueryManager['addLegacy'];
+export type AddCustomQuery = QueryManager['addCustom'];
 
 export type UpdateQuery = QueryManager['update'];
 
@@ -34,6 +36,7 @@ export class ZeroContext implements QueryDelegate {
   // that needs to be fixed.
   readonly #mainSources: IVMSourceBranch;
   readonly #addQuery: AddQuery;
+  readonly #addCustomQuery: AddCustomQuery;
   readonly #updateQuery: UpdateQuery;
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
@@ -52,6 +55,7 @@ export class ZeroContext implements QueryDelegate {
     lc: ZeroLogContext,
     mainSources: IVMSourceBranch,
     addQuery: AddQuery,
+    addCustomQuery: AddCustomQuery,
     updateQuery: UpdateQuery,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
     slowMaterializeThreshold: number,
@@ -64,10 +68,24 @@ export class ZeroContext implements QueryDelegate {
     this.#lc = lc;
     this.#slowMaterializeThreshold = slowMaterializeThreshold;
     this.assertValidRunOptions = assertValidRunOptions;
+    this.#addCustomQuery = addCustomQuery;
   }
 
   getSource(name: string): Source | undefined {
     return this.#mainSources.getSource(name);
+  }
+
+  addCustomQuery(
+    customQueryID: CustomQueryID,
+    ttl: TTL,
+    gotCallback?: GotCallback | undefined,
+  ): () => void {
+    return this.#addCustomQuery(
+      customQueryID.name,
+      customQueryID.args,
+      ttl,
+      gotCallback,
+    );
   }
 
   addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback | undefined) {

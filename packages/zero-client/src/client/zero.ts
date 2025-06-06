@@ -554,6 +554,8 @@ export class Zero<
       this.#ivmMain,
       (ast, ttl, gotCallback) =>
         this.#queryManager.addLegacy(ast, ttl, gotCallback),
+      (customQueryID, ttl, gotCallback) =>
+        this.#queryManager.addCustom(customQueryID, ttl, gotCallback),
       (ast, ttl) => this.#queryManager.update(ast, ttl),
       batchViewUpdates,
       slowMaterializeThreshold,

@@ -179,6 +179,7 @@ function makeSchemaQuery<S extends Schema>(
     lc,
     ivmBranch,
     () => emptyFunction,
+    () => emptyFunction,
     () => {},
     applyViewUpdates => applyViewUpdates(),
     slowMaterializeThreshold,

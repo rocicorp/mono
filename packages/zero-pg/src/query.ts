@@ -86,7 +86,7 @@ export class ZPGQuery<
     ast: AST,
     format: Format,
   ) {
-    super(schema, tableName, ast, format, 'permissions');
+    super(schema, tableName, ast, format, 'permissions', undefined);
     this.#dbTransaction = dbTransaction;
     this.#schema = schema;
     this.#serverSchema = serverSchema;

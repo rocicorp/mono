@@ -6,13 +6,11 @@ import type {Query} from './query.ts';
 export type NamedQuery<
   S extends Schema,
   TArg extends ReadonlyArray<ReadonlyJSONValue> = ReadonlyJSONValue[],
-> = (
-  tx: SchemaQuery<S>,
-  ...args: TArg
-) => {
+> = (tx: SchemaQuery<S>, ...args: TArg) => Query<S, keyof S['tables'] & string>;
+
+export type CustomQueryID = {
   name: string;
-  args: TArg;
-  query: Query<S, keyof S['tables'] & string>;
+  args: ReadonlyArray<ReadonlyJSONValue>;
 };
 
 type NamedQueryFunc<
@@ -25,11 +23,7 @@ export function query<
   TArg extends ReadonlyArray<ReadonlyJSONValue> = ReadonlyJSONValue[],
 >(_s: S, name: string, fn: NamedQueryFunc<S, TArg>): NamedQuery<S, TArg> {
   return function queryWrapper(tx: SchemaQuery<S>, ...args: TArg) {
-    return {
-      name,
-      args,
-      query: fn(tx, ...args),
-    };
+    return fn(tx, ...args).nameAndArgs(name, args);
   };
 }
 

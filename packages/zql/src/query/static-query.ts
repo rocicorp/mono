@@ -2,6 +2,7 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../ivm/view.ts';
 import {ExpressionBuilder} from './expression.ts';
+import type {CustomQueryID} from './named.ts';
 import {AbstractQuery, defaultFormat, newQuerySymbol} from './query-impl.ts';
 import type {HumanReadable, PullRow, Query} from './query.ts';
 import type {TypedView} from './typed-view.ts';
@@ -36,9 +37,18 @@ export class StaticQuery<
     tableName: TTable,
     ast: AST,
     format: Format,
+    customQueryID?: CustomQueryID | undefined,
     currentJunction?: string | undefined,
   ) {
-    super(schema, tableName, ast, format, 'permissions', currentJunction);
+    super(
+      schema,
+      tableName,
+      ast,
+      format,
+      'permissions',
+      customQueryID,
+      currentJunction,
+    );
   }
 
   protected [newQuerySymbol]<
@@ -50,9 +60,17 @@ export class StaticQuery<
     tableName: TTable,
     ast: AST,
     format: Format,
+    customQueryID: CustomQueryID | undefined,
     currentJunction: string | undefined,
   ): StaticQuery<TSchema, TTable, TReturn> {
-    return new StaticQuery(schema, tableName, ast, format, currentJunction);
+    return new StaticQuery(
+      schema,
+      tableName,
+      ast,
+      format,
+      customQueryID,
+      currentJunction,
+    );
   }
 
   get ast() {

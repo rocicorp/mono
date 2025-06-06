@@ -1,6 +1,9 @@
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
-import {deepEqual} from '../../../../shared/src/json.ts';
+import {
+  deepEqual,
+  type ReadonlyJSONValue,
+} from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {FilterInput} from '../../ivm/filter-operators.ts';
@@ -8,6 +11,7 @@ import {MemoryStorage} from '../../ivm/memory-storage.ts';
 import type {Input} from '../../ivm/operator.ts';
 import type {Source} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
+import type {CustomQueryID} from '../named.ts';
 import {
   type CommitListener,
   type GotCallback,
@@ -25,11 +29,17 @@ import {
 
 const lc = createSilentLogContext();
 
+type Entry = {
+  ast: AST | undefined;
+  name: string | undefined;
+  args: readonly ReadonlyJSONValue[] | undefined;
+  ttl: TTL;
+};
 export class QueryDelegateImpl implements QueryDelegate {
   readonly #sources: Record<string, Source> = makeSources();
   readonly #commitListeners: Set<CommitListener> = new Set();
 
-  readonly addedServerQueries: {ast: AST; ttl: TTL}[] = [];
+  readonly addedServerQueries: Entry[] = [];
   readonly gotCallbacks: (GotCallback | undefined)[] = [];
   synchronouslyCallNextGotCallback = false;
   callGot = false;
@@ -71,12 +81,27 @@ export class QueryDelegateImpl implements QueryDelegate {
     }
   }
 
+  addCustomQuery(
+    customQueryID: CustomQueryID,
+    ttl: TTL,
+    gotCallback?: GotCallback | undefined,
+  ): () => void {
+    return this.#addQuery({ast: undefined, ttl, ...customQueryID}, gotCallback);
+  }
+
   addServerQuery(
     ast: AST,
     ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ): () => void {
-    this.addedServerQueries.push({ast, ttl});
+    return this.#addQuery(
+      {ast, name: undefined, args: undefined, ttl},
+      gotCallback,
+    );
+  }
+
+  #addQuery(entry: Entry, gotCallback?: GotCallback | undefined) {
+    this.addedServerQueries.push(entry);
     this.gotCallbacks.push(gotCallback);
     if (this.callGot) {
       void Promise.resolve().then(() => {
