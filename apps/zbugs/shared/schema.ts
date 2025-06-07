@@ -11,7 +11,7 @@ import {
   type ExpressionBuilder,
   type Row,
 } from '@rocicorp/zero';
-import type {AuthData} from './auth.ts';
+import type {AuthData, Role} from './auth.ts';
 
 // Table definitions
 const user = table('user')
@@ -20,7 +20,7 @@ const user = table('user')
     login: string(),
     name: string().optional(),
     avatar: string(),
-    role: enumeration<'user' | 'crew'>(),
+    role: enumeration<Role>(),
   })
   .primaryKey('id');
 
@@ -35,7 +35,7 @@ const issue = table('issue')
     creatorID: string(),
     assigneeID: string().optional(),
     description: string(),
-    visibility: string(),
+    visibility: enumeration<'internal' | 'public'>(),
   })
   .primaryKey('id');
 
