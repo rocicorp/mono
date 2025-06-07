@@ -14,7 +14,6 @@ export const authDataSchema = v.object({
 });
 
 export type AuthData = v.Infer<typeof authDataSchema>;
-export type Role = AuthData['role'];
 
 export function assertIsLoggedIn(
   authData: AuthData | undefined,
