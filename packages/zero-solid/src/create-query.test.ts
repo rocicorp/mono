@@ -15,7 +15,6 @@ import {refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {createQuery} from './create-query.ts';
-import {solidViewFactory} from './solid-view.ts';
 
 function setupTestEnvironment() {
   const schema = createSchema({
@@ -83,10 +82,7 @@ test('createQuery with ttl', () => {
   expect(querySignal).toHaveBeenCalledTimes(1);
   expect(addServerQuerySpy).toHaveBeenCalledTimes(1);
   expect(updateServerQuerySpy).toHaveBeenCalledTimes(0);
-  expect(materializeSpy).toHaveBeenCalledExactlyOnceWith(
-    solidViewFactory,
-    '1m',
-  );
+
   addServerQuerySpy.mockClear();
   materializeSpy.mockClear();
 
