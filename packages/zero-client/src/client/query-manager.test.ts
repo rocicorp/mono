@@ -82,7 +82,7 @@ test('add and remove a custom query', () => {
     () => () => {},
     maxRecentQueriesSize,
   );
-  const rm1 = queryManager.addCustom('customQuery', [1], 'forever');
+  const rm1 = queryManager.addCustom('customQuery', [1], '1m');
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
     'changeDesiredQueries',
@@ -90,26 +90,51 @@ test('add and remove a custom query', () => {
       desiredQueriesPatch: [
         {
           op: 'put',
-          hash: '2tts1u0ojmujd',
+          hash: '2l1ig6e3tnu0a',
           name: 'customQuery',
           args: [1],
-          ttl: -1,
+          ttl: 60000,
         },
       ],
     },
   ]);
 
-  const rm2 = queryManager.addCustom('customQuery', [1], 'forever');
+  const rm2 = queryManager.addCustom('customQuery', [1], '1m');
   expect(send).toBeCalledTimes(1);
 
   rm2();
-  const rm3 = queryManager.addCustom('customQuery', [1], 'forever');
+  const rm3 = queryManager.addCustom('customQuery', [1], '1m');
   expect(send).toBeCalledTimes(1);
   rm1();
   rm3();
-  queryManager.addCustom('customQuery', [1], 'forever');
+  queryManager.addCustom('customQuery', [1], '1m');
   // once for del, another for put
   expect(send).toBeCalledTimes(3);
+
+  send.mockClear();
+
+  // now update the custom query
+  queryManager.updateCustom('customQuery', [1], '2m');
+  // update event sent
+  expect(send).toBeCalledTimes(1);
+  expect(send).toBeCalledWith([
+    'changeDesiredQueries',
+    {
+      desiredQueriesPatch: [
+        {
+          op: 'put',
+          hash: '2l1ig6e3tnu0a',
+          name: 'customQuery',
+          args: [1],
+          ttl: 120000,
+        },
+      ],
+    },
+  ]);
+
+  queryManager.updateCustom('customQuery', [1], '1m');
+  // send not called with lower ttl
+  expect(send).toBeCalledTimes(1);
 });
 
 test('add renamed fields', () => {
@@ -1015,6 +1040,7 @@ describe('getQueriesPatch', () => {
           "op": "del",
         },
         "3c5d3uiyypuxu" => {
+          "args": undefined,
           "ast": {
             "alias": undefined,
             "limit": undefined,
@@ -1031,10 +1057,12 @@ describe('getQueriesPatch', () => {
             "where": undefined,
           },
           "hash": "3c5d3uiyypuxu",
+          "name": undefined,
           "op": "put",
           "ttl": -1,
         },
         "2q7cds8pild5w" => {
+          "args": undefined,
           "ast": {
             "alias": undefined,
             "limit": undefined,
@@ -1051,6 +1079,7 @@ describe('getQueriesPatch', () => {
             "where": undefined,
           },
           "hash": "2q7cds8pild5w",
+          "name": undefined,
           "op": "put",
           "ttl": -1,
         },

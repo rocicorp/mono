@@ -101,6 +101,7 @@ export interface QueryDelegate extends BuilderDelegate {
     gotCallback?: GotCallback | undefined,
   ): () => void;
   updateServerQuery(ast: AST, ttl: TTL): void;
+  updateCustomQuery(customQueryID: CustomQueryID, ttl: TTL): void;
   onTransactionCommit(cb: CommitListener): () => void;
   batchViewUpdates<T>(applyViewUpdates: () => T): T;
   onQueryMaterialized(hash: string, ast: AST, duration: number): void;
@@ -768,7 +769,9 @@ export class QueryImpl<
       : this.#delegate.addServerQuery(ast, ttl, gotCallback);
 
     const updateTTL = (newTTL: TTL) => {
-      this.#delegate.updateServerQuery(ast, newTTL);
+      this.customQueryID
+        ? this.#delegate.updateCustomQuery(this.customQueryID, newTTL)
+        : this.#delegate.updateServerQuery(ast, newTTL);
     };
 
     const input = buildPipeline(ast, this.#delegate);
