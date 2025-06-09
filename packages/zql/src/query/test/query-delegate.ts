@@ -124,6 +124,16 @@ export class QueryDelegateImpl implements QueryDelegate {
     query.ttl = ttl;
   }
 
+  updateCustomQuery(customQueryID: CustomQueryID, ttl: TTL): void {
+    const query = this.addedServerQueries.find(
+      ({name, args}) =>
+        name === customQueryID.name &&
+        (args === undefined || deepEqual(args, customQueryID.args)),
+    );
+    assert(query);
+    query.ttl = ttl;
+  }
+
   getSource(name: string): Source {
     return this.#sources[name];
   }
