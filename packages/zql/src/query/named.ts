@@ -29,9 +29,12 @@ export function query<
   name: string,
   fn: NamedQueryImpl<S, TArg, TReturnQuery>,
 ): NamedQuery<S, TArg, TReturnQuery> {
-  return function queryWrapper(tx: SchemaQuery<S>, ...args: TArg) {
-    return fn(tx, ...args).nameAndArgs(name, args);
-  } as NamedQuery<S, TArg, TReturnQuery>;
+  return ((tx: SchemaQuery<S>, ...args: TArg) =>
+    fn(tx, ...args).nameAndArgs(name, args)) as NamedQuery<
+    S,
+    TArg,
+    TReturnQuery
+  >;
 }
 
 query.bindTo =
