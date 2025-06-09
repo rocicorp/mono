@@ -4,7 +4,7 @@ import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
-import {query, type NamedQuery} from './named.ts';
+import {makeSchemaQuery, query, type NamedQuery} from './named.ts';
 import {ast, defaultFormat} from './query-impl.ts';
 import {StaticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
@@ -83,3 +83,25 @@ function check(named: NamedQuery<typeof schema, [string], any>) {
     hashOfAST((r as StaticQuery<typeof schema, 'issue'>).ast),
   );
 }
+
+test('makeSchemaQuery', () => {
+  const builders = makeSchemaQuery(schema);
+  const q1 = builders.issue.where('id', '123').nameAndArgs('myName', ['123']);
+  expect(ast(q1)).toMatchInlineSnapshot(`
+    {
+      "table": "issue",
+      "where": {
+        "left": {
+          "name": "id",
+          "type": "column",
+        },
+        "op": "=",
+        "right": {
+          "type": "literal",
+          "value": "123",
+        },
+        "type": "simple",
+      },
+    }
+  `);
+});
