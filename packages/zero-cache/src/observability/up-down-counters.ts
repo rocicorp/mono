@@ -1,65 +1,53 @@
 import type {UpDownCounter} from '@opentelemetry/api';
 import {cache, getMeter} from './view-syncer-instruments.ts';
 
-const getOrCreateUpDownCounter = cache<UpDownCounter>();
-function createUpDownCounter(name: string, options: {description: string}) {
-  return getMeter().createUpDownCounter(name, {
-    description: options.description,
-  });
+const getOrCreate = cache<UpDownCounter>();
+
+function getOrCreateUpDownCounter(name: string, description: string) {
+  return getOrCreate(name, name =>
+    getMeter().createUpDownCounter(name, {description}),
+  );
 }
 
 export function activeConnections() {
-  return getOrCreateUpDownCounter('active-connections', name =>
-    createUpDownCounter(name, {
-      description: 'Number of active websocket connections',
-    }),
+  return getOrCreateUpDownCounter(
+    'active-connections',
+    'Number of active websocket connections',
   );
 }
 
 export function activeQueries() {
-  return getOrCreateUpDownCounter('active-queries', name =>
-    createUpDownCounter(name, {
-      description: 'Number of active queries',
-    }),
-  );
+  return getOrCreateUpDownCounter('active-queries', 'Number of active queries');
 }
 
 export function activeClients() {
-  return getOrCreateUpDownCounter('active-clients', name =>
-    createUpDownCounter(name, {
-      description: 'Number of active clients',
-    }),
-  );
+  return getOrCreateUpDownCounter('active-clients', 'Number of active clients');
 }
 
 export function activeClientGroups() {
-  return getOrCreateUpDownCounter('active-client-groups', name =>
-    createUpDownCounter(name, {
-      description: 'Number of active client groups',
-    }),
+  return getOrCreateUpDownCounter(
+    'active-client-groups',
+    'Number of active client groups',
   );
 }
 
 export function activeViewSyncerInstances() {
-  return getOrCreateUpDownCounter('active-view-syncer-instances', name =>
-    createUpDownCounter(name, {
-      description: 'Number of active view syncer instances',
-    }),
+  return getOrCreateUpDownCounter(
+    'active-view-syncer-instances',
+    'Number of active view syncer instances',
   );
 }
 
 export function activePusherInstances() {
-  return getOrCreateUpDownCounter('active-pusher-instances', name =>
-    createUpDownCounter(name, {
-      description: 'Number of active pusher instances',
-    }),
+  return getOrCreateUpDownCounter(
+    'active-pusher-instances',
+    'Number of active pusher instances',
   );
 }
 
 export function activeIvmStorageInstances() {
-  return getOrCreateUpDownCounter('active-ivm-storage-instances', name =>
-    createUpDownCounter(name, {
-      description: 'Number of active ivm operator storage instances',
-    }),
+  return getOrCreateUpDownCounter(
+    'active-ivm-storage-instances',
+    'Number of active ivm operator storage instances',
   );
 }
