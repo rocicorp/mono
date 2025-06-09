@@ -19,5 +19,5 @@ export function hashOfNameAndArgs(
   args: readonly unknown[],
 ): string {
   const argsString = JSON.stringify(args);
-  return h64(`${name}${argsString}`).toString(36);
+  return h64(`${name}:${argsString}`).toString(36);
 }

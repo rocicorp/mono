@@ -22,7 +22,8 @@ import type {ZeroLogContext} from './zero-log-context.ts';
 export type AddQuery = QueryManager['addLegacy'];
 export type AddCustomQuery = QueryManager['addCustom'];
 
-export type UpdateQuery = QueryManager['update'];
+export type UpdateQuery = QueryManager['updateLegacy'];
+export type UpdateCustomQuery = QueryManager['updateCustom'];
 
 /**
  * ZeroContext glues together zql and Replicache. It listens to changes in
@@ -38,6 +39,7 @@ export class ZeroContext implements QueryDelegate {
   readonly #addQuery: AddQuery;
   readonly #addCustomQuery: AddCustomQuery;
   readonly #updateQuery: UpdateQuery;
+  readonly #updateCustomQuery: UpdateCustomQuery;
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
@@ -57,6 +59,7 @@ export class ZeroContext implements QueryDelegate {
     addQuery: AddQuery,
     addCustomQuery: AddCustomQuery,
     updateQuery: UpdateQuery,
+    updateCustomQuery: UpdateCustomQuery,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
     slowMaterializeThreshold: number,
     assertValidRunOptions: (options?: RunOptions) => void,
@@ -64,6 +67,7 @@ export class ZeroContext implements QueryDelegate {
     this.#mainSources = mainSources;
     this.#addQuery = addQuery;
     this.#updateQuery = updateQuery;
+    this.#updateCustomQuery = updateCustomQuery;
     this.#batchViewUpdates = batchViewUpdates;
     this.#lc = lc;
     this.#slowMaterializeThreshold = slowMaterializeThreshold;
@@ -94,6 +98,10 @@ export class ZeroContext implements QueryDelegate {
 
   updateServerQuery(ast: AST, ttl: TTL): void {
     this.#updateQuery(ast, ttl);
+  }
+
+  updateCustomQuery(customQueryID: CustomQueryID, ttl: TTL): void {
+    this.#updateCustomQuery(customQueryID.name, customQueryID.args, ttl);
   }
 
   onQueryMaterialized(hash: string, ast: AST, duration: number): void {

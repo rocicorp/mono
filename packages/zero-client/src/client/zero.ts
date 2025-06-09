@@ -556,7 +556,8 @@ export class Zero<
         this.#queryManager.addLegacy(ast, ttl, gotCallback),
       (customQueryID, ttl, gotCallback) =>
         this.#queryManager.addCustom(customQueryID, ttl, gotCallback),
-      (ast, ttl) => this.#queryManager.update(ast, ttl),
+      (ast, ttl) => this.#queryManager.updateLegacy(ast, ttl),
+      (name, args, ttl) => this.#queryManager.updateCustom(name, args, ttl),
       batchViewUpdates,
       slowMaterializeThreshold,
       assertValidRunOptions,
