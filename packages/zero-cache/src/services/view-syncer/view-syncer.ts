@@ -968,6 +968,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         });
       }
 
+      if (customQueries.size > 0 && !this.#customQueryTransformer) {
+        lc.error?.(
+          'Custom/named queries were requested but no `pull.url` is configured for Zero Cache.',
+        );
+      }
+
       if (this.#customQueryTransformer && customQueries.size > 0) {
         const transformedCustomQueries =
           await this.#customQueryTransformer.transform(

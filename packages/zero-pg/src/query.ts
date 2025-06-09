@@ -42,6 +42,10 @@ export function makeSchemaQuery<S extends Schema>(
         return target[prop];
       }
 
+      if (!(prop in schema.tables)) {
+        throw new Error(`Table ${prop} does not exist in schema`);
+      }
+
       const q = new ZPGQuery(
         schema,
         this.#serverSchema,
