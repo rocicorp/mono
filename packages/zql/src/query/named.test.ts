@@ -1,19 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {expect, expectTypeOf, test} from 'vitest';
-import {schema} from './test/test-schemas.ts';
-import {query, type NamedQuery} from './named.ts';
-import {StaticQuery} from './static-query.ts';
-import {ast, defaultFormat} from './query-impl.ts';
 import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
+import {query, type NamedQuery} from './named.ts';
+import {ast, defaultFormat} from './query-impl.ts';
+import {StaticQuery} from './static-query.ts';
+import {schema} from './test/test-schemas.ts';
 
 const tx = {
   issue: new StaticQuery(schema, 'issue', {table: 'issue'}, defaultFormat),
 } as any;
+
 test('defining a named query', () => {
-  const named = query(schema, 'issue', (tx, id: string) =>
+  const named = query(schema, 'myName', (tx, id: string) =>
     tx.issue.where('id', id),
   );
   const q = named(tx, '123');
@@ -35,7 +36,7 @@ test('defining a named query', () => {
 test('binding query to a schema', () => {
   const bound = query.bindTo(schema);
 
-  const named = bound('issue', (tx, id: string) => tx.issue.where('id', id));
+  const named = bound('myName', (tx, id: string) => tx.issue.where('id', id));
   const q = named(tx, '123');
   expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
     Promise<
@@ -56,7 +57,7 @@ function check(named: NamedQuery<typeof schema, [string], any>) {
   const r = named(tx, '123');
 
   const id = r.customQueryID;
-  expect(id?.name).toBe('issue');
+  expect(id?.name).toBe('myName');
   expect(id?.args).toEqual(['123']);
   expect(ast(r)).toMatchInlineSnapshot(`
     {
