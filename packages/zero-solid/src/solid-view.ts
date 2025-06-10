@@ -70,7 +70,10 @@ export class SolidView implements Output {
 
     this.#setState = setState;
     this.#setState(
-      reconcile([initialRoot, queryComplete === true ? complete : unknown]),
+      reconcile([initialRoot, queryComplete === true ? complete : unknown], {
+        merge: true,
+        key: '__uniqueID',
+      }),
     );
 
     if (isEmptyRoot(initialRoot)) {
@@ -92,7 +95,10 @@ export class SolidView implements Output {
     const builderRoot = this.#builderRoot;
     if (builderRoot) {
       if (!isEmptyRoot(builderRoot)) {
-        this.#setState(0, reconcile(builderRoot));
+        this.#setState(
+          0,
+          reconcile(builderRoot, {merge: true, key: '__uniqueID'}),
+        );
         this.#builderRoot = undefined;
       }
     } else {

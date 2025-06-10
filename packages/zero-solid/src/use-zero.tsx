@@ -10,6 +10,19 @@ const ZeroContext = createContext<(() => Zero<any, any>) | undefined>(
   undefined,
 );
 
+/**
+ * @deprecated Use {@linkcode ZeroProvider} instead.
+ */
+export function createZero<S extends Schema, MD extends CustomMutatorDefs<S>>(
+  options: ZeroOptions<S, MD>,
+): Zero<S, MD> {
+  const opts = {
+    ...options,
+    batchViewUpdates: batch,
+  };
+  return new Zero(opts);
+}
+
 export function useZero<
   S extends Schema,
   MD extends CustomMutatorDefs<S> | undefined = undefined,
