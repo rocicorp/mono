@@ -123,6 +123,7 @@ export {
 } from '../../zql/src/query/named.ts';
 export type {
   HumanReadable,
+  PullRow,
   Query,
   Row,
   RunOptions,
