@@ -172,6 +172,7 @@ export interface Query<
     name: string,
     args: ReadonlyArray<ReadonlyJSONValue>,
   ): Query<TSchema, TTable, TReturn>;
+  delegate(delegate: QueryDelegate): Query<TSchema, TTable, TReturn>;
 
   /**
    * Related is used to add a related query to the current query. This is used
@@ -448,11 +449,6 @@ export type PreloadOptions = {
    * this query after {@linkcode cleanup} has been called.
    */
   ttl?: TTL | undefined;
-  delegate?:
-    | QueryDelegate
-    | (() => QueryDelegate)
-    | {queryDelegate: QueryDelegate}
-    | undefined;
 };
 
 /**

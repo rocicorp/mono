@@ -10,6 +10,7 @@ import {
   table,
   type ExpressionBuilder,
   type Row,
+  query,
 } from '@rocicorp/zero';
 import type {AuthData, Role} from './auth.ts';
 
@@ -200,6 +201,8 @@ type TableName = keyof Schema['tables'];
 export type IssueRow = Row<typeof schema.tables.issue>;
 export type CommentRow = Row<typeof schema.tables.comment>;
 export type UserRow = Row<typeof schema.tables.user>;
+
+export const queries = query(schema);
 
 export const permissions: ReturnType<typeof definePermissions> =
   definePermissions<AuthData, Schema>(schema, () => {
