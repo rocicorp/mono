@@ -5,19 +5,16 @@ import {
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
 import {query, type NamedQuery} from './named.ts';
-import {ast, defaultFormat} from './query-impl.ts';
+import {ast} from './query-impl.ts';
 import {StaticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
 
-const tx = {
-  issue: new StaticQuery(schema, 'issue', {table: 'issue'}, defaultFormat),
-} as any;
-
 test('defining a named query', () => {
-  const named = query(schema, 'myName', (tx, id: string) =>
-    tx.issue.where('id', id),
+  const builders = query(schema);
+  const named = query(schema, 'myName', (id: string) =>
+    builders.issue.where('id', id),
   );
-  const q = named(tx, '123');
+  const q = named('123');
   expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
     Promise<
       {
@@ -35,9 +32,9 @@ test('defining a named query', () => {
 
 test('binding query to a schema', () => {
   const bound = query.bindTo(schema);
-
-  const named = bound('myName', (tx, id: string) => tx.issue.where('id', id));
-  const q = named(tx, '123');
+  const builders = query(schema);
+  const named = bound('myName', (id: string) => builders.issue.where('id', id));
+  const q = named('123');
   expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
     Promise<
       {
@@ -54,7 +51,7 @@ test('binding query to a schema', () => {
 });
 
 function check(named: NamedQuery<typeof schema, [string], any>) {
-  const r = named(tx, '123');
+  const r = named('123');
 
   const id = r.customQueryID;
   expect(id?.name).toBe('myName');

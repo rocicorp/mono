@@ -10,7 +10,7 @@ export type NamedQuery<
   S extends Schema,
   TArg extends ReadonlyArray<ReadonlyJSONValue>,
   TReturnQuery extends Query<S, keyof S['tables'] & string>,
-> = (tx: SchemaQuery<S>, ...args: TArg) => TReturnQuery;
+> = (...args: TArg) => TReturnQuery;
 
 export type CustomQueryID = {
   name: string;
@@ -21,7 +21,7 @@ type NamedQueryImpl<
   S extends Schema,
   TArg extends ReadonlyArray<ReadonlyJSONValue>,
   TReturnQuery extends Query<S, keyof S['tables'] & string>,
-> = (tx: SchemaQuery<S>, ...arg: TArg) => TReturnQuery;
+> = (...arg: TArg) => TReturnQuery;
 
 export function query<S extends Schema>(s: S): SchemaQuery<S>;
 export function query<
@@ -46,8 +46,7 @@ export function query<
     return makeQueryBuilders(s) as SchemaQuery<S>;
   }
 
-  return ((tx: SchemaQuery<S>, ...args: TArg) =>
-    fn(tx, ...args).nameAndArgs(name, args)) as NamedQuery<
+  return ((...args: TArg) => fn(...args).nameAndArgs(name, args)) as NamedQuery<
     S,
     TArg,
     TReturnQuery
