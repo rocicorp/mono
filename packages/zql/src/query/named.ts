@@ -23,15 +23,29 @@ type NamedQueryImpl<
   TReturnQuery extends Query<S, keyof S['tables'] & string>,
 > = (tx: SchemaQuery<S>, ...arg: TArg) => TReturnQuery;
 
+export function query<S extends Schema>(s: S): SchemaQuery<S>;
 export function query<
   S extends Schema,
   TArg extends ReadonlyArray<ReadonlyJSONValue>,
   TReturnQuery extends Query<S, keyof S['tables'] & string>,
 >(
-  _s: S,
+  s: S,
   name: string,
   fn: NamedQueryImpl<S, TArg, TReturnQuery>,
-): NamedQuery<S, TArg, TReturnQuery> {
+): NamedQuery<S, TArg, TReturnQuery>;
+export function query<
+  S extends Schema,
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<S, keyof S['tables'] & string>,
+>(
+  s: S,
+  name?: string | undefined,
+  fn?: NamedQueryImpl<S, TArg, TReturnQuery> | undefined,
+): NamedQuery<S, TArg, TReturnQuery> | SchemaQuery<S> {
+  if (name === undefined || fn === undefined) {
+    return makeQueryBuilders(s) as SchemaQuery<S>;
+  }
+
   return ((tx: SchemaQuery<S>, ...args: TArg) =>
     fn(tx, ...args).nameAndArgs(name, args)) as NamedQuery<
     S,
@@ -55,7 +69,7 @@ query.bindTo =
  * This produces the query builders for a given schema.
  * For use in Zero on the server to process custom queries.
  */
-export function makeSchemaQuery<S extends Schema>(schema: S): SchemaQuery<S> {
+function makeQueryBuilders<S extends Schema>(schema: S): SchemaQuery<S> {
   return new Proxy(
     {},
     {
