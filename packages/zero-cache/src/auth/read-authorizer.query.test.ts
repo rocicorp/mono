@@ -533,6 +533,7 @@ beforeEach(() => {
       return () => {};
     },
     updateServerQuery() {},
+    updateCustomQuery() {},
     onQueryMaterialized() {},
     onTransactionCommit() {
       return () => {};

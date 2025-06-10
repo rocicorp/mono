@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ident} from 'pg-format';
 import type postgres from 'postgres';
+import type {ReadonlyJSONValue} from '../../../../../shared/src/json.ts';
 import {stringCompare} from '../../../../../shared/src/string-compare.ts';
 import type {ClientSchema} from '../../../../../zero-protocol/src/client-schema.ts';
 import {
@@ -16,7 +17,6 @@ import {
   versionFromString,
   versionString,
 } from './types.ts';
-import type {ReadonlyJSONValue} from '../../../../../shared/src/json.ts';
 
 // For readability in the sql statements.
 function schema(shard: ShardID) {
@@ -58,10 +58,6 @@ export function compareInstancesRows(a: InstancesRow, b: InstancesRow) {
 export type ClientsRow = {
   clientGroupID: string;
   clientID: string;
-  /** @deprecated */
-  patchVersion: string;
-  /** @deprecated */
-  deleted: boolean | null;
 };
 
 function createClientsTable(shard: ShardID) {
@@ -70,8 +66,6 @@ function createClientsTable(shard: ShardID) {
 CREATE TABLE ${schema(shard)}.clients (
   "clientGroupID"      TEXT,
   "clientID"           TEXT,
-  "patchVersion"       TEXT NOT NULL,  -- Deprecated
-  "deleted"            BOOL,           -- Deprecated
 
   PRIMARY KEY ("clientGroupID", "clientID"),
 
@@ -80,9 +74,6 @@ CREATE TABLE ${schema(shard)}.clients (
     REFERENCES ${schema(shard)}.instances("clientGroupID")
 );
 
--- For catchup patches.
-CREATE INDEX client_patch_version
-  ON ${schema(shard)}.clients ("patchVersion");
 `;
 }
 export function compareClientsRows(a: ClientsRow, b: ClientsRow) {
@@ -161,7 +152,6 @@ CREATE TABLE ${schema(shard)}.desires (
   "patchVersion"       TEXT NOT NULL,
   "deleted"            BOOL,  -- put vs del "desired" query
   "ttl"                INTERVAL,  -- Time to live for this client
-  "expiresAt"          TIMESTAMPTZ,  -- DEPRECATED Time at which this row expires
   "inactivatedAt"      TIMESTAMPTZ,  -- Time at which this row was inactivated
 
   PRIMARY KEY ("clientGroupID", "clientID", "queryHash"),
@@ -175,9 +165,6 @@ CREATE TABLE ${schema(shard)}.desires (
 -- For catchup patches.
 CREATE INDEX desires_patch_version
   ON ${schema(shard)}.desires ("patchVersion");
-
-CREATE INDEX desires_expires_at
-  ON ${schema(shard)}.desires ("expiresAt");
 
 CREATE INDEX desires_inactivated_at
   ON ${schema(shard)}.desires ("inactivatedAt");

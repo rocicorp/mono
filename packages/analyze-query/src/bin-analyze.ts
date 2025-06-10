@@ -210,6 +210,7 @@ const host: QueryDelegate = {
     return () => {};
   },
   updateServerQuery() {},
+  updateCustomQuery() {},
   onQueryMaterialized() {},
   onTransactionCommit() {
     return () => {};

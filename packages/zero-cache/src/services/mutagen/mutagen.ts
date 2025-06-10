@@ -32,7 +32,7 @@ import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema-versions.ts';
 import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.ts';
-import type {Service} from '../service.ts';
+import type {RefCountedService, Service} from '../service.ts';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -41,7 +41,7 @@ export type MutationError = [
   desc: string,
 ];
 
-export interface Mutagen {
+export interface Mutagen extends RefCountedService {
   processMutation(
     mutation: Mutation,
     authData: JWTPayload | undefined,
@@ -59,6 +59,8 @@ export class MutagenService implements Mutagen, Service {
   readonly #replica: Database;
   readonly #writeAuthorizer: WriteAuthorizerImpl;
   readonly #limiter: SlidingWindowLimiter | undefined;
+  #refCount = 0;
+  #isStopped = false;
 
   constructor(
     lc: LogContext,
@@ -88,6 +90,23 @@ export class MutagenService implements Mutagen, Service {
         config.perUserMutationLimit.max,
       );
     }
+  }
+
+  ref() {
+    assert(!this.#isStopped, 'MutagenService is already stopped');
+    ++this.#refCount;
+  }
+
+  unref() {
+    assert(!this.#isStopped, 'MutagenService is already stopped');
+    --this.#refCount;
+    if (this.#refCount <= 0) {
+      void this.stop();
+    }
+  }
+
+  hasRefs(): boolean {
+    return this.#refCount > 0;
   }
 
   processMutation(
@@ -124,8 +143,12 @@ export class MutagenService implements Mutagen, Service {
   }
 
   stop(): Promise<void> {
+    if (this.#isStopped) {
+      return this.#stopped.promise;
+    }
+    this.#isStopped = true;
     this.#stopped.resolve();
-    return Promise.resolve();
+    return this.#stopped.promise;
   }
 }
 

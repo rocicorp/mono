@@ -4,7 +4,7 @@ import {schema} from './schema.ts';
 import {test} from 'vitest';
 import '../helpers/comparePg.ts';
 import {defaultFormat} from '../../../zql/src/query/query-impl.ts';
-import type {AnyQuery} from '../../../zql/src/query/test/util.ts';
+import type {AnyStaticQuery} from '../../../zql/src/query/test/util.ts';
 import {StaticQuery} from '../../../zql/src/query/static-query.ts';
 import {staticToRunnable} from '../helpers/static.ts';
 
@@ -37,7 +37,7 @@ const z = {
 };
 
 const f = new Function('z', `return z.query.${QUERY_STRING};`);
-const query: AnyQuery = f(z);
+const query: AnyStaticQuery = f(z);
 
 test('manual zql string', async () => {
   await runAndCompare(

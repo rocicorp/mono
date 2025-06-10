@@ -389,8 +389,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: false,
         },
       ],
       queries: [
@@ -489,8 +487,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: false,
         },
       ],
       queries: [
@@ -710,14 +706,10 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'dooClient',
-          patchVersion: '1a8',
-          deleted: false,
         },
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: false,
         },
       ],
       queries: [
@@ -1097,26 +1089,18 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          deleted: false,
-          patchVersion: '1a9:01',
         },
         {
           clientGroupID: 'abc123',
           clientID: 'barClient',
-          deleted: false,
-          patchVersion: '1aa:01',
         },
         {
           clientGroupID: 'abc123',
           clientID: 'bonkClient',
-          deleted: false,
-          patchVersion: '1aa:01',
         },
         {
           clientGroupID: 'abc123',
           clientID: 'dooClient',
-          deleted: false,
-          patchVersion: '1a8',
         },
       ],
       queries: [
@@ -1343,8 +1327,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: false,
         },
       ],
       queries: [
@@ -1465,8 +1447,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -1814,8 +1794,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          deleted: null,
-          patchVersion: '1a9:01',
         },
       ],
       queries: [
@@ -1947,8 +1925,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -2470,8 +2446,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -3387,8 +3361,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: false,
         },
       ],
       queries: [
@@ -3822,8 +3794,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -4137,8 +4107,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -4286,8 +4254,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -4353,8 +4319,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -4495,8 +4459,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -4562,8 +4524,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -4765,8 +4725,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -4832,8 +4790,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -4988,8 +4944,6 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'fooClient',
-          patchVersion: '1a9:01',
-          deleted: null,
         },
       ],
       queries: [
@@ -5147,8 +5101,6 @@ describe('view-syncer/cvr', () => {
           {
             clientGroupID: 'abc123',
             clientID: 'fooClient',
-            patchVersion: '1a9:01',
-            deleted: null,
           },
         ],
         queries: [
@@ -5313,8 +5265,6 @@ describe('view-syncer/cvr', () => {
           {
             clientGroupID: 'abc123',
             clientID: 'fooClient',
-            patchVersion: '1a9:01',
-            deleted: null,
           },
         ],
         queries: [
@@ -5443,8 +5393,6 @@ describe('view-syncer/cvr', () => {
           {
             clientGroupID: 'abc123',
             clientID: 'fooClient',
-            patchVersion: '1a9:01',
-            deleted: null,
           },
         ],
         queries: [
@@ -5632,8 +5580,6 @@ describe('view-syncer/cvr', () => {
           {
             clientGroupID: 'abc123',
             clientID: 'fooClient',
-            patchVersion: '1a9:01',
-            deleted: null,
           },
         ],
         queries: [
@@ -5748,20 +5694,14 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'client-a',
-          patchVersion: '1aa',
-          deleted: null,
         },
         {
           clientGroupID: 'abc123',
           clientID: 'client-b',
-          patchVersion: '1aa',
-          deleted: null,
         },
         {
           clientGroupID: 'abc123',
           clientID: 'client-c',
-          patchVersion: '1aa',
-          deleted: null,
         },
       ],
       queries: [
@@ -5946,14 +5886,10 @@ describe('view-syncer/cvr', () => {
           {
             "clientGroupID": "abc123",
             "clientID": "client-a",
-            "deleted": null,
-            "patchVersion": "1aa",
           },
           {
             "clientGroupID": "abc123",
             "clientID": "client-c",
-            "deleted": null,
-            "patchVersion": "1aa",
           },
         ],
         "desires": Result [
@@ -6067,20 +6003,14 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           clientID: 'client-a',
-          patchVersion: '1aa',
-          deleted: null,
         },
         {
           clientGroupID: 'def456',
           clientID: 'client-b',
-          patchVersion: '1aa',
-          deleted: null,
         },
         {
           clientGroupID: 'abc123',
           clientID: 'client-c',
-          patchVersion: '1aa',
-          deleted: null,
         },
       ],
       queries: [
@@ -6263,14 +6193,10 @@ describe('view-syncer/cvr', () => {
           {
             "clientGroupID": "abc123",
             "clientID": "client-a",
-            "deleted": null,
-            "patchVersion": "1aa",
           },
           {
             "clientGroupID": "abc123",
             "clientID": "client-c",
-            "deleted": null,
-            "patchVersion": "1aa",
           },
         ],
         "desires": Result [
@@ -6484,14 +6410,10 @@ describe('view-syncer/cvr', () => {
             {
               "clientGroupID": "abc123",
               "clientID": "client-a",
-              "deleted": null,
-              "patchVersion": "1aa",
             },
             {
               "clientGroupID": "abc123",
               "clientID": "client-c",
-              "deleted": null,
-              "patchVersion": "1aa",
             },
           ],
           "desires": Result [

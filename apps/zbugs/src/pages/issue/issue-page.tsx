@@ -543,7 +543,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           {login.loginState?.decoded.role === 'crew' ? (
             <div className="sidebar-item">
               <p className="issue-detail-label">Visibility</p>
-              <Combobox
+              <Combobox<'public' | 'internal'>
                 editable={false}
                 disabled={!canEdit}
                 items={[

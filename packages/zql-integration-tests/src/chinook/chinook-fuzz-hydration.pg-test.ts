@@ -8,7 +8,10 @@ import {test} from 'vitest';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
 import '../helpers/comparePg.ts';
 import {ast} from '../../../zql/src/query/query-impl.ts';
-import type {AnyQuery} from '../../../zql/src/query/test/util.ts';
+import type {
+  AnyQuery,
+  AnyStaticQuery,
+} from '../../../zql/src/query/test/util.ts';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
 import {staticToRunnable} from '../helpers/static.ts';
@@ -71,7 +74,7 @@ async function runCase({
     await runAndCompare(
       schema,
       staticToRunnable({
-        query: query[0],
+        query: query[0] as AnyStaticQuery,
         schema,
         harness,
       }),
@@ -99,7 +102,7 @@ async function shrink(generations: AnyQuery[], seed: number) {
       await runAndCompare(
         schema,
         staticToRunnable({
-          query: generations[mid],
+          query: generations[mid] as AnyStaticQuery,
           schema,
           harness,
         }),
