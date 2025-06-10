@@ -75,9 +75,9 @@ export class Syncer implements SingletonService {
       id => viewSyncerFactory(id, notifier.subscribe(), this.#drainCoordinator),
       v => v.keepalive(),
     );
-    this.#mutagens = new ServiceRunner(lc, mutagenFactory);
+    this.#mutagens = new ServiceRunner(lc, mutagenFactory, m => m.hasRefs());
     if (pusherFactory) {
-      this.#pushers = new ServiceRunner(lc, pusherFactory);
+      this.#pushers = new ServiceRunner(lc, pusherFactory, p => p.hasRefs());
     }
     this.#parent = parent;
     this.#wss = new WebSocketServer({noServer: true});
@@ -89,6 +89,10 @@ export class Syncer implements SingletonService {
       this.#parent,
     );
   }
+
+  // TODO:
+  // 1. track all connections
+  // 2. if no connections for a client group, spin down mutagens and pushers
 
   readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {
     this.#lc.debug?.(
@@ -131,6 +135,11 @@ export class Syncer implements SingletonService {
       this.#lc.debug?.(`No auth token received for clientID ${clientID}`);
     }
 
+    const mutagen = this.#mutagens.getService(clientGroupID);
+    const pusher = this.#pushers?.getService(clientGroupID);
+    // a new connection is using the mutagen and pusher. Bump their ref counts.
+    mutagen.ref();
+    pusher?.ref();
     const connection = new Connection(
       this.#lc,
       params,
@@ -145,13 +154,17 @@ export class Syncer implements SingletonService {
             }
           : undefined,
         this.#viewSyncers.getService(clientGroupID),
-        this.#mutagens.getService(clientGroupID),
-        this.#pushers?.getService(clientGroupID),
+        mutagen,
+        pusher,
       ),
       () => {
         if (this.#connections.get(clientID) === connection) {
           this.#connections.delete(clientID);
         }
+        // Connection is closed, so we can unref the mutagen and pusher.
+        // If their ref count is zero, they will stop themselves and set themselves invalid.
+        mutagen.unref();
+        pusher?.unref();
       },
     );
     this.#connections.set(clientID, connection);
