@@ -456,17 +456,10 @@ export class CVRStore {
     });
   }
 
-  /**
-   * @param patchVersion This is only needed to allow old view syncers to function.
-   */
-  insertClient(client: ClientRecord, patchVersion: CVRVersion): void {
+  insertClient(client: ClientRecord): void {
     const change: ClientsRow = {
       clientGroupID: this.#id,
       clientID: client.id,
-
-      // Written so that exist clients that read do not fail.
-      patchVersion: versionString(patchVersion),
-      deleted: false,
     };
 
     this.#writes.add({

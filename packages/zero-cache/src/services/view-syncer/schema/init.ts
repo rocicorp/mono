@@ -111,6 +111,16 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migrateV10ToV11: Migration = {
+    migrateSchema: async (_, tx) => {
+      await tx`DROP INDEX IF EXISTS ${tx(schema)}.desires_expires_at`;
+      await tx`ALTER TABLE ${tx(schema)}.queries DROP COLUMN "expiresAt"`;
+      await tx`DROP INDEX IF EXISTS ${tx(schema)}.client_patch_version`;
+      await tx`ALTER TABLE ${tx(schema)}.clients DROP COLUMN "patchVersion"`;
+      await tx`ALTER TABLE ${tx(schema)}.clients DROP COLUMN "deleted"`;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -126,6 +136,9 @@ export async function initViewSyncerSchema(
     // custom queries. clientAST is now optional to support migrating
     // off client queries.
     10: migrateV9ToV10,
+    // V11 removes the deprecated queries."expiresAt", clients."patchVersion",
+    // clients."deleted" columns.
+    11: migrateV10ToV11,
   };
 
   await runSchemaMigrations(
