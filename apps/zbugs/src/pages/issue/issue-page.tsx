@@ -1,4 +1,3 @@
-import {escapeLike, type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useWindowVirtualizer, Virtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
@@ -23,10 +22,8 @@ import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
 import {
-  queries,
   type CommentRow,
   type IssueRow,
-  type Schema,
   type UserRow,
 } from '../../../shared/schema.ts';
 import statusClosed from '../../assets/icons/issue-closed.svg';
@@ -58,11 +55,13 @@ import {
 import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {CACHE_AWHILE} from '../../query-cache-policy.ts';
-import {links, type ListContext, type ZbugsHistoryState} from '../../routes.ts';
+import {links, type ZbugsHistoryState} from '../../routes.ts';
 import {preload} from '../../zero-setup.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
+import {emojiChange, issueDetail, prevNext} from '../../../shared/queries.ts';
+import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
 
 function softNavigate(path: string, state?: ZbugsHistoryState) {
   navigate(path, {state});
@@ -72,8 +71,6 @@ function softNavigate(path: string, state?: ZbugsHistoryState) {
 }
 
 const emojiToastShowDuration = 3_000;
-
-export const INITIAL_COMMENT_LIMIT = 100;
 
 export function IssuePage({onReady}: {onReady: () => void}) {
   const z = useZero();
@@ -85,27 +82,11 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
   const listContext = zbugsHistoryState?.zbugsListContext;
-  const q = queries.issue
-    .where(idField, id)
-    .related('emoji', emoji => emoji.related('creator'))
-    .related('creator')
-    .related('assignee')
-    .related('labels')
-    .related('viewState', viewState =>
-      viewState.where('userID', z.userID).one(),
-    )
-    .related('comments', comments =>
-      comments
-        .related('creator')
-        .related('emoji', emoji => emoji.related('creator'))
-        // One more than we display so we can detect if there are more to load.
-        .limit(INITIAL_COMMENT_LIMIT + 1)
-        .orderBy('created', 'desc')
-        .orderBy('id', 'desc'),
-    )
-    .one();
 
-  const [issue, issueResult] = useQuery(q, CACHE_AWHILE);
+  const [issue, issueResult] = useQuery(
+    issueDetail(idField, id, z.userID),
+    CACHE_AWHILE,
+  );
   useEffect(() => {
     if (issue || issueResult.type === 'complete') {
       onReady();
@@ -221,7 +202,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     enabled: listContext !== undefined && issueSnapshot !== undefined,
   } as const;
   const [next] = useQuery(
-    buildListQuery(listContext, displayed, 'next'),
+    prevNext(listContext?.params ?? null, displayed ?? null, 'next'),
     useQueryOptions,
   );
   useKeypress('j', () => {
@@ -231,7 +212,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   });
 
   const [prev] = useQuery(
-    buildListQuery(listContext, displayed, 'prev'),
+    prevNext(listContext?.params ?? null, displayed ?? null, 'prev'),
     useQueryOptions,
   );
   useKeypress('k', () => {
@@ -917,54 +898,6 @@ function noop() {
   // no op
 }
 
-function buildListQuery(
-  listContext: ListContext | undefined,
-  issue: Row<Schema['tables']['issue']> | undefined,
-  dir: 'next' | 'prev',
-) {
-  if (!listContext || !issue) {
-    return queries.issue.one();
-  }
-  const {
-    open,
-    creator,
-    assignee,
-    labels,
-    textFilter,
-    sortField,
-    sortDirection,
-  } = listContext.params;
-  const orderByDir =
-    dir === 'next' ? sortDirection : sortDirection === 'asc' ? 'desc' : 'asc';
-  let q = queries.issue
-    .orderBy(sortField, orderByDir)
-    .orderBy('id', orderByDir)
-    .start(issue)
-    .one();
-  if (open !== undefined) {
-    q = q.where('open', open);
-  }
-
-  if (creator) {
-    q = q.whereExists('creator', q => q.where('login', creator));
-  }
-
-  if (assignee) {
-    q = q.whereExists('assignee', q => q.where('login', assignee));
-  }
-
-  if (textFilter) {
-    q = q.where('title', 'ILIKE', `%${escapeLike(textFilter)}%`);
-  }
-
-  if (labels) {
-    for (const label of labels) {
-      q = q.whereExists('labels', q => q.where('name', label));
-    }
-  }
-  return q;
-}
-
 type Issue = IssueRow & {
   readonly comments: readonly CommentRow[];
 };
@@ -975,12 +908,7 @@ function useEmojiChangeListener(
 ) {
   const enabled = issue !== undefined;
   const issueID = issue?.id;
-  const [emojis, result] = useQuery(
-    queries.emoji
-      .where('subjectID', issueID ?? '')
-      .related('creator', creator => creator.one()),
-    {enabled},
-  );
+  const [emojis, result] = useQuery(emojiChange(issueID ?? ''), {enabled});
 
   const lastEmojis = useRef<Map<string, Emoji> | undefined>();
 

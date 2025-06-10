@@ -3,7 +3,7 @@ import '@dotenvx/dotenvx/config';
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
-import type {ReadonlyJSONValue} from '@rocicorp/zero';
+import type {NamedQueryImpl, ReadonlyJSONValue} from '@rocicorp/zero';
 import {
   transformRequestMessageSchema,
   type TransformResponseMessage,
@@ -18,7 +18,8 @@ import {must} from '../../../packages/shared/src/must.ts';
 import * as v from '../../../packages/shared/src/valita.ts';
 import {handlePush} from '../server/push-handler.ts';
 import {authDataSchema, type AuthData} from '../shared/auth.ts';
-import {queries} from '../shared/schema.ts';
+import * as serverQueries from '../server/server-queries.ts';
+import * as sharedQueries from '../shared/queries.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -142,13 +143,13 @@ fastify.post<{
   reply.send(response);
 });
 
-const emptyQuery = queries.issue.where(({or}) => or());
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
 }>('/api/pull', async (request, reply) => {
+  let authData;
   try {
-    await maybeVerifyAuth(request.headers);
+    authData = await maybeVerifyAuth(request.headers);
   } catch (e) {
     if (e instanceof Error) {
       reply.status(401).send(e.message);
@@ -157,17 +158,45 @@ fastify.post<{
     throw e;
   }
 
+  const context: serverQueries.ServerContext = {
+    role: authData?.role,
+  };
   const transformRequest = v.parse(request.body, transformRequestMessageSchema);
   const response: TransformResponseMessage = [
     'transformed',
-    transformRequest[1].map(req => ({
-      id: req.id,
-      name: req.name,
-      ast: emptyQuery.ast,
-    })),
+    transformRequest[1].map(req => {
+      let query;
+      const key = req.name;
+      if (isServerQuery(key)) {
+        query = (serverQueries[key] as serverQueries.ServerQuery)(
+          context,
+          ...req.args,
+        );
+      } else if (isSharedQuery(key)) {
+        query = (sharedQueries[key] as NamedQueryImpl)(...req.args);
+      } else {
+        throw new Error(`Unknown query: ${req.name}`);
+      }
+
+      const ret = {
+        id: req.id,
+        name: req.name,
+        ast: query.ast,
+      };
+
+      return ret;
+    }),
   ];
   reply.send(response);
 });
+
+function isServerQuery(key: string): key is keyof typeof serverQueries {
+  return key in serverQueries;
+}
+
+function isSharedQuery(key: string): key is keyof typeof sharedQueries {
+  return key in sharedQueries;
+}
 
 async function maybeVerifyAuth(
   headers: IncomingHttpHeaders,
