@@ -195,6 +195,10 @@ export abstract class AbstractQuery<
     return this._ast;
   }
 
+  get ast() {
+    return this._completeAst();
+  }
+
   hash(): string {
     if (!this.#hash) {
       this.#hash = hashOfAST(this._completeAst());

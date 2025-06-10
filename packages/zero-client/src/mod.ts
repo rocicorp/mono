@@ -46,6 +46,14 @@ export type {
   SimpleOperator,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
+export {
+  transformRequestMessageSchema,
+  transformResponseMessageSchema,
+  type TransformRequestBody,
+  type TransformRequestMessage,
+  type TransformResponseBody,
+  type TransformResponseMessage,
+} from '../../zero-protocol/src/custom-queries.ts';
 export {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 export {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 export {
@@ -108,6 +116,11 @@ export type {
   ExpressionBuilder,
   ExpressionFactory,
 } from '../../zql/src/query/expression.ts';
+export {
+  query,
+  type CustomQueryID,
+  type NamedQuery,
+} from '../../zql/src/query/named.ts';
 export type {
   HumanReadable,
   Query,
