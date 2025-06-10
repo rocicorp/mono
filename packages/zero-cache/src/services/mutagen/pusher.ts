@@ -103,12 +103,12 @@ export class PusherService implements Service, Pusher {
   }
 
   ref() {
-    assert(!this.#isStopped, 'MutagenService is already stopped');
+    assert(!this.#isStopped, 'PusherService is already stopped');
     ++this.#refCount;
   }
 
   unref() {
-    assert(!this.#isStopped, 'MutagenService is already stopped');
+    assert(!this.#isStopped, 'PusherService is already stopped');
     --this.#refCount;
     if (this.#refCount <= 0) {
       void this.stop();

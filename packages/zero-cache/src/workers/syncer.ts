@@ -90,10 +90,6 @@ export class Syncer implements SingletonService {
     );
   }
 
-  // TODO:
-  // 1. track all connections
-  // 2. if no connections for a client group, spin down mutagens and pushers
-
   readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {
     this.#lc.debug?.(
       'creating connection',
@@ -140,35 +136,42 @@ export class Syncer implements SingletonService {
     // a new connection is using the mutagen and pusher. Bump their ref counts.
     mutagen.ref();
     pusher?.ref();
-    const connection = new Connection(
-      this.#lc,
-      params,
-      ws,
-      new SyncerWsMessageHandler(
+    let connection: Connection;
+    try {
+      connection = new Connection(
         this.#lc,
         params,
-        auth !== undefined && decodedToken !== undefined
-          ? {
-              raw: auth,
-              decoded: decodedToken,
-            }
-          : undefined,
-        this.#viewSyncers.getService(clientGroupID),
-        mutagen,
-        pusher,
-      ),
-      () => {
-        if (this.#connections.get(clientID) === connection) {
-          this.#connections.delete(clientID);
-        }
-        // Connection is closed, so we can unref the mutagen and pusher.
-        // If their ref count is zero, they will stop themselves and set themselves invalid.
-        mutagen.unref();
-        pusher?.unref();
-      },
-    );
-    this.#connections.set(clientID, connection);
+        ws,
+        new SyncerWsMessageHandler(
+          this.#lc,
+          params,
+          auth !== undefined && decodedToken !== undefined
+            ? {
+                raw: auth,
+                decoded: decodedToken,
+              }
+            : undefined,
+          this.#viewSyncers.getService(clientGroupID),
+          mutagen,
+          pusher,
+        ),
+        () => {
+          if (this.#connections.get(clientID) === connection) {
+            this.#connections.delete(clientID);
+          }
+          // Connection is closed. We can unref the mutagen and pusher.
+          // If their ref counts are zero, they will stop themselves and set themselves invalid.
+          mutagen.unref();
+          pusher?.unref();
+        },
+      );
+    } catch (e) {
+      mutagen.unref();
+      pusher?.unref();
+      throw e;
+    }
 
+    this.#connections.set(clientID, connection);
     connection.init();
     if (params.initConnectionMsg) {
       this.#lc.debug?.(
