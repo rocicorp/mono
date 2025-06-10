@@ -38,3 +38,9 @@ export interface SingletonService extends Service {
    */
   drain?(): Promise<void>;
 }
+
+export interface RefCountedService extends Service {
+  ref(): void;
+  unref(): void;
+  hasRefs(): boolean;
+}

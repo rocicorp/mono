@@ -75,9 +75,9 @@ export class Syncer implements SingletonService {
       id => viewSyncerFactory(id, notifier.subscribe(), this.#drainCoordinator),
       v => v.keepalive(),
     );
-    this.#mutagens = new ServiceRunner(lc, mutagenFactory);
+    this.#mutagens = new ServiceRunner(lc, mutagenFactory, m => m.hasRefs());
     if (pusherFactory) {
-      this.#pushers = new ServiceRunner(lc, pusherFactory);
+      this.#pushers = new ServiceRunner(lc, pusherFactory, p => p.hasRefs());
     }
     this.#parent = parent;
     this.#wss = new WebSocketServer({noServer: true});
@@ -131,31 +131,47 @@ export class Syncer implements SingletonService {
       this.#lc.debug?.(`No auth token received for clientID ${clientID}`);
     }
 
-    const connection = new Connection(
-      this.#lc,
-      params,
-      ws,
-      new SyncerWsMessageHandler(
+    const mutagen = this.#mutagens.getService(clientGroupID);
+    const pusher = this.#pushers?.getService(clientGroupID);
+    // a new connection is using the mutagen and pusher. Bump their ref counts.
+    mutagen.ref();
+    pusher?.ref();
+    let connection: Connection;
+    try {
+      connection = new Connection(
         this.#lc,
         params,
-        auth !== undefined && decodedToken !== undefined
-          ? {
-              raw: auth,
-              decoded: decodedToken,
-            }
-          : undefined,
-        this.#viewSyncers.getService(clientGroupID),
-        this.#mutagens.getService(clientGroupID),
-        this.#pushers?.getService(clientGroupID),
-      ),
-      () => {
-        if (this.#connections.get(clientID) === connection) {
-          this.#connections.delete(clientID);
-        }
-      },
-    );
-    this.#connections.set(clientID, connection);
+        ws,
+        new SyncerWsMessageHandler(
+          this.#lc,
+          params,
+          auth !== undefined && decodedToken !== undefined
+            ? {
+                raw: auth,
+                decoded: decodedToken,
+              }
+            : undefined,
+          this.#viewSyncers.getService(clientGroupID),
+          mutagen,
+          pusher,
+        ),
+        () => {
+          if (this.#connections.get(clientID) === connection) {
+            this.#connections.delete(clientID);
+          }
+          // Connection is closed. We can unref the mutagen and pusher.
+          // If their ref counts are zero, they will stop themselves and set themselves invalid.
+          mutagen.unref();
+          pusher?.unref();
+        },
+      );
+    } catch (e) {
+      mutagen.unref();
+      pusher?.unref();
+      throw e;
+    }
 
+    this.#connections.set(clientID, connection);
     connection.init();
     if (params.initConnectionMsg) {
       this.#lc.debug?.(
