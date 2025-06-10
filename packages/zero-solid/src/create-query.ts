@@ -47,11 +47,11 @@ export function createQuery<
 
   const z = useZero();
 
-  // Wrap in in createMemo to ensure a new view is created if the querySignal changes.
+  // Wrap in in createComputed to ensure a new view is created if the querySignal changes.
   createComputed(() => {
     const query = querySignal();
     const ttl = normalize(options)?.ttl ?? DEFAULT_TTL;
-    getView(z().clientID, query, ttl, setState);
+    createView(z().clientID, query, ttl, setState);
   });
 
   return [() => state[0][''] as HumanReadable<TReturn>, () => state[1]];
@@ -68,13 +68,11 @@ export function useQuery<
   return createQuery(querySignal, options);
 }
 
-type UnknownSolidView = SolidView;
+const views = new Map<string, SolidView>();
 
-const views = new Map<string, UnknownSolidView>();
+const viewRefCount = new RefCount<SolidView>();
 
-const viewRefCount = new RefCount<UnknownSolidView>();
-
-function getView<
+function createView<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
