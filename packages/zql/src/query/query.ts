@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import {type AST, type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   LastInTuple,
@@ -164,6 +164,7 @@ export interface Query<
    * the server which tracks queries by `name:args`.
    */
   hash(): string;
+  readonly ast: AST;
   readonly customQueryID: CustomQueryID | undefined;
 
   nameAndArgs(

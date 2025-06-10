@@ -856,16 +856,6 @@ test('custom materialize factory', () => {
   >();
 });
 
-test('Make sure that QueryInternal does not expose the ast', () => {
-  const query = mockQuery as unknown as Query<Schema, 'test'>;
-  // @ts-expect-error - ast is not part of the public API
-  query.ast;
-
-  const internalQuery = mockQuery as unknown as Query<Schema, 'test'>;
-  // @ts-expect-error - ast is not part of the public API
-  internalQuery.ast;
-});
-
 describe('Where expression factory and builder', () => {
   test('does not change the type', () => {
     const query = mockQuery as unknown as Query<Schema, 'test'>;
