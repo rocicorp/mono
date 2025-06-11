@@ -46,6 +46,7 @@ import {NotImplementedError} from '../error.ts';
 import type {CustomQueryID} from './named.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {GotCallback, QueryDelegate} from './query-delegate.ts';
+import {must} from '../../../shared/src/must.ts';
 
 type AnyQuery = Query<Schema, string, any>;
 
@@ -98,6 +99,7 @@ export abstract class AbstractQuery<
 > implements Query<TSchema, TTable, TReturn>
 {
   readonly #schema: TSchema;
+  protected readonly _delegate: QueryDelegate | undefined;
   readonly #tableName: TTable;
   readonly _ast: AST;
   readonly format: Format;
@@ -107,6 +109,7 @@ export abstract class AbstractQuery<
   readonly customQueryID: CustomQueryID | undefined;
 
   constructor(
+    delegate: QueryDelegate | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST,
@@ -116,6 +119,7 @@ export abstract class AbstractQuery<
     currentJunction?: string | undefined,
   ) {
     this.#schema = schema;
+    this._delegate = delegate;
     this.#tableName = tableName;
     this._ast = ast;
     this.format = format;
@@ -124,11 +128,24 @@ export abstract class AbstractQuery<
     this.customQueryID = customQueryID;
   }
 
+  delegate(delegate: QueryDelegate): Query<TSchema, TTable, TReturn> {
+    return this[newQuerySymbol](
+      delegate,
+      this.#schema,
+      this.#tableName,
+      this._ast,
+      this.format,
+      this.customQueryID,
+      this.#currentJunction,
+    );
+  }
+
   nameAndArgs(
     name: string,
     args: ReadonlyArray<ReadonlyJSONValue>,
   ): Query<TSchema, TTable, TReturn> {
     return this[newQuerySymbol](
+      this._delegate,
       this.#schema,
       this.#tableName,
       this._ast,
@@ -162,6 +179,7 @@ export abstract class AbstractQuery<
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
+    delegate: QueryDelegate | undefined,
     schema: TSchema,
     table: TTable,
     ast: AST,
@@ -172,6 +190,7 @@ export abstract class AbstractQuery<
 
   one = (): Query<TSchema, TTable, TReturn | undefined> =>
     this[newQuerySymbol](
+      this._delegate,
       this.#schema,
       this.#tableName,
       {
@@ -208,6 +227,7 @@ export abstract class AbstractQuery<
     if (isOneHop(related)) {
       const {destSchema, destField, sourceField, cardinality} = related[0];
       let q: AnyQuery = this[newQuerySymbol](
+        this._delegate,
         this.#schema,
         destSchema,
         {
@@ -239,6 +259,7 @@ export abstract class AbstractQuery<
       );
 
       return this[newQuerySymbol](
+        this._delegate,
         this.#schema,
         this.#tableName,
         {
@@ -276,6 +297,7 @@ export abstract class AbstractQuery<
       const junctionSchema = firstRelation.destSchema;
       const sq = cb(
         this[newQuerySymbol](
+          this._delegate,
           this.#schema,
           destSchema,
           {
@@ -297,6 +319,7 @@ export abstract class AbstractQuery<
       assert(isCompoundKey(secondRelation.destField), 'Invalid relationship');
 
       return this[newQuerySymbol](
+        this._delegate,
         this.#schema,
         this.#tableName,
         {
@@ -382,6 +405,7 @@ export abstract class AbstractQuery<
     }
 
     return this[newQuerySymbol](
+      this._delegate,
       this.#schema,
       this.#tableName,
       {
@@ -399,6 +423,7 @@ export abstract class AbstractQuery<
     opts?: {inclusive: boolean} | undefined,
   ): Query<TSchema, TTable, TReturn> =>
     this[newQuerySymbol](
+      this._delegate,
       this.#schema,
       this.#tableName,
       {
@@ -428,6 +453,7 @@ export abstract class AbstractQuery<
     }
 
     return this[newQuerySymbol](
+      this._delegate,
       this.#schema,
       this.#tableName,
       {
@@ -451,6 +477,7 @@ export abstract class AbstractQuery<
       );
     }
     return this[newQuerySymbol](
+      this._delegate,
       this.#schema,
       this.#tableName,
       {
@@ -477,6 +504,7 @@ export abstract class AbstractQuery<
 
       const sq = cb(
         this[newQuerySymbol](
+          this._delegate,
           this.#schema,
           destSchema,
           {
@@ -515,6 +543,7 @@ export abstract class AbstractQuery<
       const junctionSchema = firstRelation.destSchema;
       const queryToDest = cb(
         this[newQuerySymbol](
+          this._delegate,
           this.#schema,
           destSchema,
           {
@@ -642,11 +671,10 @@ export class QueryImpl<
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
 > extends AbstractQuery<TSchema, TTable, TReturn> {
-  readonly #delegate: QueryDelegate;
   readonly #system: System;
 
   constructor(
-    delegate: QueryDelegate,
+    delegate: QueryDelegate | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST = {table: tableName},
@@ -656,6 +684,7 @@ export class QueryImpl<
     currentJunction?: string | undefined,
   ) {
     super(
+      delegate,
       schema,
       tableName,
       ast,
@@ -665,7 +694,6 @@ export class QueryImpl<
       currentJunction,
     );
     this.#system = system;
-    this.#delegate = delegate;
   }
 
   get [completedAstSymbol](): AST {
@@ -677,6 +705,7 @@ export class QueryImpl<
     TTable extends string,
     TReturn,
   >(
+    delegate: QueryDelegate | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST,
@@ -685,7 +714,7 @@ export class QueryImpl<
     currentJunction: string | undefined,
   ): QueryImpl<TSchema, TTable, TReturn> {
     return new QueryImpl(
-      this.#delegate,
+      delegate,
       schema,
       tableName,
       ast,
@@ -700,6 +729,10 @@ export class QueryImpl<
     factoryOrTTL?: ViewFactory<TSchema, TTable, TReturn, T> | TTL,
     ttl: TTL = DEFAULT_TTL,
   ): T {
+    const delegate = must(
+      this._delegate,
+      'materialize requires a query delegate to be set',
+    );
     const t0 = Date.now();
     let factory: ViewFactory<TSchema, TTable, TReturn, T> | undefined;
     if (typeof factoryOrTTL === 'function') {
@@ -709,26 +742,26 @@ export class QueryImpl<
     }
     const ast = this._completeAst();
     const queryCompleteResolver = resolver<true>();
-    let queryComplete = this.#delegate.defaultQueryComplete;
+    let queryComplete = delegate.defaultQueryComplete;
     const gotCallback: GotCallback = got => {
       if (got) {
         const t1 = Date.now();
-        this.#delegate.onQueryMaterialized(this.hash(), ast, t1 - t0);
+        delegate.onQueryMaterialized(this.hash(), ast, t1 - t0);
         queryComplete = true;
         queryCompleteResolver.resolve(true);
       }
     };
     const removeServerQuery = this.customQueryID
-      ? this.#delegate.addCustomQuery(this.customQueryID, ttl, gotCallback)
-      : this.#delegate.addServerQuery(ast, ttl, gotCallback);
+      ? delegate.addCustomQuery(this.customQueryID, ttl, gotCallback)
+      : delegate.addServerQuery(ast, ttl, gotCallback);
 
     const updateTTL = (newTTL: TTL) => {
       this.customQueryID
-        ? this.#delegate.updateCustomQuery(this.customQueryID, newTTL)
-        : this.#delegate.updateServerQuery(ast, newTTL);
+        ? delegate.updateCustomQuery(this.customQueryID, newTTL)
+        : delegate.updateServerQuery(ast, newTTL);
     };
 
-    const input = buildPipeline(ast, this.#delegate);
+    const input = buildPipeline(ast, delegate);
     let removeCommitObserver: (() => void) | undefined;
 
     const onDestroy = () => {
@@ -737,14 +770,14 @@ export class QueryImpl<
       removeServerQuery();
     };
 
-    const view = this.#delegate.batchViewUpdates(() =>
+    const view = delegate.batchViewUpdates(() =>
       (factory ?? arrayViewFactory)(
         this,
         input,
         this.format,
         onDestroy,
         cb => {
-          removeCommitObserver = this.#delegate.onTransactionCommit(cb);
+          removeCommitObserver = delegate.onTransactionCommit(cb);
         },
         queryComplete || queryCompleteResolver.promise,
         updateTTL,
@@ -755,7 +788,11 @@ export class QueryImpl<
   }
 
   run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
-    this.#delegate.assertValidRunOptions(options);
+    const delegate = must(
+      this._delegate,
+      'run requires a query delegate to be set',
+    );
+    delegate.assertValidRunOptions(options);
     const v: TypedView<HumanReadable<TReturn>> = this.materialize();
     if (options?.type === 'complete') {
       return new Promise(resolve => {
@@ -779,9 +816,13 @@ export class QueryImpl<
     cleanup: () => void;
     complete: Promise<void>;
   } {
+    const delegate = must(
+      this._delegate,
+      'preload requires a query delegate to be set',
+    );
     const {resolve, promise: complete} = resolver<void>();
     const ast = this._completeAst();
-    const unsub = this.#delegate.addServerQuery(
+    const unsub = delegate.addServerQuery(
       ast,
       options?.ttl ?? DEFAULT_TTL,
       got => {
