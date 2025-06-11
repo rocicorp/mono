@@ -32,11 +32,7 @@ import {
 import {buildPipeline} from '../../zql/src/builder/builder.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../zql/src/ivm/operator.ts';
-import {
-  completedAST,
-  newQuery,
-  type QueryDelegate,
-} from '../../zql/src/query/query-impl.ts';
+import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
 import {type PullRow, type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {
@@ -49,6 +45,7 @@ import {hashOfAST} from '../../zero-protocol/src/query-hash.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {Row} from '../../zero-protocol/src/data.ts';
 import {assert} from '../../shared/src/asserts.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 
 const options = {
   replica: zeroOptions.replica,

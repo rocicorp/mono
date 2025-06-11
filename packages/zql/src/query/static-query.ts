@@ -3,13 +3,8 @@ import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../ivm/view.ts';
 import {ExpressionBuilder} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
-import {
-  AbstractQuery,
-  defaultFormat,
-  newQuerySymbol,
-  QueryImpl,
-  type QueryDelegate,
-} from './query-impl.ts';
+import type {QueryDelegate} from './query-delegate.ts';
+import {AbstractQuery, defaultFormat, newQuerySymbol} from './query-impl.ts';
 import type {HumanReadable, PullRow, Query} from './query.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -44,6 +39,7 @@ export class StaticQuery<
     currentJunction?: string | undefined,
   ) {
     super(
+      undefined,
       schema,
       tableName,
       ast,
@@ -63,6 +59,7 @@ export class StaticQuery<
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
+    _delegate: QueryDelegate | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST,
@@ -75,25 +72,9 @@ export class StaticQuery<
       tableName,
       ast,
       format,
-      this._system,
+      'permissions',
       customQueryID,
       currentJunction,
-    );
-  }
-
-  // TODO: we should refactor `ZPGQuery` to use a `QueryDelegate` as well
-  // so we can remove `ZPGQuery` and call `asRunnable` on `StaticQuery`
-  // with the postgres delegate.
-  asRunnable(delegate: QueryDelegate): Query<TSchema, TTable, TReturn> {
-    return new QueryImpl(
-      delegate,
-      this._schema,
-      this._tableName,
-      this._ast,
-      this.format,
-      this._system,
-      this.customQueryID,
-      this._currentJunction,
     );
   }
 
