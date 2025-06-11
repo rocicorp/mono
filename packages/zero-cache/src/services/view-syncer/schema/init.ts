@@ -114,7 +114,7 @@ export async function initViewSyncerSchema(
   const migrateV10ToV11: Migration = {
     migrateSchema: async (_, tx) => {
       await tx`DROP INDEX IF EXISTS ${tx(schema)}.desires_expires_at`;
-      await tx`ALTER TABLE ${tx(schema)}.queries DROP COLUMN "expiresAt"`;
+      await tx`ALTER TABLE ${tx(schema)}.desires DROP COLUMN "expiresAt"`;
       await tx`DROP INDEX IF EXISTS ${tx(schema)}.client_patch_version`;
       await tx`ALTER TABLE ${tx(schema)}.clients DROP COLUMN "patchVersion"`;
       await tx`ALTER TABLE ${tx(schema)}.clients DROP COLUMN "deleted"`;
