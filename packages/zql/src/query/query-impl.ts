@@ -147,13 +147,13 @@ export abstract class AbstractQuery<
   TReturn = PullRow<TTable, TSchema>,
 > implements Query<TSchema, TTable, TReturn>
 {
-  protected readonly _schema: TSchema;
-  protected readonly _tableName: TTable;
-  protected readonly _ast: AST;
+  readonly #schema: TSchema;
+  readonly #tableName: TTable;
+  readonly _ast: AST;
   readonly format: Format;
   #hash: string = '';
-  protected readonly _system: System;
-  protected readonly _currentJunction: string | undefined;
+  readonly #system: System;
+  readonly #currentJunction: string | undefined;
   readonly customQueryID: CustomQueryID | undefined;
 
   constructor(
@@ -165,12 +165,12 @@ export abstract class AbstractQuery<
     customQueryID: CustomQueryID | undefined,
     currentJunction?: string | undefined,
   ) {
-    this._schema = schema;
-    this._tableName = tableName;
+    this.#schema = schema;
+    this.#tableName = tableName;
     this._ast = ast;
     this.format = format;
-    this._system = system;
-    this._currentJunction = currentJunction;
+    this.#system = system;
+    this.#currentJunction = currentJunction;
     this.customQueryID = customQueryID;
   }
 
@@ -179,15 +179,15 @@ export abstract class AbstractQuery<
     args: ReadonlyArray<ReadonlyJSONValue>,
   ): Query<TSchema, TTable, TReturn> {
     return this[newQuerySymbol](
-      this._schema,
-      this._tableName,
+      this.#schema,
+      this.#tableName,
       this._ast,
       this.format,
       {
         name,
         args: args as ReadonlyArray<ReadonlyJSONValue>,
       },
-      this._currentJunction,
+      this.#currentJunction,
     );
   }
 
@@ -222,8 +222,8 @@ export abstract class AbstractQuery<
 
   one = (): Query<TSchema, TTable, TReturn | undefined> =>
     this[newQuerySymbol](
-      this._schema,
-      this._tableName,
+      this.#schema,
+      this.#tableName,
       {
         ...this._ast,
         limit: 1,
@@ -233,7 +233,7 @@ export abstract class AbstractQuery<
         singular: true,
       },
       this.customQueryID,
-      this._currentJunction,
+      this.#currentJunction,
     );
 
   whereExists = (
@@ -253,12 +253,12 @@ export abstract class AbstractQuery<
     }
     cb = cb ?? (q => q);
 
-    const related = this._schema.relationships[this._tableName][relationship];
+    const related = this.#schema.relationships[this.#tableName][relationship];
     assert(related, 'Invalid relationship');
     if (isOneHop(related)) {
       const {destSchema, destField, sourceField, cardinality} = related[0];
       let q: AnyQuery = this[newQuerySymbol](
-        this._schema,
+        this.#schema,
         destSchema,
         {
           table: destSchema,
@@ -289,20 +289,20 @@ export abstract class AbstractQuery<
       );
 
       return this[newQuerySymbol](
-        this._schema,
-        this._tableName,
+        this.#schema,
+        this.#tableName,
         {
           ...this._ast,
           related: [
             ...(this._ast.related ?? []),
             {
-              system: this._system,
+              system: this.#system,
               correlation: {
                 parentField: sourceField,
                 childField: destField,
               },
               subquery: addPrimaryKeysToAst(
-                this._schema.tables[destSchema],
+                this.#schema.tables[destSchema],
                 sq._ast,
               ),
             },
@@ -316,7 +316,7 @@ export abstract class AbstractQuery<
           },
         },
         this.customQueryID,
-        this._currentJunction,
+        this.#currentJunction,
       );
     }
 
@@ -326,7 +326,7 @@ export abstract class AbstractQuery<
       const junctionSchema = firstRelation.destSchema;
       const sq = cb(
         this[newQuerySymbol](
-          this._schema,
+          this.#schema,
           destSchema,
           {
             table: destSchema,
@@ -347,14 +347,14 @@ export abstract class AbstractQuery<
       assert(isCompoundKey(secondRelation.destField), 'Invalid relationship');
 
       return this[newQuerySymbol](
-        this._schema,
-        this._tableName,
+        this.#schema,
+        this.#tableName,
         {
           ...this._ast,
           related: [
             ...(this._ast.related ?? []),
             {
-              system: this._system,
+              system: this.#system,
               correlation: {
                 parentField: firstRelation.sourceField,
                 childField: firstRelation.destField,
@@ -364,18 +364,18 @@ export abstract class AbstractQuery<
                 table: junctionSchema,
                 alias: relationship,
                 orderBy: addPrimaryKeys(
-                  this._schema.tables[junctionSchema],
+                  this.#schema.tables[junctionSchema],
                   undefined,
                 ),
                 related: [
                   {
-                    system: this._system,
+                    system: this.#system,
                     correlation: {
                       parentField: secondRelation.sourceField,
                       childField: secondRelation.destField,
                     },
                     subquery: addPrimaryKeysToAst(
-                      this._schema.tables[destSchema],
+                      this.#schema.tables[destSchema],
                       sq._ast,
                     ),
                   },
@@ -392,7 +392,7 @@ export abstract class AbstractQuery<
           },
         },
         this.customQueryID,
-        this._currentJunction,
+        this.#currentJunction,
       );
     }
 
@@ -425,22 +425,22 @@ export abstract class AbstractQuery<
 
     const where = simplifyCondition(cond);
 
-    if (this._system === 'client') {
+    if (this.#system === 'client') {
       // We need to do this after the DNF since the DNF conversion might change
       // an EXISTS to a NOT EXISTS condition (and vice versa).
       assertNoNotExists(where);
     }
 
     return this[newQuerySymbol](
-      this._schema,
-      this._tableName,
+      this.#schema,
+      this.#tableName,
       {
         ...this._ast,
         where,
       },
       this.format,
       this.customQueryID,
-      this._currentJunction,
+      this.#currentJunction,
     );
   };
 
@@ -449,8 +449,8 @@ export abstract class AbstractQuery<
     opts?: {inclusive: boolean} | undefined,
   ): Query<TSchema, TTable, TReturn> =>
     this[newQuerySymbol](
-      this._schema,
-      this._tableName,
+      this.#schema,
+      this.#tableName,
       {
         ...this._ast,
         start: {
@@ -460,7 +460,7 @@ export abstract class AbstractQuery<
       },
       this.format,
       this.customQueryID,
-      this._currentJunction,
+      this.#currentJunction,
     );
 
   limit = (limit: number): Query<TSchema, TTable, TReturn> => {
@@ -470,23 +470,23 @@ export abstract class AbstractQuery<
     if ((limit | 0) !== limit) {
       throw new Error('Limit must be an integer');
     }
-    if (this._currentJunction) {
+    if (this.#currentJunction) {
       throw new NotImplementedError(
         'Limit is not supported in junction relationships yet. Junction relationship being limited: ' +
-          this._currentJunction,
+          this.#currentJunction,
       );
     }
 
     return this[newQuerySymbol](
-      this._schema,
-      this._tableName,
+      this.#schema,
+      this.#tableName,
       {
         ...this._ast,
         limit,
       },
       this.format,
       this.customQueryID,
-      this._currentJunction,
+      this.#currentJunction,
     );
   };
 
@@ -494,22 +494,22 @@ export abstract class AbstractQuery<
     field: TSelector,
     direction: 'asc' | 'desc',
   ): Query<TSchema, TTable, TReturn> => {
-    if (this._currentJunction) {
+    if (this.#currentJunction) {
       throw new NotImplementedError(
         'Order by is not supported in junction relationships yet. Junction relationship being ordered: ' +
-          this._currentJunction,
+          this.#currentJunction,
       );
     }
     return this[newQuerySymbol](
-      this._schema,
-      this._tableName,
+      this.#schema,
+      this.#tableName,
       {
         ...this._ast,
         orderBy: [...(this._ast.orderBy ?? []), [field as string, direction]],
       },
       this.format,
       this.customQueryID,
-      this._currentJunction,
+      this.#currentJunction,
     );
   };
 
@@ -517,7 +517,7 @@ export abstract class AbstractQuery<
     relationship: string,
     cb: (query: AnyQuery) => AnyQuery = q => q,
   ): Condition => {
-    const related = this._schema.relationships[this._tableName][relationship];
+    const related = this.#schema.relationships[this.#tableName][relationship];
     assert(related, 'Invalid relationship');
 
     if (isOneHop(related)) {
@@ -527,7 +527,7 @@ export abstract class AbstractQuery<
 
       const sq = cb(
         this[newQuerySymbol](
-          this._schema,
+          this.#schema,
           destSchema,
           {
             table: destSchema,
@@ -541,13 +541,13 @@ export abstract class AbstractQuery<
       return {
         type: 'correlatedSubquery',
         related: {
-          system: this._system,
+          system: this.#system,
           correlation: {
             parentField: sourceField,
             childField: destField,
           },
           subquery: addPrimaryKeysToAst(
-            this._schema.tables[destSchema],
+            this.#schema.tables[destSchema],
             sq._ast,
           ),
         },
@@ -565,7 +565,7 @@ export abstract class AbstractQuery<
       const junctionSchema = firstRelation.destSchema;
       const queryToDest = cb(
         this[newQuerySymbol](
-          this._schema,
+          this.#schema,
           destSchema,
           {
             table: destSchema,
@@ -580,7 +580,7 @@ export abstract class AbstractQuery<
       return {
         type: 'correlatedSubquery',
         related: {
-          system: this._system,
+          system: this.#system,
           correlation: {
             parentField: firstRelation.sourceField,
             childField: firstRelation.destField,
@@ -589,20 +589,20 @@ export abstract class AbstractQuery<
             table: junctionSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
             orderBy: addPrimaryKeys(
-              this._schema.tables[junctionSchema],
+              this.#schema.tables[junctionSchema],
               undefined,
             ),
             where: {
               type: 'correlatedSubquery',
               related: {
-                system: this._system,
+                system: this.#system,
                 correlation: {
                   parentField: secondRelation.sourceField,
                   childField: secondRelation.destField,
                 },
 
                 subquery: addPrimaryKeysToAst(
-                  this._schema.tables[destSchema],
+                  this.#schema.tables[destSchema],
                   (queryToDest as QueryImpl<any, any>)._ast,
                 ),
               },
@@ -622,7 +622,7 @@ export abstract class AbstractQuery<
   protected _completeAst(): AST {
     if (!this.#completedAST) {
       const finalOrderBy = addPrimaryKeys(
-        this._schema.tables[this._tableName],
+        this.#schema.tables[this.#tableName],
         this._ast.orderBy,
       );
       if (this._ast.start) {
@@ -643,7 +643,7 @@ export abstract class AbstractQuery<
         this.#completedAST = {
           ...this._ast,
           orderBy: addPrimaryKeys(
-            this._schema.tables[this._tableName],
+            this.#schema.tables[this.#tableName],
             this._ast.orderBy,
           ),
         };
