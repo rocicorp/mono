@@ -12,6 +12,7 @@ import type {
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
+import type {QueryDelegate} from './query-delegate.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -447,6 +448,11 @@ export type PreloadOptions = {
    * this query after {@linkcode cleanup} has been called.
    */
   ttl?: TTL | undefined;
+  delegate?:
+    | QueryDelegate
+    | (() => QueryDelegate)
+    | {queryDelegate: QueryDelegate}
+    | undefined;
 };
 
 /**
