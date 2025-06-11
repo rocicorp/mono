@@ -12,11 +12,11 @@ import type {Input} from '../../ivm/operator.ts';
 import type {Source} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
 import type {CustomQueryID} from '../named.ts';
-import {
-  type CommitListener,
-  type GotCallback,
-  type QueryDelegate,
-} from '../query-impl.ts';
+import type {
+  CommitListener,
+  GotCallback,
+  QueryDelegate,
+} from '../query-delegate.ts';
 import type {TTL} from '../ttl.ts';
 import {
   commentSchema,

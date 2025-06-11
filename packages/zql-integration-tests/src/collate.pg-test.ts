@@ -15,11 +15,7 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
-import {
-  completedAST,
-  newQuery,
-  type QueryDelegate,
-} from '../../zql/src/query/query-impl.ts';
+import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
 import {Database} from '../../zqlite/src/db.ts';
@@ -30,6 +26,7 @@ import {
 } from '../../zqlite/src/test/source-factory.ts';
 import './helpers/comparePg.ts';
 import {fillPgAndSync} from './helpers/setup.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 
 const lc = createSilentLogContext();
 
