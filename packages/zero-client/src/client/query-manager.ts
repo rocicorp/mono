@@ -18,12 +18,12 @@ import {
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import type {GotCallback} from '../../../zql/src/query/query-impl.ts';
 import {compareTTL, parseTTL, type TTL} from '../../../zql/src/query/ttl.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
+import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
 
 type QueryHash = string;
 

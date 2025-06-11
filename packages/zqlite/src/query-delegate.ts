@@ -1,9 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {
-  CommitListener,
-  QueryDelegate,
-} from '../../zql/src/query/query-impl.ts';
 import type {Database} from './db.ts';
 import type {Source} from '../../zql/src/ivm/source.ts';
 import {TableSource} from './table-source.ts';
@@ -11,6 +7,10 @@ import type {LogConfig} from '../../otel/src/log-options.ts';
 import type {Input} from '../../zql/src/ivm/operator.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
+import type {
+  CommitListener,
+  QueryDelegate,
+} from '../../zql/src/query/query-delegate.ts';
 
 export class QueryDelegateImpl implements QueryDelegate {
   readonly #lc: LogContext;

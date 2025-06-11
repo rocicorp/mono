@@ -12,7 +12,7 @@ import type {
   CommitListener,
   GotCallback,
   QueryDelegate,
-} from '../../../zql/src/query/query-impl.ts';
+} from '../../../zql/src/query/query-delegate.ts';
 import type {RunOptions} from '../../../zql/src/query/query.ts';
 import type {TTL} from '../../../zql/src/query/ttl.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
