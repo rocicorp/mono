@@ -1907,10 +1907,15 @@ export class Zero<
     BUNDLE_SIZE: {
       const m = await import('./inspector/inspector.ts');
       // Wait for the web socket to be available
-      return m.newInspector(this.#rep, this.#schema, async () => {
-        await this.#connectResolver.promise;
-        return this.#socket!;
-      });
+      return m.newInspector(
+        this.#rep,
+        this.#zeroContext,
+        this.#schema,
+        async () => {
+          await this.#connectResolver.promise;
+          return this.#socket!;
+        },
+      );
     }
   }
 }

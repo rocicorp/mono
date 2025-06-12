@@ -733,7 +733,7 @@ export class QueryImpl<
       this._delegate,
       'materialize requires a query delegate to be set',
     );
-    const t0 = Date.now();
+    const t0 = performance.now();
     let factory: ViewFactory<TSchema, TTable, TReturn, T> | undefined;
     if (typeof factoryOrTTL === 'function') {
       factory = factoryOrTTL;
@@ -745,8 +745,7 @@ export class QueryImpl<
     let queryComplete = delegate.defaultQueryComplete;
     const gotCallback: GotCallback = got => {
       if (got) {
-        const t1 = Date.now();
-        delegate.onQueryMaterialized(this.hash(), ast, t1 - t0);
+        delegate.onQueryMaterialized(this.hash(), ast, performance.now() - t0);
         queryComplete = true;
         queryCompleteResolver.resolve(true);
       }
