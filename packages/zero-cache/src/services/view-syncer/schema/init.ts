@@ -121,6 +121,12 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migratedV11ToV12: Migration = {
+    migrateSchema: async (_, tx) => {
+      await tx`ALTER TABLE ${tx(schema)}.queries ALTER COLUMN "queryArgs" TYPE JSON USING "queryArgs"::JSON`;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -139,6 +145,7 @@ export async function initViewSyncerSchema(
     // V11 removes the deprecated queries."expiresAt", clients."patchVersion",
     // clients."deleted" columns.
     11: migrateV10ToV11,
+    12: migratedV11ToV12,
   };
 
   await runSchemaMigrations(
