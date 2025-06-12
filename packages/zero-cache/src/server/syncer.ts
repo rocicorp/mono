@@ -88,7 +88,7 @@ export default function runWorker(
       .withContext('instance', randomID());
     lc.debug?.(`creating view syncer`);
     return new ViewSyncerService(
-      config,
+      config.pull,
       logger,
       shard,
       config.taskID,
