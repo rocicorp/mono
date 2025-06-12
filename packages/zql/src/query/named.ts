@@ -6,9 +6,8 @@ import {newQuery} from './query-impl.ts';
 import type {Query} from './query.ts';
 
 export type NamedQuery<
-  S extends Schema,
   TArg extends ReadonlyArray<ReadonlyJSONValue>,
-  TReturnQuery extends Query<S, keyof S['tables'] & string>,
+  TReturnQuery extends Query<any, any, any>,
 > = (...args: TArg) => TReturnQuery;
 
 export type CustomQueryID = {
@@ -17,51 +16,39 @@ export type CustomQueryID = {
 };
 
 export type NamedQueryImpl<
-  S extends Schema,
-  TArg extends ReadonlyArray<ReadonlyJSONValue>,
-  TReturnQuery extends Query<S, keyof S['tables'] & string>,
+  TArg extends
+    ReadonlyArray<ReadonlyJSONValue> = ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any> = Query<any, any, any>,
 > = (...arg: TArg) => TReturnQuery;
 
-export function query<S extends Schema>(s: S): SchemaQuery<S>;
-export function query<
-  S extends Schema,
-  TArg extends ReadonlyArray<ReadonlyJSONValue>,
-  TReturnQuery extends Query<S, keyof S['tables'] & string>,
->(
-  s: S,
-  name: string,
-  fn: NamedQueryImpl<S, TArg, TReturnQuery>,
-): NamedQuery<S, TArg, TReturnQuery>;
-export function query<
-  S extends Schema,
-  TArg extends ReadonlyArray<ReadonlyJSONValue>,
-  TReturnQuery extends Query<S, keyof S['tables'] & string>,
->(
-  s: S,
-  name?: string | undefined,
-  fn?: NamedQueryImpl<S, TArg, TReturnQuery> | undefined,
-): NamedQuery<S, TArg, TReturnQuery> | SchemaQuery<S> {
-  if (name === undefined || fn === undefined) {
-    return makeQueryBuilders(s) as SchemaQuery<S>;
-  }
+/**
+ * Returns a set of query builders for the given schema.
+ */
+export function querify<S extends Schema>(s: S): SchemaQuery<S> {
+  return makeQueryBuilders(s) as SchemaQuery<S>;
+}
 
+/**
+ * Tags a query with a name and arguments.
+ * Named queries are run on both the client and server.
+ * The server will receive the name and arguments for a named query and can
+ * either run the same query the client did or a completely different one.
+ *
+ * The main use case here is to apply permissions to the requested query or
+ * to expand the scope of the query to include additional data. E.g., for preloading.
+ */
+export function namedQuery<
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any>,
+>(
+  name: string,
+  fn: NamedQueryImpl<TArg, TReturnQuery>,
+): NamedQuery<TArg, TReturnQuery> {
   return ((...args: TArg) => fn(...args).nameAndArgs(name, args)) as NamedQuery<
-    S,
     TArg,
     TReturnQuery
   >;
 }
-
-query.bindTo =
-  <S extends Schema>(s: S) =>
-  <
-    TArg extends ReadonlyArray<ReadonlyJSONValue>,
-    TReturnQuery extends Query<S, keyof S['tables'] & string>,
-  >(
-    name: string,
-    fn: NamedQueryImpl<S, TArg, TReturnQuery>,
-  ): NamedQuery<S, TArg, TReturnQuery> =>
-    query(s, name, fn);
 
 /**
  * This produces the query builders for a given schema.
