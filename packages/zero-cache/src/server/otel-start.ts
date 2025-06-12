@@ -19,11 +19,13 @@ import {
   type LogRecordProcessor,
 } from '@opentelemetry/sdk-logs';
 import {logs} from '@opentelemetry/api-logs';
-import {getNodeAutoInstrumentations} from '@opentelemetry/auto-instrumentations-node';
+import type {Instrumentation} from '@opentelemetry/instrumentation';
+import * as autoInstrumentationsModule from '@opentelemetry/auto-instrumentations-node';
 
 class OtelManager {
   static #instance: OtelManager;
   #started = false;
+  #autoInstrumentations: Instrumentation[] | null = null;
 
   private constructor() {}
 
@@ -61,10 +63,19 @@ class OtelManager {
     }
 
     const logger = logs.getLogger('zero-cache');
+
+    // Lazy load the auto-instrumentations module
+    // avoid MODULE_NOT_FOUND errors in environments where it's not being used
+    if (!this.#autoInstrumentations) {
+      this.#autoInstrumentations =
+        autoInstrumentationsModule.getNodeAutoInstrumentations();
+    }
+
     const sdk = new NodeSDK({
       resource,
-      // Automatically instruments all supported modules
-      instrumentations: [getNodeAutoInstrumentations()],
+      instrumentations: this.#autoInstrumentations
+        ? [this.#autoInstrumentations]
+        : [],
       traceExporter: new OTLPTraceExporter(),
       metricReader: new PeriodicExportingMetricReader({
         exportIntervalMillis: 5000,
