@@ -48,7 +48,7 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {GotCallback, QueryDelegate} from './query-delegate.ts';
 import {must} from '../../../shared/src/must.ts';
 
-type AnyQuery = Query<Schema, string, any>;
+export type AnyQuery = Query<Schema, string, any>;
 
 const astSymbol = Symbol();
 

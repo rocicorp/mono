@@ -16,7 +16,7 @@ export type CustomQueryID = {
   args: ReadonlyArray<ReadonlyJSONValue>;
 };
 
-type NamedQueryImpl<
+export type NamedQueryImpl<
   S extends Schema,
   TArg extends ReadonlyArray<ReadonlyJSONValue>,
   TReturnQuery extends Query<S, keyof S['tables'] & string>,
