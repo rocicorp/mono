@@ -21,7 +21,12 @@ import {
   type RowUpdate,
 } from './cvr.ts';
 import {setupCVRTables, type RowsRow} from './schema/cvr.ts';
-import type {CVRVersion} from './schema/types.ts';
+import type {
+  ClientQueryRecord,
+  CustomQueryRecord,
+  CVRVersion,
+} from './schema/types.ts';
+import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 
 const APP_ID = 'roze';
 const SHARD_NUM = 1;
@@ -99,6 +104,93 @@ describe('view-syncer/cvr-store', () => {
   afterEach(async () => {
     await testDBs.drop(db);
   });
+
+  describe('save various json types for named queries', () => {
+    const lc = createSilentLogContext();
+    let id = 0;
+    test.each([
+      {
+        name: 'null',
+        value: [null],
+      },
+      {
+        name: 'string',
+        value: ['hello'],
+      },
+      {
+        name: 'number',
+        value: [42],
+      },
+      {
+        name: 'float',
+        value: [3.14],
+      },
+      {
+        name: 'object',
+        value: [{key: 'value'}],
+      },
+      {
+        name: 'nested array',
+        value: [[1, 2, 3]],
+      },
+      {
+        name: 'mixed',
+        value: [1, 'hello', {key: 'value'}, [1, 2, 3]],
+      },
+      {
+        name: 'nested array with bool',
+        value: [[1, 2, 3, true]],
+      },
+      {
+        name: 'boolean - false',
+        value: [true],
+      },
+      {
+        name: 'boolean - true',
+        value: [true],
+      },
+      {
+        name: 'no args',
+        value: [],
+      },
+      {
+        name: 'trad query',
+        value: undefined,
+      },
+    ])('$name', async ({name, value}) => {
+      const now = Date.UTC(2024, 10, 22, 12, 0, 0);
+      const cvr = await store.load(lc, CONNECT_TIME);
+
+      let row: ClientQueryRecord | CustomQueryRecord;
+      if (name === 'trad query') {
+        row = {
+          id: `query-${id}`,
+          type: 'client',
+          ast: {table: 'issues'},
+          clientState: {},
+        };
+        store.putQuery(row);
+      } else {
+        row = {
+          id: `query-${id}`,
+          type: 'custom',
+          name: `query-${id}`,
+          args: value as readonly ReadonlyJSONValue[],
+          clientState: {},
+        };
+        store.putQuery(row);
+      }
+
+      await store.flush(cvr.version, cvr, now);
+      const cvr2 = await store.load(lc, CONNECT_TIME);
+
+      expect(cvr2.queries[`query-${id}`]).toEqual(row);
+
+      ++id;
+    });
+  });
+
+  test('put various json types for named queries', async () => {});
 
   test('wait for row catchup', async () => {
     // Simulate the CVR being ahead of the rows.
