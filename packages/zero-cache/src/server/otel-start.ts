@@ -63,16 +63,19 @@ class OtelManager {
     }
 
     const logger = logs.getLogger('zero-cache');
-    
+
     // Lazy load the auto-instrumentations module
     // avoid MODULE_NOT_FOUND errors in environments where it's not being used
     if (!this.#autoInstrumentations) {
-      this.#autoInstrumentations = autoInstrumentationsModule.getNodeAutoInstrumentations();
+      this.#autoInstrumentations =
+        autoInstrumentationsModule.getNodeAutoInstrumentations();
     }
 
     const sdk = new NodeSDK({
       resource,
-      instrumentations: this.#autoInstrumentations ? [this.#autoInstrumentations] : [],
+      instrumentations: this.#autoInstrumentations
+        ? [this.#autoInstrumentations]
+        : [],
       traceExporter: new OTLPTraceExporter(),
       metricReader: new PeriodicExportingMetricReader({
         exportIntervalMillis: 5000,
