@@ -1,26 +1,24 @@
 // https://vercel.com/templates/other/fastify-serverless-function
+import '@dotenvx/dotenvx/config';
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
-import '@dotenvx/dotenvx/config';
-import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
-import {jwtVerify, SignJWT, type JWK} from 'jose';
-import {nanoid} from 'nanoid';
-import postgres from 'postgres';
-import {handlePush} from '../server/push-handler.ts';
-import {must} from '../../../packages/shared/src/must.ts';
-import assert from 'assert';
-import {authDataSchema, type AuthData} from '../shared/auth.ts';
 import type {ReadonlyJSONValue} from '@rocicorp/zero';
-import type {IncomingHttpHeaders} from 'http';
-import * as v from '../../../packages/shared/src/valita.ts';
 import {
   transformRequestMessageSchema,
   type TransformResponseMessage,
-  query,
 } from '@rocicorp/zero';
-
-import {schema} from '../shared/schema.ts';
+import assert from 'assert';
+import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
+import type {IncomingHttpHeaders} from 'http';
+import {jwtVerify, SignJWT, type JWK} from 'jose';
+import {nanoid} from 'nanoid';
+import postgres from 'postgres';
+import {must} from '../../../packages/shared/src/must.ts';
+import * as v from '../../../packages/shared/src/valita.ts';
+import {handlePush} from '../server/push-handler.ts';
+import {authDataSchema, type AuthData} from '../shared/auth.ts';
+import {queries} from '../shared/schema.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -144,9 +142,7 @@ fastify.post<{
   reply.send(response);
 });
 
-const queryBuilders = query(schema);
-const emptyQuery = queryBuilders.issue.where(({or}) => or());
-
+const emptyQuery = queries.issue.where(({or}) => or());
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
