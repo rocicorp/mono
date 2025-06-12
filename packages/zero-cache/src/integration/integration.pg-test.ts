@@ -40,6 +40,7 @@ import {DbFile} from '../test/lite.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import {childWorker, type Worker} from '../types/processes.ts';
 import {stream, type Sink} from '../types/streams.ts';
+import {PROTOCOL_ERROR} from '../types/ws.ts';
 
 // Adjust to debug.
 const LOG_LEVEL: LogLevel = 'error';
@@ -945,6 +946,25 @@ describe('integration', {timeout: 30000}, () => {
         'pokeEnd',
         {pokeID: WATERMARK_REGEX},
       ]);
+
+      await testInvalidRequestHandling();
     },
   );
+
+  async function testInvalidRequestHandling() {
+    const {
+      promise: response,
+      resolve: closedWith,
+      reject: gotError,
+    } = resolver<string>();
+    // Make sure an invalid websocket request is properly handled.
+    const invalidRequest = new WebSocket(`ws://localhost:${port}/foo-bar`);
+    invalidRequest.on('error', gotError);
+    invalidRequest.on('close', (code, reason) =>
+      closedWith(`${code}: ${reason}`),
+    );
+    expect(await response).toEqual(
+      `${PROTOCOL_ERROR}: Error: Invalid URL: /foo-bar`,
+    );
+  }
 });
