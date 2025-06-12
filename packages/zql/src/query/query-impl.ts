@@ -2,8 +2,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
-import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {
   AST,
   CompoundKey,
@@ -14,6 +15,7 @@ import type {
   System,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   isOneHop,
@@ -21,6 +23,7 @@ import {
   type TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
 import {buildPipeline} from '../builder/builder.ts';
+import {NotImplementedError} from '../error.ts';
 import {ArrayView} from '../ivm/array-view.ts';
 import type {Input} from '../ivm/operator.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
@@ -32,6 +35,8 @@ import {
   simplifyCondition,
   type ExpressionFactory,
 } from './expression.ts';
+import type {CustomQueryID} from './named.ts';
+import type {GotCallback, QueryDelegate} from './query-delegate.ts';
 import {
   type GetFilterType,
   type HumanReadable,
@@ -42,11 +47,6 @@ import {
 } from './query.ts';
 import {DEFAULT_TTL, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
-import {NotImplementedError} from '../error.ts';
-import type {CustomQueryID} from './named.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {GotCallback, QueryDelegate} from './query-delegate.ts';
-import {must} from '../../../shared/src/must.ts';
 
 type AnyQuery = Query<Schema, string, any>;
 
@@ -733,7 +733,7 @@ export class QueryImpl<
       this._delegate,
       'materialize requires a query delegate to be set',
     );
-    const t0 = Date.now();
+    const t0 = performance.now();
     let factory: ViewFactory<TSchema, TTable, TReturn, T> | undefined;
     if (typeof factoryOrTTL === 'function') {
       factory = factoryOrTTL;
@@ -745,8 +745,7 @@ export class QueryImpl<
     let queryComplete = delegate.defaultQueryComplete;
     const gotCallback: GotCallback = got => {
       if (got) {
-        const t1 = Date.now();
-        delegate.onQueryMaterialized(this.hash(), ast, t1 - t0);
+        delegate.onQueryMaterialized(this.hash(), ast, performance.now() - t0);
         queryComplete = true;
         queryCompleteResolver.resolve(true);
       }
