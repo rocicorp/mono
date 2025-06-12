@@ -109,10 +109,6 @@
       "types": "./out/zero-cache/src/server/main.d.ts",
       "default": "./out/zero-cache/src/server/main.js"
     },
-    "./advanced": {
-      "types": "./out/zero/src/advanced.d.ts",
-      "default": "./out/advanced.js"
-    },
     "./change-protocol/v0": {
       "types": "./out/zero/src/change-protocol/v0.d.ts",
       "default": "./out/zero/src/change-protocol/v0.js"
