@@ -105,7 +105,7 @@ CREATE TABLE ${schema(shard)}.queries (
   "queryHash"             TEXT, -- this is the hash of the client query AST
   "clientAST"             JSONB, -- this is nullable as custom queries will not persist an AST
   "queryName"             TEXT, -- the name of the query if it is a custom query
-  "queryArgs"             JSONB, -- the arguments of the query if it is a custom query
+  "queryArgs"             JSON, -- the arguments of the query if it is a custom query
   "patchVersion"          TEXT,  -- NULL if only desired but not yet "got"
   "transformationHash"    TEXT,
   "transformationVersion" TEXT,
