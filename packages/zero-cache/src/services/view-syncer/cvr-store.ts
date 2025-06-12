@@ -421,11 +421,45 @@ export class CVRStore {
 
   putQuery(query: QueryRecord): void {
     const change: QueriesRow = queryRecordToQueryRow(this.#id, query);
+    // ${JSON.stringify(change.queryArgs)}::text::json is used because postgres.js
+    // gets confused if the input is `[boolean]` and throws an error saying a bool
+    // cannot be converted to json.
+    // https://github.com/porsager/postgres/issues/386
     this.#writes.add({
       stats: {queries: 1},
-      write: tx => tx`INSERT INTO ${this.#cvr('queries')} ${tx(change)}
+      write: tx => tx`INSERT INTO ${this.#cvr('queries')} (
+        "clientGroupID",
+        "queryHash",
+        "clientAST",
+        "queryName",
+        "queryArgs",
+        "patchVersion",
+        "transformationHash",
+        "transformationVersion",
+        "internal",
+        "deleted"
+      ) VALUES (
+        ${change.clientGroupID},
+        ${change.queryHash},
+        ${change.clientAST},
+        ${change.queryName},
+        ${change.queryArgs === undefined ? null : JSON.stringify(change.queryArgs)}::text::json,
+        ${change.patchVersion},
+        ${change.transformationHash ?? null},
+        ${change.transformationVersion ?? null},
+        ${change.internal},
+        ${change.deleted ?? false}
+      )
       ON CONFLICT ("clientGroupID", "queryHash")
-      DO UPDATE SET ${tx(change)}`,
+      DO UPDATE SET 
+        "clientAST" = ${change.clientAST},
+        "queryName" = ${change.queryName},
+        "queryArgs" = ${change.queryArgs === undefined ? null : JSON.stringify(change.queryArgs)}::text::json,
+        "patchVersion" = ${change.patchVersion},
+        "transformationHash" = ${change.transformationHash ?? null},
+        "transformationVersion" = ${change.transformationVersion ?? null},
+        "internal" = ${change.internal},
+        "deleted" = ${change.deleted ?? false}`,
     });
   }
 
