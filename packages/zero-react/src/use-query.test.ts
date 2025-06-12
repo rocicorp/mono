@@ -3,19 +3,30 @@ import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {type AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
 import {getAllViewsSizeForTesting, ViewStore} from './use-query.tsx';
+import type {Zero} from '../../zero-client/src/client/zero.ts';
 
 function newMockQuery(
   query: string,
   singular = false,
 ): AbstractQuery<Schema, string> {
   const view = newView();
-  return {
+  const ret = {
     hash() {
       return query;
+    },
+    delegate() {
+      return ret;
     },
     materialize: vi.fn().mockImplementation(() => view),
     format: {singular},
   } as unknown as AbstractQuery<Schema, string>;
+  return ret;
+}
+
+function newMockZero(clientID: string): Zero<Schema> {
+  return {
+    clientID,
+  } as unknown as Zero<Schema>;
 }
 
 function newView() {
@@ -41,13 +52,13 @@ describe('ViewStore', () => {
       const viewStore = new ViewStore();
 
       const view1 = viewStore.getView(
-        'client1',
+        newMockZero('client1'),
         newMockQuery('query1'),
         true,
         'forever',
       );
       const view2 = viewStore.getView(
-        'client1',
+        newMockZero('client1'),
         newMockQuery('query1'),
         true,
         'forever',
@@ -62,13 +73,13 @@ describe('ViewStore', () => {
       const viewStore = new ViewStore();
 
       const view1 = viewStore.getView(
-        'client1',
+        newMockZero('client1'),
         newMockQuery('query1'),
         true,
         'forever',
       );
       const view2 = viewStore.getView(
-        'client1',
+        newMockZero('client1'),
         newMockQuery('query1'),
         true,
         'forever',
@@ -88,13 +99,13 @@ describe('ViewStore', () => {
       const viewStore = new ViewStore();
 
       const q1 = newMockQuery('query1');
-      const view1 = viewStore.getView('client1', q1, true, '1s');
+      const view1 = viewStore.getView(newMockZero('client1'), q1, true, '1s');
 
       const updateTTLSpy = vi.spyOn(view1, 'updateTTL');
       expect(q1.materialize).toHaveBeenCalledExactlyOnceWith('1s');
 
       const q2 = newMockQuery('query1');
-      const view2 = viewStore.getView('client1', q2, true, '1m');
+      const view2 = viewStore.getView(newMockZero('client1'), q2, true, '1m');
       expect(view1).toBe(view2);
 
       // Same query hash so only one view. Should have called updateTTL on the existing one.
@@ -108,18 +119,18 @@ describe('ViewStore', () => {
       const viewStore = new ViewStore();
 
       const q1 = newMockQuery('query1');
-      const view1 = viewStore.getView('client1', q1, true, '60s');
+      const view1 = viewStore.getView(newMockZero('client1'), q1, true, '60s');
       const updateTTLSpy = vi.spyOn(view1, 'updateTTL');
       expect(q1.materialize).toHaveBeenCalledTimes(1);
 
       const q2 = newMockQuery('query1');
-      const view2 = viewStore.getView('client1', q2, true, '1m');
+      const view2 = viewStore.getView(newMockZero('client1'), q2, true, '1m');
       expect(view1).toBe(view2);
 
       expect(updateTTLSpy).toHaveBeenCalledExactlyOnceWith('1m');
 
       const q3 = newMockQuery('query1');
-      const view3 = viewStore.getView('client1', q3, true, 60_000);
+      const view3 = viewStore.getView(newMockZero('client1'), q3, true, 60_000);
 
       expect(view1).toBe(view3);
 
@@ -132,13 +143,13 @@ describe('ViewStore', () => {
       const viewStore = new ViewStore();
 
       const view1 = viewStore.getView(
-        'client1',
+        newMockZero('client1'),
         newMockQuery('query1'),
         true,
         'forever',
       );
       const view2 = viewStore.getView(
-        'client1',
+        newMockZero('client1'),
         newMockQuery('query1'),
         true,
         'forever',
@@ -159,7 +170,7 @@ describe('ViewStore', () => {
       const viewStore = new ViewStore();
 
       const view = viewStore.getView(
-        'client1',
+        newMockZero('client1'),
         newMockQuery('query1'),
         true,
         'forever',
@@ -176,7 +187,7 @@ describe('ViewStore', () => {
       const viewStore = new ViewStore();
 
       const view = viewStore.getView(
-        'client1',
+        newMockZero('client1'),
         newMockQuery('query1'),
         true,
         'forever',
@@ -195,7 +206,7 @@ describe('ViewStore', () => {
     test('subscribing to a view scheduled for cleanup prevents the cleanup', () => {
       const viewStore = new ViewStore();
       const view = viewStore.getView(
-        'client1',
+        newMockZero('client1'),
         newMockQuery('query1'),
         true,
         'forever',
@@ -209,7 +220,7 @@ describe('ViewStore', () => {
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
 
       const view2 = viewStore.getView(
-        'client1',
+        newMockZero('client1'),
         newMockQuery('query1'),
         true,
         'forever',
@@ -229,7 +240,7 @@ describe('ViewStore', () => {
     test('destroying the same underlying view twice is a no-op', () => {
       const viewStore = new ViewStore();
       const view = viewStore.getView(
-        'client1',
+        newMockZero('client1'),
         newMockQuery('query1'),
         true,
         'forever',
@@ -249,13 +260,13 @@ describe('ViewStore', () => {
       const viewStore = new ViewStore();
 
       const view1 = viewStore.getView(
-        'client1',
+        newMockZero('client1'),
         newMockQuery('query1'),
         true,
         'forever',
       );
       const view2 = viewStore.getView(
-        'client2',
+        newMockZero('client2'),
         newMockQuery('query1'),
         true,
         'forever',
@@ -272,7 +283,12 @@ describe('ViewStore', () => {
       const {listeners} = q.materialize() as unknown as {
         listeners: Set<(data: unknown, resultType: ResultType) => void>;
       };
-      const view = viewStore.getView('client1', q, true, 'forever');
+      const view = viewStore.getView(
+        newMockZero('client1'),
+        q,
+        true,
+        'forever',
+      );
 
       const cleanup = view.subscribeReactInternals(() => {});
 
@@ -308,7 +324,12 @@ describe('ViewStore', () => {
       const {listeners} = q.materialize() as unknown as {
         listeners: Set<(...args: unknown[]) => void>;
       };
-      const view = viewStore.getView('client1', q, true, 'forever');
+      const view = viewStore.getView(
+        newMockZero('client1'),
+        q,
+        true,
+        'forever',
+      );
 
       const cleanup = view.subscribeReactInternals(() => {});
 

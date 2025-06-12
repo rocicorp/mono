@@ -2,9 +2,9 @@ import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {useCallback, useRef, useState} from 'react';
 import {useClickOutside} from '../hooks/use-click-outside.ts';
-import {useZero} from '../hooks/use-zero.ts';
 import {Button} from './button.tsx';
 import style from './label-picker.module.css';
+import {queries} from '../../shared/schema.ts';
 
 const focusInput = (input: HTMLInputElement | null) => {
   if (input) {
@@ -24,8 +24,7 @@ export function LabelPicker({
   onCreateNewLabel: (name: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const z = useZero();
-  const [labels] = useQuery(z.query.label.orderBy('name', 'asc'));
+  const [labels] = useQuery(queries.label.orderBy('name', 'asc'));
   const ref = useRef<HTMLDivElement>(null);
 
   useClickOutside(

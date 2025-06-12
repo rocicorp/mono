@@ -9,6 +9,7 @@ import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './use-zero.tsx';
+import {Zero} from '../../zero-client/src/client/zero.ts';
 
 export type QueryResultDetails = Readonly<{
   type: ResultType;
@@ -45,9 +46,8 @@ export function useQuery<
     ({enabled = true, ttl = DEFAULT_TTL} = options);
   }
 
-  const z = useZero();
   const view = viewStore.getView(
-    z.clientID,
+    useZero(),
     query as AbstractQuery<TSchema, TTable, TReturn>,
     enabled,
     ttl,
@@ -182,8 +182,8 @@ export class ViewStore {
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
-    clientID: string,
-    query: AbstractQuery<TSchema, TTable, TReturn>,
+    zero: Zero<TSchema>,
+    query: Query<TSchema, TTable, TReturn>,
     enabled: boolean,
     ttl: TTL,
   ): {
@@ -200,9 +200,10 @@ export class ViewStore {
       };
     }
 
-    const hash = query.hash() + clientID;
+    const hash = query.hash() + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
+      query = query.delegate(zero.queryDelegate);
       existing = new ViewWrapper(
         query,
         format,
@@ -271,7 +272,7 @@ class ViewWrapper<
   #ttl: TTL;
 
   constructor(
-    query: AbstractQuery<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn>,
     format: Format,
     ttl: TTL,
     onMaterialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,

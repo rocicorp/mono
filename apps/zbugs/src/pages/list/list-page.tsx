@@ -29,15 +29,16 @@ import {mark} from '../../perf-log.ts';
 import type {ListContext} from '../../routes.ts';
 import {preload} from '../../zero-setup.ts';
 import {CACHE_AWHILE, CACHE_NONE} from '../../query-cache-policy.ts';
+import {queries} from '../../../shared/schema.ts';
 
 let firstRowRendered = false;
 const itemSize = 56;
 
 export function ListPage({onReady}: {onReady: () => void}) {
-  const z = useZero();
   const login = useLogin();
   const search = useSearch();
   const qs = useMemo(() => new URLSearchParams(search), [search]);
+  const z = useZero();
 
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator') ?? undefined;
@@ -57,7 +58,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const sortDirection =
     qs.get('sortDir')?.toLowerCase() === 'asc' ? 'asc' : 'desc';
 
-  let q = z.query.issue
+  let q = queries.issue
     .orderBy(sortField, sortDirection)
     .orderBy('id', sortDirection)
     .related('labels')

@@ -816,7 +816,7 @@ export class QueryImpl<
     complete: Promise<void>;
   } {
     const delegate = must(
-      pullDelegate(options?.delegate ?? this._delegate),
+      this._delegate,
       'preload requires a query delegate to be set',
     );
     const {resolve, promise: complete} = resolver<void>();
@@ -835,21 +835,6 @@ export class QueryImpl<
       complete,
     };
   }
-}
-
-function pullDelegate(
-  delegate: PreloadOptions['delegate'],
-): QueryDelegate | undefined {
-  if (delegate === undefined) {
-    return undefined;
-  }
-  if (typeof delegate === 'function') {
-    return delegate();
-  }
-  if (typeof delegate === 'object' && 'queryDelegate' in delegate) {
-    return delegate.queryDelegate;
-  }
-  return delegate;
 }
 
 function addPrimaryKeys(
