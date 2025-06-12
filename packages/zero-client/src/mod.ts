@@ -118,7 +118,7 @@ export type {
   ExpressionFactory,
 } from '../../zql/src/query/expression.ts';
 export {
-  query,
+  querify,
   type CustomQueryID,
   type NamedQuery,
   type NamedQueryImpl,

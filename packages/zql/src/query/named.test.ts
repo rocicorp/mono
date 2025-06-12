@@ -4,15 +4,15 @@ import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
-import {query, type NamedQuery} from './named.ts';
+import {namedQuery, querify, type NamedQuery} from './named.ts';
 import {ast} from './query-impl.ts';
 import {StaticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
 
 test('defining a named query', () => {
-  const builders = query(schema);
-  const named = query(schema, 'myName', (id: string) =>
-    builders.issue.where('id', id),
+  const queryBuilder = querify(schema);
+  const named = namedQuery('myName', (id: string) =>
+    queryBuilder.issue.where('id', id),
   );
   const q = named('123');
   expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
@@ -30,27 +30,7 @@ test('defining a named query', () => {
   check(named);
 });
 
-test('binding query to a schema', () => {
-  const bound = query.bindTo(schema);
-  const builders = query(schema);
-  const named = bound('myName', (id: string) => builders.issue.where('id', id));
-  const q = named('123');
-  expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
-    Promise<
-      {
-        readonly id: string;
-        readonly title: string;
-        readonly description: string;
-        readonly closed: boolean;
-        readonly ownerId: string | null;
-        readonly createdAt: number;
-      }[]
-    >
-  >();
-  check(named);
-});
-
-function check(named: NamedQuery<typeof schema, [string], any>) {
+function check(named: NamedQuery<[string], any>) {
   const r = named('123');
 
   const id = r.customQueryID;
@@ -82,7 +62,7 @@ function check(named: NamedQuery<typeof schema, [string], any>) {
 }
 
 test('makeSchemaQuery', () => {
-  const builders = query(schema);
+  const builders = querify(schema);
   const q1 = builders.issue.where('id', '123').nameAndArgs('myName', ['123']);
   expect(ast(q1)).toMatchInlineSnapshot(`
     {
