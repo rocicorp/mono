@@ -280,7 +280,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       return patches;
     }
     const newVersion = this._ensureNewVersion();
-    // why do we sort here?
     client.desiredQueryIDs = [...union(current, needed)].sort(stringCompare);
 
     for (const id of needed) {
