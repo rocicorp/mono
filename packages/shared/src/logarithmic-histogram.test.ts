@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {LogarithmicHistogram} from './histogram.ts';
+import {LogarithmicHistogram} from './logarithmic-histogram.ts';
 
 test('initializes correctly with default values', () => {
   const h = new LogarithmicHistogram();
