@@ -7,7 +7,6 @@ import {useQuery} from 'zero-react/src/use-query.js';
 import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.tsx';
-import {useZero} from '../hooks/use-zero.ts';
 import {IssueComposer} from '../pages/issue/issue-composer.tsx';
 import {
   links,
@@ -19,6 +18,7 @@ import {AvatarImage} from './avatar-image.tsx';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {Button} from './button.tsx';
 import {Link} from './link.tsx';
+import {queries} from '../../shared/schema.ts';
 
 export const Nav = memo(() => {
   const search = useSearch();
@@ -30,9 +30,8 @@ export const Nav = memo(() => {
   const login = useLogin();
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
-  const zero = useZero();
   const [user] = useQuery(
-    zero.query.user.where('id', login.loginState?.decoded.sub ?? '').one(),
+    queries.user.where('id', login.loginState?.decoded.sub ?? '').one(),
   );
 
   const [showIssueModal, setShowIssueModal] = useState(false);

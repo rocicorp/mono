@@ -106,6 +106,7 @@ export type {Entry, Format, View, ViewFactory} from '../../zql/src/ivm/view.ts';
 export type {
   DeleteID,
   InsertValue,
+  SchemaQuery,
   ServerTransaction,
   Transaction,
   UpdateValue,

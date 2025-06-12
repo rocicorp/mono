@@ -1,4 +1,3 @@
-import type {Zero} from '@rocicorp/zero';
 import {escapeLike, type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useWindowVirtualizer, Virtualizer} from '@tanstack/react-virtual';
@@ -23,11 +22,12 @@ import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.ts';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
-import type {
-  CommentRow,
-  IssueRow,
-  Schema,
-  UserRow,
+import {
+  queries,
+  type CommentRow,
+  type IssueRow,
+  type Schema,
+  type UserRow,
 } from '../../../shared/schema.ts';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
@@ -63,7 +63,6 @@ import {preload} from '../../zero-setup.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import type {Mutators} from '../../../shared/mutators.ts';
 
 function softNavigate(path: string, state?: ZbugsHistoryState) {
   navigate(path, {state});
@@ -86,7 +85,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
   const listContext = zbugsHistoryState?.zbugsListContext;
-  const q = z.query.issue
+  const q = queries.issue
     .where(idField, id)
     .related('emoji', emoji => emoji.related('creator'))
     .related('creator')
@@ -222,7 +221,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     enabled: listContext !== undefined && issueSnapshot !== undefined,
   } as const;
   const [next] = useQuery(
-    buildListQuery(z, listContext, displayed, 'next'),
+    buildListQuery(listContext, displayed, 'next'),
     useQueryOptions,
   );
   useKeypress('j', () => {
@@ -232,7 +231,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   });
 
   const [prev] = useQuery(
-    buildListQuery(z, listContext, displayed, 'prev'),
+    buildListQuery(listContext, displayed, 'prev'),
     useQueryOptions,
   );
   useKeypress('k', () => {
@@ -919,13 +918,12 @@ function noop() {
 }
 
 function buildListQuery(
-  z: Zero<Schema, Mutators>,
   listContext: ListContext | undefined,
   issue: Row<Schema['tables']['issue']> | undefined,
   dir: 'next' | 'prev',
 ) {
   if (!listContext || !issue) {
-    return z.query.issue.one();
+    return queries.issue.one();
   }
   const {
     open,
@@ -938,7 +936,7 @@ function buildListQuery(
   } = listContext.params;
   const orderByDir =
     dir === 'next' ? sortDirection : sortDirection === 'asc' ? 'desc' : 'asc';
-  let q = z.query.issue
+  let q = queries.issue
     .orderBy(sortField, orderByDir)
     .orderBy('id', orderByDir)
     .start(issue)
@@ -975,11 +973,10 @@ function useEmojiChangeListener(
   issue: Issue | undefined,
   cb: (added: readonly Emoji[], removed: readonly Emoji[]) => void,
 ) {
-  const z = useZero();
   const enabled = issue !== undefined;
   const issueID = issue?.id;
   const [emojis, result] = useQuery(
-    z.query.emoji
+    queries.emoji
       .where('subjectID', issueID ?? '')
       .related('creator', creator => creator.one()),
     {enabled},
