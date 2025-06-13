@@ -71,7 +71,8 @@ jobs:
       - name: Deploy SST app
         env:
           ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
-          ZERO_PUSH_URL: ${{ secrets.GIGABUGS_ZERO_PUSH_URL }}
+          ZERO_PUSH_URL: ${{ vars.GIGABUGS_ZERO_PUSH_URL }}
+          ZERO_PULL_URL: ${{ vars.GIGABUGS_ZERO_PULL_URL }}
           ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}
           ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}
           ZERO_AUTH_JWK: ${{ secrets.GIGABUGS_ZERO_AUTH_JWK }}
@@ -89,7 +90,8 @@ jobs:
         env:
           ZERO_APP_ID: '1'
           ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
-          ZERO_PUSH_URL: ${{ secrets.GIGABUGS_ZERO_PUSH_URL }}
+          ZERO_PUSH_URL: ${{ vars.GIGABUGS_ZERO_PUSH_URL }}
+          ZERO_PULL_URL: ${{ vars.GIGABUGS_ZERO_PULL_URL }}
           ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}2
           ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}2
           ZERO_AUTH_JWK: ${{ secrets.GIGABUGS_ZERO_AUTH_JWK }}
