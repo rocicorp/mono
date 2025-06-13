@@ -821,6 +821,22 @@ export class QueryImpl<
       'preload requires a query delegate to be set',
     );
     const {resolve, promise: complete} = resolver<void>();
+    if (this.customQueryID) {
+      const unsub = delegate.addCustomQuery(
+        this.customQueryID,
+        options?.ttl ?? DEFAULT_TTL,
+        got => {
+          if (got) {
+            resolve();
+          }
+        },
+      );
+      return {
+        cleanup: unsub,
+        complete,
+      };
+    }
+
     const ast = this._completeAst();
     const unsub = delegate.addServerQuery(
       ast,

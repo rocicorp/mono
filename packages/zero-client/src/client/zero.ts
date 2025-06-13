@@ -560,8 +560,8 @@ export class Zero<
       this.#ivmMain,
       (ast, ttl, gotCallback) =>
         this.#queryManager.addLegacy(ast, ttl, gotCallback),
-      (customQueryID, ttl, gotCallback) =>
-        this.#queryManager.addCustom(customQueryID, ttl, gotCallback),
+      (queryName, queryArgs, ttl, gotCallback) =>
+        this.#queryManager.addCustom(queryName, queryArgs, ttl, gotCallback),
       (ast, ttl) => this.#queryManager.updateLegacy(ast, ttl),
       (name, args, ttl) => this.#queryManager.updateCustom(name, args, ttl),
       batchViewUpdates,
@@ -747,8 +747,8 @@ export class Zero<
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     query: Query<S, keyof S['tables'] & string, any>,
     options: PreloadOptions,
-  ): void {
-    query.delegate(this.#zeroContext).preload(options);
+  ) {
+    return query.delegate(this.#zeroContext).preload(options);
   }
 
   /**
