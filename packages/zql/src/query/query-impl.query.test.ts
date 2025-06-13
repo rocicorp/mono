@@ -1,4 +1,4 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {deepClone} from '../../../shared/src/deep-clone.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
@@ -1835,5 +1835,30 @@ describe('junction relationship limitations', () => {
         q.whereExists('comments', q => q.orderBy('id', 'asc')),
       ),
     ).not.toThrow();
+  });
+});
+
+describe('addCustom / addServer are called', () => {
+  async function check(
+    type: 'addCustomQuery' | 'addServerQuery',
+    op: 'preload' | 'materialize' | 'run',
+  ) {
+    const queryDelegate = new QueryDelegateImpl();
+    let query = newQuery(queryDelegate, schema, 'issue');
+    if (type === 'addCustomQuery') {
+      query = query.nameAndArgs('issue', []);
+    }
+    const spy = vi.spyOn(queryDelegate, type);
+    await query[op]();
+
+    expect(spy).toHaveBeenCalledOnce();
+  }
+
+  test('preload, materialize, run', async () => {
+    for (const type of ['addCustomQuery', 'addServerQuery'] as const) {
+      for (const op of ['preload', 'materialize', 'run'] as const) {
+        await check(type, op);
+      }
+    }
   });
 });
