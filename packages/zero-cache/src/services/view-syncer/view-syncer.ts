@@ -823,7 +823,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #scheduleExpireEviction(lc: LogContext, cvr: CVRSnapshot): void {
     // first see if there is any inactive query with a ttl.
-    const next = nextEvictionTime(cvr);
+    const next = nextEvictionTime(lc, cvr);
     if (next === undefined) {
       lc.debug?.('no inactive queries with ttl');
       // no inactive queries with a ttl. Cancel existing timeout if any.
@@ -1574,7 +1574,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         `Trying to evict inactive queries, rowCount: ${rowCountBeforeEvictions} > maxRowCount: ${this.maxRowCount}`,
       );
 
-      const inactiveQueries = getInactiveQueries(cvr);
+      const inactiveQueries = getInactiveQueries(lc, cvr);
       if (!inactiveQueries.length) {
         lc.info?.('No inactive queries to evict');
         return;

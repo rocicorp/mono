@@ -64,22 +64,22 @@ test.each([
 });
 
 test.each([
-  ['none', 'none'],
-  ['forever', MAX_TTL],
+  ['none', 0],
+  ['forever', 10 * 60 * 1000, true],
   [0, 0],
-  [-1, MAX_TTL],
+  [-1, 10 * 60 * 1000, true],
   [1, 1],
   [1000, 1000],
-  [10 * 60 * 1000, MAX_TTL], // Exactly at the max TTL
-  [10 * 60 * 1000 + 1, MAX_TTL], // Just above the max TTL
-  ['1h', MAX_TTL], // Above max TTL in string format
-  ['1m', '1m'], // Below max TTL in string format
-] as const)('clampTTL(%o) === %o', (ttl, expected) => {
+  [10 * 60 * 1000, 10 * 60 * 1000], // Exactly at the max TTL
+  [10 * 60 * 1000 + 1, 10 * 60 * 1000, true], // Just above the max TTL
+  ['1h', 10 * 60 * 1000, true], // Above max TTL in string format
+  ['1m', 60 * 1000], // Below max TTL in string format
+] as const)('clampTTL(%o) === %o', (ttl, expected, expectError?) => {
   const mockLogContext = {
     warn: vi.fn(),
   } as unknown as LogContext;
   expect(clampTTL(mockLogContext, ttl)).toBe(expected);
-  if (expected === MAX_TTL) {
+  if (expectError) {
     expect(mockLogContext.warn).toHaveBeenCalledWith(
       `TTL (${ttl}) is too high, clamping to ${MAX_TTL}`,
     );

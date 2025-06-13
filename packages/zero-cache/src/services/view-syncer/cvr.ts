@@ -18,7 +18,7 @@ import {
 import {stringCompare} from '../../../../shared/src/string-compare.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
-import {compareTTL} from '../../../../zql/src/query/ttl.ts';
+import {clampTTL, compareTTL} from '../../../../zql/src/query/ttl.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
@@ -337,12 +337,12 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   /**
    * Returns non active queries in the order that we want to remove them.
    */
-  getInactiveQueries(): {
+  getInactiveQueries(lc: LogContext): {
     hash: string;
     inactivatedAt: number;
     ttl: number | undefined;
   }[] {
-    return getInactiveQueries(this._cvr);
+    return getInactiveQueries(lc, this._cvr);
   }
 
   deleteDesiredQueries(
@@ -878,11 +878,15 @@ function mergeRefCounts(
   return Object.values(merged).some(v => v > 0) ? merged : null;
 }
 
-export function getInactiveQueries(cvr: CVR): {
+export function getInactiveQueries(
+  lc: LogContext,
+  cvr: CVR,
+): {
   hash: string;
   inactivatedAt: number;
   ttl: number;
 }[] {
+  // We no longer support a TTL larger than 10 minutes.
   const inactive: Map<
     string,
     {
@@ -897,28 +901,24 @@ export function getInactiveQueries(cvr: CVR): {
     }
     for (const clientState of Object.values(query.clientState)) {
       const {inactivatedAt, ttl} = clientState;
+      const clampedTTL = clampTTL(lc, ttl);
       if (inactivatedAt !== undefined) {
         const existing = inactive.get(queryID);
         if (existing) {
-          // if one of them have no ttl, then we have no ttl
-          if (existing.ttl < 0 || ttl < 0) {
-            existing.ttl = -1;
-            existing.inactivatedAt = Math.max(
-              existing.inactivatedAt,
-              inactivatedAt,
-            );
-          } else {
-            // pick the one with the last expire
-            if (existing.inactivatedAt + existing.ttl < inactivatedAt + ttl) {
-              existing.inactivatedAt = inactivatedAt;
-              existing.ttl = ttl;
-            }
+          // Use the last eviction time.
+          const existingTTL = clampTTL(lc, existing.ttl);
+          if (
+            existingTTL + existing.inactivatedAt <
+            inactivatedAt + clampedTTL
+          ) {
+            existing.ttl = clampedTTL;
+            existing.inactivatedAt = inactivatedAt;
           }
         } else {
           inactive.set(queryID, {
             hash: queryID,
             inactivatedAt,
-            ttl,
+            ttl: clampedTTL,
           });
         }
       }
@@ -930,23 +930,16 @@ export function getInactiveQueries(cvr: CVR): {
     if (a.ttl === b.ttl) {
       return a.inactivatedAt - b.inactivatedAt;
     }
-    if (a.ttl < 0) {
-      return 1;
-    }
-    if (b.ttl < 0) {
-      return -1;
-    }
     return a.inactivatedAt + a.ttl - b.inactivatedAt - b.ttl;
   });
 }
 
-export function nextEvictionTime(cvr: CVR): number | undefined {
+export function nextEvictionTime(lc: LogContext, cvr: CVR): number | undefined {
   let next: number | undefined;
-  for (const {inactivatedAt, ttl} of getInactiveQueries(cvr)) {
-    if (ttl < 0) {
-      continue;
-    }
-    const expire = inactivatedAt + ttl;
+  for (const {inactivatedAt, ttl} of getInactiveQueries(lc, cvr)) {
+    // We no longer support a TTL larger than 10 minutes. So, ttl < 0 means 10 minutes.
+    const clampedTTL = clampTTL(lc, ttl);
+    const expire = inactivatedAt + clampedTTL;
     if (next === undefined || expire < next) {
       next = expire;
     }
