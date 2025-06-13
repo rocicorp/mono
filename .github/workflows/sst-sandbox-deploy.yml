@@ -66,8 +66,7 @@ jobs:
       - name: Deploy SST app
         env:
           ZERO_UPSTREAM_DB: ${{ secrets.SANDBOX_ZERO_UPSTREAM_DB }}
-          ZERO_PUSH_URL: ${{ vars.SANDBOX_ZERO_PUSH_URL }}
-          ZERO_PULL_URL: ${{ vars.SANDBOX_ZERO_PULL_URL }}
+          ZERO_PUSH_URL: ${{ secrets.SANDBOX_ZERO_PUSH_URL }}
           ZERO_CVR_DB: ${{ secrets.SANDBOX_ZERO_CVR_DB }}
           ZERO_CHANGE_DB: ${{ secrets.SANDBOX_ZERO_CHANGE_DB }}
           ZERO_AUTH_JWK: ${{ secrets.SANDBOX_ZERO_AUTH_JWK }}
