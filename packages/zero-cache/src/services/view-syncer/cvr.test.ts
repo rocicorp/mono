@@ -1,5 +1,4 @@
 import {expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {getInactiveQueries, type CVR} from './cvr.ts';
 import type {ClientQueryRecord} from './schema/types.ts';
 
@@ -235,6 +234,5 @@ test.each([
   },
 ])('getInactiveQueries %o', ({clients, expected}) => {
   const cvr = makeCVR(clients);
-  const lc = createSilentLogContext();
-  expect(getInactiveQueries(lc, cvr)).toEqual(expected);
+  expect(getInactiveQueries(cvr)).toEqual(expected);
 });

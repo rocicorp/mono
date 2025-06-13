@@ -337,12 +337,12 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   /**
    * Returns non active queries in the order that we want to remove them.
    */
-  getInactiveQueries(lc: LogContext): {
+  getInactiveQueries(): {
     hash: string;
     inactivatedAt: number;
     ttl: number | undefined;
   }[] {
-    return getInactiveQueries(lc, this._cvr);
+    return getInactiveQueries(this._cvr);
   }
 
   deleteDesiredQueries(
@@ -878,10 +878,7 @@ function mergeRefCounts(
   return Object.values(merged).some(v => v > 0) ? merged : null;
 }
 
-export function getInactiveQueries(
-  lc: LogContext,
-  cvr: CVR,
-): {
+export function getInactiveQueries(cvr: CVR): {
   hash: string;
   inactivatedAt: number;
   ttl: number;
@@ -901,12 +898,12 @@ export function getInactiveQueries(
     }
     for (const clientState of Object.values(query.clientState)) {
       const {inactivatedAt, ttl} = clientState;
-      const clampedTTL = clampTTL(lc, ttl);
+      const clampedTTL = clampTTL(ttl);
       if (inactivatedAt !== undefined) {
         const existing = inactive.get(queryID);
         if (existing) {
           // Use the last eviction time.
-          const existingTTL = clampTTL(lc, existing.ttl);
+          const existingTTL = clampTTL(existing.ttl);
           if (
             existingTTL + existing.inactivatedAt <
             inactivatedAt + clampedTTL
@@ -934,11 +931,11 @@ export function getInactiveQueries(
   });
 }
 
-export function nextEvictionTime(lc: LogContext, cvr: CVR): number | undefined {
+export function nextEvictionTime(cvr: CVR): number | undefined {
   let next: number | undefined;
-  for (const {inactivatedAt, ttl} of getInactiveQueries(lc, cvr)) {
+  for (const {inactivatedAt, ttl} of getInactiveQueries(cvr)) {
     // We no longer support a TTL larger than 10 minutes. So, ttl < 0 means 10 minutes.
-    const clampedTTL = clampTTL(lc, ttl);
+    const clampedTTL = clampTTL(ttl);
     const expire = inactivatedAt + clampedTTL;
     if (next === undefined || expire < next) {
       next = expire;
