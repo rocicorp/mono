@@ -3,7 +3,7 @@ import '@dotenvx/dotenvx/config';
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
-import type {NamedQueryImpl, ReadonlyJSONValue} from '@rocicorp/zero';
+import type {ReadonlyJSONValue} from '@rocicorp/zero';
 import {
   transformRequestMessageSchema,
   type TransformResponseMessage,
@@ -18,8 +18,8 @@ import {must} from '../../../packages/shared/src/must.ts';
 import * as v from '../../../packages/shared/src/valita.ts';
 import {handlePush} from '../server/push-handler.ts';
 import {authDataSchema, type AuthData} from '../shared/auth.ts';
-import * as serverQueries from '../server/server-queries.ts';
-import * as sharedQueries from '../shared/queries.ts';
+import {getQuery} from '../server/get-query.ts';
+import type {ServerContext} from '../server/server-queries.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -158,25 +158,14 @@ fastify.post<{
     throw e;
   }
 
-  const context: serverQueries.ServerContext = {
+  const context: ServerContext = {
     role: authData?.role,
   };
   const transformRequest = v.parse(request.body, transformRequestMessageSchema);
   const response: TransformResponseMessage = [
     'transformed',
     transformRequest[1].map(req => {
-      let query;
-      const key = req.name;
-      if (isServerQuery(key)) {
-        query = (serverQueries[key] as serverQueries.ServerQuery)(
-          context,
-          ...req.args,
-        );
-      } else if (isSharedQuery(key)) {
-        query = (sharedQueries[key] as NamedQueryImpl)(...req.args);
-      } else {
-        throw new Error(`Unknown query: ${req.name}`);
-      }
+      const query = getQuery(context, req.name, req.args);
 
       const ret = {
         id: req.id,
@@ -189,14 +178,6 @@ fastify.post<{
   ];
   reply.send(response);
 });
-
-function isServerQuery(key: string): key is keyof typeof serverQueries {
-  return key in serverQueries;
-}
-
-function isSharedQuery(key: string): key is keyof typeof sharedQueries {
-  return key in sharedQueries;
-}
 
 async function maybeVerifyAuth(
   headers: IncomingHttpHeaders,
