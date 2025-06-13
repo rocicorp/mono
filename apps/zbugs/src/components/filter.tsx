@@ -3,10 +3,10 @@ import classNames from 'classnames';
 import {memo, useMemo, useState} from 'react';
 import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';
 import labelIcon from '../assets/icons/label.svg';
-import {useZero} from '../hooks/use-zero.ts';
 import {Button} from './button.tsx';
 import {Combobox} from './combobox.tsx';
 import {UserPicker} from './user-picker.tsx';
+import {queries} from '../../shared/schema.ts';
 
 export type Selection =
   | {creator: string}
@@ -18,10 +18,9 @@ type Props = {
 };
 
 export const Filter = memo(function Filter({onSelect}: Props) {
-  const z = useZero();
   const [isOpen, setIsOpen] = useState(false);
 
-  const [unsortedLabels] = useQuery(z.query.label);
+  const [unsortedLabels] = useQuery(queries.label);
   // TODO: Support case-insensitive sorting in ZQL.
   const labels = useMemo(
     () => toSorted(unsortedLabels, (a, b) => a.name.localeCompare(b.name)),

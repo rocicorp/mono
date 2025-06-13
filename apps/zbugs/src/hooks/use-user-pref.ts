@@ -1,12 +1,12 @@
 import type {Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
-import type {Schema} from '../../shared/schema.ts';
+import {queries, type Schema} from '../../shared/schema.ts';
 import {useZero} from './use-zero.ts';
 import type {Mutators} from '../../shared/mutators.ts';
 
 export function useUserPref(key: string): string | undefined {
   const z = useZero();
-  const q = z.query.userPref.where('key', key).where('userID', z.userID).one();
+  const q = queries.userPref.where('key', key).where('userID', z.userID).one();
   const [pref] = useQuery(q);
   return pref?.value;
 }

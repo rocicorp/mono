@@ -181,8 +181,8 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     client = {id, desiredQueryIDs: []};
     this._cvr.clients[id] = client;
 
-    const newVersion = this._ensureNewVersion();
-    this._cvrStore.insertClient(client, newVersion);
+    this._ensureNewVersion();
+    this._cvrStore.insertClient(client);
 
     if (!this._cvr.queries[CLIENT_LMID_QUERY_ID]) {
       const lmidsQuery: InternalQueryRecord = {
@@ -280,7 +280,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       return patches;
     }
     const newVersion = this._ensureNewVersion();
-    // why do we sort here?
     client.desiredQueryIDs = [...union(current, needed)].sort(stringCompare);
 
     for (const id of needed) {

@@ -749,8 +749,8 @@ describe('view-syncer/cvr-store', () => {
 
   test('load with deleted client with remaining desires', async () => {
     await db.unsafe(`
-      INSERT INTO "roze_1/cvr".clients ("clientGroupID", "clientID", "patchVersion", deleted)
-        VALUES('${CVR_ID}', 'client1', '01', false);
+      INSERT INTO "roze_1/cvr".clients ("clientGroupID", "clientID")
+        VALUES('${CVR_ID}', 'client1');
       INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion")
         VALUES('${CVR_ID}', 'client1', 'foo', '01');
       INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "ttl", "inactivatedAt")
@@ -816,10 +816,10 @@ describe('view-syncer/cvr-store', () => {
     // Setup two clients with two desired queries each
     await db.unsafe(`
       -- Insert client1 and client2
-      INSERT INTO "roze_1/cvr".clients ("clientGroupID", "clientID", "patchVersion", deleted)
-        VALUES('${CVR_ID}', 'client1', '01', false);
-      INSERT INTO "roze_1/cvr".clients ("clientGroupID", "clientID", "patchVersion", deleted)
-        VALUES('${CVR_ID}', 'client2', '01', false);
+      INSERT INTO "roze_1/cvr".clients ("clientGroupID", "clientID")
+        VALUES('${CVR_ID}', 'client1');
+      INSERT INTO "roze_1/cvr".clients ("clientGroupID", "clientID")
+        VALUES('${CVR_ID}', 'client2');
       
       -- Insert query 'bar' (users table with AST)
       INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", "patchVersion", "transformationHash", "transformationVersion")

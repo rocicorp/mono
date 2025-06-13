@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import {type AST, type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   LastInTuple,
@@ -12,6 +12,7 @@ import type {
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
+import type {QueryDelegate} from './query-delegate.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -164,12 +165,14 @@ export interface Query<
    * the server which tracks queries by `name:args`.
    */
   hash(): string;
+  readonly ast: AST;
   readonly customQueryID: CustomQueryID | undefined;
 
   nameAndArgs(
     name: string,
     args: ReadonlyArray<ReadonlyJSONValue>,
   ): Query<TSchema, TTable, TReturn>;
+  delegate(delegate: QueryDelegate): Query<TSchema, TTable, TReturn>;
 
   /**
    * Related is used to add a related query to the current query. This is used

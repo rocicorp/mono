@@ -1,8 +1,9 @@
-import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {AST, System} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../ivm/view.ts';
 import {ExpressionBuilder} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
+import type {QueryDelegate} from './query-delegate.ts';
 import {AbstractQuery, defaultFormat, newQuerySymbol} from './query-impl.ts';
 import type {HumanReadable, PullRow, Query} from './query.ts';
 import type {TypedView} from './typed-view.ts';
@@ -28,27 +29,29 @@ export class StaticQuery<
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
 > extends AbstractQuery<TSchema, TTable, TReturn> {
-  expressionBuilder() {
-    return new ExpressionBuilder(this._exists);
-  }
-
   constructor(
     schema: TSchema,
     tableName: TTable,
     ast: AST,
     format: Format,
+    system: System = 'permissions',
     customQueryID?: CustomQueryID | undefined,
     currentJunction?: string | undefined,
   ) {
     super(
+      undefined,
       schema,
       tableName,
       ast,
       format,
-      'permissions',
+      system,
       customQueryID,
       currentJunction,
     );
+  }
+
+  expressionBuilder() {
+    return new ExpressionBuilder(this._exists);
   }
 
   protected [newQuerySymbol]<
@@ -56,6 +59,7 @@ export class StaticQuery<
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
+    _delegate: QueryDelegate | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST,
@@ -68,6 +72,7 @@ export class StaticQuery<
       tableName,
       ast,
       format,
+      'permissions',
       customQueryID,
       currentJunction,
     );

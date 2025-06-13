@@ -15,6 +15,10 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
+import type {
+  TransformResponseBody,
+  TransformResponseMessage,
+} from '../../../../zero-protocol/src/custom-queries.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import type {ErrorBody} from '../../../../zero-protocol/src/error.ts';
@@ -43,6 +47,7 @@ import {
 } from '../../../../zero-schema/src/permissions.ts';
 import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {testDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
@@ -75,11 +80,6 @@ import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
-import type {ZeroConfig} from '../../config/zero-config.ts';
-import type {
-  TransformResponseBody,
-  TransformResponseMessage,
-} from '../../../../zero-protocol/src/custom-queries.ts';
 
 const APP_ID = 'this_app';
 const SHARD_NUM = 2;
@@ -1571,17 +1571,15 @@ describe('view-syncer/service', () => {
     await nextPoke(client2);
 
     expect(
-      await cvrDB`SELECT "clientID", "deleted" from "this_app_2/cvr".clients`,
+      await cvrDB`SELECT "clientID" from "this_app_2/cvr".clients`,
     ).toMatchInlineSnapshot(
       `
       Result [
         {
           "clientID": "foo",
-          "deleted": false,
         },
         {
           "clientID": "bar",
-          "deleted": false,
         },
       ]
     `,
@@ -1646,13 +1644,12 @@ describe('view-syncer/service', () => {
     await expectNoPokes(client1);
 
     expect(
-      await cvrDB`SELECT "clientID", "deleted" from "this_app_2/cvr".clients`,
+      await cvrDB`SELECT "clientID" from "this_app_2/cvr".clients`,
     ).toMatchInlineSnapshot(
       `
       Result [
         {
           "clientID": "foo",
-          "deleted": false,
         },
       ]
     `,
@@ -1766,17 +1763,15 @@ describe('view-syncer/service', () => {
     await nextPoke(client2);
 
     expect(
-      await cvrDB`SELECT "clientID", "deleted" from "this_app_2/cvr".clients`,
+      await cvrDB`SELECT "clientID" from "this_app_2/cvr".clients`,
     ).toMatchInlineSnapshot(
       `
       Result [
         {
           "clientID": "foo",
-          "deleted": false,
         },
         {
           "clientID": "bar",
-          "deleted": false,
         },
       ]
     `,
@@ -1869,13 +1864,11 @@ describe('view-syncer/service', () => {
         },
       ]
     `);
-    expect(
-      await cvrDB`SELECT "clientID", "deleted" from "this_app_2/cvr".clients`,
-    ).toMatchInlineSnapshot(`
+    expect(await cvrDB`SELECT "clientID" from "this_app_2/cvr".clients`)
+      .toMatchInlineSnapshot(`
       Result [
         {
           "clientID": "foo",
-          "deleted": false,
         },
       ]
     `);

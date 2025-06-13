@@ -12,11 +12,11 @@ import type {Input} from '../../ivm/operator.ts';
 import type {Source} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
 import type {CustomQueryID} from '../named.ts';
-import {
-  type CommitListener,
-  type GotCallback,
-  type QueryDelegate,
-} from '../query-impl.ts';
+import type {
+  CommitListener,
+  GotCallback,
+  QueryDelegate,
+} from '../query-delegate.ts';
 import type {TTL} from '../ttl.ts';
 import {
   commentSchema,
@@ -119,6 +119,16 @@ export class QueryDelegateImpl implements QueryDelegate {
   updateServerQuery(ast: AST, ttl: TTL): void {
     const query = this.addedServerQueries.find(({ast: otherAST}) =>
       deepEqual(otherAST, ast),
+    );
+    assert(query);
+    query.ttl = ttl;
+  }
+
+  updateCustomQuery(customQueryID: CustomQueryID, ttl: TTL): void {
+    const query = this.addedServerQueries.find(
+      ({name, args}) =>
+        name === customQueryID.name &&
+        (args === undefined || deepEqual(args, customQueryID.args)),
     );
     assert(query);
     query.ttl = ttl;

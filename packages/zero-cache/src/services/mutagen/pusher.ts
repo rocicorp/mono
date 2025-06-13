@@ -19,7 +19,7 @@ import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
-import type {Service} from '../service.ts';
+import type {RefCountedService, Service} from '../service.ts';
 import {fetchFromAPIServer} from '../../custom/fetch.ts';
 
 type Fatal = {
@@ -28,7 +28,7 @@ type Fatal = {
   mutationIDs: PushError['mutationIDs'];
 };
 
-export interface Pusher {
+export interface Pusher extends RefCountedService {
   readonly pushURL: string | undefined;
 
   enqueuePush(
@@ -63,6 +63,8 @@ export class PusherService implements Service, Pusher {
   readonly #pusher: PushWorker;
   readonly #queue: Queue<PusherEntryOrStop>;
   #stopped: Promise<void> | undefined;
+  #refCount = 0;
+  #isStopped = false;
 
   constructor(
     config: Config,
@@ -100,12 +102,33 @@ export class PusherService implements Service, Pusher {
     };
   }
 
+  ref() {
+    assert(!this.#isStopped, 'PusherService is already stopped');
+    ++this.#refCount;
+  }
+
+  unref() {
+    assert(!this.#isStopped, 'PusherService is already stopped');
+    --this.#refCount;
+    if (this.#refCount <= 0) {
+      void this.stop();
+    }
+  }
+
+  hasRefs(): boolean {
+    return this.#refCount > 0;
+  }
+
   run(): Promise<void> {
     this.#stopped = this.#pusher.run();
     return this.#stopped;
   }
 
   stop(): Promise<void> {
+    if (this.#isStopped) {
+      return must(this.#stopped, 'Stop was called before `run`');
+    }
+    this.#isStopped = true;
     this.#queue.enqueue('stop');
     return must(this.#stopped, 'Stop was called before `run`');
   }

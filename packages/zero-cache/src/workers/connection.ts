@@ -250,6 +250,7 @@ export class Connection {
         this.#lc.warn?.(
           `failed to parse close message "${reason}": ${String(e)}`,
         );
+        this.close('WebSocket close event', {code, reason, wasClean});
         return;
       }
 

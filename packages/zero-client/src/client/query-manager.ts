@@ -18,12 +18,12 @@ import {
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import type {GotCallback} from '../../../zql/src/query/query-impl.ts';
 import {compareTTL, parseTTL, type TTL} from '../../../zql/src/query/ttl.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
+import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
 
 type QueryHash = string;
 
@@ -139,9 +139,16 @@ export class QueryManager {
         patch.set(hash, {op: 'del', hash});
       }
     }
-    for (const [hash, {normalized, ttl}] of this.#queries) {
+    for (const [hash, {normalized, ttl, name, args}] of this.#queries) {
       if (!existingQueryHashes.has(hash)) {
-        patch.set(hash, {op: 'put', hash, ast: normalized, ttl: parseTTL(ttl)});
+        patch.set(hash, {
+          op: 'put',
+          hash,
+          ast: normalized,
+          name,
+          args,
+          ttl: parseTTL(ttl),
+        });
       }
     }
 
@@ -275,7 +282,13 @@ export class QueryManager {
     };
   }
 
-  update(ast: AST, ttl: TTL) {
+  updateCustom(name: string, args: readonly ReadonlyJSONValue[], ttl: TTL) {
+    const hash = hashOfNameAndArgs(name, args);
+    const entry = must(this.#queries.get(hash));
+    this.#updateEntry(entry, hash, ttl);
+  }
+
+  updateLegacy(ast: AST, ttl: TTL) {
     const normalized = normalizeAST(ast);
     const astHash = hashOfAST(normalized);
     const entry = must(this.#queries.get(astHash));

@@ -12,6 +12,7 @@ import {
 } from '../../zql/src/query/query-impl.ts';
 import type {HumanReadable, PullRow, Query} from '../../zql/src/query/query.ts';
 import type {TypedView} from '../../zql/src/query/typed-view.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 
 export function makeSchemaQuery<S extends Schema>(
   schema: S,
@@ -40,6 +41,10 @@ export function makeSchemaQuery<S extends Schema>(
     ) {
       if (prop in target) {
         return target[prop];
+      }
+
+      if (!(prop in schema.tables)) {
+        throw new Error(`Table ${prop} does not exist in schema`);
       }
 
       const q = new ZPGQuery(
@@ -86,7 +91,7 @@ export class ZPGQuery<
     ast: AST,
     format: Format,
   ) {
-    super(schema, tableName, ast, format, 'permissions', undefined);
+    super(undefined, schema, tableName, ast, format, 'permissions', undefined);
     this.#dbTransaction = dbTransaction;
     this.#schema = schema;
     this.#serverSchema = serverSchema;
@@ -97,6 +102,7 @@ export class ZPGQuery<
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
+    _delegate: QueryDelegate | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST,
