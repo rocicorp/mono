@@ -1,15 +1,15 @@
+import {ZeroInspector, ZeroProvider} from '@rocicorp/zero/react';
 import Cookies from 'js-cookie';
-import {ZeroProvider} from '@rocicorp/zero/react';
 import {useCallback, useState, useSyncExternalStore} from 'react';
 import {Route, Switch} from 'wouter';
 import {Nav} from './components/nav.tsx';
+import {OnboardingModal} from './components/onboarding-modal.tsx';
 import {useSoftNav} from './hooks/use-softnav.ts';
 import {ErrorPage} from './pages/error/error-page.tsx';
 import {IssuePage} from './pages/issue/issue-page.tsx';
 import {ListPage} from './pages/list/list-page.tsx';
 import {routes} from './routes.ts';
 import {zeroRef} from './zero-setup.ts';
-import {OnboardingModal} from './components/onboarding-modal.tsx';
 
 export function Root() {
   const z = useSyncExternalStore(
@@ -61,6 +61,7 @@ export function Root() {
           setShowOnboarding(false);
         }}
       />
+      {import.meta.env.DEV && <ZeroInspector zero={z} />}
     </ZeroProvider>
   );
 }
