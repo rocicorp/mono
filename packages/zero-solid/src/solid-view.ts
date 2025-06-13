@@ -1,4 +1,4 @@
-import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
+import {produce, type SetStoreFunction} from 'solid-js/store';
 import {
   applyChange,
   type Change,
@@ -69,12 +69,7 @@ export class SolidView implements Output {
     );
 
     this.#setState = setState;
-    this.#setState(
-      reconcile([initialRoot, queryComplete === true ? complete : unknown], {
-        merge: true,
-        key: '__uniqueID',
-      }),
-    );
+    this.#setState([initialRoot, queryComplete === true ? complete : unknown]);
 
     if (isEmptyRoot(initialRoot)) {
       this.#builderRoot = this.#createEmptyRoot();
@@ -95,10 +90,7 @@ export class SolidView implements Output {
     const builderRoot = this.#builderRoot;
     if (builderRoot) {
       if (!isEmptyRoot(builderRoot)) {
-        this.#setState(
-          0,
-          reconcile(builderRoot, {merge: true, key: '__uniqueID'}),
-        );
+        this.#setState(0, builderRoot);
         this.#builderRoot = undefined;
       }
     } else {
