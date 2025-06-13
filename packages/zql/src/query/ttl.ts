@@ -81,11 +81,11 @@ export function normalizeTTL(ttl: TTL): TTL {
   return (shortest.length < lengthOfNumber ? shortest : ttl) as TTL;
 }
 
-export function clampTTL(lc: LogContext, ttl: TTL): number {
+export function clampTTL(ttl: TTL, lc?: LogContext): number {
   const parsedTTL = parseTTL(ttl);
   if (parsedTTL === -1 || parsedTTL > 10 * 60 * 1000) {
     // 10 minutes in milliseconds
-    lc.warn?.(`TTL (${ttl}) is too high, clamping to ${MAX_TTL}`);
+    lc?.warn?.(`TTL (${ttl}) is too high, clamping to ${MAX_TTL}`);
     return parseTTL(MAX_TTL);
   }
   return parsedTTL;

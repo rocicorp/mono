@@ -78,7 +78,7 @@ test.each([
   const mockLogContext = {
     warn: vi.fn(),
   } as unknown as LogContext;
-  expect(clampTTL(mockLogContext, ttl)).toBe(expected);
+  expect(clampTTL(ttl, mockLogContext)).toBe(expected);
   if (expectError) {
     expect(mockLogContext.warn).toHaveBeenCalledWith(
       `TTL (${ttl}) is too high, clamping to ${MAX_TTL}`,
