@@ -1,4 +1,4 @@
-import type {AnyQuery, Query, ReadonlyJSONValue, Row} from '@rocicorp/zero';
+import type {AnyQuery, ReadonlyJSONValue, Row} from '@rocicorp/zero';
 import type {Schema} from '../shared/schema.ts';
 import type {Role} from '../shared/auth.ts';
 import type {ListContext} from '../shared/queries.ts';
@@ -6,17 +6,9 @@ import {
   issuePreload as sharedIssuePreload,
   prevNext as sharedPrevNext,
   issueList as sharedIssueList,
+  issueDetail as sharedIssueDetail,
 } from '../shared/queries.ts';
-
-function applyIssuePermissions(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  q: Query<Schema, 'issue', any>,
-  role: Role | undefined,
-) {
-  return q.where(({or, cmp, cmpLit}) =>
-    or(cmp('visibility', '=', 'public'), cmpLit(role ?? null, '=', 'crew')),
-  );
-}
+import {applyIssuePermissions} from './read-permissions.ts';
 
 export type ServerContext = {
   role: Role | undefined;
@@ -50,4 +42,13 @@ export function issueList(
     sharedIssueList(listContext, userID, limit),
     c.role,
   );
+}
+
+export function issueDetail(
+  c: ServerContext,
+  idField: 'shortID' | 'id',
+  id: string | number,
+  userID: string,
+) {
+  return applyIssuePermissions(sharedIssueDetail(idField, id, userID), c.role);
 }
