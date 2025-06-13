@@ -51,7 +51,7 @@ export function createQuery<
   createComputed(() => {
     const query = querySignal();
     const ttl = normalize(options)?.ttl ?? DEFAULT_TTL;
-    createView(z().clientID, query, ttl, setState);
+    createView(z()?.clientID, query, ttl, setState);
   });
 
   return [() => state[0][''] as HumanReadable<TReturn>, () => state[1]];
@@ -77,12 +77,12 @@ function createView<
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
-  clientID: string,
+  clientID: string | undefined,
   query: Query<TSchema, TTable, TReturn>,
   ttl: TTL,
   setState: SetStoreFunction<State>,
 ): SolidView {
-  const hash = query.hash() + clientID;
+  const hash = query.hash() + (clientID ?? '');
   let view = views.get(hash);
   if (!view) {
     view = query.materialize(createSolidView(setState), ttl);
