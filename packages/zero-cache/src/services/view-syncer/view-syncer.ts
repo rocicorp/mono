@@ -34,6 +34,8 @@ import {
   transformAndHashQuery,
   type TransformedAndHashed,
 } from '../../auth/read-authorizer.ts';
+import {type ZeroConfig} from '../../config/zero-config.ts';
+import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
 import {stringify} from '../../types/bigint-json.ts';
@@ -79,8 +81,6 @@ import {
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
-import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
-import {type ZeroConfig} from '../../config/zero-config.ts';
 
 export type TokenData = {
   readonly raw: string;
