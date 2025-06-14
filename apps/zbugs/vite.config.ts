@@ -3,9 +3,9 @@ import {defineConfig, type ViteDevServer} from 'vite';
 import svgr from 'vite-plugin-svgr';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import {makeDefine} from '../../packages/shared/src/build.ts';
-import {fastify} from './api/index.ts';
 
 async function configureServer(server: ViteDevServer) {
+  const {fastify} = await import('./api/index.js');
   await fastify.ready();
   server.middlewares.use((req, res, next) => {
     if (!req.url?.startsWith('/api')) {

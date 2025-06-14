@@ -18,7 +18,8 @@ import {must} from '../../../packages/shared/src/must.ts';
 import * as v from '../../../packages/shared/src/valita.ts';
 import {handlePush} from '../server/push-handler.ts';
 import {authDataSchema, type AuthData} from '../shared/auth.ts';
-import {queries} from '../shared/schema.ts';
+import {getQuery} from '../server/get-query.ts';
+import type {ServerContext} from '../server/server-queries.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -142,13 +143,13 @@ fastify.post<{
   reply.send(response);
 });
 
-const emptyQuery = queries.issue.where(({or}) => or());
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
 }>('/api/pull', async (request, reply) => {
+  let authData;
   try {
-    await maybeVerifyAuth(request.headers);
+    authData = await maybeVerifyAuth(request.headers);
   } catch (e) {
     if (e instanceof Error) {
       reply.status(401).send(e.message);
@@ -157,14 +158,23 @@ fastify.post<{
     throw e;
   }
 
+  const context: ServerContext = {
+    role: authData?.role,
+  };
   const transformRequest = v.parse(request.body, transformRequestMessageSchema);
   const response: TransformResponseMessage = [
     'transformed',
-    transformRequest[1].map(req => ({
-      id: req.id,
-      name: req.name,
-      ast: emptyQuery.ast,
-    })),
+    transformRequest[1].map(req => {
+      const query = getQuery(context, req.name, req.args);
+
+      const ret = {
+        id: req.id,
+        name: req.name,
+        ast: query.ast,
+      };
+
+      return ret;
+    }),
   ];
   reply.send(response);
 });

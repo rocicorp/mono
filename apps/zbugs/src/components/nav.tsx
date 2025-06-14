@@ -8,17 +8,12 @@ import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.tsx';
 import {IssueComposer} from '../pages/issue/issue-composer.tsx';
-import {
-  links,
-  routes,
-  type ListContext,
-  type ZbugsHistoryState,
-} from '../routes.ts';
+import {links, routes, type ZbugsHistoryState} from '../routes.ts';
 import {AvatarImage} from './avatar-image.tsx';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {Button} from './button.tsx';
 import {Link} from './link.tsx';
-import {queries} from '../../shared/schema.ts';
+import {user as userQuery, type ListContext} from '../../shared/queries.ts';
 
 export const Nav = memo(() => {
   const search = useSearch();
@@ -30,9 +25,7 @@ export const Nav = memo(() => {
   const login = useLogin();
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
-  const [user] = useQuery(
-    queries.user.where('id', login.loginState?.decoded.sub ?? '').one(),
-  );
+  const [user] = useQuery(userQuery(login.loginState?.decoded.sub ?? ''));
 
   const [showIssueModal, setShowIssueModal] = useState(false);
 

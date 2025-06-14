@@ -1,18 +1,16 @@
 import {
-  ANYONE_CAN,
   boolean,
   createSchema,
-  definePermissions,
   enumeration,
   number,
   relationships,
   string,
   table,
-  type ExpressionBuilder,
   type Row,
   querify,
+  definePermissions,
 } from '@rocicorp/zero';
-import type {AuthData, Role} from './auth.ts';
+import type {Role} from './auth.ts';
 
 // Table definitions
 const user = table('user')
@@ -196,81 +194,12 @@ export const schema = createSchema({
 });
 
 export type Schema = typeof schema;
-type TableName = keyof Schema['tables'];
 
 export type IssueRow = Row<typeof schema.tables.issue>;
 export type CommentRow = Row<typeof schema.tables.comment>;
 export type UserRow = Row<typeof schema.tables.user>;
 
-export const queries = querify(schema);
+export const builder = querify(schema);
 
 export const permissions: ReturnType<typeof definePermissions> =
-  definePermissions<AuthData, Schema>(schema, () => {
-    const userIsLoggedIn = (
-      authData: AuthData,
-      {cmpLit}: ExpressionBuilder<Schema, TableName>,
-    ) => cmpLit(authData.sub, 'IS NOT', null);
-
-    const loggedInUserIsAdmin = (
-      authData: AuthData,
-      eb: ExpressionBuilder<Schema, TableName>,
-    ) =>
-      eb.and(
-        userIsLoggedIn(authData, eb),
-        eb.cmpLit(authData.role, '=', 'crew'),
-      );
-
-    const allowIfUserIDMatchesLoggedInUser = (
-      authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'viewState' | 'userPref'>,
-    ) => cmp('userID', '=', authData.sub);
-
-    const canSeeIssue = (
-      authData: AuthData,
-      eb: ExpressionBuilder<Schema, 'issue'>,
-    ) =>
-      eb.or(loggedInUserIsAdmin(authData, eb), eb.cmp('visibility', 'public'));
-
-    return {
-      user: {
-        row: {
-          select: ANYONE_CAN,
-        },
-      },
-      issue: {
-        row: {
-          select: [canSeeIssue],
-        },
-      },
-      comment: {
-        row: {
-          select: ANYONE_CAN,
-        },
-      },
-      label: {
-        row: {
-          select: ANYONE_CAN,
-        },
-      },
-      viewState: {
-        row: {
-          select: ANYONE_CAN,
-        },
-      },
-      issueLabel: {
-        row: {
-          select: ANYONE_CAN,
-        },
-      },
-      emoji: {
-        row: {
-          select: ANYONE_CAN,
-        },
-      },
-      userPref: {
-        row: {
-          select: [allowIfUserIDMatchesLoggedInUser],
-        },
-      },
-    };
-  });
+  definePermissions<unknown, Schema>(schema, () => ({}));
