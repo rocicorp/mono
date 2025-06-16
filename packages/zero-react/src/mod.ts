@@ -8,6 +8,7 @@ export type {
 } from '../../zero-schema/src/table-schema.ts';
 export type {HumanReadable} from '../../zql/src/query/query.ts';
 export type {ResultType} from '../../zql/src/query/typed-view.ts';
+export {ZeroInspector} from './components/zero-inspector.tsx';
 export {
   useQuery,
   type QueryResult,
