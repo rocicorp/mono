@@ -143,6 +143,11 @@ import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
+import {
+  mutatorsSymbol,
+  type MutatorMap,
+  type NamedMutator,
+} from '../../../zql/src/mutate/named.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -492,40 +497,56 @@ export class Zero<
     const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
 
     this.#mutationTracker = new MutationTracker(lc);
-    if (options.mutators) {
-      for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
-        options.mutators,
-      )) {
-        if (typeof mutatorOrMutators === 'function') {
-          const key = namespaceOrKey as string;
+    const {mutators} = options;
+    if (mutators) {
+      if (Array.isArray(mutators)) {
+        for (const mutator of mutators as readonly NamedMutator<S>[]) {
+          const key = mutator.mutatorName;
           assertUnique(key);
           replicacheMutators[key] = makeReplicacheMutator(
             lc,
-            mutatorOrMutators,
+            mutator,
             schema,
             slowMaterializeThreshold,
             // Replicache expects mutators to only be able to return JSON
             // but Zero wraps the return with: `{server?: Promise<MutationResult>, client?: T}`
           ) as () => MutatorReturn;
-          continue;
         }
-        if (typeof mutatorOrMutators === 'object') {
-          for (const [name, mutator] of Object.entries(mutatorOrMutators)) {
-            const key = customMutatorKey(
-              namespaceOrKey as string,
-              name as string,
-            );
+      } else {
+        for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
+          mutators as CustomMutatorDefs<S>,
+        )) {
+          if (typeof mutatorOrMutators === 'function') {
+            const key = namespaceOrKey as string;
             assertUnique(key);
             replicacheMutators[key] = makeReplicacheMutator(
               lc,
-              mutator as CustomMutatorImpl<S>,
+              mutatorOrMutators,
               schema,
               slowMaterializeThreshold,
+              // Replicache expects mutators to only be able to return JSON
+              // but Zero wraps the return with: `{server?: Promise<MutationResult>, client?: T}`
             ) as () => MutatorReturn;
+            continue;
           }
-          continue;
+          if (typeof mutatorOrMutators === 'object') {
+            for (const [name, mutator] of Object.entries(mutatorOrMutators)) {
+              const key = customMutatorKey(
+                namespaceOrKey as string,
+                name as string,
+              );
+              assertUnique(key);
+              replicacheMutators[key] = makeReplicacheMutator(
+                lc,
+                mutator as CustomMutatorImpl<S>,
+                schema,
+                slowMaterializeThreshold,
+              ) as () => MutatorReturn;
+            }
+            continue;
+          }
+          unreachable();
         }
-        unreachable(mutatorOrMutators);
       }
     }
 
@@ -631,29 +652,36 @@ export class Zero<
     const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
 
     if (options.mutators) {
-      for (const [namespaceOrKey, mutatorsOrMutator] of Object.entries(
-        options.mutators,
-      )) {
-        if (typeof mutatorsOrMutator === 'function') {
-          mutate[namespaceOrKey] = must(rep.mutate[namespaceOrKey as string]);
-          continue;
+      if (Array.isArray(options.mutators)) {
+        for (const mutator of options.mutators as readonly NamedMutator<S>[]) {
+          mutate[mutator.mutatorName] = must(rep.mutate[mutator.mutatorName]);
         }
+      } else {
+        for (const [namespaceOrKey, mutatorsOrMutator] of Object.entries(
+          options.mutators as CustomMutatorDefs<S>,
+        )) {
+          if (typeof mutatorsOrMutator === 'function') {
+            mutate[namespaceOrKey] = must(rep.mutate[namespaceOrKey as string]);
+            continue;
+          }
 
-        let existing = mutate[namespaceOrKey];
-        if (existing === undefined) {
-          existing = {};
-          mutate[namespaceOrKey] = existing;
-        }
+          let existing = mutate[namespaceOrKey];
+          if (existing === undefined) {
+            existing = {};
+            mutate[namespaceOrKey] = existing;
+          }
 
-        for (const name of Object.keys(mutatorsOrMutator)) {
-          existing[name] = must(
-            rep.mutate[customMutatorKey(namespaceOrKey as string, name)],
-          );
+          for (const name of Object.keys(mutatorsOrMutator)) {
+            existing[name] = must(
+              rep.mutate[customMutatorKey(namespaceOrKey as string, name)],
+            );
+          }
         }
       }
     }
 
     this.mutate = mutate;
+    this[mutatorsSymbol] = mutate;
     this.mutateBatch = mutateBatch;
 
     this.#queryManager = new QueryManager(
@@ -802,6 +830,9 @@ export class Zero<
   readonly mutate: MD extends CustomMutatorDefs<S>
     ? DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD>>
     : DBMutator<S>;
+  readonly [mutatorsSymbol]: MutatorMap;
+
+  // mutators array option
 
   /**
    * Provides a way to batch multiple CRUD mutations together:

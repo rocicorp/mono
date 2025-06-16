@@ -7,6 +7,8 @@ import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {OnError} from './on-error.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
+import type {NamedMutator} from '../../../zql/src/mutate/named.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 
 /**
  * Configuration for {@linkcode Zero}.
@@ -95,7 +97,10 @@ export interface ZeroOptions<
    * mutation can be rebased multiple times when folding in authoritative
    * changes from the server to the client.
    */
-  mutators?: MD | undefined;
+  mutators?:
+    | MD
+    | undefined
+    | ReadonlyArray<NamedMutator<S, ReadonlyArray<ReadonlyJSONValue>>>;
 
   /**
    * Custom mutations are pushed to zero-cache and then to

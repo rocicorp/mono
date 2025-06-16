@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {mapAST, type AST} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
 import {newQuery} from './query-impl.ts';
 import type {Query} from './query.ts';
@@ -15,11 +17,9 @@ export type CustomQueryID = {
   args: ReadonlyArray<ReadonlyJSONValue>;
 };
 
-export type NamedQueryImpl<
-  TArg extends
-    ReadonlyArray<ReadonlyJSONValue> = ReadonlyArray<ReadonlyJSONValue>,
-  TReturnQuery extends Query<any, any, any> = Query<any, any, any>,
-> = (...arg: TArg) => TReturnQuery;
+export function ast<S extends Schema>(schema: S, q: Query<S, any, any>): AST {
+  return mapAST(q.ast, clientToServer(schema.tables));
+}
 
 /**
  * Returns a set of query builders for the given schema.
@@ -42,7 +42,7 @@ export function namedQuery<
   TReturnQuery extends Query<any, any, any>,
 >(
   name: string,
-  fn: NamedQueryImpl<TArg, TReturnQuery>,
+  fn: NamedQuery<TArg, TReturnQuery>,
 ): NamedQuery<TArg, TReturnQuery> {
   return ((...args: TArg) => fn(...args).nameAndArgs(name, args)) as NamedQuery<
     TArg,

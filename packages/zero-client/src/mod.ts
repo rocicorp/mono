@@ -121,9 +121,15 @@ export {
   querify,
   type CustomQueryID,
   type NamedQuery,
-  type NamedQueryImpl,
   namedQuery,
+  ast,
 } from '../../zql/src/query/named.ts';
+export {
+  type NamedMutator,
+  type MutatorProvider,
+  type NamedMutatorImpl,
+  mutator,
+} from '../../zql/src/mutate/named.ts';
 export type {
   HumanReadable,
   PullRow,
