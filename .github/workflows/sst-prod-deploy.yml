@@ -66,7 +66,8 @@ jobs:
       - name: Deploy SST app
         env:
           ZERO_UPSTREAM_DB: ${{ secrets.PROD_ZERO_UPSTREAM_DB }}
-          ZERO_PUSH_URL: ${{ secrets.PROD_ZERO_PUSH_URL }}
+          ZERO_PUSH_URL: ${{ vars.PROD_ZERO_PUSH_URL }}
+          ZERO_PULL_URL: ${{ vars.PROD_ZERO_PULL_URL }}
           ZERO_CVR_DB: ${{ secrets.PROD_ZERO_CVR_DB }}
           ZERO_CHANGE_DB: ${{ secrets.PROD_ZERO_CHANGE_DB }}
           ZERO_AUTH_JWK: ${{ secrets.PROD_ZERO_AUTH_JWK }}
