@@ -30,6 +30,14 @@ const initConnectionBodySchema = v.object({
   clientSchema: clientSchemaSchema.optional(),
   deleted: deleteClientsBodySchema.optional(),
   userPushParams: userPushParamsSchema.optional(),
+
+  /**
+   * `activeClients` is an optional array of client IDs that are currently active
+   * in the client group. This is used to inform the server about the clients
+   * that are currently active (aka running, aka alive), so it can inactive
+   * queries from inactive clients.
+   */
+  activeClients: v.array(v.string()).optional(),
 });
 
 export const initConnectionMessageSchema = v.tuple([
