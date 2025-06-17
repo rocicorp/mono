@@ -32,7 +32,6 @@ import {navigator} from '../../../shared/src/navigator.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
-import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {CloseConnectionMessage} from '../../../zero-protocol/src/close-connection.ts';
 import type {
@@ -78,6 +77,7 @@ import {
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {
   type PreloadOptions,
@@ -143,7 +143,6 @@ import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
-import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -661,7 +660,7 @@ export class Zero<
       this.#mutationTracker,
       rep.clientID,
       schema.tables,
-      msg => this.#sendChangeDesiredQueries(msg),
+      msg => this.#send(msg),
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
     );
@@ -717,10 +716,6 @@ export class Zero<
         connectionState: () => this.#connectionState,
       };
     }
-  }
-
-  #sendChangeDesiredQueries(msg: ChangeDesiredQueriesMessage): void {
-    this.#send(msg);
   }
 
   #send(msg: Upstream): void {

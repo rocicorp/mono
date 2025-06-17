@@ -19,7 +19,7 @@
     "run-query": "tsx ../../packages/zero-cache/src/scripts/run-query.ts",
     "run-query-brk": "tsx --inspect-brk ../../packages/zero-cache/src/scripts/run-query.ts",
     "create-keys": "tsx ../../packages/zero-cache/src/scripts/create-jwk.ts",
-    "test": "vitest run --config vitest.config.ts --project zbugs/no-pg",
+    "test": "cd ../../packages/zero && npm run build && cd ../../apps/zbugs && vitest run --config vitest.config.ts --project zbugs/no-pg",
     "test:watch": "vitest --config vitest.config.ts --project zbugs/no-pg",
     "analyze": "analyze -c vite.config.ts",
     "test:pg": "vitest run --config vitest.config.ts --project zbugs/pg-16",

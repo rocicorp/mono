@@ -1,4 +1,5 @@
-import {links, type ListContext} from '../routes.ts';
+import type {ListContext} from '../../shared/queries.ts';
+import {links} from '../routes.ts';
 import {Link, type Props as LinkProps} from './link.tsx';
 
 export function IssueLink({

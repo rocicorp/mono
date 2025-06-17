@@ -165,7 +165,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
           {
             type: 'stream',
             source: 'viewSyncer',
-            stream: await startSpan(tracer, 'connection.initConnection', () =>
+            stream: startSpan(tracer, 'connection.initConnection', () =>
               viewSyncer.initConnection(this.#syncContext, msg),
             ),
           },
