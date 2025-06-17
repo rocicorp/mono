@@ -61,7 +61,6 @@ export type ClientsRow = {
 };
 
 function createClientsTable(shard: ShardID) {
-  // patchVersion and deleted are not used. Remove after all readers are migrated.
   return `
 CREATE TABLE ${schema(shard)}.clients (
   "clientGroupID"      TEXT,

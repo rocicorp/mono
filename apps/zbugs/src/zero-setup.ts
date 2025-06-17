@@ -1,11 +1,12 @@
 import {Zero} from '@rocicorp/zero';
-import {queries, type Schema, schema} from '../shared/schema.ts';
+import {type Schema, schema} from '../shared/schema.ts';
 import {createMutators, type Mutators} from '../shared/mutators.ts';
 import {Atom} from './atom.ts';
 import {clearJwt, getJwt, getRawJwt} from './jwt.ts';
 import {mark} from './perf-log.ts';
 import {CACHE_FOREVER} from './query-cache-policy.ts';
 import type {AuthData} from '../shared/auth.ts';
+import {allLabels, allUsers, issuePreload} from '../shared/queries.ts';
 
 export type LoginState = {
   encoded: string;
@@ -59,25 +60,10 @@ export function preload(z: Zero<Schema, Mutators>) {
   didPreload = true;
 
   // Preload all issues and first 10 comments from each.
-  z.preload(
-    queries.issue
-      .related('labels')
-      .related('viewState', q => q.where('userID', z.userID))
-      .related('creator')
-      .related('assignee')
-      .related('emoji', emoji => emoji.related('creator'))
-      .related('comments', comments =>
-        comments
-          .related('creator')
-          .related('emoji', emoji => emoji.related('creator'))
-          .limit(10)
-          .orderBy('created', 'desc'),
-      ),
-    CACHE_FOREVER,
-  );
+  z.preload(issuePreload(z.userID), CACHE_FOREVER);
 
-  z.preload(queries.user, CACHE_FOREVER);
-  z.preload(queries.label, CACHE_FOREVER);
+  z.preload(allUsers(), CACHE_FOREVER);
+  z.preload(allLabels(), CACHE_FOREVER);
 }
 
 // To enable accessing zero in the devtools easily.
