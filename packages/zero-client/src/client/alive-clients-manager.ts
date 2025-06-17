@@ -48,7 +48,7 @@ export class AliveClientsManager {
     this.clientGroupID = clientGroupID;
     this.clientID = clientID;
 
-    lockManager?.request(
+    void lockManager?.request(
       toLockKey(clientGroupID, clientID),
       () => this.#resolver.promise,
     );
