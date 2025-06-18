@@ -23,62 +23,57 @@ describe('AliveClientManager with mocked locks', () => {
   });
 
   test('should call lockManager.request in the constructor', () => {
-    const clientManager = new AliveClientsManager('group1', 'client1');
+    const ac = new AbortController();
+    new AliveClientsManager('group1', 'client1', ac.signal);
 
     expect(requestSpy).toHaveBeenCalledWith(
       'zero-alive/group1/client1',
+      {signal: ac.signal},
       expect.any(Function),
     );
-
-    clientManager.close();
+    ac.abort();
   });
 
   test('should return alive clients from held and pending locks', async () => {
+    const ac = new AbortController();
+
     querySpy.mockResolvedValue({
       held: [{name: 'zero-alive/group1/client1'}],
       pending: [{name: 'zero-alive/group1/client2'}],
     });
 
-    const clientManager = new AliveClientsManager('group1', 'client1');
+    const clientManager = new AliveClientsManager(
+      'group1',
+      'client1',
+      ac.signal,
+    );
     const aliveClients = await clientManager.getAliveClients();
 
     expect(aliveClients).toEqual(new Set(['client1', 'client2']));
-
-    clientManager.close();
+    ac.abort();
   });
 
   test('should ignore invalid lock keys', async () => {
+    const ac = new AbortController();
+
+    const clientManager = new AliveClientsManager(
+      'group1',
+      'client1',
+      ac.signal,
+    );
+
     querySpy.mockResolvedValue({
       held: [{name: 'invalid-lock-key'}],
-      pending: [{name: 'zero-alive/group1/client3'}],
+      pending: [
+        {name: 'zero-alive/group1/client1'},
+        {name: 'zero-alive/group1/client3'},
+      ],
     });
 
-    const clientManager = new AliveClientsManager('group1', 'client1');
     const aliveClients = await clientManager.getAliveClients();
 
     expect(aliveClients).toEqual(new Set(['client1', 'client3']));
-
-    clientManager.close();
-  });
-
-  test('should abort the lock when close is called', () => {
-    const clientManager = new AliveClientsManager('group1', 'client1');
-
-    expect(clientManager.closed).toBe(false);
-
-    clientManager.close();
-
-    expect(clientManager.closed).toBe(true);
-  });
-
-  test('should handle multiple calls to close gracefully', () => {
-    const clientManager = new AliveClientsManager('group1', 'client1');
-
-    clientManager.close();
-    expect(clientManager.closed).toBe(true);
-
-    clientManager.close();
-    expect(clientManager.closed).toBe(true);
+    ac.abort();
   });
 });
 
@@ -91,21 +86,58 @@ describe('AliveClientManager without navigator', () => {
   });
 
   test('should return set with self if navigator is undefined', async () => {
-    vi.stubGlobal('navigator', undefined);
-
-    const clientManager = new AliveClientsManager('group1', 'client1');
+    const ac = new AbortController();
+    const clientManager = new AliveClientsManager(
+      'group1',
+      'client1',
+      ac.signal,
+    );
     const aliveClients = await clientManager.getAliveClients();
 
     expect(aliveClients).toEqual(new Set(['client1']));
+    ac.abort();
+  });
 
-    clientManager.close();
+  test('multiple clients are managed in memory', async () => {
+    const ac1 = new AbortController();
+    const ac2 = new AbortController();
+
+    const clientManager1 = new AliveClientsManager(
+      'group1',
+      'client1',
+      ac1.signal,
+    );
+    const clientManager2 = new AliveClientsManager(
+      'group1',
+      'client2',
+      ac2.signal,
+    );
+
+    expect(await clientManager1.getAliveClients()).toEqual(
+      new Set(['client1', 'client2']),
+    );
+    expect(await clientManager2.getAliveClients()).toEqual(
+      new Set(['client1', 'client2']),
+    );
+
+    ac1.abort();
+
+    expect(await clientManager2.getAliveClients()).toEqual(
+      new Set(['client2']),
+    );
+
+    ac2.abort();
   });
 });
 
 describe('AliveClientManager with undefined locks', () => {
+  let signal: AbortSignal;
   beforeEach(() => {
+    const ac = new AbortController();
+    signal = ac.signal;
     vi.stubGlobal('navigator', {locks: undefined});
     return () => {
+      ac.abort();
       vi.restoreAllMocks();
     };
   });
@@ -113,12 +145,10 @@ describe('AliveClientManager with undefined locks', () => {
   test('should return set with self if navigator.locks is undefined', async () => {
     vi.stubGlobal('navigator', {locks: undefined});
 
-    const clientManager = new AliveClientsManager('group1', 'client1');
+    const clientManager = new AliveClientsManager('group1', 'client1', signal);
     const aliveClients = await clientManager.getAliveClients();
 
     expect(aliveClients).toEqual(new Set(['client1']));
-
-    clientManager.close();
   });
 });
 
@@ -126,20 +156,35 @@ describe('AliveClientManager with real lock', () => {
   // Use nanoid for client groups so that tests do not interfere with each other.
 
   test('One manager', async () => {
+    const ac = new AbortController();
     const clientGroupID = nanoid();
-    const clientManager = new AliveClientsManager(clientGroupID, 'client1');
+    const clientManager = new AliveClientsManager(
+      clientGroupID,
+      'client1',
+      ac.signal,
+    );
     const aliveClients = await clientManager.getAliveClients();
 
     expect(aliveClients).toEqual(new Set(['client1']));
 
-    clientManager.close();
+    ac.abort();
   });
 
   test('Two managers in the same group', async () => {
     const clientGroupID = nanoid();
+    const ac1 = new AbortController();
+    const ac2 = new AbortController();
 
-    const clientManager1 = new AliveClientsManager(clientGroupID, 'client1');
-    const clientManager2 = new AliveClientsManager(clientGroupID, 'client2');
+    const clientManager1 = new AliveClientsManager(
+      clientGroupID,
+      'client1',
+      ac1.signal,
+    );
+    const clientManager2 = new AliveClientsManager(
+      clientGroupID,
+      'client2',
+      ac2.signal,
+    );
 
     const aliveClients1 = await clientManager1.getAliveClients();
     const aliveClients2 = await clientManager2.getAliveClients();
@@ -147,18 +192,38 @@ describe('AliveClientManager with real lock', () => {
     expect(aliveClients1).toEqual(new Set(['client1', 'client2']));
     expect(aliveClients2).toEqual(new Set(['client1', 'client2']));
 
-    clientManager1.close();
-    clientManager2.close();
+    ac1.abort();
+    ac2.abort();
   });
 
   test('4 managers in 2 different groups', async () => {
     const clientGroupID1 = nanoid();
     const clientGroupID2 = nanoid();
+    const ac1 = new AbortController();
+    const ac2 = new AbortController();
+    const ac3 = new AbortController();
+    const ac4 = new AbortController();
 
-    const clientManager1 = new AliveClientsManager(clientGroupID1, 'client1');
-    const clientManager2 = new AliveClientsManager(clientGroupID1, 'client2');
-    const clientManager3 = new AliveClientsManager(clientGroupID2, 'client3');
-    const clientManager4 = new AliveClientsManager(clientGroupID2, 'client4');
+    const clientManager1 = new AliveClientsManager(
+      clientGroupID1,
+      'client1',
+      ac1.signal,
+    );
+    const clientManager2 = new AliveClientsManager(
+      clientGroupID1,
+      'client2',
+      ac1.signal,
+    );
+    const clientManager3 = new AliveClientsManager(
+      clientGroupID2,
+      'client3',
+      ac3.signal,
+    );
+    const clientManager4 = new AliveClientsManager(
+      clientGroupID2,
+      'client4',
+      ac4.signal,
+    );
 
     const aliveClients1 = await clientManager1.getAliveClients();
     const aliveClients2 = await clientManager2.getAliveClients();
@@ -169,16 +234,28 @@ describe('AliveClientManager with real lock', () => {
     expect(aliveClients3).toEqual(new Set(['client3', 'client4']));
     expect(aliveClients4).toEqual(new Set(['client3', 'client4']));
 
-    clientManager1.close();
-    clientManager2.close();
+    ac1.abort();
+    ac2.abort();
+    ac3.abort();
+    ac4.abort();
   });
 
   test('2 clients in 2 different groups', async () => {
     const clientGroupID1 = nanoid();
     const clientGroupID2 = nanoid();
+    const ac1 = new AbortController();
+    const ac2 = new AbortController();
 
-    const clientManager1 = new AliveClientsManager(clientGroupID1, 'client1');
-    const clientManager2 = new AliveClientsManager(clientGroupID2, 'client2');
+    const clientManager1 = new AliveClientsManager(
+      clientGroupID1,
+      'client1',
+      ac1.signal,
+    );
+    const clientManager2 = new AliveClientsManager(
+      clientGroupID2,
+      'client2',
+      ac2.signal,
+    );
 
     const aliveClients1 = await clientManager1.getAliveClients();
     const aliveClients2 = await clientManager2.getAliveClients();
@@ -186,16 +263,31 @@ describe('AliveClientManager with real lock', () => {
     expect(aliveClients1).toEqual(new Set(['client1']));
     expect(aliveClients2).toEqual(new Set(['client2']));
 
-    clientManager1.close();
-    clientManager2.close();
+    ac1.abort();
+    ac2.abort();
   });
 
   test('3 clients in 1 group. Close one and check others', async () => {
     const clientGroupID = nanoid();
+    const ac1 = new AbortController();
+    const ac2 = new AbortController();
+    const ac3 = new AbortController();
 
-    const clientManager1 = new AliveClientsManager(clientGroupID, 'client1');
-    const clientManager2 = new AliveClientsManager(clientGroupID, 'client2');
-    const clientManager3 = new AliveClientsManager(clientGroupID, 'client3');
+    const clientManager1 = new AliveClientsManager(
+      clientGroupID,
+      'client1',
+      ac1.signal,
+    );
+    const clientManager2 = new AliveClientsManager(
+      clientGroupID,
+      'client2',
+      ac2.signal,
+    );
+    const clientManager3 = new AliveClientsManager(
+      clientGroupID,
+      'client3',
+      ac3.signal,
+    );
 
     const aliveClients1 = await clientManager1.getAliveClients();
     const aliveClients2 = await clientManager2.getAliveClients();
@@ -205,8 +297,7 @@ describe('AliveClientManager with real lock', () => {
     expect(aliveClients2).toEqual(new Set(['client1', 'client2', 'client3']));
     expect(aliveClients3).toEqual(new Set(['client1', 'client2', 'client3']));
 
-    clientManager1.close();
-    await 0;
+    ac1.abort();
 
     const aliveClientsAfterClose1 = await clientManager2.getAliveClients();
     expect(aliveClientsAfterClose1).toEqual(new Set(['client2', 'client3']));
@@ -214,7 +305,7 @@ describe('AliveClientManager with real lock', () => {
     const aliveClientsAfterClose2 = await clientManager3.getAliveClients();
     expect(aliveClientsAfterClose2).toEqual(new Set(['client2', 'client3']));
 
-    clientManager2.close();
-    clientManager3.close();
+    ac2.abort();
+    ac3.abort();
   });
 });
