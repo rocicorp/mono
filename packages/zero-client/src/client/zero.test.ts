@@ -351,6 +351,7 @@ describe('createSocket', () => {
     now: number,
     expectedURL: string,
     additionalConnectParams?: Record<string, string>,
+    activeClients = new Set([clientID]),
   ) => {
     const clientSchema: ClientSchema = {
       tables: {
@@ -382,6 +383,7 @@ describe('createSocket', () => {
         undefined,
         1048 * 8,
         additionalConnectParams,
+        {getActiveClients: () => Promise.resolve(activeClients)},
       );
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket.protocol).equal(
@@ -392,6 +394,7 @@ describe('createSocket', () => {
               desiredQueriesPatch: [],
               deleted: {clientIDs: ['old-deleted-client']},
               ...(baseCookie === null ? {clientSchema} : {}),
+              activeClients: [...activeClients],
             },
           ],
           auth,
@@ -418,6 +421,7 @@ describe('createSocket', () => {
         undefined,
         0, // do not put any extra information into headers
         additionalConnectParams,
+        {getActiveClients: () => Promise.resolve(activeClients)},
       );
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket2.protocol).equal(encodeSecProtocols(undefined, auth));
@@ -767,43 +771,37 @@ describe('initConnection', () => {
         decodeSecProtocols(mockSocket.protocol).initConnectionMessage,
         initConnectionMessageSchema,
       ),
-    ).toMatchInlineSnapshot(`
-      [
-        "initConnection",
-        {
-          "clientSchema": {
-            "tables": {
-              "e": {
-                "columns": {
-                  "id": {
-                    "type": "string",
-                  },
-                  "value": {
-                    "type": "string",
-                  },
+    ).toEqual([
+      'initConnection',
+      {
+        activeClients: [r.clientID],
+        clientSchema: {
+          tables: {
+            e: {
+              columns: {
+                id: {
+                  type: 'string',
+                },
+                value: {
+                  type: 'string',
                 },
               },
             },
           },
-          "desiredQueriesPatch": [
-            {
-              "ast": {
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
-                "table": "e",
-              },
-              "hash": "29j3x0l4bxthp",
-              "op": "put",
-              "ttl": 0,
-            },
-          ],
         },
-      ]
-    `);
+        desiredQueriesPatch: [
+          {
+            ast: {
+              orderBy: [['id', 'asc']],
+              table: 'e',
+            },
+            hash: '29j3x0l4bxthp',
+            op: 'put',
+            ttl: 0,
+          },
+        ],
+      },
+    ]);
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
@@ -864,52 +862,45 @@ describe('initConnection', () => {
         decodeSecProtocols(mockSocket.protocol).initConnectionMessage,
         initConnectionMessageSchema,
       ),
-    ).toMatchInlineSnapshot(`
-      [
-        "initConnection",
-        {
-          "clientSchema": {
-            "tables": {
-              "e": {
-                "columns": {
-                  "id": {
-                    "type": "string",
-                  },
-                  "value": {
-                    "type": "string",
-                  },
+    ).toEqual([
+      'initConnection',
+      {
+        activeClients: [r.clientID],
+        clientSchema: {
+          tables: {
+            e: {
+              columns: {
+                id: {
+                  type: 'string',
+                },
+                value: {
+                  type: 'string',
                 },
               },
             },
           },
-          "deleted": {
-            "clientIDs": [
-              "a",
-            ],
-          },
-          "desiredQueriesPatch": [
-            {
-              "ast": {
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
-                "table": "e",
-              },
-              "hash": "29j3x0l4bxthp",
-              "op": "put",
-              "ttl": 0,
-            },
-          ],
         },
-      ]
-    `);
+        deleted: {
+          clientIDs: ['a'],
+        },
+        desiredQueriesPatch: [
+          {
+            ast: {
+              orderBy: [['id', 'asc']],
+              table: 'e',
+            },
+            hash: '29j3x0l4bxthp',
+            op: 'put',
+            ttl: 0,
+          },
+        ],
+      },
+    ]);
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(0);
+    await r.close();
   });
 
   test('sends desired queries patch in `initConnectionMessage` when the patch is over maxHeaderLength', async () => {
@@ -976,6 +967,8 @@ describe('initConnection', () => {
     view.addListener(() => {});
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(1);
+
+    await r.close();
   });
 
   test('sends desired queries patch in `initConnectionMessage` when the patch is over maxHeaderLength with deleted clients', async () => {
@@ -1095,6 +1088,7 @@ describe('initConnection', () => {
     ).toEqual([
       'initConnection',
       {
+        activeClients: [r.clientID],
         desiredQueriesPatch: [],
         clientSchema: {
           tables: {
