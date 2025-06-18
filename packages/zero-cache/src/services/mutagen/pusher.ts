@@ -35,6 +35,7 @@ export interface Pusher extends RefCountedService {
     clientID: string,
     push: PushBody,
     jwt: string | undefined,
+    httpCookie: string | undefined,
   ): HandlerResult;
   initConnection(
     clientID: string,
@@ -94,8 +95,9 @@ export class PusherService implements Service, Pusher {
     clientID: string,
     push: PushBody,
     jwt: string | undefined,
+    httpCookie: string | undefined,
   ): Exclude<HandlerResult, StreamResult> {
-    this.#queue.enqueue({push, jwt, clientID});
+    this.#queue.enqueue({push, jwt, clientID, httpCookie});
 
     return {
       type: 'ok',
@@ -137,6 +139,7 @@ export class PusherService implements Service, Pusher {
 type PusherEntry = {
   push: PushBody;
   jwt: string | undefined;
+  httpCookie: string | undefined;
   clientID: string;
 };
 type PusherEntryOrStop = PusherEntry | 'stop';
@@ -343,17 +346,6 @@ class PushWorker {
       clientGroupID: entry.push.clientGroupID,
     });
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (this.#apiKey) {
-      headers['X-Api-Key'] = this.#apiKey;
-    }
-    if (entry.jwt) {
-      headers['Authorization'] = `Bearer ${entry.jwt}`;
-    }
-
     try {
       const response = await fetchFromAPIServer(
         this.#pushURL,
@@ -364,6 +356,7 @@ class PushWorker {
         {
           apiKey: this.#apiKey,
           token: entry.jwt,
+          cookie: entry.httpCookie,
         },
         this.#clients.get(entry.clientID)?.userParams?.queryParams,
         entry.push,

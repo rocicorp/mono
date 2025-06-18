@@ -42,11 +42,15 @@ describe('combine pushes', () => {
       {
         push: makePush(1),
         jwt: 'a',
+        httpCookie: undefined,
+
         clientID,
       },
       {
         push: makePush(1),
         jwt: 'a',
+        httpCookie: undefined,
+
         clientID,
       },
       undefined,
@@ -60,12 +64,16 @@ describe('combine pushes', () => {
       {
         push: makePush(1),
         jwt: 'a',
+        httpCookie: undefined,
+
         clientID,
       },
       undefined,
       {
         push: makePush(1),
         jwt: 'a',
+        httpCookie: undefined,
+
         clientID,
       },
     ]);
@@ -80,16 +88,19 @@ describe('combine pushes', () => {
       {
         push: makePush(1, 'client1'),
         jwt: 'a',
+        httpCookie: undefined,
         clientID: 'client1',
       },
       {
         push: makePush(2, 'client1'),
         jwt: 'a',
+        httpCookie: undefined,
         clientID: 'client1',
       },
       {
         push: makePush(1, 'client2'),
         jwt: 'b',
+        httpCookie: undefined,
         clientID: 'client2',
       },
     ]);
@@ -114,11 +125,13 @@ describe('combine pushes', () => {
         {
           push: makePush(1, 'client1'),
           jwt: 'a',
+          httpCookie: undefined,
           clientID: 'client1',
         },
         {
           push: makePush(2, 'client1'),
-          jwt: 'b', // Different JWT
+          jwt: 'b',
+          httpCookie: undefined, // Different JWT
           clientID: 'client1',
         },
       ]),
@@ -134,6 +147,7 @@ describe('combine pushes', () => {
             schemaVersion: 1,
           },
           jwt: 'a',
+          httpCookie: undefined,
           clientID: 'client1',
         },
         {
@@ -142,6 +156,7 @@ describe('combine pushes', () => {
             schemaVersion: 2, // Different schema version
           },
           jwt: 'a',
+          httpCookie: undefined,
           clientID: 'client1',
         },
       ]),
@@ -159,6 +174,7 @@ describe('combine pushes', () => {
             pushVersion: 1,
           },
           jwt: 'a',
+          httpCookie: undefined,
           clientID: 'client1',
         },
         {
@@ -167,6 +183,7 @@ describe('combine pushes', () => {
             pushVersion: 2, // Different push version
           },
           jwt: 'a',
+          httpCookie: undefined,
           clientID: 'client1',
         },
       ]),
@@ -184,6 +201,7 @@ describe('combine pushes', () => {
           pushVersion: 1,
         },
         jwt: 'a',
+        httpCookie: undefined,
         clientID: 'client1',
       },
       {
@@ -193,6 +211,7 @@ describe('combine pushes', () => {
           pushVersion: 1,
         },
         jwt: 'a',
+        httpCookie: undefined,
         clientID: 'client1',
       },
     ]);
@@ -207,21 +226,25 @@ describe('combine pushes', () => {
       {
         push: makePush(1, 'client1'),
         jwt: 'a',
+        httpCookie: undefined,
         clientID: 'client1',
       },
       {
         push: makePush(2, 'client2'),
         jwt: 'b',
+        httpCookie: undefined,
         clientID: 'client2',
       },
       {
         push: makePush(1, 'client1'),
         jwt: 'a',
+        httpCookie: undefined,
         clientID: 'client1',
       },
       {
         push: makePush(3, 'client2'),
         jwt: 'b',
+        httpCookie: undefined,
         clientID: 'client2',
       },
     ]);
@@ -243,16 +266,19 @@ describe('combine pushes', () => {
       {
         push: makePush(1, 'client1'),
         jwt: 'a',
+        httpCookie: undefined,
         clientID: 'client1',
       },
       {
         push: makePush(1, 'client2'),
         jwt: 'b',
+        httpCookie: undefined,
         clientID: 'client2',
       },
       {
         push: makePush(1, 'client1'),
         jwt: 'a',
+        httpCookie: undefined,
         clientID: 'client1',
       },
     ]);
@@ -298,7 +324,7 @@ describe('pusher service', () => {
     void pusher.run();
     pusher.initConnection(clientID, wsID, undefined);
 
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
 
     await pusher.stop();
 
@@ -328,7 +354,7 @@ describe('pusher service', () => {
     void pusher.run();
     pusher.initConnection(clientID, wsID, undefined);
 
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
 
     await pusher.stop();
 
@@ -356,7 +382,7 @@ describe('pusher service', () => {
 
     void pusher.run();
     pusher.initConnection(clientID, wsID, undefined);
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
     // release control of the loop so the push can be sent
     await Promise.resolve();
 
@@ -365,11 +391,11 @@ describe('pusher service', () => {
     expect(JSON.parse(fetch.mock.calls[0][1].body).mutations).toHaveLength(1);
 
     // We have not resolved the API server yet so these should stack up
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
     await Promise.resolve();
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
     await Promise.resolve();
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
     await Promise.resolve();
 
     // no new pushes sent yet since we are still waiting on the user's API server
@@ -457,7 +483,7 @@ describe('initConnection', () => {
     };
 
     pusher.initConnection(clientID, wsID, userPushParams);
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
 
     // Wait for the push to be processed
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -497,8 +523,8 @@ describe('pusher streaming', () => {
     void pusher.run();
 
     pusher.initConnection(clientID, wsID, undefined);
-    pusher.enqueuePush(clientID, makePush(1), 'jwt');
-    const result = pusher.enqueuePush(clientID, makePush(1), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
+    const result = pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
     expect(result.type).toBe('ok');
   });
 
@@ -536,14 +562,14 @@ describe('pusher streaming', () => {
       ok: true,
       json: () => Promise.resolve(successResponse1),
     });
-    pusher.enqueuePush('client1', makePush(1, 'client1'), 'jwt');
+    pusher.enqueuePush('client1', makePush(1, 'client1'), 'jwt', undefined);
     await new Promise(resolve => setTimeout(resolve, 0));
 
     fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve(successResponse2),
     });
-    pusher.enqueuePush('client2', makePush(2, 'client2'), 'jwt');
+    pusher.enqueuePush('client2', makePush(2, 'client2'), 'jwt', undefined);
 
     const s1Messages: unknown[] = [];
     const s2Messages: unknown[] = [];
@@ -613,8 +639,8 @@ describe('pusher streaming', () => {
     const stream1 = pusher.initConnection('client1', 'ws1', undefined);
     const stream2 = pusher.initConnection('client2', 'ws2', undefined);
 
-    pusher.enqueuePush('client1', makePush(1, 'client1'), 'jwt');
-    pusher.enqueuePush('client2', makePush(1, 'client2'), 'jwt');
+    pusher.enqueuePush('client1', makePush(1, 'client1'), 'jwt', undefined);
+    pusher.enqueuePush('client2', makePush(1, 'client2'), 'jwt', undefined);
 
     const messages1: unknown[] = [];
     const messages2: unknown[] = [];
@@ -669,7 +695,7 @@ describe('pusher streaming', () => {
     void pusher.run();
     const stream = pusher.initConnection(clientID, wsID, undefined);
 
-    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
 
     const messages: unknown[] = [];
     for await (const msg of stream) {
@@ -701,7 +727,7 @@ describe('pusher streaming', () => {
 
     const stream1 = pusher.initConnection(clientID, 'ws1', undefined);
 
-    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
 
     stream1.cancel();
 
@@ -762,7 +788,7 @@ describe('pusher streaming', () => {
     void pusher.run();
 
     const stream = pusher.initConnection(clientID, 'ws1', undefined);
-    pusher.enqueuePush(clientID, makePush(2, clientID), 'jwt');
+    pusher.enqueuePush(clientID, makePush(2, clientID), 'jwt', undefined);
 
     const messages: unknown[] = [];
     for await (const msg of stream) {
@@ -818,7 +844,7 @@ describe('pusher streaming', () => {
     void pusher.run();
 
     const stream = pusher.initConnection(clientID, 'ws1', undefined);
-    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
 
     await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
       'unsupportedSchemaVersion',
@@ -844,7 +870,7 @@ describe('pusher streaming', () => {
     void pusher.run();
 
     const stream = pusher.initConnection(clientID, 'ws1', undefined);
-    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt');
+    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
 
     await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
       new ErrorForClient({
