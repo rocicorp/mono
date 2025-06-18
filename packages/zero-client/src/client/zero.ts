@@ -1927,7 +1927,7 @@ export async function createSocket(
   maxHeaderLength = 1024 * 8,
   additionalConnectParams: Record<string, string> | undefined,
   aliveClientsManager:
-    | Pick<ActiveClientsManager, 'getAliveClients'>
+    | Pick<ActiveClientsManager, 'getActiveClients'>
     | undefined,
 ): Promise<
   [
