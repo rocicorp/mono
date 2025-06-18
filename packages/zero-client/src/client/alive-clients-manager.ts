@@ -23,7 +23,9 @@ function fromLockKey(
   };
 }
 
-const lockManager = getBrowserGlobal('navigator')?.locks;
+// When we do not have the `navigator.locks` API available, we will keep track
+// of the "locks" in memory.
+const allMockLocks = new Set<{name: string}>();
 
 /**
  * A class that lists the alive clients in a client group. It uses the
@@ -42,26 +44,44 @@ export class AliveClientsManager {
   readonly clientGroupID: string;
   readonly clientID: string;
   readonly #resolver = resolver<void>();
-  #closed = false;
+  readonly #lockManager = getBrowserGlobal('navigator')?.locks;
 
-  constructor(clientGroupID: string, clientID: string) {
+  constructor(clientGroupID: string, clientID: string, signal: AbortSignal) {
     this.clientGroupID = clientGroupID;
     this.clientID = clientID;
 
-    void lockManager?.request(
-      toLockKey(clientGroupID, clientID),
-      () => this.#resolver.promise,
+    const name = toLockKey(clientGroupID, clientID);
+    let mockLock: {name: string};
+
+    if (this.#lockManager) {
+      this.#lockManager
+        .request(name, {signal}, () => this.#resolver.promise)
+        .catch(e => {
+          if (e.name !== 'AbortError') {
+            throw e;
+          }
+        });
+    } else {
+      mockLock = {name};
+      allMockLocks.add(mockLock);
+    }
+
+    signal.addEventListener(
+      'abort',
+      () => {
+        if (!this.#lockManager) {
+          allMockLocks.delete(mockLock);
+        }
+        this.#resolver.resolve();
+      },
+      {once: true},
     );
   }
 
   async getAliveClients(): Promise<Set<string>> {
-    const aliveClients: Set<string> = new Set([this.clientID]);
-    if (!lockManager) {
-      return aliveClients;
-    }
+    const aliveClients: Set<string> = new Set();
 
-    const snapshot = await lockManager.query();
-    const add = (info: LockInfo[] | undefined) => {
+    const add = (info: Iterable<{name?: string}> | undefined) => {
       for (const lock of info ?? []) {
         const client = fromLockKey(lock.name);
         if (client?.clientGroupID === this.clientGroupID) {
@@ -70,17 +90,13 @@ export class AliveClientsManager {
       }
     };
 
-    add(snapshot.held);
-    add(snapshot.pending);
+    if (!this.#lockManager) {
+      add(allMockLocks);
+    } else {
+      const snapshot = await this.#lockManager.query();
+      add(snapshot.held);
+      add(snapshot.pending);
+    }
     return aliveClients;
-  }
-
-  close(): void {
-    this.#resolver.resolve();
-    this.#closed = true;
-  }
-
-  get closed(): boolean {
-    return this.#closed;
   }
 }
