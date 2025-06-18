@@ -13,7 +13,7 @@ import {
 } from '../../zero-protocol/src/push.ts';
 import {splitMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {createLogContext} from './logging.ts';
-import type {CustomMutatorDefs} from './custom.ts';
+import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 
 export type Params = v.Infer<typeof pushParamsSchema>;
 
@@ -46,7 +46,9 @@ type ExtractTransactionType<D> = D extends Database<infer T> ? T : never;
 
 export class PushProcessor<
   D extends Database<ExtractTransactionType<D>>,
-  MD extends CustomMutatorDefs<ExtractTransactionType<D>>,
+  MD extends
+    | CustomMutatorDefs<ExtractTransactionType<D>>
+    | ((name: string) => CustomMutatorImpl<ExtractTransactionType<D>>),
 > {
   readonly #dbProvider: D;
   readonly #lc: LogContext;
@@ -241,6 +243,19 @@ export class PushProcessor<
     mutators: MD,
     m: Mutation,
   ): Promise<void> {
+    if (typeof mutators === 'function') {
+      assert(
+        m.type === 'custom',
+        () => `Cannot process crud mutations with a custom mutator function`,
+      );
+      const mutator = mutators(m.name);
+      assert(
+        typeof mutator === 'function',
+        () => `could not find mutator ${m.name}`,
+      );
+      return mutator(dbTx, m.args[0]);
+    }
+
     const [namespace, name] = splitMutatorKey(m.name);
     if (name === undefined) {
       const mutator = mutators[namespace];
