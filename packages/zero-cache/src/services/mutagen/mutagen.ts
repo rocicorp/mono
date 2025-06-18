@@ -33,6 +33,7 @@ import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema
 import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.ts';
 import type {RefCountedService, Service} from '../service.ts';
+import {recordMutation} from '../../server/anonymous-otel-start.ts';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -241,6 +242,8 @@ export async function processMutation(
         if (errorMode) {
           lc.debug?.('Ran mutation successfully in error mode');
         }
+        // Record successful mutation for telemetry
+        recordMutation();
         break;
       } catch (e) {
         if (e instanceof MutationAlreadyProcessedError) {

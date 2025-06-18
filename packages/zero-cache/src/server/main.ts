@@ -31,6 +31,8 @@ import {
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
 import {WorkerDispatcher} from './worker-dispatcher.ts';
+import {startAnonymousTelemetry, shutdownAnonymousTelemetry} from './anonymous-otel-start.ts';
+
 const clientConnectionBifurcated = false;
 
 export default async function runWorker(
@@ -41,6 +43,9 @@ export default async function runWorker(
   const config = getZeroConfig({env});
   assertNormalized(config);
   const lc = createLogContext(config, {worker: 'dispatcher'});
+
+  // Start anonymous telemetry
+  startAnonymousTelemetry();
 
   const processes = new ProcessManager(lc, parent);
 
@@ -212,6 +217,9 @@ export default async function runWorker(
     );
   } catch (err) {
     processes.logErrorAndExit(err, 'dispatcher');
+  } finally {
+    // Shutdown telemetry when the process exits
+    shutdownAnonymousTelemetry();
   }
 
   await processes.done();
