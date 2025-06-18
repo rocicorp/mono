@@ -5,6 +5,7 @@ import {
   type CustomMutation,
   type MutationResponse,
   type PushBody,
+  type PushResponse,
 } from '../../../zero-protocol/src/push.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {
@@ -17,6 +18,7 @@ import {
 import {MutationAlreadyProcessedError} from '../../../zero-cache/src/services/mutagen/mutagen.ts';
 import {createLogContext} from '../logging.ts';
 import type {LogContext, LogLevel} from '@rocicorp/logger';
+import {assert} from '../../../shared/src/asserts.ts';
 
 type TransactFn = <D extends Database<ExtractTransactionType<D>>>(
   dbProvider: D,
@@ -29,20 +31,32 @@ export type Parsed = {
   mutations: CustomMutation[];
 };
 
-export function parsePushRequest(
+export function handleMutations(
+  cb: (
+    transact: TransactFn,
+    mutation: CustomMutation,
+  ) => Promise<MutationResponse>,
   queryString: URLSearchParams | Record<string, string>,
   body: ReadonlyJSONValue,
   logLevel: LogLevel,
-): Promise<Parsed>;
-export function parsePushRequest(
+): Promise<PushResponse>;
+export function handleMutations(
+  cb: (
+    transact: TransactFn,
+    mutation: CustomMutation,
+  ) => Promise<MutationResponse>,
   request: Request,
   logLevel: LogLevel,
-): Promise<Parsed>;
-export async function parsePushRequest(
+): Promise<PushResponse>;
+export async function handleMutations(
+  cb: (
+    transact: TransactFn,
+    mutation: CustomMutation,
+  ) => Promise<MutationResponse>,
   queryOrQueryString: Request | URLSearchParams | Record<string, string>,
   body?: ReadonlyJSONValue | LogLevel,
   logLevel?: LogLevel | undefined,
-): Promise<Parsed> {
+): Promise<PushResponse> {
   if (logLevel === undefined) {
     if (queryOrQueryString instanceof Request && typeof body === 'string') {
       logLevel = body as LogLevel;
@@ -71,9 +85,19 @@ export async function parsePushRequest(
   }
 
   const transactor = new Transactor(req, queryParams, logLevel);
+
+  const responses: MutationResponse[] = [];
+  for (const m of req.mutations) {
+    assert(m.type === 'custom', 'Expected custom mutation');
+    const res = await cb(transactor.transact, m);
+    responses.push(res);
+    if ('error' in res.result) {
+      break;
+    }
+  }
+
   return {
-    mutations: req.mutations as CustomMutation[],
-    transact: transactor.transact,
+    mutations: responses,
   };
 }
 
