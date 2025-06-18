@@ -42,7 +42,7 @@ export interface Database<T> {
   ) => Promise<R>;
 }
 
-type ExtractTransactionType<D> = D extends Database<infer T> ? T : never;
+export type ExtractTransactionType<D> = D extends Database<infer T> ? T : never;
 
 export class PushProcessor<
   D extends Database<ExtractTransactionType<D>>,
@@ -308,7 +308,7 @@ export class PushProcessor<
   }
 }
 
-class OutOfOrderMutation extends Error {
+export class OutOfOrderMutation extends Error {
   constructor(
     clientID: string,
     receivedMutationID: number,
