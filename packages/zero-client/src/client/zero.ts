@@ -86,7 +86,7 @@ import {
 } from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
-import {AliveClientsManager} from './alive-clients-manager.ts';
+import {ActiveClientsManager} from './active-clients-manager.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import {ZeroContext} from './context.ts';
 import {
@@ -371,7 +371,7 @@ export class Zero<
 
   // We use an accessor pair to allow the subclass to override the setter.
   #connectionState: ConnectionState = ConnectionState.Disconnected;
-  #aliveClientsManager: AliveClientsManager | undefined;
+  #aliveClientsManager: ActiveClientsManager | undefined;
 
   #setConnectionState(state: ConnectionState) {
     if (state === this.#connectionState) {
@@ -597,7 +597,7 @@ export class Zero<
     this.#mutationTracker.clientID = rep.clientID;
 
     void rep.clientGroupID.then(clientGroupID => {
-      this.#aliveClientsManager = new AliveClientsManager(
+      this.#aliveClientsManager = new ActiveClientsManager(
         clientGroupID,
         rep.clientID,
         this.#closeAbortController.signal,
@@ -1926,7 +1926,9 @@ export async function createSocket(
   userPushParams: UserPushParams | undefined,
   maxHeaderLength = 1024 * 8,
   additionalConnectParams: Record<string, string> | undefined,
-  aliveClientsManager: Pick<AliveClientsManager, 'getAliveClients'> | undefined,
+  aliveClientsManager:
+    | Pick<ActiveClientsManager, 'getAliveClients'>
+    | undefined,
 ): Promise<
   [
     WebSocket,
@@ -1972,7 +1974,7 @@ export async function createSocket(
   let queriesPatch: Map<string, UpQueriesPatchOp> | undefined =
     await queriesPatchP;
 
-  const activeClients = await aliveClientsManager?.getAliveClients();
+  const activeClients = await aliveClientsManager?.getActiveClients();
 
   let secProtocol = encodeSecProtocols(
     [

@@ -383,7 +383,7 @@ describe('createSocket', () => {
         undefined,
         1048 * 8,
         additionalConnectParams,
-        {getAliveClients: () => Promise.resolve(activeClients)},
+        {getActiveClients: () => Promise.resolve(activeClients)},
       );
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket.protocol).equal(
@@ -421,7 +421,7 @@ describe('createSocket', () => {
         undefined,
         0, // do not put any extra information into headers
         additionalConnectParams,
-        {getAliveClients: () => Promise.resolve(activeClients)},
+        {getActiveClients: () => Promise.resolve(activeClients)},
       );
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket2.protocol).equal(encodeSecProtocols(undefined, auth));

@@ -1,7 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import {getBrowserGlobal} from '../../../shared/src/browser-env.ts';
 
-const lockKeyPrefix = 'zero-alive';
+const lockKeyPrefix = 'zero-active-clients';
 
 function toLockKey(clientGroupID: string, clientID: string): string {
   return `${lockKeyPrefix}/${clientGroupID}/${clientID}`;
@@ -28,7 +28,7 @@ function fromLockKey(
 const allMockLocks = new Set<{name: string}>();
 
 /**
- * A class that lists the alive clients in a client group. It uses the
+ * A class that lists the active clients in a client group. It uses the
  * `navigator.locks` API to manage locks for each client. The class is designed
  * to be used in a browser environment where the `navigator.locks` API is
  * available.
@@ -40,7 +40,7 @@ const allMockLocks = new Set<{name: string}>();
  * and `clientID`. Then the `query` method is used to get the list of all
  * clients that hold or are waiting for locks in the same client group.
  */
-export class AliveClientsManager {
+export class ActiveClientsManager {
   readonly clientGroupID: string;
   readonly clientID: string;
   readonly #resolver = resolver<void>();
@@ -78,14 +78,14 @@ export class AliveClientsManager {
     );
   }
 
-  async getAliveClients(): Promise<Set<string>> {
-    const aliveClients: Set<string> = new Set();
+  async getActiveClients(): Promise<Set<string>> {
+    const activeClients: Set<string> = new Set();
 
     const add = (info: Iterable<{name?: string}> | undefined) => {
       for (const lock of info ?? []) {
         const client = fromLockKey(lock.name);
         if (client?.clientGroupID === this.clientGroupID) {
-          aliveClients.add(client.clientID);
+          activeClients.add(client.clientID);
         }
       }
     };
@@ -97,6 +97,6 @@ export class AliveClientsManager {
       add(snapshot.held);
       add(snapshot.pending);
     }
-    return aliveClients;
+    return activeClients;
   }
 }
