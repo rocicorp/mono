@@ -4,10 +4,6 @@ import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
 import type {ReadonlyJSONValue} from '@rocicorp/zero';
-import {
-  transformRequestMessageSchema,
-  type TransformResponseMessage,
-} from '@rocicorp/zero';
 import assert from 'assert';
 import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
 import type {IncomingHttpHeaders} from 'http';
@@ -15,11 +11,12 @@ import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
 import {must} from '../../../packages/shared/src/must.ts';
-import * as v from '../../../packages/shared/src/valita.ts';
 import {handlePush} from '../server/push-handler.ts';
 import {authDataSchema, type AuthData} from '../shared/auth.ts';
 import {getQuery} from '../server/get-query.ts';
 import type {ServerContext} from '../server/server-queries.ts';
+import {processQueries} from '@rocicorp/zero/server';
+import {schema} from '../shared/schema.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -161,22 +158,13 @@ fastify.post<{
   const context: ServerContext = {
     role: authData?.role,
   };
-  const transformRequest = v.parse(request.body, transformRequestMessageSchema);
-  const response: TransformResponseMessage = [
-    'transformed',
-    transformRequest[1].map(req => {
-      const query = getQuery(context, req.name, req.args);
-
-      const ret = {
-        id: req.id,
-        name: req.name,
-        ast: query.ast,
-      };
-
-      return ret;
-    }),
-  ];
-  reply.send(response);
+  reply.send(
+    await processQueries(
+      async (name, args) => ({query: getQuery(context, name, args)}),
+      schema,
+      request.body,
+    ),
+  );
 });
 
 async function maybeVerifyAuth(

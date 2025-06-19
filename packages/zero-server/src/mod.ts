@@ -1,2 +1,1 @@
-export function processQueries() {}
-export function processMutations() {}
+export * from './queries/process-queries.ts';
