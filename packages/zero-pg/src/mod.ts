@@ -24,3 +24,4 @@ export {
   type TransactionProviderInput,
   type TransactionProviderHooks,
 } from './push-processor.ts';
+export * from './process-mutations.ts';

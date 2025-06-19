@@ -1,4 +1,4 @@
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {
   pushBodySchema,
   pushParamsSchema,
@@ -6,49 +6,55 @@ import {
   type MutationResponse,
   type PushBody,
   type PushResponse,
-} from '../../../zero-protocol/src/push.ts';
-import * as v from '../../../shared/src/valita.ts';
+} from '../../zero-protocol/src/push.ts';
+import * as v from '../../shared/src/valita.ts';
 import {
   OutOfOrderMutation,
   type Database,
   type ExtractTransactionType,
   type Params,
   type TransactionProviderHooks,
-} from '../push-processor.ts';
-import {MutationAlreadyProcessedError} from '../../../zero-cache/src/services/mutagen/mutagen.ts';
-import {createLogContext} from '../logging.ts';
+} from './push-processor.ts';
+import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
+import {createLogContext} from './logging.ts';
 import type {LogContext, LogLevel} from '@rocicorp/logger';
-import {assert} from '../../../shared/src/asserts.ts';
+import {assert} from '../../shared/src/asserts.ts';
 
-type TransactFn = <D extends Database<ExtractTransactionType<D>>>(
+export type TransactFn = <D extends Database<ExtractTransactionType<D>>>(
   dbProvider: D,
-  mutation: CustomMutation,
-  cb: (tx: unknown, args: readonly ReadonlyJSONValue[]) => Promise<void>,
+  cb: TransactFnCallback<D>,
 ) => Promise<MutationResponse>;
+
+export type TransactFnCallback<D extends Database<ExtractTransactionType<D>>> =
+  (
+    tx: ExtractTransactionType<D>,
+    mutatorName: string,
+    mutatorArgs: ReadonlyJSONValue,
+  ) => Promise<void>;
 
 export type Parsed = {
   transact: TransactFn;
   mutations: CustomMutation[];
 };
 
-export function handleMutations(
+export function processMutations(
   cb: (
     transact: TransactFn,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
   queryString: URLSearchParams | Record<string, string>,
   body: ReadonlyJSONValue,
-  logLevel: LogLevel,
+  logLevel?: LogLevel | undefined,
 ): Promise<PushResponse>;
-export function handleMutations(
+export function processMutations(
   cb: (
     transact: TransactFn,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
   request: Request,
-  logLevel: LogLevel,
+  logLevel?: LogLevel | undefined,
 ): Promise<PushResponse>;
-export async function handleMutations(
+export async function processMutations(
   cb: (
     transact: TransactFn,
     mutation: CustomMutation,
@@ -81,7 +87,9 @@ export async function handleMutations(
   const queryParams = v.parse(queryString, pushParamsSchema, 'passthrough');
 
   if (req.pushVersion !== 1) {
-    throw new Error('unsupportedPushVersion');
+    return {
+      error: 'unsupportedPushVersion',
+    };
   }
 
   const transactor = new Transactor(req, queryParams, logLevel);
@@ -89,7 +97,10 @@ export async function handleMutations(
   const responses: MutationResponse[] = [];
   for (const m of req.mutations) {
     assert(m.type === 'custom', 'Expected custom mutation');
-    const res = await cb(transactor.transact, m);
+    const res = await cb(
+      (dbProvider, innerCb) => transactor.transact(dbProvider, m, innerCb),
+      m,
+    );
     responses.push(res);
     if ('error' in res.result) {
       break;
@@ -115,10 +126,7 @@ class Transactor {
   transact = async <D extends Database<ExtractTransactionType<D>>>(
     dbProvider: D,
     mutation: CustomMutation,
-    cb: (
-      tx: ExtractTransactionType<D>,
-      args: readonly ReadonlyJSONValue[],
-    ) => Promise<void>,
+    cb: TransactFnCallback<D>,
   ): Promise<MutationResponse> => {
     try {
       return await this.#transactImpl(dbProvider, mutation, cb, false);
@@ -179,22 +187,31 @@ class Transactor {
     }
   };
 
-  async #transactImpl<D extends Database<ExtractTransactionType<D>>>(
+  #transactImpl<D extends Database<ExtractTransactionType<D>>>(
     dbProvider: D,
     mutation: CustomMutation,
-    cb: (
-      tx: ExtractTransactionType<D>,
-      args: readonly ReadonlyJSONValue[],
-    ) => Promise<void>,
+    cb: TransactFnCallback<D>,
     errorMode: boolean,
   ): Promise<MutationResponse> {
-    await dbProvider.transaction(
+    return dbProvider.transaction(
       async (dbTx, transactionHooks) => {
         await this.#checkAndIncrementLastMutationID(
           transactionHooks,
           mutation.clientID,
           mutation.id,
         );
+
+        if (!errorMode) {
+          await cb(dbTx, mutation.name, mutation.args[0]);
+        }
+
+        return {
+          id: {
+            clientID: mutation.clientID,
+            id: mutation.id,
+          },
+          result: {},
+        };
       },
       {
         upstreamSchema: this.#params.schema,
