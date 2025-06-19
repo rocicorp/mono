@@ -34,6 +34,8 @@ import {
   transformAndHashQuery,
   type TransformedAndHashed,
 } from '../../auth/read-authorizer.ts';
+import {type ZeroConfig} from '../../config/zero-config.ts';
+import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
 import {stringify} from '../../types/bigint-json.ts';
@@ -79,8 +81,6 @@ import {
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
-import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
-import {type ZeroConfig} from '../../config/zero-config.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -398,6 +398,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       return false; // common case.
     }
 
+    // If there are no more clients we pause the TTL clock.
+    await this.#runInLockWithCVR(this.#pauseTTLClock);
+
     // Keep the view-syncer alive if there are pending rows being flushed.
     // It's better to do this before shutting down since it may take a
     // while, during which new connections may come in.
@@ -422,6 +425,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#clients.delete(clientID);
 
       if (this.#clients.size === 0) {
+        this.#runInLockWithCVR(this.#pauseTTLClock).catch(e => {
+          this.#lc.error?.(`pauseTTLClock failed`, e);
+        });
+
         this.#scheduleShutdown();
       }
     }
@@ -467,6 +474,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
       this.#clients.get(clientID)?.close(`replaced by wsID: ${wsID}`);
       this.#clients.set(clientID, newClient);
+
+      if (this.#clients.size === 1) {
+        this.#runInLockWithCVR(this.#startTTLClock).catch(e => {
+          lc.error?.(`startTTLClock failed`, e);
+        });
+      }
 
       // Note: initConnection() must be synchronous so that `downstream` is
       // immediately returned to the caller (connection.ts). This ensures
@@ -637,6 +650,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         )
       : clients;
   }
+
+  #startTTLClock = async (lc: LogContext, cvr: CVRSnapshot) => {
+    lc.debug?.('XXX TTL clock started at', Date.now());
+    await cvr;
+  };
+
+  #pauseTTLClock = async (lc: LogContext, cvr: CVRSnapshot) => {
+    lc.debug?.('XXX TTL clock paused at', Date.now());
+    await cvr;
+  };
 
   // Must be called from within #lock.
   readonly #handleConfigUpdate = (
