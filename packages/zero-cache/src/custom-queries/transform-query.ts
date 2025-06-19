@@ -33,12 +33,21 @@ type HttpError = {
  * implement leeway for expiration checks: https://github.com/panva/jose/blob/main/docs/jwt/verify/interfaces/JWTVerifyOptions.md#clocktolerance
  */
 export class CustomQueryTransformer {
-  readonly #pullUrl: string;
   readonly #shard: ShardID;
   readonly #cache: TimedCache<TransformedAndHashed>;
+  readonly #config: {
+    url: string;
+    forwardCookies: boolean;
+  };
 
-  constructor(pullUrl: string, shard: ShardID) {
-    this.#pullUrl = pullUrl;
+  constructor(
+    config: {
+      url: string;
+      forwardCookies: boolean;
+    },
+    shard: ShardID,
+  ) {
+    this.#config = config;
     this.#shard = shard;
     this.#cache = new TimedCache(5000); // 5 seconds cache TTL
   }
@@ -49,6 +58,13 @@ export class CustomQueryTransformer {
   ): Promise<(TransformedAndHashed | ErroredQuery)[] | HttpError> {
     const request: TransformRequestBody = [];
     const cachedResponses: TransformedAndHashed[] = [];
+
+    if (!this.#config.forwardCookies && headerOptions.cookie) {
+      headerOptions = {
+        ...headerOptions,
+        cookie: undefined, // remove cookies if not forwarded
+      };
+    }
 
     // split queries into cached and uncached
     for (const query of queries) {
@@ -70,7 +86,7 @@ export class CustomQueryTransformer {
     }
 
     const response = await fetchFromAPIServer(
-      this.#pullUrl,
+      this.#config.url,
       this.#shard,
       headerOptions,
       undefined,
@@ -116,5 +132,5 @@ function getCacheKey(headerOptions: HeaderOptions, queryID: string) {
   // For custom queries, queryID is a hash of the name + args.
   // the APIKey from headerOptions is static. Not needed for the cache key.
   // The token is used to identify the user and should be included in the cache key.
-  return `${headerOptions.token}:${queryID}`;
+  return `${headerOptions.token}:${headerOptions.cookie}:${queryID}`;
 }

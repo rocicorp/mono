@@ -295,10 +295,12 @@ describe('pusher service', () => {
   test('the service can be stopped', async () => {
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://exmaple.com',
-      undefined,
     );
     let shutDown = false;
     void pusher.run().then(() => {
@@ -316,10 +318,13 @@ describe('pusher service', () => {
 
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://exmaple.com',
-      'api-key',
     );
     void pusher.run();
     pusher.initConnection(clientID, wsID, undefined);
@@ -346,10 +351,13 @@ describe('pusher service', () => {
 
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://exmaple.com',
-      'api-key',
     );
     void pusher.run();
     pusher.initConnection(clientID, wsID, undefined);
@@ -359,7 +367,7 @@ describe('pusher service', () => {
     await pusher.stop();
 
     expect(fetch.mock.calls[0][0]).toMatchInlineSnapshot(
-      `"http://exmaple.com/?schema=zero_0&appID=zero"`,
+      `"http://example.com/?schema=zero_0&appID=zero"`,
     );
 
     fetch.mockReset();
@@ -374,10 +382,13 @@ describe('pusher service', () => {
 
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://exmaple.com',
-      'api-key',
     );
 
     void pusher.run();
@@ -412,16 +423,74 @@ describe('pusher service', () => {
     expect(JSON.parse(fetch.mock.calls[1][1].body).mutations).toHaveLength(3);
     expect(fetch.mock.calls).toHaveLength(2);
   });
+
+  test('the service does not forward cookies if forwardCookies is false', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+    });
+
+    const pusher = new PusherService(
+      config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+    pusher.initConnection(clientID, wsID, undefined);
+
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', 'my-cookie');
+
+    await pusher.stop();
+
+    expect(fetch.mock.calls[0][1]?.headers).not.toHaveProperty('Cookie');
+  });
+
+  test('the service forwards cookies if forwardCookies is true', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+    });
+
+    const pusher = new PusherService(
+      config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: true,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+    pusher.initConnection(clientID, wsID, undefined);
+
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', 'my-cookie');
+
+    await pusher.stop();
+
+    expect(fetch.mock.calls[0][1]?.headers).toHaveProperty(
+      'Cookie',
+      'my-cookie',
+    );
+  });
 });
 
 describe('initConnection', () => {
   test('initConnection returns a stream', () => {
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://example.com',
-      'api-key',
     );
     void pusher.run();
 
@@ -432,10 +501,13 @@ describe('initConnection', () => {
   test('initConnection throws if it was already called for the same clientID and wsID', () => {
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://example.com',
-      'api-key',
     );
     void pusher.run();
     pusher.initConnection('c1', 'ws1', undefined);
@@ -447,10 +519,13 @@ describe('initConnection', () => {
   test('initConnection destroys prior stream for same client when wsID changes', async () => {
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://example.com',
-      'api-key',
     );
     void pusher.run();
     const stream1 = pusher.initConnection('c1', 'ws1', undefined);
@@ -471,10 +546,13 @@ describe('initConnection', () => {
 
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://example.com',
-      'api-key',
     );
     void pusher.run();
 
@@ -515,10 +593,13 @@ describe('pusher streaming', () => {
   test('returns ok for subsequent pushes from same client', () => {
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://example.com',
-      'api-key',
     );
     void pusher.run();
 
@@ -549,10 +630,13 @@ describe('pusher streaming', () => {
 
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://example.com',
-      'api-key',
     );
     void pusher.run();
     const stream1 = pusher.initConnection('client1', 'ws1', undefined);
@@ -630,10 +714,13 @@ describe('pusher streaming', () => {
 
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://example.com',
-      'api-key',
     );
     void pusher.run();
     const stream1 = pusher.initConnection('client1', 'ws1', undefined);
@@ -687,10 +774,13 @@ describe('pusher streaming', () => {
 
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://example.com',
-      'api-key',
     );
     void pusher.run();
     const stream = pusher.initConnection(clientID, wsID, undefined);
@@ -718,10 +808,13 @@ describe('pusher streaming', () => {
   test('cleanup removes client subscription', () => {
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://example.com',
-      'api-key',
     );
     void pusher.run();
 
@@ -740,10 +833,13 @@ describe('pusher streaming', () => {
   test('new websocket for same client creates new downstream', async () => {
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://example.com',
-      'api-key',
     );
     void pusher.run();
 
@@ -780,10 +876,13 @@ describe('pusher streaming', () => {
 
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://example.com',
-      'api-key',
     );
     void pusher.run();
 
@@ -836,10 +935,13 @@ describe('pusher streaming', () => {
 
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://example.com',
-      'api-key',
     );
     void pusher.run();
 
@@ -862,10 +964,13 @@ describe('pusher streaming', () => {
 
     const pusher = new PusherService(
       config,
+      {
+        url: 'http://example.com',
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
       lc,
       'cgid',
-      'http://example.com',
-      'api-key',
     );
     void pusher.run();
 

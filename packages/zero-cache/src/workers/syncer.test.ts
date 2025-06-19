@@ -87,10 +87,12 @@ describe('cleanup', () => {
       id => {
         const ret = new PusherService(
           {} as ZeroConfig,
+          {
+            url: 'http://example.com',
+            forwardCookies: false,
+          },
           lc,
           id,
-          'http://example.com',
-          undefined,
         );
         pushers.push(ret);
         return ret;

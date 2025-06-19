@@ -221,7 +221,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     if (pullConfig.url) {
       this.#customQueryTransformer = new CustomQueryTransformer(
-        pullConfig.url,
+        {
+          url: pullConfig.url,
+          forwardCookies: pullConfig.forwardCookies,
+        },
         shard,
       );
     }
@@ -825,7 +828,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           {
             apiKey: this.#pullConfig.apiKey,
             token: this.#authData?.raw,
-            cookie: this.#httpCookie,
+            cookie: this.#pullConfig.forwardCookies
+              ? this.#httpCookie
+              : undefined,
           },
           customQueries,
         );

@@ -112,6 +112,7 @@ const ON_FAILURE = (e: unknown) => {
 
 const pullConfig: ZeroConfig['pull'] = {
   url: 'http://my-pull-endpoint.dev/api/zero/pull',
+  forwardCookies: true,
 };
 
 const REPLICA_VERSION = '01';

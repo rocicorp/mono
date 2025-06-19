@@ -63,20 +63,27 @@ export class PusherService implements Service, Pusher {
   readonly id: string;
   readonly #pusher: PushWorker;
   readonly #queue: Queue<PusherEntryOrStop>;
+  readonly #pushConfig: ZeroConfig['push'] & {url: string};
   #stopped: Promise<void> | undefined;
   #refCount = 0;
   #isStopped = false;
 
   constructor(
-    config: Config,
+    appConfig: Config,
+    pushConfig: ZeroConfig['push'] & {url: string},
     lc: LogContext,
     clientGroupID: string,
-    pushURL: string,
-    apiKey: string | undefined,
   ) {
     this.#queue = new Queue();
-    this.#pusher = new PushWorker(config, lc, pushURL, apiKey, this.#queue);
+    this.#pusher = new PushWorker(
+      appConfig,
+      lc,
+      pushConfig.url,
+      pushConfig.apiKey,
+      this.#queue,
+    );
     this.id = clientGroupID;
+    this.#pushConfig = pushConfig;
   }
 
   get pushURL(): string | undefined {
@@ -97,6 +104,9 @@ export class PusherService implements Service, Pusher {
     jwt: string | undefined,
     httpCookie: string | undefined,
   ): Exclude<HandlerResult, StreamResult> {
+    if (!this.#pushConfig.forwardCookies) {
+      httpCookie = undefined; // remove cookies if not forwarded
+    }
     this.#queue.enqueue({push, jwt, clientID, httpCookie});
 
     return {
