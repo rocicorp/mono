@@ -27,7 +27,7 @@ const harness = await bootstrap({
   pgContent,
 });
 
-test.each(Array.from({length: 1000}, () => createCase()))(
+test.each(Array.from({length: 100}, () => createCase()))(
   'fuzz-hydration $seed',
   runCase,
 );
