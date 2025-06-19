@@ -86,7 +86,6 @@ import {
 } from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
-import {ActiveClientsManager} from './active-clients-manager.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import {ZeroContext} from './context.ts';
 import {
@@ -371,7 +370,6 @@ export class Zero<
 
   // We use an accessor pair to allow the subclass to override the setter.
   #connectionState: ConnectionState = ConnectionState.Disconnected;
-  #aliveClientsManager: ActiveClientsManager | undefined;
 
   #setConnectionState(state: ConnectionState) {
     if (state === this.#connectionState) {
@@ -595,14 +593,6 @@ export class Zero<
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
     this.#mutationTracker.clientID = rep.clientID;
-
-    void rep.clientGroupID.then(clientGroupID => {
-      this.#aliveClientsManager = new ActiveClientsManager(
-        clientGroupID,
-        rep.clientID,
-        this.#closeAbortController.signal,
-      );
-    });
 
     const onUpdateNeededCallback = (
       reason: UpdateNeededReason,
@@ -1227,7 +1217,6 @@ export class Zero<
       this.#options.push,
       this.#options.maxHeaderLength,
       additionalConnectParams,
-      this.#aliveClientsManager,
     );
 
     if (this.closed) {
@@ -1925,10 +1914,7 @@ export async function createSocket(
   lc: ZeroLogContext,
   userPushParams: UserPushParams | undefined,
   maxHeaderLength = 1024 * 8,
-  additionalConnectParams: Record<string, string> | undefined,
-  aliveClientsManager:
-    | Pick<ActiveClientsManager, 'getActiveClients'>
-    | undefined,
+  additionalConnectParams?: Record<string, string> | undefined,
 ): Promise<
   [
     WebSocket,
@@ -1974,8 +1960,6 @@ export async function createSocket(
   let queriesPatch: Map<string, UpQueriesPatchOp> | undefined =
     await queriesPatchP;
 
-  const activeClients = await aliveClientsManager?.getActiveClients();
-
   let secProtocol = encodeSecProtocols(
     [
       'initConnection',
@@ -1986,7 +1970,6 @@ export async function createSocket(
         // Henceforth it is stored with the CVR and verified automatically.
         ...(baseCookie === null ? {clientSchema} : {}),
         userPushParams,
-        activeClients: activeClients && [...activeClients],
       },
     ],
     auth,
