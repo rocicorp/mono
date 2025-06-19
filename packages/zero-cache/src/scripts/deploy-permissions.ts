@@ -1,5 +1,5 @@
+import '../../../shared/src/dotenv.ts';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import '@dotenvx/dotenvx/config';
 import {writeFile} from 'node:fs/promises';
 import {ident as id, literal} from 'pg-format';
 import {parseOptions} from '../../../shared/src/options.ts';

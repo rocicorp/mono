@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
-import '@dotenvx/dotenvx/config';
+import '../../shared/src/dotenv.ts';
 import {resolver} from '@rocicorp/resolver';
 import chalk from 'chalk';
 import {watch} from 'chokidar';

@@ -1,5 +1,5 @@
+import '../../shared/src/dotenv.ts';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import '@dotenvx/dotenvx/config';
 import {nanoid} from 'nanoid';
 import {pipeline, Writable} from 'node:stream';
 import WebSocket, {createWebSocketStream} from 'ws';

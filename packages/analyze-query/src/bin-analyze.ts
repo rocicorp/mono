@@ -1,5 +1,5 @@
 /* eslint-disable no-console */
-import '@dotenvx/dotenvx/config';
+import '../../shared/src/dotenv.ts';
 import chalk from 'chalk';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
