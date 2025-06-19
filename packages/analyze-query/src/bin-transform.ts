@@ -1,6 +1,5 @@
 /* eslint-disable no-console */
-import '@dotenvx/dotenvx/config';
-
+import '../../shared/src/dotenv.ts';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {must} from '../../shared/src/must.ts';
 import {parseOptions} from '../../shared/src/options.ts';
