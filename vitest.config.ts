@@ -1,7 +1,13 @@
 import {readdirSync} from 'node:fs';
 import {defineConfig} from 'vitest/config';
 
-const special = ['shared', 'zero-cache', 'z2s', 'zero-pg'];
+const special = [
+  'shared',
+  'zero-cache',
+  'z2s',
+  'zero-pg',
+  'zql-integration-tests',
+];
 
 // Get all the dirs in packages
 function getPackages() {
@@ -17,6 +23,6 @@ function getPackages() {
 
 export default defineConfig({
   test: {
-    workspace: [...getPackages(), 'apps/zbugs/vitest.config.*.ts','tools/*'],
+    workspace: [...getPackages(), 'apps/zbugs/vitest.config.*.ts', 'tools/*'],
   },
 });
