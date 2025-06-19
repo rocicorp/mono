@@ -6,20 +6,15 @@ import {newQuery} from './query-impl.ts';
 import type {Query} from './query.ts';
 
 export type NamedQuery<
-  TArg extends ReadonlyArray<ReadonlyJSONValue>,
-  TReturnQuery extends Query<any, any, any>,
+  TArg extends
+    ReadonlyArray<ReadonlyJSONValue> = ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any> = Query<any, any, any>,
 > = (...args: TArg) => TReturnQuery;
 
 export type CustomQueryID = {
   name: string;
   args: ReadonlyArray<ReadonlyJSONValue>;
 };
-
-export type NamedQueryImpl<
-  TArg extends
-    ReadonlyArray<ReadonlyJSONValue> = ReadonlyArray<ReadonlyJSONValue>,
-  TReturnQuery extends Query<any, any, any> = Query<any, any, any>,
-> = (...arg: TArg) => TReturnQuery;
 
 /**
  * Returns a set of query builders for the given schema.
@@ -42,7 +37,7 @@ export function namedQuery<
   TReturnQuery extends Query<any, any, any>,
 >(
   name: string,
-  fn: NamedQueryImpl<TArg, TReturnQuery>,
+  fn: NamedQuery<TArg, TReturnQuery>,
 ): NamedQuery<TArg, TReturnQuery> {
   return ((...args: TArg) => fn(...args).nameAndArgs(name, args)) as NamedQuery<
     TArg,

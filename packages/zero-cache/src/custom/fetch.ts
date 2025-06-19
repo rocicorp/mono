@@ -8,6 +8,7 @@ const reservedParams = ['schema', 'appID'];
 export type HeaderOptions = {
   apiKey?: string | undefined;
   token?: string | undefined;
+  cookie?: string | undefined;
 };
 
 export async function fetchFromAPIServer(
@@ -26,6 +27,9 @@ export async function fetchFromAPIServer(
   }
   if (headerOptions.token !== undefined) {
     headers['Authorization'] = `Bearer ${headerOptions.token}`;
+  }
+  if (headerOptions.cookie !== undefined) {
+    headers['Cookie'] = headerOptions.cookie;
   }
 
   const urlObj = new URL(url);

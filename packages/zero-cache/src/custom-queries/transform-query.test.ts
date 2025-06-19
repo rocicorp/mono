@@ -131,7 +131,13 @@ describe('CustomQueryTransformer', () => {
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse);
 
-    const transformer = new CustomQueryTransformer(pullUrl, mockShard);
+    const transformer = new CustomQueryTransformer(
+      {
+        url: pullUrl,
+        forwardCookies: false,
+      },
+      mockShard,
+    );
     const result = await transformer.transform(headerOptions, mockQueries);
 
     // Verify the API was called correctly
@@ -172,7 +178,13 @@ describe('CustomQueryTransformer', () => {
 
     mockFetchFromAPIServer.mockResolvedValue(mockMixedResponse);
 
-    const transformer = new CustomQueryTransformer(pullUrl, mockShard);
+    const transformer = new CustomQueryTransformer(
+      {
+        url: pullUrl,
+        forwardCookies: false,
+      },
+      mockShard,
+    );
     const result = await transformer.transform(headerOptions, mockQueries);
 
     expect(result).toEqual([
@@ -196,7 +208,13 @@ describe('CustomQueryTransformer', () => {
 
     mockFetchFromAPIServer.mockResolvedValue(mockErrorResponse);
 
-    const transformer = new CustomQueryTransformer(pullUrl, mockShard);
+    const transformer = new CustomQueryTransformer(
+      {
+        url: pullUrl,
+        forwardCookies: false,
+      },
+      mockShard,
+    );
     const result = await transformer.transform(headerOptions, mockQueries);
 
     expect(result).toEqual({
@@ -214,7 +232,13 @@ describe('CustomQueryTransformer', () => {
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse);
 
-    const transformer = new CustomQueryTransformer(pullUrl, mockShard);
+    const transformer = new CustomQueryTransformer(
+      {
+        url: pullUrl,
+        forwardCookies: false,
+      },
+      mockShard,
+    );
     const result = await transformer.transform(headerOptions, []);
 
     expect(mockFetchFromAPIServer).not.toHaveBeenCalled();
@@ -233,7 +257,13 @@ describe('CustomQueryTransformer', () => {
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
-    const transformer = new CustomQueryTransformer(pullUrl, mockShard);
+    const transformer = new CustomQueryTransformer(
+      {
+        url: pullUrl,
+        forwardCookies: false,
+      },
+      mockShard,
+    );
 
     // First call - should fetch
     await transformer.transform(headerOptions, [mockQueries[0]]);
@@ -258,7 +288,13 @@ describe('CustomQueryTransformer', () => {
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
-    const transformer = new CustomQueryTransformer(pullUrl, mockShard);
+    const transformer = new CustomQueryTransformer(
+      {
+        url: pullUrl,
+        forwardCookies: false,
+      },
+      mockShard,
+    );
 
     // First call
     await transformer.transform(headerOptions, [mockQueries[0]]);
@@ -299,13 +335,19 @@ describe('CustomQueryTransformer', () => {
       .mockResolvedValueOnce(mockResponse1())
       .mockResolvedValueOnce(mockResponse2());
 
-    const transformer = new CustomQueryTransformer(pullUrl, mockShard);
+    const transformer = new CustomQueryTransformer(
+      {
+        url: pullUrl,
+        forwardCookies: false,
+      },
+      mockShard,
+    );
 
     // Cache first query
     await transformer.transform(headerOptions, [mockQueries[0]]);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
-      pullUrl,
+      'https://api.example.com/pull',
       mockShard,
       headerOptions,
       undefined,
@@ -331,6 +373,80 @@ describe('CustomQueryTransformer', () => {
     expect(result).toEqual(expect.arrayContaining(transformResults));
   });
 
+  test('should not forward cookies if forwardCookies is false', async () => {
+    const mockSuccessResponse = () =>
+      new Response(
+        JSON.stringify([
+          'transformed',
+          [mockQueryResponses[0]],
+        ] satisfies TransformResponseMessage),
+        {status: 200},
+      );
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+
+    const transformer = new CustomQueryTransformer(
+      {
+        url: pullUrl,
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    // Call with cookies in header options
+    const result = await transformer.transform(
+      {...headerOptions, cookie: 'test-cookie'},
+      [mockQueries[0]],
+    );
+
+    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      pullUrl,
+      mockShard,
+      headerOptions, // Cookies should not be forwarded
+      undefined,
+      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
+    );
+    expect(result).toEqual([transformResults[0]]);
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
+  });
+
+  test('should forward cookies if forwardCookies is true', async () => {
+    const mockSuccessResponse = () =>
+      new Response(
+        JSON.stringify([
+          'transformed',
+          [mockQueryResponses[0]],
+        ] satisfies TransformResponseMessage),
+        {status: 200},
+      );
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+
+    const transformer = new CustomQueryTransformer(
+      {
+        url: pullUrl,
+        forwardCookies: true,
+      },
+      mockShard,
+    );
+
+    // Call with cookies in header options
+    const result = await transformer.transform(
+      {...headerOptions, cookie: 'test-cookie'},
+      [mockQueries[0]],
+    );
+
+    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      pullUrl,
+      mockShard,
+      {...headerOptions, cookie: 'test-cookie'}, // Cookies should be forwarded
+      undefined,
+      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
+    );
+    expect(result).toEqual([transformResults[0]]);
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
+  });
+
   test('should not cache error responses', async () => {
     const mockErrorResponse = () =>
       new Response(
@@ -350,7 +466,13 @@ describe('CustomQueryTransformer', () => {
 
     mockFetchFromAPIServer.mockResolvedValue(mockErrorResponse());
 
-    const transformer = new CustomQueryTransformer(pullUrl, mockShard);
+    const transformer = new CustomQueryTransformer(
+      {
+        url: pullUrl,
+        forwardCookies: false,
+      },
+      mockShard,
+    );
 
     // First call - should fetch and get error
     const result1 = await transformer.transform(headerOptions, [
@@ -384,7 +506,13 @@ describe('CustomQueryTransformer', () => {
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
-    const transformer = new CustomQueryTransformer(pullUrl, mockShard);
+    const transformer = new CustomQueryTransformer(
+      {
+        url: pullUrl,
+        forwardCookies: false,
+      },
+      mockShard,
+    );
     const differentHeaderOptions = {
       apiKey: 'different-api-key',
       token: 'different-token',

@@ -112,6 +112,7 @@ const ON_FAILURE = (e: unknown) => {
 
 const pullConfig: ZeroConfig['pull'] = {
   url: 'http://my-pull-endpoint.dev/api/zero/pull',
+  forwardCookies: true,
 };
 
 const REPLICA_VERSION = '01';
@@ -730,6 +731,7 @@ describe('view-syncer/service', () => {
     protocolVersion: PROTOCOL_VERSION,
     schemaVersion: 2,
     tokenData: undefined,
+    httpCookie: undefined,
   };
 
   beforeEach(async () => {
@@ -3255,6 +3257,7 @@ describe('view-syncer/service', () => {
         protocolVersion: PROTOCOL_VERSION,
         schemaVersion: 2,
         tokenData: undefined,
+        httpCookie: undefined,
       },
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     );
@@ -6689,6 +6692,7 @@ describe('view-syncer/service', () => {
           protocolVersion: PROTOCOL_VERSION,
           schemaVersion: 2,
           tokenData: undefined,
+          httpCookie: undefined,
         },
         [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2}],
       );
@@ -6897,6 +6901,7 @@ describe('permissions', () => {
       raw: '',
       decoded: {sub: 'foo', role: 'user', iat: 0},
     },
+    httpCookie: undefined,
   };
 
   beforeEach(async () => {

@@ -35,6 +35,7 @@ export interface Pusher extends RefCountedService {
     clientID: string,
     push: PushBody,
     jwt: string | undefined,
+    httpCookie: string | undefined,
   ): HandlerResult;
   initConnection(
     clientID: string,
@@ -62,20 +63,27 @@ export class PusherService implements Service, Pusher {
   readonly id: string;
   readonly #pusher: PushWorker;
   readonly #queue: Queue<PusherEntryOrStop>;
+  readonly #pushConfig: ZeroConfig['push'] & {url: string};
   #stopped: Promise<void> | undefined;
   #refCount = 0;
   #isStopped = false;
 
   constructor(
-    config: Config,
+    appConfig: Config,
+    pushConfig: ZeroConfig['push'] & {url: string},
     lc: LogContext,
     clientGroupID: string,
-    pushURL: string,
-    apiKey: string | undefined,
   ) {
     this.#queue = new Queue();
-    this.#pusher = new PushWorker(config, lc, pushURL, apiKey, this.#queue);
+    this.#pusher = new PushWorker(
+      appConfig,
+      lc,
+      pushConfig.url,
+      pushConfig.apiKey,
+      this.#queue,
+    );
     this.id = clientGroupID;
+    this.#pushConfig = pushConfig;
   }
 
   get pushURL(): string | undefined {
@@ -94,8 +102,12 @@ export class PusherService implements Service, Pusher {
     clientID: string,
     push: PushBody,
     jwt: string | undefined,
+    httpCookie: string | undefined,
   ): Exclude<HandlerResult, StreamResult> {
-    this.#queue.enqueue({push, jwt, clientID});
+    if (!this.#pushConfig.forwardCookies) {
+      httpCookie = undefined; // remove cookies if not forwarded
+    }
+    this.#queue.enqueue({push, jwt, clientID, httpCookie});
 
     return {
       type: 'ok',
@@ -137,6 +149,7 @@ export class PusherService implements Service, Pusher {
 type PusherEntry = {
   push: PushBody;
   jwt: string | undefined;
+  httpCookie: string | undefined;
   clientID: string;
 };
 type PusherEntryOrStop = PusherEntry | 'stop';
@@ -343,17 +356,6 @@ class PushWorker {
       clientGroupID: entry.push.clientGroupID,
     });
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (this.#apiKey) {
-      headers['X-Api-Key'] = this.#apiKey;
-    }
-    if (entry.jwt) {
-      headers['Authorization'] = `Bearer ${entry.jwt}`;
-    }
-
     try {
       const response = await fetchFromAPIServer(
         this.#pushURL,
@@ -364,6 +366,7 @@ class PushWorker {
         {
           apiKey: this.#apiKey,
           token: entry.jwt,
+          cookie: entry.httpCookie,
         },
         this.#clients.get(entry.clientID)?.userParams?.queryParams,
         entry.push,

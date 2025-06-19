@@ -125,10 +125,12 @@ export default function runWorker(
       : (id: string) =>
           new PusherService(
             config,
+            {
+              ...config.push,
+              url: must(config.push.url),
+            },
             lc.withContext('clientGroupID', id),
             id,
-            must(config.push.url),
-            config.push.apiKey,
           );
 
   const syncer = new Syncer(
