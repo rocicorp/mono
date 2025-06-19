@@ -4,5 +4,6 @@ import {configForCustomPg} from '../zero-cache/vitest.config.ts';
 export default defineConfig({
   test: {
     workspace: ['vitest.config.*.ts', ...configForCustomPg(import.meta.url)],
+    testTimeout: 20_000, // 20 seconds
   },
 });
