@@ -121,7 +121,6 @@ export {
   querify,
   type CustomQueryID,
   type NamedQuery,
-  type NamedQueryImpl,
   namedQuery,
 } from '../../zql/src/query/named.ts';
 export type {

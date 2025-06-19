@@ -1,4 +1,4 @@
-import type {NamedQueryImpl, ReadonlyJSONValue} from '@rocicorp/zero';
+import type {NamedQuery, ReadonlyJSONValue} from '@rocicorp/zero';
 import * as serverQueries from '../server/server-queries.ts';
 import * as sharedQueries from '../shared/queries.ts';
 
@@ -14,7 +14,7 @@ export function getQuery(
       ...args,
     );
   } else if (isSharedQuery(name)) {
-    query = (sharedQueries[name] as NamedQueryImpl)(...args);
+    query = (sharedQueries[name] as NamedQuery)(...args);
   } else {
     throw new Error(`Unknown query: ${name}`);
   }
