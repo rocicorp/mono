@@ -94,6 +94,7 @@ export type SyncContext = {
   readonly protocolVersion: number;
   readonly schemaVersion: number | null;
   readonly tokenData: TokenData | undefined;
+  readonly httpCookie: string | undefined;
 };
 
 const tracer = trace.getTracer('view-syncer', version);
@@ -159,7 +160,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
+  // DEPRECATED: remove `authData` in favor of forwarding
+  // auth and cookie headers directly
   #authData: TokenData | undefined;
+  #httpCookie: string | undefined;
 
   /**
    * The {@linkcode maxRowCount} is used for the eviction of inactive queries.
@@ -217,7 +221,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     if (pullConfig.url) {
       this.#customQueryTransformer = new CustomQueryTransformer(
-        pullConfig.url,
+        {
+          url: pullConfig.url,
+          forwardCookies: pullConfig.forwardCookies,
+        },
         shard,
       );
     }
@@ -426,11 +433,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Source<Downstream> {
     this.#lc.debug?.('viewSyncer.initConnection');
     return startSpan(tracer, 'vs.initConnection', () => {
-      const {clientID, wsID, baseCookie, schemaVersion, tokenData} = ctx;
+      const {clientID, wsID, baseCookie, schemaVersion, tokenData, httpCookie} =
+        ctx;
       this.#authData = pickToken(this.#lc, this.#authData, tokenData);
       this.#lc.debug?.(
         `Picked auth token: ${JSON.stringify(this.#authData?.decoded)}`,
       );
+      this.#httpCookie = httpCookie;
 
       const lc = this.#lc
         .withContext('clientID', clientID)
@@ -819,6 +828,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           {
             apiKey: this.#pullConfig.apiKey,
             token: this.#authData?.raw,
+            cookie: this.#pullConfig.forwardCookies
+              ? this.#httpCookie
+              : undefined,
           },
           customQueries,
         );
@@ -980,6 +992,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             {
               apiKey: this.#pullConfig.apiKey,
               token: this.#authData?.raw,
+              cookie: this.#httpCookie,
             },
             customQueries.values(),
           );

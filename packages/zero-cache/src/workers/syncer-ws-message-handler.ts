@@ -29,6 +29,9 @@ export class SyncerWsMessageHandler implements MessageHandler {
   readonly #clientGroupID: string;
   readonly #syncContext: SyncContext;
   readonly #pusher: Pusher | undefined;
+  // DEPRECATED: remove #token
+  // and forward auth and cookie headers that were
+  // sent with the push.
   readonly #token: string | undefined;
 
   constructor(
@@ -46,6 +49,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
       baseCookie,
       protocolVersion,
       schemaVersion,
+      httpCookie,
     } = connectParams;
     this.#viewSyncer = viewSyncer;
     this.#mutagen = mutagen;
@@ -66,6 +70,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
       protocolVersion,
       schemaVersion,
       tokenData,
+      httpCookie,
     };
   }
 
@@ -121,6 +126,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
                   this.#syncContext.clientID,
                   msg[1],
                   this.#token,
+                  this.#syncContext.httpCookie,
                 ),
               ];
             }

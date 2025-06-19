@@ -208,6 +208,16 @@ export const zeroOptions = {
         `An optional secret used to authorize zero-cache to call the API server handling writes.`,
       ],
     },
+    forwardCookies: {
+      type: v.boolean().default(false),
+      desc: [
+        `If true, zero-cache will forward cookies from the request to the push URL.`,
+        `This is useful for passing authentication cookies to the API server.`,
+        `If false, cookies are not forwarded.`,
+        ``,
+        `Note that this option is only relevant if the {bold push-url} is set.`,
+      ],
+    },
   },
 
   pull: {
@@ -221,6 +231,16 @@ export const zeroOptions = {
       type: v.string().optional(),
       desc: [
         `An optional secret used to authorize zero-cache to call the API server handling reads.`,
+      ],
+    },
+    forwardCookies: {
+      type: v.boolean().default(false),
+      desc: [
+        `If true, zero-cache will forward cookies from the request to the pull URL.`,
+        `This is useful for passing authentication cookies to the API server.`,
+        `If false, cookies are not forwarded.`,
+        ``,
+        `Note that this option is only relevant if the {bold pull-url} is set.`,
       ],
     },
   },
