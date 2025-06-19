@@ -11,6 +11,7 @@
         "../zero-client/src/**/*.ts",
         "../zero-pg/src/**/*.ts",
         "../zero-react/src/**/*.ts",
+        "../zero-server/src/**/*.ts",
         "../zero-schema/src/**/*.ts",
         "../zero-solid/src/**/*.ts",
         "../analyze-query/src/**/*.ts"
@@ -41,6 +42,7 @@
         "../zero-client/src/**/*.ts",
         "../zero-pg/src/**/*.ts",
         "../zero-react/src/**/*.ts",
+        "../zero-server/src/**/*.ts",
         "../zero-schema/src/**/*.ts",
         "../zero-solid/src/**/*.ts"
       ]
