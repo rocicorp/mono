@@ -5,7 +5,8 @@ import {MeterProvider} from '@opentelemetry/sdk-metrics';
 import {resourceFromAttributes} from '@opentelemetry/resources';
 import type {ObservableGauge, ObservableCounter, ObservableResult} from '@opentelemetry/api';
 import {platform} from 'os';
-import { hash } from 'crypto';
+import { h64 } from '../../../shared/src/hash.js';
+import type {LogContext} from '@rocicorp/logger';
 
 const ROCICORP_TELEMETRY_TOKEN = process.env.ROCICORP_TELEMETRY_TOKEN || 'anonymous-token';
 
@@ -29,6 +30,7 @@ class AnonymousTelemetryManager {
   #clientGroupsGauge!: ObservableGauge;
   #mutationsCounter!: ObservableCounter;
   #rowsSyncedCounter!: ObservableCounter;
+  #lc: LogContext | undefined;
 
   private constructor() {
     this.#startTime = Date.now();
@@ -41,22 +43,26 @@ class AnonymousTelemetryManager {
     return AnonymousTelemetryManager.#instance;
   }
 
-  startAnonymousTelemetry() {
+  startAnonymousTelemetry(lc?: LogContext) {
     if (this.#started) {
       return;
     }
     this.#started = true;
+    this.#lc = lc;
 
     const telemetryConfig = getTelemetryConfig(process.env);
     if (telemetryConfig.optOut) {
+      this.#lc?.info?.('Anonymous telemetry is disabled');
       return;
     }
+
+    this.#lc?.info?.('Starting anonymous telemetry');
 
     // Create a separate MeterProvider for anonymous telemetry
     // This won't interfere with the main SDK
     const resource = resourceFromAttributes({
       //hash of upstream db uri
-      'zero.project.id': hash(process.env.ZERO_UPSTREAM_DB as string || 'unknown', 'sha256').toString(),
+      'zero.project.id': h64(process.env.ZERO_UPSTREAM_DB || 'unknown').toString(),
       'zero.machine.id': process.env.ZERO_MACHINE_ID || 'unknown',
       'zero.machine.os': platform(),
       'zero.telemetry.type': 'anonymous'
@@ -99,6 +105,7 @@ class AnonymousTelemetryManager {
     // Set up observable callbacks that will be called every 60 seconds
     this.#uptimeGauge.addCallback((result: ObservableResult) => {
       const uptimeSeconds = Math.floor((Date.now() - this.#startTime) / 1000);
+      this.#lc?.info?.('uptimeGauge!!!!!!', uptimeSeconds);
       result.observe(uptimeSeconds, this.#getAttributes());
     });
 
@@ -117,6 +124,8 @@ class AnonymousTelemetryManager {
       // Reset counter after observation
       this.#lastMinuteRowsSynced = 0;
     });
+
+    this.#lc?.info?.('Anonymous telemetry started successfully');
   }
 
   // Methods to record events as they happen
@@ -147,25 +156,28 @@ class AnonymousTelemetryManager {
 
   shutdown() {
     if (this.#meterProvider) {
+      this.#lc?.info?.('Shutting down anonymous telemetry');
       void this.#meterProvider.shutdown();
     }
   }
 
   #getAttributes() {
     return {
+
+      'zero.project.id': h64(process.env.ZERO_UPSTREAM_DB || 'unknown').toString(),
       'zero.machine.id': process.env.ZERO_MACHINE_ID || 'unknown',
+      
       'zero.machine.os': platform()
     };
   }
-
 
   #getConnectedClientGroups(): number {
     return this.#connectedClientGroups.size;
   }
 }
 
-export const startAnonymousTelemetry = () => {
-  AnonymousTelemetryManager.getInstance().startAnonymousTelemetry();
+export const startAnonymousTelemetry = (lc?: LogContext) => {
+  AnonymousTelemetryManager.getInstance().startAnonymousTelemetry(lc);
 };
 
 export const recordMutation = () => {
