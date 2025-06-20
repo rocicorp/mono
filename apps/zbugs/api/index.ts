@@ -12,7 +12,7 @@ import {nanoid} from 'nanoid';
 import postgres from 'postgres';
 import {must} from '../../../packages/shared/src/must.ts';
 import {handlePush} from '../server/push-handler.ts';
-import {authDataSchema, type AuthData} from '../shared/auth.ts';
+import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {getQuery} from '../server/get-query.ts';
 import type {ServerContext} from '../server/server-queries.ts';
 import {processQueries} from '@rocicorp/zero/server';
@@ -98,7 +98,7 @@ fastify.get<{
 
   const userRows = await sql`SELECT * FROM "user" WHERE "id" = ${userId}`;
 
-  const jwtPayload: AuthData = {
+  const jwtPayload: JWTData = {
     sub: userId,
     iat: Math.floor(Date.now() / 1000),
     role: userRows[0].role,
@@ -125,9 +125,9 @@ fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
 }>('/api/push', async function (request, reply) {
-  let authData: AuthData | undefined;
+  let jwtData: JWTData | undefined;
   try {
-    authData = await maybeVerifyAuth(request.headers);
+    jwtData = await maybeVerifyAuth(request.headers);
   } catch (e) {
     if (e instanceof Error) {
       reply.status(401).send(e.message);
@@ -136,7 +136,7 @@ fastify.post<{
     throw e;
   }
 
-  const response = await handlePush(authData, request.query, request.body);
+  const response = await handlePush(jwtData, request.query, request.body);
   reply.send(response);
 });
 
@@ -169,7 +169,7 @@ fastify.post<{
 
 async function maybeVerifyAuth(
   headers: IncomingHttpHeaders,
-): Promise<AuthData | undefined> {
+): Promise<JWTData | undefined> {
   let {authorization} = headers;
   if (!authorization) {
     return undefined;
@@ -183,7 +183,7 @@ async function maybeVerifyAuth(
     throw new Error('VITE_PUBLIC_JWK is not set');
   }
 
-  return authDataSchema.parse(
+  return jwtDataSchema.parse(
     (await jwtVerify(authorization, JSON.parse(jwk))).payload,
   );
 }

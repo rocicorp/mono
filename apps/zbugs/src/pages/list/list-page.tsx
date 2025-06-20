@@ -25,7 +25,7 @@ import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
-import {preload} from '../../zero-setup.ts';
+import {preload} from '../../zero-preload.ts';
 import {CACHE_AWHILE, CACHE_NONE} from '../../query-cache-policy.ts';
 import {issueList, type ListContext} from '../../../shared/queries.ts';
 

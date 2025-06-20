@@ -56,12 +56,12 @@ import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {CACHE_AWHILE} from '../../query-cache-policy.ts';
 import {links, type ZbugsHistoryState} from '../../routes.ts';
-import {preload} from '../../zero-setup.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
 import {emojiChange, issueDetail, prevNext} from '../../../shared/queries.ts';
 import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
+import {preload} from '../../zero-preload.ts';
 
 function softNavigate(path: string, state?: ZbugsHistoryState) {
   navigate(path, {state});
@@ -141,7 +141,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
       recordPageLoad('issue-page');
       preload(z);
     }
-  }, [issueResult.type, z]);
+  }, [issueResult.type, preload, z]);
 
   useEffect(() => {
     // only push viewed forward if the issue has been modified since the last viewing

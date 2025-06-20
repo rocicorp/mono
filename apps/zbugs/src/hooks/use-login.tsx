@@ -1,5 +1,5 @@
 import {createContext, useContext} from 'react';
-import {type LoginState} from '../zero-setup.ts';
+import {type LoginState} from '../components/login-provider.tsx';
 
 export type LoginContext = {
   logout: () => void;
