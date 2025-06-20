@@ -1,0 +1,28 @@
+{
+  "name": "zero-server",
+  "description": "Library to include in API servers for processing mutation and query requests",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
+    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
+  },
+  "eslintConfig": {
+    "extends": "../../eslint-config.json"
+  },
+  "prettier": "@rocicorp/prettier-config",
+  "dependencies": {
+    "@rocicorp/logger": "^5.4.0"
+  },
+  "devDependencies": {
+    "@rocicorp/prettier-config": "^0.3.0",
+    "@vitest/runner": "3.0.8",
+    "vitest": "3.0.8"
+  }
+}
