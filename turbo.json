@@ -4,18 +4,7 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": ["out/**", "dist/**", ".next/**", "next-env.d.ts", "build/**"],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "../zero-cache/src/**/*.ts",
-        "../zero-client/src/**/*.ts",
-        "../zero-pg/src/**/*.ts",
-        "../zero-react/src/**/*.ts",
-        "../zero-server/src/**/*.ts",
-        "../zero-schema/src/**/*.ts",
-        "../zero-solid/src/**/*.ts",
-        "../analyze-query/src/**/*.ts"
-      ]
+      "outputs": ["out/**", "dist/**", ".next/**", "next-env.d.ts", "build/**"]
     },
     "lint": {
       "outputs": []
@@ -35,17 +24,7 @@
     },
     "check-types": {
       "dependsOn": ["^check-types", "build"],
-      "outputs": [],
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "../zero-cache/src/**/*.ts",
-        "../zero-client/src/**/*.ts",
-        "../zero-pg/src/**/*.ts",
-        "../zero-react/src/**/*.ts",
-        "../zero-server/src/**/*.ts",
-        "../zero-schema/src/**/*.ts",
-        "../zero-solid/src/**/*.ts"
-      ]
+      "outputs": []
     }
   }
 }

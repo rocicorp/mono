@@ -73,9 +73,12 @@
     "@vitest/runner": "3.0.8",
     "concurrently": "^8.2.1",
     "nock": "^14.0.4",
-    "shared": "0.0.0",
+    "shared": "*",
     "typescript": "~5.8.2",
-    "vitest": "3.0.8"
+    "vitest": "3.0.8",
+    "zero-protocol": "*",
+    "zero-schema": "*",
+    "zql": "*"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"
