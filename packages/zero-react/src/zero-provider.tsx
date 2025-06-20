@@ -59,10 +59,7 @@ export function ZeroProvider<
     }
 
     const z = new Zero(props);
-    if (init) {
-      init(z);
-    }
-
+    init?.(z);
     setZero(z);
 
     return () => {
