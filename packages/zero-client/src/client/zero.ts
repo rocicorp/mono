@@ -703,6 +703,8 @@ export class Zero<
 
     void this.#runLoop();
 
+    this.#expose();
+
     if (TESTING) {
       asTestZero(this)[exposedToTestingSymbol] = {
         puller: this.#puller,
@@ -715,6 +717,38 @@ export class Zero<
         socketResolver: () => this.#socketResolver,
         connectionState: () => this.#connectionState,
       };
+    }
+  }
+
+  #expose() {
+    // Expose the Zero instance to the global scope.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const g = globalThis as any;
+    if (g.__zero === undefined) {
+      g.__zero = this;
+    } else if (g.__zero instanceof Zero) {
+      const prev = g.__zero;
+      g.__zero = {
+        [prev.clientID]: prev,
+        [this.clientID]: this,
+      };
+    } else {
+      g.__zero[this.clientID] = this;
+    }
+  }
+
+  #unexpose() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const g = globalThis as any;
+    assert(g.__zero !== undefined);
+    if (g.__zero instanceof Zero) {
+      assert(g.__zero === this);
+      delete g.__zero;
+    } else {
+      delete g.__zero[this.clientID];
+      if (Object.entries(g.__zero).length === 1) {
+        g.__zero = Object.values(g.__zero)[0];
+      }
     }
   }
 
@@ -838,7 +872,7 @@ export class Zero<
    * Once a Zero instance has been closed it no longer syncs, you can no
    * longer query or mutate data with it, and its query views stop updating.
    */
-  close(): Promise<void> {
+  async close(): Promise<void> {
     const lc = this.#lc.withContext('close');
 
     lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
@@ -864,7 +898,9 @@ export class Zero<
     lc.debug?.('Aborting closeAbortController due to close()');
     this.#closeAbortController.abort();
     this.#metrics.stop();
-    return this.#rep.close();
+    const ret = await this.#rep.close();
+    this.#unexpose();
+    return ret;
   }
 
   #onPageHide = (e: PageTransitionEvent) => {

@@ -86,6 +86,40 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+test('expose and unexpose', async () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const g = globalThis as any;
+  expect(g.__zero).toBeUndefined();
+  const z1 = zeroForTest();
+  expect(g.__zero).toBe(z1);
+  const z1p = z1.close();
+  expect(g.__zero).toBe(z1);
+  await z1p;
+  expect(g.__zero).toBeUndefined();
+  const z2 = zeroForTest();
+  expect(g.__zero).toBe(z2);
+  const z3 = zeroForTest();
+  expect(g.__zero).deep.equal({
+    [z2.clientID]: z2,
+    [z3.clientID]: z3,
+  });
+  const z4 = zeroForTest();
+  expect(g.__zero).deep.equal({
+    [z2.clientID]: z2,
+    [z3.clientID]: z3,
+    [z4.clientID]: z4,
+  });
+  await z2.close();
+  expect(g.__zero).deep.equal({
+    [z3.clientID]: z3,
+    [z4.clientID]: z4,
+  });
+  await z3.close();
+  expect(g.__zero).toBe(z4);
+  await z4.close();
+  expect(g.__zero).toBeUndefined();
+});
+
 test('onOnlineChange callback', async () => {
   let onlineCount = 0;
   let offlineCount = 0;
