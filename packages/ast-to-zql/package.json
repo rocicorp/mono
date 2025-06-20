@@ -18,11 +18,11 @@
     "@faker-js/faker": "^9.6.0",
     "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
-    "shared": "*",
-    "zero-cache": "*",
-    "zero-protocol": "*",
-    "zero-schema": "*",
-    "zql": "*"
+    "shared": "0.0.0",
+    "zero-cache": "0.0.0",
+    "zero-protocol": "0.0.0",
+    "zero-schema": "0.0.0",
+    "zql": "0.0.0"
   },
   "prettier": "@rocicorp/prettier-config",
   "eslintConfig": {

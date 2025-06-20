@@ -22,9 +22,9 @@
     "fast-check": "^3.18.0",
     "nanoid": "^5.1.2",
     "replicache": "15.2.1",
-    "shared": "*",
+    "shared": "0.0.0",
     "typescript": "~5.8.2",
-    "zero-protocol": "*",
+    "zero-protocol": "0.0.0",
     "zod": "^3.21.4"
   },
   "eslintConfig": {

@@ -16,8 +16,8 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
-    "zero-protocol": "*",
-    "zql": "*"
+    "zero-protocol": "0.0.0",
+    "zql": "0.0.0"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"
