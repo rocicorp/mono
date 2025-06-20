@@ -3,11 +3,13 @@ import {beforeEach, describe, expect, test} from 'vitest';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {getClientsTableDefinition} from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
 
-import {PushProcessor} from './push-processor.ts';
+import {OutOfOrderMutation, PushProcessor} from './push-processor.ts';
 import {PostgresJSConnection} from './postgresjs-connection.ts';
 import type {PushBody} from '../../zero-protocol/src/push.ts';
 import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {ZQLDatabase} from './zql-database.ts';
+import {zip} from '../../shared/src/arrays.ts';
+import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
 
 let pg: PostgresDB;
 const params = {
@@ -23,25 +25,25 @@ beforeEach(async () => {
 });
 
 function makePush(
-  mid: number,
-  mutatorName: string = customMutatorKey('foo', 'bar'),
+  mid: number | number[],
+  mutatorName: string | string[] = customMutatorKey('foo', 'bar'),
 ): PushBody {
+  const mids = Array.isArray(mid) ? mid : [mid];
+  const mutatorNames = Array.isArray(mutatorName) ? mutatorName : [mutatorName];
   return {
     pushVersion: 1,
     clientGroupID: 'cgid',
     requestID: 'rid',
     schemaVersion: 1,
     timestamp: 42,
-    mutations: [
-      {
-        type: 'custom',
-        clientID: 'cid',
-        id: mid,
-        name: mutatorName,
-        timestamp: 42,
-        args: [],
-      },
-    ],
+    mutations: zip(mids, mutatorNames).map(([mid, mutatorName]) => ({
+      type: 'custom',
+      clientID: 'cid',
+      id: mid,
+      name: mutatorName,
+      timestamp: 42,
+      args: [],
+    })),
   };
 }
 
@@ -208,6 +210,223 @@ test('lmid still moves forward if the mutator implementation throws', async () =
     ],
   });
   await checkClientsTable(pg, 3);
+});
+
+test('processes all mutations, even if all mutations throw app errors', async () => {
+  const processor = new PushProcessor(
+    new ZQLDatabase(new PostgresJSConnection(pg), {
+      tables: {},
+      relationships: {},
+      version: 1,
+    }),
+  );
+
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush([1, 2, 3, 4], Array(4).fill(customMutatorKey('foo', 'baz'))),
+    ),
+  ).toEqual({
+    mutations: Array.from({length: 4}, (_, i) => ({
+      id: {
+        clientID: 'cid',
+        id: i + 1,
+      },
+      result: {
+        error: 'app',
+        details: 'application error',
+      },
+    })),
+  });
+});
+
+test('processes all mutations, even if all mutations have been seen before', async () => {
+  const processor = new PushProcessor(
+    new ZQLDatabase(new PostgresJSConnection(pg), {
+      tables: {},
+      relationships: {},
+      version: 1,
+    }),
+  );
+
+  // process a bunch of successful mutations first
+  await processor.process(
+    mutators,
+    params,
+    makePush([1, 2, 3, 4], Array(4).fill(customMutatorKey('foo', 'bar'))),
+  );
+
+  async function resend(basis: number, mutator: string) {
+    expect(
+      await processor.process(
+        mutators,
+        params,
+        makePush(
+          Array.from({length: 4}, (_, i) => basis + i + 1),
+          Array(4).fill(mutator),
+        ),
+      ),
+    ).toEqual({
+      mutations: Array.from({length: 4}, (_, i) => ({
+        id: {
+          clientID: 'cid',
+          id: basis + i + 1,
+        },
+        result: {
+          details: `Ignoring mutation from cid with ID ${basis + i + 1} as it was already processed. Expected: ${basis + 4 + 1}`,
+          error: 'alreadyProcessed',
+        },
+      })),
+    });
+  }
+
+  // re-send the same mutations
+  await resend(0, customMutatorKey('foo', 'bar'));
+
+  // process a bunch of mutations that throw app errors
+  await processor.process(
+    mutators,
+    params,
+    makePush([5, 6, 7, 8], Array(4).fill(customMutatorKey('foo', 'baz'))),
+  );
+
+  // re-send the same mutations that throw app errors
+  await resend(4, customMutatorKey('foo', 'baz'));
+});
+
+test('stops processing mutations as soon as it hits an out of order mutation', async () => {
+  const processor = new PushProcessor(
+    new ZQLDatabase(new PostgresJSConnection(pg), {
+      tables: {},
+      relationships: {},
+      version: 1,
+    }),
+  );
+
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush(
+        [1, 2, 5, 4],
+        [
+          customMutatorKey('foo', 'bar'),
+          customMutatorKey('foo', 'bar'),
+          customMutatorKey('foo', 'bar'),
+          customMutatorKey('foo', 'bar'),
+        ],
+      ),
+    ),
+  ).toEqual({
+    mutations: [
+      {
+        id: {
+          clientID: 'cid',
+          id: 1,
+        },
+        result: {},
+      },
+      {
+        id: {
+          clientID: 'cid',
+          id: 2,
+        },
+        result: {},
+      },
+      {
+        id: {
+          clientID: 'cid',
+          id: 5,
+        },
+        result: {
+          details: 'Client cid sent mutation ID 5 but expected 3',
+          error: 'oooMutation',
+        },
+      },
+    ],
+  });
+});
+
+test('a mutation throws an app error then an ooo mutation error', async () => {
+  const db = new ZQLDatabase(new PostgresJSConnection(pg), {
+    tables: {},
+    relationships: {},
+    version: 1,
+  });
+  const c = {c: 0};
+  // eslint-disable-next-line require-await
+  db.transaction = async () => {
+    if (c.c++ === 0) {
+      throw new Error('application error');
+    }
+    throw new OutOfOrderMutation('cid', 1, 2);
+  };
+  const processor = new PushProcessor(db);
+
+  // We should still catch and correctly report errors
+  // even when running in error mode
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush(1, customMutatorKey('foo', 'baz')),
+    ),
+  ).toEqual({
+    mutations: [
+      {
+        id: {
+          clientID: 'cid',
+          id: 1,
+        },
+        result: {
+          details: 'Client cid sent mutation ID 1 but expected 2',
+          error: 'oooMutation',
+        },
+      },
+    ],
+  });
+});
+
+test('mutation throws an app error then an already processed error', async () => {
+  const db = new ZQLDatabase(new PostgresJSConnection(pg), {
+    tables: {},
+    relationships: {},
+    version: 1,
+  });
+  const c = {c: 0};
+  // eslint-disable-next-line require-await
+  db.transaction = async () => {
+    if (c.c++ === 0) {
+      throw new Error('application error');
+    }
+    throw new MutationAlreadyProcessedError('cid', 1, 2);
+  };
+  const processor = new PushProcessor(db);
+
+  // We should still catch and correctly report errors
+  // even when running in error mode
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush(1, customMutatorKey('foo', 'baz')),
+    ),
+  ).toEqual({
+    mutations: [
+      {
+        id: {
+          clientID: 'cid',
+          id: 1,
+        },
+        result: {
+          details:
+            'Ignoring mutation from cid with ID 1 as it was already processed. Expected: 2',
+          error: 'alreadyProcessed',
+        },
+      },
+    ],
+  });
 });
 
 test('mutators with and without namespaces', async () => {
