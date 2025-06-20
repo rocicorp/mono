@@ -21,7 +21,6 @@
   },
   "dependencies": {
     "@databases/sql": "^3.3.0",
-    "@dotenvx/dotenvx": "^1.39.0",
     "@drdgvhbh/postgres-error-codes": "^0.0.6",
     "@fastify/cors": "^10.0.0",
     "@fastify/websocket": "^11.0.0",
