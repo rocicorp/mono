@@ -183,9 +183,11 @@ export class PushProcessor<
         }
 
         // We threw an error while running in error mode.
-        // Return the new error.
+        // Re-throw the error and stop processing any further
+        // mutations as all subsequent mutations will fail by being
+        // out of order.
         if (caughtError !== undefined) {
-          return makeAppErrorResponse(m, e);
+          throw e;
         }
 
         caughtError = e;

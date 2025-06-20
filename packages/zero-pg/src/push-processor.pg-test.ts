@@ -295,6 +295,120 @@ test('processes all mutations, even if all mutations have been seen before', asy
   await resend(4, customMutatorKey('foo', 'baz'));
 });
 
+test('continues processing if all mutations throw in error mode with "MutationAlreadyProcessedError"', async () => {
+  const db = new ZQLDatabase(new PostgresJSConnection(pg), {
+    tables: {},
+    relationships: {},
+    version: 1,
+  });
+  const c = {c: 0};
+  // eslint-disable-next-line require-await
+  db.transaction = async () => {
+    c.c++;
+    if (c.c % 2 === 0) {
+      throw new MutationAlreadyProcessedError('cid', 1, 2);
+    }
+
+    throw new Error('application error');
+  };
+  const processor = new PushProcessor(db);
+
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush(
+        Array.from({length: 4}, (_, i) => i + 1),
+        Array(4).fill('foo|bar'),
+      ),
+    ),
+  ).toEqual({
+    mutations: Array.from({length: 4}, (_, i) => ({
+      id: {
+        clientID: 'cid',
+        id: i + 1,
+      },
+      result: {
+        details: `Ignoring mutation from cid with ID 1 as it was already processed. Expected: 2`,
+        error: 'alreadyProcessed',
+      },
+    })),
+  });
+});
+
+test('bails processing if all mutations throw in error mode with "OutOfOrderMutation"', async () => {
+  const db = new ZQLDatabase(new PostgresJSConnection(pg), {
+    tables: {},
+    relationships: {},
+    version: 1,
+  });
+  const c = {c: 0};
+  // eslint-disable-next-line require-await
+  db.transaction = async () => {
+    c.c++;
+    if (c.c % 2 === 0) {
+      throw new OutOfOrderMutation('cid', 1, 2);
+    }
+
+    throw new Error('application error');
+  };
+  const processor = new PushProcessor(db);
+
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush(
+        Array.from({length: 4}, (_, i) => i + 1),
+        Array(4).fill('foo|bar'),
+      ),
+    ),
+  ).toEqual({
+    mutations: [
+      {
+        id: {
+          clientID: 'cid',
+          id: 1,
+        },
+        result: {
+          details: 'Client cid sent mutation ID 1 but expected 2',
+          error: 'oooMutation',
+        },
+      },
+    ],
+  });
+});
+
+test('bails processing if a mutation throws an unknown error in error mode', async () => {
+  const db = new ZQLDatabase(new PostgresJSConnection(pg), {
+    tables: {},
+    relationships: {},
+    version: 1,
+  });
+  const c = {c: 0};
+  // eslint-disable-next-line require-await
+  db.transaction = async () => {
+    c.c++;
+    if (c.c % 2 === 0) {
+      throw new Error('unknown');
+    }
+
+    throw new Error('application error');
+  };
+  const processor = new PushProcessor(db);
+
+  await expect(
+    processor.process(
+      mutators,
+      params,
+      makePush(
+        Array.from({length: 4}, (_, i) => i + 1),
+        Array(4).fill('foo|bar'),
+      ),
+    ),
+  ).rejects.toThrow('unknown');
+});
+
 test('stops processing mutations as soon as it hits an out of order mutation', async () => {
   const processor = new PushProcessor(
     new ZQLDatabase(new PostgresJSConnection(pg), {
