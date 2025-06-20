@@ -112,7 +112,10 @@ export class PushProcessor<
     for (const m of req.mutations) {
       const res = await this.#processMutation(mutators, queryParams, req, m);
       responses.push(res);
-      if ('error' in res.result) {
+
+      // we only break if we encounter an out-of-order mutation.
+      // otherwise we continue processing the rest of the mutations.
+      if ('error' in res.result && res.result.error === 'oooMutation') {
         break;
       }
     }
@@ -128,68 +131,69 @@ export class PushProcessor<
     req: PushBody,
     m: Mutation,
   ): Promise<MutationResponse> {
-    try {
-      return await this.#processMutationImpl(mutators, params, req, m, false);
-    } catch (e) {
-      if (e instanceof OutOfOrderMutation) {
-        this.#lc.error?.(e);
-        return {
-          id: {
-            clientID: m.clientID,
-            id: m.id,
-          },
-          result: {
-            error: 'oooMutation',
-            details: e.message,
-          },
-        };
-      }
+    let caughtError: unknown = undefined;
+    for (;;) {
+      try {
+        const ret = await this.#processMutationImpl(
+          mutators,
+          params,
+          req,
+          m,
+          caughtError !== undefined,
+        );
 
-      if (e instanceof MutationAlreadyProcessedError) {
-        this.#lc.warn?.(e);
-        return {
-          id: {
-            clientID: m.clientID,
-            id: m.id,
-          },
-          result: {
-            error: 'alreadyProcessed',
-            details: e.message,
-          },
-        };
-      }
+        // The first time through we caught an error.
+        // We want to report that error as it was an application
+        // level error.
+        if (caughtError !== undefined) {
+          this.#lc.warn?.(
+            `Mutation ${m.id} for client ${m.clientID} was retried after an error: ${caughtError}`,
+          );
+          return makeAppErrorResponse(m, caughtError);
+        }
 
-      const ret = await this.#processMutationImpl(
-        mutators,
-        params,
-        req,
-        m,
-        true,
-      );
+        return ret;
+      } catch (e) {
+        if (e instanceof OutOfOrderMutation) {
+          this.#lc.error?.(e);
+          return {
+            id: {
+              clientID: m.clientID,
+              id: m.id,
+            },
+            result: {
+              error: 'oooMutation',
+              details: e.message,
+            },
+          };
+        }
 
-      if ('error' in ret.result) {
+        if (e instanceof MutationAlreadyProcessedError) {
+          this.#lc.warn?.(e);
+          return {
+            id: {
+              clientID: m.clientID,
+              id: m.id,
+            },
+            result: {
+              error: 'alreadyProcessed',
+              details: e.message,
+            },
+          };
+        }
+
+        // We threw an error while running in error mode.
+        // Return the new error.
+        if (caughtError !== undefined) {
+          return makeAppErrorResponse(m, e);
+        }
+
+        caughtError = e;
         this.#lc.error?.(
-          `Error ${ret.result.error} processing mutation ${m.id} for client ${m.clientID}: ${ret.result.details}`,
+          `Unexpected error processing mutation ${m.id} for client ${m.clientID}`,
           e,
         );
-        return ret;
       }
-
-      this.#lc.error?.(
-        `Unexpected error processing mutation ${m.id} for client ${m.clientID}`,
-        e,
-      );
-
-      return {
-        id: ret.id,
-        result: {
-          error: 'app',
-          details:
-            e instanceof Error
-              ? e.message
-              : 'exception was not of type `Error`',
-        },
-      };
     }
   }
 
@@ -293,7 +297,7 @@ export class PushProcessor<
   }
 }
 
-class OutOfOrderMutation extends Error {
+export class OutOfOrderMutation extends Error {
   constructor(
     clientID: string,
     receivedMutationID: number,
@@ -303,4 +307,18 @@ class OutOfOrderMutation extends Error {
       `Client ${clientID} sent mutation ID ${receivedMutationID} but expected ${lastMutationID}`,
     );
   }
+}
+
+function makeAppErrorResponse(m: Mutation, e: unknown): MutationResponse {
+  return {
+    id: {
+      clientID: m.clientID,
+      id: m.id,
+    },
+    result: {
+      error: 'app',
+      details:
+        e instanceof Error ? e.message : 'exception was not of type `Error`',
+    },
+  };
 }
