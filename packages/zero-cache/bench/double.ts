@@ -30,12 +30,15 @@ export function double(opts: Options) {
 
   let newIssues = 0;
   let newIssueLabels = 1;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   for (const issue of db.prepare(`SELECT * FROM issue`).all() as any[]) {
     newIssues++;
     const id = Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString(36);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const newIssue = {...(issue as any), id};
     insertIssue.run(newIssue);
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     for (const issueLabel of issueLabels.all(issue.id) as any[]) {
       newIssueLabels++;
       const newIssueLabel = {...issueLabel, issueID: id};
@@ -43,6 +46,7 @@ export function double(opts: Options) {
     }
   }
 
+  // eslint-disable-next-line no-console
   console.info(`Created ${newIssues} new issues with ${newIssueLabels} labels`);
   db.close();
 }

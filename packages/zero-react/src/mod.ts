@@ -15,4 +15,4 @@ export {
   type QueryResultDetails,
   type UseQueryOptions,
 } from './use-query.tsx';
-export {createUseZero, useZero, ZeroProvider} from './use-zero.tsx';
+export {createUseZero, useZero, ZeroProvider} from './zero-provider.tsx';
