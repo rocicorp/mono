@@ -62,6 +62,7 @@ async function getExternal(includePeerDeps: boolean): Promise<string[]> {
     'zero-pg',
     'zero-protocol',
     'zero-react',
+    'zero-server',
     'zero-schema',
     'zero-solid',
     'zql',
