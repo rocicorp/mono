@@ -105,10 +105,6 @@
       "types": "./out/zero-solid/src/mod.d.ts",
       "default": "./out/solid.js"
     },
-    "./server": {
-      "types": "./out/zero-cache/src/server/main.d.ts",
-      "default": "./out/zero-cache/src/server/main.js"
-    },
     "./change-protocol/v0": {
       "types": "./out/zero/src/change-protocol/v0.d.ts",
       "default": "./out/zero/src/change-protocol/v0.js"
