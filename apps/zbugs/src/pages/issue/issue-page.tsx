@@ -141,7 +141,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
       recordPageLoad('issue-page');
       preload(z);
     }
-  }, [issueResult.type, preload, z]);
+  }, [issueResult.type, z]);
 
   useEffect(() => {
     // only push viewed forward if the issue has been modified since the last viewing
