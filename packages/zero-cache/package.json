@@ -75,7 +75,10 @@
     "nock": "^14.0.4",
     "shared": "0.0.0",
     "typescript": "~5.8.2",
-    "vitest": "3.0.8"
+    "vitest": "3.0.8",
+    "zero-protocol": "0.0.0",
+    "zero-schema": "0.0.0",
+    "zql": "0.0.0"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"
