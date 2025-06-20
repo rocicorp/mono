@@ -1475,13 +1475,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         return;
       }
 
-      lc.debug?.(
+      lc.info?.(
         `Trying to evict inactive queries, rowCount: ${rowCountBeforeEvictions} > maxRowCount: ${this.maxRowCount}`,
       );
 
       const inactiveQueries = getInactiveQueries(cvr);
       if (!inactiveQueries.length) {
-        lc.debug?.('No inactive queries to evict');
+        lc.info?.('No inactive queries to evict');
         return;
       }
 
@@ -1519,7 +1519,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
 
         if (this.#cvrStore.rowCount <= this.maxRowCount) {
-          lc.debug?.(
+          lc.info?.(
             'Evicted',
             hash,
             'Reduced rowCount from',
