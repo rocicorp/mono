@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {basename, dirname, join, relative, resolve, sep} from 'node:path';
+import {existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {tsImport} from 'tsx/esm/api';
 import {logOptions} from '../../../otel/src/log-options.ts';
@@ -74,7 +75,18 @@ export const deployPermissionsOptions = {
 export async function loadSchemaAndPermissions(
   lc: LogContext,
   schemaPath: string,
-): Promise<{schema: Schema; permissions: PermissionsConfig}> {
+  allowMissing: true,
+): Promise<{schema: Schema; permissions: PermissionsConfig} | undefined>;
+export async function loadSchemaAndPermissions(
+  lc: LogContext,
+  schemaPath: string,
+  allowMissing?: false,
+): Promise<{schema: Schema; permissions: PermissionsConfig}>;
+export async function loadSchemaAndPermissions(
+  lc: LogContext,
+  schemaPath: string,
+  allowMissing: boolean | undefined,
+): Promise<{schema: Schema; permissions: PermissionsConfig} | undefined> {
   const typeModuleErrorMessage = () =>
     `\n\nYou may need to add \` "type": "module" \` to the package.json file for ${schemaPath}.\n`;
 
@@ -91,6 +103,14 @@ export async function loadSchemaAndPermissions(
   // tsImport doesn't expect to receive slashes in the Windows format when running
   // on Windows. They need to be converted to *nix format.
   relativePath = relativePath.replace(/\\/g, '/');
+
+  if (!existsSync(absoluteSchemaPath)) {
+    if (allowMissing) {
+      return undefined;
+    }
+    lc.error?.(`Schema file ${schemaPath} does not exist.`);
+    process.exit(1);
+  }
 
   let module;
   try {

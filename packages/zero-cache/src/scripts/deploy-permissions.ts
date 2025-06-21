@@ -171,22 +171,31 @@ async function writePermissionsFile(
   lc.info?.(`Wrote ${format} permissions to ${config.output.file}`);
 }
 
-const {permissions} = await loadSchemaAndPermissions(lc, config.schema.path);
-if (config.output.file) {
-  await writePermissionsFile(
-    permissions,
-    config.output.file,
-    config.output.format,
-  );
-} else if (config.upstream.type !== 'pg') {
+const ret = await loadSchemaAndPermissions(lc, config.schema.path, true);
+if (!ret) {
   lc.warn?.(
-    `Permissions deployment is not supported for ${config.upstream.type} upstreams`,
+    `No schema found at ${config.schema.path}, so could not deploy ` +
+      `permissions. Replicating data, but no tables will be syncable.` +
+      `Create a schema file with permissions to be able to sync data.`,
   );
-  process.exit(-1);
-} else if (config.upstream.db) {
-  await deployPermissions(config.upstream.db, permissions, config.force);
 } else {
-  lc.error?.(`No --output-file or --upstream-db specified`);
-  // Shows the usage text.
-  parseOptions(deployPermissionsOptions, ['--help'], ZERO_ENV_VAR_PREFIX);
+  const {permissions} = ret;
+  if (config.output.file) {
+    await writePermissionsFile(
+      permissions,
+      config.output.file,
+      config.output.format,
+    );
+  } else if (config.upstream.type !== 'pg') {
+    lc.warn?.(
+      `Permissions deployment is not supported for ${config.upstream.type} upstreams`,
+    );
+    process.exit(-1);
+  } else if (config.upstream.db) {
+    await deployPermissions(config.upstream.db, permissions, config.force);
+  } else {
+    lc.error?.(`No --output-file or --upstream-db specified`);
+    // Shows the usage text.
+    parseOptions(deployPermissionsOptions, ['--help'], ZERO_ENV_VAR_PREFIX);
+  }
 }
