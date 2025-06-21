@@ -9,7 +9,7 @@ import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, testDBs} from '../../test/db.ts';
-import {stringify} from '../../types/bigint-json.ts';
+import {stringify} from '../../../../shared/src/bigint-json.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';

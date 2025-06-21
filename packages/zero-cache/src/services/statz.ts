@@ -6,7 +6,7 @@ import type {Writable} from 'stream';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
-import {BigIntJSON} from '../types/bigint-json.ts';
+import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {pgClient} from '../types/pg.ts';
 import {getShardID, upstreamSchema} from '../types/shards.ts';
 import type {LogContext} from '@rocicorp/logger';

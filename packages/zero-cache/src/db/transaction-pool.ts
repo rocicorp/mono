@@ -5,7 +5,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
-import {stringify} from '../types/bigint-json.ts';
+import {stringify} from '../../../shared/src/bigint-json.ts';
 import type {PostgresDB, PostgresTransaction} from '../types/pg.ts';
 import * as Mode from './mode-enum.ts';
 

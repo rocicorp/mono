@@ -4,7 +4,7 @@ import {LogContext} from '@rocicorp/logger';
 import postgres, {type Notice, type PostgresType} from 'postgres';
 import {randInt} from '../../../shared/src/rand.ts';
 import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
-import {BigIntJSON, type JSONValue} from './bigint-json.ts';
+import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {
   DATE,
   JSON,

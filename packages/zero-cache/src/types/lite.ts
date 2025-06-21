@@ -4,7 +4,7 @@ import type {
   ValueType,
 } from '../../../zero-schema/src/table-schema.ts';
 import type {LiteTableSpec} from '../db/specs.ts';
-import {stringify, type JSONValue} from './bigint-json.ts';
+import {stringify, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {
   dataTypeToZqlValueType as upstreamDataTypeToZqlValueType,
   type PostgresValueType,

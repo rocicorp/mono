@@ -7,7 +7,7 @@ import {listIndexes, listTables} from '../../../db/lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from '../../../db/specs.ts';
 import {getConnectionURI, testDBs} from '../../../test/db.ts';
 import {DbFile, expectMatchingObjectsInTables} from '../../../test/lite.ts';
-import {type JSONValue} from '../../../types/bigint-json.ts';
+import {type JSONValue} from '../../../../../shared/src/bigint-json.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import type {Source} from '../../../types/streams.ts';
 import type {ChangeProcessor} from '../../replicator/change-processor.ts';

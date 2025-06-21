@@ -3,7 +3,6 @@
 
 import '../../shared/src/dotenv.ts';
 import {resolver} from '@rocicorp/resolver';
-import chalk from 'chalk';
 import {watch} from 'chokidar';
 import {spawn, type ChildProcess} from 'node:child_process';
 import {parseOptionsAdvanced} from '../../shared/src/options.ts';
@@ -12,6 +11,7 @@ import {
   zeroOptions,
 } from '../../zero-cache/src/config/zero-config.ts';
 import {deployPermissionsOptions} from '../../zero-cache/src/scripts/permissions.ts';
+import {createLogContext} from '../../shared/src/logging.ts';
 
 const deployPermissionsScript = 'zero-deploy-permissions';
 const zeroCacheScript = 'zero-cache';
@@ -28,18 +28,6 @@ function killProcess(childProcess: ChildProcess | undefined) {
   return promise;
 }
 
-function log(msg: string) {
-  console.log(chalk.green('> ' + msg));
-}
-
-function logWarn(msg: string) {
-  console.log(chalk.yellow('> ' + msg));
-}
-
-function logError(msg: string) {
-  console.error(chalk.red('> ' + msg));
-}
-
 async function main() {
   const {config} = parseOptionsAdvanced(
     {
@@ -51,6 +39,14 @@ async function main() {
     false,
     true, // allowPartial, required by server/runner/config.ts
   );
+
+  const lc = createLogContext(config);
+
+  process.on('unhandledRejection', reason => {
+    lc.error?.('Unexpected unhandled rejection.', reason);
+    lc.error?.('Exiting');
+    process.exit(-1);
+  });
 
   const {unknown: zeroCacheArgs} = parseOptionsAdvanced(
     deployPermissionsOptions,
@@ -79,7 +75,7 @@ async function main() {
 
   async function deployPermissions(): Promise<boolean> {
     if (config.upstream.type !== 'pg') {
-      logWarn(
+      lc.warn?.(
         `Skipping permissions deployment for ${config.upstream.type} upstream`,
       );
       return true;
@@ -88,7 +84,7 @@ async function main() {
     await killProcess(permissionsProcess);
     permissionsProcess = undefined;
 
-    log(`Running ${deployPermissionsScript}.`);
+    lc.info?.(`Running ${deployPermissionsScript}.`);
     permissionsProcess = spawn(
       deployPermissionsScript,
       deployPermissionsArgs ?? [],
@@ -101,10 +97,10 @@ async function main() {
     const {promise: code, resolve} = resolver<number>();
     permissionsProcess.on('exit', resolve);
     if ((await code) === 0) {
-      log(`${deployPermissionsScript} completed successfully.`);
+      lc.info?.(`${deployPermissionsScript} completed successfully.`);
       return true;
     }
-    logError(`Failed to deploy permissions from ${path}.`);
+    lc.error?.(`Failed to deploy permissions from ${path}.`);
     return false;
   }
 
@@ -114,7 +110,7 @@ async function main() {
     zeroCacheProcess = undefined;
 
     if (await deployPermissions()) {
-      log(
+      lc.info?.(
         `Running ${zeroCacheScript} at\n\n\thttp://localhost:${config.port}\n`,
       );
       const env: Record<string, string> = {
@@ -127,7 +123,7 @@ async function main() {
         ...process.env,
       };
       if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
-        log('Starting OpenTelemetry auto instrumentation.');
+        lc.info?.('Starting OpenTelemetry auto instrumentation.');
         env['NODE_OPTIONS'] =
           (env['NODE_OPTIONS'] || '') +
           ' --require @opentelemetry/auto-instrumentations-node/register';
@@ -138,7 +134,7 @@ async function main() {
         shell: true,
       });
       zeroCacheProcess.on('exit', () => {
-        logError(`${zeroCacheScript} exited. Exiting.`);
+        lc.error?.(`${zeroCacheScript} exited. Exiting.`);
         process.exit(-1);
       });
     }
@@ -152,7 +148,7 @@ async function main() {
     awaitWriteFinish: {stabilityThreshold: 500, pollInterval: 100},
   });
   const onFileChange = async () => {
-    log(`Detected ${path} change.`);
+    lc.info?.(`Detected ${path} change.`);
     await deployPermissions();
   };
   watcher.on('add', onFileChange);
@@ -160,16 +156,4 @@ async function main() {
   watcher.on('unlink', onFileChange);
 }
 
-process.on('unhandledRejection', reason => {
-  logError('Unexpected unhandled rejection.');
-  console.error(reason);
-  logError('Exiting');
-  process.exit(-1);
-});
-
-main().catch(e => {
-  logError(`Unexpected unhandled error.`);
-  console.error(e);
-  logError('Exiting.');
-  process.exit(-1);
-});
+void main();

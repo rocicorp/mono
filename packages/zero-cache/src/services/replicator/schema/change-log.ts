@@ -5,7 +5,7 @@ import {
   jsonObjectSchema,
   parse,
   stringify,
-} from '../../../types/bigint-json.ts';
+} from '../../../../../shared/src/bigint-json.ts';
 import type {LexiVersion} from '../../../types/lexi-version.ts';
 import type {LiteRowKey} from '../../../types/lite.ts';
 import {normalizedKeyOrder} from '../../../types/row-key.ts';

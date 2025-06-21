@@ -8,7 +8,7 @@ import type {
   PokePartMessage,
   PokeStartMessage,
 } from '../../../../zero-protocol/src/poke.ts';
-import type {JSONObject} from '../../types/bigint-json.ts';
+import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {

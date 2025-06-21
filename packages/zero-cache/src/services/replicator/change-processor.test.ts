@@ -6,7 +6,7 @@ import {listIndexes, listTables} from '../../db/lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
-import type {JSONObject} from '../../types/bigint-json.ts';
+import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor} from './change-processor.ts';
 import {initChangeLog} from './schema/change-log.ts';

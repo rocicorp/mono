@@ -6,7 +6,7 @@ import type {SchemaValue} from '../../../../../zero-schema/src/table-schema.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {computeZqlSpecs} from '../../../db/lite-tables.ts';
 import {StatementRunner} from '../../../db/statements.ts';
-import {stringify} from '../../../types/bigint-json.ts';
+import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import type {ShardConfig, ShardID} from '../../../types/shards.ts';
 import {stream} from '../../../types/streams.ts';
 import type {

@@ -1,6 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {h128} from '../../../shared/src/hash.ts';
-import {stringify, type JSONValue} from './bigint-json.ts';
+import {stringify, type JSONValue} from '../../../shared/src/bigint-json.ts';
 
 export type ColumnType = {readonly typeOid: number};
 export type RowKeyType = Readonly<Record<string, ColumnType>>;

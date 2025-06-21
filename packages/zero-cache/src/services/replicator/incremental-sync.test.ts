@@ -12,7 +12,7 @@ import {
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
-import type {JSONObject} from '../../types/bigint-json.ts';
+import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {
   PROTOCOL_VERSION,

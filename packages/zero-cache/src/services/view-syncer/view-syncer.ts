@@ -36,7 +36,7 @@ import {
 } from '../../auth/read-authorizer.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
-import {stringify} from '../../types/bigint-json.ts';
+import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
