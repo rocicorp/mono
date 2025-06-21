@@ -6,7 +6,7 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.ts';
 import type {LiteAndZqlSpec, LiteTableSpecWithKeys} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {stringify, type JSONValue} from '../../types/bigint-json.ts';
+import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import {
   normalizedKeyOrder,
   type RowKey,

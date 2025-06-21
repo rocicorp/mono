@@ -8,7 +8,7 @@ import {
   type JSONObject,
   type JSONValue,
   stringify,
-} from '../../../types/bigint-json.ts';
+} from '../../../../../shared/src/bigint-json.ts';
 import {normalizedKeyOrder, type RowKey} from '../../../types/row-key.ts';
 import {cvrSchema, type ShardID} from '../../../types/shards.ts';
 import {

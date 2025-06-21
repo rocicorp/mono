@@ -17,7 +17,10 @@ import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts'
 import {compareTTL} from '../../../../zql/src/query/ttl.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
-import {stringify, type JSONObject} from '../../types/bigint-json.ts';
+import {
+  stringify,
+  type JSONObject,
+} from '../../../../shared/src/bigint-json.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';

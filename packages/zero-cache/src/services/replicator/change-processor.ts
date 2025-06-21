@@ -20,7 +20,7 @@ import {
 } from '../../db/pg-to-lite.ts';
 import type {LiteTableSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
-import {stringify} from '../../types/bigint-json.ts';
+import {stringify} from '../../../../shared/src/bigint-json.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {
   JSON_PARSED,

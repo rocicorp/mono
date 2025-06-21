@@ -9,7 +9,7 @@ import {columnSpec, indexSpec, tableSpec} from '../../../../db/specs.ts';
 import {
   jsonValueSchema,
   type JSONObject,
-} from '../../../../types/bigint-json.ts';
+} from '../../../../../../shared/src/bigint-json.ts';
 import type {Satisfies} from '../../../../types/satisfies.ts';
 
 export const beginSchema = v.object({

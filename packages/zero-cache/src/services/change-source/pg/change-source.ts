@@ -23,7 +23,7 @@ import type {
   TableSpec,
 } from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
-import {stringify} from '../../../types/bigint-json.ts';
+import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {
   oneAfter,
   versionFromLexi,

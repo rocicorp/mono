@@ -16,7 +16,7 @@ import {
 } from 'ws';
 import {Queue} from '../../../shared/src/queue.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {BigIntJSON, type JSONValue} from './bigint-json.ts';
+import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {Subscription, type Options} from './subscription.ts';
 import {
   closeWithError,

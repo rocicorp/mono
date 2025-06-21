@@ -19,7 +19,7 @@ import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary
 import type {RowPatchOp} from '../../../../zero-protocol/src/row-patch.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
-import type {JSONObject} from '../../types/bigint-json.ts';
+import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {getLogLevel} from '../../types/error-for-client.ts';
 import {
   getErrorForClientIfSchemaVersionNotSupported,

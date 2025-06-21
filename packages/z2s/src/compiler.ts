@@ -7,7 +7,7 @@ import {must} from '../../shared/src/must.ts';
 import {
   parse as parseBigIntJson,
   type JSONValue as BigIntJSONValue,
-} from '../../zero-cache/src/types/bigint-json.ts';
+} from '../../shared/src/bigint-json.ts';
 import {pgToZqlStringTypeMap} from '../../zero-cache/src/types/pg.ts';
 import type {
   AST,

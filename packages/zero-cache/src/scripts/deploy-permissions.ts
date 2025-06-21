@@ -1,5 +1,4 @@
 import '../../../shared/src/dotenv.ts';
-import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {writeFile} from 'node:fs/promises';
 import {ident as id, literal} from 'pg-format';
 import {parseOptions} from '../../../shared/src/options.ts';
@@ -24,6 +23,7 @@ import {
   deployPermissionsOptions,
   loadSchemaAndPermissions,
 } from './permissions.ts';
+import {createLogContext} from '../../../shared/src/logging.ts';
 
 const config = parseOptions(
   deployPermissionsOptions,
@@ -34,7 +34,7 @@ const config = parseOptions(
 const shard = getShardID(config);
 const app = appSchema(shard);
 
-const lc = new LogContext(config.log.level, {}, consoleLogSink);
+const lc = createLogContext(config);
 
 async function validatePermissions(
   db: PostgresDB,
@@ -175,7 +175,7 @@ const ret = await loadSchemaAndPermissions(lc, config.schema.path, true);
 if (!ret) {
   lc.warn?.(
     `No schema found at ${config.schema.path}, so could not deploy ` +
-      `permissions. Replicating data, but no tables will be syncable.` +
+      `permissions. Replicating data, but no tables will be syncable. ` +
       `Create a schema file with permissions to be able to sync data.`,
   );
 } else {

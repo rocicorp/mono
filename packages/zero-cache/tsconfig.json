@@ -4,5 +4,11 @@
     "lib": ["es2022", "dom"],
     "types": ["node"]
   },
-  "include": ["src", "bench", "tool"]
+  "include": [
+    "src",
+    "bench",
+    "tool",
+    "../shared/src/bigint-json.test.ts",
+    "../shared/src/bigint-json.ts"
+  ]
 }
