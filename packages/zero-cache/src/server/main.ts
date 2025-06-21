@@ -31,7 +31,10 @@ import {
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
 import {WorkerDispatcher} from './worker-dispatcher.ts';
-import {startAnonymousTelemetry, shutdownAnonymousTelemetry} from './anonymous-otel-start.ts';
+import {
+  startAnonymousTelemetry,
+  shutdownAnonymousTelemetry,
+} from './anonymous-otel-start.ts';
 
 const clientConnectionBifurcated = false;
 
