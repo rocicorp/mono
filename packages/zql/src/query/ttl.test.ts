@@ -1,5 +1,6 @@
-import {expect, test} from 'vitest';
-import {compareTTL, normalizeTTL, parseTTL} from './ttl.ts';
+import type {LogContext} from '@rocicorp/logger';
+import {expect, test, vi} from 'vitest';
+import {clampTTL, compareTTL, MAX_TTL, normalizeTTL, parseTTL} from './ttl.ts';
 
 test.each([
   ['none', 0],
@@ -60,4 +61,29 @@ test.each([
   [1.25 * 365 * 24 * 60 * 60 * 1000, '1.25y'],
 ] as const)('normalizeTTL(%o) === %o', (ttl, expected) => {
   expect(normalizeTTL(ttl)).toBe(expected);
+});
+
+test.each([
+  ['none', 0],
+  ['forever', 10 * 60 * 1000, true],
+  [0, 0],
+  [-1, 10 * 60 * 1000, true],
+  [1, 1],
+  [1000, 1000],
+  [10 * 60 * 1000, 10 * 60 * 1000], // Exactly at the max TTL
+  [10 * 60 * 1000 + 1, 10 * 60 * 1000, true], // Just above the max TTL
+  ['1h', 10 * 60 * 1000, true], // Above max TTL in string format
+  ['1m', 60 * 1000], // Below max TTL in string format
+] as const)('clampTTL(%o) === %o', (ttl, expected, expectError?) => {
+  const mockLogContext = {
+    warn: vi.fn(),
+  } as unknown as LogContext;
+  expect(clampTTL(ttl, mockLogContext)).toBe(expected);
+  if (expectError) {
+    expect(mockLogContext.warn).toHaveBeenCalledWith(
+      `TTL (${ttl}) is too high, clamping to ${MAX_TTL}`,
+    );
+  } else {
+    expect(mockLogContext.warn).not.toHaveBeenCalled();
+  }
 });
