@@ -5,7 +5,7 @@ import * as v from '../../../packages/shared/src/valita.ts';
 import type {schema} from './schema.ts';
 
 /** The contents of the zbugs JWT */
-export const authDataSchema = v.object({
+export const jwtDataSchema = v.object({
   sub: v.string(),
   role: v.literalUnion('crew', 'user'),
   name: v.string(),
@@ -13,7 +13,9 @@ export const authDataSchema = v.object({
   exp: v.number(),
 });
 
-export type AuthData = v.Infer<typeof authDataSchema>;
+export type JWTData = v.Infer<typeof jwtDataSchema>;
+
+export type AuthData = Pick<JWTData, 'sub' | 'role'>;
 export type Role = AuthData['role'];
 
 export function assertIsLoggedIn(

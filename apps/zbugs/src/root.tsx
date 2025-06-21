@@ -1,6 +1,6 @@
-import {ZeroInspector, ZeroProvider} from '@rocicorp/zero/react';
+import {ZeroInspector} from '@rocicorp/zero/react';
 import Cookies from 'js-cookie';
-import {useCallback, useState, useSyncExternalStore} from 'react';
+import {useState} from 'react';
 import {Route, Switch} from 'wouter';
 import {Nav} from './components/nav.tsx';
 import {OnboardingModal} from './components/onboarding-modal.tsx';
@@ -9,13 +9,10 @@ import {ErrorPage} from './pages/error/error-page.tsx';
 import {IssuePage} from './pages/issue/issue-page.tsx';
 import {ListPage} from './pages/list/list-page.tsx';
 import {routes} from './routes.ts';
-import {zeroRef} from './zero-setup.ts';
+import {useZero} from './hooks/use-zero.ts';
 
 export function Root() {
-  const z = useSyncExternalStore(
-    zeroRef.onChange,
-    useCallback(() => zeroRef.value, []),
-  );
+  const z = useZero();
 
   const [contentReady, setContentReady] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(
@@ -24,12 +21,8 @@ export function Root() {
 
   useSoftNav();
 
-  if (!z) {
-    return null;
-  }
-
   return (
-    <ZeroProvider zero={z}>
+    <>
       <div
         className="app-container flex p-8"
         style={{visibility: contentReady ? 'visible' : 'hidden'}}
@@ -62,6 +55,6 @@ export function Root() {
         }}
       />
       {import.meta.env.DEV && <ZeroInspector zero={z} />}
-    </ZeroProvider>
+    </>
   );
 }

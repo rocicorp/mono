@@ -85,8 +85,16 @@
     "@vitest/runner": "3.0.8",
     "esbuild": "^0.25.0",
     "replicache": "15.2.1",
+    "shared": "0.0.0",
     "typescript": "~5.8.2",
-    "vitest": "3.0.8"
+    "vitest": "3.0.8",
+    "zero-client": "0.0.0",
+    "zqlite": "0.0.0",
+    "zero-solid": "0.0.0",
+    "zero-pg": "0.0.0",
+    "zero-react": "0.0.0",
+    "zero-server": "0.0.0",
+    "zero-cache": "0.0.0"
   },
   "type": "module",
   "main": "out/zero.js",
