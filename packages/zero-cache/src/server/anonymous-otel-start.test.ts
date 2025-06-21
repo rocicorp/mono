@@ -3,6 +3,7 @@ import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
 import {PeriodicExportingMetricReader} from '@opentelemetry/sdk-metrics';
 import {MeterProvider} from '@opentelemetry/sdk-metrics';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {getZeroConfig, type ZeroConfig} from '../config/zero-config.js';
 import {
   startAnonymousTelemetry,
   recordMutation,
@@ -20,6 +21,11 @@ import {
 // Mock the OTLP exporter and related OpenTelemetry components
 vi.mock('@opentelemetry/exporter-metrics-otlp-http');
 vi.mock('@opentelemetry/sdk-metrics');
+
+// Mock the config
+vi.mock('../config/zero-config.js', () => ({
+  getZeroConfig: vi.fn(),
+}));
 
 describe('Anonymous Telemetry Integration Tests', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -44,6 +50,12 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
     // Reset all mocks
     vi.clearAllMocks();
+
+    // Mock getZeroConfig to return default enabled state
+    vi.mocked(getZeroConfig).mockReturnValue({
+      enableUsageAnalytics: true,
+      // Add other config properties as needed for tests
+    } as Partial<ZeroConfig> as ZeroConfig);
 
     // Mock histogram
     mockHistogram = {
@@ -80,12 +92,12 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
     // Setup mocks
     vi.mocked(OTLPMetricExporter).mockImplementation(() => mockExporter);
-    vi.mocked(PeriodicExportingMetricReader).mockImplementation(() => mockMetricReader);
+    vi.mocked(PeriodicExportingMetricReader).mockImplementation(
+      () => mockMetricReader,
+    );
     vi.mocked(MeterProvider).mockImplementation(() => mockMeterProvider);
 
     // Clear environment variables that might affect telemetry
-    delete process.env.ZERO_ENABLE_USAGE_ANALYTICS;
-    delete process.env.ZERO_TELEMETRY_OPT_OUT;
     delete process.env.ZERO_UPSTREAM_DB;
     delete process.env.ZERO_SERVER_VERSION;
   });
@@ -93,68 +105,41 @@ describe('Anonymous Telemetry Integration Tests', () => {
   afterAll(() => {
     // Restore environment
     process.env = originalEnv;
-    
+
     // Shutdown telemetry
     shutdownAnonymousTelemetry();
   });
 
   describe('Opt-out Configuration (test these first)', () => {
-    test('should respect opt-out via ZERO_ENABLE_USAGE_ANALYTICS=false', () => {
-      // Set up environment for opt-out test
-      const testEnv = {...process.env};
-      testEnv.ZERO_ENABLE_USAGE_ANALYTICS = 'false';
-      
-      // Temporarily replace process.env
-      const originalProcessEnv = process.env;
-      process.env = testEnv;
-      
-      try {
-        startAnonymousTelemetry();
-        
-        // Should not initialize any telemetry components
-        expect(OTLPMetricExporter).not.toHaveBeenCalled();
-        expect(PeriodicExportingMetricReader).not.toHaveBeenCalled();
-        expect(MeterProvider).not.toHaveBeenCalled();
-      } finally {
-        process.env = originalProcessEnv;
-      }
+    test('should respect opt-out via enableUsageAnalytics=false', () => {
+      // Mock config to return disabled analytics
+      vi.mocked(getZeroConfig).mockReturnValueOnce({
+        enableUsageAnalytics: false,
+      } as Partial<ZeroConfig> as ZeroConfig);
+
+      startAnonymousTelemetry();
+
+      // Should not initialize any telemetry components
+      expect(OTLPMetricExporter).not.toHaveBeenCalled();
+      expect(PeriodicExportingMetricReader).not.toHaveBeenCalled();
+      expect(MeterProvider).not.toHaveBeenCalled();
     });
 
-    test('should respect opt-out via ZERO_ENABLE_USAGE_ANALYTICS=0', () => {
-      const testEnv = {...process.env};
-      testEnv.ZERO_ENABLE_USAGE_ANALYTICS = '0';
-      
-      const originalProcessEnv = process.env;
-      process.env = testEnv;
-      
-      try {
-        startAnonymousTelemetry();
-        expect(OTLPMetricExporter).not.toHaveBeenCalled();
-      } finally {
-        process.env = originalProcessEnv;
-      }
-    });
+    test('should respect opt-out when analytics explicitly disabled', () => {
+      // Mock config to return disabled analytics
+      vi.mocked(getZeroConfig).mockReturnValueOnce({
+        enableUsageAnalytics: false,
+      } as Partial<ZeroConfig> as ZeroConfig);
 
-    test('should respect opt-out via ZERO_TELEMETRY_OPT_OUT=true', () => {
-      const testEnv = {...process.env};
-      testEnv.ZERO_TELEMETRY_OPT_OUT = 'true';
-      
-      const originalProcessEnv = process.env;
-      process.env = testEnv;
-      
-      try {
-        startAnonymousTelemetry();
-        expect(OTLPMetricExporter).not.toHaveBeenCalled();
-      } finally {
-        process.env = originalProcessEnv;
-      }
+      startAnonymousTelemetry();
+      expect(OTLPMetricExporter).not.toHaveBeenCalled();
     });
   });
 
   describe('Telemetry Startup and Operation', () => {
     test('should start telemetry with default configuration', () => {
       const lc = createSilentLogContext();
-      
+
       startAnonymousTelemetry(lc);
 
       // Verify OTLP exporter was created with correct configuration
@@ -171,51 +156,81 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
       // Verify meter provider was created
       expect(MeterProvider).toHaveBeenCalled();
-      expect(mockMeterProvider.getMeter).toHaveBeenCalledWith('zero-anonymous-telemetry');
+      expect(mockMeterProvider.getMeter).toHaveBeenCalledWith(
+        'zero-anonymous-telemetry',
+      );
     });
 
     test('should create all required metrics', () => {
       // Since telemetry is already started, these should have been called
-      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith('zero.uptime', {
-        description: 'System uptime in seconds',
-        unit: 'seconds',
-      });
+      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith(
+        'zero.uptime',
+        {
+          description: 'System uptime in seconds',
+          unit: 'seconds',
+        },
+      );
 
-      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith('zero.client_groups', {
-        description: 'Number of connected client groups',
-      });
+      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith(
+        'zero.client_groups',
+        {
+          description: 'Number of connected client groups',
+        },
+      );
 
-      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith('zero.active_queries', {
-        description: 'Total number of active queries across all client groups',
-      });
+      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith(
+        'zero.active_queries',
+        {
+          description:
+            'Total number of active queries across all client groups',
+        },
+      );
 
-      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith('zero.active_queries_per_client_group', {
-        description: 'Number of active queries per client group',
-      });
+      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith(
+        'zero.active_queries_per_client_group',
+        {
+          description: 'Number of active queries per client group',
+        },
+      );
 
-      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith('zero.cvr_size', {
-        description: 'Current CVR size in bytes',
-        unit: 'bytes',
-      });
+      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith(
+        'zero.cvr_size',
+        {
+          description: 'Current CVR size in bytes',
+          unit: 'bytes',
+        },
+      );
 
-      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith('zero.mutations_processed', {
-        description: 'Number of mutations processed in the last minute',
-      });
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.mutations_processed',
+        {
+          description: 'Number of mutations processed in the last minute',
+        },
+      );
 
-      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith('zero.rows_synced', {
-        description: 'Number of rows synced in the last minute',
-      });
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.rows_synced',
+        {
+          description: 'Number of rows synced in the last minute',
+        },
+      );
 
       // Verify histograms were created
-      expect(mockMeter.createHistogram).toHaveBeenCalledWith('zero.change_desired_queries_duration', {
-        description: 'Time taken to process changeDesiredQueries operations',
-        unit: 'milliseconds',
-      });
+      expect(mockMeter.createHistogram).toHaveBeenCalledWith(
+        'zero.change_desired_queries_duration',
+        {
+          description: 'Time taken to process changeDesiredQueries operations',
+          unit: 'milliseconds',
+        },
+      );
 
-      expect(mockMeter.createHistogram).toHaveBeenCalledWith('zero.replication_event_duration', {
-        description: 'Time taken to process replication events from upstream',
-        unit: 'milliseconds',
-      });
+      expect(mockMeter.createHistogram).toHaveBeenCalledWith(
+        'zero.replication_event_duration',
+        {
+          description: 'Time taken to process replication events from upstream',
+          unit: 'milliseconds',
+        },
+      );
     });
 
     test('should register callbacks for observable metrics', () => {
@@ -228,19 +243,25 @@ describe('Anonymous Telemetry Integration Tests', () => {
   describe('Metric Recording', () => {
     test('should record histogram metrics with correct attributes', () => {
       const duration = 123.45;
-      
+
       recordChangeDesiredQueriesTime(duration);
       recordReplicationEventTime(duration * 2);
 
-      expect(mockHistogram.record).toHaveBeenCalledWith(duration, expect.objectContaining({
-        'zero.telemetry.type': 'anonymous',
-        'zero.infra.platform': expect.any(String),
-      }));
+      expect(mockHistogram.record).toHaveBeenCalledWith(
+        duration,
+        expect.objectContaining({
+          'zero.telemetry.type': 'anonymous',
+          'zero.infra.platform': expect.any(String),
+        }),
+      );
 
-      expect(mockHistogram.record).toHaveBeenCalledWith(duration * 2, expect.objectContaining({
-        'zero.telemetry.type': 'anonymous',
-        'zero.infra.platform': expect.any(String),
-      }));
+      expect(mockHistogram.record).toHaveBeenCalledWith(
+        duration * 2,
+        expect.objectContaining({
+          'zero.telemetry.type': 'anonymous',
+          'zero.infra.platform': expect.any(String),
+        }),
+      );
     });
 
     test('should accumulate mutation counts', () => {
@@ -265,16 +286,16 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
     test('should handle CVR size updates', () => {
       const cvrSize = 1024 * 1024; // 1MB
-      
+
       updateCvrSize(cvrSize);
-      
+
       // Should not throw
       expect(() => updateCvrSize(cvrSize * 2)).not.toThrow();
     });
   });
 
   describe('Client Group and Query Management', () => {
-    test('should manage client groups correctly', () => {
+    test('should manage client groups correctly and reflect in metrics', () => {
       const clientGroupId1 = 'group-1';
       const clientGroupId2 = 'group-2';
 
@@ -285,25 +306,95 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Should not throw
       expect(() => addClientGroup(clientGroupId1)).not.toThrow(); // Duplicate should be fine
 
+      // Test that the client groups gauge callback works correctly
+      const clientGroupsCallback = mockObservableGauge.addCallback.mock.calls
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .find((call: any) =>
+          call[0].toString().includes('connectedClientGroups'),
+        )?.[0];
+
+      if (clientGroupsCallback) {
+        const mockResult = {observe: vi.fn()};
+        clientGroupsCallback(mockResult);
+
+        // Should observe the count of client groups (at least 2)
+        expect(mockResult.observe).toHaveBeenCalledWith(
+          expect.any(Number),
+          expect.objectContaining({
+            'zero.telemetry.type': 'anonymous',
+          }),
+        );
+
+        // Verify the observed value is reasonable (should be >= 2)
+        const observedValue = mockResult.observe.mock.calls[0][0];
+        expect(observedValue).toBeGreaterThanOrEqual(2);
+      }
+
       // Remove client groups
       removeClientGroup(clientGroupId1);
       removeClientGroup(clientGroupId2);
-      
+
       // Should not throw even if removing non-existent group
       expect(() => removeClientGroup('non-existent')).not.toThrow();
     });
 
-    test('should manage active queries correctly', () => {
+    test('should manage active queries correctly and reflect in metrics', () => {
       const clientGroupId = 'test-group';
       const queryId1 = 'query-1';
       const queryId2 = 'query-2';
 
+      // Add client group first
+      addClientGroup(clientGroupId);
+
       // Add queries
       addActiveQuery(clientGroupId, queryId1);
       addActiveQuery(clientGroupId, queryId2);
-      
+
       // Add query to different group
       addActiveQuery('other-group', 'other-query');
+
+      // Test that the active queries gauge callback works correctly
+      const activeQueriesCallback = mockObservableGauge.addCallback.mock.calls
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .find((call: any) =>
+          call[0].toString().includes('getTotalActiveQueries'),
+        )?.[0];
+
+      if (activeQueriesCallback) {
+        const mockResult = {observe: vi.fn()};
+        activeQueriesCallback(mockResult);
+
+        // Should observe the total count of active queries (at least 3)
+        expect(mockResult.observe).toHaveBeenCalledWith(
+          expect.any(Number),
+          expect.objectContaining({
+            'zero.telemetry.type': 'anonymous',
+          }),
+        );
+
+        // Verify the observed value reflects our added queries
+        const observedValue = mockResult.observe.mock.calls[0][0];
+        expect(observedValue).toBeGreaterThanOrEqual(3);
+      }
+
+      // Test per-client-group queries callback
+      const perClientGroupCallback = mockObservableGauge.addCallback.mock.calls
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .find((call: any) => call[0].toString().includes('clientGroupID'))?.[0];
+
+      if (perClientGroupCallback) {
+        const mockResult = {observe: vi.fn()};
+        perClientGroupCallback(mockResult);
+
+        // Should observe queries for each client group
+        expect(mockResult.observe).toHaveBeenCalledWith(
+          expect.any(Number),
+          expect.objectContaining({
+            'zero.telemetry.type': 'anonymous',
+            'zero.client_group.id': expect.any(String),
+          }),
+        );
+      }
 
       // Remove queries
       removeActiveQuery(clientGroupId, queryId1);
@@ -311,19 +402,43 @@ describe('Anonymous Telemetry Integration Tests', () => {
       removeActiveQuery('other-group', 'other-query');
 
       // Should not throw even if removing non-existent query
-      expect(() => removeActiveQuery('non-existent', 'non-existent')).not.toThrow();
+      expect(() =>
+        removeActiveQuery('non-existent', 'non-existent'),
+      ).not.toThrow();
     });
 
-    test('should clean up queries when client group is removed', () => {
-      const clientGroupId = 'test-group';
-      
-      // Add queries to group
+    test('should clean up queries when client group is removed and reflect in metrics', () => {
+      const clientGroupId = 'cleanup-test-group';
+
+      // Add client group and queries
+      addClientGroup(clientGroupId);
       addActiveQuery(clientGroupId, 'query-1');
       addActiveQuery(clientGroupId, 'query-2');
-      
-      // Remove client group (should also clean up its queries)
-      removeClientGroup(clientGroupId);
-      
+
+      // Verify queries are tracked before removal
+      const activeQueriesCallback = mockObservableGauge.addCallback.mock.calls
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .find((call: any) =>
+          call[0].toString().includes('getTotalActiveQueries'),
+        )?.[0];
+
+      if (activeQueriesCallback) {
+        const mockResultBefore = {observe: vi.fn()};
+        activeQueriesCallback(mockResultBefore);
+        const queriesBeforeRemoval = mockResultBefore.observe.mock.calls[0][0];
+
+        // Remove client group (should also clean up its queries)
+        removeClientGroup(clientGroupId);
+
+        // Verify queries are cleaned up
+        const mockResultAfter = {observe: vi.fn()};
+        activeQueriesCallback(mockResultAfter);
+        const queriesAfterRemoval = mockResultAfter.observe.mock.calls[0][0];
+
+        // Should have fewer or equal queries after removal
+        expect(queriesAfterRemoval).toBeLessThanOrEqual(queriesBeforeRemoval);
+      }
+
       // Should not throw
       expect(() => removeClientGroup(clientGroupId)).not.toThrow();
     });
@@ -333,10 +448,13 @@ describe('Anonymous Telemetry Integration Tests', () => {
     test('should include platform information in attributes', () => {
       const duration = 100;
       recordChangeDesiredQueriesTime(duration);
-      
-      expect(mockHistogram.record).toHaveBeenCalledWith(duration, expect.objectContaining({
-        'zero.infra.platform': expect.any(String),
-      }));
+
+      expect(mockHistogram.record).toHaveBeenCalledWith(
+        duration,
+        expect.objectContaining({
+          'zero.infra.platform': expect.any(String),
+        }),
+      );
     });
   });
 
@@ -345,25 +463,30 @@ describe('Anonymous Telemetry Integration Tests', () => {
       const duration = 100;
       recordChangeDesiredQueriesTime(duration);
 
-      expect(mockHistogram.record).toHaveBeenCalledWith(duration, expect.objectContaining({
-        'zero.app.id': expect.any(String),
-        'zero.machine.os': expect.any(String),
-        'zero.telemetry.type': 'anonymous',
-        'zero.infra.platform': expect.any(String),
-        'zero.version': expect.any(String),
-      }));
+      expect(mockHistogram.record).toHaveBeenCalledWith(
+        duration,
+        expect.objectContaining({
+          'zero.app.id': expect.any(String),
+          'zero.machine.os': expect.any(String),
+          'zero.telemetry.type': 'anonymous',
+          'zero.infra.platform': expect.any(String),
+          'zero.version': expect.any(String),
+        }),
+      );
     });
   });
 
   describe('Singleton Behavior', () => {
     test('should not start again after already started', () => {
       const initialCallCount = vi.mocked(OTLPMetricExporter).mock.calls.length;
-      
+
       // Try to start again
       startAnonymousTelemetry();
-      
+
       // Should not create additional instances
-      expect(vi.mocked(OTLPMetricExporter)).toHaveBeenCalledTimes(initialCallCount);
+      expect(vi.mocked(OTLPMetricExporter)).toHaveBeenCalledTimes(
+        initialCallCount,
+      );
     });
   });
 
@@ -382,9 +505,13 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
       // Get the callbacks that were registered
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const callbacks = mockObservableGauge.addCallback.mock.calls.map((call: any) => call[0]);
+      const callbacks = mockObservableGauge.addCallback.mock.calls.map(
+        (call: any) => call[0],
+      );
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const counterCallbacks = mockObservableCounter.addCallback.mock.calls.map((call: any) => call[0]);
+      const counterCallbacks = mockObservableCounter.addCallback.mock.calls.map(
+        (call: any) => call[0],
+      );
 
       // Mock the result object
       const mockResult = {
@@ -410,18 +537,20 @@ describe('Anonymous Telemetry Integration Tests', () => {
   describe('Shutdown', () => {
     test('should shutdown meter provider', () => {
       shutdownAnonymousTelemetry();
-      
+
       expect(mockMeterProvider.shutdown).toHaveBeenCalled();
     });
 
     test('should handle multiple shutdown calls', () => {
       const initialCallCount = mockMeterProvider.shutdown.mock.calls.length;
-      
+
       shutdownAnonymousTelemetry();
       shutdownAnonymousTelemetry();
-      
+
       // Should handle multiple calls gracefully
-      expect(mockMeterProvider.shutdown.mock.calls.length).toBeGreaterThanOrEqual(initialCallCount);
+      expect(
+        mockMeterProvider.shutdown.mock.calls.length,
+      ).toBeGreaterThanOrEqual(initialCallCount);
     });
   });
-}); 
+});

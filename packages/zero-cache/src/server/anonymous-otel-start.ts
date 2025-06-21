@@ -3,26 +3,15 @@ import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
 import {PeriodicExportingMetricReader} from '@opentelemetry/sdk-metrics';
 import {MeterProvider} from '@opentelemetry/sdk-metrics';
 import {resourceFromAttributes} from '@opentelemetry/resources';
-import type {
-  ObservableResult,
-  Histogram,
-} from '@opentelemetry/api';
+import type {ObservableResult, Histogram} from '@opentelemetry/api';
 import {platform} from 'os';
 import {h64} from '../../../shared/src/hash.js';
 import type {LogContext} from '@rocicorp/logger';
 import packageJson from '../../package.json' with {type: 'json'};
+import {getZeroConfig} from '../config/zero-config.js';
 
 const ROCICORP_TELEMETRY_TOKEN =
   process.env.ROCICORP_TELEMETRY_TOKEN || 'anonymous-token';
-
-function getTelemetryConfig(env: NodeJS.ProcessEnv) {
-  return {
-    optOut:
-      env.ZERO_ENABLE_USAGE_ANALYTICS === 'false' ||
-      env.ZERO_ENABLE_USAGE_ANALYTICS === '0' ||
-      env.ZERO_TELEMETRY_OPT_OUT === 'true',
-  };
-}
 
 class AnonymousTelemetryManager {
   static #instance: AnonymousTelemetryManager;
@@ -49,7 +38,8 @@ class AnonymousTelemetryManager {
   }
 
   start(lc?: LogContext) {
-    if (this.#started || getTelemetryConfig(process.env).optOut) {
+    const config = getZeroConfig();
+    if (this.#started || !config.enableUsageAnalytics) {
       return;
     }
     this.#lc = lc;
@@ -63,13 +53,15 @@ class AnonymousTelemetryManager {
       }),
     });
 
-    this.#meterProvider = new MeterProvider({resource, readers: [metricReader]});
+    this.#meterProvider = new MeterProvider({
+      resource,
+      readers: [metricReader],
+    });
     this.#meter = this.#meterProvider.getMeter('zero-anonymous-telemetry');
 
     this.#setupMetrics();
     this.#lc?.info?.('Anonymous telemetry started');
     this.#started = true;
-
   }
 
   #setupMetrics() {
@@ -78,12 +70,18 @@ class AnonymousTelemetryManager {
       description: 'System uptime in seconds',
       unit: 'seconds',
     });
-    const clientGroupsGauge = this.#meter.createObservableGauge('zero.client_groups', {
-      description: 'Number of connected client groups',
-    });
-    const activeQueriesGauge = this.#meter.createObservableGauge('zero.active_queries', {
-      description: 'Total number of active queries across all client groups',
-    });
+    const clientGroupsGauge = this.#meter.createObservableGauge(
+      'zero.client_groups',
+      {
+        description: 'Number of connected client groups',
+      },
+    );
+    const activeQueriesGauge = this.#meter.createObservableGauge(
+      'zero.active_queries',
+      {
+        description: 'Total number of active queries across all client groups',
+      },
+    );
     const activeQueriesPerClientGroupGauge = this.#meter.createObservableGauge(
       'zero.active_queries_per_client_group',
       {description: 'Number of active queries per client group'},
@@ -94,12 +92,18 @@ class AnonymousTelemetryManager {
     });
 
     // Observable counters
-    const mutationsCounter = this.#meter.createObservableCounter('zero.mutations_processed', {
-      description: 'Number of mutations processed in the last minute',
-    });
-    const rowsSyncedCounter = this.#meter.createObservableCounter('zero.rows_synced', {
-      description: 'Number of rows synced in the last minute',
-    });
+    const mutationsCounter = this.#meter.createObservableCounter(
+      'zero.mutations_processed',
+      {
+        description: 'Number of mutations processed in the last minute',
+      },
+    );
+    const rowsSyncedCounter = this.#meter.createObservableCounter(
+      'zero.rows_synced',
+      {
+        description: 'Number of rows synced in the last minute',
+      },
+    );
 
     // Histograms
     this.#changeDesiredQueriesHistogram = this.#meter.createHistogram(
@@ -130,7 +134,10 @@ class AnonymousTelemetryManager {
     });
     activeQueriesPerClientGroupGauge.addCallback((result: ObservableResult) => {
       for (const [clientGroupID, queries] of this.#activeQueries) {
-        result.observe(queries.size, {...attrs, 'zero.client_group.id': clientGroupID});
+        result.observe(queries.size, {
+          ...attrs,
+          'zero.client_group.id': clientGroupID,
+        });
       }
     });
     cvrSizeGauge.addCallback((result: ObservableResult) => {
@@ -155,7 +162,10 @@ class AnonymousTelemetryManager {
   }
 
   recordChangeDesiredQueriesTime(durationMs: number) {
-    this.#changeDesiredQueriesHistogram?.record(durationMs, this.#getAttributes());
+    this.#changeDesiredQueriesHistogram?.record(
+      durationMs,
+      this.#getAttributes(),
+    );
   }
 
   recordReplicationEventTime(durationMs: number) {
@@ -211,8 +221,14 @@ class AnonymousTelemetryManager {
 
   #getPlatform(): string {
     if (process.env.FLY_APP_NAME || process.env.FLY_REGION) return 'fly.io';
-    if (process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.AWS_REGION || process.env.AWS_EXECUTION_ENV) return 'aws';
-    if (process.env.RAILWAY_ENV || process.env.RAILWAY_STATIC_URL) return 'railway';
+    if (
+      process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.env.AWS_REGION ||
+      process.env.AWS_EXECUTION_ENV
+    )
+      return 'aws';
+    if (process.env.RAILWAY_ENV || process.env.RAILWAY_STATIC_URL)
+      return 'railway';
     if (process.env.RENDER || process.env.RENDER_SERVICE_ID) return 'render';
     return 'local';
   }
@@ -224,19 +240,26 @@ class AnonymousTelemetryManager {
     }
     return total;
   }
-
 }
 
 const manager = () => AnonymousTelemetryManager.getInstance();
 
 export const startAnonymousTelemetry = (lc?: LogContext) => manager().start(lc);
 export const recordMutation = () => manager().recordMutation();
-export const recordRowsSynced = (count: number) => manager().recordRowsSynced(count);
-export const recordChangeDesiredQueriesTime = (durationMs: number) => manager().recordChangeDesiredQueriesTime(durationMs);
-export const recordReplicationEventTime = (durationMs: number) => manager().recordReplicationEventTime(durationMs);
-export const addActiveQuery = (clientGroupID: string, queryID: string) => manager().addActiveQuery(clientGroupID, queryID);
-export const removeActiveQuery = (clientGroupID: string, queryID: string) => manager().removeActiveQuery(clientGroupID, queryID);
-export const updateCvrSize = (sizeBytes: number) => manager().updateCvrSize(sizeBytes);
-export const addClientGroup = (clientGroupID: string) => manager().addClientGroup(clientGroupID);
-export const removeClientGroup = (clientGroupID: string) => manager().removeClientGroup(clientGroupID);
+export const recordRowsSynced = (count: number) =>
+  manager().recordRowsSynced(count);
+export const recordChangeDesiredQueriesTime = (durationMs: number) =>
+  manager().recordChangeDesiredQueriesTime(durationMs);
+export const recordReplicationEventTime = (durationMs: number) =>
+  manager().recordReplicationEventTime(durationMs);
+export const addActiveQuery = (clientGroupID: string, queryID: string) =>
+  manager().addActiveQuery(clientGroupID, queryID);
+export const removeActiveQuery = (clientGroupID: string, queryID: string) =>
+  manager().removeActiveQuery(clientGroupID, queryID);
+export const updateCvrSize = (sizeBytes: number) =>
+  manager().updateCvrSize(sizeBytes);
+export const addClientGroup = (clientGroupID: string) =>
+  manager().addClientGroup(clientGroupID);
+export const removeClientGroup = (clientGroupID: string) =>
+  manager().removeClientGroup(clientGroupID);
 export const shutdownAnonymousTelemetry = () => manager().shutdown();
