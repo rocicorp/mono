@@ -2014,7 +2014,9 @@ export async function createSocket(
     secProtocol = encodeSecProtocols(undefined, auth);
     if (secProtocol.length > maxHeaderLength) {
       lc.warn?.(
-        `Encoded auth token length (${secProtocol.length}) exceeds ZeroOptions.maxHeaderLength (${maxHeaderLength}). This may cause connection failures.',
+        `Encoded auth token length (${secProtocol.length}) exceeds ` +
+          `ZeroOptions.maxHeaderLength (${maxHeaderLength}). This may ` +
+          `cause connection failures.`,
       );
     }
     queriesPatch = undefined;
