@@ -259,7 +259,7 @@ export default $config({
       wait: false,
     });
 
-    if ($app.stage === 'sandbox') {
+    if ($app.stage === 'sandbox-disabled') {
       // In sandbox, deploy permissions in a Lambda.
       const permissionsDeployer = new sst.aws.Function(
         'zero-permissions-deployer',
