@@ -1,4 +1,4 @@
-import {BroadcastChannel} from './broadcast-channel.ts';
+import {BroadcastChannel} from '../../shared/src/broadcast-channel.ts';
 import type {Read, Store} from './dag/store.ts';
 import {getClientGroup} from './persist/client-groups.ts';
 import {withRead} from './with-transactions.ts';

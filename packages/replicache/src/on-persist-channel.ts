@@ -1,5 +1,5 @@
 import {assertObject, assertString} from '../../shared/src/asserts.ts';
-import {BroadcastChannel} from './broadcast-channel.ts';
+import {BroadcastChannel} from '../../shared/src/broadcast-channel.ts';
 import type {ClientGroupID, ClientID} from './sync/ids.ts';
 
 function makeChannelName(replicacheName: string): string {
