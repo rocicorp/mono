@@ -10,7 +10,7 @@ import {
 import {Queue} from '../../../shared/src/queue.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import {nanoid} from '../util/nanoid.ts';
-import {ActiveClientsManager} from './alive-clients-manager.ts';
+import {ActiveClientsManager} from './active-clients-manager.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();
