@@ -1,14 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ident} from 'pg-format';
 import type postgres from 'postgres';
-import type {ReadonlyJSONValue} from '../../../../../shared/src/json.ts';
-import {stringCompare} from '../../../../../shared/src/string-compare.ts';
-import type {ClientSchema} from '../../../../../zero-protocol/src/client-schema.ts';
 import {
   type JSONObject,
   type JSONValue,
   stringify,
 } from '../../../../../shared/src/bigint-json.ts';
+import type {ReadonlyJSONValue} from '../../../../../shared/src/json.ts';
+import {stringCompare} from '../../../../../shared/src/string-compare.ts';
+import type {ClientSchema} from '../../../../../zero-protocol/src/client-schema.ts';
 import {normalizedKeyOrder, type RowKey} from '../../../types/row-key.ts';
 import {cvrSchema, type ShardID} from '../../../types/shards.ts';
 import {
@@ -31,6 +31,7 @@ export type InstancesRow = {
   clientGroupID: string;
   version: string;
   lastActive: number;
+  ttlClock: number;
   replicaVersion: string | null;
   owner: string | null;
   grantedAt: number | null;
@@ -41,12 +42,13 @@ function createInstancesTable(shard: ShardID) {
   return `
 CREATE TABLE ${schema(shard)}.instances (
   "clientGroupID"  TEXT PRIMARY KEY,
-  "version"        TEXT NOT NULL,        -- Sortable representation of CVRVersion, e.g. "5nbqa2w:09"
-  "lastActive"     TIMESTAMPTZ NOT NULL, -- For garbage collection
-  "replicaVersion" TEXT,                 -- Identifies the replica (i.e. initial-sync point) from which the CVR data comes.
-  "owner"          TEXT,                 -- The ID of the task / server that has been granted ownership of the CVR.
-  "grantedAt"      TIMESTAMPTZ,          -- The time at which the current owner was last granted ownership (most recent connection time).
-  "clientSchema"   JSONB                 -- ClientSchema of the client group
+  "version"        TEXT NOT NULL,             -- Sortable representation of CVRVersion, e.g. "5nbqa2w:09"
+  "lastActive"     TIMESTAMPTZ NOT NULL,      -- For garbage collection
+  "ttlClock"       DOUBLE PRECISION NOT NULL, -- The ttl clock gets "paused" when disconnected.
+  "replicaVersion" TEXT,                      -- Identifies the replica (i.e. initial-sync point) from which the CVR data comes.
+  "owner"          TEXT,                      -- The ID of the task / server that has been granted ownership of the CVR.
+  "grantedAt"      TIMESTAMPTZ,               -- The time at which the current owner was last granted ownership (most recent connection time).
+  "clientSchema"   JSONB                      -- ClientSchema of the client group
 );
 `;
 }

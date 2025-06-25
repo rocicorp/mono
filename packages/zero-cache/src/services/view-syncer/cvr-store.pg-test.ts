@@ -8,6 +8,7 @@ import {
   type Mock,
 } from 'vitest';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {testDBs} from '../../test/db.ts';
@@ -26,7 +27,6 @@ import type {
   CustomQueryRecord,
   CVRVersion,
 } from './schema/types.ts';
-import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 
 const APP_ID = 'roze';
 const SHARD_NUM = 1;
@@ -51,8 +51,9 @@ describe('view-syncer/cvr-store', () => {
     db = await testDBs.create('view_syncer_cvr_schema');
     await db.begin(tx => setupCVRTables(lc, tx, SHARD));
     await db.unsafe(`
-    INSERT INTO "roze_1/cvr".instances ("clientGroupID", version, "lastActive", "replicaVersion")
-      VALUES('${CVR_ID}', '03', '2024-09-04T00:00:00Z', '01');
+    INSERT INTO "roze_1/cvr".instances ("clientGroupID", version, "lastActive", "ttlClock", "replicaVersion")
+      VALUES('${CVR_ID}', '03', '2024-09-04T00:00:00Z', 
+        (EXTRACT(EPOCH FROM TIMESTAMPTZ '2024-09-04T00:00:00Z') * 1000)::BIGINT, '01');
     INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", 
                              "patchVersion", "transformationHash", "transformationVersion")
       VALUES('${CVR_ID}', 'foo', '{"table":"issues"}', '01', 'foo-transformed', '01');
@@ -235,6 +236,7 @@ describe('view-syncer/cvr-store', () => {
             "lastActive": 1725408000000,
             "owner": "my-task",
             "replicaVersion": "01",
+            "ttlClock": 1725408000000,
             "version": "04",
           },
         ]
@@ -260,6 +262,7 @@ describe('view-syncer/cvr-store', () => {
             "lastActive": 1725408000000,
             "owner": "other-task",
             "replicaVersion": "01",
+            "ttlClock": 1725408000000,
             "version": "03",
           },
         ]
@@ -487,7 +490,7 @@ describe('view-syncer/cvr-store', () => {
       );
     }
     await updater.received(lc, rows);
-    cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
+    cvr = (await updater.flush(lc, CONNECT_TIME, now, now)).cvr;
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
@@ -499,6 +502,7 @@ describe('view-syncer/cvr-store', () => {
             "lastActive": 1732320000000,
             "owner": "my-task",
             "replicaVersion": "01",
+            "ttlClock": 1732320000000,
             "version": "04",
           },
         ]
@@ -542,7 +546,7 @@ describe('view-syncer/cvr-store', () => {
       );
     }
     await updater.received(lc, rows);
-    await updater.flush(lc, CONNECT_TIME, now);
+    await updater.flush(lc, CONNECT_TIME, now, now);
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
@@ -554,6 +558,7 @@ describe('view-syncer/cvr-store', () => {
             "lastActive": 1732320000000,
             "owner": "my-task",
             "replicaVersion": "01",
+            "ttlClock": 1732320000000,
             "version": "05",
           },
         ]
@@ -626,7 +631,7 @@ describe('view-syncer/cvr-store', () => {
         );
       }
       await updater.received(lc, rows);
-      cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
+      cvr = (await updater.flush(lc, CONNECT_TIME, now, now)).cvr;
 
       // add a random sleep for varying the asynchronicity
       // between the CVR flush and the async row flush.
@@ -643,6 +648,7 @@ describe('view-syncer/cvr-store', () => {
             "lastActive": 1732320000000,
             "owner": "my-task",
             "replicaVersion": "01",
+            "ttlClock": 1732320000000,
             "version": "18m",
           },
         ]
@@ -699,7 +705,7 @@ describe('view-syncer/cvr-store', () => {
         );
       }
       await updater.received(lc, rows);
-      cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
+      cvr = (await updater.flush(lc, CONNECT_TIME, now, now)).cvr;
 
       // add a random sleep for varying the asynchronicity
       // between the CVR flush and the async row flush.
@@ -720,7 +726,7 @@ describe('view-syncer/cvr-store', () => {
     // Empty rows.
     const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
     await updater.received(lc, rows);
-    await updater.flush(lc, CONNECT_TIME, now);
+    await updater.flush(lc, CONNECT_TIME, now, now);
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
@@ -732,6 +738,7 @@ describe('view-syncer/cvr-store', () => {
             "lastActive": 1732320000000,
             "owner": "my-task",
             "replicaVersion": "01",
+            "ttlClock": 1732320000000,
             "version": "18m",
           },
         ]
@@ -783,7 +790,7 @@ describe('view-syncer/cvr-store', () => {
       );
     }
     await updater.received(lc, rows);
-    cvr = (await updater.flush(lc, CONNECT_TIME, now)).cvr;
+    cvr = (await updater.flush(lc, CONNECT_TIME, now, now)).cvr;
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
@@ -795,6 +802,7 @@ describe('view-syncer/cvr-store', () => {
             "lastActive": 1732320000000,
             "owner": "my-task",
             "replicaVersion": "01",
+            "ttlClock": 1732320000000,
             "version": "04",
           },
         ]
@@ -897,6 +905,7 @@ describe('view-syncer/cvr-store', () => {
           },
         },
         "replicaVersion": "01",
+        "ttlClock": 1725408000000,
         "version": {
           "stateVersion": "03",
         },

@@ -127,6 +127,12 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migratedV12ToV13: Migration = {
+    migrateSchema: async (_, tx) => {
+      await tx`ALTER TABLE ${tx(schema)}.instances ALTER COLUMN "ttlClock" DOUBLE PRECISION NOT NULL DEFAULT 0`;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -146,6 +152,8 @@ export async function initViewSyncerSchema(
     // clients."deleted" columns.
     11: migrateV10ToV11,
     12: migratedV11ToV12,
+    // V13 adds instances."ttlClock"
+    13: migratedV12ToV13,
   };
 
   await runSchemaMigrations(

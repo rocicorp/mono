@@ -42,7 +42,10 @@ const LAST_CONNECT = Date.UTC(2024, 2, 1);
 describe('view-syncer/cvr', () => {
   type DBState = {
     instances: (Partial<InstancesRow> &
-      Pick<InstancesRow, 'clientGroupID' | 'version' | 'clientSchema'>)[];
+      Pick<
+        InstancesRow,
+        'clientGroupID' | 'version' | 'clientSchema' | 'ttlClock'
+      >)[];
     clients: ClientsRow[];
     queries: QueriesRow[];
     desires: DesiresRow[];
@@ -198,11 +201,13 @@ describe('view-syncer/cvr', () => {
       clients: {},
       queries: {},
       clientSchema: null,
+      ttlClock: 0,
     } satisfies CVRSnapshot);
     const flushed = (
       await new CVRUpdater(pgStore, cvr, cvr.replicaVersion).flush(
         lc,
         LAST_CONNECT,
+        Date.UTC(2024, 3, 20),
         Date.UTC(2024, 3, 20),
       )
     ).cvr;
@@ -210,6 +215,7 @@ describe('view-syncer/cvr', () => {
     expect(flushed).toEqual({
       ...cvr,
       lastActive: 1713571200000,
+      ttlClock: 1713571200000,
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
@@ -230,6 +236,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '00',
           lastActive: 1713571200000,
+          ttlClock: 1713571200000,
           replicaVersion: null,
           owner: 'my-task',
           grantedAt: 1709251200000,
@@ -261,6 +268,7 @@ describe('view-syncer/cvr', () => {
       clients: {},
       queries: {},
       clientSchema: null,
+      ttlClock: 0,
     } satisfies CVRSnapshot);
 
     const updater = new CVRConfigDrivenUpdater(pgStore, cvr, SHARD);
@@ -278,6 +286,7 @@ describe('view-syncer/cvr', () => {
     const {cvr: updated} = await updater.flush(
       lc,
       LAST_CONNECT,
+      Date.UTC(2024, 3, 20),
       Date.UTC(2024, 3, 20),
     );
     expect(updated).toMatchInlineSnapshot(`
@@ -301,6 +310,7 @@ describe('view-syncer/cvr', () => {
         "lastActive": 1713571200000,
         "queries": {},
         "replicaVersion": null,
+        "ttlClock": 1713571200000,
         "version": {
           "stateVersion": "00",
         },
@@ -325,6 +335,7 @@ describe('view-syncer/cvr', () => {
           clientGroupID: 'abc123',
           version: '00',
           lastActive: 1713571200000,
+          ttlClock: 1713571200000,
           replicaVersion: null,
           owner: 'my-task',
           grantedAt: 1709251200000,
@@ -382,6 +393,7 @@ describe('view-syncer/cvr', () => {
           version: '1a9:02',
           replicaVersion: '123',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -435,6 +447,7 @@ describe('view-syncer/cvr', () => {
       version: {stateVersion: '1a9', minorVersion: 2},
       replicaVersion: '123',
       lastActive: 1713830400000,
+      ttlClock: 1713830400000,
       clients: {
         fooClient: {
           id: 'fooClient',
@@ -480,6 +493,7 @@ describe('view-syncer/cvr', () => {
           version: '1a9:02',
           replicaVersion: '112',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -533,14 +547,16 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 24),
+      Date.UTC(2024, 3, 24),
     );
-    expect(flushed).toBe(false);
+    expect(flushed).toMatchInlineSnapshot(`false`);
 
     expect(cvr).toEqual({
       id: 'abc123',
       version: {stateVersion: '1a9', minorVersion: 2},
       replicaVersion: '112',
-      lastActive: 1713830400000,
+      lastActive: Date.UTC(2024, 3, 23),
+      ttlClock: Date.UTC(2024, 3, 23),
       clients: {
         fooClient: {
           id: 'fooClient',
@@ -588,7 +604,6 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           ...initialState.instances[0],
-          lastActive: Date.UTC(2024, 3, 23),
           owner: 'my-task',
           grantedAt: 1709251200000,
         },
@@ -604,6 +619,7 @@ describe('view-syncer/cvr', () => {
           version: '1a9:02',
           replicaVersion: '100',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -632,7 +648,12 @@ describe('view-syncer/cvr', () => {
     updater.ensureClient('client-foo');
 
     await expect(
-      updater.flush(lc, LAST_CONNECT, Date.UTC(2024, 4, 19)),
+      updater.flush(
+        lc,
+        LAST_CONNECT,
+        Date.UTC(2024, 4, 19),
+        Date.UTC(2024, 4, 19),
+      ),
     ).rejects.toThrow(ConcurrentModificationException);
 
     // The last active time should not have been modified.
@@ -649,6 +670,7 @@ describe('view-syncer/cvr', () => {
           version: '1a9:02',
           replicaVersion: '100',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           owner: 'my-task',
           grantedAt: LAST_CONNECT,
           clientSchema: null,
@@ -682,7 +704,12 @@ describe('view-syncer/cvr', () => {
     updater.ensureClient('client-bar');
 
     await expect(
-      updater.flush(lc, LAST_CONNECT, Date.UTC(2024, 4, 19)),
+      updater.flush(
+        lc,
+        LAST_CONNECT,
+        Date.UTC(2024, 4, 19),
+        Date.UTC(2024, 4, 19),
+      ),
     ).rejects.toThrow(OwnershipError);
 
     // The last active time should not have been modified.
@@ -699,6 +726,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '101',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -764,6 +792,7 @@ describe('view-syncer/cvr', () => {
       version: {stateVersion: '1aa'},
       replicaVersion: '101',
       lastActive: 1713830400000,
+      ttlClock: 1713830400000,
       clients: {
         dooClient: {
           id: 'dooClient',
@@ -940,6 +969,7 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 24),
+      Date.UTC(2024, 3, 24),
     );
 
     expect(flushed).toMatchInlineSnapshot(`
@@ -958,6 +988,7 @@ describe('view-syncer/cvr', () => {
       version: {stateVersion: '1aa', minorVersion: 1}, // minorVersion bump
       replicaVersion: '101',
       lastActive: 1713916800000,
+      ttlClock: 1713916800000,
       clients: {
         barClient: {
           id: 'barClient',
@@ -1078,6 +1109,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           lastActive: new Date('2024-04-24T00:00:00.000Z').getTime(),
+          ttlClock: new Date('2024-04-24T00:00:00.000Z').getTime(),
           version: '1aa:01',
           replicaVersion: '101',
           owner: 'my-task',
@@ -1308,6 +1340,7 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 24, 1),
+      Date.UTC(2024, 3, 24, 1),
     );
     expect(updated2.clients.fooClient.desiredQueryIDs).toContain('oneHash');
   });
@@ -1320,6 +1353,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '03',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -1374,13 +1408,15 @@ describe('view-syncer/cvr', () => {
       updater.putDesiredQueries('fooClient', [
         {hash: 'oneHash', ast: {table: 'issues'}, ttl: undefined},
       ]),
-    ).toMatchInlineSnapshot(`[]`);
+    ).toEqual([]);
 
     // Same last active day (no index change), but different hour.
+    const now = Date.UTC(2024, 3, 23, 1);
     const {cvr: updated, flushed} = await updater.flush(
       lc,
       LAST_CONNECT,
-      Date.UTC(2024, 3, 23, 1),
+      now,
+      now,
     );
     expect(flushed).toBe(false);
 
@@ -1406,7 +1442,6 @@ describe('view-syncer/cvr', () => {
       instances: [
         {
           ...initialState.instances[0],
-          lastActive: Date.UTC(2024, 3, 23),
           owner: 'my-task',
           grantedAt: 1709251200000,
         },
@@ -1440,6 +1475,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: null,
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -1675,6 +1711,7 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(flushed).toMatchInlineSnapshot(`
       {
@@ -1764,6 +1801,7 @@ describe('view-syncer/cvr', () => {
         },
       },
       lastActive: 1713834000000,
+      ttlClock: 1713834000000,
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
@@ -1783,6 +1821,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
+          ttlClock: new Date('2024-04-23T01:00:00Z').getTime(),
           version: '1aa:01',
           replicaVersion: '123',
           owner: 'my-task',
@@ -1918,6 +1957,7 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '123',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -2111,6 +2151,7 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(flushed).toMatchInlineSnapshot(`
       {
@@ -2210,6 +2251,7 @@ describe('view-syncer/cvr', () => {
         },
       },
       lastActive: 1713834000000,
+      ttlClock: 1713834000000,
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
@@ -2222,6 +2264,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
+          ttlClock: new Date('2024-04-23T01:00:00Z').getTime(),
           version: '1ba:01',
           replicaVersion: '123',
           owner: 'my-task',
@@ -2353,6 +2396,7 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 2),
+      Date.UTC(2024, 3, 23, 2),
     ));
     expect(flushed).toMatchInlineSnapshot(`
       {
@@ -2376,6 +2420,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           lastActive: new Date('2024-04-23T02:00:00Z').getTime(),
+          ttlClock: new Date('2024-04-23T02:00:00Z').getTime(),
           version: '1ba:02',
           replicaVersion: '123',
           owner: 'my-task',
@@ -2439,6 +2484,7 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '123',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -2680,6 +2726,7 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(flushed).toMatchInlineSnapshot(`
       {
@@ -2786,6 +2833,7 @@ describe('view-syncer/cvr', () => {
       ...cvr,
       version: newVersion,
       lastActive: 1713834000000,
+      ttlClock: 1713834000000,
       queries: {
         oneHash: {
           id: 'oneHash',
@@ -2837,6 +2885,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
+          ttlClock: new Date('2024-04-23T01:00:00Z').getTime(),
           version: '1ba:01',
           replicaVersion: '123',
           owner: 'my-task',
@@ -2987,6 +3036,7 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '123',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -3130,6 +3180,7 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(flushed).toMatchInlineSnapshot(`
       {
@@ -3220,6 +3271,7 @@ describe('view-syncer/cvr', () => {
       version: newVersion,
       queries: {},
       lastActive: 1713834000000,
+      ttlClock: 1713834000000,
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
@@ -3239,6 +3291,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
+          ttlClock: new Date('2024-04-23T01:00:00Z').getTime(),
           version: '1ba:01',
           replicaVersion: '123',
           owner: 'my-task',
@@ -3354,6 +3407,7 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -3563,6 +3617,7 @@ describe('view-syncer/cvr', () => {
           },
         },
         "replicaVersion": "120",
+        "ttlClock": 1713830400000,
         "version": {
           "stateVersion": "1ba",
         },
@@ -3660,8 +3715,9 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
+      Date.UTC(2024, 3, 23, 1),
     );
-    expect(flushed).toBe(false);
+    expect(flushed).toMatchInlineSnapshot(`false`);
 
     expect(
       await cvrStore.catchupConfigPatches(
@@ -3787,6 +3843,7 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '123',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -3983,6 +4040,7 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(flushed).toMatchInlineSnapshot(`
       {
@@ -4013,6 +4071,7 @@ describe('view-syncer/cvr', () => {
         {
           clientGroupID: 'abc123',
           lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
+          ttlClock: new Date('2024-04-23T01:00:00Z').getTime(),
           version: '1bb',
           replicaVersion: '123',
           owner: 'my-task',
@@ -4100,6 +4159,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -4213,6 +4273,7 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(flushed).toMatchInlineSnapshot(`
       {
@@ -4245,9 +4306,10 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23, 1),
+          ttlClock: Date.UTC(2024, 3, 23, 1),
           owner: 'my-task',
-          grantedAt: 1709251200000,
           clientSchema: null,
+          grantedAt: 1709251200000,
         },
       ],
       clients: [
@@ -4312,6 +4374,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -4418,6 +4481,7 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(flushed).toMatchInlineSnapshot(`
       {
@@ -4450,6 +4514,7 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23, 1),
+          ttlClock: Date.UTC(2024, 3, 23, 1),
           owner: 'my-task',
           grantedAt: 1709251200000,
           clientSchema: null,
@@ -4517,6 +4582,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -4684,6 +4750,7 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(flushed).toMatchInlineSnapshot(`
       {
@@ -4716,6 +4783,7 @@ describe('view-syncer/cvr', () => {
           version: '1ba',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23, 1),
+          ttlClock: Date.UTC(2024, 3, 23, 1),
           owner: 'my-task',
           grantedAt: 1709251200000,
           clientSchema: null,
@@ -4783,6 +4851,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -4920,13 +4989,14 @@ describe('view-syncer/cvr', () => {
       // deduped
     ]);
 
-    // No net change to the CVR expected.
+    // Flushing always writes instances.
     const {flushed} = await updater.flush(
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
+      Date.UTC(2024, 3, 23, 1),
     );
-    expect(flushed).toBe(false);
+    expect(flushed).toMatchInlineSnapshot(`false`);
   });
 
   test('advance with add and delete of new row', async () => {
@@ -4937,6 +5007,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -5056,6 +5127,7 @@ describe('view-syncer/cvr', () => {
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
+      Date.UTC(2024, 3, 23, 1),
     );
     expect(flushed).toBe(false);
 
@@ -5094,6 +5166,7 @@ describe('view-syncer/cvr', () => {
             version: '1aa',
             replicaVersion: '120',
             lastActive: now,
+            ttlClock: now,
             clientSchema: null,
           },
         ],
@@ -5197,6 +5270,7 @@ describe('view-syncer/cvr', () => {
             },
           },
           "replicaVersion": "120",
+          "ttlClock": 1742256000000,
           "version": {
             "stateVersion": "1aa",
           },
@@ -5206,7 +5280,7 @@ describe('view-syncer/cvr', () => {
       const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
       updater.markDesiredQueriesAsInactive('fooClient', ['oneHash'], now);
 
-      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now);
+      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now, now);
       expect(updated).toEqual({
         clients: {
           fooClient: {
@@ -5216,6 +5290,7 @@ describe('view-syncer/cvr', () => {
         },
         id: 'abc123',
         lastActive: now,
+        ttlClock: now,
         queries: {
           oneHash: {
             type: 'client',
@@ -5258,6 +5333,7 @@ describe('view-syncer/cvr', () => {
             version: '1aa',
             replicaVersion: '120',
             lastActive: now,
+            ttlClock: now,
             clientSchema: null,
           },
         ],
@@ -5351,7 +5427,7 @@ describe('view-syncer/cvr', () => {
       const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
       updater.markDesiredQueriesAsInactive('fooClient', ['oneHash'], now);
 
-      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now);
+      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now, now);
       expect(updated.queries).toEqual({
         oneHash: {
           ast: {
@@ -5386,6 +5462,7 @@ describe('view-syncer/cvr', () => {
             version: '1aa',
             replicaVersion: '120',
             lastActive: now,
+            ttlClock: now,
             clientSchema: null,
           },
         ],
@@ -5454,49 +5531,50 @@ describe('view-syncer/cvr', () => {
       );
       const cvr = await cvrStore.load(lc, LAST_CONNECT);
       expect(cvr).toMatchInlineSnapshot(`
-          {
-            "clientSchema": null,
-            "clients": {
-              "fooClient": {
-                "desiredQueryIDs": [
-                  "oneHash",
-                ],
-                "id": "fooClient",
-              },
+        {
+          "clientSchema": null,
+          "clients": {
+            "fooClient": {
+              "desiredQueryIDs": [
+                "oneHash",
+              ],
+              "id": "fooClient",
             },
-            "id": "abc123",
-            "lastActive": 1742256000000,
-            "queries": {
-              "oneHash": {
-                "ast": {
-                  "table": "issues",
-                },
-                "clientState": {
-                  "fooClient": {
-                    "inactivatedAt": undefined,
-                    "ttl": -1,
-                    "version": {
-                      "minorVersion": 1,
-                      "stateVersion": "1a9",
-                    },
+          },
+          "id": "abc123",
+          "lastActive": 1742256000000,
+          "queries": {
+            "oneHash": {
+              "ast": {
+                "table": "issues",
+              },
+              "clientState": {
+                "fooClient": {
+                  "inactivatedAt": undefined,
+                  "ttl": -1,
+                  "version": {
+                    "minorVersion": 1,
+                    "stateVersion": "1a9",
                   },
                 },
-                "id": "oneHash",
-                "patchVersion": undefined,
-                "transformationHash": "oneHashTransformed",
-                "transformationVersion": {
-                  "minorVersion": 1,
-                  "stateVersion": "1a9",
-                },
-                "type": "client",
               },
+              "id": "oneHash",
+              "patchVersion": undefined,
+              "transformationHash": "oneHashTransformed",
+              "transformationVersion": {
+                "minorVersion": 1,
+                "stateVersion": "1a9",
+              },
+              "type": "client",
             },
-            "replicaVersion": "120",
-            "version": {
-              "stateVersion": "1aa",
-            },
-          }
-        `);
+          },
+          "replicaVersion": "120",
+          "ttlClock": 1742256000000,
+          "version": {
+            "stateVersion": "1aa",
+          },
+        }
+      `);
 
       const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
       expect(
@@ -5518,7 +5596,7 @@ describe('view-syncer/cvr', () => {
         ]
       `);
 
-      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now);
+      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now, now);
       expect(updated).toEqual({
         clients: {
           fooClient: {
@@ -5528,6 +5606,7 @@ describe('view-syncer/cvr', () => {
         },
         id: 'abc123',
         lastActive: now,
+        ttlClock: now,
         queries: {
           oneHash: {
             type: 'client',
@@ -5573,6 +5652,7 @@ describe('view-syncer/cvr', () => {
             version: '1aa',
             replicaVersion: '120',
             lastActive: now,
+            ttlClock: now,
             clientSchema: null,
           },
         ],
@@ -5662,7 +5742,7 @@ describe('view-syncer/cvr', () => {
           },
         ]
       `);
-      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now);
+      const {cvr: updated} = await updater.flush(lc, LAST_CONNECT, now, now);
       expect(
         (updated.queries.oneHash as ClientQueryRecord).clientState.fooClient,
       ).toMatchInlineSnapshot(`
@@ -5687,6 +5767,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -5799,75 +5880,78 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
+    const now = Date.now();
     const {cvr: updated, flushed} = await updater.flush(
       lc,
       LAST_CONNECT,
-      Date.now(),
+      now,
+      now,
     );
     expect(updated).toMatchInlineSnapshot(`
-        {
-          "clientSchema": null,
-          "clients": {
-            "client-a": {
-              "desiredQueryIDs": [
-                "oneHash",
-              ],
-              "id": "client-a",
-            },
-            "client-c": {
-              "desiredQueryIDs": [
-                "oneHash",
-              ],
-              "id": "client-c",
-            },
+      {
+        "clientSchema": null,
+        "clients": {
+          "client-a": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-a",
           },
-          "id": "abc123",
-          "lastActive": 1709683200000,
-          "queries": {
-            "oneHash": {
-              "ast": {
-                "table": "issues",
-              },
-              "clientState": {
-                "client-a": {
-                  "inactivatedAt": undefined,
-                  "ttl": -1,
-                  "version": {
-                    "minorVersion": 1,
-                    "stateVersion": "1a9",
-                  },
-                },
-                "client-b": {
-                  "inactivatedAt": 1709683200000,
-                  "ttl": -1,
-                  "version": {
-                    "minorVersion": 1,
-                    "stateVersion": "1aa",
-                  },
-                },
-                "client-c": {
-                  "inactivatedAt": undefined,
-                  "ttl": -1,
-                  "version": {
-                    "minorVersion": 1,
-                    "stateVersion": "1a9",
-                  },
+          "client-c": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-c",
+          },
+        },
+        "id": "abc123",
+        "lastActive": 1709683200000,
+        "queries": {
+          "oneHash": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientState": {
+              "client-a": {
+                "inactivatedAt": undefined,
+                "ttl": -1,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
                 },
               },
-              "id": "oneHash",
-              "patchVersion": undefined,
-              "transformationHash": undefined,
-              "transformationVersion": undefined,
-              "type": "client",
+              "client-b": {
+                "inactivatedAt": 1709683200000,
+                "ttl": -1,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1aa",
+                },
+              },
+              "client-c": {
+                "inactivatedAt": undefined,
+                "ttl": -1,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
+                },
+              },
             },
+            "id": "oneHash",
+            "patchVersion": undefined,
+            "transformationHash": undefined,
+            "transformationVersion": undefined,
+            "type": "client",
           },
-          "replicaVersion": "120",
-          "version": {
-            "minorVersion": 1,
-            "stateVersion": "1aa",
-          },
-        }
-      `);
+        },
+        "replicaVersion": "120",
+        "ttlClock": 1709683200000,
+        "version": {
+          "minorVersion": 1,
+          "stateVersion": "1aa",
+        },
+      }
+    `);
     expect(flushed).toMatchInlineSnapshot(`
       {
         "clients": 1,
@@ -5929,6 +6013,7 @@ describe('view-syncer/cvr', () => {
             "lastActive": 1709683200000,
             "owner": "my-task",
             "replicaVersion": "120",
+            "ttlClock": 1709683200000,
             "version": "1aa:01",
           },
         ],
@@ -5988,6 +6073,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
 
@@ -5996,6 +6082,7 @@ describe('view-syncer/cvr', () => {
           version: '1aa',
           replicaVersion: '120',
           lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: Date.UTC(2024, 3, 23),
           clientSchema: null,
         },
       ],
@@ -6121,60 +6208,61 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
 
     expect(cvr).toMatchInlineSnapshot(`
-        {
-          "clientSchema": null,
-          "clients": {
-            "client-a": {
-              "desiredQueryIDs": [
-                "oneHash",
-              ],
-              "id": "client-a",
-            },
-            "client-c": {
-              "desiredQueryIDs": [
-                "oneHash",
-              ],
-              "id": "client-c",
-            },
+      {
+        "clientSchema": null,
+        "clients": {
+          "client-a": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-a",
           },
-          "id": "abc123",
-          "lastActive": 1713830400000,
-          "queries": {
-            "oneHash": {
-              "ast": {
-                "table": "issues",
-              },
-              "clientState": {
-                "client-a": {
-                  "inactivatedAt": undefined,
-                  "ttl": -1,
-                  "version": {
-                    "minorVersion": 1,
-                    "stateVersion": "1a9",
-                  },
-                },
-                "client-c": {
-                  "inactivatedAt": undefined,
-                  "ttl": -1,
-                  "version": {
-                    "minorVersion": 1,
-                    "stateVersion": "1a9",
-                  },
+          "client-c": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-c",
+          },
+        },
+        "id": "abc123",
+        "lastActive": 1713830400000,
+        "queries": {
+          "oneHash": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientState": {
+              "client-a": {
+                "inactivatedAt": undefined,
+                "ttl": -1,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
                 },
               },
-              "id": "oneHash",
-              "patchVersion": undefined,
-              "transformationHash": undefined,
-              "transformationVersion": undefined,
-              "type": "client",
+              "client-c": {
+                "inactivatedAt": undefined,
+                "ttl": -1,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
+                },
+              },
             },
+            "id": "oneHash",
+            "patchVersion": undefined,
+            "transformationHash": undefined,
+            "transformationVersion": undefined,
+            "type": "client",
           },
-          "replicaVersion": "120",
-          "version": {
-            "stateVersion": "1aa",
-          },
-        }
-      `);
+        },
+        "replicaVersion": "120",
+        "ttlClock": 1713830400000,
+        "version": {
+          "stateVersion": "1aa",
+        },
+      }
+    `);
 
     const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
@@ -6184,6 +6272,7 @@ describe('view-syncer/cvr', () => {
     const {cvr: updated} = await updater.flush(
       lc,
       LAST_CONNECT,
+      Date.UTC(2024, 3, 23, 1),
       Date.UTC(2024, 3, 23, 1),
     );
 
@@ -6236,6 +6325,7 @@ describe('view-syncer/cvr', () => {
             "lastActive": 1713830400000,
             "owner": null,
             "replicaVersion": "120",
+            "ttlClock": 1713830400000,
             "version": "1aa",
           },
           {
@@ -6245,6 +6335,7 @@ describe('view-syncer/cvr', () => {
             "lastActive": 1713834000000,
             "owner": "my-task",
             "replicaVersion": "120",
+            "ttlClock": 1713834000000,
             "version": "1aa",
           },
         ],
@@ -6336,60 +6427,61 @@ describe('view-syncer/cvr', () => {
     `);
 
     expect(updated).toMatchInlineSnapshot(`
-              {
-                "clientSchema": null,
-                "clients": {
-                  "client-a": {
-                    "desiredQueryIDs": [
-                      "oneHash",
-                    ],
-                    "id": "client-a",
-                  },
-                  "client-c": {
-                    "desiredQueryIDs": [
-                      "oneHash",
-                    ],
-                    "id": "client-c",
-                  },
-                },
-                "id": "abc123",
-                "lastActive": 1713834000000,
-                "queries": {
-                  "oneHash": {
-                    "ast": {
-                      "table": "issues",
-                    },
-                    "clientState": {
-                      "client-a": {
-                        "inactivatedAt": undefined,
-                        "ttl": -1,
-                        "version": {
-                          "minorVersion": 1,
-                          "stateVersion": "1a9",
-                        },
-                      },
-                      "client-c": {
-                        "inactivatedAt": undefined,
-                        "ttl": -1,
-                        "version": {
-                          "minorVersion": 1,
-                          "stateVersion": "1a9",
-                        },
-                      },
-                    },
-                    "id": "oneHash",
-                    "patchVersion": undefined,
-                    "transformationHash": undefined,
-                    "transformationVersion": undefined,
-                    "type": "client",
-                  },
-                },
-                "replicaVersion": "120",
+      {
+        "clientSchema": null,
+        "clients": {
+          "client-a": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-a",
+          },
+          "client-c": {
+            "desiredQueryIDs": [
+              "oneHash",
+            ],
+            "id": "client-c",
+          },
+        },
+        "id": "abc123",
+        "lastActive": 1713834000000,
+        "queries": {
+          "oneHash": {
+            "ast": {
+              "table": "issues",
+            },
+            "clientState": {
+              "client-a": {
+                "inactivatedAt": undefined,
+                "ttl": -1,
                 "version": {
-                  "stateVersion": "1aa",
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
                 },
-              }
-            `);
+              },
+              "client-c": {
+                "inactivatedAt": undefined,
+                "ttl": -1,
+                "version": {
+                  "minorVersion": 1,
+                  "stateVersion": "1a9",
+                },
+              },
+            },
+            "id": "oneHash",
+            "patchVersion": undefined,
+            "transformationHash": undefined,
+            "transformationVersion": undefined,
+            "type": "client",
+          },
+        },
+        "replicaVersion": "120",
+        "ttlClock": 1713834000000,
+        "version": {
+          "stateVersion": "1aa",
+        },
+      }
+    `);
 
     {
       const cvr = await cvrStore.load(lc, LAST_CONNECT);
@@ -6399,6 +6491,7 @@ describe('view-syncer/cvr', () => {
       const {cvr: updated2} = await updater.flush(
         lc,
         LAST_CONNECT,
+        Date.UTC(2024, 3, 23, 1),
         Date.UTC(2024, 3, 23, 1),
       );
 
@@ -6444,6 +6537,7 @@ describe('view-syncer/cvr', () => {
               "lastActive": 1713834000000,
               "owner": "my-task",
               "replicaVersion": "120",
+              "ttlClock": 1713834000000,
               "version": "1aa",
             },
           ],
@@ -6494,5 +6588,120 @@ describe('view-syncer/cvr', () => {
         }
       `);
     }
+  });
+
+  test('ttlClock only updates when we have meaningful flushes', async () => {
+    const t0 = Date.UTC(2024, 5, 23);
+    vi.setSystemTime(t0);
+
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1aa',
+          replicaVersion: '120',
+          lastActive: t0,
+          ttlClock: t0,
+          clientSchema: null,
+        },
+      ],
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'client-a',
+        },
+      ],
+      queries: [],
+      desires: [],
+      rows: [],
+    };
+
+    await setInitialState(db, initialState);
+
+    const cvrStore = new CVRStore(
+      lc,
+      db,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, t0);
+    expect(cvr).toEqual({
+      clientSchema: null,
+      clients: {
+        'client-a': {
+          desiredQueryIDs: [],
+          id: 'client-a',
+        },
+      },
+      id: 'abc123',
+      lastActive: t0,
+      queries: {},
+      replicaVersion: '120',
+      ttlClock: t0,
+      version: {
+        stateVersion: '1aa',
+      },
+    });
+
+    // let an hour pass...
+    const t1 = t0 + 60 * 60 * 1000;
+    vi.setSystemTime(t1);
+    cvr.lastActive = t1;
+    cvr.ttlClock = t1;
+
+    const query = {
+      id: 'q1',
+      clientState: {},
+      type: 'client',
+      ast: {table: 'issues'},
+    } satisfies ClientQueryRecord;
+
+    cvrStore.putQuery(query);
+
+    await cvrStore.flush(
+      {
+        stateVersion: '1aa',
+      },
+      cvr,
+      t1,
+    );
+
+    const cvr2 = await cvrStore.load(lc, t1);
+    expect(cvr2).toEqual({
+      clientSchema: null,
+      clients: {
+        'client-a': {
+          desiredQueryIDs: [],
+          id: 'client-a',
+        },
+      },
+      id: 'abc123',
+      lastActive: t1,
+      queries: {
+        q1: query,
+      },
+      replicaVersion: '120',
+      ttlClock: t1,
+      version: {
+        stateVersion: '1aa',
+      },
+    });
+
+    // Flush again, but no changes.
+    const t2 = t1 + 60 * 60 * 1000;
+    vi.setSystemTime(t2);
+    cvr.lastActive = t2;
+    cvr.ttlClock = t2;
+    await cvrStore.flush(
+      {
+        stateVersion: '1aa',
+      },
+      cvr,
+      t2,
+    );
+    const cvr3 = await cvrStore.load(lc, t2);
+    expect(cvr3).toEqual(cvr2);
   });
 });

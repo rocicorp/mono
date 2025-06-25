@@ -1,5 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {
+  stringify,
+  type JSONObject,
+} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {
   deepEqual,
@@ -17,10 +21,6 @@ import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts'
 import {compareTTL} from '../../../../zql/src/query/ttl.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
-import {
-  stringify,
-  type JSONObject,
-} from '../../../../shared/src/bigint-json.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
@@ -54,6 +54,7 @@ export type CVR = {
   id: string;
   version: CVRVersion;
   lastActive: number;
+  ttlClock: number;
   replicaVersion: string | null;
   clients: Record<string, ClientRecord>;
   queries: Record<string, QueryRecord>;
@@ -66,6 +67,7 @@ export type CVRSnapshot = {
   readonly id: string;
   readonly version: CVRVersion;
   readonly lastActive: number;
+  readonly ttlClock: number;
   readonly replicaVersion: string | null;
   readonly clients: Readonly<Record<string, ClientRecord>>;
   readonly queries: Readonly<Record<string, QueryRecord>>;
@@ -134,13 +136,15 @@ export class CVRUpdater {
   async flush(
     lc: LogContext,
     lastConnectTime: number,
-    lastActive = Date.now(),
+    lastActive: number,
+    ttlClock: number,
   ): Promise<{
     cvr: CVRSnapshot;
     flushed: CVRFlushStats | false;
   }> {
     const start = performance.now();
 
+    this._cvr.ttlClock = ttlClock;
     this._cvr.lastActive = lastActive;
     const flushed = await this._cvrStore.flush(
       this._orig.version,
@@ -443,10 +447,8 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     this._cvrStore.deleteClientGroup(clientGroupID);
   }
 
-  flush(lc: LogContext, lastConnectTime: number, lastActive = Date.now()) {
-    // TODO: Add cleanup of no-longer-desired got queries and constituent rows.
-    return super.flush(lc, lastConnectTime, lastActive);
-  }
+  // TODO: Add cleanup of no-longer-desired got queries and constituent rows in
+  // flush.
 }
 
 type Hash = string;

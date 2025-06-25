@@ -3507,12 +3507,13 @@ describe('view-syncer/service', () => {
       serviceID,
       ON_FAILURE,
     );
+    const now = Date.now();
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(lc, Date.now()),
+      await cvrStore.load(lc, now),
       '07',
       REPLICA_VERSION,
-    ).flush(lc, Date.now(), Date.now());
+    ).flush(lc, now, now, now);
 
     // Connect the client.
     const client = connect(SYNC_CONTEXT, [
@@ -3617,12 +3618,13 @@ describe('view-syncer/service', () => {
       serviceID,
       ON_FAILURE,
     );
+    const now = Date.now();
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(lc, Date.now()),
+      await cvrStore.load(lc, now),
       '07',
       '1' + REPLICA_VERSION, // CVR is at a newer replica version.
-    ).flush(lc, Date.now(), Date.now());
+    ).flush(lc, now, now, now);
 
     // Connect the client.
     const client = connect(SYNC_CONTEXT, [
@@ -3673,13 +3675,14 @@ describe('view-syncer/service', () => {
       serviceID,
       ON_FAILURE,
     );
-    const otherTaskOwnershipTime = Date.now() - 600_000;
+    const now = Date.now();
+    const otherTaskOwnershipTime = now - 600_000;
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, otherTaskOwnershipTime),
       '07',
       REPLICA_VERSION, // CVR is at a newer replica version.
-    ).flush(lc, otherTaskOwnershipTime, Date.now());
+    ).flush(lc, otherTaskOwnershipTime, now, now);
 
     expect(await getCVROwner()).toBe('some-other-task-id');
 
@@ -3703,13 +3706,14 @@ describe('view-syncer/service', () => {
       serviceID,
       ON_FAILURE,
     );
-    const otherTaskOwnershipTime = Date.now();
+    const now = Date.now();
+    const otherTaskOwnershipTime = now;
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, otherTaskOwnershipTime),
       '07',
       REPLICA_VERSION, // CVR is at a newer replica version.
-    ).flush(lc, otherTaskOwnershipTime, Date.now());
+    ).flush(lc, otherTaskOwnershipTime, now, now);
 
     expect(await getCVROwner()).toBe('some-other-task-id');
 
@@ -3734,12 +3738,13 @@ describe('view-syncer/service', () => {
       serviceID,
       ON_FAILURE,
     );
+    const now = Date.now();
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(lc, Date.now()),
+      await cvrStore.load(lc, now),
       '07',
       REPLICA_VERSION,
-    ).flush(lc, Date.now(), Date.now());
+    ).flush(lc, now, now, now);
 
     // Connect the client with a base cookie from the future.
     const client = connect({...SYNC_CONTEXT, baseCookie: '08'}, [
@@ -6875,6 +6880,302 @@ describe('view-syncer/service', () => {
         ]
       `);
     });
+  });
+
+  describe('ttlClock', () => {
+    test('one client', async () => {
+      const ttl = 1000;
+      vi.setSystemTime(Date.UTC(2025, 5, 4, 24));
+      const t0 = Date.now();
+
+      // Connect a client with a TTL.
+      const {queue: client, source} = connectWithQueueAndSource(SYNC_CONTEXT, [
+        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
+      ]);
+
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client); // config
+      await nextPoke(client); // hydration
+
+      // Before closing, check initial values.
+      const result = await cvrDB`
+        SELECT "ttlClock", "lastActive"
+        FROM "this_app_2/cvr".instances
+        WHERE "clientGroupID" = ${serviceID}`;
+      expect(result[0].ttlClock).toBe(t0);
+      expect(result[0].lastActive).toBe(t0);
+
+      {
+        vi.setSystemTime(Date.now() + 500);
+        const t1 = Date.now();
+
+        // Close the connection.
+        source.cancel();
+
+        await sleep(10);
+        vi.setSystemTime(Date.now() + 10);
+
+        // Before closing, check initial values.
+        const result = await cvrDB`
+          SELECT "ttlClock", "lastActive"
+          FROM "this_app_2/cvr".instances
+          WHERE "clientGroupID" = ${serviceID}`;
+        expect(result).toEqual([
+          {
+            ttlClock: t1,
+            lastActive: t1,
+          },
+        ]);
+      }
+    });
+
+    test('two clients', async () => {
+      const ttl = 1000;
+      vi.setSystemTime(Date.UTC(2025, 5, 4, 24));
+      const t0 = Date.now();
+
+      // Connect two clients with a TTL.
+      const ctx1 = {...SYNC_CONTEXT, clientID: 'foo', wsID: 'ws1'};
+      const ctx2 = {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'};
+      const {queue: client1, source: source1} = connectWithQueueAndSource(
+        ctx1,
+        [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl}],
+      );
+      const {queue: client2, source: source2} = connectWithQueueAndSource(
+        ctx2,
+        [{op: 'put', hash: 'query-hash2', ast: USERS_QUERY, ttl}],
+      );
+
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client1); // config
+      await nextPoke(client1); // hydration
+      await nextPoke(client2); // config
+      await nextPoke(client2); // hydration
+
+      // Before closing, check initial values.
+      let result = await cvrDB`
+        SELECT "ttlClock", "lastActive"
+        FROM "this_app_2/cvr".instances
+        WHERE "clientGroupID" = ${serviceID}`;
+      expect(result).toEqual([{ttlClock: t0, lastActive: t0}]);
+
+      vi.setSystemTime(Date.now() + 500);
+      // Close the first connection.
+      source1.cancel();
+      await sleep(10);
+      vi.setSystemTime(Date.now() + 10);
+
+      result = await cvrDB`
+          SELECT "ttlClock", "lastActive"
+          FROM "this_app_2/cvr".instances
+          WHERE "clientGroupID" = ${serviceID}`;
+      expect(result).toEqual([{ttlClock: t0, lastActive: t0}]);
+
+      // Move time forward and close the second connection.
+      vi.setSystemTime(Date.now() + 500);
+      const t2 = Date.now();
+
+      source2.cancel();
+      await sleep(10);
+      vi.setSystemTime(Date.now() + 10);
+
+      result = await cvrDB`
+          SELECT "ttlClock", "lastActive"
+          FROM "this_app_2/cvr".instances
+          WHERE "clientGroupID" = ${serviceID}`;
+      expect(result).toEqual([{ttlClock: t2, lastActive: t2}]);
+    });
+
+    test('one client - disconnect and reconnect', async () => {
+      const ttl = 1000;
+      vi.setSystemTime(Date.UTC(2025, 5, 4, 24));
+      const t0 = Date.now();
+
+      // Connect a client with a TTL.
+      const {queue: client, source} = connectWithQueueAndSource(SYNC_CONTEXT, [
+        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
+      ]);
+
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client); // config
+      await nextPoke(client); // hydration
+
+      // Initial values.
+      let result = await cvrDB`
+        SELECT "ttlClock", "lastActive"
+        FROM "this_app_2/cvr".instances
+        WHERE "clientGroupID" = ${serviceID}`;
+      expect(result[0].ttlClock).toBe(t0);
+      expect(result[0].lastActive).toBe(t0);
+
+      // Disconnect.
+      vi.setSystemTime(Date.now() + 500);
+      const t1 = Date.now();
+      source.cancel();
+      await sleep(10);
+
+      result = await cvrDB`
+        SELECT "ttlClock", "lastActive"
+        FROM "this_app_2/cvr".instances
+        WHERE "clientGroupID" = ${serviceID}`;
+      expect(result[0].ttlClock).toBe(t1);
+      expect(result[0].lastActive).toBe(t1);
+
+      // Wait some time while disconnected (should not advance ttlClock).
+      vi.setSystemTime(Date.now() + 1000);
+      await sleep(100);
+
+      // Reconnect.
+      const client2 = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
+      ]);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client2);
+
+      // After reconnect, ttlClock and lastActive have not been updated yet.
+      const t2 = Date.now();
+      result = await cvrDB`
+          SELECT "ttlClock", "lastActive"
+          FROM "this_app_2/cvr".instances
+          WHERE "clientGroupID" = ${serviceID}`;
+      expect(result[0].ttlClock).toBe(t1);
+      expect(result[0].lastActive).toBe(t1);
+
+      // Make a change.
+      replicator.processTransaction(
+        '123',
+        messages.update('issues', {
+          id: '1',
+          title: 'new title',
+          owner: 100,
+          parent: null,
+          big: 9007199254740991n,
+        }),
+      );
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client2);
+
+      result = await cvrDB`
+          SELECT "ttlClock", "lastActive"
+          FROM "this_app_2/cvr".instances
+          WHERE "clientGroupID" = ${serviceID}`;
+      expect(result[0].ttlClock).toBe(t1);
+      expect(result[0].lastActive).toBe(t2);
+    });
+  });
+
+  test('Query with ttl 10 minutes, disconnect after 5m, reconnect after an hour, should expire after 5 more minutes ', async () => {
+    const ttl = 10 * 60 * 1000; // 10 minutes
+    vi.setSystemTime(Date.UTC(2025, 5, 4, 12, 0, 0));
+    const t0 = Date.now();
+
+    // Connect a client with a TTL.
+    const {queue: client, source} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
+    ]);
+
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client); // config
+    await nextPoke(client); // hydration
+
+    // Advance 5 minutes, then remove the query.
+    const t1 = t0 + 5 * 60 * 1000;
+    vi.setSystemTime(t1);
+    await vs.changeDesiredQueries(SYNC_CONTEXT, [
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
+      },
+    ]);
+    // Should get a desiredQueriesPatches poke, but not expired yet.
+    await nextPokeParts(client);
+
+    await expectNoPokes(client);
+
+    // Advance another 5 minutes (total 10m), then disconnect.
+    const t2 = t1 + 5 * 60 * 1000;
+    vi.setSystemTime(t2);
+    source.cancel();
+    await sleep(10);
+
+    expect(
+      await cvrDB`
+      SELECT "ttlClock", "lastActive"
+      FROM "this_app_2/cvr".instances
+      WHERE "clientGroupID" = ${serviceID}
+    `,
+    ).toEqual([
+      {
+        ttlClock: t2,
+        lastActive: t2,
+      },
+    ]);
+
+    // Wait an hour while disconnected.
+    const t3 = t2 + 60 * 60 * 1000;
+    vi.setSystemTime(t3);
+    await sleep(10);
+    setTimeoutFn.mockClear();
+
+    // Reconnect. The query should still be there but should expire after 5 more minutes.
+    const {queue: client2} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+    stateChanges.push({state: 'version-ready'});
+
+    expect(
+      await cvrDB`
+      SELECT "ttlClock", "lastActive"
+      FROM "this_app_2/cvr".instances
+      WHERE "clientGroupID" = ${serviceID}
+    `,
+    ).toEqual([
+      {
+        ttlClock: t2,
+        lastActive: t2,
+      },
+    ]);
+
+    await nextPokeParts(client2);
+    await expectNoPokes(client2);
+
+    expect(
+      await cvrDB`
+      SELECT "ttlClock", "lastActive"
+      FROM "this_app_2/cvr".instances
+      WHERE "clientGroupID" = ${serviceID}
+    `,
+    ).toEqual([
+      {
+        ttlClock: t2,
+        lastActive: t2,
+      },
+    ]);
+
+    // Advance 5 minutes
+    callNextSetTimeout(5 * 60 * 1000);
+
+    expect((await nextPokeParts(client2))[0].gotQueriesPatch)
+      .toMatchInlineSnapshot(`
+        [
+          {
+            "hash": "query-hash1",
+            "op": "del",
+          },
+        ]
+      `);
+    await expectNoPokes(client2);
+
+    expect(
+      await cvrDB`
+      SELECT "ttlClock", "lastActive"
+      FROM "this_app_2/cvr".instances
+      WHERE "clientGroupID" = ${serviceID}
+    `,
+    ).toEqual([
+      {
+        ttlClock: t2 + 300_000,
+        lastActive: t3 + 300_000,
+      },
+    ]);
   });
 });
 
