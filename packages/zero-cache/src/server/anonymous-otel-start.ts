@@ -8,7 +8,7 @@ import {platform} from 'os';
 import {h64} from '../../../shared/src/hash.js';
 import type {LogContext} from '@rocicorp/logger';
 import packageJson from '../../package.json' with {type: 'json'};
-import {getZeroConfig} from '../config/zero-config.js';
+import {getZeroConfig, type ZeroConfig} from '../config/zero-config.js';
 
 const ROCICORP_TELEMETRY_TOKEN =
   process.env.ROCICORP_TELEMETRY_TOKEN || 'anonymous-token';
@@ -25,6 +25,7 @@ class AnonymousTelemetryManager {
   #activeQueries = new Map<string, Set<string>>();
   #cvrSize = 0;
   #lc: LogContext | undefined;
+  #config: ZeroConfig | undefined;
 
   private constructor() {}
 
@@ -35,20 +36,22 @@ class AnonymousTelemetryManager {
     return AnonymousTelemetryManager.#instance;
   }
 
-  start(lc?: LogContext) {
-    let config;
-    try {
-      config = getZeroConfig();
-    } catch (e) {
-      // Gracefully handle cases where config cannot be parsed (e.g., in test environments)
-      this.#lc?.debug?.('Anonymous telemetry disabled: unable to parse config', e);
-      return;
+  start(lc?: LogContext, config?: ZeroConfig) {
+    if (!config) {
+      try {
+        config = getZeroConfig();
+      } catch (e) {
+        // Gracefully handle cases where config cannot be parsed (e.g., in test environments)
+        this.#lc?.debug?.('Anonymous telemetry disabled: unable to parse config', e);
+        return;
+      }
     }
     
     if (this.#started || !config.enableUsageAnalytics) {
       return;
     }
     this.#lc = lc;
+    this.#config = config;
 
     const resource = resourceFromAttributes(this.#getAttributes());
     const metricReader = new PeriodicExportingMetricReader({
@@ -190,11 +193,11 @@ class AnonymousTelemetryManager {
 
   #getAttributes() {
     return {
-      'zero.app.id': h64(process.env.ZERO_UPSTREAM_DB || 'unknown').toString(),
+      'zero.app.id': h64(this.#config?.upstream.db || 'unknown').toString(),
       'zero.machine.os': platform(),
       'zero.telemetry.type': 'anonymous',
       'zero.infra.platform': this.#getPlatform(),
-      'zero.version': process.env.ZERO_SERVER_VERSION ?? packageJson.version,
+      'zero.version': this.#config?.serverVersion ?? packageJson.version,
     };
   }
 
@@ -223,7 +226,7 @@ class AnonymousTelemetryManager {
 
 const manager = () => AnonymousTelemetryManager.getInstance();
 
-export const startAnonymousTelemetry = (lc?: LogContext) => manager().start(lc);
+export const startAnonymousTelemetry = (lc?: LogContext, config?: ZeroConfig) => manager().start(lc, config);
 export const recordMutation = () => manager().recordMutation();
 export const recordRowsSynced = (count: number) =>
   manager().recordRowsSynced(count);
