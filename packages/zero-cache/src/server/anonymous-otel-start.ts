@@ -3,7 +3,7 @@ import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
 import {PeriodicExportingMetricReader} from '@opentelemetry/sdk-metrics';
 import {MeterProvider} from '@opentelemetry/sdk-metrics';
 import {resourceFromAttributes} from '@opentelemetry/resources';
-import type {ObservableResult, Histogram} from '@opentelemetry/api';
+import type {ObservableResult} from '@opentelemetry/api';
 import {platform} from 'os';
 import {h64} from '../../../shared/src/hash.js';
 import type {LogContext} from '@rocicorp/logger';
@@ -25,8 +25,6 @@ class AnonymousTelemetryManager {
   #activeQueries = new Map<string, Set<string>>();
   #cvrSize = 0;
   #lc: LogContext | undefined;
-  #changeDesiredQueriesHistogram?: Histogram;
-  #replicationEventHistogram?: Histogram;
 
   private constructor() {}
 
@@ -105,22 +103,6 @@ class AnonymousTelemetryManager {
       },
     );
 
-    // Histograms
-    this.#changeDesiredQueriesHistogram = this.#meter.createHistogram(
-      'zero.change_desired_queries_duration',
-      {
-        description: 'Time taken to process changeDesiredQueries operations',
-        unit: 'milliseconds',
-      },
-    );
-    this.#replicationEventHistogram = this.#meter.createHistogram(
-      'zero.replication_event_duration',
-      {
-        description: 'Time taken to process replication events from upstream',
-        unit: 'milliseconds',
-      },
-    );
-
     // Callbacks
     const attrs = this.#getAttributes();
     uptimeGauge.addCallback((result: ObservableResult) => {
@@ -159,17 +141,6 @@ class AnonymousTelemetryManager {
 
   recordRowsSynced(count: number) {
     this.#lastMinuteRowsSynced += count;
-  }
-
-  recordChangeDesiredQueriesTime(durationMs: number) {
-    this.#changeDesiredQueriesHistogram?.record(
-      durationMs,
-      this.#getAttributes(),
-    );
-  }
-
-  recordReplicationEventTime(durationMs: number) {
-    this.#replicationEventHistogram?.record(durationMs, this.#getAttributes());
   }
 
   addActiveQuery(clientGroupID: string, queryID: string) {
@@ -248,10 +219,6 @@ export const startAnonymousTelemetry = (lc?: LogContext) => manager().start(lc);
 export const recordMutation = () => manager().recordMutation();
 export const recordRowsSynced = (count: number) =>
   manager().recordRowsSynced(count);
-export const recordChangeDesiredQueriesTime = (durationMs: number) =>
-  manager().recordChangeDesiredQueriesTime(durationMs);
-export const recordReplicationEventTime = (durationMs: number) =>
-  manager().recordReplicationEventTime(durationMs);
 export const addActiveQuery = (clientGroupID: string, queryID: string) =>
   manager().addActiveQuery(clientGroupID, queryID);
 export const removeActiveQuery = (clientGroupID: string, queryID: string) =>
