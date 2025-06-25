@@ -439,6 +439,105 @@ describe('Anonymous Telemetry Integration Tests', () => {
         removeClientGroup('attr-test-group');
       }).not.toThrow();
     });
+
+    test('should include taskID in telemetry attributes', () => {
+      // Test that the telemetry system includes taskID in attributes
+      // We'll verify this by checking the existing mock calls
+
+      // Add some test data to trigger callbacks
+      addClientGroup('taskid-test-group-2');
+      addActiveQuery('taskid-test-group-2', 'test-query');
+      recordMutation();
+
+      // Get the callbacks that were registered
+      type CallbackFunction = (result: {
+        observe: (_value: number, attrs?: Record<string, unknown>) => void;
+      }) => void;
+
+      // Find a callback that includes attributes
+      let foundTaskIdInAttributes = false;
+
+      const callbacks = mockObservableGauge.addCallback.mock.calls.map(
+        (call: unknown[]) => call[0] as CallbackFunction,
+      );
+
+      // Mock the result object to capture attributes
+      const mockResult = {
+        observe: vi.fn((_value: number, attrs?: Record<string, unknown>) => {
+          if (attrs && attrs['zero.task.id']) {
+            foundTaskIdInAttributes = true;
+          }
+        }),
+      };
+
+      // Execute callbacks to see if any include taskID
+      callbacks.forEach((callback: CallbackFunction) => {
+        try {
+          callback(mockResult);
+        } catch (e) {
+          // Some callbacks might fail due to mocking, that's ok
+        }
+      });
+
+      // Since the singleton is already initialized, we can't easily test the new config
+      // But we can verify that taskID is part of the attribute structure
+      expect(foundTaskIdInAttributes).toBe(true);
+
+      // Clean up
+      removeActiveQuery('taskid-test-group-2', 'test-query');
+      removeClientGroup('taskid-test-group-2');
+    });
+
+    test('should use unknown taskID when not provided in config', () => {
+      const lc = createSilentLogContext();
+
+      // Mock config without taskID
+      const configWithoutTaskID = {
+        enableUsageAnalytics: true,
+        upstream: {
+          db: 'postgresql://test@localhost/test',
+        },
+        serverVersion: '1.0.0-test',
+        // taskID is undefined
+      } as Partial<ZeroConfig> as ZeroConfig;
+
+      // Start telemetry without taskID
+      startAnonymousTelemetry(lc, configWithoutTaskID);
+
+      // Add some test data to trigger callbacks
+      addClientGroup('no-taskid-test-group');
+      recordMutation();
+
+      // Get the callbacks that were registered
+      type CallbackFunction = (result: {
+        observe: (value: number, attrs?: object) => void;
+      }) => void;
+      const callbacks = mockObservableGauge.addCallback.mock.calls.map(
+        (call: [CallbackFunction]) => call[0],
+      );
+
+      // Mock the result object to capture attributes
+      const mockResult = {
+        observe: vi.fn(),
+      };
+
+      // Execute callbacks to verify attributes include default taskID
+      callbacks.forEach((callback: CallbackFunction) => {
+        callback(mockResult);
+      });
+
+      // Verify that taskID defaults to 'unknown'
+      expect(mockResult.observe).toHaveBeenCalledWith(
+        expect.any(Number),
+        expect.objectContaining({
+          'zero.task.id': 'unknown',
+          'zero.telemetry.type': 'anonymous',
+        }),
+      );
+
+      // Clean up
+      removeClientGroup('no-taskid-test-group');
+    });
   });
 
   describe('Singleton Behavior', () => {
@@ -469,7 +568,9 @@ describe('Anonymous Telemetry Integration Tests', () => {
       recordRowsSynced(100);
 
       // Get the callbacks that were registered
-      type CallbackFunction = (result: {observe: (value: number, attrs?: object) => void}) => void;
+      type CallbackFunction = (result: {
+        observe: (value: number, attrs?: object) => void;
+      }) => void;
       const callbacks = mockObservableGauge.addCallback.mock.calls.map(
         (call: [CallbackFunction]) => call[0],
       );
@@ -520,14 +621,14 @@ describe('Anonymous Telemetry Integration Tests', () => {
     test('should record rows synced with correct count', () => {
       const rowCount1 = 42;
       const rowCount2 = 15;
-      
+
       // Record multiple row sync operations
       recordRowsSynced(rowCount1);
       recordRowsSynced(rowCount2);
-      
+
       // Should not throw and values should be accumulated internally
       expect(() => recordRowsSynced(100)).not.toThrow();
-      
+
       // Test that the rows synced counter callback works correctly
       const rowsSyncedCallback = mockObservableCounter.addCallback.mock.calls
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -556,10 +657,10 @@ describe('Anonymous Telemetry Integration Tests', () => {
     test('should handle edge cases for recordRowsSynced', () => {
       // Test with zero rows
       expect(() => recordRowsSynced(0)).not.toThrow();
-      
+
       // Test with large numbers
       expect(() => recordRowsSynced(1000000)).not.toThrow();
-      
+
       // Test with negative numbers (though this shouldn't happen in practice)
       expect(() => recordRowsSynced(-1)).not.toThrow();
     });
@@ -735,7 +836,8 @@ describe('Anonymous Telemetry Integration Tests', () => {
           expect.any(Object),
         );
 
-        const firstMutationsValue = mockMutationsResult.observe.mock.calls[0][0];
+        const firstMutationsValue =
+          mockMutationsResult.observe.mock.calls[0][0];
         const firstRowsValue = mockRowsResult.observe.mock.calls[0][0];
 
         expect(firstMutationsValue).toBeGreaterThanOrEqual(2);
@@ -749,7 +851,8 @@ describe('Anonymous Telemetry Integration Tests', () => {
         mutationsCallback(mockMutationsResult);
         rowsCallback(mockRowsResult);
 
-        const secondMutationsValue = mockMutationsResult.observe.mock.calls[0][0];
+        const secondMutationsValue =
+          mockMutationsResult.observe.mock.calls[0][0];
         const secondRowsValue = mockRowsResult.observe.mock.calls[0][0];
 
         // Values should be reset to 0 after the first observation
