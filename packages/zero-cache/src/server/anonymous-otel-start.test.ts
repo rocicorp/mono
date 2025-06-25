@@ -52,6 +52,10 @@ describe('Anonymous Telemetry Integration Tests', () => {
     // Mock getZeroConfig to return default enabled state
     vi.mocked(getZeroConfig).mockReturnValue({
       enableUsageAnalytics: true,
+      upstream: {
+        db: 'postgresql://test@localhost/test',
+      },
+      serverVersion: '1.0.0-test',
       // Add other config properties as needed for tests
     } as Partial<ZeroConfig> as ZeroConfig);
 
