@@ -36,7 +36,15 @@ class AnonymousTelemetryManager {
   }
 
   start(lc?: LogContext) {
-    const config = getZeroConfig();
+    let config;
+    try {
+      config = getZeroConfig();
+    } catch (e) {
+      // Gracefully handle cases where config cannot be parsed (e.g., in test environments)
+      this.#lc?.debug?.('Anonymous telemetry disabled: unable to parse config', e);
+      return;
+    }
+    
     if (this.#started || !config.enableUsageAnalytics) {
       return;
     }
