@@ -42,11 +42,14 @@ class AnonymousTelemetryManager {
         config = getZeroConfig();
       } catch (e) {
         // Gracefully handle cases where config cannot be parsed (e.g., in test environments)
-        this.#lc?.debug?.('Anonymous telemetry disabled: unable to parse config', e);
+        this.#lc?.debug?.(
+          'Anonymous telemetry disabled: unable to parse config',
+          e,
+        );
         return;
       }
     }
-    
+
     if (this.#started || !config.enableUsageAnalytics) {
       return;
     }
@@ -198,6 +201,7 @@ class AnonymousTelemetryManager {
       'zero.telemetry.type': 'anonymous',
       'zero.infra.platform': this.#getPlatform(),
       'zero.version': this.#config?.serverVersion ?? packageJson.version,
+      'zero.task.id': this.#config?.taskID || 'unknown',
     };
   }
 
@@ -226,7 +230,8 @@ class AnonymousTelemetryManager {
 
 const manager = () => AnonymousTelemetryManager.getInstance();
 
-export const startAnonymousTelemetry = (lc?: LogContext, config?: ZeroConfig) => manager().start(lc, config);
+export const startAnonymousTelemetry = (lc?: LogContext, config?: ZeroConfig) =>
+  manager().start(lc, config);
 export const recordMutation = () => manager().recordMutation();
 export const recordRowsSynced = (count: number) =>
   manager().recordRowsSynced(count);
