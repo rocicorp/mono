@@ -42,7 +42,10 @@ import {
   type RowID,
   type RowRecord,
 } from './schema/types.ts';
-import {addActiveQuery, removeActiveQuery} from '../../server/anonymous-otel-start.ts';
+import {
+  addActiveQuery,
+  removeActiveQuery,
+} from '../../server/anonymous-otel-start.ts';
 
 export type RowUpdate = {
   version?: string; // Undefined for an unref.
