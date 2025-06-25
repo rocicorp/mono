@@ -48,7 +48,7 @@ export default async function runWorker(
   const lc = createLogContext(config, {worker: 'dispatcher'});
 
   // Start anonymous telemetry
-  startAnonymousTelemetry(lc);
+  startAnonymousTelemetry(lc, config);
 
   const processes = new ProcessManager(lc, parent);
 
