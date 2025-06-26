@@ -175,6 +175,9 @@ export async function processMutation(
   lc = lc.withContext('processMutation');
   lc.debug?.('Process mutation start', mutation);
 
+  // Record mutation processing attempt for telemetry (regardless of success/failure)
+  recordMutation();
+
   let result: MutationError | undefined;
 
   const start = Date.now();
@@ -242,12 +245,11 @@ export async function processMutation(
         if (errorMode) {
           lc.debug?.('Ran mutation successfully in error mode');
         }
-        // Record successful mutation for telemetry
-        recordMutation();
         break;
       } catch (e) {
         if (e instanceof MutationAlreadyProcessedError) {
           lc.debug?.(e.message);
+          // Don't double-count already processed mutations, but they were counted above
           return undefined;
         }
         if (
