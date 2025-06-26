@@ -1,6 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import {BroadcastChannel} from '../../../shared/src/broadcast-channel.ts';
 import {getBrowserGlobal} from '../../../shared/src/browser-env.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
 
 /**
  * The prefix for the keys used for the locks and the broadcast channels.
@@ -74,6 +75,8 @@ class AllMockLocks extends Set<{
   }
 }
 
+const USE = false;
+
 const allMockLocks = new AllMockLocks();
 
 /**
@@ -107,6 +110,7 @@ export class ActiveClientsManager {
   readonly #lockManager = getBrowserGlobal('navigator')?.locks;
   readonly #signal: AbortSignal;
   readonly #unlisteners: (() => void)[] = [];
+  readonly #clientLockManager: ClientLockManager;
   #activeClients: Set<string> = new Set();
 
   /**
@@ -120,6 +124,11 @@ export class ActiveClientsManager {
     this.clientID = clientID;
     this.#signal = signal;
     this.#activeClients.add(clientID);
+
+    this.#clientLockManager = new NativeClientLockManager(
+      this.#lockManager!,
+      signal,
+    );
 
     const name = toLockName(clientGroupID, clientID);
 
@@ -145,28 +154,40 @@ export class ActiveClientsManager {
 
     let mockLock: {name: string; mode: 'exclusive'};
 
-    if (this.#lockManager) {
-      this.#lockManager
-        .request(name, {signal}, async () => {
-          await this.#resolver.promise;
-        })
+    if (USE) {
+      this.#clientLockManager
+        .request(name, 'exclusive', () => this.#resolver.promise)
         .catch(ignoreAbortError);
     } else {
-      mockLock = {name, mode: 'exclusive'};
-      allMockLocks.add(mockLock);
+      if (this.#lockManager) {
+        this.#lockManager
+          .request(name, {signal}, async () => {
+            await this.#resolver.promise;
+          })
+          .catch(ignoreAbortError);
+      } else {
+        mockLock = {name, mode: 'exclusive'};
+        allMockLocks.add(mockLock);
+      }
     }
 
     signal.addEventListener(
       'abort',
       () => {
-        if (!this.#lockManager) {
-          for (const unlisten of this.#unlisteners) {
-            unlisten();
+        if (USE) {
+          void this.#clientLockManager.release(name, () =>
+            this.#resolver.resolve(),
+          );
+        } else {
+          if (!this.#lockManager) {
+            for (const unlisten of this.#unlisteners) {
+              unlisten();
+            }
+            allMockLocks.delete(mockLock);
+            this.#unlisteners.length = 0;
           }
-          allMockLocks.delete(mockLock);
-          this.#unlisteners.length = 0;
+          this.#resolver.resolve();
         }
-        this.#resolver.resolve();
       },
       {once: true},
     );
@@ -192,23 +213,32 @@ export class ActiveClientsManager {
   async getActiveClients(): Promise<Set<string>> {
     const activeClients: Set<string> = new Set();
 
-    const add = (info: Iterable<LockInfo> | undefined) => {
-      for (const lock of info ?? []) {
-        if (lock.mode === 'exclusive') {
-          const client = fromLockName(lock.name);
-          if (client?.clientGroupID === this.clientGroupID) {
-            activeClients.add(client.clientID);
-          }
+    if (USE) {
+      for await (const lockName of this.#clientLockManager.queryExclusive()) {
+        const client = fromLockName(lockName);
+        if (client?.clientGroupID === this.clientGroupID) {
+          activeClients.add(client.clientID);
         }
       }
-    };
-
-    if (!this.#lockManager) {
-      add(allMockLocks);
     } else {
-      const snapshot = await this.#lockManager.query();
-      add(snapshot.held);
-      add(snapshot.pending);
+      const add = (info: Iterable<LockInfo> | undefined) => {
+        for (const lock of info ?? []) {
+          if (lock.mode === 'exclusive') {
+            const client = fromLockName(lock.name);
+            if (client?.clientGroupID === this.clientGroupID) {
+              activeClients.add(client.clientID);
+            }
+          }
+        }
+      };
+
+      if (!this.#lockManager) {
+        add(allMockLocks);
+      } else {
+        const snapshot = await this.#lockManager.query();
+        add(snapshot.held);
+        add(snapshot.pending);
+      }
     }
     return activeClients;
   }
@@ -221,27 +251,33 @@ export class ActiveClientsManager {
    */
   #addClient(clientID: string): void {
     const name = toLockName(this.clientGroupID, clientID);
-    if (this.#lockManager) {
-      this.#lockManager
-        .request(name, {mode: 'shared', signal: this.#signal}, () =>
-          this.#notifyClientInactivated(clientID),
-        )
+    if (USE) {
+      this.#clientLockManager
+        .request(name, 'shared', () => this.#notifyClientInactivated(clientID))
         .catch(ignoreAbortError);
     } else {
-      // For the mock locks we will add a listener that will notify us when the
-      // lock is deleted from the `allMockLocks` set.
-      const listener = (clientGroupID: string, clientID2: string) => {
-        if (
-          clientID === clientID2 &&
-          clientGroupID === this.clientGroupID &&
-          clientID2 !== this.clientID
-        ) {
-          unlisten();
-          this.#notifyClientInactivated(clientID);
-        }
-      };
-      const unlisten = allMockLocks.addListener(listener);
-      this.#unlisteners.push(unlisten);
+      if (this.#lockManager) {
+        this.#lockManager
+          .request(name, {mode: 'shared', signal: this.#signal}, () =>
+            this.#notifyClientInactivated(clientID),
+          )
+          .catch(ignoreAbortError);
+      } else {
+        // For the mock locks we will add a listener that will notify us when the
+        // lock is deleted from the `allMockLocks` set.
+        const listener = (clientGroupID: string, clientID2: string) => {
+          if (
+            clientID === clientID2 &&
+            clientGroupID === this.clientGroupID &&
+            clientID2 !== this.clientID
+          ) {
+            unlisten();
+            this.#notifyClientInactivated(clientID);
+          }
+        };
+        const unlisten = allMockLocks.addListener(listener);
+        this.#unlisteners.push(unlisten);
+      }
     }
   }
 
@@ -263,5 +299,95 @@ export class ActiveClientsManager {
     }
     this.#activeClients.add(clientID);
     this.#onChange();
+  }
+}
+
+interface ClientLockManager {
+  request(
+    name: string,
+    mode: 'exclusive' | 'shared',
+    fn: () => MaybePromise<void>,
+  ): Promise<void>;
+  release(name: string, fn: () => void): void;
+  queryExclusive(): AsyncIterable<string>;
+}
+
+class NativeClientLockManager implements ClientLockManager {
+  readonly #locks: LockManager;
+  readonly #signal: AbortSignal;
+
+  constructor(locks: LockManager, signal: AbortSignal) {
+    this.#locks = locks;
+    this.#signal = signal;
+  }
+
+  request(
+    name: string,
+    mode: 'exclusive' | 'shared',
+    fn: () => Promise<void>,
+  ): Promise<void> {
+    return this.#locks.request(name, {mode, signal: this.#signal}, fn);
+  }
+
+  release(_name: string, fn: () => void): void {
+    fn();
+  }
+
+  async *queryExclusive(): AsyncIterable<string> {
+    const snapshot = await this.#locks.query();
+    for (const lock of [
+      ...(snapshot.held ?? []),
+      ...(snapshot.pending ?? []),
+    ]) {
+      if (lock.mode === 'exclusive' && lock.name) {
+        yield lock.name;
+      }
+    }
+  }
+}
+
+const mockLockNames = new Set<string>();
+
+const mockListeners: Set<(name: string) => void> = new Set();
+
+class MockClientLockManager implements ClientLockManager {
+  readonly #listeners: Set<(name: string) => void> = new Set();
+
+  request(
+    name: string,
+    mode: 'exclusive' | 'shared',
+    fn: () => void | Promise<void>,
+  ): Promise<void> {
+    if (mode === 'exclusive') {
+      mockLockNames.add(name);
+    } else {
+      mode satisfies 'shared';
+
+      // For the mock locks we will add a listener that will notify us when the
+      // lock is deleted from the `allMockLocks` set.
+      const listener = (removed: string) => {
+        if (removed === name) {
+          mockListeners.delete(listener);
+          return fn();
+        }
+      };
+      mockListeners.add(listener);
+      this.#listeners.add(listener);
+    }
+    return Promise.resolve();
+  }
+
+  release(name: string, fn: () => void): void {
+    mockLockNames.delete(name);
+    for (const listener of mockListeners) {
+      listener(name);
+    }
+    fn();
+  }
+
+  async *queryExclusive(): AsyncIterable<string> {
+    for (const lock of allMockLocks) {
+      yield lock.name;
+    }
   }
 }
