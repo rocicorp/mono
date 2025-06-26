@@ -21,6 +21,7 @@ function makeCVR(clients: Record<string, QueryDef[]>): CVR {
     ),
     id: 'abc123',
     lastActive: Date.UTC(2024, 1, 20),
+    ttlClock: Date.UTC(2024, 1, 20),
     queries: {},
     replicaVersion: '120',
     version: {
