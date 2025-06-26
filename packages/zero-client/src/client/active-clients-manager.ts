@@ -2,6 +2,9 @@ import {resolver} from '@rocicorp/resolver';
 import {BroadcastChannel} from '../../../shared/src/broadcast-channel.ts';
 import {getBrowserGlobal} from '../../../shared/src/browser-env.ts';
 
+/**
+ * The prefix for the keys used for the locks and the broadcast channels.
+ */
 const keyPrefix = 'zero-active';
 
 function toLockName(clientGroupID: string, clientID: string): string {
@@ -80,11 +83,22 @@ const allMockLocks = new AllMockLocks();
  * available.
  *
  * When navigator.locks is not available, it will return a set only containing
- * the current clientID.
+ * the clients in the current scripting context (window, worker, etc).
  *
- * It uses one lock per client, identified by a combination of `clientGroupID`
- * and `clientID`. Then the `query` method is used to get the list of all
- * clients that hold or are waiting for locks in the same client group.
+ * It uses one exclusive lock per client, identified by a combination of
+ * `clientGroupID` and `clientID`. Then the `query` method is used to get the
+ * list of all clients that hold or are waiting for locks in the same client
+ * group.
+ *
+ * It also tries to get a shared lock for each client in the group, so that it
+ * can be notified when the exclusive lock is released. This allows the class to
+ * keep track of the active clients in the group and notify when an existing
+ * client is removed.
+ *
+ * The class also uses a `BroadcastChannel` to notify other clients in the
+ * same client group when a new client is added. This allows the class to keep
+ * track of the active clients in the group and notify when a new client is
+ * added.
  */
 export class ActiveClientsManager {
   readonly clientGroupID: string;
@@ -109,13 +123,20 @@ export class ActiveClientsManager {
 
     const name = toLockName(clientGroupID, clientID);
 
+    // The BroadcastChannel is used to notify other clients in the same client
+    // group when a new client is added. It listens for messages that contain
+    // the lock name, which is used to identify the client. When a message is
+    // received, it checks if the client belongs to the same client group and
+    // adds it to the list of active clients. It also adds a shared lock for
+    // the client, so that it can be notified when the exclusive lock is
+    // released.
     const channel = new BroadcastChannel(toBroadcastChannelName(clientGroupID));
     channel.addEventListener(
       'message',
       e => {
         const client = fromLockName(e.data);
         if (client?.clientGroupID === this.clientGroupID) {
-          this.#addListener(client.clientID);
+          this.#addClient(client.clientID);
           this.#notifyClientActivated(client.clientID);
         }
       },
@@ -139,10 +160,10 @@ export class ActiveClientsManager {
       'abort',
       () => {
         if (!this.#lockManager) {
-          allMockLocks.delete(mockLock);
           for (const unlisten of this.#unlisteners) {
             unlisten();
           }
+          allMockLocks.delete(mockLock);
           this.#unlisteners.length = 0;
         }
         this.#resolver.resolve();
@@ -153,15 +174,14 @@ export class ActiveClientsManager {
     void this.getActiveClients().then(activeClients => {
       for (const clientID of activeClients) {
         if (clientID !== this.clientID) {
-          this.#addListener(clientID);
+          this.#addClient(clientID);
         }
       }
 
-      // We will add the current client to the set
       this.#activeClients = activeClients;
       if (this.#activeClients.size > 1) {
-        // If there are other clients, we will add the current client to the
-        // set of active clients.
+        // One for the current client, so if there are more than one, we notify
+        // that the list of active clients has changed.
         this.#onChange();
       }
 
@@ -193,17 +213,23 @@ export class ActiveClientsManager {
     return activeClients;
   }
 
-  #addListener(clientID: string): void {
+  /**
+   * This gets called when a new client is added to the client group.
+   *
+   * It will request a shared lock for the client, and when the exclusive lock
+   * is released, it will notify that the client has been deactivated.
+   */
+  #addClient(clientID: string): void {
     const name = toLockName(this.clientGroupID, clientID);
     if (this.#lockManager) {
       this.#lockManager
-        .request(name, {mode: 'shared', signal: this.#signal}, () => {
-          // This callback is called when the exclusive lock is released and we
-          // can get the shared lock.
-          this.#notifyClientInactivated(clientID);
-        })
+        .request(name, {mode: 'shared', signal: this.#signal}, () =>
+          this.#notifyClientInactivated(clientID),
+        )
         .catch(ignoreAbortError);
     } else {
+      // For the mock locks we will add a listener that will notify us when the
+      // lock is deleted from the `allMockLocks` set.
       const listener = (clientGroupID: string, clientID2: string) => {
         if (
           clientID === clientID2 &&
@@ -228,13 +254,11 @@ export class ActiveClientsManager {
 
   #onChange() {
     // This method is called when the list of active clients changes.
-    // It will notify the listeners that the list has changed.
     this.onChange?.(this.#activeClients);
   }
 
   #notifyClientActivated(clientID: string) {
     if (this.#activeClients.has(clientID)) {
-      // If the client is already in the set, we do not need to add it again.
       return;
     }
     this.#activeClients.add(clientID);
