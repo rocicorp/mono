@@ -23,14 +23,14 @@ vi.mock('../server/anonymous-otel-start.ts', () => ({
   addClientGroup: vi.fn(),
   removeClientGroup: vi.fn(),
   recordConnectionSuccess: vi.fn(),
-  recordConnectionFailed: vi.fn(),
+  recordConnectionAttempted: vi.fn(),
 }));
 
 import {Syncer} from './syncer.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {
   recordConnectionSuccess,
-  recordConnectionFailed,
+  recordConnectionAttempted,
 } from '../server/anonymous-otel-start.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
@@ -243,10 +243,12 @@ describe('connection telemetry', () => {
       id => {
         const ret = new PusherService(
           {} as ZeroConfig,
+          {
+            url: 'http://example.com',
+            forwardCookies: false,
+          },
           lc,
           id,
-          'http://example.com',
-          undefined,
         );
         pushers.push(ret);
         return ret;
@@ -279,34 +281,15 @@ describe('connection telemetry', () => {
     return ws;
   }
 
-  test('should record connection success for valid protocol version', async () => {
+  test('should record connection success for valid protocol version', () => {
     // Create a connection with valid protocol version
     newConnection(1, {protocolVersion: 6});
 
     // Should record connection success
     expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(recordConnectionFailed)).not.toHaveBeenCalled();
   });
 
-  test('should record connection failure for unsupported protocol version', async () => {
-    // Create a connection with unsupported protocol version
-    newConnection(2, {protocolVersion: 999});
-
-    // Should record connection failure for protocol version
-    expect(vi.mocked(recordConnectionFailed)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(recordConnectionSuccess)).not.toHaveBeenCalled();
-  });
-
-  test('should record connection failure for old protocol version', async () => {
-    // Create a connection with old protocol version
-    newConnection(3, {protocolVersion: 1});
-
-    // Should record connection failure for protocol version
-    expect(vi.mocked(recordConnectionFailed)).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(recordConnectionSuccess)).not.toHaveBeenCalled();
-  });
-
-  test('should record multiple successful connections', async () => {
+  test('should record multiple successful connections', () => {
     // Create multiple connections with valid protocol version
     newConnection(1, {protocolVersion: 6});
     newConnection(2, {protocolVersion: 6});
@@ -314,19 +297,15 @@ describe('connection telemetry', () => {
 
     // Should record multiple connection successes
     expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(3);
-    expect(vi.mocked(recordConnectionFailed)).not.toHaveBeenCalled();
   });
 
-  test('should record mixed success and failure connections', async () => {
-    // Create connections with mixed protocol versions
-    newConnection(1, {protocolVersion: 6}); // Valid
-    newConnection(2, {protocolVersion: 999}); // Invalid - too high
-    newConnection(3, {protocolVersion: 6}); // Valid
-    newConnection(4, {protocolVersion: 1}); // Invalid - too low
+  test('should record connection attempted for each connection', () => {
+    // Create connections - both should record attempts
+    newConnection(1, {protocolVersion: 6});
+    newConnection(2, {protocolVersion: 6});
 
-    // Should record appropriate counts
-    expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(recordConnectionFailed)).toHaveBeenCalledTimes(2);
+    // Should record connection attempts
+    expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(2);
   });
 });
 

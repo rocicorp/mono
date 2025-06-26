@@ -18,11 +18,10 @@ class AnonymousTelemetryManager {
   #started = false;
   #meter!: Meter;
   #meterProvider!: MeterProvider;
-  #startTime = Date.now();
   #totalMutations = 0;
   #totalRowsSynced = 0;
   #totalConnectionsSuccess = 0;
-  #totalConnectionsFailed = 0;
+  #totalConnectionsAttempted = 0;
   #connectedClientGroups = new Set<string>();
   #activeQueries = new Map<string, Set<string>>();
   #cvrSize = 0;
@@ -108,6 +107,13 @@ class AnonymousTelemetryManager {
     });
 
     // Observable counters
+    const uptimeCounter = this.#meter.createObservableCounter(
+      'zero.uptime_counter',
+      {
+        description: 'System uptime in seconds',
+        unit: 'seconds',
+      },
+    );
     const mutationsCounter = this.#meter.createObservableCounter(
       'zero.mutations_processed',
       {
@@ -128,19 +134,25 @@ class AnonymousTelemetryManager {
         description: 'Total number of successful connections',
       },
     );
-    const connectionsFailedCounter = this.#meter.createObservableCounter(
-      'zero.connections_failed',
+
+    const connectionsAttemptedCounter = this.#meter.createObservableCounter(
+      'zero.connections_attempted',
       {
-        description: 'Total number of failed connections',
+        description: 'Total number of attempted connections',
       },
     );
 
     // Callbacks
     const attrs = this.#getAttributes();
     uptimeGauge.addCallback((result: ObservableResult) => {
-      const uptimeSeconds = Math.floor((Date.now() - this.#startTime) / 1000);
+      const uptimeSeconds = Math.floor(process.uptime());
       result.observe(uptimeSeconds, attrs);
       this.#lc?.debug?.(`Telemetry: uptime=${uptimeSeconds}s`);
+    });
+    uptimeCounter.addCallback((result: ObservableResult) => {
+      const uptimeSeconds = Math.floor(process.uptime());
+      result.observe(uptimeSeconds, attrs);
+      this.#lc?.debug?.(`Telemetry: uptime_counter=${uptimeSeconds}s`);
     });
     clientGroupsGauge.addCallback((result: ObservableResult) => {
       result.observe(this.#connectedClientGroups.size, attrs);
@@ -184,10 +196,10 @@ class AnonymousTelemetryManager {
         `Telemetry: connections_success=${this.#totalConnectionsSuccess}`,
       );
     });
-    connectionsFailedCounter.addCallback((result: ObservableResult) => {
-      result.observe(this.#totalConnectionsFailed, attrs);
+    connectionsAttemptedCounter.addCallback((result: ObservableResult) => {
+      result.observe(this.#totalConnectionsAttempted, attrs);
       this.#lc?.debug?.(
-        `Telemetry: connections_failed=${this.#totalConnectionsFailed}`,
+        `Telemetry: connections_attempted=${this.#totalConnectionsAttempted}`,
       );
     });
   }
@@ -204,8 +216,8 @@ class AnonymousTelemetryManager {
     this.#totalConnectionsSuccess++;
   }
 
-  recordConnectionFailed() {
-    this.#totalConnectionsFailed++;
+  recordConnectionAttempted() {
+    this.#totalConnectionsAttempted++;
   }
 
   addActiveQuery(clientGroupID: string, queryID: string) {
@@ -284,7 +296,8 @@ export const recordRowsSynced = (count: number) =>
   manager().recordRowsSynced(count);
 export const recordConnectionSuccess = () =>
   manager().recordConnectionSuccess();
-export const recordConnectionFailed = () => manager().recordConnectionFailed();
+export const recordConnectionAttempted = () =>
+  manager().recordConnectionAttempted();
 export const addActiveQuery = (clientGroupID: string, queryID: string) =>
   manager().addActiveQuery(clientGroupID, queryID);
 export const removeActiveQuery = (clientGroupID: string, queryID: string) =>
