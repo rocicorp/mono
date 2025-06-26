@@ -202,6 +202,7 @@ export class CVRStore {
       id,
       version: EMPTY_CVR_VERSION,
       lastActive: 0,
+      ttlClock: 0,
       replicaVersion: null,
       clients: {},
       queries: {},
@@ -213,7 +214,8 @@ export class CVRStore {
         tx<
           (Omit<InstancesRow, 'clientGroupID'> & {rowsVersion: string | null})[]
         >`SELECT cvr."version", 
-                 "lastActive", 
+                 "lastActive",
+                 "ttlClock",
                  "replicaVersion", 
                  "owner", 
                  "grantedAt",
@@ -246,6 +248,7 @@ export class CVRStore {
       this.putInstance({
         version: cvr.version,
         lastActive: 0,
+        ttlClock: 0,
         replicaVersion: null,
         clientSchema: null,
       });
@@ -254,6 +257,7 @@ export class CVRStore {
       const {
         version,
         lastActive,
+        ttlClock,
         replicaVersion,
         owner,
         grantedAt,
@@ -288,6 +292,7 @@ export class CVRStore {
 
       cvr.version = versionFromString(version);
       cvr.lastActive = lastActive;
+      cvr.ttlClock = ttlClock;
       cvr.replicaVersion = replicaVersion;
 
       try {
@@ -378,14 +383,43 @@ export class CVRStore {
     }
   }
 
+  /**
+   * Updates the `ttlClock` of the CVR instance.
+   */
+  async updateTTLClock(ttlClock: number, lastActive: number): Promise<void> {
+    await this.#db`UPDATE ${this.#cvr('instances')}
+          SET "lastActive" = ${lastActive},
+              "ttlClock" = ${ttlClock}
+          WHERE "clientGroupID" = ${this.#id}`.execute();
+  }
+
+  /**
+   *
+   * @returns This returns the current `ttlClock` of the CVR instance. If the
+   *          CVR has never been initialized for this client group, it returns
+   *          `undefined`.
+   */
+  async getTTLClock(): Promise<number | undefined> {
+    const result = await this.#db<Pick<InstancesRow, 'ttlClock'>[]>`
+      SELECT "ttlClock" FROM ${this.#cvr('instances')}
+      WHERE "clientGroupID" = ${this.#id}`.values();
+    if (result.length === 0) {
+      // This can happen if the CVR has not been initialized yet.
+      return undefined;
+    }
+    assert(result.length === 1);
+    return result[0][0];
+  }
+
   putInstance({
     version,
     replicaVersion,
     lastActive,
     clientSchema,
+    ttlClock,
   }: Pick<
     CVRSnapshot,
-    'version' | 'replicaVersion' | 'lastActive' | 'clientSchema'
+    'version' | 'replicaVersion' | 'lastActive' | 'clientSchema' | 'ttlClock'
   >): void {
     this.#writes.add({
       stats: {instances: 1},
@@ -394,6 +428,7 @@ export class CVRStore {
           clientGroupID: this.#id,
           version: versionString(version),
           lastActive,
+          ttlClock,
           replicaVersion,
           owner: this.#taskID,
           grantedAt: lastConnectTime,
