@@ -186,10 +186,8 @@ export class ActiveClientsManager {
   }
 
   #notifyClientInactivated(clientID: string) {
-    const removed = this.#activeClients.delete(clientID);
-    if (removed) {
-      this.#onChange();
-    }
+    this.#activeClients.delete(clientID);
+    this.#onChange();
   }
 
   #onChange() {
@@ -198,9 +196,6 @@ export class ActiveClientsManager {
   }
 
   #notifyClientActivated(clientID: string) {
-    if (this.#activeClients.has(clientID)) {
-      return;
-    }
     this.#activeClients.add(clientID);
     this.#onChange();
   }
