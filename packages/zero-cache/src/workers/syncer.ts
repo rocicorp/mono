@@ -26,6 +26,10 @@ import type {ConnectParams} from './connect-params.ts';
 import {Connection, sendError} from './connection.ts';
 import {createNotifierFrom, subscribeTo} from './replicator.ts';
 import {SyncerWsMessageHandler} from './syncer-ws-message-handler.ts';
+import {
+  addClientGroup,
+  removeClientGroup,
+} from '../server/anonymous-otel-start.ts';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -50,6 +54,7 @@ export class Syncer implements SingletonService {
   readonly #wss: WebSocketServer;
   readonly #stopped = resolver();
   readonly #authConfig: AuthConfig;
+  readonly #connectedClientGroups = new Set<string>();
 
   constructor(
     lc: LogContext,
@@ -103,6 +108,12 @@ export class Syncer implements SingletonService {
         `client ${clientID} already connected, closing existing connection`,
       );
       existing.close(`replaced by ${params.wsID}`);
+    }
+
+    // Track client group for telemetry when connection is established
+    if (!this.#connectedClientGroups.has(clientGroupID)) {
+      this.#connectedClientGroups.add(clientGroupID);
+      addClientGroup(clientGroupID);
     }
 
     let decodedToken: JWTPayload | undefined;
@@ -163,6 +174,12 @@ export class Syncer implements SingletonService {
           // If their ref counts are zero, they will stop themselves and set themselves invalid.
           mutagen.unref();
           pusher?.unref();
+
+          // Remove client group from telemetry tracking when connection closes
+          if (this.#connectedClientGroups.has(clientGroupID)) {
+            this.#connectedClientGroups.delete(clientGroupID);
+            removeClientGroup(clientGroupID);
+          }
         },
       );
     } catch (e) {
