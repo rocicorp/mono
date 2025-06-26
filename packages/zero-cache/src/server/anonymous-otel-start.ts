@@ -192,8 +192,8 @@ class AnonymousTelemetryManager {
     });
   }
 
-  recordMutation() {
-    this.#totalMutations++;
+  recordMutation(count = 1) {
+    this.#totalMutations += count;
   }
 
   recordRowsSynced(count: number) {
@@ -268,7 +268,7 @@ class AnonymousTelemetryManager {
     if (process.env.RAILWAY_ENV || process.env.RAILWAY_STATIC_URL)
       return 'railway';
     if (process.env.RENDER || process.env.RENDER_SERVICE_ID) return 'render';
-    return 'local';
+    return 'unknown';
   }
 }
 
@@ -279,7 +279,7 @@ export const startAnonymousTelemetry = (
   config?: ZeroConfig,
   workerId?: string,
 ) => manager().start(lc, config, workerId);
-export const recordMutation = () => manager().recordMutation();
+export const recordMutation = (count = 1) => manager().recordMutation(count);
 export const recordRowsSynced = (count: number) =>
   manager().recordRowsSynced(count);
 export const recordConnectionSuccess = () =>
