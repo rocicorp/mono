@@ -105,6 +105,13 @@ async function buildZeroClient() {
   const define = makeDefine('unknown');
   define['process.env.DISABLE_MUTATION_RECOVERY'] = 'true';
 
+  // Hardcode the telemetry token at build time
+  const buildTimeTelemetryToken =
+    process.env.BUILD_TIME_TELEMETRY_TOKEN || 'anonymous-token';
+  define['process.env.ROCICORP_TELEMETRY_TOKEN'] = JSON.stringify(
+    buildTimeTelemetryToken,
+  );
+
   const entryPoints = forBundleSizeDashboard
     ? {zero: basePath('src/zero.ts')}
     : {

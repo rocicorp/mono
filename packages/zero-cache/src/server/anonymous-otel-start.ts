@@ -21,6 +21,8 @@ class AnonymousTelemetryManager {
   #startTime = Date.now();
   #totalMutations = 0;
   #totalRowsSynced = 0;
+  #totalConnectionsSuccess = 0;
+  #totalConnectionsFailed = 0;
   #connectedClientGroups = new Set<string>();
   #activeQueries = new Map<string, Set<string>>();
   #cvrSize = 0;
@@ -119,6 +121,20 @@ class AnonymousTelemetryManager {
       },
     );
 
+    // Observable counters for connections
+    const connectionsSuccessCounter = this.#meter.createObservableCounter(
+      'zero.connections_success',
+      {
+        description: 'Total number of successful connections',
+      },
+    );
+    const connectionsFailedCounter = this.#meter.createObservableCounter(
+      'zero.connections_failed',
+      {
+        description: 'Total number of failed connections',
+      },
+    );
+
     // Callbacks
     const attrs = this.#getAttributes();
     uptimeGauge.addCallback((result: ObservableResult) => {
@@ -162,6 +178,18 @@ class AnonymousTelemetryManager {
       result.observe(this.#totalRowsSynced, attrs);
       this.#lc?.debug?.(`Telemetry: rows_synced=${this.#totalRowsSynced}`);
     });
+    connectionsSuccessCounter.addCallback((result: ObservableResult) => {
+      result.observe(this.#totalConnectionsSuccess, attrs);
+      this.#lc?.debug?.(
+        `Telemetry: connections_success=${this.#totalConnectionsSuccess}`,
+      );
+    });
+    connectionsFailedCounter.addCallback((result: ObservableResult) => {
+      result.observe(this.#totalConnectionsFailed, attrs);
+      this.#lc?.debug?.(
+        `Telemetry: connections_failed=${this.#totalConnectionsFailed}`,
+      );
+    });
   }
 
   recordMutation() {
@@ -170,6 +198,14 @@ class AnonymousTelemetryManager {
 
   recordRowsSynced(count: number) {
     this.#totalRowsSynced += count;
+  }
+
+  recordConnectionSuccess() {
+    this.#totalConnectionsSuccess++;
+  }
+
+  recordConnectionFailed() {
+    this.#totalConnectionsFailed++;
   }
 
   addActiveQuery(clientGroupID: string, queryID: string) {
@@ -246,6 +282,9 @@ export const startAnonymousTelemetry = (
 export const recordMutation = () => manager().recordMutation();
 export const recordRowsSynced = (count: number) =>
   manager().recordRowsSynced(count);
+export const recordConnectionSuccess = () =>
+  manager().recordConnectionSuccess();
+export const recordConnectionFailed = () => manager().recordConnectionFailed();
 export const addActiveQuery = (clientGroupID: string, queryID: string) =>
   manager().addActiveQuery(clientGroupID, queryID);
 export const removeActiveQuery = (clientGroupID: string, queryID: string) =>

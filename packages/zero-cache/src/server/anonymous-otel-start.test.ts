@@ -8,6 +8,8 @@ import {
   startAnonymousTelemetry,
   recordMutation,
   recordRowsSynced,
+  recordConnectionSuccess,
+  recordConnectionFailed,
   addActiveQuery,
   removeActiveQuery,
   updateCvrSize,
@@ -217,13 +219,27 @@ describe('Anonymous Telemetry Integration Tests', () => {
         },
       );
 
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.connections_success',
+        {
+          description: 'Total number of successful connections',
+        },
+      );
+
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.connections_failed',
+        {
+          description: 'Total number of failed connections',
+        },
+      );
+
       // Note: Histogram metrics are not currently implemented in the anonymous telemetry
     });
 
     test('should register callbacks for observable metrics', () => {
       // Each observable should have a callback registered
       expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(5); // 5 gauges
-      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(2); // 2 counters
+      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(4); // 4 counters (mutations, rows_synced, connections_success, connections_failed)
     });
   });
 
@@ -233,6 +249,8 @@ describe('Anonymous Telemetry Integration Tests', () => {
       expect(() => recordMutation()).not.toThrow();
       expect(() => recordRowsSynced(42)).not.toThrow();
       expect(() => updateCvrSize(1024)).not.toThrow();
+      expect(() => recordConnectionSuccess()).not.toThrow();
+      expect(() => recordConnectionFailed()).not.toThrow();
     });
 
     test('should accumulate mutation counts', () => {
@@ -262,6 +280,27 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
       // Should not throw
       expect(() => updateCvrSize(cvrSize * 2)).not.toThrow();
+    });
+
+    test('should accumulate connection success counts', () => {
+      // Record multiple successful connections
+      recordConnectionSuccess();
+      recordConnectionSuccess();
+      recordConnectionSuccess();
+
+      // Connection successes should be accumulated internally
+      // The actual value will be observed when the callback is triggered
+      expect(() => recordConnectionSuccess()).not.toThrow();
+    });
+
+    test('should accumulate connection failure counts', () => {
+      // Record multiple failed connections
+      recordConnectionFailed();
+      recordConnectionFailed();
+
+      // Connection failures should be accumulated internally
+      // The actual value will be observed when the callback is triggered
+      expect(() => recordConnectionFailed()).not.toThrow();
     });
   });
 
