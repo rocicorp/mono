@@ -709,10 +709,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
             if (newClient) {
               assert(newClient === client);
-              checkClientAndCVRVersions(
-                client.version() ?? EMPTY_CVR_VERSION,
-                cvr.version,
-              );
+              checkClientAndCVRVersions(client.version(), cvr.version);
             } else if (!this.#clients.has(clientID)) {
               lc.warn?.(`Processing ${cmd} before initConnection was received`);
             }
