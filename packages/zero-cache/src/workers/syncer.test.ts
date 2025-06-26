@@ -18,8 +18,20 @@ vi.mock('../types/websocket-handoff.ts', () => ({
     }),
 }));
 
+// Mock the anonymous telemetry functions
+vi.mock('../server/anonymous-otel-start.ts', () => ({
+  addClientGroup: vi.fn(),
+  removeClientGroup: vi.fn(),
+  recordConnectionSuccess: vi.fn(),
+  recordConnectionFailed: vi.fn(),
+}));
+
 import {Syncer} from './syncer.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {
+  recordConnectionSuccess,
+  recordConnectionFailed,
+} from '../server/anonymous-otel-start.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
 import type {ActivityBasedService} from '../services/service.ts';
@@ -183,6 +195,138 @@ describe('cleanup', () => {
       newConnection(1);
       check(i);
     }
+  });
+});
+
+describe('connection telemetry', () => {
+  let syncer: Syncer;
+  let mutagens: MutagenService[];
+  let pushers: PusherService[];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mutagens = [];
+    pushers = [];
+    syncer = new Syncer(
+      lc,
+      {} as ZeroConfig,
+      id =>
+        ({
+          id,
+          keepalive: () => true,
+          stop() {
+            return Promise.resolve();
+          },
+          run() {
+            return Promise.resolve();
+          },
+        }) as ViewSyncer & ActivityBasedService,
+      id => {
+        const ret = new MutagenService(
+          lc,
+          {
+            appID: 'test-app',
+            shardNum: 0,
+          },
+          id,
+          {} as any,
+          {
+            replica: {
+              file: tempFile,
+            },
+            perUserMutationLimit: {},
+          } as ZeroConfig,
+        );
+        mutagens.push(ret);
+        return ret;
+      },
+      id => {
+        const ret = new PusherService(
+          {} as ZeroConfig,
+          lc,
+          id,
+          'http://example.com',
+          undefined,
+        );
+        pushers.push(ret);
+        return ret;
+      },
+      {
+        onMessageType: () => {},
+        send: () => {},
+      } as any,
+    );
+  });
+
+  afterEach(async () => {
+    await syncer.stop();
+  });
+
+  function newConnection(clientID: number, params: any = {}) {
+    const ws = new MockWebSocket() as unknown as WebSocket;
+    receiver(
+      ws,
+      {
+        clientGroupID: '1',
+        clientID: `${clientID}`,
+        userID: 'anon',
+        wsID: '1',
+        protocolVersion: 6, // Valid protocol version
+        ...params,
+      },
+      {} as any,
+    );
+    return ws;
+  }
+
+  test('should record connection success for valid protocol version', async () => {
+    // Create a connection with valid protocol version
+    newConnection(1, {protocolVersion: 6});
+
+    // Should record connection success
+    expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordConnectionFailed)).not.toHaveBeenCalled();
+  });
+
+  test('should record connection failure for unsupported protocol version', async () => {
+    // Create a connection with unsupported protocol version
+    newConnection(2, {protocolVersion: 999});
+
+    // Should record connection failure for protocol version
+    expect(vi.mocked(recordConnectionFailed)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordConnectionSuccess)).not.toHaveBeenCalled();
+  });
+
+  test('should record connection failure for old protocol version', async () => {
+    // Create a connection with old protocol version
+    newConnection(3, {protocolVersion: 1});
+
+    // Should record connection failure for protocol version
+    expect(vi.mocked(recordConnectionFailed)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordConnectionSuccess)).not.toHaveBeenCalled();
+  });
+
+  test('should record multiple successful connections', async () => {
+    // Create multiple connections with valid protocol version
+    newConnection(1, {protocolVersion: 6});
+    newConnection(2, {protocolVersion: 6});
+    newConnection(3, {protocolVersion: 6});
+
+    // Should record multiple connection successes
+    expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(recordConnectionFailed)).not.toHaveBeenCalled();
+  });
+
+  test('should record mixed success and failure connections', async () => {
+    // Create connections with mixed protocol versions
+    newConnection(1, {protocolVersion: 6}); // Valid
+    newConnection(2, {protocolVersion: 999}); // Invalid - too high
+    newConnection(3, {protocolVersion: 6}); // Valid
+    newConnection(4, {protocolVersion: 1}); // Invalid - too low
+
+    // Should record appropriate counts
+    expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(recordConnectionFailed)).toHaveBeenCalledTimes(2);
   });
 });
 
