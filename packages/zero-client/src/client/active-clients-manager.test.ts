@@ -26,13 +26,13 @@ describe('ActiveClientManager with mocked locks', () => {
     querySpy = vi.spyOn(navigator.locks, 'query');
   });
 
-  test('should call lockManager.request in the constructor', () => {
+  test('should call lockManager.request in the constructor', async () => {
     const ac = new AbortController();
-    new ActiveClientsManager('group1', 'client1', ac.signal);
+    await ActiveClientsManager.create('group1', 'client1', ac.signal);
 
     expect(requestSpy).toHaveBeenCalledWith(
       'zero-active/group1/client1',
-      {signal: ac.signal},
+      {mode: 'exclusive', signal: ac.signal},
       expect.any(Function),
     );
     ac.abort();
@@ -46,7 +46,7 @@ describe('ActiveClientManager with mocked locks', () => {
       pending: [{name: 'zero-active/group1/client2', mode: 'exclusive'}],
     });
 
-    const clientManager = new ActiveClientsManager(
+    const clientManager = await ActiveClientsManager.create(
       'group1',
       'client1',
       ac.signal,
@@ -60,7 +60,7 @@ describe('ActiveClientManager with mocked locks', () => {
   test('should ignore invalid lock keys', async () => {
     const ac = new AbortController();
 
-    const clientManager = new ActiveClientsManager(
+    const clientManager = await ActiveClientsManager.create(
       'group1',
       'client1',
       ac.signal,
@@ -88,7 +88,7 @@ describe('ActiveClientManager without navigator', () => {
 
   test('should return set with self if navigator is undefined', async () => {
     const ac = new AbortController();
-    const clientManager = new ActiveClientsManager(
+    const clientManager = await ActiveClientsManager.create(
       'group1',
       'client1',
       ac.signal,
@@ -103,12 +103,12 @@ describe('ActiveClientManager without navigator', () => {
     const ac1 = new AbortController();
     const ac2 = new AbortController();
 
-    const clientManager1 = new ActiveClientsManager(
+    const clientManager1 = await ActiveClientsManager.create(
       'group1',
       'client1',
       ac1.signal,
     );
-    const clientManager2 = new ActiveClientsManager(
+    const clientManager2 = await ActiveClientsManager.create(
       'group1',
       'client2',
       ac2.signal,
@@ -145,7 +145,11 @@ describe('ActiveClientManager with undefined locks', () => {
   test('should return set with self if navigator.locks is undefined', async () => {
     vi.stubGlobal('navigator', {locks: undefined});
 
-    const clientManager = new ActiveClientsManager('group1', 'client1', signal);
+    const clientManager = await ActiveClientsManager.create(
+      'group1',
+      'client1',
+      signal,
+    );
     const activeClients = await clientManager.getActiveClients();
 
     expect(activeClients).toEqual(new Set(['client1']));
@@ -173,7 +177,7 @@ describe('ActiveClientManager', () => {
         activeClients: ReadonlySet<string>;
       }>();
 
-      const clientManager1 = new ActiveClientsManager(
+      const clientManager1 = await ActiveClientsManager.create(
         clientGroupID,
         'client1',
         ac1.signal,
@@ -182,7 +186,7 @@ describe('ActiveClientManager', () => {
         changes.enqueue({clientID: 'client1', activeClients});
       };
 
-      const clientManager2 = new ActiveClientsManager(
+      const clientManager2 = await ActiveClientsManager.create(
         clientGroupID,
         'client2',
         ac2.signal,
@@ -204,16 +208,12 @@ describe('ActiveClientManager', () => {
 
       await expectDequeue(changes, [
         {
-          clientID: 'client2',
-          activeClients: new Set(['client1', 'client2']),
-        },
-        {
           clientID: 'client1',
           activeClients: new Set(['client1', 'client2']),
         },
       ]);
 
-      const clientManager3 = new ActiveClientsManager(
+      const clientManager3 = await ActiveClientsManager.create(
         clientGroupID,
         'client3',
         ac3.signal,
@@ -223,10 +223,6 @@ describe('ActiveClientManager', () => {
       };
 
       await expectDequeue(changes, [
-        {
-          clientID: 'client3',
-          activeClients: new Set(['client1', 'client2', 'client3']),
-        },
         {
           clientID: 'client1',
           activeClients: new Set(['client1', 'client2', 'client3']),
@@ -271,7 +267,7 @@ describe('ActiveClientManager', () => {
       setup();
       const ac = new AbortController();
       const clientGroupID = nanoid();
-      const clientManager = new ActiveClientsManager(
+      const clientManager = await ActiveClientsManager.create(
         clientGroupID,
         'client1',
         ac.signal,
@@ -291,12 +287,12 @@ describe('ActiveClientManager', () => {
       const ac1 = new AbortController();
       const ac2 = new AbortController();
 
-      const clientManager1 = new ActiveClientsManager(
+      const clientManager1 = await ActiveClientsManager.create(
         clientGroupID,
         'client1',
         ac1.signal,
       );
-      const clientManager2 = new ActiveClientsManager(
+      const clientManager2 = await ActiveClientsManager.create(
         clientGroupID,
         'client2',
         ac2.signal,
@@ -323,22 +319,22 @@ describe('ActiveClientManager', () => {
       const ac3 = new AbortController();
       const ac4 = new AbortController();
 
-      const clientManager1 = new ActiveClientsManager(
+      const clientManager1 = await ActiveClientsManager.create(
         clientGroupID1,
         'client1',
         ac1.signal,
       );
-      const clientManager2 = new ActiveClientsManager(
+      const clientManager2 = await ActiveClientsManager.create(
         clientGroupID1,
         'client2',
         ac1.signal,
       );
-      const clientManager3 = new ActiveClientsManager(
+      const clientManager3 = await ActiveClientsManager.create(
         clientGroupID2,
         'client3',
         ac3.signal,
       );
-      const clientManager4 = new ActiveClientsManager(
+      const clientManager4 = await ActiveClientsManager.create(
         clientGroupID2,
         'client4',
         ac4.signal,
@@ -368,12 +364,12 @@ describe('ActiveClientManager', () => {
       const ac1 = new AbortController();
       const ac2 = new AbortController();
 
-      const clientManager1 = new ActiveClientsManager(
+      const clientManager1 = await ActiveClientsManager.create(
         clientGroupID1,
         'client1',
         ac1.signal,
       );
-      const clientManager2 = new ActiveClientsManager(
+      const clientManager2 = await ActiveClientsManager.create(
         clientGroupID2,
         'client2',
         ac2.signal,
@@ -398,17 +394,17 @@ describe('ActiveClientManager', () => {
       const ac2 = new AbortController();
       const ac3 = new AbortController();
 
-      const clientManager1 = new ActiveClientsManager(
+      const clientManager1 = await ActiveClientsManager.create(
         clientGroupID,
         'client1',
         ac1.signal,
       );
-      const clientManager2 = new ActiveClientsManager(
+      const clientManager2 = await ActiveClientsManager.create(
         clientGroupID,
         'client2',
         ac2.signal,
       );
-      const clientManager3 = new ActiveClientsManager(
+      const clientManager3 = await ActiveClientsManager.create(
         clientGroupID,
         'client3',
         ac3.signal,

@@ -41,45 +41,6 @@ function ignoreAbortError(e: unknown) {
 }
 
 /**
- *  When we do not have the `navigator.locks` API available, we will keep track
- *  of the "locks" in memory.
- */
-class AllMockLocks extends Set<{
-  name: string;
-  mode: 'exclusive';
-}> {
-  #listeners: Set<(clientGroupID: string, clientID: string) => void> =
-    new Set();
-
-  addListener(
-    listener: (clientGroupID: string, clientID: string) => void,
-  ): () => void {
-    this.#listeners.add(listener);
-
-    return () => {
-      this.#listeners.delete(listener);
-    };
-  }
-
-  delete(item: {name: string; mode: 'exclusive'}): boolean {
-    const removed = super.delete(item);
-    if (removed) {
-      const client = fromLockName(item.name);
-      if (client) {
-        for (const listener of this.#listeners) {
-          listener(client.clientGroupID, client.clientID);
-        }
-      }
-    }
-    return removed;
-  }
-}
-
-const USE = false;
-
-const allMockLocks = new AllMockLocks();
-
-/**
  * A class that lists the active clients in a client group. It uses the
  * `navigator.locks` API to manage locks for each client. The class is designed
  * to be used in a browser environment where the `navigator.locks` API is
@@ -107,11 +68,9 @@ export class ActiveClientsManager {
   readonly clientGroupID: string;
   readonly clientID: string;
   readonly #resolver = resolver<void>();
-  readonly #lockManager = getBrowserGlobal('navigator')?.locks;
-  readonly #signal: AbortSignal;
-  readonly #unlisteners: (() => void)[] = [];
-  readonly #clientLockManager: ClientLockManager;
+  readonly #lockManager: ClientLockManager;
   #activeClients: Set<string> = new Set();
+  readonly #readyResolver = resolver();
 
   /**
    * A callback that is called when the list of active clients changes. It
@@ -119,17 +78,38 @@ export class ActiveClientsManager {
    */
   onChange: ((activeClients: ReadonlySet<string>) => void) | undefined;
 
-  constructor(clientGroupID: string, clientID: string, signal: AbortSignal) {
+  /**
+   * Creates an instance of `ActiveClientsManager` for the specified client
+   * group and client ID. It will return a promise that resolves when the
+   * instance is ready to use, which means that it has successfully acquired the
+   * exclusive lock for the client and has retrieved the list of active clients.
+   */
+  static async create(
+    clientGroupID: string,
+    clientID: string,
+    signal: AbortSignal,
+  ): Promise<ActiveClientsManager> {
+    const instance = new ActiveClientsManager(clientGroupID, clientID, signal);
+    await instance.#init(clientGroupID, clientID, signal);
+    return instance;
+  }
+
+  private constructor(
+    clientGroupID: string,
+    clientID: string,
+    signal: AbortSignal,
+  ) {
     this.clientGroupID = clientGroupID;
     this.clientID = clientID;
-    this.#signal = signal;
+    this.#lockManager = getClientLockManager(signal);
     this.#activeClients.add(clientID);
+  }
 
-    this.#clientLockManager = new NativeClientLockManager(
-      this.#lockManager!,
-      signal,
-    );
-
+  async #init(
+    clientGroupID: string,
+    clientID: string,
+    signal: AbortSignal,
+  ): Promise<void> {
     const name = toLockName(clientGroupID, clientID);
 
     // The BroadcastChannel is used to notify other clients in the same client
@@ -152,94 +132,44 @@ export class ActiveClientsManager {
       {signal},
     );
 
-    let mockLock: {name: string; mode: 'exclusive'};
-
-    if (USE) {
-      this.#clientLockManager
-        .request(name, 'exclusive', () => this.#resolver.promise)
-        .catch(ignoreAbortError);
-    } else {
-      if (this.#lockManager) {
-        this.#lockManager
-          .request(name, {signal}, async () => {
-            await this.#resolver.promise;
-          })
-          .catch(ignoreAbortError);
-      } else {
-        mockLock = {name, mode: 'exclusive'};
-        allMockLocks.add(mockLock);
-      }
-    }
+    this.#lockManager
+      .request(name, 'exclusive', () => this.#resolver.promise)
+      .catch(ignoreAbortError);
 
     signal.addEventListener(
       'abort',
-      () => {
-        if (USE) {
-          void this.#clientLockManager.release(name, () =>
-            this.#resolver.resolve(),
-          );
-        } else {
-          if (!this.#lockManager) {
-            for (const unlisten of this.#unlisteners) {
-              unlisten();
-            }
-            allMockLocks.delete(mockLock);
-            this.#unlisteners.length = 0;
-          }
-          this.#resolver.resolve();
-        }
-      },
+      () => this.#lockManager.release(name, () => this.#resolver.resolve()),
       {once: true},
     );
 
-    void this.getActiveClients().then(activeClients => {
-      for (const clientID of activeClients) {
-        if (clientID !== this.clientID) {
-          this.#addClient(clientID);
-        }
-      }
+    const activeClients = await this.getActiveClients();
 
-      this.#activeClients = activeClients;
-      if (this.#activeClients.size > 1) {
-        // One for the current client, so if there are more than one, we notify
-        // that the list of active clients has changed.
-        this.#onChange();
+    for (const clientID of activeClients) {
+      if (clientID !== this.clientID) {
+        this.#addClient(clientID);
       }
+    }
 
-      channel.postMessage(name);
-    });
+    this.#activeClients = activeClients;
+    if (this.#activeClients.size > 1) {
+      // One for the current client, so if there are more than one, we notify
+      // that the list of active clients has changed.
+      this.#onChange();
+    }
+
+    channel.postMessage(name);
   }
 
   async getActiveClients(): Promise<Set<string>> {
     const activeClients: Set<string> = new Set();
 
-    if (USE) {
-      for await (const lockName of this.#clientLockManager.queryExclusive()) {
-        const client = fromLockName(lockName);
-        if (client?.clientGroupID === this.clientGroupID) {
-          activeClients.add(client.clientID);
-        }
-      }
-    } else {
-      const add = (info: Iterable<LockInfo> | undefined) => {
-        for (const lock of info ?? []) {
-          if (lock.mode === 'exclusive') {
-            const client = fromLockName(lock.name);
-            if (client?.clientGroupID === this.clientGroupID) {
-              activeClients.add(client.clientID);
-            }
-          }
-        }
-      };
-
-      if (!this.#lockManager) {
-        add(allMockLocks);
-      } else {
-        const snapshot = await this.#lockManager.query();
-        add(snapshot.held);
-        add(snapshot.pending);
+    for await (const lockName of this.#lockManager.queryExclusive()) {
+      const client = fromLockName(lockName);
+      if (client?.clientGroupID === this.clientGroupID) {
+        activeClients.add(client.clientID);
       }
     }
+
     return activeClients;
   }
 
@@ -251,34 +181,9 @@ export class ActiveClientsManager {
    */
   #addClient(clientID: string): void {
     const name = toLockName(this.clientGroupID, clientID);
-    if (USE) {
-      this.#clientLockManager
-        .request(name, 'shared', () => this.#notifyClientInactivated(clientID))
-        .catch(ignoreAbortError);
-    } else {
-      if (this.#lockManager) {
-        this.#lockManager
-          .request(name, {mode: 'shared', signal: this.#signal}, () =>
-            this.#notifyClientInactivated(clientID),
-          )
-          .catch(ignoreAbortError);
-      } else {
-        // For the mock locks we will add a listener that will notify us when the
-        // lock is deleted from the `allMockLocks` set.
-        const listener = (clientGroupID: string, clientID2: string) => {
-          if (
-            clientID === clientID2 &&
-            clientGroupID === this.clientGroupID &&
-            clientID2 !== this.clientID
-          ) {
-            unlisten();
-            this.#notifyClientInactivated(clientID);
-          }
-        };
-        const unlisten = allMockLocks.addListener(listener);
-        this.#unlisteners.push(unlisten);
-      }
-    }
+    this.#lockManager
+      .request(name, 'shared', () => this.#notifyClientInactivated(clientID))
+      .catch(ignoreAbortError);
   }
 
   #notifyClientInactivated(clientID: string) {
@@ -300,6 +205,14 @@ export class ActiveClientsManager {
     this.#activeClients.add(clientID);
     this.#onChange();
   }
+}
+
+function getClientLockManager(signal: AbortSignal): ClientLockManager {
+  const locks = getBrowserGlobal('navigator')?.locks;
+  if (locks) {
+    return new NativeClientLockManager(locks, signal);
+  }
+  return new MockClientLockManager();
 }
 
 interface ClientLockManager {
@@ -382,12 +295,13 @@ class MockClientLockManager implements ClientLockManager {
     for (const listener of mockListeners) {
       listener(name);
     }
+    for (const listener of this.#listeners) {
+      mockListeners.delete(listener);
+    }
     fn();
   }
 
   async *queryExclusive(): AsyncIterable<string> {
-    for (const lock of allMockLocks) {
-      yield lock.name;
-    }
+    yield* mockLockNames;
   }
 }
