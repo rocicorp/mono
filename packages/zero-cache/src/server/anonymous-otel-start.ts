@@ -19,13 +19,14 @@ class AnonymousTelemetryManager {
   #meter!: Meter;
   #meterProvider!: MeterProvider;
   #startTime = Date.now();
-  #lastMinuteMutations = 0;
-  #lastMinuteRowsSynced = 0;
+  #totalMutations = 0;
+  #totalRowsSynced = 0;
   #connectedClientGroups = new Set<string>();
   #activeQueries = new Map<string, Set<string>>();
   #cvrSize = 0;
   #lc: LogContext | undefined;
   #config: ZeroConfig | undefined;
+  #workerId = 'unknown';
 
   private constructor() {}
 
@@ -36,7 +37,7 @@ class AnonymousTelemetryManager {
     return AnonymousTelemetryManager.#instance;
   }
 
-  start(lc?: LogContext, config?: ZeroConfig) {
+  start(lc?: LogContext, config?: ZeroConfig, workerId?: string) {
     if (!config) {
       try {
         config = getZeroConfig();
@@ -55,6 +56,7 @@ class AnonymousTelemetryManager {
     }
     this.#lc = lc;
     this.#config = config;
+    this.#workerId = workerId || 'unknown';
 
     const resource = resourceFromAttributes(this.#getAttributes());
     const metricReader = new PeriodicExportingMetricReader({
@@ -72,7 +74,7 @@ class AnonymousTelemetryManager {
     this.#meter = this.#meterProvider.getMeter('zero-anonymous-telemetry');
 
     this.#setupMetrics();
-    this.#lc?.info?.('Anonymous telemetry started');
+    this.#lc?.info?.('Anonymous telemetry started (exports every 60 seconds)');
     this.#started = true;
   }
 
@@ -107,26 +109,36 @@ class AnonymousTelemetryManager {
     const mutationsCounter = this.#meter.createObservableCounter(
       'zero.mutations_processed',
       {
-        description: 'Number of mutations processed in the last minute',
+        description: 'Total number of mutations processed',
       },
     );
     const rowsSyncedCounter = this.#meter.createObservableCounter(
       'zero.rows_synced',
       {
-        description: 'Number of rows synced in the last minute',
+        description: 'Total number of rows synced',
       },
     );
 
     // Callbacks
     const attrs = this.#getAttributes();
     uptimeGauge.addCallback((result: ObservableResult) => {
-      result.observe(Math.floor((Date.now() - this.#startTime) / 1000), attrs);
+      const uptimeSeconds = Math.floor((Date.now() - this.#startTime) / 1000);
+      result.observe(uptimeSeconds, attrs);
+      this.#lc?.debug?.(`Telemetry: uptime=${uptimeSeconds}s`);
     });
     clientGroupsGauge.addCallback((result: ObservableResult) => {
       result.observe(this.#connectedClientGroups.size, attrs);
+      this.#lc?.debug?.(
+        `Telemetry: client_groups=${this.#connectedClientGroups.size}`,
+      );
     });
     activeQueriesGauge.addCallback((result: ObservableResult) => {
-      result.observe(this.#getTotalActiveQueries(), attrs);
+      const totalQueries = Array.from(this.#activeQueries.values()).reduce(
+        (sum, queries) => sum + queries.size,
+        0,
+      );
+      result.observe(totalQueries, attrs);
+      this.#lc?.debug?.(`Telemetry: active_queries=${totalQueries}`);
     });
     activeQueriesPerClientGroupGauge.addCallback((result: ObservableResult) => {
       for (const [clientGroupID, queries] of this.#activeQueries) {
@@ -138,23 +150,26 @@ class AnonymousTelemetryManager {
     });
     cvrSizeGauge.addCallback((result: ObservableResult) => {
       result.observe(this.#cvrSize, attrs);
+      this.#lc?.debug?.(`Telemetry: cvr_size=${this.#cvrSize} bytes`);
     });
     mutationsCounter.addCallback((result: ObservableResult) => {
-      result.observe(this.#lastMinuteMutations, attrs);
-      this.#lastMinuteMutations = 0;
+      result.observe(this.#totalMutations, attrs);
+      this.#lc?.debug?.(
+        `Telemetry: mutations_processed=${this.#totalMutations}`,
+      );
     });
     rowsSyncedCounter.addCallback((result: ObservableResult) => {
-      result.observe(this.#lastMinuteRowsSynced, attrs);
-      this.#lastMinuteRowsSynced = 0;
+      result.observe(this.#totalRowsSynced, attrs);
+      this.#lc?.debug?.(`Telemetry: rows_synced=${this.#totalRowsSynced}`);
     });
   }
 
   recordMutation() {
-    this.#lastMinuteMutations++;
+    this.#totalMutations++;
   }
 
   recordRowsSynced(count: number) {
-    this.#lastMinuteRowsSynced += count;
+    this.#totalRowsSynced += count;
   }
 
   addActiveQuery(clientGroupID: string, queryID: string) {
@@ -202,6 +217,7 @@ class AnonymousTelemetryManager {
       'zero.infra.platform': this.#getPlatform(),
       'zero.version': this.#config?.serverVersion ?? packageJson.version,
       'zero.task.id': this.#config?.taskID || 'unknown',
+      'zero.worker.id': this.#workerId,
     };
   }
 
@@ -218,20 +234,15 @@ class AnonymousTelemetryManager {
     if (process.env.RENDER || process.env.RENDER_SERVICE_ID) return 'render';
     return 'local';
   }
-
-  #getTotalActiveQueries(): number {
-    let total = 0;
-    for (const queries of this.#activeQueries.values()) {
-      total += queries.size;
-    }
-    return total;
-  }
 }
 
 const manager = () => AnonymousTelemetryManager.getInstance();
 
-export const startAnonymousTelemetry = (lc?: LogContext, config?: ZeroConfig) =>
-  manager().start(lc, config);
+export const startAnonymousTelemetry = (
+  lc?: LogContext,
+  config?: ZeroConfig,
+  workerId?: string,
+) => manager().start(lc, config, workerId);
 export const recordMutation = () => manager().recordMutation();
 export const recordRowsSynced = (count: number) =>
   manager().recordRowsSynced(count);

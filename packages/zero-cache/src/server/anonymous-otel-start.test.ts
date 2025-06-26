@@ -206,14 +206,14 @@ describe('Anonymous Telemetry Integration Tests', () => {
       expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
         'zero.mutations_processed',
         {
-          description: 'Number of mutations processed in the last minute',
+          description: 'Total number of mutations processed',
         },
       );
 
       expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
         'zero.rows_synced',
         {
-          description: 'Number of rows synced in the last minute',
+          description: 'Total number of rows synced',
         },
       );
 
@@ -633,7 +633,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
       const rowsSyncedCallback = mockObservableCounter.addCallback.mock.calls
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .find((call: any) =>
-          call[0].toString().includes('lastMinuteRowsSynced'),
+          call[0].toString().includes('totalRowsSynced'),
         )?.[0];
 
       if (rowsSyncedCallback) {
@@ -799,7 +799,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
       removeClientGroup(group3);
     });
 
-    test('should reset counter values after observation', () => {
+    test('should accumulate counter values across observations', () => {
       // Record some mutations and rows
       recordMutation();
       recordMutation();
@@ -810,13 +810,13 @@ describe('Anonymous Telemetry Integration Tests', () => {
       const mutationsCallback = mockObservableCounter.addCallback.mock.calls
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .find((call: any) =>
-          call[0].toString().includes('lastMinuteMutations'),
+          call[0].toString().includes('totalMutations'),
         )?.[0];
 
       const rowsCallback = mockObservableCounter.addCallback.mock.calls
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .find((call: any) =>
-          call[0].toString().includes('lastMinuteRowsSynced'),
+          call[0].toString().includes('totalRowsSynced'),
         )?.[0];
 
       if (mutationsCallback && rowsCallback) {
@@ -843,11 +843,15 @@ describe('Anonymous Telemetry Integration Tests', () => {
         expect(firstMutationsValue).toBeGreaterThanOrEqual(2);
         expect(firstRowsValue).toBeGreaterThanOrEqual(75);
 
+        // Record additional activity
+        recordMutation();
+        recordRowsSynced(10);
+
         // Reset mocks for second observation
         mockMutationsResult.observe.mockClear();
         mockRowsResult.observe.mockClear();
 
-        // Second observation should see reset values (0 since no new activity)
+        // Second observation should see accumulated values (including new activity)
         mutationsCallback(mockMutationsResult);
         rowsCallback(mockRowsResult);
 
@@ -855,9 +859,11 @@ describe('Anonymous Telemetry Integration Tests', () => {
           mockMutationsResult.observe.mock.calls[0][0];
         const secondRowsValue = mockRowsResult.observe.mock.calls[0][0];
 
-        // Values should be reset to 0 after the first observation
-        expect(secondMutationsValue).toBe(0);
-        expect(secondRowsValue).toBe(0);
+        // Values should continue to accumulate (not reset)
+        expect(secondMutationsValue).toBeGreaterThanOrEqual(
+          firstMutationsValue + 1,
+        );
+        expect(secondRowsValue).toBeGreaterThanOrEqual(firstRowsValue + 10);
       }
     });
   });
