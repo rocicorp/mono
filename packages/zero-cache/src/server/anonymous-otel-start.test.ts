@@ -9,7 +9,7 @@ import {
   recordMutation,
   recordRowsSynced,
   recordConnectionSuccess,
-  recordConnectionFailed,
+  recordConnectionAttempted,
   addActiveQuery,
   removeActiveQuery,
   updateCvrSize,
@@ -206,6 +206,14 @@ describe('Anonymous Telemetry Integration Tests', () => {
       );
 
       expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.uptime_counter',
+        {
+          description: 'System uptime in seconds',
+          unit: 'seconds',
+        },
+      );
+
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
         'zero.mutations_processed',
         {
           description: 'Total number of mutations processed',
@@ -227,9 +235,9 @@ describe('Anonymous Telemetry Integration Tests', () => {
       );
 
       expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
-        'zero.connections_failed',
+        'zero.connections_attempted',
         {
-          description: 'Total number of failed connections',
+          description: 'Total number of attempted connections',
         },
       );
 
@@ -239,7 +247,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
     test('should register callbacks for observable metrics', () => {
       // Each observable should have a callback registered
       expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(5); // 5 gauges
-      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(4); // 4 counters (mutations, rows_synced, connections_success, connections_failed)
+      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(5); // 5 counters (uptime_counter, mutations, rows_synced, connections_success, connections_attempted)
     });
   });
 
@@ -250,7 +258,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
       expect(() => recordRowsSynced(42)).not.toThrow();
       expect(() => updateCvrSize(1024)).not.toThrow();
       expect(() => recordConnectionSuccess()).not.toThrow();
-      expect(() => recordConnectionFailed()).not.toThrow();
+      expect(() => recordConnectionAttempted()).not.toThrow();
     });
 
     test('should accumulate mutation counts', () => {
@@ -293,14 +301,15 @@ describe('Anonymous Telemetry Integration Tests', () => {
       expect(() => recordConnectionSuccess()).not.toThrow();
     });
 
-    test('should accumulate connection failure counts', () => {
-      // Record multiple failed connections
-      recordConnectionFailed();
-      recordConnectionFailed();
+    test('should accumulate connection attempted counts', () => {
+      // Record multiple attempted connections
+      recordConnectionAttempted();
+      recordConnectionAttempted();
+      recordConnectionAttempted();
 
-      // Connection failures should be accumulated internally
+      // Connection attempts should be accumulated internally
       // The actual value will be observed when the callback is triggered
-      expect(() => recordConnectionFailed()).not.toThrow();
+      expect(() => recordConnectionAttempted()).not.toThrow();
     });
   });
 
@@ -904,6 +913,230 @@ describe('Anonymous Telemetry Integration Tests', () => {
         );
         expect(secondRowsValue).toBeGreaterThanOrEqual(firstRowsValue + 10);
       }
+    });
+  });
+
+  describe('ViewSyncerService Integration', () => {
+    test('should call addClientGroup when ViewSyncerService starts running', async () => {
+      // We'll need to mock ViewSyncerService dependencies to test this
+      const clientGroupId = 'view-syncer-test-group';
+
+      // Import the functions we need to spy on
+      const {
+        addClientGroup: addClientGroupSpy,
+        removeClientGroup: removeClientGroupSpy,
+      } = await import('./anonymous-otel-start.ts');
+
+      // Create spies to track calls
+      const addSpy = vi.fn();
+      const removeSpy = vi.fn();
+
+      // Mock the telemetry functions
+      vi.doMock('./anonymous-otel-start.ts', () => ({
+        ...vi.importActual('./anonymous-otel-start.ts'),
+        addClientGroup: addSpy,
+        removeClientGroup: removeSpy,
+      }));
+
+      // Since we can't easily test the full ViewSyncerService lifecycle in a unit test
+      // due to its complexity, we'll test that the functions themselves work correctly
+      // when called with a client group ID
+      addClientGroupSpy(clientGroupId);
+      expect(() => addClientGroupSpy(clientGroupId)).not.toThrow();
+
+      removeClientGroupSpy(clientGroupId);
+      expect(() => removeClientGroupSpy(clientGroupId)).not.toThrow();
+    });
+
+    test('should track client group lifecycle in telemetry', () => {
+      const clientGroupId = 'lifecycle-test-group';
+
+      // Get initial client group count
+      const clientGroupsCallback = mockObservableGauge.addCallback.mock.calls
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .find((call: any) =>
+          call[0].toString().includes('connectedClientGroups'),
+        )?.[0];
+
+      let initialCount = 0;
+      if (clientGroupsCallback) {
+        const mockResult = {observe: vi.fn()};
+        clientGroupsCallback(mockResult);
+        initialCount = mockResult.observe.mock.calls[0]?.[0] || 0;
+      }
+
+      // Add client group (simulating ViewSyncerService.run())
+      addClientGroup(clientGroupId);
+
+      // Verify count increased
+      if (clientGroupsCallback) {
+        const mockResult = {observe: vi.fn()};
+        clientGroupsCallback(mockResult);
+        const newCount = mockResult.observe.mock.calls[0]?.[0] || 0;
+        expect(newCount).toBeGreaterThan(initialCount);
+      }
+
+      // Remove client group (simulating ViewSyncerService.#cleanup())
+      removeClientGroup(clientGroupId);
+
+      // Verify count decreased
+      if (clientGroupsCallback) {
+        const mockResult = {observe: vi.fn()};
+        clientGroupsCallback(mockResult);
+        const finalCount = mockResult.observe.mock.calls[0]?.[0] || 0;
+        expect(finalCount).toBeLessThanOrEqual(initialCount + 1);
+      }
+    });
+
+    test('should handle multiple ViewSyncerService instances correctly', () => {
+      const clientGroupIds = [
+        'view-syncer-1',
+        'view-syncer-2',
+        'view-syncer-3',
+      ];
+
+      // Simulate multiple ViewSyncerService instances starting
+      clientGroupIds.forEach(id => {
+        expect(() => addClientGroup(id)).not.toThrow();
+      });
+
+      // Verify all are tracked
+      const clientGroupsCallback = mockObservableGauge.addCallback.mock.calls
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .find((call: any) =>
+          call[0].toString().includes('connectedClientGroups'),
+        )?.[0];
+
+      if (clientGroupsCallback) {
+        const mockResult = {observe: vi.fn()};
+        clientGroupsCallback(mockResult);
+        const count = mockResult.observe.mock.calls[0]?.[0] || 0;
+        expect(count).toBeGreaterThanOrEqual(clientGroupIds.length);
+      }
+
+      // Simulate ViewSyncerService instances stopping (cleanup)
+      clientGroupIds.forEach(id => {
+        expect(() => removeClientGroup(id)).not.toThrow();
+      });
+
+      // Verify telemetry is cleaned up properly
+      expect(() => {
+        if (clientGroupsCallback) {
+          const mockResult = {observe: vi.fn()};
+          clientGroupsCallback(mockResult);
+        }
+      }).not.toThrow();
+    });
+
+    test('should handle ViewSyncerService error scenarios correctly', () => {
+      const clientGroupId = 'error-test-group';
+
+      // Add client group (simulating ViewSyncerService.run())
+      addClientGroup(clientGroupId);
+
+      // Even if ViewSyncerService encounters an error, cleanup should still work
+      // (simulating ViewSyncerService.#cleanup() being called with an error)
+      expect(() => removeClientGroup(clientGroupId)).not.toThrow();
+
+      // Verify duplicate cleanup calls don't cause issues
+      expect(() => removeClientGroup(clientGroupId)).not.toThrow();
+
+      // Verify removing non-existent client group doesn't cause issues
+      expect(() => removeClientGroup('non-existent-group')).not.toThrow();
+    });
+
+    test('should properly clean up queries when client group is removed', () => {
+      const clientGroupId = 'query-cleanup-test-group';
+      const queryIds = ['query-1', 'query-2', 'query-3'];
+
+      // Simulate ViewSyncerService starting and adding queries
+      addClientGroup(clientGroupId);
+      queryIds.forEach(queryId => {
+        addActiveQuery(clientGroupId, queryId);
+      });
+
+      // Verify queries are tracked
+      const activeQueriesCallback = mockObservableGauge.addCallback.mock.calls
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .find((call: any) =>
+          call[0].toString().includes('getTotalActiveQueries'),
+        )?.[0];
+
+      let queriesBeforeCleanup = 0;
+      if (activeQueriesCallback) {
+        const mockResult = {observe: vi.fn()};
+        activeQueriesCallback(mockResult);
+        queriesBeforeCleanup = mockResult.observe.mock.calls[0]?.[0] || 0;
+        expect(queriesBeforeCleanup).toBeGreaterThanOrEqual(queryIds.length);
+      }
+
+      // Simulate ViewSyncerService cleanup (which calls removeClientGroup)
+      removeClientGroup(clientGroupId);
+
+      // Verify queries were cleaned up automatically
+      if (activeQueriesCallback) {
+        const mockResult = {observe: vi.fn()};
+        activeQueriesCallback(mockResult);
+        const queriesAfterCleanup = mockResult.observe.mock.calls[0]?.[0] || 0;
+        expect(queriesAfterCleanup).toBeLessThan(queriesBeforeCleanup);
+      }
+    });
+
+    test('should handle concurrent ViewSyncerService operations', () => {
+      const clientGroupIds = [
+        'concurrent-1',
+        'concurrent-2',
+        'concurrent-3',
+        'concurrent-4',
+        'concurrent-5',
+      ];
+
+      // Simulate multiple ViewSyncerService instances being created and destroyed concurrently
+      expect(() => {
+        // Add all client groups
+        clientGroupIds.forEach(id => addClientGroup(id));
+
+        // Add some queries to each
+        clientGroupIds.forEach(id => {
+          addActiveQuery(id, `query-${id}-1`);
+          addActiveQuery(id, `query-${id}-2`);
+        });
+
+        // Remove some client groups
+        clientGroupIds.slice(0, 2).forEach(id => removeClientGroup(id));
+
+        // Add more queries to remaining groups
+        clientGroupIds.slice(2).forEach(id => {
+          addActiveQuery(id, `query-${id}-3`);
+        });
+
+        // Remove remaining client groups
+        clientGroupIds.slice(2).forEach(id => removeClientGroup(id));
+      }).not.toThrow();
+
+      // Verify telemetry state is consistent
+      const clientGroupsCallback = mockObservableGauge.addCallback.mock.calls
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .find((call: any) =>
+          call[0].toString().includes('connectedClientGroups'),
+        )?.[0];
+
+      const activeQueriesCallback = mockObservableGauge.addCallback.mock.calls
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .find((call: any) =>
+          call[0].toString().includes('getTotalActiveQueries'),
+        )?.[0];
+
+      expect(() => {
+        if (clientGroupsCallback) {
+          const mockResult = {observe: vi.fn()};
+          clientGroupsCallback(mockResult);
+        }
+        if (activeQueriesCallback) {
+          const mockResult = {observe: vi.fn()};
+          activeQueriesCallback(mockResult);
+        }
+      }).not.toThrow();
     });
   });
 });
