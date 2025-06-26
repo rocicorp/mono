@@ -70,7 +70,6 @@ export class ActiveClientsManager {
   readonly #resolver = resolver<void>();
   readonly #lockManager: ClientLockManager;
   #activeClients: Set<string> = new Set();
-  readonly #readyResolver = resolver();
 
   /**
    * A callback that is called when the list of active clients changes. It
