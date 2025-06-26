@@ -6,6 +6,10 @@ import {MessagePort} from 'node:worker_threads';
 import {WebSocketServer, type WebSocket} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {
+  PROTOCOL_VERSION,
+  MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
+} from '../../../zero-protocol/src/protocol-version.ts';
 import {verifyToken} from '../auth/jwt.ts';
 import {type AuthConfig, type ZeroConfig} from '../config/zero-config.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
@@ -29,6 +33,8 @@ import {SyncerWsMessageHandler} from './syncer-ws-message-handler.ts';
 import {
   addClientGroup,
   removeClientGroup,
+  recordConnectionSuccess,
+  recordConnectionFailed,
 } from '../server/anonymous-otel-start.ts';
 
 export type SyncerWorkerData = {
@@ -136,6 +142,7 @@ export class Syncer implements SingletonService {
           e,
         );
         ws.close(3000, 'Failed to decode JWT');
+        recordConnectionFailed();
         return;
       }
     } else {
@@ -185,11 +192,24 @@ export class Syncer implements SingletonService {
     } catch (e) {
       mutagen.unref();
       pusher?.unref();
+      recordConnectionFailed();
       throw e;
     }
 
     this.#connections.set(clientID, connection);
+
+    // Check if connection will succeed based on protocol version
+    if (
+      params.protocolVersion > PROTOCOL_VERSION ||
+      params.protocolVersion < MIN_SERVER_SUPPORTED_SYNC_PROTOCOL
+    ) {
+      recordConnectionFailed();
+    } else {
+      recordConnectionSuccess();
+    }
+
     connection.init();
+
     if (params.initConnectionMsg) {
       this.#lc.debug?.(
         'handling init connection message from sec header',
