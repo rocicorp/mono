@@ -18,7 +18,6 @@ import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/change-desired-queries.ts';
-import type {CloseConnectionMessage} from '../../../../zero-protocol/src/close-connection.ts';
 import type {
   InitConnectionBody,
   InitConnectionMessage,
@@ -30,7 +29,6 @@ import type {
   InspectUpBody,
   InspectUpMessage,
 } from '../../../../zero-protocol/src/inspect-up.ts';
-import type {Upstream} from '../../../../zero-protocol/src/up.ts';
 import {
   transformAndHashQuery,
   type TransformedAndHashed,
@@ -112,7 +110,6 @@ export interface ViewSyncer {
   ): Promise<void>;
 
   deleteClients(ctx: SyncContext, msg: DeleteClientsMessage): Promise<void>;
-  closeConnection(ctx: SyncContext, msg: CloseConnectionMessage): Promise<void>;
   inspect(context: SyncContext, msg: InspectUpMessage): Promise<void>;
 }
 
@@ -574,21 +571,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
   }
 
-  async closeConnection(
-    ctx: SyncContext,
-    msg: CloseConnectionMessage,
-  ): Promise<void> {
-    try {
-      await this.#runInLockForClient(
-        ctx,
-        [msg[0], {deleted: {clientIDs: [ctx.clientID]}}],
-        this.#handleConfigUpdate,
-      );
-    } catch (e) {
-      this.#lc.error?.('closeConnection failed', e);
-    }
-  }
-
   #getTTLClock(now: number): number {
     // We will update ttlClock with delta from the ttlClockBase to the current time.
     const delta = now - this.#ttlClockBase;
@@ -686,7 +668,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     fn: (
       lc: LogContext,
       clientID: string,
-      cmd: M[0],
       body: B,
       cvr: CVRSnapshot,
     ) => Promise<void>,
@@ -729,7 +710,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             }
 
             lc.debug?.(cmd, body);
-            return fn(lc, clientID, cmd, body, cvr);
+            return fn(lc, clientID, body, cvr);
           });
         } catch (e) {
           const lc = this.#lc
@@ -762,7 +743,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #handleConfigUpdate = (
     lc: LogContext,
     clientID: string,
-    cmd: Upstream[0],
     {clientSchema, deleted, desiredQueriesPatch}: Partial<InitConnectionBody>,
     cvr: CVRSnapshot,
   ) =>
@@ -805,11 +785,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         if (deleted?.clientIDs?.length || deleted?.clientGroupIDs?.length) {
           if (deleted?.clientIDs) {
             for (const cid of deleted.clientIDs) {
-              if (cmd === 'closeConnection') {
-                assert(cid === clientID, 'cannot close other clients');
-              } else {
-                assert(cid !== clientID, 'cannot delete self');
-              }
+              assert(cid !== clientID, 'cannot delete self');
               const patchesDueToClient = updater.deleteClient(cid);
               patches.push(...patchesDueToClient);
               deletedClientIDs.push(cid);
@@ -1670,7 +1646,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #handleInspect = async (
     lc: LogContext,
     clientID: string,
-    _cmd: 'inspect',
     body: InspectUpBody,
     _cvr: CVRSnapshot,
   ): Promise<void> => {

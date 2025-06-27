@@ -1,6 +1,5 @@
 import * as v from '../../shared/src/valita.ts';
 import {changeDesiredQueriesMessageSchema} from './change-desired-queries.ts';
-import {closeConnectionMessageSchema} from './close-connection.ts';
 import {initConnectionMessageSchema} from './connect.ts';
 import {deleteClientsMessageSchema} from './delete-clients.ts';
 import {inspectUpMessageSchema} from './inspect-up.ts';
@@ -15,7 +14,6 @@ export const upstreamSchema = v.union(
   changeDesiredQueriesMessageSchema,
   pullRequestMessageSchema,
   pushMessageSchema,
-  closeConnectionMessageSchema,
   inspectUpMessageSchema,
 );
 
