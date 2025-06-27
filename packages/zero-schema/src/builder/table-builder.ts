@@ -68,7 +68,12 @@ export class TableBuilder<TShape extends TableSchema> {
   from<ServerName extends string>(serverName: ServerName) {
     return new TableBuilder<TShape>({
       ...this.#schema,
-      serverName,
+      // Strip the "public." schema if specific, as tables in the public
+      // schema are replicated without the schema prefix.
+      // See liteTableName() in zero-cache/src/types/names.ts
+      serverName: serverName.startsWith('public.')
+        ? serverName.substring('public.'.length)
+        : serverName,
     });
   }
 
