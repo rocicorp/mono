@@ -2,7 +2,7 @@ name: Build and Deploy Sandbox Zero-Cache AWS SST
 
 on:
   push:
-    branches: [sandbox]
+    branches: [arv/active-clients-init-connect]
 env:
   # Setting an environment variable with the value of a configuration variable
   ECR_IMAGE_ZERO_CACHE: zero-zbugs-sandbox
