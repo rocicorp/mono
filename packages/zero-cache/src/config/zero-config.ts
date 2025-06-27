@@ -601,6 +601,15 @@ export const zeroOptions = {
     type: v.string().optional(),
     desc: [`The version string outputted to logs when the server starts up.`],
   },
+
+  enableUsageAnalytics: {
+    type: v.boolean().default(true),
+    desc: [
+      `Enable anonymous usage analytics telemetry. Set to false to opt out of`,
+      `telemetry collection. This helps us improve Zero Cache by collecting`,
+      `anonymous usage statistics.`,
+    ],
+  },
 };
 
 export type ZeroConfig = Config<typeof zeroOptions>;
