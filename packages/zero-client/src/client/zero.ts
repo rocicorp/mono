@@ -1238,7 +1238,7 @@ export class Zero<
       this.#options.push,
       this.#options.maxHeaderLength,
       additionalConnectParams,
-      this.#activeClientsManager,
+      await this.#activeClientsManager,
     );
 
     if (this.closed) {
@@ -1926,7 +1926,7 @@ export async function createSocket(
   userPushParams: UserPushParams | undefined,
   maxHeaderLength = 1024 * 8,
   additionalConnectParams: Record<string, string> | undefined,
-  activeClientsManager: Promise<Pick<ActiveClientsManager, 'getActiveClients'>>,
+  activeClientsManager: Pick<ActiveClientsManager, 'activeClients'>,
 ): Promise<
   [
     WebSocket,
@@ -1971,9 +1971,7 @@ export async function createSocket(
     await deleteClientsManager.getDeletedClients();
   let queriesPatch: Map<string, UpQueriesPatchOp> | undefined =
     await queriesPatchP;
-  const activeClients = [
-    ...(await activeClientsManager.then(manager => manager.getActiveClients())),
-  ];
+  const {activeClients} = activeClientsManager;
 
   let secProtocol = encodeSecProtocols(
     [
@@ -1985,7 +1983,7 @@ export async function createSocket(
         // Henceforth it is stored with the CVR and verified automatically.
         ...(baseCookie === null ? {clientSchema} : {}),
         userPushParams,
-        activeClients,
+        activeClients: [...activeClients],
       },
     ],
     auth,

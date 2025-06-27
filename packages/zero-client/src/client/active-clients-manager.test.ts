@@ -51,20 +51,16 @@ describe('ActiveClientManager with mocked locks', () => {
       'client1',
       ac.signal,
     );
-    const activeClients = await clientManager.getActiveClients();
 
-    expect(activeClients).toEqual(new Set(['client1', 'client2']));
+    expect(clientManager.activeClients).toEqual(
+      new Set(['client1', 'client2']),
+    );
+
     ac.abort();
   });
 
   test('should ignore invalid lock keys', async () => {
     const ac = new AbortController();
-
-    const clientManager = await ActiveClientsManager.create(
-      'group1',
-      'client1',
-      ac.signal,
-    );
 
     querySpy.mockResolvedValue({
       held: [{name: 'invalid-lock-key', mode: 'exclusive'}],
@@ -74,9 +70,15 @@ describe('ActiveClientManager with mocked locks', () => {
       ],
     });
 
-    const activeClients = await clientManager.getActiveClients();
+    const clientManager = await ActiveClientsManager.create(
+      'group1',
+      'client1',
+      ac.signal,
+    );
 
-    expect(activeClients).toEqual(new Set(['client1', 'client3']));
+    expect(clientManager.activeClients).toEqual(
+      new Set(['client1', 'client3']),
+    );
     ac.abort();
   });
 });
@@ -93,9 +95,8 @@ describe('ActiveClientManager without navigator', () => {
       'client1',
       ac.signal,
     );
-    const activeClients = await clientManager.getActiveClients();
 
-    expect(activeClients).toEqual(new Set(['client1']));
+    expect(clientManager.activeClients).toEqual(new Set(['client1']));
     ac.abort();
   });
 
@@ -113,19 +114,18 @@ describe('ActiveClientManager without navigator', () => {
       'client2',
       ac2.signal,
     );
+    await waitForPostMessage();
 
-    expect(await clientManager1.getActiveClients()).toEqual(
+    expect(clientManager1.activeClients).toEqual(
       new Set(['client1', 'client2']),
     );
-    expect(await clientManager2.getActiveClients()).toEqual(
+    expect(clientManager2.activeClients).toEqual(
       new Set(['client1', 'client2']),
     );
 
     ac1.abort();
 
-    expect(await clientManager2.getActiveClients()).toEqual(
-      new Set(['client2']),
-    );
+    expect(clientManager2.activeClients).toEqual(new Set(['client2']));
 
     ac2.abort();
   });
@@ -144,15 +144,13 @@ describe('ActiveClientManager with undefined locks', () => {
 
   test('should return set with self if navigator.locks is undefined', async () => {
     vi.stubGlobal('navigator', {locks: undefined});
-
     const clientManager = await ActiveClientsManager.create(
       'group1',
       'client1',
       signal,
     );
-    const activeClients = await clientManager.getActiveClients();
 
-    expect(activeClients).toEqual(new Set(['client1']));
+    expect(clientManager.activeClients).toEqual(new Set(['client1']));
   });
 });
 
@@ -272,9 +270,8 @@ describe('ActiveClientManager', () => {
         'client1',
         ac.signal,
       );
-      const activeClients = await clientManager.getActiveClients();
 
-      expect(activeClients).toEqual(new Set(['client1']));
+      expect(clientManager.activeClients).toEqual(new Set(['client1']));
 
       ac.abort();
     });
@@ -297,12 +294,14 @@ describe('ActiveClientManager', () => {
         'client2',
         ac2.signal,
       );
+      await waitForPostMessage();
 
-      const activeClients1 = await clientManager1.getActiveClients();
-      const activeClients2 = await clientManager2.getActiveClients();
-
-      expect(activeClients1).toEqual(new Set(['client1', 'client2']));
-      expect(activeClients2).toEqual(new Set(['client1', 'client2']));
+      expect(clientManager1.activeClients).toEqual(
+        new Set(['client1', 'client2']),
+      );
+      expect(clientManager2.activeClients).toEqual(
+        new Set(['client1', 'client2']),
+      );
 
       ac1.abort();
       ac2.abort();
@@ -339,15 +338,20 @@ describe('ActiveClientManager', () => {
         'client4',
         ac4.signal,
       );
+      await waitForPostMessage();
 
-      const activeClients1 = await clientManager1.getActiveClients();
-      const activeClients2 = await clientManager2.getActiveClients();
-      const activeClients3 = await clientManager3.getActiveClients();
-      const activeClients4 = await clientManager4.getActiveClients();
-      expect(activeClients1).toEqual(new Set(['client1', 'client2']));
-      expect(activeClients2).toEqual(new Set(['client1', 'client2']));
-      expect(activeClients3).toEqual(new Set(['client3', 'client4']));
-      expect(activeClients4).toEqual(new Set(['client3', 'client4']));
+      expect(clientManager1.activeClients).toEqual(
+        new Set(['client1', 'client2']),
+      );
+      expect(clientManager2.activeClients).toEqual(
+        new Set(['client1', 'client2']),
+      );
+      expect(clientManager3.activeClients).toEqual(
+        new Set(['client3', 'client4']),
+      );
+      expect(clientManager4.activeClients).toEqual(
+        new Set(['client3', 'client4']),
+      );
 
       ac1.abort();
       ac2.abort();
@@ -375,8 +379,8 @@ describe('ActiveClientManager', () => {
         ac2.signal,
       );
 
-      const activeClients1 = await clientManager1.getActiveClients();
-      const activeClients2 = await clientManager2.getActiveClients();
+      const activeClients1 = clientManager1.activeClients;
+      const activeClients2 = clientManager2.activeClients;
 
       expect(activeClients1).toEqual(new Set(['client1']));
       expect(activeClients2).toEqual(new Set(['client2']));
@@ -409,28 +413,28 @@ describe('ActiveClientManager', () => {
         'client3',
         ac3.signal,
       );
+      await waitForPostMessage();
 
-      const activeClients1 = await clientManager1.getActiveClients();
-      const activeClients2 = await clientManager2.getActiveClients();
-      const activeClients3 = await clientManager3.getActiveClients();
-
-      expect(activeClients1).toEqual(
+      expect(clientManager1.activeClients).toEqual(
         new Set(['client1', 'client2', 'client3']),
       );
-      expect(activeClients2).toEqual(
+      expect(clientManager2.activeClients).toEqual(
         new Set(['client1', 'client2', 'client3']),
       );
-      expect(activeClients3).toEqual(
+      expect(clientManager3.activeClients).toEqual(
         new Set(['client1', 'client2', 'client3']),
       );
 
       ac1.abort();
       await sleep(5); // Give some time for the change to propagate
 
-      const activeClientsAfterClose1 = await clientManager2.getActiveClients();
+      const activeClientsAfterClose1 = clientManager2.activeClients;
       expect(activeClientsAfterClose1).toEqual(new Set(['client2', 'client3']));
 
-      const activeClientsAfterClose2 = await clientManager3.getActiveClients();
+      expect(clientManager2.activeClients).toEqual(
+        new Set(['client2', 'client3']),
+      );
+      const activeClientsAfterClose2 = clientManager3.activeClients;
       expect(activeClientsAfterClose2).toEqual(new Set(['client2', 'client3']));
 
       ac2.abort();
@@ -438,3 +442,19 @@ describe('ActiveClientManager', () => {
     });
   });
 });
+
+// postMessage uses a message queue. By adding another message to the queue,
+// we can ensure that the first message is processed before the second one.
+function waitForPostMessage() {
+  return new Promise<void>(resolve => {
+    const name = nanoid();
+    const c1 = new BroadcastChannel(name);
+    const c2 = new BroadcastChannel(name);
+    c2.postMessage('');
+    c1.onmessage = () => {
+      c1.close();
+      c2.close();
+      resolve();
+    };
+  });
+}
