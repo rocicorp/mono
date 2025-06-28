@@ -1,6 +1,7 @@
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import {assert} from '../../../shared/src/asserts.ts';
+import {LogarithmicHistogram} from '../../../shared/src/logarithmic-histogram.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
@@ -15,6 +16,7 @@ import type {
 } from '../../../zql/src/query/query-delegate.ts';
 import type {RunOptions} from '../../../zql/src/query/query.ts';
 import type {TTL} from '../../../zql/src/query/ttl.ts';
+import type {HistogramsDelegate, HistogramsMap} from './inspector/types.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
@@ -30,7 +32,7 @@ export type UpdateCustomQuery = QueryManager['updateCustom'];
  * Replicache data and pushes them into IVM and on tells the server about new
  * queries.
  */
-export class ZeroContext implements QueryDelegate {
+export class ZeroContext implements QueryDelegate, HistogramsDelegate {
   // It is a bummer to have to maintain separate MemorySources here and copy the
   // data in from the Replicache db. But we want the data to be accessible via
   // pipelines *synchronously* and the core Replicache infra is all async. So
@@ -52,6 +54,16 @@ export class ZeroContext implements QueryDelegate {
    * "complete" once the server has sent back the query result.
    */
   readonly defaultQueryComplete = false;
+
+  /**
+   * Histograms for materialization durations of queries.
+   */
+  readonly #materializeHistograms = new Map<string, LogarithmicHistogram>();
+
+  /**
+   * Histograms for advance durations.
+   */
+  readonly #advanceHistograms = new LogarithmicHistogram();
 
   constructor(
     lc: ZeroLogContext,
@@ -123,6 +135,14 @@ export class ZeroContext implements QueryDelegate {
         duration,
       );
     }
+
+    // Add a histogram for the materialization duration.
+    let histogram = this.#materializeHistograms.get(hash);
+    if (histogram === undefined) {
+      histogram = new LogarithmicHistogram();
+      this.#materializeHistograms.set(hash, histogram);
+    }
+    histogram.add(duration);
   }
 
   mapAst(ast: AST): AST {
@@ -169,7 +189,9 @@ export class ZeroContext implements QueryDelegate {
   ) {
     this.batchViewUpdates(() => {
       try {
+        const t0 = performance.now();
         this.#mainSources.advance(expectedHead, newHead, changes);
+        this.#advanceHistograms.add(performance.now() - t0);
       } finally {
         this.#endTransaction();
       }
@@ -191,5 +213,17 @@ export class ZeroContext implements QueryDelegate {
         );
       }
     }
+  }
+
+  queryHistograms(hash: string): HistogramsMap {
+    const histogram = this.#materializeHistograms.get(hash);
+    if (histogram === undefined) {
+      return new Map();
+    }
+    return new Map([['materialize', histogram]]);
+  }
+
+  get advanceHistogram(): LogarithmicHistogram {
+    return this.#advanceHistograms;
   }
 }
