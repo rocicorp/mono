@@ -278,6 +278,13 @@ export class TableSource implements Source {
 
       const comparator = makeComparator(sort, req.reverse);
 
+      runtimeDebugStats.rowVended(
+        this.#clientGroupID,
+        this.#table,
+        sqlAndBindings.text,
+        undefined,
+      );
+
       yield* generateWithStart(
         generateWithOverlay(
           req.start?.row,
