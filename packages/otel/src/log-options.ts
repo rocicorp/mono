@@ -1,8 +1,10 @@
 import {type Config} from '../../shared/src/options.ts';
 import * as v from '../../shared/src/valita.ts';
 
+export const logLevel = v.literalUnion('debug', 'info', 'warn', 'error');
+
 export const logOptions = {
-  level: v.literalUnion('debug', 'info', 'warn', 'error').default('info'),
+  level: logLevel.default('info'),
 
   format: {
     type: v.literalUnion('text', 'json').default('text'),

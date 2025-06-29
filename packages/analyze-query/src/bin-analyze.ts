@@ -1,10 +1,11 @@
 /* eslint-disable no-console */
 import '../../shared/src/dotenv.ts';
 import chalk from 'chalk';
+import fs from 'node:fs';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {colorConsole, createLogContext} from '../../shared/src/logging.ts';
 import {must} from '../../shared/src/must.ts';
 import {parseOptions} from '../../shared/src/options.ts';
 import * as v from '../../shared/src/valita.ts';
@@ -15,7 +16,10 @@ import {
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
 } from '../../zero-cache/src/config/zero-config.ts';
-import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
+import {
+  deployPermissionsOptions,
+  loadSchemaAndPermissions,
+} from '../../zero-cache/src/scripts/permissions.ts';
 import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
@@ -46,9 +50,14 @@ import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {Row} from '../../zero-protocol/src/data.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
+import {logLevel, logOptions} from '../../otel/src/log-options.ts';
 
 const options = {
-  replica: zeroOptions.replica,
+  schema: deployPermissionsOptions.schema,
+  replicaFile: {
+    ...zeroOptions.replica.file,
+    desc: [`File path to the SQLite replica to test queries against.`],
+  },
   ast: {
     type: v.string().optional(),
     desc: [
@@ -71,10 +80,6 @@ const options = {
       `configuration required. The .env file should contain the connection URL to the CVR database.`,
     ],
   },
-  schemaPath: {
-    type: v.string().default('./schema.ts'),
-    desc: ['Path to the schema file.'],
-  },
   applyPermissions: {
     type: v.boolean().default(false),
     desc: [
@@ -88,19 +93,6 @@ const options = {
       'This will be used to fill permission variables if the "applyPermissions" option is set',
     ],
   },
-  cvr: {
-    db: {
-      type: v.string().optional(),
-      desc: [
-        'Connection URL to the CVR database. Required if using a query hash. ',
-        'Will attempt to be set to your upstream db if this option is not specified.',
-        'If your upstream db does not have a schema for the cvr, you must provide this in ',
-        'order to use the hash option.',
-      ],
-    },
-  },
-  app: appOptions,
-  shard: shardOptions,
   outputVendedRows: {
     type: v.boolean().default(false),
     desc: [
@@ -114,20 +106,31 @@ const options = {
       'Whether to output the rows which would be synced to the client for the analyzed query.',
     ],
   },
-
-  // This args is hidden as it is only present to:
-  // 1. Parse it out of the env if it exists
-  // 2. Use it to default the `cvr` to `upstream` if `cvr` is not provided
-  upstream: Object.fromEntries(
-    Object.entries(zeroOptions.upstream).map(([key, value]) => [
-      key,
-      {
-        ...value,
-        type: value.type.optional(),
-        hidden: true,
-      },
-    ]),
-  ) as unknown as typeof zeroOptions.upstream,
+  cvr: {
+    db: {
+      type: v.string().optional(),
+      desc: [
+        'Connection URL to the CVR database. If using --hash, either this or --upstream-db',
+        'must be specified.',
+      ],
+    },
+  },
+  upstream: {
+    db: {
+      desc: [
+        `Connection URL to the "upstream" authoritative postgres database. If using --hash, `,
+        'either this or --cvr-db must be specified.',
+      ],
+      type: v.string().optional(),
+    },
+    type: zeroOptions.upstream.type,
+  },
+  app: appOptions,
+  shard: shardOptions,
+  log: {
+    ...logOptions,
+    level: logLevel.default('error'),
+  },
 };
 
 const cfg = parseOptions(
@@ -150,13 +153,20 @@ runtimeDebugFlags.trackRowCountsVended = true;
 runtimeDebugFlags.trackRowsVended = config.outputVendedRows;
 
 const clientGroupID = 'clientGroupIDForAnalyze';
-const lc = createSilentLogContext();
+const lc = createLogContext({
+  log: config.log,
+});
 
-const db = new Database(lc, config.replica.file);
+if (!fs.existsSync(config.replicaFile)) {
+  colorConsole.error(`Replica file ${config.replicaFile} does not exist`);
+  process.exit(1);
+}
+const db = new Database(lc, config.replicaFile);
+
 const {schema, permissions} = await loadSchemaAndPermissions(
-  lc,
-  config.schemaPath,
+  config.schema.path,
 );
+
 const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const serverToClientMapper = serverToClient(schema.tables);
@@ -230,7 +240,8 @@ if (config.ast) {
 } else if (config.hash) {
   [start, end] = await runHash(config.hash);
 } else {
-  throw new Error('No query or AST or hash provided');
+  colorConsole.error('No query or AST or hash provided');
+  process.exit(1);
 }
 
 async function runAst(
@@ -244,10 +255,8 @@ async function runAst(
   if (config.applyPermissions) {
     const authData = config.authData ? JSON.parse(config.authData) : {};
     if (!config.authData) {
-      console.warn(
-        chalk.yellow(
-          'No auth data provided. Permission rules will compare to `NULL` wherever an auth data field is referenced.',
-        ),
+      colorConsole.warn(
+        'No auth data provided. Permission rules will compare to `NULL` wherever an auth data field is referenced.',
       );
     }
     ast = transformAndHashQuery(
@@ -258,8 +267,8 @@ async function runAst(
       authData,
       false,
     ).transformedAst;
-    console.log(chalk.blue.bold('\n\n=== Query After Permissions: ===\n'));
-    console.log(await formatOutput(ast.table + astToZQL(ast)));
+    colorConsole.log(chalk.blue.bold('\n\n=== Query After Permissions: ===\n'));
+    colorConsole.log(await formatOutput(ast.table + astToZQL(ast)));
   }
 
   const tableSpecs = computeZqlSpecs(lc, db);
@@ -268,7 +277,7 @@ async function runAst(
   const start = performance.now();
 
   if (config.outputSyncedRows) {
-    console.log(chalk.blue.bold('\n\n=== Synced rows: ===\n'));
+    colorConsole.log(chalk.blue.bold('\n\n=== Synced rows: ===\n'));
   }
   let syncedRowCount = 0;
   const rowsByTable: Record<string, Row[]> = {};
@@ -286,9 +295,9 @@ async function runAst(
   }
   if (config.outputSyncedRows) {
     for (const [source, rows] of Object.entries(rowsByTable)) {
-      console.log(chalk.bold(`${source}:`), rows);
+      colorConsole.log(chalk.bold(`${source}:`), rows);
     }
-    console.log(chalk.bold('total synced rows:'), syncedRowCount);
+    colorConsole.log(chalk.bold('total synced rows:'), syncedRowCount);
   }
 
   const end = performance.now();
@@ -324,17 +333,17 @@ async function runHash(hash: string) {
     )} limit 1;`;
   await cvrDB.end();
 
-  console.log('ZQL from Hash:');
+  colorConsole.log('ZQL from Hash:');
   const ast = rows[0].clientAST as AST;
-  console.log(await formatOutput(ast.table + astToZQL(ast)));
+  colorConsole.log(await formatOutput(ast.table + astToZQL(ast)));
 
   return runAst(ast, true);
 }
 
-console.log(chalk.blue.bold('=== Query Stats: ===\n'));
+colorConsole.log(chalk.blue.bold('=== Query Stats: ===\n'));
 showStats();
 if (config.outputVendedRows) {
-  console.log(chalk.blue.bold('=== Vended Rows: ===\n'));
+  colorConsole.log(chalk.blue.bold('=== Vended Rows: ===\n'));
   for (const source of sources.values()) {
     const entries = [
       ...(runtimeDebugStats
@@ -343,10 +352,13 @@ if (config.outputVendedRows) {
         ?.get(source.table)
         ?.entries() ?? []),
     ];
-    console.log(chalk.bold(`${source.table}:`), Object.fromEntries(entries));
+    colorConsole.log(
+      chalk.bold(`${source.table}:`),
+      Object.fromEntries(entries),
+    );
   }
 }
-console.log(chalk.blue.bold('\n\n=== Query Plans: ===\n'));
+colorConsole.log(chalk.blue.bold('\n\n=== Query Plans: ===\n'));
 explainQueries();
 
 function showStats() {
@@ -360,17 +372,17 @@ function showStats() {
         ?.entries() ?? []),
     ];
     totalRowsConsidered += entries.reduce((acc, entry) => acc + entry[1], 0);
-    console.log(
+    colorConsole.log(
       chalk.bold(source.table + ' vended:'),
       Object.fromEntries(entries),
     );
   }
 
-  console.log(
+  colorConsole.log(
     chalk.bold('total rows considered:'),
     colorRowsConsidered(totalRowsConsidered),
   );
-  console.log(chalk.bold('time:'), colorTime(end - start), 'ms');
+  colorConsole.log(chalk.bold('time:'), colorTime(end - start), 'ms');
 }
 
 function explainQueries() {
@@ -382,8 +394,8 @@ function explainQueries() {
         ?.get(source.table)
         ?.keys() ?? [];
     for (const query of queries) {
-      console.log(chalk.bold('query'), query);
-      console.log(
+      colorConsole.log(chalk.bold('query'), query);
+      colorConsole.log(
         db
           // we should be more intelligent about value replacement.
           // Different values result in different plans. E.g., picking a value at the start
@@ -393,7 +405,7 @@ function explainQueries() {
           .map((row, i) => colorPlanRow(row.detail, i))
           .join('\n'),
       );
-      console.log('\n');
+      colorConsole.log('\n');
     }
   }
 }
