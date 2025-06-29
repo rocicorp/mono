@@ -129,7 +129,7 @@ export async function initViewSyncerSchema(
 
   const migratedV12ToV13: Migration = {
     migrateSchema: async (_, tx) => {
-      await tx`ALTER TABLE ${tx(schema)}.instances ALTER COLUMN "ttlClock" DOUBLE PRECISION NOT NULL DEFAULT 0`;
+      await tx`ALTER TABLE ${tx(schema)}.instances ADD COLUMN "ttlClock" DOUBLE PRECISION NOT NULL DEFAULT 0`;
     },
   };
 
