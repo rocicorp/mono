@@ -561,6 +561,7 @@ test.each([
     options,
     argv,
     'Z_',
+    [],
     true,
     allowPartial,
     env,
@@ -574,6 +575,7 @@ test.each([
     options,
     [],
     'Z_',
+    [],
     true,
     allowPartial,
     parsed.env,
@@ -825,7 +827,7 @@ test.each([
   (_name, opts, argv, errorMsg) => {
     let message;
     try {
-      parseOptions(opts, argv, 'ZORRO_', {}, new SilentLogger());
+      parseOptions(opts, argv, 'ZORRO_', [], {}, new SilentLogger());
     } catch (e) {
       expect(e).toBeInstanceOf(TypeError);
       message = (e as TypeError).message;
@@ -842,7 +844,7 @@ const exit = () => {
 test('--help', () => {
   const logger = {info: vi.fn()};
   expect(() =>
-    parseOptions(options, ['--help'], 'Z_', {}, logger, exit),
+    parseOptions(options, ['--help'], 'Z_', [], {}, logger, exit),
   ).toThrow(ExitAfterUsage);
   expect(logger.info).toHaveBeenCalled();
   expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
@@ -880,7 +882,7 @@ test('--help', () => {
 test('-h', () => {
   const logger = {info: vi.fn()};
   expect(() =>
-    parseOptions(options, ['-h'], 'ZERO_', {}, logger, exit),
+    parseOptions(options, ['-h'], 'ZERO_', [], {}, logger, exit),
   ).toThrow(ExitAfterUsage);
   expect(logger.info).toHaveBeenCalled();
   expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
@@ -918,7 +920,7 @@ test('-h', () => {
 test('unknown arguments', () => {
   const logger = {info: vi.fn(), error: vi.fn()};
   expect(() =>
-    parseOptions(options, ['--shardID', 'foo'], '', {}, logger, exit),
+    parseOptions(options, ['--shardID', 'foo'], '', [], {}, logger, exit),
   ).toThrow(ExitAfterUsage);
   expect(logger.error).toHaveBeenCalled();
   expect(logger.error.mock.calls[0]).toMatchInlineSnapshot(`
@@ -993,6 +995,7 @@ test('ungrouped config', () => {
       '456',
     ],
     'Z_',
+    [],
     {},
   );
 
@@ -1005,9 +1008,15 @@ test('ungrouped config', () => {
     topLevelCamel: 'case',
   });
 
-  const envResult = parseOptions(ungroupedOptions, ['--name', 'test2'], 'x', {
-    xFORMAT: 'text',
-  });
+  const envResult = parseOptions(
+    ungroupedOptions,
+    ['--name', 'test2'],
+    'x',
+    [],
+    {
+      xFORMAT: 'text',
+    },
+  );
 
   expect(envResult).toEqual({
     port: 4848,

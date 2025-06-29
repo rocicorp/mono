@@ -36,6 +36,7 @@ async function main() {
     },
     process.argv.slice(2),
     ZERO_ENV_VAR_PREFIX,
+    [],
     false,
     true, // allowPartial, required by server/runner/config.ts
   );
@@ -52,6 +53,7 @@ async function main() {
     deployPermissionsOptions,
     process.argv.slice(2),
     ZERO_ENV_VAR_PREFIX,
+    [],
     true,
   );
 
@@ -59,6 +61,7 @@ async function main() {
     zeroOptions,
     process.argv.slice(2),
     ZERO_ENV_VAR_PREFIX,
+    [],
     true,
   );
 

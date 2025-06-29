@@ -16,7 +16,7 @@ const exit = () => {
 test('zero-cache --help', () => {
   const logger = {info: vi.fn()};
   expect(() =>
-    parseOptions(zeroOptions, ['--help'], 'ZERO_', {}, logger, exit),
+    parseOptions(zeroOptions, ['--help'], 'ZERO_', [], {}, logger, exit),
   ).toThrow(ExitAfterUsage);
   expect(logger.info).toHaveBeenCalled();
   expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
@@ -379,6 +379,7 @@ test.each([['has/slashes'], ['has-dashes'], ['has.dots']])(
         zeroOptions,
         ['--app-id', appID],
         'ZERO_',
+        [],
         false, // allow unknown
         true, // allow partial
         {},
@@ -396,6 +397,7 @@ test.each([['isok'], ['has_underscores'], ['1'], ['123']])(
       zeroOptions,
       ['--app-id', appID],
       'ZERO_',
+      [],
       false,
       true,
     );
@@ -410,6 +412,7 @@ test('--shard-id disallowed', () => {
       zeroOptions,
       ['--shard-id', 'prod'],
       'ZERO_',
+      [],
       false, // allow unknown
       true, // allow partial
       {},

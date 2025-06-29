@@ -614,7 +614,13 @@ export function getZeroConfig(
   argv = process.argv.slice(2),
 ) {
   if (!loadedConfig || singleProcessMode()) {
-    loadedConfig = parseOptions(zeroOptions, argv, ZERO_ENV_VAR_PREFIX, env);
+    loadedConfig = parseOptions(
+      zeroOptions,
+      argv,
+      ZERO_ENV_VAR_PREFIX,
+      [],
+      env,
+    );
 
     if (loadedConfig.queryHydrationStats) {
       runtimeDebugFlags.trackRowCountsVended = true;
