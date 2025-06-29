@@ -2,7 +2,7 @@ import type {OptionalLogger} from '@rocicorp/logger';
 import {template} from 'chalk-template';
 import type {OptionDefinition} from 'command-line-args';
 import commandLineArgs from 'command-line-args';
-import commandLineUsage from 'command-line-usage';
+import commandLineUsage, {type Section} from 'command-line-usage';
 import {createDefu} from 'defu';
 import {toKebabCase, toSnakeCase} from 'kasi';
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
@@ -280,6 +280,7 @@ export function parseOptions<T extends Options>(
   options: T,
   argv: string[] = process.argv.slice(2),
   envNamePrefix = '',
+  description: {header: string; content: string}[] = [],
   processEnv = process.env,
   logger: OptionalLogger = console,
   exit = process.exit,
@@ -288,6 +289,7 @@ export function parseOptions<T extends Options>(
     options,
     argv,
     envNamePrefix,
+    description,
     false,
     false,
     processEnv,
@@ -300,6 +302,7 @@ export function parseOptionsAdvanced<T extends Options>(
   options: T,
   argv: string[],
   envNamePrefix = '',
+  description: {header: string; content: string}[] = [],
   allowUnknown = false,
   allowPartial = false,
   processEnv = process.env,
@@ -424,13 +427,13 @@ export function parseOptionsAdvanced<T extends Options>(
         break;
       case '--help':
       case '-h':
-        showUsage(optsWithDefaults, logger);
+        showUsage(optsWithDefaults, description, logger);
         exit(0);
         break;
       default:
         if (!allowUnknown) {
           logger.error?.('Invalid arguments:', unknown);
-          showUsage(optsWithDefaults, logger);
+          showUsage(optsWithDefaults, description, logger);
           exit(0);
         }
         break;
@@ -451,7 +454,7 @@ export function parseOptionsAdvanced<T extends Options>(
     };
   } catch (e) {
     logger.error?.(String(e));
-    showUsage(optsWithDefaults, logger);
+    showUsage(optsWithDefaults, description, logger);
     throw e;
   }
 }
@@ -547,6 +550,7 @@ export function parseBoolean(optionName: string, input: string) {
 
 function showUsage(
   optionList: DescribedOptionDefinition[],
+  description: {header: string; content: string}[] = [],
   logger: OptionalLogger = console,
 ) {
   const hide: string[] = [];
@@ -567,8 +571,8 @@ function showUsage(
     }
   });
 
-  logger.info?.(
-    commandLineUsage({
+  const sections: Section[] = [
+    {
       optionList,
       reverseNameOrder: true, // Display --flag-name before -alias
       hide,
@@ -579,8 +583,14 @@ function showUsage(
         ],
         noTrim: true,
       },
-    }),
-  );
+    },
+  ];
+
+  if (description) {
+    sections.unshift(...description);
+  }
+
+  logger.info?.(commandLineUsage(sections));
 }
 
 type DescribedOptionDefinition = OptionDefinition & {
