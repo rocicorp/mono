@@ -21,11 +21,14 @@ const rowCountsByCg: RowCountsByCg = new Map();
 const rowsByCg: RowsByCg = new Map();
 
 export const runtimeDebugStats = {
+  /**
+   * Pass `undefined` at startup to initialize the stats.
+   */
   rowVended(
     clientGroupID: ClientGroupID,
     source: SourceName,
     query: SQL,
-    row: Row,
+    row: Row | undefined,
   ) {
     if (runtimeDebugFlags.trackRowCountsVended) {
       let sourceMap = rowCountsByCg.get(clientGroupID);
@@ -38,7 +41,7 @@ export const runtimeDebugStats = {
         queryMap = new Map();
         sourceMap.set(source, queryMap);
       }
-      queryMap.set(query, (queryMap.get(query) ?? 0) + 1);
+      queryMap.set(query, row ? (queryMap.get(query) ?? 0) + 1 : 0);
     }
     if (runtimeDebugFlags.trackRowsVended) {
       let sourceMap = rowsByCg.get(clientGroupID);
@@ -56,7 +59,9 @@ export const runtimeDebugStats = {
         rowArray = [];
         queryMap.set(query, rowArray);
       }
-      rowArray.push(row);
+      if (row) {
+        rowArray.push(row);
+      }
     }
   },
 
