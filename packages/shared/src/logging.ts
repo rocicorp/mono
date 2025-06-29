@@ -1,6 +1,5 @@
+/* eslint-disable no-console */
 import {
-  FormatLogger,
-  logLevelPrefix,
   type LogLevel,
   type LogSink,
   type Context,
@@ -22,12 +21,33 @@ const colors = {
   error: chalk.red,
 };
 
-export const consoleSink = new FormatLogger((level, ...args) => [
-  colors[level](
-    logLevelPrefix[level],
-    ...args.map(s => (typeof s === 'string' ? s : stringify(s))),
-  ),
-]);
+/**
+ * Returns an object for writing colorized output to a provided console.
+ * Note this should only be used when console is a TTY (i.e., Node).
+ */
+export const colorConsole = {
+  log: (...args: unknown[]) => {
+    console.log(...args);
+  },
+  debug: (...args: unknown[]) => {
+    console.debug(colors.debug(...args));
+  },
+  info: (...args: unknown[]) => {
+    console.info(colors.info(...args));
+  },
+  warn: (...args: unknown[]) => {
+    console.warn(colors.warn(...args));
+  },
+  error: (...args: unknown[]) => {
+    console.error(colors.error(...args));
+  },
+};
+
+export const consoleSink: LogSink = {
+  log(level, context, ...args) {
+    colorConsole[level](stringifyContext(context), ...args.map(stringifyValue));
+  },
+};
 
 export function getLogSink(config: LogConfig): LogSink {
   return config.format === 'json' ? consoleJsonLogSink : consoleSink;
@@ -55,13 +75,10 @@ const consoleJsonLogSink: LogSink = {
     }
     const message = args.length
       ? {
-          message: args
-            .map(s => (typeof s === 'string' ? s : stringify(s)))
-            .join(' '),
+          message: args.map(stringifyValue).join(' '),
         }
       : undefined;
 
-    // eslint-disable-next-line no-console
     console[level](
       stringify({
         level: level.toUpperCase(),
@@ -87,4 +104,20 @@ export function errorOrObject(v: unknown): object | undefined {
     return v;
   }
   return undefined;
+}
+
+function stringifyContext(context: Context | undefined): unknown[] {
+  const args = [];
+  for (const [k, v] of Object.entries(context ?? {})) {
+    const arg = v === undefined ? k : `${k}=${v}`;
+    args.push(arg);
+  }
+  return args;
+}
+
+function stringifyValue(v: unknown): string {
+  if (typeof v === 'string') {
+    return v;
+  }
+  return stringify(v);
 }

@@ -37,7 +37,7 @@ const config = parseOptions(
 );
 
 const lc = new LogContext('debug', {}, consoleLogSink);
-const {permissions} = await loadSchemaAndPermissions(lc, config.schema);
+const {permissions} = await loadSchemaAndPermissions(config.schema);
 
 const cvrDB = pgClient(lc, config.cvr.db);
 
