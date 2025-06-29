@@ -140,6 +140,44 @@ const cfg = parseOptions(
   // before parsing
   process.argv.slice(2).map(s => s.replaceAll('\n', ' ')),
   ZERO_ENV_VAR_PREFIX,
+  [
+    {
+      header: 'analyze-query',
+      content: `Analyze a ZQL query and show information about how it runs against a SQLite replica.
+
+  analyze-query uses the same environment variables and flags as zero-cache-dev. If run from your development environment, it will pick up your ZERO_REPLICA_FILE, ZERO_SCHEMA_PATH, and other env vars automatically.
+
+  If run in another environment (e.g., production) you will have to specify these flags. In particular, you must have a copy of the appropriate Zero schema file to give to the --schema-path flag.`,
+    },
+    {
+      header: 'Examples',
+      content: `# In development
+  npx analyze-query --query='issue.related("comments").limit(10)'
+  npx analyze-query --ast='\\{"table": "artist","limit": 10\\}'
+  npx analyze-query --hash=1234567890
+
+  # In production
+  # First copy schema.ts to your production environment, then run:
+  npx analyze-query \\
+    --schema-path='./schema.ts' \\
+    --replica-file='/path/to/replica.db' \\
+    --query='issue.related("comments").limit(10)'
+
+  npx analyze-query \\
+    --schema-path='./schema.ts' \\
+    --replica-file='/path/to/replica.db' \\
+    --ast='\\{"table": "artist","limit": 10\\}'
+
+  # cvr-db is required when using the hash option.
+  # It is typically the same as your upstream db.
+  npx analyze-query \\
+    --schema-path='./schema.ts' \\
+    --replica-file='/path/to/replica.db' \\
+    --cvr-db='postgres://user:pass@host:port/db' \\
+    --hash=1234567890
+  `,
+    },
+  ],
 );
 const config = {
   ...cfg,
