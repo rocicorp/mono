@@ -179,6 +179,9 @@ const clientStateSchema = v.object({
    * TTL, time to live in milliseconds. If the query is not updated within this
    * time. The time to live is the time after it has become inactive. Negative
    * values are treated as `'forever'`.
+   *
+   * We do clamp this to a maximum of 10 minutes, so that queries do not
+   * live for a very long time in the CVR.
    */
   ttl: v.number(),
 
