@@ -360,6 +360,16 @@ export const zeroOptions = {
       ],
     },
 
+    protocol: {
+      type: v.literalUnion('http', 'https').default('http'),
+      desc: [
+        `The {bold protocol} for other processes to use when connecting to this `,
+        `change-streamer.`,
+        ``,
+        `If unspecified, defaults to http.`,
+      ],
+    },
+
     discoveryInterfacePreferences: {
       type: v.array(v.string()).default([
         'eth', // linux

@@ -221,6 +221,13 @@ test('zero-cache --help', () => {
                                                                  the --change-streamer-address must be specified manually (e.g. a load balancer or                 
                                                                  service discovery address).                                                                       
                                                                                                                                                                    
+     --change-streamer-protocol http,https                       default: "http"                                                                                   
+       ZERO_CHANGE_STREAMER_PROTOCOL env                                                                                                                           
+                                                                 The protocol for other processes to use when connecting to this                                   
+                                                                 change-streamer.                                                                                  
+                                                                                                                                                                   
+                                                                 If unspecified, defaults to http.                                                                 
+                                                                                                                                                                   
      --task-id string                                            optional                                                                                          
        ZERO_TASK_ID env                                                                                                                                            
                                                                  Globally unique identifier for the zero-cache instance.                                           

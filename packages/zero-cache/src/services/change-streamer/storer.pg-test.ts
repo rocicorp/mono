@@ -61,6 +61,7 @@ describe('change-streamer/storer', () => {
       shard,
       'task-id',
       'change-streamer:12345',
+      'http',
       db,
       REPLICA_VERSION,
       msg => consumed.enqueue(msg),
