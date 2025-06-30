@@ -927,8 +927,8 @@ describe('view-syncer/cvr-store', () => {
         VALUES('${CVR_ID}', 'bar', '{"table":"users"}', '02', 'bar-transformed', '01');
       
       -- Insert query 'baz' (tasks table with AST)
-      INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", "patchVersion", "transformationHash", "transformationVersion")
-        VALUES('${CVR_ID}', 'baz', '{"table":"tasks"}', '03', 'baz-transformed', '01');
+      INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", "patchVersion", "transformationHash", "transformationVersion", "queryName", "queryArgs")
+        VALUES('${CVR_ID}', 'baz', NULL, '03', 'baz-transformed', '01', 'named', '["arg1",1,true]');
       
       -- Client1 desires foo and bar
       INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion")
@@ -948,6 +948,7 @@ describe('view-syncer/cvr-store', () => {
     expect(allQueries).toMatchInlineSnapshot(`
       Result [
         {
+          "args": null,
           "ast": {
             "table": "users",
           },
@@ -955,11 +956,13 @@ describe('view-syncer/cvr-store', () => {
           "deleted": false,
           "got": true,
           "inactivatedAt": null,
+          "name": null,
           "queryID": "bar",
           "rowCount": 6,
           "ttl": -1,
         },
         {
+          "args": null,
           "ast": {
             "table": "issues",
           },
@@ -967,11 +970,13 @@ describe('view-syncer/cvr-store', () => {
           "deleted": false,
           "got": true,
           "inactivatedAt": null,
+          "name": null,
           "queryID": "foo",
           "rowCount": 6,
           "ttl": -1,
         },
         {
+          "args": null,
           "ast": {
             "table": "users",
           },
@@ -979,18 +984,23 @@ describe('view-syncer/cvr-store', () => {
           "deleted": false,
           "got": true,
           "inactivatedAt": 1728950400000,
+          "name": null,
           "queryID": "bar",
           "rowCount": 6,
           "ttl": -1,
         },
         {
-          "ast": {
-            "table": "tasks",
-          },
+          "args": [
+            "arg1",
+            1,
+            true,
+          ],
+          "ast": null,
           "clientID": "client2",
           "deleted": false,
           "got": true,
           "inactivatedAt": null,
+          "name": "named",
           "queryID": "baz",
           "rowCount": 0,
           "ttl": 7200,
@@ -1003,6 +1013,7 @@ describe('view-syncer/cvr-store', () => {
     expect(client1Queries).toMatchInlineSnapshot(`
       Result [
         {
+          "args": null,
           "ast": {
             "table": "users",
           },
@@ -1010,11 +1021,13 @@ describe('view-syncer/cvr-store', () => {
           "deleted": false,
           "got": true,
           "inactivatedAt": null,
+          "name": null,
           "queryID": "bar",
           "rowCount": 6,
           "ttl": -1,
         },
         {
+          "args": null,
           "ast": {
             "table": "issues",
           },
@@ -1022,6 +1035,7 @@ describe('view-syncer/cvr-store', () => {
           "deleted": false,
           "got": true,
           "inactivatedAt": null,
+          "name": null,
           "queryID": "foo",
           "rowCount": 6,
           "ttl": -1,
@@ -1034,6 +1048,7 @@ describe('view-syncer/cvr-store', () => {
     expect(client2Queries).toMatchInlineSnapshot(`
       Result [
         {
+          "args": null,
           "ast": {
             "table": "users",
           },
@@ -1041,18 +1056,23 @@ describe('view-syncer/cvr-store', () => {
           "deleted": false,
           "got": true,
           "inactivatedAt": 1728950400000,
+          "name": null,
           "queryID": "bar",
           "rowCount": 6,
           "ttl": -1,
         },
         {
-          "ast": {
-            "table": "tasks",
-          },
+          "args": [
+            "arg1",
+            1,
+            true,
+          ],
+          "ast": null,
           "clientID": "client2",
           "deleted": false,
           "got": true,
           "inactivatedAt": null,
+          "name": "named",
           "queryID": "baz",
           "rowCount": 0,
           "ttl": 7200,
