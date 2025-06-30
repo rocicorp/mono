@@ -1,20 +1,20 @@
 import {createComputed, onCleanup, type Accessor} from 'solid-js';
-import {RefCount} from '../../shared/src/ref-count.ts';
 import {
   DEFAULT_TTL,
+  type ClientID,
   type HumanReadable,
   type Query,
   type Schema,
   type TTL,
 } from '../../zero/src/zero.ts';
 import {
-  createSolidView,
-  unknown,
+  createSolidViewFactory,
   type State,
   type QueryResultDetails,
   type SolidView,
+  UNKNOWN,
 } from './solid-view.ts';
-import {createStore, type SetStoreFunction} from 'solid-js/store';
+import {createStore} from 'solid-js/store';
 import {useZero} from './use-zero.tsx';
 
 export type QueryResult<TReturn> = readonly [
@@ -42,16 +42,49 @@ export function createQuery<
     {
       '': undefined,
     },
-    unknown,
+    UNKNOWN,
   ]);
 
-  const z = useZero();
-
+  let view: SolidView | undefined = undefined;
   // Wrap in in createComputed to ensure a new view is created if the querySignal changes.
-  createComputed(() => {
-    const query = querySignal();
-    const ttl = normalize(options)?.ttl ?? DEFAULT_TTL;
-    createView(z()?.clientID, query, ttl, setState);
+  createComputed<
+    [
+      SolidView | undefined,
+      ClientID | undefined,
+      Query<TSchema, TTable, TReturn> | undefined,
+      string | undefined,
+      TTL | undefined,
+    ]
+  >(
+    ([prevView, prevClientID, prevQuery, prevQueryHash, prevTtl]) => {
+      const clientID = useZero()()?.clientID;
+      const query = querySignal();
+      const queryHash = query.hash();
+      const ttl = normalize(options)?.ttl ?? DEFAULT_TTL;
+      if (
+        !prevView ||
+        clientID !== prevClientID ||
+        (query !== prevQuery &&
+          (clientID === undefined || query.hash() !== prevQueryHash))
+      ) {
+        if (prevView) {
+          prevView.destroy();
+        }
+        view = query.materialize(createSolidViewFactory(setState), ttl);
+      } else {
+        view = prevView;
+        if (ttl !== prevTtl) {
+          view.updateTTL(ttl);
+        }
+      }
+
+      return [view, clientID, query, queryHash, ttl];
+    },
+    [undefined, undefined, undefined, undefined, undefined],
+  );
+
+  onCleanup(() => {
+    view?.destroy();
   });
 
   return [() => state[0][''] as HumanReadable<TReturn>, () => state[1]];
@@ -66,43 +99,6 @@ export function useQuery<
   options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
 ): QueryResult<TReturn> {
   return createQuery(querySignal, options);
-}
-
-const views = new Map<string, SolidView>();
-
-const viewRefCount = new RefCount<SolidView>();
-
-function createView<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
->(
-  clientID: string | undefined,
-  query: Query<TSchema, TTable, TReturn>,
-  ttl: TTL,
-  setState: SetStoreFunction<State>,
-): SolidView {
-  const hash = query.hash() + (clientID ?? '');
-  let view = views.get(hash);
-  if (!view) {
-    view = query.materialize(createSolidView(setState), ttl);
-    views.set(hash, view);
-  } else {
-    view.updateTTL(ttl);
-  }
-  viewRefCount.inc(view);
-
-  // Use queueMicrotask to allow cleanup/create in the current microtask to
-  // reuse the view.
-  onCleanup(() =>
-    queueMicrotask(() => {
-      if (viewRefCount.dec(view)) {
-        views.delete(hash);
-        view.destroy();
-      }
-    }),
-  );
-  return view;
 }
 
 function normalize<T>(

@@ -22,8 +22,8 @@ export type QueryResultDetails = {
 
 export type State = [Entry, QueryResultDetails];
 
-export const complete = {type: 'complete'} as const;
-export const unknown = {type: 'unknown'} as const;
+export const COMPLETE: QueryResultDetails = {type: 'complete'} as const;
+export const UNKNOWN: QueryResultDetails = {type: 'unknown'} as const;
 
 export class SolidView implements Output {
   readonly #input: Input;
@@ -69,7 +69,11 @@ export class SolidView implements Output {
     );
 
     this.#setState = setState;
-    this.#setState([initialRoot, queryComplete === true ? complete : unknown]);
+    const s = [
+      initialRoot,
+      queryComplete === true ? COMPLETE : UNKNOWN,
+    ] as const;
+    this.#setState(s);
 
     if (isEmptyRoot(initialRoot)) {
       this.#builderRoot = this.#createEmptyRoot();
@@ -77,7 +81,7 @@ export class SolidView implements Output {
 
     if (queryComplete !== true) {
       void queryComplete.then(() => {
-        this.#setState(1, complete);
+        this.#setState(prev => [prev[0], COMPLETE]);
       });
     }
   }
@@ -90,7 +94,7 @@ export class SolidView implements Output {
     const builderRoot = this.#builderRoot;
     if (builderRoot) {
       if (!isEmptyRoot(builderRoot)) {
-        this.#setState(0, builderRoot);
+        this.#setState(prev => [builderRoot, prev[1]]);
         this.#builderRoot = undefined;
       }
     } else {
@@ -196,7 +200,7 @@ function isEmptyRoot(entry: Entry) {
   return data === undefined || (Array.isArray(data) && data.length === 0);
 }
 
-export function createSolidView(setState: SetStoreFunction<State>) {
+export function createSolidViewFactory(setState: SetStoreFunction<State>) {
   function solidViewFactory<
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,

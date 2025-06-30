@@ -6,13 +6,11 @@ import {
   type ZeroOptions,
 } from '../../zero/src/zero.ts';
 
-const ZeroContext = createContext<(() => Zero<any, any>) | undefined>(
+// eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/no-explicit-any
+export const ZeroContext = createContext<(() => Zero<any, any>) | undefined>(
   undefined,
 );
 
-/**
- * @deprecated Use {@linkcode ZeroProvider} instead.
- */
 export function createZero<S extends Schema, MD extends CustomMutatorDefs<S>>(
   options: ZeroOptions<S, MD>,
 ): Zero<S, MD> {
@@ -29,7 +27,7 @@ export function useZero<
 >(): () => Zero<S, MD> | undefined {
   const zero = useContext(ZeroContext);
 
-  // TODO: Remove this once we have a way to ensure that useZero is used within a ZeroProvider.
+  // TODO: uncomment when we require ZeroProvider in a future release.
   // if (zero === undefined) {
   //   throw new Error('useZero must be used within a ZeroProvider');
   // }
@@ -46,10 +44,17 @@ export function createUseZero<
 export function ZeroProvider<
   S extends Schema,
   MD extends CustomMutatorDefs<S> | undefined = undefined,
->(props: {children: JSX.Element; options: ZeroOptions<S, MD>}) {
+>(props: {
+  children: JSX.Element;
+  zeroSignal: () => ZeroOptions<S, MD> | {zero: Zero<S, MD>};
+}) {
   const zero = createMemo(() => {
+    const z = props.zeroSignal();
+    if ('zero' in z) {
+      return z.zero;
+    }
     return new Zero({
-      ...props.options,
+      ...z,
       batchViewUpdates: batch,
     });
   });
