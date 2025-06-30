@@ -743,7 +743,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #handleConfigUpdate = (
     lc: LogContext,
     clientID: string,
-    {clientSchema, deleted, desiredQueriesPatch}: Partial<InitConnectionBody>,
+
+    {
+      clientSchema,
+      deleted,
+      desiredQueriesPatch,
+      activeClients,
+    }: Partial<InitConnectionBody>,
     cvr: CVRSnapshot,
   ) =>
     startAsyncSpan(tracer, 'vs.#patchQueries', async () => {
@@ -782,16 +788,33 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
         }
 
-        if (deleted?.clientIDs?.length || deleted?.clientGroupIDs?.length) {
-          if (deleted?.clientIDs) {
-            for (const cid of deleted.clientIDs) {
-              assert(cid !== clientID, 'cannot delete self');
-              const patchesDueToClient = updater.deleteClient(cid);
-              patches.push(...patchesDueToClient);
-              deletedClientIDs.push(cid);
+        const clientIDsToDelete: Set<string> = new Set();
+
+        if (activeClients) {
+          // We find all the clients in this client group that are not active.
+          const allClientIDs = Object.keys(cvr.clients);
+          const activeClientsSet = new Set(activeClients);
+          for (const id of allClientIDs) {
+            if (!activeClientsSet.has(id)) {
+              clientIDsToDelete.add(id);
             }
           }
+        }
 
+        if (deleted?.clientIDs?.length) {
+          for (const cid of deleted.clientIDs) {
+            assert(cid !== clientID, 'cannot delete self');
+            clientIDsToDelete.add(cid);
+          }
+        }
+
+        for (const cid of clientIDsToDelete) {
+          const patchesDueToClient = updater.deleteClient(cid);
+          patches.push(...patchesDueToClient);
+          deletedClientIDs.push(cid);
+        }
+
+        if (deleted?.clientGroupIDs?.length) {
           if (deleted?.clientGroupIDs) {
             for (const clientGroupID of deleted.clientGroupIDs) {
               assert(clientGroupID !== this.id, 'cannot delete self');
@@ -803,8 +826,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         return patches;
       });
 
-      // Send 'deleteClients' to the clients.
-      if (deletedClientIDs.length || deletedClientGroupIDs.length) {
+      // Send 'deleteClients' ack to the clients.
+      if (
+        (deletedClientIDs.length && deleted?.clientIDs?.length) ||
+        deletedClientGroupIDs.length
+      ) {
         const clients = this.#getClients();
         await Promise.allSettled(
           clients.map(client =>
