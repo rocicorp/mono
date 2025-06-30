@@ -2353,15 +2353,13 @@ test('server ahead', async () => {
     ErrorKind.InvalidConnectionRequestBaseCookie,
     'unexpected BaseCookie',
   );
-  // There are a lot of timers that get scheduled before the reload timer
-  // for dropping the database. TODO: Make this more robust.
-  for (let i = 0; i < 10; i++) {
-    await vi.advanceTimersToNextTimerAsync();
-  }
+
+  await vi.waitUntil(() => storage[RELOAD_REASON_STORAGE_KEY]);
+
   await promise;
 
-  expect(storage[RELOAD_REASON_STORAGE_KEY]).toMatchInlineSnapshot(
-    `"["InvalidConnectionRequestBaseCookie","Server reported that client is ahead of server. This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero."]"`,
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toEqual(
+    `["InvalidConnectionRequestBaseCookie","Server reported that client is ahead of server. This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero."]`,
   );
 });
 
