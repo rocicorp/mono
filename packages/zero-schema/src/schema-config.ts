@@ -29,7 +29,7 @@ export const relationshipSchema: v.Type<Relationship> = v.union(
 export const schemaValueSchema = v.readonlyObject({
   type: valueTypeSchema,
   serverName: v.string().optional(),
-  optional: v.boolean().optional(),
+  nullable: v.boolean().optional(),
 });
 
 export const tableSchemaSchema: v.Type<TableSchema> = v.readonlyObject({

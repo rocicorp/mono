@@ -6,7 +6,6 @@ import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema
 import type {
   LastInTuple,
   SchemaValueToTSType,
-  SchemaValueWithCustomType,
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
@@ -27,9 +26,9 @@ type JsonSelectors<E extends TableSchema> = {
 }[keyof E['columns']];
 
 type ArraySelectors<E extends TableSchema> = {
-  [K in keyof E['columns']]: E['columns'][K] extends SchemaValueWithCustomType<
-    any[]
-  >
+  [K in keyof E['columns']]: E['columns'][K] extends {
+    customType: any[];
+  }
     ? K
     : never;
 }[keyof E['columns']];
@@ -39,7 +38,7 @@ export type GetFilterType<
   TColumn extends keyof TSchema['columns'],
   TOperator extends SimpleOperator,
 > = TOperator extends 'IS' | 'IS NOT'
-  ? // SchemaValueToTSType adds null if the type is optional, but we add null
+  ? // SchemaValueToTSType adds null if the type is nullable, but we add null
     // no matter what for dx reasons. See:
     // https://github.com/rocicorp/mono/pull/3576#discussion_r1925792608
     SchemaValueToTSType<TSchema['columns'][TColumn]> | null

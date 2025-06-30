@@ -103,6 +103,8 @@ test('supports mutators without a namespace', async () => {
 
   const issues = await z.query.issue;
   expect(issues[0].title).toEqual('no-namespace');
+  expect(issues[0].createdAt).toEqual(1743018138477);
+  expect(issues[0].updatedAt).toEqual(1743018158555);
 });
 
 test('detects collisions in mutator names', () => {
@@ -294,6 +296,84 @@ describe('rebasing custom mutators', () => {
     `);
   });
 
+  test('custom mutators use default values', async () => {
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema,
+      mutators: {
+        issue: {
+          setTitle: async (tx, {id, title}: {id: string; title: string}) => {
+            await tx.mutate.issue.update({id, title});
+          },
+          create: async (tx, args: InsertValue<typeof schema.tables.issue>) => {
+            await tx.mutate.issue.insert(args);
+          },
+        },
+      } satisfies CustomMutatorDefs<Schema>,
+    });
+
+    await z.mutate.issue.create({
+      id: '1',
+      title: 'baz',
+      closed: false,
+      ownerId: '',
+      description: '',
+    }).client;
+
+    await z.markQueryAsGot(z.query.issue);
+    let issues = await z.query.issue;
+    expect(issues[0].title).toEqual('baz');
+    expect(issues[0].id).toEqual('1');
+    expect(issues[0].createdAt).toEqual(1743018158555);
+    expect(issues[0].updatedAt).toEqual(1743018158555);
+
+    await z.mutate.issue.setTitle({id: issues[0].id, title: 'biz'}).client;
+    issues = await z.query.issue;
+    expect(issues[0].title).toEqual('biz');
+    expect(issues[0].createdAt).toEqual(1743018158555);
+    expect(issues[0].updatedAt).toEqual(1743018158666);
+  });
+
+  test('custom mutators use default values when server "db" is used', async () => {
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema,
+      mutators: {
+        auditLog: {
+          create: async (
+            tx,
+            args: InsertValue<typeof schema.tables.auditLog>,
+          ) => {
+            await tx.mutate.auditLog.insert(args);
+          },
+          update: async (tx, args: {action: string; id: string}) => {
+            await tx.mutate.auditLog.update(args);
+          },
+        },
+      } satisfies CustomMutatorDefs<Schema>,
+    });
+
+    await z.mutate.auditLog.create({
+      id: '1',
+      action: 'create',
+      userId: '1',
+    }).client;
+
+    await z.markQueryAsGot(z.query.auditLog);
+    let auditLogs = await z.query.auditLog;
+    expect(auditLogs[0].action).toEqual('create');
+    expect(auditLogs[0].id).toEqual('1');
+    expect(auditLogs[0].createdAt).toEqual(1743018158777);
+    expect(auditLogs[0].updatedAt).toEqual(1743018158777);
+
+    await z.mutate.auditLog.update({id: auditLogs[0].id, action: 'update'})
+      .client;
+    auditLogs = await z.query.auditLog;
+    expect(auditLogs[0].action).toEqual('update');
+    expect(auditLogs[0].createdAt).toEqual(1743018158777);
+    expect(auditLogs[0].updatedAt).toEqual(1743018158888);
+  });
+
   test('mutations can read their own writes', async () => {
     const z = zeroForTest({
       schema,
@@ -301,7 +381,7 @@ describe('rebasing custom mutators', () => {
         issue: {
           createAndReadCreated: async (
             tx,
-            args: InsertValue<typeof schema.tables.issue>,
+            args: InsertValue<typeof schema.tables.issue> & {id: string},
           ) => {
             await tx.mutate.issue.insert(args);
             const readIssue = must(

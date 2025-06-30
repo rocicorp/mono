@@ -101,6 +101,7 @@ test('row type', () => {
         readonly closed: boolean;
         readonly ownerId: string | null;
         readonly createdAt: number;
+        readonly updatedAt: number;
         readonly labels: readonly {
           readonly id: string;
           readonly name: string;
@@ -122,6 +123,7 @@ test('basic query', async () => {
         "id": "0001",
         "ownerId": "0001",
         "title": "issue 1",
+        "updatedAt": null,
       },
       {
         "closed": false,
@@ -130,6 +132,7 @@ test('basic query', async () => {
         "id": "0002",
         "ownerId": "0002",
         "title": "issue 2",
+        "updatedAt": null,
       },
       {
         "closed": false,
@@ -138,6 +141,7 @@ test('basic query', async () => {
         "id": "0003",
         "ownerId": null,
         "title": "issue 3",
+        "updatedAt": null,
       },
     ]
   `);
@@ -158,6 +162,7 @@ test('null compare', async () => {
         "id": "0003",
         "ownerId": null,
         "title": "issue 3",
+        "updatedAt": null,
       },
     ]
   `);
@@ -177,6 +182,7 @@ test('null compare', async () => {
         "id": "0001",
         "owner_id": "0001",
         "title": "issue 1",
+        "updatedAt": null,
         Symbol(rc): 1,
       },
       {
@@ -186,6 +192,7 @@ test('null compare', async () => {
         "id": "0002",
         "owner_id": "0002",
         "title": "issue 2",
+        "updatedAt": null,
         Symbol(rc): 1,
       },
     ]
@@ -206,6 +213,7 @@ test('or', async () => {
         "id": "0001",
         "ownerId": "0001",
         "title": "issue 1",
+        "updatedAt": null,
       },
       {
         "closed": false,
@@ -214,6 +222,7 @@ test('or', async () => {
         "id": "0002",
         "ownerId": "0002",
         "title": "issue 2",
+        "updatedAt": null,
       },
     ]
   `);
@@ -253,6 +262,7 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
           ],
           "ownerId": "0001",
           "title": "issue 1",
+          "updatedAt": null,
         },
       ]
     `);
@@ -355,6 +365,7 @@ test('schema applied `one`', async () => {
         },
         "ownerId": "0001",
         "title": "issue 1",
+        "updatedAt": null,
       },
     ]
   `);

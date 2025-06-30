@@ -888,7 +888,7 @@ suite('push', () => {
       {
         id: {type: 'number'},
         date: {type: 'string'},
-        x: {type: 'number', optional: true},
+        x: {type: 'number', nullable: true},
       },
       ['id'],
     );

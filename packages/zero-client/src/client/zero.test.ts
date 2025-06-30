@@ -1461,7 +1461,7 @@ test('pusher maps CRUD mutation names', async () => {
             .from('issues')
             .columns({
               id: string(),
-              title: string().optional(),
+              title: string().nullable(),
             })
             .primaryKey('id'),
           table('comment')
@@ -1469,7 +1469,7 @@ test('pusher maps CRUD mutation names', async () => {
             .columns({
               id: string(),
               issueId: string().from('issue_id'),
-              text: string().optional(),
+              text: string().nullable(),
             })
             .primaryKey('id'),
           table('compoundPKTest')
@@ -2849,6 +2849,7 @@ test('the type of collection should be inferred from options with parse', () => 
 });
 
 describe('CRUD', () => {
+  // TODO(chase) update tests to use default values
   const makeZero = () =>
     zeroForTest({
       schema: createSchema({
@@ -2857,7 +2858,7 @@ describe('CRUD', () => {
             .from('issues')
             .columns({
               id: string(),
-              title: string().optional(),
+              title: string().nullable(),
             })
             .primaryKey('id'),
           table('comment')
@@ -2865,7 +2866,7 @@ describe('CRUD', () => {
             .columns({
               id: string(),
               issueID: string().from('issue_id'),
-              text: string().optional(),
+              text: string().nullable(),
             })
             .primaryKey('id'),
           table('compoundPKTest')
@@ -3032,7 +3033,7 @@ describe('CRUD', () => {
       {id: 'a', issueID: '11', text: 'AAA text', [refCountSymbol]: 1},
     ]);
 
-    // 'optional' fields can be explicitly set to null to overwrite previous
+    // 'nullable' fields can be explicitly set to null to overwrite previous
     // value.
     await updateComment({id: 'a', issueID: '11', text: null});
     expect(view.data).toEqual([

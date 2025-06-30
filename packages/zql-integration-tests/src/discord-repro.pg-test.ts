@@ -29,8 +29,8 @@ beforeAll(async () => {
   sqlite = new Database(lc, ':memory:');
 
   await pg.unsafe(/*sql*/ `
-    INSERT INTO "issues" ("id", "title", "description", "closed", "owner_id", "createdAt") VALUES (
-      'issue1', 'Test Issue 1', 'Description for issue 1', false, 'user1', TIMESTAMPTZ '2001-02-16T20:38:40.000Z'
+    INSERT INTO "issues" ("id", "title", "description", "closed", "owner_id", "createdAt", "updatedAt") VALUES (
+      'issue1', 'Test Issue 1', 'Description for issue 1', false, 'user1', TIMESTAMPTZ '2001-02-16T20:38:40.000Z', TIMESTAMPTZ '2001-02-16T20:38:40.000Z'
     );
 
     INSERT INTO "users" ("id", "name") VALUES (
@@ -101,6 +101,7 @@ test('discord report https://discord.com/channels/830183651022471199/13475501749
           "id": "issue1",
           "ownerId": "user1",
           "title": "Test Issue 1",
+          "updatedAt": 982355920000,
         },
       ]
     `);

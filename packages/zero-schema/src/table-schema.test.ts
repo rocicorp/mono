@@ -64,17 +64,15 @@ test('relationship schema types', () => {
     relationships: [issueRelationships],
   });
 
-  expectTypeOf(schema.tables.issueLabel).toMatchTypeOf<TableSchema>();
+  expectTypeOf(schema.tables.issueLabel).toExtend<TableSchema>();
 
-  expectTypeOf(schema.tables.comment).toMatchTypeOf<TableSchema>();
+  expectTypeOf(schema.tables.comment).toExtend<TableSchema>();
 
-  expectTypeOf(schema.tables.label).toMatchTypeOf<TableSchema>();
+  expectTypeOf(schema.tables.label).toExtend<TableSchema>();
 
-  expectTypeOf(schema.tables.issue).toMatchTypeOf<TableSchema>();
+  expectTypeOf(schema.tables.issue).toExtend<TableSchema>();
 
-  expectTypeOf(
-    schema.relationships.issue.comments,
-  ).toMatchTypeOf<Relationship>();
+  expectTypeOf(schema.relationships.issue.comments).toExtend<Relationship>();
 
-  expectTypeOf(schema.relationships.issue.labels).toMatchTypeOf<Relationship>();
+  expectTypeOf(schema.relationships.issue.labels).toExtend<Relationship>();
 });

@@ -36,7 +36,7 @@ function generateTable(name: string, rng: Rng, faker: Faker): TableSchema {
   const columns = generateUniqueValues(
     faker.word.noun,
     Math.floor(rng() * 10) + 1,
-  ).map(name => generateColumn(name, rng));
+  ).map(name => generateColumn(name, rng, faker));
   const numPkColumns = Math.min(rng() < 0.5 ? 1 : 2, columns.length);
 
   return {
@@ -93,7 +93,7 @@ function generateRelationshipsForTable(
 
     const destField = selectRandom(rng, destTargets);
     const cardinality =
-      destField[1].optional || destField[1].type === 'boolean'
+      destField[1].nullable || destField[1].type === 'boolean'
         ? 'many'
         : selectRandom(rng, ['one', 'many'] as const);
 
@@ -110,23 +110,59 @@ function generateRelationshipsForTable(
   return relationships;
 }
 
-function generateColumn(name: string, rng: Rng): [string, SchemaValue] {
+function generateColumn(
+  name: string,
+  rng: Rng,
+  faker: Faker,
+): [string, SchemaValue] {
+  const type = selectRandom(rng, [
+    'string',
+    'string',
+    'string',
+    'string',
+    'string',
+    'boolean',
+    'number',
+    'number',
+    'number',
+    'json',
+  ]) as keyof typeof dbTypes;
+
+  const generateDefault =
+    type === 'string'
+      ? () => faker.lorem.word()
+      : type === 'number'
+        ? () => faker.number.int()
+        : type === 'boolean'
+          ? () => faker.datatype.boolean()
+          : type === 'json'
+            ? () =>
+                faker.helpers.arrayElement([
+                  {uno: faker.lorem.word()},
+                  {dos: faker.lorem.word()},
+                  {tres: faker.lorem.word()},
+                ])
+            : null;
+
   return [
     name,
     {
-      type: selectRandom(rng, [
-        'string',
-        'string',
-        'string',
-        'string',
-        'string',
-        'boolean',
-        'number',
-        'number',
-        'number',
-        'json',
-      ]) as keyof typeof dbTypes,
-      optional: rng() < 0.5,
+      type,
+      nullable: rng() < 0.5,
+      ...(rng() < 0.7 && generateDefault
+        ? {
+            defaultConfig: {
+              insert: {
+                client: generateDefault,
+                server: rng() < 0.5 ? 'db' : generateDefault,
+              },
+              update: {
+                client: generateDefault,
+                server: rng() < 0.5 ? 'db' : generateDefault,
+              },
+            },
+          }
+        : {}),
     },
   ];
 }

@@ -24,7 +24,7 @@ export const schema = createSchema({
         id: string(),
         a: number(),
         b: string(),
-        c: boolean().optional(),
+        c: boolean().nullable(),
       })
       .primaryKey('id'),
     table('names')
@@ -33,14 +33,14 @@ export const schema = createSchema({
         id: string().from('divergent_id'),
         a: number().from('divergent_a'),
         b: string().from('divergent_b'),
-        c: boolean().from('divergent_c').optional(),
+        c: boolean().from('divergent_c').nullable(),
       })
       .primaryKey('id'),
     table('compoundPk')
       .columns({
         a: string(),
         b: number(),
-        c: string().optional(),
+        c: string().nullable(),
       })
       .primaryKey('a', 'b'),
     table('dateTypes')
@@ -84,7 +84,64 @@ export const schema = createSchema({
         id: string(),
         a: number(),
         b: string(),
-        c: boolean().optional(),
+        c: boolean().nullable(),
+      })
+      .primaryKey('id'),
+    table('defaults')
+      .columns({
+        id: string(),
+        insert: string().default({
+          insert: {
+            client: () => 'client-insert-default-1' as const,
+            server: () => 'server-insert-default-1' as const,
+          },
+        }),
+        update: string()
+          .default({
+            update: {
+              client: () => 'client-update-default-2' as const,
+              server: () => 'server-update-default-2' as const,
+            },
+          })
+          .nullable(),
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        insert_update: string().default({
+          insert: {
+            client: () => 'client-insert-default-3' as const,
+            server: () => 'server-insert-default-3' as const,
+          },
+          update: {
+            client: () => 'client-update-default-3' as const,
+            server: () => 'server-update-default-3' as const,
+          },
+        }),
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        insert_db_generated: string().default({
+          insert: {
+            client: () => 'client-insert-default-4' as const,
+            server: 'db',
+          },
+        }),
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        update_db_generated: string()
+          .default({
+            update: {
+              client: () => 'client-update-default-5' as const,
+              server: 'db',
+            },
+          })
+          .nullable(),
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        insert_update_db_generated: string().default({
+          insert: {
+            client: () => 'client-insert-default-6' as const,
+            server: 'db',
+          },
+          update: {
+            client: () => 'client-update-default-6' as const,
+            server: 'db',
+          },
+        }),
       })
       .primaryKey('id'),
   ],
@@ -168,6 +225,30 @@ CREATE TABLE alternate_schema.basic (
   b TEXT,
   C BOOLEAN
 );
+
+CREATE TABLE "defaults" (
+  id TEXT PRIMARY KEY,
+  "insert" TEXT,
+  "update" TEXT,
+  "insert_update" TEXT,
+  "insert_db_generated" TEXT DEFAULT 'db-insert-default-1',
+  "update_db_generated" TEXT,
+  "insert_update_db_generated" TEXT DEFAULT 'db-insert-update-default-2'
+);
+
+CREATE OR REPLACE FUNCTION update_defaults_trigger()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW."update_db_generated" = 'db-update-default-3';
+  NEW."insert_update_db_generated" = 'db-insert-update-default-4';
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER defaults_update_trigger
+  BEFORE UPDATE ON "defaults"
+  FOR EACH ROW
+  EXECUTE FUNCTION update_defaults_trigger();
 `;
 
 export const seedDataSql = `
