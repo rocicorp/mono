@@ -11,13 +11,18 @@ export const closeConnectionBodySchema = v.array(v.unknown());
  
  * "The value must be no longer than 123 bytes (encoded in UTF-8)." -
  * https://developer.mozilla.org/en-US/docs/Web/API/WebSocket/close#reason
+ * 
+ * @deprecated
  */
 export const closeConnectionMessageSchema = v.tuple([
   v.literal('closeConnection'),
   closeConnectionBodySchema,
 ]);
 
+/** @deprecated */
 export type CloseConnectionBody = v.Infer<typeof closeConnectionBodySchema>;
+
+/** @deprecated */
 export type CloseConnectionMessage = v.Infer<
   typeof closeConnectionMessageSchema
 >;
