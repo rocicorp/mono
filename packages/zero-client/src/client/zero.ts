@@ -86,6 +86,7 @@ import {
 } from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
+import {ActiveClientsManager} from './active-clients-manager.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import {ZeroContext} from './context.ts';
 import {
@@ -370,6 +371,7 @@ export class Zero<
 
   // We use an accessor pair to allow the subclass to override the setter.
   #connectionState: ConnectionState = ConnectionState.Disconnected;
+  readonly #activeClientsManager: Promise<ActiveClientsManager>;
 
   #setConnectionState(state: ConnectionState) {
     if (state === this.#connectionState) {
@@ -593,6 +595,12 @@ export class Zero<
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
     this.#mutationTracker.clientID = rep.clientID;
+
+    this.#activeClientsManager = makeActiveClientsManager(
+      rep.clientGroupID,
+      this.clientID,
+      this.#closeAbortController.signal,
+    );
 
     const onUpdateNeededCallback = (
       reason: UpdateNeededReason,
@@ -1253,6 +1261,7 @@ export class Zero<
       this.#options.push,
       this.#options.maxHeaderLength,
       additionalConnectParams,
+      this.#activeClientsManager,
     );
 
     if (this.closed) {
@@ -1950,7 +1959,8 @@ export async function createSocket(
   lc: ZeroLogContext,
   userPushParams: UserPushParams | undefined,
   maxHeaderLength = 1024 * 8,
-  additionalConnectParams?: Record<string, string> | undefined,
+  additionalConnectParams: Record<string, string> | undefined,
+  activeClientsManager: Promise<Pick<ActiveClientsManager, 'getActiveClients'>>,
 ): Promise<
   [
     WebSocket,
@@ -1995,6 +2005,9 @@ export async function createSocket(
     await deleteClientsManager.getDeletedClients();
   let queriesPatch: Map<string, UpQueriesPatchOp> | undefined =
     await queriesPatchP;
+  const activeClients = [
+    ...(await activeClientsManager.then(manager => manager.getActiveClients())),
+  ];
 
   let secProtocol = encodeSecProtocols(
     [
@@ -2006,6 +2019,7 @@ export async function createSocket(
         // Henceforth it is stored with the CVR and verified automatically.
         ...(baseCookie === null ? {clientSchema} : {}),
         userPushParams,
+        activeClients,
       },
     ],
     auth,
@@ -2094,3 +2108,11 @@ class TimedOutError extends Error {
 class CloseError extends Error {}
 
 function assertValidRunOptions(_options?: RunOptions | undefined): void {}
+
+async function makeActiveClientsManager(
+  clientGroupID: Promise<string>,
+  clientID: string,
+  signal: AbortSignal,
+): Promise<ActiveClientsManager> {
+  return ActiveClientsManager.create(await clientGroupID, clientID, signal);
+}
