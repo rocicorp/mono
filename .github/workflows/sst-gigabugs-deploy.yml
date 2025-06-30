@@ -2,7 +2,7 @@ name: Build and Deploy Gigabugs Zero-Cache AWS SST
 
 on:
   push:
-    branches: [gigabugs]
+    branches: [darkgnotic/sync-one-gigabugs]
 env:
   # Setting an environment variable with the value of a configuration variable
   ECR_IMAGE_ZERO_CACHE: zero-zgigabugs
@@ -86,21 +86,21 @@ jobs:
           cd prod/sst
           npm install
           npx sst deploy --stage gigabugs-ebs
-      - name: Deploy SST app non ebs
-        env:
-          ZERO_APP_ID: '1'
-          ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
-          ZERO_PUSH_URL: ${{ vars.GIGABUGS_ZERO_PUSH_URL }}
-          ZERO_PULL_URL: ${{ vars.GIGABUGS_ZERO_PULL_URL }}
-          ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}2
-          ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}2
-          ZERO_AUTH_JWK: ${{ secrets.GIGABUGS_ZERO_AUTH_JWK }}
-          AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
-          ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
-          DOMAIN_NAME: 'zgigabugs2-sync.rocicorp.dev'
-          DOMAIN_CERT: 'arn:aws:acm:us-east-1:712907626835:certificate/b0dd8b0b-2007-42e7-b61d-6573b571b19c'
-          DATADOG_API_KEY: ${{ secrets.GIGABUGS_DATADOG_API_KEY }}
-        run: |
-          cd prod/sst
-          npm install
-          npx sst deploy --stage gigabugs
+      # - name: Deploy SST app non ebs
+      #   env:
+      #     ZERO_APP_ID: '1'
+      #     ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
+      #     ZERO_PUSH_URL: ${{ vars.GIGABUGS_ZERO_PUSH_URL }}
+      #     ZERO_PULL_URL: ${{ vars.GIGABUGS_ZERO_PULL_URL }}
+      #     ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}2
+      #     ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}2
+      #     ZERO_AUTH_JWK: ${{ secrets.GIGABUGS_ZERO_AUTH_JWK }}
+      #     AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
+      #     ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
+      #     DOMAIN_NAME: 'zgigabugs2-sync.rocicorp.dev'
+      #     DOMAIN_CERT: 'arn:aws:acm:us-east-1:712907626835:certificate/b0dd8b0b-2007-42e7-b61d-6573b571b19c'
+      #     DATADOG_API_KEY: ${{ secrets.GIGABUGS_DATADOG_API_KEY }}
+      #   run: |
+      #     cd prod/sst
+      #     npm install
+      #     npx sst deploy --stage gigabugs
