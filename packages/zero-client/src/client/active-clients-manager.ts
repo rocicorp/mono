@@ -141,25 +141,22 @@ export class ActiveClientsManager {
       {once: true},
     );
 
-    const activeClients = await this.getActiveClients();
+    await this.#updateActiveClients();
 
-    for (const clientID of activeClients) {
+    for (const clientID of this.#activeClients) {
       if (clientID !== this.clientID) {
         this.#addClient(clientID);
       }
     }
 
-    this.#activeClients = activeClients;
-    if (this.#activeClients.size > 1) {
-      // One for the current client, so if there are more than one, we notify
-      // that the list of active clients has changed.
-      this.#onChange();
-    }
-
     channel.postMessage(name);
   }
 
-  async getActiveClients(): Promise<Set<string>> {
+  get activeClients(): ReadonlySet<string> {
+    return this.#activeClients;
+  }
+
+  async #updateActiveClients(): Promise<void> {
     const activeClients: Set<string> = new Set();
 
     for await (const lockName of this.#lockManager.queryExclusive()) {
@@ -169,7 +166,7 @@ export class ActiveClientsManager {
       }
     }
 
-    return activeClients;
+    this.#activeClients = activeClients;
   }
 
   /**
