@@ -30,7 +30,9 @@ export interface ClientGroup {
 }
 
 export interface Query {
-  readonly ast: AST;
+  readonly ast: AST | null;
+  readonly name: string | null;
+  readonly args: ReadonlyArray<ReadonlyJSONValue> | null;
   readonly clientID: string;
   readonly deleted: boolean;
   readonly got: boolean;
@@ -38,5 +40,5 @@ export interface Query {
   readonly inactivatedAt: Date | null;
   readonly rowCount: number;
   readonly ttl: TTL;
-  readonly zql: string;
+  readonly zql: string | null;
 }

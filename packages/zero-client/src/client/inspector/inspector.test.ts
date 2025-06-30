@@ -115,6 +115,8 @@ test('client queries', async () => {
         clientID: z.clientID,
         queryID: '1',
         ast: {table: 'issue'},
+        name: null,
+        args: null,
         deleted: false,
         got: true,
         inactivatedAt: null,
@@ -126,6 +128,8 @@ test('client queries', async () => {
       {
         clientID: z.clientID,
         ast: {table: 'issue'},
+        name: null,
+        args: null,
         deleted: false,
         got: true,
         id: '1',
@@ -143,6 +147,8 @@ test('client queries', async () => {
         clientID: z.clientID,
         queryID: '1',
         ast: {table: 'issue'},
+        name: null,
+        args: null,
         deleted: false,
         got: true,
         inactivatedAt: d,
@@ -154,6 +160,8 @@ test('client queries', async () => {
       {
         clientID: z.clientID,
         ast: {table: 'issue'},
+        name: null,
+        args: null,
         deleted: false,
         got: true,
         id: '1',
@@ -217,6 +225,8 @@ test('clientGroup queries', async () => {
           clientID: z.clientID,
           queryID: '1',
           ast,
+          name: null,
+          args: null,
           deleted: false,
           got: true,
           inactivatedAt: null,
@@ -229,6 +239,8 @@ test('clientGroup queries', async () => {
   expect(await p).toEqual([
     {
       ast,
+      name: null,
+      args: null,
       clientID: z.clientID,
       deleted: false,
       got: true,
