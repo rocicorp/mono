@@ -4,10 +4,6 @@ import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket, {createWebSocketStream} from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import * as valita from '../../../shared/src/valita.ts';
-import {
-  closeConnectionMessageSchema,
-  type CloseConnectionMessage,
-} from '../../../zero-protocol/src/close-connection.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
@@ -237,33 +233,8 @@ export class Connection {
     }
   }
 
-  #handleClose = async (e: CloseEvent) => {
+  #handleClose = (e: CloseEvent) => {
     const {code, reason, wasClean} = e;
-    // Normal closure
-    if (code === 1000) {
-      let msg: CloseConnectionMessage | undefined;
-      try {
-        const data = JSON.parse(reason);
-        msg = valita.parse(data, closeConnectionMessageSchema);
-      } catch (e) {
-        // failed to to parse reason as JSON.
-        this.#lc.warn?.(
-          `failed to parse close message "${reason}": ${String(e)}`,
-        );
-        this.close('WebSocket close event', {code, reason, wasClean});
-        return;
-      }
-
-      try {
-        const result = await this.#messageHandler.handleMessage(msg);
-        for (const r of result) {
-          this.#handleMessageResult(r);
-        }
-      } catch (e) {
-        this.#lc.warn?.(`error while handling close connection`, e);
-      }
-    }
-
     this.close('WebSocket close event', {code, reason, wasClean});
   };
 

@@ -196,9 +196,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
         return ret;
       }
       case 'closeConnection':
-        await startAsyncSpan(tracer, 'connection.closeConnection', () =>
-          viewSyncer.closeConnection(this.#syncContext, msg),
-        );
+        // This message is deprecated and no longer used.
         break;
 
       case 'inspect':
