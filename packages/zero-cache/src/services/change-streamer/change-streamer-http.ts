@@ -157,9 +157,9 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     }
     const uri = new URL(
       path,
-      address.startsWith('http://') || address.startsWith('https://')
+      address.startsWith('ws://') || address.startsWith('wss://')
         ? `${address}/`
-        : `http://${address}/`,
+        : `ws://${address}/`,
     );
     this.#lc.info?.(`connecting to change-streamer@${uri}`);
     return uri;

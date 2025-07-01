@@ -84,14 +84,14 @@ describe('change-streamer/storer', () => {
     return msgs;
   }
 
-  describe('protocol: http', () => {
+  describe('protocol: ws', () => {
     beforeEach(async () => {
       storer = new Storer(
         lc,
         shard,
         'task-id',
         'change-streamer:12345',
-        'http',
+        'ws',
         db,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
@@ -865,14 +865,14 @@ describe('change-streamer/storer', () => {
     });
   });
 
-  describe('protocol: https', () => {
+  describe('protocol: wss', () => {
     beforeEach(async () => {
       storer = new Storer(
         lc,
         shard,
         'task-id',
         'change-streamer:12345',
-        'https',
+        'wss',
         db,
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
@@ -885,7 +885,7 @@ describe('change-streamer/storer', () => {
     test('ownerAddress is set correctly', async () => {
       expect(
         await db`SELECT "ownerAddress" FROM "xero_5/cdc"."replicationState" WHERE owner = 'task-id'`,
-      ).toEqual([{ownerAddress: 'https://change-streamer:12345'}]);
+      ).toEqual([{ownerAddress: 'wss://change-streamer:12345'}]);
     });
   });
 });
