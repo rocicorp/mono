@@ -968,7 +968,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       transformationHash,
       transformedAst,
     } of transformedQueries) {
-      const start = Date.now();
+      const timer = new Timer();
       let count = 0;
       await startAsyncSpan(
         tracer,
@@ -977,7 +977,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           span.setAttribute('queryHash', hash);
           span.setAttribute('transformationHash', transformationHash);
           span.setAttribute('table', transformedAst.table);
-          const timer = new Timer();
           for (const _ of this.#pipelines.addQuery(
             transformationHash,
             transformedAst,
@@ -994,7 +993,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         },
       );
 
-      const elapsed = Date.now() - start;
+      const elapsed = timer.totalElapsed();
       counters.queryHydrations().add(1, {
         clientGroupID: this.id,
         hash,
