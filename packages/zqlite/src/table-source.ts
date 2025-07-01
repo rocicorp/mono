@@ -490,7 +490,7 @@ export class TableSource implements Source {
     if (constraint) {
       for (const [key, value] of Object.entries(constraint)) {
         constraints.push(
-          sql`${sql.ident(key)} = ${toSQLiteType(
+          sql`${sql.ident(key)} IS ${toSQLiteType(
             value,
             this.#columns[key].type,
           )}`,
@@ -603,6 +603,8 @@ function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
     }
   }
   return sql`${valuePositionToSQL(filter.left)} ${sql.__dangerous__rawValue(
+    // SQLite's LIKE operator is case-insensitive by default, so we
+    // convert ILIKE to LIKE and NOT ILIKE to NOT LIKE.
     filter.op === 'ILIKE'
       ? 'LIKE'
       : filter.op === 'NOT ILIKE'
@@ -667,46 +669,38 @@ function gatherStartConstraints(
     const [iField, iDirection] = order[i];
     for (let j = 0; j <= i; j++) {
       if (j === i) {
+        const constraintValue = toSQLiteType(
+          from[iField],
+          columnTypes[iField].type,
+        );
         if (iDirection === 'asc') {
           if (!reverse) {
             group.push(
-              sql`${sql.ident(iField)} > ${toSQLiteType(
-                from[iField],
-                columnTypes[iField].type,
-              )}`,
+              sql`(${constraintValue} IS NULL OR ${sql.ident(iField)} > ${constraintValue})`,
             );
           } else {
             reverse satisfies true;
             group.push(
-              sql`${sql.ident(iField)} < ${toSQLiteType(
-                from[iField],
-                columnTypes[iField].type,
-              )}`,
+              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${constraintValue})`,
             );
           }
         } else {
           iDirection satisfies 'desc';
           if (!reverse) {
             group.push(
-              sql`${sql.ident(iField)} < ${toSQLiteType(
-                from[iField],
-                columnTypes[iField].type,
-              )}`,
+              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${constraintValue})`,
             );
           } else {
             reverse satisfies true;
             group.push(
-              sql`${sql.ident(iField)} > ${toSQLiteType(
-                from[iField],
-                columnTypes[iField].type,
-              )}`,
+              sql`(${constraintValue} IS NULL OR ${sql.ident(iField)} > ${constraintValue})`,
             );
           }
         }
       } else {
         const [jField] = order[j];
         group.push(
-          sql`${sql.ident(jField)} = ${toSQLiteType(
+          sql`${sql.ident(jField)} IS ${toSQLiteType(
             from[jField],
             columnTypes[jField].type,
           )}`,
@@ -721,7 +715,7 @@ function gatherStartConstraints(
       sql`(${sql.join(
         order.map(
           s =>
-            sql`${sql.ident(s[0])} = ${toSQLiteType(
+            sql`${sql.ident(s[0])} IS ${toSQLiteType(
               from[s[0]],
               columnTypes[s[0]].type,
             )}`,
