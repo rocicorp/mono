@@ -1,4 +1,4 @@
-import {createMemo, onCleanup, type Accessor} from 'solid-js';
+import {createComputed, onCleanup, type Accessor} from 'solid-js';
 import {RefCount} from '../../shared/src/ref-count.ts';
 import {
   DEFAULT_TTL,
@@ -8,10 +8,14 @@ import {
   type TTL,
 } from '../../zero/src/zero.ts';
 import {
-  solidViewFactory,
+  createSolidView,
+  unknown,
+  type State,
   type QueryResultDetails,
   type SolidView,
 } from './solid-view.ts';
+import {createStore, type SetStoreFunction} from 'solid-js/store';
+import {useZero} from './use-zero.tsx';
 
 export type QueryResult<TReturn> = readonly [
   Accessor<HumanReadable<TReturn>>,
@@ -22,10 +26,6 @@ export type CreateQueryOptions = {
   ttl?: TTL | undefined;
 };
 
-// Deprecated in 0.19
-/**
- * @deprecated Use {@linkcode CreateQueryOptions} instead.
- */
 export type UseQueryOptions = {
   ttl?: TTL | undefined;
 };
@@ -38,25 +38,25 @@ export function createQuery<
   querySignal: () => Query<TSchema, TTable, TReturn>,
   options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
 ): QueryResult<TReturn> {
-  // Wrap in in createMemo to ensure a new view is created if the querySignal changes.
-  const view = createMemo(() => {
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    unknown,
+  ]);
+
+  const z = useZero();
+
+  // Wrap in in createComputed to ensure a new view is created if the querySignal changes.
+  createComputed(() => {
     const query = querySignal();
     const ttl = normalize(options)?.ttl ?? DEFAULT_TTL;
-    const view = getView(query, ttl);
-
-    // Use queueMicrotask to allow cleanup/create in the current microtask to
-    // reuse the view.
-    onCleanup(() => queueMicrotask(() => releaseView(query, view)));
-    return view;
+    createView(z()?.clientID, query, ttl, setState);
   });
 
-  return [() => view().data, () => view().resultDetails];
+  return [() => state[0][''] as HumanReadable<TReturn>, () => state[1]];
 }
 
-// Deprecated in 0.19
-/**
- * @deprecated Use {@linkcode createQuery} instead.
- */
 export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
@@ -68,38 +68,41 @@ export function useQuery<
   return createQuery(querySignal, options);
 }
 
-type UnknownSolidView = SolidView<HumanReadable<unknown>>;
+const views = new Map<string, SolidView>();
 
-const views = new WeakMap<WeakKey, UnknownSolidView>();
+const viewRefCount = new RefCount<SolidView>();
 
-const viewRefCount = new RefCount<UnknownSolidView>();
-
-function getView<
+function createView<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
+  clientID: string | undefined,
   query: Query<TSchema, TTable, TReturn>,
   ttl: TTL,
-): SolidView<HumanReadable<TReturn>> {
-  // TODO(arv): Use the hash of the query instead of the query object itself... but
-  // we need the clientID to do that in a reasonable way.
-  let view = views.get(query);
+  setState: SetStoreFunction<State>,
+): SolidView {
+  const hash = query.hash() + (clientID ?? '');
+  let view = views.get(hash);
   if (!view) {
-    view = query.materialize(solidViewFactory, ttl);
-    views.set(query, view);
+    view = query.materialize(createSolidView(setState), ttl);
+    views.set(hash, view);
   } else {
     view.updateTTL(ttl);
   }
   viewRefCount.inc(view);
-  return view as SolidView<HumanReadable<TReturn>>;
-}
 
-function releaseView(query: WeakKey, view: UnknownSolidView) {
-  if (viewRefCount.dec(view)) {
-    views.delete(query);
-    view.destroy();
-  }
+  // Use queueMicrotask to allow cleanup/create in the current microtask to
+  // reuse the view.
+  onCleanup(() =>
+    queueMicrotask(() => {
+      if (viewRefCount.dec(view)) {
+        views.delete(hash);
+        view.destroy();
+      }
+    }),
+  );
+  return view;
 }
 
 function normalize<T>(
