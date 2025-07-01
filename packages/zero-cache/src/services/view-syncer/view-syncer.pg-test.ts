@@ -1858,7 +1858,7 @@ describe('view-syncer/service', () => {
       ]
     `);
 
-    // expect(Date.now()).toBe(123);
+    // Simulate the passage of time.
     const ONE_HOUR = 60 * 60 * 1000;
     vi.setSystemTime(Date.now() + ONE_HOUR);
 
@@ -1872,39 +1872,19 @@ describe('view-syncer/service', () => {
       ['clientA', 'clientB'],
     );
 
-    // desired +A +B -C
-    // got +A +B +C
-    // rows +A +B +C -- why is it sending the rows again?
-    expect(await nextPoke(newClientA)).toMatchInlineSnapshot(`
+    expect(await nextPokeParts(newClientA)).toMatchInlineSnapshot(`
       [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "01:04",
-            "pokeID": "01:05",
+        {
+          "desiredQueriesPatches": {
+            "clientC": [
+              {
+                "hash": "query-hashC",
+                "op": "del",
+              },
+            ],
           },
-        ],
-        [
-          "pokePart",
-          {
-            "desiredQueriesPatches": {
-              "clientC": [
-                {
-                  "hash": "query-hashC",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:05",
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "01:05",
-            "pokeID": "01:05",
-          },
-        ],
+          "pokeID": "01:05",
+        },
       ]
     `);
 
@@ -1913,7 +1893,7 @@ describe('view-syncer/service', () => {
     await nextPoke(clientB); // desire delete query-hashC
     await expectNoPokes(clientB);
 
-    // Verify that clientC's query remains present but is invalidated.
+    // Verify that clientC's query remains present but is inactivated.
     expect(
       await cvrDB`SELECT "clientID", "deleted", "queryHash", "inactivatedAt" FROM "this_app_2/cvr".desires`,
     ).toMatchInlineSnapshot(`
@@ -1938,6 +1918,71 @@ describe('view-syncer/service', () => {
         },
       ]
     `);
+
+    // If we move time forward 5s the inactivated query should be deleted
+    callNextSetTimeout(ttl);
+
+    expect(await nextPokeParts(newClientA)).toMatchInlineSnapshot(`
+      [
+        {
+          "gotQueriesPatch": [
+            {
+              "hash": "query-hashC",
+              "op": "del",
+            },
+          ],
+          "pokeID": "01:06",
+          "rowsPatch": [
+            {
+              "id": {
+                "id": "1",
+              },
+              "op": "del",
+              "tableName": "comments",
+            },
+            {
+              "id": {
+                "id": "2",
+              },
+              "op": "del",
+              "tableName": "comments",
+            },
+          ],
+        },
+      ]
+    `);
+    expect(await nextPokeParts(clientB)).toMatchInlineSnapshot(`
+      [
+        {
+          "gotQueriesPatch": [
+            {
+              "hash": "query-hashC",
+              "op": "del",
+            },
+          ],
+          "pokeID": "01:06",
+          "rowsPatch": [
+            {
+              "id": {
+                "id": "1",
+              },
+              "op": "del",
+              "tableName": "comments",
+            },
+            {
+              "id": {
+                "id": "2",
+              },
+              "op": "del",
+              "tableName": "comments",
+            },
+          ],
+        },
+      ]
+    `);
+
+    await expectNoPokes(newClientA);
+    await expectNoPokes(clientB);
 
     // Clean up the streams
     newStreamA.cancel();
