@@ -16,7 +16,9 @@ export type TimeUnit = 's' | 'm' | 'h' | 'd' | 'y';
  */
 export type TTL = `${number}${TimeUnit}` | 'forever' | 'none' | number;
 
-export const DEFAULT_TTL: TTL = 'none';
+export const DEFAULT_TTL: TTL = '1s';
+
+export const DEFAULT_PRELOAD_TTL: TTL = '5s';
 
 export const MAX_TTL: TTL = '10m';
 

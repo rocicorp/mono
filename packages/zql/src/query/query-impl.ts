@@ -2,8 +2,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
-import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {
   AST,
   CompoundKey,
@@ -14,6 +15,7 @@ import type {
   System,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   isOneHop,
@@ -21,6 +23,7 @@ import {
   type TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
 import {buildPipeline} from '../builder/builder.ts';
+import {NotImplementedError} from '../error.ts';
 import {ArrayView} from '../ivm/array-view.ts';
 import type {Input} from '../ivm/operator.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
@@ -32,6 +35,8 @@ import {
   simplifyCondition,
   type ExpressionFactory,
 } from './expression.ts';
+import type {CustomQueryID} from './named.ts';
+import type {GotCallback, QueryDelegate} from './query-delegate.ts';
 import {
   type GetFilterType,
   type HumanReadable,
@@ -40,13 +45,8 @@ import {
   type Query,
   type RunOptions,
 } from './query.ts';
-import {DEFAULT_TTL, type TTL} from './ttl.ts';
+import {DEFAULT_PRELOAD_TTL, DEFAULT_TTL, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
-import {NotImplementedError} from '../error.ts';
-import type {CustomQueryID} from './named.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {GotCallback, QueryDelegate} from './query-delegate.ts';
-import {must} from '../../../shared/src/must.ts';
 
 export type AnyQuery = Query<Schema, string, any>;
 
@@ -824,7 +824,7 @@ export class QueryImpl<
     if (this.customQueryID) {
       const unsub = delegate.addCustomQuery(
         this.customQueryID,
-        options?.ttl ?? DEFAULT_TTL,
+        options?.ttl ?? DEFAULT_PRELOAD_TTL,
         got => {
           if (got) {
             resolve();
