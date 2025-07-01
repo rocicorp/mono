@@ -25,7 +25,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- Version 17 deprecates `AST` in downstream query puts. It was never used anyway.
 // -- Version 18 adds `name` and `args` to the `queries-patch` protocol
 // -- Version 19 adds `activeClients` to the `initConnection` protocol
-export const PROTOCOL_VERSION = 19;
+// -- Version 20 changes inspector down message
+export const PROTOCOL_VERSION = 20;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

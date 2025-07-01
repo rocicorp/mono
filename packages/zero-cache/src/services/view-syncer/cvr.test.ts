@@ -57,6 +57,8 @@ function makeCVR(clients: Record<string, QueryDef[]>): CVR {
   return cvr;
 }
 
+const minutes = (n: number) => n * 60 * 1000;
+
 test.each([
   {
     clients: {
@@ -96,8 +98,8 @@ test.each([
     },
     expected: [
       {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
-      {hash: 'h1', ttl: -1, inactivatedAt: 1000},
-      {hash: 'h3', ttl: -1, inactivatedAt: 3000},
+      {hash: 'h1', ttl: minutes(10), inactivatedAt: 1000},
+      {hash: 'h3', ttl: minutes(10), inactivatedAt: 3000},
     ],
   },
   {
@@ -120,7 +122,7 @@ test.each([
     },
     expected: [
       {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-      {hash: 'h2', ttl: -1, inactivatedAt: 2000},
+      {hash: 'h2', ttl: minutes(10), inactivatedAt: 2000},
     ],
   },
 
@@ -195,7 +197,7 @@ test.each([
     },
     expected: [
       {hash: 'h1', ttl: 3000, inactivatedAt: 2000},
-      {hash: 'h2', ttl: -1, inactivatedAt: 4000},
+      {hash: 'h2', ttl: minutes(10), inactivatedAt: 4000},
     ],
   },
   {
@@ -210,8 +212,8 @@ test.each([
       ],
     },
     expected: [
-      {hash: 'h2', ttl: -1, inactivatedAt: 2000},
-      {hash: 'h1', ttl: -1, inactivatedAt: 3000},
+      {hash: 'h2', ttl: minutes(10), inactivatedAt: 2000},
+      {hash: 'h1', ttl: minutes(10), inactivatedAt: 3000},
     ],
   },
   {
@@ -227,7 +229,7 @@ test.each([
     },
     expected: [
       {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
-      {hash: 'h1', ttl: -1, inactivatedAt: 2000},
+      {hash: 'h1', ttl: minutes(10), inactivatedAt: 2000},
     ],
   },
 ])('getInactiveQueries %o', ({clients, expected}) => {
