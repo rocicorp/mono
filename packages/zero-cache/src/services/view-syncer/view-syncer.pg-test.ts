@@ -1864,7 +1864,7 @@ describe('view-syncer/service', () => {
 
     // Now reconnect client A with activeClients [clientA, clientB]
     // This should inactivate clientC's queries
-    const newCtxA = {...ctxA, wsID: 'wsA2'};
+    const newCtxA = {...ctxA, baseCookie: '01:04', wsID: 'wsA2'};
     const {source: newStreamA, queue: newClientA} = connectWithQueueAndSource(
       newCtxA,
       [{op: 'put', hash: 'query-hashA', ast: ISSUES_QUERY, ttl}],
@@ -1880,30 +1880,14 @@ describe('view-syncer/service', () => {
         [
           "pokeStart",
           {
-            "baseCookie": null,
+            "baseCookie": "01:04",
             "pokeID": "01:05",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
           },
         ],
         [
           "pokePart",
           {
             "desiredQueriesPatches": {
-              "clientA": [
-                {
-                  "hash": "query-hashA",
-                  "op": "put",
-                },
-              ],
-              "clientB": [
-                {
-                  "hash": "query-hashB",
-                  "op": "put",
-                },
-              ],
               "clientC": [
                 {
                   "hash": "query-hashC",
@@ -1911,116 +1895,7 @@ describe('view-syncer/service', () => {
                 },
               ],
             },
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hashA",
-                "op": "put",
-              },
-              {
-                "hash": "query-hashB",
-                "op": "put",
-              },
-              {
-                "hash": "query-hashC",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
             "pokeID": "01:05",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "100",
-                  "name": "Alice",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "101",
-                  "name": "Bob",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "102",
-                  "name": "Candice",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "1",
-                  "issueID": "1",
-                  "text": "comment 1",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "2",
-                  "issueID": "1",
-                  "text": "bar",
-                },
-              },
-            ],
           },
         ],
         [
