@@ -72,10 +72,16 @@ export class ActiveClientsManager {
   #activeClients: Set<string> = new Set();
 
   /**
-   * A callback that is called when the list of active clients changes. It
-   * receives a `Set` of client IDs that are currently active in the client group.
+   * A callback that is called when a client is added to the client group.
+   * It receives the client ID of the added client.
    */
-  onChange: ((activeClients: ReadonlySet<string>) => void) | undefined;
+  onAdd: ((clientID: string) => void) | undefined;
+
+  /**
+   * A callback that is called when a client is deleted from the client group.
+   * It receives the client ID of the deleted client.
+   */
+  onDelete: ((clientID: string) => void) | undefined;
 
   /**
    * Creates an instance of `ActiveClientsManager` for the specified client
@@ -125,7 +131,6 @@ export class ActiveClientsManager {
         const client = fromLockName(e.data);
         if (client?.clientGroupID === this.clientGroupID) {
           this.#addClient(client.clientID);
-          this.#notifyClientActivated(client.clientID);
         }
       },
       {signal},
@@ -137,26 +142,29 @@ export class ActiveClientsManager {
 
     signal.addEventListener(
       'abort',
-      () => this.#lockManager.release(name, () => this.#resolver.resolve()),
+      () => {
+        this.#lockManager.release(name, () => this.#resolver.resolve());
+        channel.close();
+      },
       {once: true},
     );
 
-    await this.#updateActiveClients();
-
-    for (const clientID of this.#activeClients) {
+    for (const clientID of await this.#getActiveClients()) {
       if (clientID !== this.clientID) {
         this.#addClient(clientID);
       }
     }
 
-    channel.postMessage(name);
+    if (!signal.aborted) {
+      channel.postMessage(name);
+    }
   }
 
   get activeClients(): ReadonlySet<string> {
     return this.#activeClients;
   }
 
-  async #updateActiveClients(): Promise<void> {
+  async #getActiveClients(): Promise<Set<string>> {
     const activeClients: Set<string> = new Set();
 
     for await (const lockName of this.#lockManager.queryExclusive()) {
@@ -166,7 +174,7 @@ export class ActiveClientsManager {
       }
     }
 
-    this.#activeClients = activeClients;
+    return activeClients;
   }
 
   /**
@@ -175,26 +183,25 @@ export class ActiveClientsManager {
    * It will request a shared lock for the client, and when the exclusive lock
    * is released, it will notify that the client has been deactivated.
    */
-  #addClient(clientID: string): void {
+  #addSharedLockForOtherClient(clientID: string): void {
     const name = toLockName(this.clientGroupID, clientID);
     this.#lockManager
-      .request(name, 'shared', () => this.#notifyClientInactivated(clientID))
+      .request(name, 'shared', () => this.#removeClient(clientID))
       .catch(ignoreAbortError);
   }
 
-  #notifyClientInactivated(clientID: string) {
-    this.#activeClients.delete(clientID);
-    this.#onChange();
+  #addClient(clientID: string): void {
+    if (!this.#activeClients.has(clientID)) {
+      this.#activeClients.add(clientID);
+      this.#addSharedLockForOtherClient(clientID);
+      this.onAdd?.(clientID);
+    }
   }
 
-  #onChange() {
-    // This method is called when the list of active clients changes.
-    this.onChange?.(this.#activeClients);
-  }
-
-  #notifyClientActivated(clientID: string) {
-    this.#activeClients.add(clientID);
-    this.#onChange();
+  #removeClient(clientID: string): void {
+    if (this.#activeClients.delete(clientID)) {
+      this.onDelete?.(clientID);
+    }
   }
 }
 
