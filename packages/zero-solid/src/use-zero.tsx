@@ -1,4 +1,11 @@
-import {batch, createContext, createMemo, useContext, type JSX} from 'solid-js';
+import {
+  batch,
+  createContext,
+  createMemo,
+  onCleanup,
+  useContext,
+  type JSX,
+} from 'solid-js';
 import {
   Zero,
   type CustomMutatorDefs,
@@ -7,7 +14,7 @@ import {
 } from '../../zero/src/zero.ts';
 
 // eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/no-explicit-any
-export const ZeroContext = createContext<(() => Zero<any, any>) | undefined>(
+const ZeroContext = createContext<(() => Zero<any, any>) | undefined>(
   undefined,
 );
 
@@ -53,10 +60,12 @@ export function ZeroProvider<
     if ('zero' in z) {
       return z.zero;
     }
-    return new Zero({
+    const createdZero = new Zero({
       ...z,
       batchViewUpdates: batch,
     });
+    onCleanup(() => createdZero.close());
+    return createdZero;
   });
 
   return (
