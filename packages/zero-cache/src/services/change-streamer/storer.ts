@@ -138,7 +138,9 @@ export class Storer implements Service {
     const ownerProtocol = this.#discoveryProtocol;
     // we omit `ws://` so that old view syncer versions that are not expecting the protocol continue to not get it
     const addressWithProtocol =
-      ownerProtocol === 'wss' ? `wss://${ownerAddress}` : ownerAddress;
+      ownerProtocol === 'ws'
+        ? ownerAddress
+        : `${ownerProtocol}://${ownerAddress}`;
     await db`UPDATE ${this.#cdc('replicationState')} SET ${db({owner, ownerAddress: addressWithProtocol})}`;
     this.#lc.info?.(`assumed ownership at ${addressWithProtocol}`);
   }
