@@ -43,6 +43,7 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
+import {nanoid} from '../util/nanoid.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {DeleteClientsManager} from './delete-clients-manager.ts';
@@ -3598,4 +3599,39 @@ test('onError is called on error', async () => {
       ],
     ]
   `);
+});
+
+test('We should send a deleteClient when a Zero instance is closed', async () => {
+  // We need the same clientGroupID for both instances to test the
+  // deleteClients message.
+  const userID = nanoid();
+  const z1 = zeroForTest({userID});
+  const z2 = zeroForTest({userID});
+
+  expect(await z1.clientGroupID).toBe(await z2.clientGroupID);
+
+  await z1.triggerConnected();
+  await z2.triggerConnected();
+
+  expect(z1.connectionState).toBe(ConnectionState.Connected);
+  expect(z2.connectionState).toBe(ConnectionState.Connected);
+
+  const mockSocket1 = await z1.socket;
+  const mockSocket2 = await z2.socket;
+
+  expect(mockSocket1.messages).toMatchInlineSnapshot(`[]`);
+  expect(mockSocket2.messages).toMatchInlineSnapshot(`[]`);
+
+  await z1.close();
+
+  vi.useRealTimers();
+
+  await vi.waitFor(() => {
+    expect(mockSocket1.messages).toMatchInlineSnapshot(`[]`);
+    expect(mockSocket2.messages.map(s => JSON.parse(s))).toEqual([
+      ['deleteClients', {clientIDs: [z1.clientID], clientGroupIDs: []}],
+    ]);
+  });
+
+  await z2.close();
 });
