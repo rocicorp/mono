@@ -3,5 +3,5 @@ export {
   useQuery,
   type CreateQueryOptions,
   type UseQueryOptions,
-} from './create-query.ts';
-export {createZero} from './create-zero.ts';
+} from './use-query.ts';
+export {useZero, createZero, ZeroProvider} from './use-zero.ts';
