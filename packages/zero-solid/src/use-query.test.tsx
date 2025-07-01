@@ -22,8 +22,8 @@ import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
-import {createQuery, type CreateQueryOptions} from './create-query.ts';
-import {ZeroProvider} from './use-zero.tsx';
+import {useQuery, type UseQueryOptions} from './use-query.ts';
+import {ZeroProvider} from './use-zero.ts';
 
 function setupTestEnvironment() {
   const schema = createSchema({
@@ -56,34 +56,36 @@ function newMockZero(clientID: string): Zero<Schema> {
   } as unknown as Zero<Schema>;
 }
 
-function createQueryWithZeroProvider<
+function useQueryWithZeroProvider<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
-  clientID: string,
+  clientIDOrZeroSignal: string | Accessor<Zero<Schema>>,
   querySignal: () => Query<TSchema, TTable, TReturn>,
-  options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
+  options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ) {
-  const zero = {zero: newMockZero(clientID)};
-  const zeroSignal = () => zero;
+  const isClientID = typeof clientIDOrZeroSignal === 'string';
+  const zero = newMockZero(isClientID ? clientIDOrZeroSignal : 'unused');
   // eslint-disable-next-line @typescript-eslint/naming-convention
   const MockZeroProvider = (props: {children: JSX.Element}) => (
-    <ZeroProvider zeroSignal={zeroSignal}>{props.children}</ZeroProvider>
+    <ZeroProvider zero={!isClientID ? clientIDOrZeroSignal() : zero}>
+      {props.children}
+    </ZeroProvider>
   );
-  return renderHook(createQuery, {
+  return renderHook(useQuery, {
     initialProps: [querySignal, options],
     wrapper: MockZeroProvider,
   });
 }
 
-test('createQuery', async () => {
+test('useQuery', async () => {
   const {ms, tableQuery, queryDelegate} = setupTestEnvironment();
   const querySignal = vi.fn(() => tableQuery);
 
   const {
     result: [rows, resultType],
-  } = createQueryWithZeroProvider('createQuery-id', querySignal);
+  } = useQueryWithZeroProvider('useQuery-id', querySignal);
 
   expect(rows()).toEqual([
     {a: 1, b: 'a', [refCountSymbol]: 1},
@@ -105,7 +107,7 @@ test('createQuery', async () => {
   expect(resultType()).toEqual({type: 'complete'});
 });
 
-test('createQuery with ttl', () => {
+test('useQuery with ttl', () => {
   const {tableQuery, queryDelegate} = setupTestEnvironment();
   const [ttl, setTTL] = createSignal<TTL>('1m');
 
@@ -115,7 +117,7 @@ test('createQuery with ttl', () => {
 
   const querySignal = vi.fn(() => tableQuery);
 
-  createQueryWithZeroProvider('createQuery-with-ttl-id', querySignal, () => ({
+  useQueryWithZeroProvider('useQuery-with-ttl-id', querySignal, () => ({
     ttl: ttl(),
   }));
 
@@ -138,14 +140,14 @@ test('createQuery with ttl', () => {
   expect(materializeSpy).toHaveBeenCalledTimes(0);
 });
 
-test('createQuery query deps change', async () => {
+test('useQuery query deps change', async () => {
   const {tableQuery, queryDelegate} = setupTestEnvironment();
 
   const [a, setA] = createSignal(1);
   const querySignal = () => tableQuery.where('a', a());
 
-  const renderHookResult = createQueryWithZeroProvider(
-    'createQuery-deps-change-id',
+  const renderHookResult = useQueryWithZeroProvider(
+    'useQuery-deps-change-id',
     querySignal,
   );
 
@@ -192,14 +194,14 @@ test('createQuery query deps change', async () => {
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
 });
 
-test('createQuery query deps change testEffect', () => {
+test('useQuery query deps change testEffect', () => {
   const {ms, tableQuery, queryDelegate} = setupTestEnvironment();
 
   const [a, setA] = createSignal(1);
   const querySignal = () => tableQuery.where('a', a());
 
-  const renderHookResult = createQueryWithZeroProvider(
-    'createQuery-deps-change-testEffect-id',
+  const renderHookResult = useQueryWithZeroProvider(
+    'useQuery-deps-change-testEffect-id',
     querySignal,
   );
 
@@ -223,18 +225,18 @@ test('createQuery query deps change testEffect', () => {
   );
 });
 
-test('createQuery ttl dep changed', () => {
+test('useQuery ttl dep changed', () => {
   const {tableQuery} = setupTestEnvironment();
   const query = tableQuery.where('a', 1);
   const materializeSpy = vi.spyOn(query, 'materialize');
   const querySignal = () => query;
 
-  const [options, setOptions] = createSignal<CreateQueryOptions>({ttl: '1d'});
+  const [options, setOptions] = createSignal<UseQueryOptions>({ttl: '1d'});
 
-  const clientID = 'createQuery ttl dep changed';
+  const clientID = 'useQuery ttl dep changed';
   const {
     result: [rows],
-  } = createQueryWithZeroProvider(clientID, querySignal, options);
+  } = useQueryWithZeroProvider(clientID, querySignal, options);
 
   expect(rows()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
 
@@ -253,17 +255,17 @@ test('createQuery ttl dep changed', () => {
   expect(updateTTLSpy).toHaveBeenCalledExactlyOnceWith('2d');
 });
 
-test('createQuery view disposed when owner cleaned up', () => {
+test('useQuery view disposed when owner cleaned up', () => {
   const {tableQuery} = setupTestEnvironment();
   const query = tableQuery.where('a', 1);
   const materializeSpy = vi.spyOn(query, 'materialize');
   const querySignal = () => query;
 
-  const clientID = 'createQuery-view-disposed-when-owner-cleaned-up';
+  const clientID = 'useQuery-view-disposed-when-owner-cleaned-up';
   const {
     result: [rows],
     cleanup,
-  } = createQueryWithZeroProvider(clientID, querySignal);
+  } = useQueryWithZeroProvider(clientID, querySignal);
 
   expect(rows()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
 
@@ -279,27 +281,19 @@ test('createQuery view disposed when owner cleaned up', () => {
   expect(destroySpy).toHaveBeenCalledTimes(1);
 });
 
-test('createQuery view disposed when zero instance changes, new view created', () => {
+test('useQuery view disposed when zero instance changes, new view created', () => {
   const {tableQuery} = setupTestEnvironment();
   const query = tableQuery.where('a', 1);
   const materializeSpy = vi.spyOn(query, 'materialize');
   const querySignal = () => query;
 
   const clientID =
-    'createQuery view disposed when zero instance changes, new view created';
-  const [zero, setZero] = createSignal({
-    zero: newMockZero(clientID),
-  });
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  const MockZeroProvider = (props: {children: JSX.Element}) => (
-    <ZeroProvider zeroSignal={zero}>{props.children}</ZeroProvider>
-  );
+    'useQuery view disposed when zero instance changes, new view created';
+  const mockZero0 = newMockZero(clientID);
+  const [zero, setZero] = createSignal(mockZero0);
   const {
     result: [rows],
-  } = renderHook(createQuery, {
-    initialProps: [querySignal],
-    wrapper: MockZeroProvider,
-  });
+  } = useQueryWithZeroProvider(zero, querySignal);
 
   expect(rows()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
 
@@ -310,15 +304,20 @@ test('createQuery view disposed when zero instance changes, new view created', (
 
   expect(destroySpy).toHaveBeenCalledTimes(0);
 
-  setZero({
-    zero: newMockZero('2' + clientID),
-  });
+  setZero(mockZero0);
+
+  expect(destroySpy).toHaveBeenCalledTimes(0);
+  expect(materializeSpy).toHaveBeenCalledTimes(1);
+
+  const mockZero1 = newMockZero(clientID + '1');
+
+  setZero(mockZero1);
 
   expect(destroySpy).toHaveBeenCalledTimes(1);
   expect(materializeSpy).toHaveBeenCalledTimes(2);
 });
 
-test('createQuery view disposed when query changes and new view is created', () => {
+test('useQuery view disposed when query changes and new view is created', () => {
   const {tableQuery} = setupTestEnvironment();
   const queries = [
     tableQuery.where('a', 1),
@@ -329,11 +328,11 @@ test('createQuery view disposed when query changes and new view is created', () 
   const [queryIndex, setQueryIndex] = createSignal(0);
   const querySignal = () => queries[queryIndex()];
 
-  const clientID = 'createQuery-view-disposed-when-owner-cleaned-up';
+  const clientID = 'useQuery-view-disposed-when-owner-cleaned-up';
   const {
     result: [rows],
     cleanup,
-  } = createQueryWithZeroProvider(clientID, querySignal);
+  } = useQueryWithZeroProvider(clientID, querySignal);
 
   expect(rows()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
 
@@ -380,7 +379,7 @@ test('createQuery view disposed when query changes and new view is created', () 
   expect(destroy2Spy).toHaveBeenCalledTimes(1);
 });
 
-test('createQuery when ZeroProvider is used, view is reused if query instance changes as long as hash does not change', () => {
+test('useQuery when ZeroProvider is used, view is reused if query instance changes as long as hash does not change', () => {
   const {tableQuery} = setupTestEnvironment();
   const queries = [tableQuery.where('a', 1), tableQuery.where('a', 1)];
   const querySpies = queries.map(q => vi.spyOn(q, 'materialize'));
@@ -388,11 +387,11 @@ test('createQuery when ZeroProvider is used, view is reused if query instance ch
   const querySignal = () => queries[queryIndex()];
 
   const clientID =
-    'createQuery when ZeroProvider is used, view is reused if query instance changes as long as hash does not change';
+    'useQuery when ZeroProvider is used, view is reused if query instance changes as long as hash does not change';
   const {
     result: [rows],
     cleanup,
-  } = createQueryWithZeroProvider(clientID, querySignal);
+  } = useQueryWithZeroProvider(clientID, querySignal);
 
   expect(rows()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
 
@@ -416,7 +415,7 @@ test('createQuery when ZeroProvider is used, view is reused if query instance ch
   expect(destroy0Spy).toHaveBeenCalledTimes(1);
 });
 
-test('createQuery when ZeroProvider is not-used, view is not-reused if query instance changes even if hash does not change', () => {
+test('useQuery when ZeroProvider is not-used, view is not-reused if query instance changes even if hash does not change', () => {
   const {tableQuery} = setupTestEnvironment();
   const queries = [tableQuery.where('a', 1), tableQuery.where('a', 1)];
   const querySpies = queries.map(q => vi.spyOn(q, 'materialize'));
@@ -426,7 +425,7 @@ test('createQuery when ZeroProvider is not-used, view is not-reused if query ins
   const {
     result: [rows],
     cleanup,
-  } = renderHook(createQuery, {
+  } = renderHook(useQuery, {
     initialProps: [querySignal],
   });
 

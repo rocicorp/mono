@@ -15,13 +15,17 @@ import {
   UNKNOWN,
 } from './solid-view.ts';
 import {createStore} from 'solid-js/store';
-import {useZero} from './use-zero.tsx';
+import {useZero} from './use-zero.ts';
 
 export type QueryResult<TReturn> = readonly [
   Accessor<HumanReadable<TReturn>>,
   Accessor<QueryResultDetails>,
 ];
 
+// Deprecated in 0.22
+/**
+ * @deprecated Use {@linkcode UseQueryOptions} instead.
+ */
 export type CreateQueryOptions = {
   ttl?: TTL | undefined;
 };
@@ -30,13 +34,28 @@ export type UseQueryOptions = {
   ttl?: TTL | undefined;
 };
 
+// Deprecated in 0.22
+/**
+ * @deprecated Use {@linkcode useQuery} instead.
+ */
 export function createQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
-  querySignal: () => Query<TSchema, TTable, TReturn>,
+  querySignal: Accessor<Query<TSchema, TTable, TReturn>>,
   options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
+): QueryResult<TReturn> {
+  return useQuery(querySignal, options);
+}
+
+export function useQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+>(
+  querySignal: () => Query<TSchema, TTable, TReturn>,
+  options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ): QueryResult<TReturn> {
   const [state, setState] = createStore<State>([
     {
@@ -88,17 +107,6 @@ export function createQuery<
   });
 
   return [() => state[0][''] as HumanReadable<TReturn>, () => state[1]];
-}
-
-export function useQuery<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
->(
-  querySignal: () => Query<TSchema, TTable, TReturn>,
-  options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
-): QueryResult<TReturn> {
-  return createQuery(querySignal, options);
 }
 
 function normalize<T>(

@@ -3,6 +3,7 @@ import {
   createContext,
   createMemo,
   onCleanup,
+  splitProps,
   useContext,
   type JSX,
 } from 'solid-js';
@@ -51,24 +52,31 @@ export function createUseZero<
 export function ZeroProvider<
   S extends Schema,
   MD extends CustomMutatorDefs<S> | undefined = undefined,
->(props: {
-  children: JSX.Element;
-  zeroSignal: () => ZeroOptions<S, MD> | {zero: Zero<S, MD>};
-}) {
+>(
+  props: {children: JSX.Element} & (
+    | {
+        zero: Zero<S, MD>;
+      }
+    | ZeroOptions<S, MD>
+  ),
+) {
   const zero = createMemo(() => {
-    const z = props.zeroSignal();
-    if ('zero' in z) {
-      return z.zero;
+    if ('zero' in props) {
+      return props.zero;
     }
+    const [, options] = splitProps(props, ['children']);
     const createdZero = new Zero({
-      ...z,
+      ...options,
       batchViewUpdates: batch,
     });
     onCleanup(() => createdZero.close());
     return createdZero;
   });
 
-  return (
-    <ZeroContext.Provider value={zero}>{props.children}</ZeroContext.Provider>
-  );
+  return ZeroContext.Provider({
+    value: zero,
+    get children() {
+      return props.children;
+    },
+  });
 }

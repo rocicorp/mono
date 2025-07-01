@@ -22,8 +22,8 @@ export type QueryResultDetails = {
 
 export type State = [Entry, QueryResultDetails];
 
-export const COMPLETE: QueryResultDetails = {type: 'complete'} as const;
-export const UNKNOWN: QueryResultDetails = {type: 'unknown'} as const;
+export const COMPLETE: QueryResultDetails = Object.freeze({type: 'complete'});
+export const UNKNOWN: QueryResultDetails = Object.freeze({type: 'unknown'});
 
 export class SolidView implements Output {
   readonly #input: Input;
@@ -69,11 +69,7 @@ export class SolidView implements Output {
     );
 
     this.#setState = setState;
-    const s = [
-      initialRoot,
-      queryComplete === true ? COMPLETE : UNKNOWN,
-    ] as const;
-    this.#setState(s);
+    this.#setState([initialRoot, queryComplete === true ? COMPLETE : UNKNOWN]);
 
     if (isEmptyRoot(initialRoot)) {
       this.#builderRoot = this.#createEmptyRoot();
