@@ -54,7 +54,7 @@ export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
-  querySignal: () => Query<TSchema, TTable, TReturn>,
+  querySignal: Accessor<Query<TSchema, TTable, TReturn>>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ): QueryResult<TReturn> {
   const [state, setState] = createStore<State>([

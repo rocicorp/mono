@@ -5,6 +5,7 @@ import {
   onCleanup,
   splitProps,
   useContext,
+  type Accessor,
   type JSX,
 } from 'solid-js';
 import {
@@ -15,7 +16,7 @@ import {
 } from '../../zero/src/zero.ts';
 
 // eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/no-explicit-any
-const ZeroContext = createContext<(() => Zero<any, any>) | undefined>(
+const ZeroContext = createContext<Accessor<Zero<any, any>> | undefined>(
   undefined,
 );
 
