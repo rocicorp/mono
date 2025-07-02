@@ -26,7 +26,7 @@
     "fast-check": "^3.18.0",
     "nanoid": "^4.0.2",
     "playwright": "^1.43.1",
-    "replicache": "15.2.1",
+    "replicache": "15.3.0",
     "shared": "0.0.0",
     "typescript": "^5.5.3",
     "wa-sqlite": "github:rhashimoto/wa-sqlite#ca2084cdd188c56532ba3e272696d0b9e21a23bf",

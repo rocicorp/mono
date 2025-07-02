@@ -8,7 +8,7 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.2.2",
     "@rocicorp/prettier-config": "^0.2.0",
-    "replicache": "15.2.1",
+    "replicache": "15.3.0",
     "typescript": "^5.5.3",
     "vitest": "^2.0.3"
   },
