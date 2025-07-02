@@ -66,7 +66,7 @@
     "@types/react-dom": "18.3.5",
     "@typescript-eslint/eslint-plugin": "^5.16.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "@vitest/runner": "3.0.8",
+    "@vitest/runner": "3.2.4",
     "eslint": "^8.15.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-react-hooks": "^4.6.0",
@@ -82,7 +82,7 @@
     "vite-bundle-analyzer": "^0.17.3",
     "vite-plugin-svgr": "^4.3.0",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "3.0.8"
+    "vitest": "3.2.4"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"
