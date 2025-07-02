@@ -283,14 +283,16 @@ async function clientsWithQueries(
 }
 
 class Query implements QueryInterface {
-  readonly ast: AST;
+  readonly ast: AST | null;
+  readonly name: string | null;
+  readonly args: ReadonlyArray<ReadonlyJSONValue> | null;
   readonly got: boolean;
   readonly ttl: TTL;
   readonly inactivatedAt: Date | null;
   readonly rowCount: number;
   readonly deleted: boolean;
   readonly id: string;
-  readonly zql: string;
+  readonly zql: string | null;
   readonly clientID: string;
 
   constructor(row: InspectQueryRow, _schema: Schema) {
@@ -303,9 +305,11 @@ class Query implements QueryInterface {
       row.inactivatedAt === null ? null : new Date(row.inactivatedAt);
     this.ttl = normalizeTTL(row.ttl);
     this.ast = row.ast;
+    this.name = row.name;
+    this.args = row.args;
     this.got = row.got;
     this.rowCount = row.rowCount;
     this.deleted = row.deleted;
-    this.zql = this.ast.table + astToZQL(this.ast);
+    this.zql = this.ast ? this.ast.table + astToZQL(this.ast) : null;
   }
 }

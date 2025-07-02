@@ -1,7 +1,9 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "lib": ["DOM", "ES2022"]
+    "lib": ["DOM", "ES2022"],
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js"
   },
   "include": ["src"]
 }
