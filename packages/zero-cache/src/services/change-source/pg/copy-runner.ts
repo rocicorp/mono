@@ -5,7 +5,7 @@ import {READONLY} from '../../../db/mode-enum.ts';
 import type {PostgresDB, PostgresTransaction} from '../../../types/pg.ts';
 import {orTimeoutWith} from '../../../types/timeout.ts';
 
-const CONNECTION_REUSE_TIMEOUT = 100;
+const CONNECTION_REUSE_TIMEOUT = 250;
 const TIMED_OUT = {reason: 'commit timed out'};
 
 type Task<T> = {
@@ -74,7 +74,7 @@ export class CopyRunner {
     }
   }
 
-  async #run(task: Task<unknown>): Promise<unknown> {
+  async #run(task: Task<unknown>) {
     const {db, connID} = this.#getConnection();
     const lc = this.#lc.withContext('conn', connID.toString());
 
@@ -83,7 +83,8 @@ export class CopyRunner {
       if (this.#snapshotID) {
         void tx
           .unsafe(`SET TRANSACTION SNAPSHOT '${this.#snapshotID}'`)
-          .execute();
+          .execute()
+          .catch(e => lc.error?.(`error setting transaction snapshot`, e));
       }
       return copy(tx, lc).then(result.resolve, result.reject);
     });
@@ -91,6 +92,8 @@ export class CopyRunner {
     function closeConnection() {
       void db.end().catch(e => lc.warn?.(`error closing connection`, e));
     }
+
+    await result.promise;
 
     // If the transaction successfully completes, the `COMMIT` succeeded
     // and the connection is healthy, so the connection can be reused.
@@ -108,8 +111,6 @@ export class CopyRunner {
     } else {
       this.#pool.push({db, connID});
     }
-
-    return result.promise;
   }
 
   #getConnection(): {db: PostgresDB; connID: number} {
