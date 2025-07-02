@@ -138,6 +138,50 @@ describe('Anonymous Telemetry Integration Tests', () => {
       startAnonymousTelemetry();
       expect(OTLPMetricExporter).not.toHaveBeenCalled();
     });
+
+    test('should respect opt-out via DO_NOT_TRACK environment variable', () => {
+      // Set DO_NOT_TRACK environment variable
+      process.env.DO_NOT_TRACK = '1';
+
+      // Mock config to return enabled analytics
+      vi.mocked(getZeroConfig).mockReturnValueOnce({
+        enableUsageAnalytics: true,
+      } as Partial<ZeroConfig> as ZeroConfig);
+
+      startAnonymousTelemetry();
+
+      // Should not initialize any telemetry components
+      expect(OTLPMetricExporter).not.toHaveBeenCalled();
+      expect(PeriodicExportingMetricReader).not.toHaveBeenCalled();
+      expect(MeterProvider).not.toHaveBeenCalled();
+
+      // Clean up
+      delete process.env.DO_NOT_TRACK;
+    });
+
+    test('should respect opt-out via DO_NOT_TRACK environment variable with any value', () => {
+      // Set DO_NOT_TRACK environment variable with different values
+      const testValues = ['1', 'true', 'yes', 'on', 'anything'];
+
+      for (const value of testValues) {
+        process.env.DO_NOT_TRACK = value;
+
+        // Mock config to return enabled analytics
+        vi.mocked(getZeroConfig).mockReturnValueOnce({
+          enableUsageAnalytics: true,
+        } as Partial<ZeroConfig> as ZeroConfig);
+
+        startAnonymousTelemetry();
+
+        // Should not initialize any telemetry components
+        expect(OTLPMetricExporter).not.toHaveBeenCalled();
+        expect(PeriodicExportingMetricReader).not.toHaveBeenCalled();
+        expect(MeterProvider).not.toHaveBeenCalled();
+
+        // Clean up
+        delete process.env.DO_NOT_TRACK;
+      }
+    });
   });
 
   describe('Telemetry Startup and Operation', () => {

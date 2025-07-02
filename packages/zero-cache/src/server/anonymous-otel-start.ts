@@ -60,6 +60,14 @@ class AnonymousTelemetryManager {
       }
     }
 
+    // Check for DO_NOT_TRACK environment variable
+    if (process.env.DO_NOT_TRACK) {
+      this.#lc?.debug?.(
+        'Anonymous telemetry disabled: DO_NOT_TRACK environment variable is set',
+      );
+      return;
+    }
+
     if (this.#started || !config.enableUsageAnalytics) {
       return;
     }
