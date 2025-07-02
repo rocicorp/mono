@@ -2625,7 +2625,7 @@ suite('take with no partition', () => {
       });
 
       test('edit row at boundary, making it fall outside the window', () => {
-        const {data, messages, storage, pushes} = takeNoPartitionTest({
+        const {data, messages, storage, pushesWithFetch} = takeNoPartitionTest({
           ...base,
           limit: 3,
           fetchOnPush: true,
@@ -2736,29 +2736,77 @@ suite('take with no partition', () => {
             },
           }
         `);
-        expect(pushes).toMatchInlineSnapshot(`
+        expect(pushesWithFetch).toMatchInlineSnapshot(`
           [
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 300,
-                  "id": "i3",
-                  "text": "c",
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
                 },
+                "type": "remove",
               },
-              "type": "remove",
+              "fetch": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 100,
+                    "id": "i1",
+                    "text": "a",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 200,
+                    "id": "i2",
+                    "text": "b",
+                  },
+                },
+              ],
             },
             {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "created": 400,
-                  "id": "i4",
-                  "text": "d",
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "created": 400,
+                    "id": "i4",
+                    "text": "d",
+                  },
                 },
+                "type": "add",
               },
-              "type": "add",
+              "fetch": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 100,
+                    "id": "i1",
+                    "text": "a",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 200,
+                    "id": "i2",
+                    "text": "b",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 400,
+                    "id": "i4",
+                    "text": "d",
+                  },
+                },
+              ],
             },
           ]
         `);
@@ -5756,18 +5804,19 @@ suite('take with partition', () => {
       });
 
       test('edit row at boundary, making it fall outside the window', () => {
-        const {data, messages, storage, pushes} = takeTestWithPartition({
-          ...base,
-          limit: 2,
-          fetchOnPush: true,
-          pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-              row: {id: 'c2', issueID: 'i1', created: 350, text: 'b2'},
-            },
-          ],
-        });
+        const {data, messages, storage, pushesWithFetch} =
+          takeTestWithPartition({
+            ...base,
+            limit: 2,
+            fetchOnPush: true,
+            pushes: [
+              {
+                type: 'edit',
+                oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+                row: {id: 'c2', issueID: 'i1', created: 350, text: 'b2'},
+              },
+            ],
+          });
         expect(data).toMatchInlineSnapshot(`
           [
             {
@@ -5963,49 +6012,156 @@ suite('take with partition', () => {
             },
           }
         `);
-        expect(pushes).toMatchInlineSnapshot(`
+        expect(pushesWithFetch).toMatchInlineSnapshot(`
           [
             {
-              "child": {
-                "change": {
-                  "node": {
-                    "relationships": {},
-                    "row": {
-                      "created": 200,
-                      "id": "c2",
-                      "issueID": "i1",
-                      "text": "b",
+              "change": {
+                "child": {
+                  "change": {
+                    "node": {
+                      "relationships": {},
+                      "row": {
+                        "created": 200,
+                        "id": "c2",
+                        "issueID": "i1",
+                        "text": "b",
+                      },
                     },
+                    "type": "remove",
                   },
-                  "type": "remove",
+                  "relationshipName": "comments",
                 },
-                "relationshipName": "comments",
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
-              "row": {
-                "id": "i1",
-              },
-              "type": "child",
+              "fetch": [
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 100,
+                          "id": "c1",
+                          "issueID": "i1",
+                          "text": "a",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i1",
+                  },
+                },
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 400,
+                          "id": "c4",
+                          "issueID": "i2",
+                          "text": "d",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 500,
+                          "id": "c5",
+                          "issueID": "i2",
+                          "text": "e",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                  },
+                },
+              ],
             },
             {
-              "child": {
-                "change": {
-                  "node": {
-                    "relationships": {},
-                    "row": {
-                      "created": 300,
-                      "id": "c3",
-                      "issueID": "i1",
-                      "text": "c",
+              "change": {
+                "child": {
+                  "change": {
+                    "node": {
+                      "relationships": {},
+                      "row": {
+                        "created": 300,
+                        "id": "c3",
+                        "issueID": "i1",
+                        "text": "c",
+                      },
                     },
+                    "type": "add",
                   },
-                  "type": "add",
+                  "relationshipName": "comments",
                 },
-                "relationshipName": "comments",
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
-              "row": {
-                "id": "i1",
-              },
-              "type": "child",
+              "fetch": [
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 100,
+                          "id": "c1",
+                          "issueID": "i1",
+                          "text": "a",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 300,
+                          "id": "c3",
+                          "issueID": "i1",
+                          "text": "c",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i1",
+                  },
+                },
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 400,
+                          "id": "c4",
+                          "issueID": "i2",
+                          "text": "d",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 500,
+                          "id": "c5",
+                          "issueID": "i2",
+                          "text": "e",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                  },
+                },
+              ],
             },
           ]
         `);
