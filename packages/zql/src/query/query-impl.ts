@@ -553,7 +553,7 @@ export abstract class AbstractQuery<
           defaultFormat,
           this.customQueryID,
           relationship,
-        ),
+        ) as AnyQuery,
       );
 
       return {
