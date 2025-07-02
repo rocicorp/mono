@@ -325,7 +325,7 @@ export class CVRStore {
         }
       } else {
         // This can happen if the client was deleted but the queries are still alive.
-        lc.debug?.(`Client ${row.clientID} not found`, cvr);
+        lc.debug?.(`Client ${row.clientID} not found`);
       }
 
       const query = cvr.queries[row.queryHash];
