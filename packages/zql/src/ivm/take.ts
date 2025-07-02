@@ -498,6 +498,12 @@ export class Take implements Operator {
         newBoundNode.row,
         maxBound,
       );
+      this.#withRowHiddenFromFetch(newBoundNode.row, () => {
+        this.#output.push({
+          type: 'remove',
+          node: change.oldNode,
+        });
+      });
       this.#output.push({
         type: 'add',
         node: newBoundNode,

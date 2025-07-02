@@ -540,11 +540,14 @@ describe(
             name: 'Order by nullable column',
             createQuery: q => q.customer.orderBy('company', 'desc').limit(10),
           },
-          // TODO: case below is broken.
-          // {
-          //   name: 'Order by nullable column (single row)',
-          //   createQuery: q => q.employee.orderBy('reportsTo', 'asc').limit(1),
-          // },
+          {
+            name: 'Order by column (single row)',
+            createQuery: q => q.employee.orderBy('firstName', 'asc').limit(1),
+          },
+          {
+            name: 'Order by nullable column (single row)',
+            createQuery: q => q.employee.orderBy('reportsTo', 'asc').limit(1),
+          },
           {
             name: 'Order by nullable column',
             createQuery: q => q.employee.orderBy('reportsTo', 'desc').limit(6),
