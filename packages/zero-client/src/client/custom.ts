@@ -69,7 +69,8 @@ export type CustomMutatorImpl<
  */
 export type MakeCustomMutatorInterfaces<
   S extends Schema,
-  MD extends CustomMutatorDefs<S>,
+  MD extends CustomMutatorDefs<S, TWrappedTransaction>,
+  TWrappedTransaction = unknown,
 > = {
   readonly [NamespaceOrName in keyof MD]: MD[NamespaceOrName] extends (
     tx: Transaction<S>,
@@ -131,9 +132,9 @@ export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
   readonly token: string | undefined;
 }
 
-export function makeReplicacheMutator<S extends Schema>(
+export function makeReplicacheMutator<S extends Schema, TWrappedTransaction>(
   lc: ZeroLogContext,
-  mutator: CustomMutatorImpl<S>,
+  mutator: CustomMutatorImpl<S, TWrappedTransaction>,
   schema: S,
   slowMaterializeThreshold: number,
 ) {
