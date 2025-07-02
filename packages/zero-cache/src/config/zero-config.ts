@@ -360,6 +360,16 @@ export const zeroOptions = {
       ],
     },
 
+    protocol: {
+      type: v.literalUnion('ws', 'wss').default('ws'),
+      desc: [
+        `The {bold protocol} for other processes to use when connecting to this `,
+        `change-streamer.`,
+        ``,
+        `If unspecified, defaults to ws.`,
+      ],
+    },
+
     discoveryInterfacePreferences: {
       type: v.array(v.string()).default([
         'eth', // linux

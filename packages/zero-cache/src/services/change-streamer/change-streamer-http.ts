@@ -155,7 +155,10 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     if (!address) {
       throw new Error(`no change-streamer is running`);
     }
-    const uri = new URL(path, `http://${address}/`);
+    const uri = new URL(
+      path,
+      address.includes('://') ? `${address}/` : `ws://${address}/`,
+    );
     this.#lc.info?.(`connecting to change-streamer@${uri}`);
     return uri;
   }
