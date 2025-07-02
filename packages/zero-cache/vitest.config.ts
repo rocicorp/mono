@@ -74,6 +74,6 @@ export function configForCustomPg(url: string) {
 
 export default defineConfig({
   test: {
-    workspace: ['vitest.config.*.ts', ...configForCustomPg(import.meta.url)],
+    projects: ['vitest.config.*.ts', ...configForCustomPg(import.meta.url)],
   },
 });
