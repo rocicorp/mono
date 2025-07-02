@@ -7,8 +7,12 @@ import type {ObservableResult} from '@opentelemetry/api';
 import {platform} from 'os';
 import {h64} from '../../../shared/src/hash.js';
 import type {LogContext} from '@rocicorp/logger';
-import packageJson from '../../package.json' with {type: 'json'};
+import packageJson from '../../../zero/package.json' with {type: 'json'};
 import {getZeroConfig, type ZeroConfig} from '../config/zero-config.js';
+import {execSync} from 'child_process';
+import {randomUUID} from 'crypto';
+import {existsSync} from 'fs';
+import {join, dirname} from 'path';
 
 const ROCICORP_TELEMETRY_TOKEN =
   process.env.ROCICORP_TELEMETRY_TOKEN || 'anonymous-token';
@@ -28,8 +32,12 @@ class AnonymousTelemetryManager {
   #lc: LogContext | undefined;
   #config: ZeroConfig | undefined;
   #workerId = 'unknown';
+  #sessionId: string;
+  #cachedAttributes: Record<string, string> | undefined;
 
-  private constructor() {}
+  private constructor() {
+    this.#sessionId = randomUUID();
+  }
 
   static getInstance(): AnonymousTelemetryManager {
     if (!AnonymousTelemetryManager.#instance) {
@@ -58,6 +66,8 @@ class AnonymousTelemetryManager {
     this.#lc = lc;
     this.#config = config;
     this.#workerId = workerId || 'unknown';
+    // Clear cached attributes when config/workerId changes
+    this.#cachedAttributes = undefined;
 
     const resource = resourceFromAttributes(this.#getAttributes());
     const metricReader = new PeriodicExportingMetricReader({
@@ -258,15 +268,23 @@ class AnonymousTelemetryManager {
   }
 
   #getAttributes() {
-    return {
-      'zero.app.id': h64(this.#config?.upstream.db || 'unknown').toString(),
-      'zero.machine.os': platform(),
-      'zero.telemetry.type': 'anonymous',
-      'zero.infra.platform': this.#getPlatform(),
-      'zero.version': this.#config?.serverVersion ?? packageJson.version,
-      'zero.task.id': this.#config?.taskID || 'unknown',
-      'zero.worker.id': this.#workerId,
-    };
+    if (!this.#cachedAttributes) {
+      this.#cachedAttributes = {
+        'zero.app.id': h64(this.#config?.upstream.db || 'unknown').toString(),
+        'zero.machine.os': platform(),
+        'zero.telemetry.type': 'anonymous',
+        'zero.infra.platform': this.#getPlatform(),
+        'zero.version': this.#config?.serverVersion ?? packageJson.version,
+        'zero.task.id': this.#config?.taskID || 'unknown',
+        'zero.worker.id': this.#workerId,
+        'zero.project.id': this.#getGitProjectId(),
+        'zero.session.id': this.#sessionId,
+      };
+      this.#lc?.debug?.(
+        `Telemetry: cached attributes=${JSON.stringify(this.#cachedAttributes)}`,
+      );
+    }
+    return this.#cachedAttributes;
   }
 
   #getPlatform(): string {
@@ -281,6 +299,37 @@ class AnonymousTelemetryManager {
       return 'railway';
     if (process.env.RENDER || process.env.RENDER_SERVICE_ID) return 'render';
     return 'unknown';
+  }
+
+  #findUp(startDir: string, target: string): string | null {
+    let dir = startDir;
+    while (dir !== dirname(dir)) {
+      if (existsSync(join(dir, target))) return dir;
+      dir = dirname(dir);
+    }
+    return null;
+  }
+
+  #getGitProjectId(): string {
+    try {
+      const cwd = process.cwd();
+      const gitRoot = this.#findUp(cwd, '.git');
+      if (!gitRoot) {
+        return 'unknown';
+      }
+
+      const rootCommitHash = execSync('git rev-list --max-parents=0 HEAD -1', {
+        cwd: gitRoot,
+        encoding: 'utf8',
+        timeout: 1000,
+        stdio: ['ignore', 'pipe', 'ignore'], // Suppress stderr
+      }).trim();
+
+      return rootCommitHash.length === 40 ? rootCommitHash : 'unknown';
+    } catch (error) {
+      this.#lc?.debug?.('Unable to get Git root commit:', error);
+      return 'unknown';
+    }
   }
 }
 
