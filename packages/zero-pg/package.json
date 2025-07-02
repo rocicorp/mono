@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.3.0",
-    "@vitest/runner": "3.0.8",
-    "vitest": "3.0.8"
+    "@vitest/runner": "3.2.4",
+    "vitest": "3.2.4"
   }
 }

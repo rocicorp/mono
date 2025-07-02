@@ -27,13 +27,13 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
-    "@vitest/coverage-v8": "3.0.8",
-    "@vitest/runner": "3.0.8",
+    "@vitest/coverage-v8": "3.2.4",
+    "@vitest/runner": "3.2.4",
     "prettier": "^3.5.3",
     "syncpack": "^12.3.2",
     "tsx": "^4.19.1",
     "turbo": "^2.4.4",
-    "vitest": "3.0.8"
+    "vitest": "3.2.4"
   },
   "eslintConfig": {
     "extends": "./eslint-config.json"

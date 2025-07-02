@@ -37,7 +37,7 @@
     "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@types/command-line-usage": "^5.0.2",
-    "@vitest/runner": "3.0.8",
+    "@vitest/runner": "3.2.4",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.1.1",
@@ -46,7 +46,7 @@
     "playwright": "^1.51.0",
     "shared": "0.0.0",
     "typescript": "~5.8.2",
-    "vitest": "3.0.8"
+    "vitest": "3.2.4"
   },
   "type": "module",
   "main": "out/replicache.js",

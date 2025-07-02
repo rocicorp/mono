@@ -1,8 +1,8 @@
+import {dirname, resolve} from 'path';
+import {fileURLToPath} from 'url';
+import tsconfigPaths from 'vite-tsconfig-paths';
 import {defineConfig, mergeConfig} from 'vitest/config';
 import config from '../../packages/shared/src/tool/vitest-config.ts';
-import tsconfigPaths from 'vite-tsconfig-paths';
-import {fileURLToPath} from 'url';
-import {dirname, resolve} from 'path';
 
 const ci = process.env['CI'] === 'true' || process.env['CI'] === '1';
 
@@ -73,7 +73,7 @@ export function configForNoPg(url: string) {
 
 export default defineConfig({
   test: {
-    workspace: [
+    projects: [
       configForNoPg(import.meta.url),
       configForVersion(16, import.meta.url),
     ],
