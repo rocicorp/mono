@@ -1,7 +1,7 @@
-import { dirname, resolve } from 'path';
-import { fileURLToPath } from 'url';
+import {dirname, resolve} from 'path';
+import {fileURLToPath} from 'url';
 import tsconfigPaths from 'vite-tsconfig-paths';
-import { defineConfig, mergeConfig } from 'vitest/config';
+import {defineConfig, mergeConfig} from 'vitest/config';
 import config from '../../packages/shared/src/tool/vitest-config.ts';
 
 const ci = process.env['CI'] === 'true' || process.env['CI'] === '1';
