@@ -1,19 +1,12 @@
-import {
-  ZQLDatabase,
-  PostgresJSConnection,
-  PushProcessor,
-} from '@rocicorp/zero/pg';
-import postgres from 'postgres';
+import {PushProcessor} from '@rocicorp/zero/server';
+import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
 import {schema} from '../shared/schema.ts';
 import {createServerMutators, type PostCommitTask} from './server-mutators.ts';
 import type {AuthData} from '../shared/auth.ts';
 import type {ReadonlyJSONValue} from '@rocicorp/zero';
 
 const processor = new PushProcessor(
-  new ZQLDatabase(
-    new PostgresJSConnection(postgres(process.env.ZERO_UPSTREAM_DB as string)),
-    schema,
-  ),
+  zeroPostgresJS(schema, process.env.ZERO_UPSTREAM_DB as string),
 );
 
 export async function handlePush(
