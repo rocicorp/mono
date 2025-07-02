@@ -62,6 +62,14 @@ import {isCtrlEnter} from './is-ctrl-enter.ts';
 import {emojiChange, issueDetail, prevNext} from '../../../shared/queries.ts';
 import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
 import {preload} from '../../zero-preload.ts';
+import {
+  addLabelToIssue,
+  createLabelAndAddToIssue,
+  deleteIssue,
+  removeLabelFromIssue,
+  setViewState,
+  updateIssue,
+} from '../../../shared/mutators.ts';
 
 function softNavigate(path: string, state?: ZbugsHistoryState) {
   navigate(path, {state});
@@ -152,7 +160,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     ) {
       // only set to viewed if the user has looked at it for > 1 second
       const handle = setTimeout(() => {
-        z.mutate.viewState.set({
+        setViewState(login.loginState?.decoded)(z, {
           issueID: displayed.id,
           viewed: Date.now(),
         });
@@ -160,7 +168,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
       return () => clearTimeout(handle);
     }
     return;
-  }, [displayed, z]);
+  }, [displayed, z, login.loginState?.decoded]);
 
   const [editing, setEditing] = useState<typeof displayed | null>(null);
   const [edits, setEdits] = useState<Partial<typeof displayed>>({});
@@ -177,7 +185,12 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     if (!editing) {
       return;
     }
-    z.mutate.issue.update({id: editing.id, ...edits, modified: Date.now()});
+    updateIssue(login.loginState?.decoded)(z, {
+      id: editing.id,
+      ...edits,
+      modified: Date.now(),
+    });
+
     setEditing(null);
     setEdits({});
   };
@@ -350,7 +363,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const remove = () => {
     // TODO: Implement undo - https://github.com/rocicorp/undo
-    z.mutate.issue.delete(displayed.id);
+    deleteIssue(login.loginState?.decoded)(z, displayed.id);
     navigate(listContext?.href ?? links.home());
   };
 
@@ -493,7 +506,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               ]}
               selectedValue={displayed.open}
               onChange={value =>
-                z.mutate.issue.update({
+                updateIssue(login.loginState?.decoded)(z, {
                   id: displayed.id,
                   open: value,
                   modified: Date.now(),
@@ -511,7 +524,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               unselectedLabel="Nobody"
               filter="crew"
               onSelect={user => {
-                z.mutate.issue.update({
+                updateIssue(login.loginState?.decoded)(z, {
                   id: displayed.id,
                   assigneeID: user?.id ?? null,
                   modified: Date.now(),
@@ -540,7 +553,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                 ]}
                 selectedValue={displayed.visibility}
                 onChange={value =>
-                  z.mutate.issue.update({
+                  updateIssue(login.loginState?.decoded)(z, {
                     id: displayed.id,
                     visibility: value,
                     modified: Date.now(),
@@ -574,20 +587,20 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               <LabelPicker
                 selected={labelSet}
                 onAssociateLabel={labelID =>
-                  z.mutate.issue.addLabel({
+                  addLabelToIssue(login.loginState?.decoded)(z, {
                     issueID: displayed.id,
                     labelID,
                   })
                 }
                 onDisassociateLabel={labelID =>
-                  z.mutate.issue.removeLabel({
+                  removeLabelFromIssue(login.loginState?.decoded)(z, {
                     issueID: displayed.id,
                     labelID,
                   })
                 }
                 onCreateNewLabel={labelName => {
                   const labelID = nanoid();
-                  z.mutate.label.createAndAddToIssue({
+                  createLabelAndAddToIssue(login.loginState?.decoded)(z, {
                     labelID,
                     labelName,
                     issueID: displayed.id,

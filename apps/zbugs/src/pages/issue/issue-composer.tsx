@@ -8,6 +8,8 @@ import {
   MAX_ISSUE_TITLE_LENGTH,
 } from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
+import {createIssue} from '../../../shared/mutators.ts';
+import {useLogin} from '../../hooks/use-login.tsx';
 
 interface Props {
   /** If id is defined the issue created by the composer. */
@@ -25,6 +27,7 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState<string>('');
   const z = useZero();
+  const login = useLogin();
 
   // Function to handle textarea resizing
   function autoResizeTextarea(textarea: HTMLTextAreaElement) {
@@ -52,7 +55,7 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
   const handleSubmit = () => {
     const id = nanoid();
 
-    z.mutate.issue.create({
+    createIssue(login.loginState?.decoded)(z, {
       id,
       title,
       description: description ?? '',

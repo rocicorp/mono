@@ -1,4 +1,3 @@
-// https://vercel.com/templates/other/fastify-serverless-function
 import '../../../packages/shared/src/dotenv.ts';
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
@@ -11,18 +10,25 @@ import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
 import {must} from '../../../packages/shared/src/must.ts';
-import {handlePush} from '../server/push-handler.ts';
 import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {getQuery} from '../server/get-query.ts';
 import type {ServerContext} from '../server/server-queries.ts';
-import {processQueries} from '@rocicorp/zero/server';
+import {processMutations, processQueries} from '@rocicorp/zero/server';
 import {schema} from '../shared/schema.ts';
+import {PostgresJSConnection, ZQLDatabase} from '@rocicorp/zero/pg';
+import * as serverMutators from '../server/server-mutators.ts';
+import * as sharedMutators from '../shared/mutators.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
     githubOAuth2: OAuth2Namespace;
   }
 }
+
+const dbProvider = new ZQLDatabase(
+  new PostgresJSConnection(postgres(process.env.ZERO_UPSTREAM_DB as string)),
+  schema,
+);
 
 const sql = postgres(process.env.ZERO_UPSTREAM_DB as string);
 type QueryParams = {redirect?: string | undefined};
@@ -136,9 +142,43 @@ fastify.post<{
     throw e;
   }
 
-  const response = await handlePush(jwtData, request.query, request.body);
+  const postCommitTasks: (() => Promise<void>)[] = [];
+
+  const response = await processMutations(
+    async transact =>
+      await transact(dbProvider, async (tx, name, args) => {
+        if (isServerMutator(name)) {
+          const mutator = serverMutators[name];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await mutator(jwtData, postCommitTasks, tx, args as any);
+          return;
+        }
+
+        if (isSharedMutator(name)) {
+          const mutator = sharedMutators[name];
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await mutator(jwtData)(tx, args as any);
+          return;
+        }
+
+        console.warn(`Unknown mutator: ${name}. Skipping the mutation.`);
+      }),
+    request.query,
+    request.body,
+    'info',
+  );
+
+  await Promise.all(postCommitTasks.map(task => task()));
   reply.send(response);
 });
+
+function isServerMutator(name: string): name is keyof typeof serverMutators {
+  return name in serverMutators;
+}
+
+function isSharedMutator(name: string): name is keyof typeof sharedMutators {
+  return name in sharedMutators;
+}
 
 fastify.post<{
   Querystring: Record<string, string>;

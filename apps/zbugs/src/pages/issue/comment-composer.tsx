@@ -5,6 +5,7 @@ import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
 import {nanoid} from 'nanoid';
+import {addComment, editComment} from '../../../shared/mutators.ts';
 
 export function CommentComposer({
   id,
@@ -23,7 +24,7 @@ export function CommentComposer({
   const save = () => {
     setCurrentBody(body ?? '');
     if (!id) {
-      z.mutate.comment.add({
+      addComment(login.loginState?.decoded)(z, {
         id: nanoid(),
         issueID,
         body: currentBody,
@@ -33,7 +34,7 @@ export function CommentComposer({
       return;
     }
 
-    z.mutate.comment.edit({id, body: currentBody});
+    editComment(login.loginState?.decoded)(z, {id, body: currentBody});
     onDone?.();
   };
 

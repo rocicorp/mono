@@ -2,8 +2,9 @@ import type {Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {type Schema} from '../../shared/schema.ts';
 import {useZero} from './use-zero.ts';
-import type {Mutators} from '../../shared/mutators.ts';
 import {userPref} from '../../shared/queries.ts';
+import {setUserPref as setUserPrefMutation} from '../../shared/mutators.ts';
+import type {JWTData} from '../../shared/auth.ts';
 
 export function useUserPref(key: string): string | undefined {
   const z = useZero();
@@ -12,12 +13,12 @@ export function useUserPref(key: string): string | undefined {
 }
 
 export async function setUserPref(
-  z: Zero<Schema, Mutators>,
+  z: Zero<Schema>,
+  authData: JWTData | undefined,
   key: string,
   value: string,
-  mutate = z.mutate,
 ): Promise<void> {
-  await mutate.userPref.set({key, value});
+  setUserPrefMutation(authData)(z, {key, value});
 }
 
 export function useNumericPref(key: string, defaultValue: number): number {
@@ -26,9 +27,10 @@ export function useNumericPref(key: string, defaultValue: number): number {
 }
 
 export function setNumericPref(
-  z: Zero<Schema, Mutators>,
+  z: Zero<Schema>,
+  authData: JWTData | undefined,
   key: string,
   value: number,
 ): Promise<void> {
-  return setUserPref(z, key, value + '');
+  return setUserPref(z, authData, key, value + '');
 }

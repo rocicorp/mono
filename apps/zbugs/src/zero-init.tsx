@@ -1,8 +1,9 @@
 import {ZeroProvider} from '@rocicorp/zero/react';
 import {useLogin} from './hooks/use-login.tsx';
-import {createMutators} from '../shared/mutators.ts';
 import {useMemo, type ReactNode} from 'react';
-import {schema} from '../shared/schema.ts';
+import {schema, type Schema} from '../shared/schema.ts';
+import {type NamedMutator} from '@rocicorp/zero';
+import * as mutators from '../shared/mutators.ts';
 
 export function ZeroInit({children}: {children: ReactNode}) {
   const login = useLogin();
@@ -12,7 +13,11 @@ export function ZeroInit({children}: {children: ReactNode}) {
       schema,
       server: import.meta.env.VITE_PUBLIC_SERVER,
       userID: login.loginState?.decoded?.sub ?? 'anon',
-      mutators: createMutators(login.loginState?.decoded),
+      // TODO: ideally the `mutators` options becomes an async function that looks up the
+      // mutator definition in order to support code splitting for large applications.
+      mutators: Object.values(mutators).map(v =>
+        v(login.loginState?.decoded),
+      ) as NamedMutator<Schema>[],
       logLevel: 'info' as const,
       auth: (error?: 'invalid-token') => {
         if (error === 'invalid-token') {

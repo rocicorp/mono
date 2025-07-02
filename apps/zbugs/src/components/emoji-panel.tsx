@@ -32,6 +32,11 @@ import {type ButtonProps} from './button.tsx';
 import {EmojiPicker} from './emoji-picker.tsx';
 import {EmojiPill} from './emoji-pill.tsx';
 import {nanoid} from 'nanoid';
+import {
+  addEmojiToComment,
+  addEmojiToIssue,
+  removeEmoji as removeEmojiMutation,
+} from '../../shared/mutators.ts';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 
@@ -51,6 +56,7 @@ export const EmojiPanel = memo(
     ) => {
       const subjectID = commentID ?? issueID;
       const z = useZero();
+      const login = useLogin();
 
       const addEmoji = useCallback(
         (unicode: string, annotation: string) => {
@@ -63,19 +69,19 @@ export const EmojiPanel = memo(
             created: Date.now(),
           } as const;
           if (commentID !== undefined) {
-            z.mutate.emoji.addToComment(args);
+            addEmojiToComment(login.loginState?.decoded)(z, args);
           } else {
-            z.mutate.emoji.addToIssue(args);
+            addEmojiToIssue(login.loginState?.decoded)(z, args);
           }
         },
-        [subjectID, commentID, z],
+        [subjectID, commentID, z, login.loginState?.decoded],
       );
 
       const removeEmoji = useCallback(
         (id: string) => {
-          z.mutate.emoji.remove(id);
+          removeEmojiMutation(login.loginState?.decoded)(z, id);
         },
-        [z],
+        [z, login.loginState?.decoded],
       );
 
       // The emojis is an array. We want to group them by value and count them.
@@ -95,8 +101,6 @@ export const EmojiPanel = memo(
         },
         [addEmoji, groups, removeEmoji, z.userID],
       );
-
-      const login = useLogin();
 
       return (
         <FloatingDelayGroup delay={1000}>

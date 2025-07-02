@@ -16,6 +16,7 @@ import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import style from './comment.module.css';
+import {removeComment} from '../../../shared/mutators.ts';
 
 type Props = {
   id: string;
@@ -42,7 +43,7 @@ export const Comment = memo(
     const isPermalinked = highlight || hash === permalink;
 
     const edit = () => setEditing(true);
-    const remove = () => z.mutate.comment.remove(id);
+    const remove = () => removeComment(login.loginState?.decoded)(z, id);
 
     if (!comment) {
       return <div style={{height}}></div>;
