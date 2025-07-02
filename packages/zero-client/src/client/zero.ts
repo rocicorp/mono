@@ -33,7 +33,6 @@ import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
-import type {CloseConnectionMessage} from '../../../zero-protocol/src/close-connection.ts';
 import type {
   ConnectedMessage,
   UserPushParams,
@@ -86,6 +85,7 @@ import {
 } from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
+import {ActiveClientsManager} from './active-clients-manager.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import {ZeroContext} from './context.ts';
 import {
@@ -370,6 +370,7 @@ export class Zero<
 
   // We use an accessor pair to allow the subclass to override the setter.
   #connectionState: ConnectionState = ConnectionState.Disconnected;
+  readonly #activeClientsManager: Promise<ActiveClientsManager>;
 
   #setConnectionState(state: ConnectionState) {
     if (state === this.#connectionState) {
@@ -593,6 +594,14 @@ export class Zero<
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
     this.#mutationTracker.clientID = rep.clientID;
+
+    this.#activeClientsManager = makeActiveClientsManager(
+      rep.clientGroupID,
+      this.clientID,
+      this.#closeAbortController.signal,
+      (clientID: string) =>
+        this.#deleteClientsManager.onClientsDeleted([clientID], []),
+    );
 
     const onUpdateNeededCallback = (
       reason: UpdateNeededReason,
@@ -878,21 +887,12 @@ export class Zero<
     lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
 
     if (this.#connectionState !== ConnectionState.Disconnected) {
-      let closeReason = JSON.stringify([
-        'closeConnection',
-        [],
-      ] satisfies CloseConnectionMessage);
-      if (closeReason.length > 123) {
-        lc.warn?.('Close reason is too long. Removing it.');
-        closeReason = '';
-      }
       this.#disconnect(
         lc,
         {
           client: 'ClientClosed',
         },
         CLOSE_CODE_NORMAL,
-        closeReason,
       );
     }
     lc.debug?.('Aborting closeAbortController due to close()');
@@ -902,19 +902,6 @@ export class Zero<
     this.#unexpose();
     return ret;
   }
-
-  #onPageHide = (e: PageTransitionEvent) => {
-    // When pagehide fires and persisted is true it means the page is going into
-    // the BFCache. If that happens the page might get restored and this client
-    // will be operational again. If that happens we do not want to remove the
-    // client from the server.
-    if (e.persisted) {
-      this.#lc.debug?.('Ignoring pagehide event because it was persisted');
-    } else {
-      this.#lc.debug?.('Closing client because we got a clean close');
-      this.close().catch(() => {});
-    }
-  };
 
   #onMessage = (e: MessageEvent<string>) => {
     const lc = this.#lc;
@@ -1253,6 +1240,7 @@ export class Zero<
       this.#options.push,
       this.#options.maxHeaderLength,
       additionalConnectParams,
+      await this.#activeClientsManager,
     );
 
     if (this.closed) {
@@ -1266,11 +1254,6 @@ export class Zero<
     ws.addEventListener('close', this.#onClose);
     this.#socket = ws;
     this.#socketResolver.resolve(ws);
-
-    getBrowserGlobal('window')?.addEventListener?.(
-      'pagehide',
-      this.#onPageHide,
-    );
 
     try {
       lc.debug?.('Waiting for connection to be acknowledged');
@@ -1291,7 +1274,6 @@ export class Zero<
     lc: ZeroLogContext,
     reason: DisconnectReason,
     closeCode?: CloseCode,
-    closeReason?: string,
   ): void {
     if (this.#connectionState === ConnectionState.Connecting) {
       this.#connectErrorCount++;
@@ -1357,15 +1339,10 @@ export class Zero<
     this.#socket?.removeEventListener('message', this.#onMessage);
     this.#socket?.removeEventListener('open', this.#onOpen);
     this.#socket?.removeEventListener('close', this.#onClose);
-    this.#socket?.close(closeCode, closeReason);
+    this.#socket?.close(closeCode);
     this.#socket = undefined;
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
     this.#pokeHandler.handleDisconnect();
-
-    getBrowserGlobal('window')?.removeEventListener?.(
-      'pagehide',
-      this.#onPageHide,
-    );
   }
 
   #handlePokeStart(_lc: ZeroLogContext, pokeMessage: PokeStartMessage): void {
@@ -1950,7 +1927,8 @@ export async function createSocket(
   lc: ZeroLogContext,
   userPushParams: UserPushParams | undefined,
   maxHeaderLength = 1024 * 8,
-  additionalConnectParams?: Record<string, string> | undefined,
+  additionalConnectParams: Record<string, string> | undefined,
+  activeClientsManager: Pick<ActiveClientsManager, 'activeClients'>,
 ): Promise<
   [
     WebSocket,
@@ -1995,6 +1973,7 @@ export async function createSocket(
     await deleteClientsManager.getDeletedClients();
   let queriesPatch: Map<string, UpQueriesPatchOp> | undefined =
     await queriesPatchP;
+  const {activeClients} = activeClientsManager;
 
   let secProtocol = encodeSecProtocols(
     [
@@ -2006,6 +1985,7 @@ export async function createSocket(
         // Henceforth it is stored with the CVR and verified automatically.
         ...(baseCookie === null ? {clientSchema} : {}),
         userPushParams,
+        activeClients: [...activeClients],
       },
     ],
     auth,
@@ -2094,3 +2074,18 @@ class TimedOutError extends Error {
 class CloseError extends Error {}
 
 function assertValidRunOptions(_options?: RunOptions | undefined): void {}
+
+async function makeActiveClientsManager(
+  clientGroupID: Promise<string>,
+  clientID: string,
+  signal: AbortSignal,
+  onDelete: ActiveClientsManager['onDelete'],
+): Promise<ActiveClientsManager> {
+  const manager = await ActiveClientsManager.create(
+    await clientGroupID,
+    clientID,
+    signal,
+  );
+  manager.onDelete = onDelete;
+  return manager;
+}

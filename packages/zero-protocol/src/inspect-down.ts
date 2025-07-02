@@ -1,10 +1,16 @@
+import {jsonSchema} from '../../shared/src/json-schema.ts';
 import * as v from '../../shared/src/valita.ts';
 import {astSchema} from './ast.ts';
 
 const inspectQueryRowSchema = v.object({
   clientID: v.string(),
   queryID: v.string(),
-  ast: astSchema,
+  // null for custom queries
+  ast: astSchema.nullable(),
+  // not null for custom queries
+  name: v.string().nullable(),
+  // not null for custom queries
+  args: v.readonlyArray(jsonSchema).nullable(),
   got: v.boolean(),
   deleted: v.boolean(),
   ttl: v.number(),

@@ -398,7 +398,7 @@ export interface Query<
    *
    * @example
    * ```ts
-   * const view = query.materialize(createSolidView, '1m');
+   * const view = query.materialize(createSolidViewFactory, '1m');
    * ```
    */
   materialize<T>(
