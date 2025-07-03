@@ -42,8 +42,8 @@ export default {
       screenshotFailures: false,
       instances: [
         {browser: 'chromium'},
-        // {browser: 'firefox'},
-        // {browser: 'webkit'},
+        {browser: 'firefox'},
+        {browser: 'webkit'},
       ],
     },
     typecheck: {
