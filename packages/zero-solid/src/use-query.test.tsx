@@ -247,7 +247,9 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  setQuery(tableQuery.where(({or, cmp}) => or(cmp('a', 1), cmp('a', 10))));
+  await setQuery(
+    tableQuery.where(({or, cmp}) => or(cmp('a', 1), cmp('a', 10))),
+  );
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([]);
   expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
@@ -261,7 +263,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  setQuery(tableQuery.where(({or, cmp}) => or(cmp('a', 1), cmp('a', 2))));
+  await setQuery(tableQuery.where(({or, cmp}) => or(cmp('a', 1), cmp('a', 2))));
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([
     {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
@@ -405,7 +407,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  setQuery(
+  await setQuery(
     issueQuery
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i10')))
       .related('comments'),
@@ -451,7 +453,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  setQuery(
+  await setQuery(
     issueQuery
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
       .related('comments'),
@@ -500,7 +502,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  setQuery(
+  await setQuery(
     issueQuery
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
       .related('comments', q => q.where('id', 'c1')),
@@ -544,7 +546,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
 
   resetLogs();
 
-  setQuery(
+  await setQuery(
     issueQuery
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
       .related('comments', q => q.where('id', 'c2')),
