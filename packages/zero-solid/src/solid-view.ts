@@ -72,7 +72,7 @@ export class SolidView implements Output {
     this.#setState = setState;
     this.#setState(
       reconcile([initialRoot, queryComplete === true ? COMPLETE : UNKNOWN], {
-        // solidjs's types wants a string, but a symbol should work as well
+        // solidjs's types want a string, but a symbol works
         key: idSymbol as unknown as string,
       }),
     );
@@ -99,7 +99,7 @@ export class SolidView implements Output {
         this.#setState(
           0,
           reconcile(builderRoot, {
-            // solidjs's types wants a string, but a symbol should work as well
+            // solidjs's types want a string, but a symbol works
             key: idSymbol as unknown as string,
           }),
         );
