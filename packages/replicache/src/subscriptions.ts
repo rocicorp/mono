@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import {compareUTF8, greaterThan, lessThan, lessThanEq} from 'compare-utf8';
 import {assert} from '../../shared/src/asserts.ts';
+import {binarySearch} from '../../shared/src/binary-search.ts';
 import type {Enum} from '../../shared/src/enum.ts';
 import {deepEqual} from '../../shared/src/json.ts';
-import {binarySearch} from './binary-search.ts';
 import type {
   Diff,
   DiffOperation,
