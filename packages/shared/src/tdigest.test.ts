@@ -308,7 +308,7 @@ describe('TDigest', () => {
     td.add(2, 1);
     td.add(Infinity, 1);
     expect(td.quantile(0.5)).toBe(2);
-    expect(td.quantile(0.9)).toBe(Infinity);
+    expect(td.quantile(0.9)).toBe(NaN);
   });
 
   test('merge', () => {

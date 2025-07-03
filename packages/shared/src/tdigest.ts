@@ -349,11 +349,6 @@ function weightedAverageSorted(
   x2: number,
   w2: number,
 ): number {
-  // Handle Infinity and -Infinity explicitly to match Go behavior
-  if (!Number.isFinite(x1) || !Number.isFinite(x2)) {
-    if (x1 === Infinity || x2 === Infinity) return Infinity;
-    if (x1 === -Infinity || x2 === -Infinity) return -Infinity;
-  }
   const x = (x1 * w1 + x2 * w2) / (w1 + w2);
   return Math.max(x1, Math.min(x, x2));
 }
