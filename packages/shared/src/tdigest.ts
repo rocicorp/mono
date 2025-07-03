@@ -1,6 +1,7 @@
 // Apache License 2.0
 // https://github.com/influxdata/tdigest
 
+import {binarySearch} from './binary-search.ts';
 import {Centroid, sortCentroidList, type CentroidList} from './centroid.ts';
 
 // TDigest is a data structure for accurate on-line accumulation of
@@ -189,9 +190,9 @@ export class TDigest {
       );
     }
 
-    const lower = search(
+    const lower = binarySearch(
       this.#cumulative.length,
-      (i: number) => this.#cumulative[i] >= index,
+      (i: number) => -this.#cumulative[i] + index,
     );
 
     if (lower + 1 !== this.#cumulative.length) {
@@ -274,9 +275,12 @@ export class TDigest {
       return 1;
     }
 
-    const upper = search(
+    const upper = binarySearch(
       this.#processed.length,
-      (i: number) => this.#processed[i].mean > x,
+      // Treat equals as greater than, so we can use the upper index
+      // This is equivalent to:
+      //   i => this.#processed[i].mean > x ? -1 : 1,
+      i => x - this.#processed[i].mean || 1,
     );
 
     const z1 = x - this.#processed[upper - 1].mean;
@@ -365,22 +369,4 @@ function unprocessedSize(size: number, compression: number): number {
     return Math.ceil(compression) * 8;
   }
   return size;
-}
-
-function search(n: number, f: (i: number) => boolean): number {
-  // Define f(-1) == false and f(n) == true.
-  // Invariant: f(i-1) == false, f(j) == true.
-  let i = 0;
-  let j = n;
-  while (i < j) {
-    const h = (i + j) >> 1; // avoid overflow when computing h
-    // i ≤ h < j
-    if (!f(h)) {
-      i = h + 1; // preserves f(i-1) == false
-    } else {
-      j = h; // preserves f(j) == true
-    }
-  }
-  // i == j, f(i-1) == false, and f(j) (= f(i)) == true  =>  answer is i.
-  return i;
 }
