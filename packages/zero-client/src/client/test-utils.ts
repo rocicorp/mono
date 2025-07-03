@@ -82,8 +82,9 @@ export class MockSocket extends EventTarget {
 
 export class TestZero<
   const S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined = undefined,
-> extends Zero<S, MD> {
+  MD extends CustomMutatorDefs<S, TWrappedTransaction> | undefined = undefined,
+  TWrappedTransaction = unknown,
+> extends Zero<S, MD, TWrappedTransaction> {
   pokeIDCounter = 0;
 
   #connectionStateResolvers: Set<{
@@ -91,7 +92,7 @@ export class TestZero<
     resolve: (state: ConnectionState) => void;
   }> = new Set();
 
-  constructor(options: ZeroOptions<S, MD>) {
+  constructor(options: ZeroOptions<S, MD, TWrappedTransaction>) {
     super(options);
   }
 
@@ -278,11 +279,12 @@ let testZeroCounter = 0;
 
 export function zeroForTest<
   const S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined = undefined,
+  MD extends CustomMutatorDefs<S, TWrappedTransaction> | undefined = undefined,
+  TWrappedTransaction = unknown,
 >(
-  options: Partial<ZeroOptions<S, MD>> = {},
+  options: Partial<ZeroOptions<S, MD, TWrappedTransaction>> = {},
   errorOnUpdateNeeded = true,
-): TestZero<S, MD> {
+): TestZero<S, MD, TWrappedTransaction> {
   // Special case kvStore. If not present we default to 'mem'. This allows
   // passing `undefined` to get the default behavior.
   const newOptions = {...options};
@@ -304,7 +306,7 @@ export function zeroForTest<
         }
       : undefined,
     ...newOptions,
-  } satisfies ZeroOptions<S, MD>);
+  } satisfies ZeroOptions<S, MD, TWrappedTransaction>);
 }
 
 export async function waitForUpstreamMessage(
