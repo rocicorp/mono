@@ -452,6 +452,33 @@ const permissionsAll = await definePermissions<AuthData, typeof schema>(
   }),
 );
 
+async function nextPoke(client: Queue<Downstream>): Promise<Downstream[]> {
+  const received: Downstream[] = [];
+  for (;;) {
+    const msg = await client.dequeue();
+    received.push(msg);
+    if (msg[0] === 'pokeEnd') {
+      break;
+    }
+  }
+  return received;
+}
+
+async function nextPokeParts(
+  client: Queue<Downstream>,
+): Promise<PokePartBody[]> {
+  const pokes = await nextPoke(client);
+  return pokes
+    .filter((msg: Downstream) => msg[0] === 'pokePart')
+    .map(([, body]) => body);
+}
+
+async function expectNoPokes(client: Queue<Downstream>) {
+  // Use the dequeue() API that cancels the dequeue() request after a timeout.
+  const timedOut = 'nothing' as unknown as Downstream;
+  expect(await client.dequeue(timedOut, 10)).toBe(timedOut);
+}
+
 async function setup(permissions: PermissionsConfig | undefined) {
   const lc = createSilentLogContext();
   const storageDB = new Database(lc, ':memory:');
@@ -588,20 +615,21 @@ async function setup(permissions: PermissionsConfig | undefined) {
     ctx: SyncContext,
     desiredQueriesPatch: UpQueriesPatch,
     clientSchema: ClientSchema = defaultClientSchema,
+    activeClients?: string[],
   ): {queue: Queue<Downstream>; source: Source<Downstream>} {
     const source = vs.initConnection(ctx, [
       'initConnection',
-      {desiredQueriesPatch, clientSchema},
+      {desiredQueriesPatch, clientSchema, activeClients},
     ]);
     const queue = new Queue<Downstream>();
 
     void (async function () {
       try {
         for await (const msg of source) {
-          await queue.enqueue(msg);
+          queue.enqueue(msg);
         }
       } catch (e) {
-        await queue.enqueueRejection(e);
+        queue.enqueueRejection(e);
       }
     })();
 
@@ -617,33 +645,6 @@ async function setup(permissions: PermissionsConfig | undefined) {
       .queue;
   }
 
-  async function nextPoke(client: Queue<Downstream>): Promise<Downstream[]> {
-    const received: Downstream[] = [];
-    for (;;) {
-      const msg = await client.dequeue();
-      received.push(msg);
-      if (msg[0] === 'pokeEnd') {
-        break;
-      }
-    }
-    return received;
-  }
-
-  async function nextPokeParts(
-    client: Queue<Downstream>,
-  ): Promise<PokePartBody[]> {
-    const pokes = await nextPoke(client);
-    return pokes
-      .filter((msg: Downstream) => msg[0] === 'pokePart')
-      .map(([, body]) => body);
-  }
-
-  async function expectNoPokes(client: Queue<Downstream>) {
-    // Use the dequeue() API that cancels the dequeue() request after a timeout.
-    const timedOut = 'nothing' as unknown as Downstream;
-    expect(await client.dequeue(timedOut, 10)).toBe(timedOut);
-  }
-
   return {
     storageDB,
     replicaDbFile,
@@ -657,9 +658,6 @@ async function setup(permissions: PermissionsConfig | undefined) {
     replicator,
     connect,
     connectWithQueueAndSource,
-    nextPoke,
-    nextPokeParts,
-    expectNoPokes,
     setTimeoutFn,
   };
 }
@@ -707,13 +705,11 @@ describe('view-syncer/service', () => {
     ctx: SyncContext,
     desiredQueriesPatch: UpQueriesPatch,
     clientSchema?: ClientSchema,
+    activeClients?: string[],
   ) => {
     queue: Queue<Downstream>;
     source: Source<Downstream>;
   };
-  let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
-  let nextPokeParts: (client: Queue<Downstream>) => Promise<PokePartBody[]>;
-  let expectNoPokes: (client: Queue<Downstream>) => Promise<void>;
   let setTimeoutFn: Mock<typeof setTimeout>;
 
   function callNextSetTimeout(delta: number) {
@@ -748,9 +744,6 @@ describe('view-syncer/service', () => {
       replicator,
       connect,
       connectWithQueueAndSource,
-      nextPoke,
-      nextPokeParts,
-      expectNoPokes,
       setTimeoutFn,
     } = await setup(permissionsAll));
   });
@@ -1739,6 +1732,264 @@ describe('view-syncer/service', () => {
         },
       ]
     `);
+  });
+
+  test('activeClients inactivates queries from inactive clients', async () => {
+    const ttl = 5000; // 5s
+    vi.setSystemTime(Date.UTC(2025, 5, 30));
+
+    // First, connect client A with queries
+    const ctxA = {...SYNC_CONTEXT, clientID: 'clientA', wsID: 'wsA'};
+    const {source: streamA, queue: clientA} = connectWithQueueAndSource(ctxA, [
+      {op: 'put', hash: 'query-hashA', ast: ISSUES_QUERY, ttl},
+    ]);
+
+    stateChanges.push({state: 'version-ready'});
+
+    await nextPoke(clientA); // desire query-hashA
+    await nextPoke(clientA); // Got query-hashA and rows
+
+    // Now connect client B and C using initConnection
+    const ctxB = {...SYNC_CONTEXT, clientID: 'clientB', wsID: 'wsB'};
+    const ctxC = {...SYNC_CONTEXT, clientID: 'clientC', wsID: 'wsC'};
+
+    // Connect client B
+    const {source: streamB, queue: clientB} = connectWithQueueAndSource(ctxB, [
+      {op: 'put', hash: 'query-hashB', ast: USERS_QUERY, ttl},
+    ]);
+
+    // Connect client C
+    const {source: streamC, queue: clientC} = connectWithQueueAndSource(ctxC, [
+      {op: 'put', hash: 'query-hashC', ast: COMMENTS_QUERY, ttl},
+    ]);
+
+    await nextPoke(clientA); // desire query-hashB
+    await nextPoke(clientA); // Got query-hashB and rows
+
+    await nextPoke(clientA); // desire query-hashC
+    await nextPoke(clientA); // Got query-hashC
+    await expectNoPokes(clientA);
+
+    await nextPoke(clientB); // Desire and got A & B and rows
+    await nextPoke(clientB); // desire query-hashC
+    await nextPoke(clientB); // Got query-hashC
+    await expectNoPokes(clientB);
+
+    await nextPoke(clientC); // Desire and got A & B and rows
+    await nextPoke(clientC); // desire query-hashC
+    await nextPoke(clientC); // Got query-hashC
+    await expectNoPokes(clientC);
+
+    // Verify all three clients are active and have their queries
+    expect(
+      await cvrDB`SELECT "clientID" from "this_app_2/cvr".clients ORDER BY "clientID"`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "clientA",
+        },
+        {
+          "clientID": "clientB",
+        },
+        {
+          "clientID": "clientC",
+        },
+      ]
+    `);
+
+    expect(
+      await cvrDB`SELECT "clientID", "deleted", "queryHash", "inactivatedAt" from "this_app_2/cvr".desires ORDER BY "clientID"`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "clientA",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashA",
+        },
+        {
+          "clientID": "clientB",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashB",
+        },
+        {
+          "clientID": "clientC",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashC",
+        },
+      ]
+    `);
+
+    // Close client A & C
+    streamA.cancel();
+    streamC.cancel();
+
+    await expectNoPokes(clientA);
+    await expectNoPokes(clientB);
+    await expectNoPokes(clientC);
+
+    // Verify that the clients' queries are NOT inactivated
+    expect(
+      await cvrDB`SELECT "clientID", "deleted", "queryHash", "inactivatedAt"
+        FROM "this_app_2/cvr".desires
+        ORDER BY "clientID"`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "clientA",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashA",
+        },
+        {
+          "clientID": "clientB",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashB",
+        },
+        {
+          "clientID": "clientC",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashC",
+        },
+      ]
+    `);
+
+    // Simulate the passage of time.
+    const ONE_HOUR = 60 * 60 * 1000;
+    vi.setSystemTime(Date.now() + ONE_HOUR);
+
+    // Now reconnect client A with activeClients [clientA, clientB]
+    // This should inactivate clientC's queries
+    const newCtxA = {...ctxA, baseCookie: '01:04', wsID: 'wsA2'};
+    const {source: newStreamA, queue: newClientA} = connectWithQueueAndSource(
+      newCtxA,
+      [{op: 'put', hash: 'query-hashA', ast: ISSUES_QUERY, ttl}],
+      undefined,
+      ['clientA', 'clientB'],
+    );
+
+    expect(await nextPokeParts(newClientA)).toMatchInlineSnapshot(`
+      [
+        {
+          "desiredQueriesPatches": {
+            "clientC": [
+              {
+                "hash": "query-hashC",
+                "op": "del",
+              },
+            ],
+          },
+          "pokeID": "01:05",
+        },
+      ]
+    `);
+
+    await expectNoPokes(newClientA);
+
+    await nextPoke(clientB); // desire delete query-hashC
+    await expectNoPokes(clientB);
+
+    // Verify that clientC's query remains present but is inactivated.
+    expect(
+      await cvrDB`SELECT "clientID", "deleted", "queryHash", "inactivatedAt" FROM "this_app_2/cvr".desires`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "clientA",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashA",
+        },
+        {
+          "clientID": "clientB",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashB",
+        },
+        {
+          "clientID": "clientC",
+          "deleted": true,
+          "inactivatedAt": 1751245200000,
+          "queryHash": "query-hashC",
+        },
+      ]
+    `);
+
+    // If we move time forward 5s the inactivated query should be deleted
+    callNextSetTimeout(ttl);
+
+    expect(await nextPokeParts(newClientA)).toMatchInlineSnapshot(`
+      [
+        {
+          "gotQueriesPatch": [
+            {
+              "hash": "query-hashC",
+              "op": "del",
+            },
+          ],
+          "pokeID": "01:06",
+          "rowsPatch": [
+            {
+              "id": {
+                "id": "1",
+              },
+              "op": "del",
+              "tableName": "comments",
+            },
+            {
+              "id": {
+                "id": "2",
+              },
+              "op": "del",
+              "tableName": "comments",
+            },
+          ],
+        },
+      ]
+    `);
+    expect(await nextPokeParts(clientB)).toMatchInlineSnapshot(`
+      [
+        {
+          "gotQueriesPatch": [
+            {
+              "hash": "query-hashC",
+              "op": "del",
+            },
+          ],
+          "pokeID": "01:06",
+          "rowsPatch": [
+            {
+              "id": {
+                "id": "1",
+              },
+              "op": "del",
+              "tableName": "comments",
+            },
+            {
+              "id": {
+                "id": "2",
+              },
+              "op": "del",
+              "tableName": "comments",
+            },
+          ],
+        },
+      ]
+    `);
+
+    await expectNoPokes(newClientA);
+    await expectNoPokes(clientB);
+
+    // Clean up the streams
+    newStreamA.cancel();
+    streamB.cancel();
+
+    await expectNoPokes(newClientA);
+    await expectNoPokes(clientB);
   });
 
   test('initial hydration, rows in multiple queries', async () => {
@@ -6994,7 +7245,6 @@ describe('permissions', () => {
     ctx: SyncContext,
     desiredQueriesPatch: UpQueriesPatch,
   ) => Queue<Downstream>;
-  let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
   let replicaDbFile: DbFile;
   let cvrDB: PostgresDB;
   let vs: ViewSyncerService;
@@ -7018,7 +7268,6 @@ describe('permissions', () => {
     ({
       stateChanges,
       connect,
-      nextPoke,
       vs,
       viewSyncerDone,
       cvrDB,
@@ -7356,7 +7605,7 @@ describe('permissions', () => {
   });
 
   test('permissions via subquery', async () => {
-    const client = await connect(SYNC_CONTEXT, [
+    const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: COMMENTS_QUERY},
     ]);
     stateChanges.push({state: 'version-ready'});

@@ -601,6 +601,8 @@ export class Zero<
       rep.clientGroupID,
       this.clientID,
       this.#closeAbortController.signal,
+      (clientID: string) =>
+        this.#deleteClientsManager.onClientsDeleted([clientID], []),
     );
 
     const onUpdateNeededCallback = (
@@ -2082,6 +2084,13 @@ async function makeActiveClientsManager(
   clientGroupID: Promise<string>,
   clientID: string,
   signal: AbortSignal,
+  onDelete: ActiveClientsManager['onDelete'],
 ): Promise<ActiveClientsManager> {
-  return ActiveClientsManager.create(await clientGroupID, clientID, signal);
+  const manager = await ActiveClientsManager.create(
+    await clientGroupID,
+    clientID,
+    signal,
+  );
+  manager.onDelete = onDelete;
+  return manager;
 }

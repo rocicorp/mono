@@ -535,6 +535,47 @@ describe(
               },
             };
           })(),
+          // ordering by nullable columns
+          {
+            name: 'Order by nullable column',
+            createQuery: q => q.customer.orderBy('company', 'desc').limit(10),
+          },
+          {
+            name: 'Order by column (single row)',
+            createQuery: q => q.employee.orderBy('firstName', 'asc').limit(1),
+          },
+          {
+            name: 'Order by nullable column (single row)',
+            createQuery: q => q.employee.orderBy('reportsTo', 'asc').limit(1),
+          },
+          {
+            name: 'Order by nullable column',
+            createQuery: q => q.employee.orderBy('reportsTo', 'desc').limit(6),
+          },
+          {
+            name: 'Order by nullable column with where (is not null)',
+            createQuery: q =>
+              q.employee
+                .where('reportsTo', 'IS NOT', null)
+                .orderBy('reportsTo', 'desc')
+                .limit(6),
+          },
+          {
+            name: 'Order by nullable column with where (is null)',
+            createQuery: q =>
+              q.customer
+                .where('company', 'IS', null)
+                .orderBy('company', 'desc')
+                .limit(10),
+          },
+          {
+            name: 'Order by nullable column with where inequality',
+            createQuery: q => q.employee.where('reportsTo', '<', 1).limit(6),
+          },
+          {
+            name: 'Order by nullable column with where inequality',
+            createQuery: q => q.employee.where('reportsTo', '<=', 6).limit(6),
+          },
           // This is currently unsupported in z2s
           // test.each(tables.map(table => [table]))('0-branches %s', async table => {
           //   await checkZqlAndSql(

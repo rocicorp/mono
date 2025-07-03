@@ -325,7 +325,7 @@ export class CVRStore {
         }
       } else {
         // This can happen if the client was deleted but the queries are still alive.
-        lc.debug?.(`Client ${row.clientID} not found`, cvr);
+        lc.debug?.(`Client ${row.clientID} not found`);
       }
 
       const query = cvr.queries[row.queryHash];
@@ -839,19 +839,20 @@ export class CVRStore {
     try {
       return await reader.processReadTask(
         tx => tx<InspectQueryRow[]>`
-  SELECT
+  SELECT DISTINCT ON (d."clientID", d."queryHash")
     d."clientID",
     d."queryHash" AS "queryID",
     COALESCE((EXTRACT(EPOCH FROM d."ttl") * 1000)::double precision, -1) AS "ttl",
     (EXTRACT(EPOCH FROM d."inactivatedAt") * 1000)::double precision AS "inactivatedAt",
-    COUNT(r.*)::INT AS "rowCount",
+    (SELECT COUNT(*)::INT FROM ${this.#cvr('rows')} r 
+     WHERE r."clientGroupID" = d."clientGroupID" 
+     AND r."refCounts" ? d."queryHash") AS "rowCount",
     q."clientAST" AS "ast",
     (q."patchVersion" IS NOT NULL) AS "got",
-    COALESCE(d."deleted", FALSE) AS "deleted"
+    COALESCE(d."deleted", FALSE) AS "deleted",
+    q."queryName" AS "name",
+    q."queryArgs" AS "args"
   FROM ${this.#cvr('desires')} d
-  LEFT JOIN ${this.#cvr('rows')} r
-    ON r."clientGroupID" = d."clientGroupID"
-   AND r."refCounts" ? d."queryHash"
   LEFT JOIN ${this.#cvr('queries')} q
     ON q."clientGroupID" = d."clientGroupID"
    AND q."queryHash" = d."queryHash"
@@ -861,7 +862,6 @@ export class CVRStore {
       d."deleted" IS NOT DISTINCT FROM true AND
       (d."inactivatedAt" IS NOT NULL AND d."ttl" IS NOT NULL AND d."inactivatedAt" + d."ttl" <= now())
     )
-  GROUP BY d."clientID", d."queryHash", d."ttl", d."inactivatedAt", q."patchVersion", q."clientAST", d."deleted"
   ORDER BY d."clientID", d."queryHash"`,
       );
     } finally {

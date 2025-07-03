@@ -21,6 +21,7 @@ describe('change-streamer/storer', () => {
   let done: Promise<void>;
   let consumed: Queue<Commit | StatusMessage>;
   let fatalErrors: Queue<Error>;
+  let shard: {appID: string; shardNum: number};
 
   const REPLICA_VERSION = '00';
   const APP_ID = 'xero';
@@ -28,7 +29,7 @@ describe('change-streamer/storer', () => {
 
   beforeEach(async () => {
     db = await testDBs.create('change_streamer_storer');
-    const shard = {appID: APP_ID, shardNum: SHARD_NUM};
+    shard = {appID: APP_ID, shardNum: SHARD_NUM};
     await db.begin(tx => setupCDCTables(lc, tx, shard));
     await ensureReplicationConfig(
       lc,
@@ -56,18 +57,6 @@ describe('change-streamer/storer', () => {
     });
     consumed = new Queue();
     fatalErrors = new Queue();
-    storer = new Storer(
-      lc,
-      shard,
-      'task-id',
-      'change-streamer:12345',
-      db,
-      REPLICA_VERSION,
-      msg => consumed.enqueue(msg),
-      err => fatalErrors.enqueue(err),
-    );
-    await storer.assumeOwnership();
-    done = storer.run();
   });
 
   afterEach(async () => {
@@ -95,101 +84,130 @@ describe('change-streamer/storer', () => {
     return msgs;
   }
 
-  test('purge', async () => {
-    expect(await storer.purgeRecordsBefore('02')).toBe(0);
-    expect(
-      await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
-    ).toEqual([
-      {watermark: '03', pos: 0n},
-      {watermark: '03', pos: 1n},
-      {watermark: '03', pos: 2n},
-      {watermark: '06', pos: 0n},
-      {watermark: '06', pos: 1n},
-      {watermark: '06', pos: 2n},
-    ]);
+  describe('protocol: ws', () => {
+    beforeEach(async () => {
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        db,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+      );
+      await storer.assumeOwnership();
+      done = storer.run();
+    });
 
-    expect(await storer.purgeRecordsBefore('03')).toBe(0);
-    expect(
-      await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
-    ).toEqual([
-      {watermark: '03', pos: 0n},
-      {watermark: '03', pos: 1n},
-      {watermark: '03', pos: 2n},
-      {watermark: '06', pos: 0n},
-      {watermark: '06', pos: 1n},
-      {watermark: '06', pos: 2n},
-    ]);
+    test('ownerAddress is set correctly', async () => {
+      expect(
+        await db`SELECT "ownerAddress" FROM "xero_5/cdc"."replicationState" WHERE owner = 'task-id'`,
+      ).toEqual([{ownerAddress: 'change-streamer:12345'}]);
+    });
 
-    // Should be rejected as an invalid watermark.
-    expect(await storer.purgeRecordsBefore('04')).toBe(3);
-    expect(
-      await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
-    ).toEqual([
-      {watermark: '06', pos: 0n},
-      {watermark: '06', pos: 1n},
-      {watermark: '06', pos: 2n},
-    ]);
+    test('purge', async () => {
+      expect(await storer.purgeRecordsBefore('02')).toBe(0);
+      expect(
+        await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
+      ).toEqual([
+        {watermark: '03', pos: 0n},
+        {watermark: '03', pos: 1n},
+        {watermark: '03', pos: 2n},
+        {watermark: '06', pos: 0n},
+        {watermark: '06', pos: 1n},
+        {watermark: '06', pos: 2n},
+      ]);
 
-    expect(await storer.purgeRecordsBefore('06')).toBe(0);
-    expect(
-      await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
-    ).toEqual([
-      {watermark: '06', pos: 0n},
-      {watermark: '06', pos: 1n},
-      {watermark: '06', pos: 2n},
-    ]);
-  });
+      expect(await storer.purgeRecordsBefore('03')).toBe(0);
+      expect(
+        await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
+      ).toEqual([
+        {watermark: '03', pos: 0n},
+        {watermark: '03', pos: 1n},
+        {watermark: '03', pos: 2n},
+        {watermark: '06', pos: 0n},
+        {watermark: '06', pos: 1n},
+        {watermark: '06', pos: 2n},
+      ]);
 
-  test('abort', async () => {
-    expect(await storer.abort()).toBeNull();
+      // Should be rejected as an invalid watermark.
+      expect(await storer.purgeRecordsBefore('04')).toBe(3);
+      expect(
+        await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
+      ).toEqual([
+        {watermark: '06', pos: 0n},
+        {watermark: '06', pos: 1n},
+        {watermark: '06', pos: 2n},
+      ]);
 
-    storer.store(['0a', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-    storer.store(['0a', ['data', messages.insert('issues', {id: 'foo'})]]);
-    expect(await storer.abort()).toBe('0a');
+      expect(await storer.purgeRecordsBefore('06')).toBe(0);
+      expect(
+        await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
+      ).toEqual([
+        {watermark: '06', pos: 0n},
+        {watermark: '06', pos: 1n},
+        {watermark: '06', pos: 2n},
+      ]);
+    });
 
-    storer.store(['0a', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-    storer.store(['0a', ['data', messages.insert('issues', {id: 'bar'})]]);
-    storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
+    test('abort', async () => {
+      expect(await storer.abort()).toBeNull();
 
-    await expectConsumed('0a');
+      storer.store([
+        '0a',
+        ['begin', messages.begin(), {commitWatermark: '0a'}],
+      ]);
+      storer.store(['0a', ['data', messages.insert('issues', {id: 'foo'})]]);
+      expect(await storer.abort()).toBe('0a');
 
-    expect(
-      await db`
+      storer.store([
+        '0a',
+        ['begin', messages.begin(), {commitWatermark: '0a'}],
+      ]);
+      storer.store(['0a', ['data', messages.insert('issues', {id: 'bar'})]]);
+      storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
+
+      await expectConsumed('0a');
+
+      expect(
+        await db`
       SELECT watermark, pos, change FROM "xero_5/cdc"."changeLog"
         WHERE watermark >= '0a'`,
-    ).toMatchObject([
-      {
-        change: {tag: 'begin'},
-        pos: 0n,
-        watermark: '0a',
-      },
-      {
-        change: {
-          tag: 'insert',
-          new: {id: 'bar'},
+      ).toMatchObject([
+        {
+          change: {tag: 'begin'},
+          pos: 0n,
+          watermark: '0a',
         },
-        pos: 1n,
-        watermark: '0a',
-      },
-      {
-        change: {tag: 'commit'},
-        pos: 2n,
-        watermark: '0a',
-      },
-    ]);
-  });
+        {
+          change: {
+            tag: 'insert',
+            new: {id: 'bar'},
+          },
+          pos: 1n,
+          watermark: '0a',
+        },
+        {
+          change: {tag: 'commit'},
+          pos: 2n,
+          watermark: '0a',
+        },
+      ]);
+    });
 
-  test('no queueing if not in transaction', async () => {
-    const [sub, _, stream] = createSubscriber('00');
+    test('no queueing if not in transaction', async () => {
+      const [sub, _, stream] = createSubscriber('00');
 
-    // This should be buffered until catchup is complete.
-    sub.send(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
-    sub.send(['08', ['commit', messages.commit(), {watermark: '08'}]]);
+      // This should be buffered until catchup is complete.
+      sub.send(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
+      sub.send(['08', ['commit', messages.commit(), {watermark: '08'}]]);
 
-    // Catchup should start immediately since there are no txes in progress.
-    storer.catchup(sub, 'backup');
+      // Catchup should start immediately since there are no txes in progress.
+      storer.catchup(sub, 'backup');
 
-    expect(await drain(stream, '08')).toMatchInlineSnapshot(`
+      expect(await drain(stream, '08')).toMatchInlineSnapshot(`
       [
         [
           "status",
@@ -269,67 +287,70 @@ describe('change-streamer/storer', () => {
         ],
       ]
     `);
-  });
+    });
 
-  test('watermark too old (serving)', async () => {
-    // '01' is not the replica version, and not a watermark in the changeLog
-    const [sub, _, stream] = createSubscriber('01');
-    storer.catchup(sub, 'serving');
+    test('watermark too old (serving)', async () => {
+      // '01' is not the replica version, and not a watermark in the changeLog
+      const [sub, _, stream] = createSubscriber('01');
+      storer.catchup(sub, 'serving');
 
-    expect(await drain(stream)).toEqual([
-      [
-        'error',
-        {
-          type: ErrorType.WatermarkTooOld,
-          message: 'earliest supported watermark is 03 (requested 01)',
-        },
-      ],
-    ]);
-  });
+      expect(await drain(stream)).toEqual([
+        [
+          'error',
+          {
+            type: ErrorType.WatermarkTooOld,
+            message: 'earliest supported watermark is 03 (requested 01)',
+          },
+        ],
+      ]);
+    });
 
-  test('watermark too old (backup)', async () => {
-    // '01' is not the replica version, and not a watermark in the changeLog
-    const [sub] = createSubscriber('01');
-    storer.catchup(sub, 'backup');
+    test('watermark too old (backup)', async () => {
+      // '01' is not the replica version, and not a watermark in the changeLog
+      const [sub] = createSubscriber('01');
+      storer.catchup(sub, 'backup');
 
-    expect(await fatalErrors.dequeue()).toMatchInlineSnapshot(
-      `[AutoResetSignal: backup replica at watermark 01 is behind change db: 03)]`,
-    );
-  });
+      expect(await fatalErrors.dequeue()).toMatchInlineSnapshot(
+        `[AutoResetSignal: backup replica at watermark 01 is behind change db: 03)]`,
+      );
+    });
 
-  test('queued if transaction in progress', async () => {
-    const [sub1, _0, stream1] = createSubscriber('03');
-    const [sub2, _1, stream2] = createSubscriber('06');
+    test('queued if transaction in progress', async () => {
+      const [sub1, _0, stream1] = createSubscriber('03');
+      const [sub2, _1, stream2] = createSubscriber('06');
 
-    // This should be buffered until catchup is complete.
-    sub1.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-    sub1.send([
-      '0a',
-      ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
-    ]);
-    sub2.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-    sub2.send([
-      '0a',
-      ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
-    ]);
+      // This should be buffered until catchup is complete.
+      sub1.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
+      sub1.send([
+        '0a',
+        ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
+      ]);
+      sub2.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
+      sub2.send([
+        '0a',
+        ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
+      ]);
 
-    // Start a transaction before enqueuing catchup.
-    storer.store(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
-    // Enqueue catchup before transaction completes.
-    storer.catchup(sub1, 'serving');
-    storer.catchup(sub2, 'serving');
-    // Finish the transaction.
-    storer.store([
-      '08',
-      ['commit', messages.commit({extra: 'stuff'}), {watermark: '08'}],
-    ]);
+      // Start a transaction before enqueuing catchup.
+      storer.store([
+        '07',
+        ['begin', messages.begin(), {commitWatermark: '08'}],
+      ]);
+      // Enqueue catchup before transaction completes.
+      storer.catchup(sub1, 'serving');
+      storer.catchup(sub2, 'serving');
+      // Finish the transaction.
+      storer.store([
+        '08',
+        ['commit', messages.commit({extra: 'stuff'}), {watermark: '08'}],
+      ]);
 
-    storer.status(['status', {}, {watermark: '0e'}]);
-    storer.status(['status', {}, {watermark: '0f'}]);
+      storer.status(['status', {}, {watermark: '0e'}]);
+      storer.status(['status', {}, {watermark: '0f'}]);
 
-    // Catchup should wait for the transaction to complete before querying
-    // the database, and start after watermark '03'.
-    expect(await drain(stream1, '0a')).toMatchInlineSnapshot(`
+      // Catchup should wait for the transaction to complete before querying
+      // the database, and start after watermark '03'.
+      expect(await drain(stream1, '0a')).toMatchInlineSnapshot(`
       [
         [
           "status",
@@ -404,9 +425,9 @@ describe('change-streamer/storer', () => {
       ]
     `);
 
-    // Catchup should wait for the transaction to complete before querying
-    // the database, and start after watermark '06'.
-    expect(await drain(stream2, '0a')).toMatchInlineSnapshot(`
+      // Catchup should wait for the transaction to complete before querying
+      // the database, and start after watermark '06'.
+      expect(await drain(stream2, '0a')).toMatchInlineSnapshot(`
               [
                 [
                   "status",
@@ -455,9 +476,9 @@ describe('change-streamer/storer', () => {
               ]
             `);
 
-    expect(
-      await db`SELECT * FROM "xero_5/cdc"."changeLog" ORDER BY watermark, pos`,
-    ).toMatchInlineSnapshot(`
+      expect(
+        await db`SELECT * FROM "xero_5/cdc"."changeLog" ORDER BY watermark, pos`,
+      ).toMatchInlineSnapshot(`
         Result [
           {
             "change": {
@@ -531,40 +552,43 @@ describe('change-streamer/storer', () => {
         ]
       `);
 
-    await expectConsumed('08', '0e', '0f');
-  });
+      await expectConsumed('08', '0e', '0f');
+    });
 
-  // Similar to "queued if transaction is in progress" but tests rollback.
-  test('queued until transaction is rolled back', async () => {
-    const [sub1, _0, stream1] = createSubscriber('03');
-    const [sub2, _1, stream2] = createSubscriber('06');
+    // Similar to "queued if transaction is in progress" but tests rollback.
+    test('queued until transaction is rolled back', async () => {
+      const [sub1, _0, stream1] = createSubscriber('03');
+      const [sub2, _1, stream2] = createSubscriber('06');
 
-    // This should be buffered until catchup is complete.
-    sub1.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-    sub1.send([
-      '0a',
-      ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
-    ]);
-    sub2.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-    sub2.send([
-      '0a',
-      ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
-    ]);
+      // This should be buffered until catchup is complete.
+      sub1.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
+      sub1.send([
+        '0a',
+        ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
+      ]);
+      sub2.send(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
+      sub2.send([
+        '0a',
+        ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
+      ]);
 
-    // Start a transaction before enqueuing catchup.
-    storer.store(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
-    // Enqueue catchup before transaction completes.
-    storer.catchup(sub1, 'backup');
-    storer.catchup(sub2, 'serving');
-    // Rollback the transaction.
-    storer.store(['08', ['rollback', messages.rollback()]]);
+      // Start a transaction before enqueuing catchup.
+      storer.store([
+        '07',
+        ['begin', messages.begin(), {commitWatermark: '08'}],
+      ]);
+      // Enqueue catchup before transaction completes.
+      storer.catchup(sub1, 'backup');
+      storer.catchup(sub2, 'serving');
+      // Rollback the transaction.
+      storer.store(['08', ['rollback', messages.rollback()]]);
 
-    storer.status(['status', {}, {watermark: '0a'}]);
-    storer.status(['status', {}, {watermark: '0c'}]);
+      storer.status(['status', {}, {watermark: '0a'}]);
+      storer.status(['status', {}, {watermark: '0c'}]);
 
-    // Catchup should wait for the transaction to complete before querying
-    // the database, and start after watermark '03'.
-    expect(await drain(stream1, '0a')).toMatchInlineSnapshot(`
+      // Catchup should wait for the transaction to complete before querying
+      // the database, and start after watermark '03'.
+      expect(await drain(stream1, '0a')).toMatchInlineSnapshot(`
         [
           [
             "status",
@@ -620,9 +644,9 @@ describe('change-streamer/storer', () => {
         ]
       `);
 
-    // Catchup should wait for the transaction to complete before querying
-    // the database, and start after watermark '06'.
-    expect(await drain(stream2, '0a')).toMatchInlineSnapshot(`
+      // Catchup should wait for the transaction to complete before querying
+      // the database, and start after watermark '06'.
+      expect(await drain(stream2, '0a')).toMatchInlineSnapshot(`
             [
               [
                 "status",
@@ -652,9 +676,9 @@ describe('change-streamer/storer', () => {
             ]
           `);
 
-    expect(
-      await db`SELECT * FROM "xero_5/cdc"."changeLog" ORDER BY watermark, pos`,
-    ).toMatchInlineSnapshot(`
+      expect(
+        await db`SELECT * FROM "xero_5/cdc"."changeLog" ORDER BY watermark, pos`,
+      ).toMatchInlineSnapshot(`
         Result [
           {
             "change": {
@@ -711,53 +735,59 @@ describe('change-streamer/storer', () => {
         ]
       `);
 
-    await expectConsumed('0a', '0c');
-  });
+      await expectConsumed('0a', '0c');
+    });
 
-  test('catchup does not include subsequent transactions', async () => {
-    const [sub, _0, stream] = createSubscriber('03');
+    test('catchup does not include subsequent transactions', async () => {
+      const [sub, _0, stream] = createSubscriber('03');
 
-    // This should be buffered until catchup is complete.
-    sub.send(['0b', ['begin', messages.begin(), {commitWatermark: '0c'}]]);
-    sub.send([
-      '0c',
-      ['commit', messages.commit({waa: 'hoo'}), {watermark: '0c'}],
-    ]);
+      // This should be buffered until catchup is complete.
+      sub.send(['0b', ['begin', messages.begin(), {commitWatermark: '0c'}]]);
+      sub.send([
+        '0c',
+        ['commit', messages.commit({waa: 'hoo'}), {watermark: '0c'}],
+      ]);
 
-    // Start a transaction before enqueuing catchup.
-    storer.store(['07', ['begin', messages.begin(), {commitWatermark: '08'}]]);
-    // Enqueue catchup before transaction completes.
-    storer.catchup(sub, 'serving');
-    // Finish the transaction.
-    storer.store([
-      '08',
-      ['commit', messages.commit({extra: 'fields'}), {watermark: '08'}],
-    ]);
+      // Start a transaction before enqueuing catchup.
+      storer.store([
+        '07',
+        ['begin', messages.begin(), {commitWatermark: '08'}],
+      ]);
+      // Enqueue catchup before transaction completes.
+      storer.catchup(sub, 'serving');
+      // Finish the transaction.
+      storer.store([
+        '08',
+        ['commit', messages.commit({extra: 'fields'}), {watermark: '08'}],
+      ]);
 
-    // And finish another the transaction. In reality, these would be
-    // sent by the forwarder, but we skip it in the test to confirm that
-    // catchup doesn't include the next transaction.
-    storer.store(['09', ['begin', messages.begin(), {commitWatermark: '0a'}]]);
-    storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
+      // And finish another the transaction. In reality, these would be
+      // sent by the forwarder, but we skip it in the test to confirm that
+      // catchup doesn't include the next transaction.
+      storer.store([
+        '09',
+        ['begin', messages.begin(), {commitWatermark: '0a'}],
+      ]);
+      storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
 
-    storer.status(['status', {}, {watermark: '0d'}]);
-    storer.status(['status', {}, {watermark: '0e'}]);
+      storer.status(['status', {}, {watermark: '0d'}]);
+      storer.status(['status', {}, {watermark: '0e'}]);
 
-    // Wait for the storer to commit that transaction.
-    for (let i = 0; i < 10; i++) {
-      const result =
-        await db`SELECT * FROM "xero_5/cdc"."changeLog" WHERE watermark = '0a'`;
-      if (result.length) {
-        break;
+      // Wait for the storer to commit that transaction.
+      for (let i = 0; i < 10; i++) {
+        const result =
+          await db`SELECT * FROM "xero_5/cdc"."changeLog" WHERE watermark = '0a'`;
+        if (result.length) {
+          break;
+        }
+        await sleep(10);
       }
-      await sleep(10);
-    }
 
-    // Messages should catchup from after '03' and include '06'
-    // from the pending transaction. '07' and '08' should not be included
-    // in the snapshot used for catchup. We confirm this by sending the '0c'
-    // message and ensuring that that was sent.
-    expect(await drain(stream, '0c')).toMatchInlineSnapshot(`
+      // Messages should catchup from after '03' and include '06'
+      // from the pending transaction. '07' and '08' should not be included
+      // in the snapshot used for catchup. We confirm this by sending the '0c'
+      // message and ensuring that that was sent.
+      expect(await drain(stream, '0c')).toMatchInlineSnapshot(`
       [
         [
           "status",
@@ -831,6 +861,31 @@ describe('change-streamer/storer', () => {
         ],
       ]
     `);
-    await expectConsumed('08', '0a', '0d', '0e');
+      await expectConsumed('08', '0a', '0d', '0e');
+    });
+  });
+
+  describe('protocol: wss', () => {
+    beforeEach(async () => {
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'wss',
+        db,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+      );
+      await storer.assumeOwnership();
+      done = storer.run();
+    });
+
+    test('ownerAddress is set correctly', async () => {
+      expect(
+        await db`SELECT "ownerAddress" FROM "xero_5/cdc"."replicationState" WHERE owner = 'task-id'`,
+      ).toEqual([{ownerAddress: 'wss://change-streamer:12345'}]);
+    });
   });
 });

@@ -35,7 +35,7 @@ export default async function runWorker(
   assertNormalized(config);
   const {
     taskID,
-    changeStreamer: {port, address},
+    changeStreamer: {port, address, protocol},
     upstream,
     change,
     replica,
@@ -80,6 +80,7 @@ export default async function runWorker(
         shard,
         taskID,
         address,
+        protocol,
         changeDB,
         changeSource,
         subscriptionState,
