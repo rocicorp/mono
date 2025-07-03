@@ -12,6 +12,7 @@ import type {SourceSchema} from './schema.ts';
 import type {Entry, Format} from './view.ts';
 
 export const refCountSymbol = Symbol('rc');
+export const idSymbol = Symbol('id');
 
 type RCEntry = Writable<Entry> & {[refCountSymbol]: number};
 type RCEntryList = RCEntry[];
@@ -70,22 +71,7 @@ export function applyChange(
   schema: SourceSchema,
   relationship: string,
   format: Format,
-): void;
-/** @deprecated Use the version without the `refCountMap` parameter. */
-export function applyChange(
-  parentEntry: Entry,
-  change: ViewChange,
-  schema: SourceSchema,
-  relationship: string,
-  format: Format,
-  refCountMap?: unknown,
-): void;
-export function applyChange(
-  parentEntry: Entry,
-  change: ViewChange,
-  schema: SourceSchema,
-  relationship: string,
-  format: Format,
+  withIDs = false,
 ): void {
   if (schema.isHidden) {
     switch (change.type) {
@@ -102,6 +88,7 @@ export function applyChange(
               childSchema,
               relationship,
               format,
+              withIDs,
             );
           }
         }
@@ -122,6 +109,7 @@ export function applyChange(
           childSchema,
           relationship,
           format,
+          withIDs,
         );
         return;
       }
@@ -147,14 +135,20 @@ export function applyChange(
           rc = oldEntry[refCountSymbol] + 1;
         }
 
-        newEntry = makeNewEntryWithRefCount(change.node.row, rc);
+        newEntry = makeNewEntryWithRefCount(
+          change.node.row,
+          schema,
+          withIDs,
+          rc,
+        );
 
         (parentEntry as Writable<Entry>)[relationship] = newEntry;
       } else {
         newEntry = makeNewEntryAndInsert(
           change.node.row,
           getChildEntryList(parentEntry, relationship),
-          schema.compareRows,
+          schema,
+          withIDs,
         );
       }
 
@@ -178,6 +172,7 @@ export function applyChange(
             childSchema,
             relationship,
             childFormat,
+            withIDs,
           );
         }
       }
@@ -229,6 +224,7 @@ export function applyChange(
           childSchema,
           change.child.relationshipName,
           childFormat,
+          withIDs,
         );
       }
       break;
@@ -263,6 +259,8 @@ export function applyChange(
             change.node.row,
             oldEntry,
             format.relationships,
+            schema,
+            withIDs,
             rc,
           );
 
@@ -281,7 +279,8 @@ export function applyChange(
             change.node.row,
             oldEntry,
             format.relationships,
-            schema.compareRows,
+            schema,
+            withIDs,
           );
         }
       }
@@ -296,9 +295,10 @@ export function applyChange(
 function makeNewEntryAndInsert(
   newRow: Row,
   view: RCEntryList,
-  compareRows: Comparator,
+  schema: SourceSchema,
+  withIDs: boolean,
 ): RCEntry {
-  const {pos, found} = binarySearch(view, newRow, compareRows);
+  const {pos, found} = binarySearch(view, newRow, schema.compareRows);
 
   let deleteCount = 0;
   let rc = 1;
@@ -309,7 +309,7 @@ function makeNewEntryAndInsert(
     rc++;
   }
 
-  const newEntry = makeNewEntryWithRefCount(newRow, rc);
+  const newEntry = makeNewEntryWithRefCount(newRow, schema, withIDs, rc);
 
   view.splice(pos, deleteCount, newEntry);
 
@@ -321,9 +321,10 @@ function insertAndSetRefCount(
   newRow: Row,
   oldEntry: RCEntry,
   relationships: {[key: string]: Format},
-  compareRows: Comparator,
+  schema: SourceSchema,
+  withIDs: boolean,
 ): void {
-  const {pos, found} = binarySearch(view, newRow, compareRows);
+  const {pos, found} = binarySearch(view, newRow, schema.compareRows);
 
   let deleteCount = 0;
   let rc = 1;
@@ -338,6 +339,8 @@ function insertAndSetRefCount(
     newRow,
     oldEntry,
     relationships,
+    schema,
+    withIDs,
     rc,
   );
 
@@ -383,9 +386,11 @@ function makeEntryPreserveRelationships(
   newRow: Row,
   oldEntry: RCEntry,
   relationships: {[key: string]: Format},
+  schema: SourceSchema,
+  withIDs: boolean,
   rc: number,
 ): RCEntry {
-  const entry = makeNewEntryWithRefCount(newRow, rc);
+  const entry = makeNewEntryWithRefCount(newRow, schema, withIDs, rc);
   for (const relationship in relationships) {
     assert(!(relationship in newRow), 'Relationship already exists');
     entry[relationship] = oldEntry[relationship];
@@ -412,6 +417,19 @@ function getSingularEntry(parentEntry: Entry, relationship: string): RCEntry {
   return e as RCEntry;
 }
 
-function makeNewEntryWithRefCount(row: Row, rc: number): RCEntry {
-  return {...row, [refCountSymbol]: rc};
+function makeNewEntryWithRefCount(
+  row: Row,
+  schema: SourceSchema,
+  withIDs: boolean,
+  rc: number,
+): RCEntry {
+  const id = withIDs ? makeID(row, schema) : '';
+  return {...row, [refCountSymbol]: rc, [idSymbol]: id};
+}
+function makeID(row: Row, schema: SourceSchema) {
+  // optimization for case of non-compound primary key
+  if (schema.primaryKey.length === 1) {
+    return JSON.stringify(row[schema.primaryKey[0]]);
+  }
+  return JSON.stringify(schema.primaryKey.map(k => row[k]));
 }
