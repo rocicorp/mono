@@ -32,12 +32,15 @@ import type {ZeroLogContext} from './zero-log-context.ts';
 /**
  * The shape which a user's custom mutator definitions must conform to.
  */
-export type CustomMutatorDefs<S extends Schema> = {
+export type CustomMutatorDefs<
+  S extends Schema,
+  TWrappedTransaction = unknown,
+> = {
   [namespaceOrKey: string]:
     | {
-        [key: string]: CustomMutatorImpl<S>;
+        [key: string]: CustomMutatorImpl<S, TWrappedTransaction>;
       }
-    | CustomMutatorImpl<S>;
+    | CustomMutatorImpl<S, TWrappedTransaction>;
 };
 
 export type MutatorResult = {
@@ -45,9 +48,13 @@ export type MutatorResult = {
   server: Promise<MutationOk>;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type CustomMutatorImpl<S extends Schema, TArgs = any> = (
-  tx: Transaction<S>,
+export type CustomMutatorImpl<
+  S extends Schema,
+  TWrappedTransaction = unknown,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  TArgs = any,
+> = (
+  tx: Transaction<S, TWrappedTransaction>,
   // TODO: many args. See commit: 52657c2f934b4a458d628ea77e56ce92b61eb3c6 which did have many args.
   // The issue being that it will be a protocol change to support varargs.
   args: TArgs,
@@ -62,7 +69,8 @@ export type CustomMutatorImpl<S extends Schema, TArgs = any> = (
  */
 export type MakeCustomMutatorInterfaces<
   S extends Schema,
-  MD extends CustomMutatorDefs<S>,
+  MD extends CustomMutatorDefs<S, TWrappedTransaction>,
+  TWrappedTransaction = unknown,
 > = {
   readonly [NamespaceOrName in keyof MD]: MD[NamespaceOrName] extends (
     tx: Transaction<S>,
@@ -124,9 +132,9 @@ export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
   readonly token: string | undefined;
 }
 
-export function makeReplicacheMutator<S extends Schema>(
+export function makeReplicacheMutator<S extends Schema, TWrappedTransaction>(
   lc: ZeroLogContext,
-  mutator: CustomMutatorImpl<S>,
+  mutator: CustomMutatorImpl<S, TWrappedTransaction>,
   schema: S,
   slowMaterializeThreshold: number,
 ) {

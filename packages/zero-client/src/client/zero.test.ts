@@ -42,7 +42,10 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
+import {
+  idSymbol,
+  refCountSymbol,
+} from '../../../zql/src/ivm/view-apply-change.ts';
 import {nanoid} from '../util/nanoid.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import type {CustomMutatorDefs} from './custom.ts';
@@ -1766,10 +1769,12 @@ test('smokeTest', async () => {
     // we test multiple changes in a transactions below
     expect(calls.length).eq(3);
     expect(calls[0]).toEqual([]);
-    expect(calls[1]).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+    expect(calls[1]).toEqual([
+      {id: 'a', value: 1, [refCountSymbol]: 1, [idSymbol]: ''},
+    ]);
     expect(calls[2]).toEqual([
-      {id: 'a', value: 1, [refCountSymbol]: 1},
-      {id: 'b', value: 2, [refCountSymbol]: 1},
+      {id: 'a', value: 1, [refCountSymbol]: 1, [idSymbol]: ''},
+      {id: 'b', value: 2, [refCountSymbol]: 1, [idSymbol]: ''},
     ]);
 
     calls.length = 0;
@@ -1785,14 +1790,16 @@ test('smokeTest', async () => {
     // they are in same tx, so we only get one call coming out.
     expect(calls.length).eq(1);
     expect(calls[0]).toEqual([
-      {id: 'a', value: 11, [refCountSymbol]: 1},
-      {id: 'b', value: 2, [refCountSymbol]: 1},
+      {id: 'a', value: 11, [refCountSymbol]: 1, [idSymbol]: ''},
+      {id: 'b', value: 2, [refCountSymbol]: 1, [idSymbol]: ''},
     ]);
 
     calls.length = 0;
     await r.mutate.issues.delete({id: 'b'});
     expect(calls.length).eq(1);
-    expect(calls[0]).toEqual([{id: 'a', value: 11, [refCountSymbol]: 1}]);
+    expect(calls[0]).toEqual([
+      {id: 'a', value: 11, [refCountSymbol]: 1, [idSymbol]: ''},
+    ]);
 
     unsubscribe();
 
@@ -2668,6 +2675,7 @@ test('kvStore option', async () => {
     id: string;
     value: number;
     [refCountSymbol]: number;
+    [idSymbol]: string;
   };
 
   const t = async <S extends Schema>(
@@ -2702,7 +2710,7 @@ test('kvStore option', async () => {
     await r.mutate.e.insert({id: 'a', value: 1});
 
     expect(idIsAView.data).deep.equal([
-      {id: 'a', value: 1, [refCountSymbol]: 1},
+      {id: 'a', value: 1, [refCountSymbol]: 1, [idSymbol]: ''},
     ]);
     // Wait for persist to finish
     await r.persist();
@@ -2717,7 +2725,7 @@ test('kvStore option', async () => {
 
   await t('idb', 'kv-store-test-user-id-1' + uuid, true, []);
   await t('idb', 'kv-store-test-user-id-1' + uuid, true, [
-    {id: 'a', value: 1, [refCountSymbol]: 1},
+    {id: 'a', value: 1, [refCountSymbol]: 1, [idSymbol]: ''},
   ]);
   await t('mem', 'kv-store-test-user-id-2' + uuid, false, []);
   // Defaults to idb
@@ -2878,32 +2886,36 @@ describe('CRUD', () => {
     const createIssue = z.mutate.issue.insert;
     const view = z.query.issue.materialize();
     await createIssue({id: 'a', title: 'A'});
-    expect(view.data).toEqual([{id: 'a', title: 'A', [refCountSymbol]: 1}]);
+    expect(view.data).toEqual([
+      {id: 'a', title: 'A', [refCountSymbol]: 1, [idSymbol]: ''},
+    ]);
 
     // create again should not change anything
     await createIssue({id: 'a', title: 'Again'});
-    expect(view.data).toEqual([{id: 'a', title: 'A', [refCountSymbol]: 1}]);
+    expect(view.data).toEqual([
+      {id: 'a', title: 'A', [refCountSymbol]: 1, [idSymbol]: ''},
+    ]);
 
     // Optional fields can be set to null/undefined or left off completely.
     await createIssue({id: 'b'});
     expect(view.data).toEqual([
-      {id: 'a', title: 'A', [refCountSymbol]: 1},
-      {id: 'b', title: null, [refCountSymbol]: 1},
+      {id: 'a', title: 'A', [refCountSymbol]: 1, [idSymbol]: ''},
+      {id: 'b', title: null, [refCountSymbol]: 1, [idSymbol]: ''},
     ]);
 
     await createIssue({id: 'c', title: undefined});
     expect(view.data).toEqual([
-      {id: 'a', title: 'A', [refCountSymbol]: 1},
-      {id: 'b', title: null, [refCountSymbol]: 1},
-      {id: 'c', title: null, [refCountSymbol]: 1},
+      {id: 'a', title: 'A', [refCountSymbol]: 1, [idSymbol]: ''},
+      {id: 'b', title: null, [refCountSymbol]: 1, [idSymbol]: ''},
+      {id: 'c', title: null, [refCountSymbol]: 1, [idSymbol]: ''},
     ]);
 
     await createIssue({id: 'd', title: null});
     expect(view.data).toEqual([
-      {id: 'a', title: 'A', [refCountSymbol]: 1},
-      {id: 'b', title: null, [refCountSymbol]: 1},
-      {id: 'c', title: null, [refCountSymbol]: 1},
-      {id: 'd', title: null, [refCountSymbol]: 1},
+      {id: 'a', title: 'A', [refCountSymbol]: 1, [idSymbol]: ''},
+      {id: 'b', title: null, [refCountSymbol]: 1, [idSymbol]: ''},
+      {id: 'c', title: null, [refCountSymbol]: 1, [idSymbol]: ''},
+      {id: 'd', title: null, [refCountSymbol]: 1, [idSymbol]: ''},
     ]);
   });
 
@@ -2913,21 +2925,51 @@ describe('CRUD', () => {
     const view = z.query.comment.materialize();
     await z.mutate.comment.insert({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '1', text: 'A text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '1',
+        text: 'A text',
+        [refCountSymbol]: 1,
+        [idSymbol]: '',
+      },
     ]);
 
     const setComment = z.mutate.comment.upsert;
     await setComment({id: 'b', issueID: '2', text: 'B text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '1', text: 'A text', [refCountSymbol]: 1},
-      {id: 'b', issueID: '2', text: 'B text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '1',
+        text: 'A text',
+        [refCountSymbol]: 1,
+        [idSymbol]: '',
+      },
+      {
+        id: 'b',
+        issueID: '2',
+        text: 'B text',
+        [refCountSymbol]: 1,
+        [idSymbol]: '',
+      },
     ]);
 
     // set allows updating
     await setComment({id: 'a', issueID: '11', text: 'AA text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '11', text: 'AA text', [refCountSymbol]: 1},
-      {id: 'b', issueID: '2', text: 'B text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '11',
+        text: 'AA text',
+        [refCountSymbol]: 1,
+        [idSymbol]: '',
+      },
+      {
+        id: 'b',
+        issueID: '2',
+        text: 'B text',
+        [refCountSymbol]: 1,
+        [idSymbol]: '',
+      },
     ]);
 
     // Optional fields can be set to null/undefined or left off completely.
@@ -2937,6 +2979,7 @@ describe('CRUD', () => {
       issueID: '3',
       text: null,
       [refCountSymbol]: 1,
+      [idSymbol]: '',
     });
 
     await setComment({id: 'd', issueID: '4', text: undefined});
@@ -2945,6 +2988,7 @@ describe('CRUD', () => {
       issueID: '4',
       text: null,
       [refCountSymbol]: 1,
+      [idSymbol]: '',
     });
 
     await setComment({id: 'e', issueID: '5', text: undefined});
@@ -2953,6 +2997,7 @@ describe('CRUD', () => {
       issueID: '5',
       text: null,
       [refCountSymbol]: 1,
+      [idSymbol]: '',
     });
 
     // Setting with undefined/null/missing overwrites field to default/null.
@@ -2962,6 +3007,7 @@ describe('CRUD', () => {
       issueID: '11',
       text: null,
       [refCountSymbol]: 1,
+      [idSymbol]: '',
     });
 
     await setComment({id: 'a', issueID: '11', text: 'foo'});
@@ -2970,6 +3016,7 @@ describe('CRUD', () => {
       issueID: '11',
       text: 'foo',
       [refCountSymbol]: 1,
+      [idSymbol]: '',
     });
 
     await setComment({id: 'a', issueID: '11', text: undefined});
@@ -2978,6 +3025,7 @@ describe('CRUD', () => {
       issueID: '11',
       text: null,
       [refCountSymbol]: 1,
+      [idSymbol]: '',
     });
 
     await setComment({id: 'a', issueID: '11', text: 'foo'});
@@ -2986,6 +3034,7 @@ describe('CRUD', () => {
       issueID: '11',
       text: 'foo',
       [refCountSymbol]: 1,
+      [idSymbol]: '',
     });
   });
 
@@ -2994,42 +3043,78 @@ describe('CRUD', () => {
     const view = z.query.comment.materialize();
     await z.mutate.comment.insert({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '1', text: 'A text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '1',
+        text: 'A text',
+        [refCountSymbol]: 1,
+        [idSymbol]: '',
+      },
     ]);
 
     const updateComment = z.mutate.comment.update;
     await updateComment({id: 'a', issueID: '11', text: 'AA text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '11', text: 'AA text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '11',
+        text: 'AA text',
+        [refCountSymbol]: 1,
+        [idSymbol]: '',
+      },
     ]);
 
     await updateComment({id: 'a', text: 'AAA text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '11', text: 'AAA text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '11',
+        text: 'AAA text',
+        [refCountSymbol]: 1,
+        [idSymbol]: '',
+      },
     ]);
 
     // update is a noop if not existing
     await updateComment({id: 'b', issueID: '2', text: 'B text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '11', text: 'AAA text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '11',
+        text: 'AAA text',
+        [refCountSymbol]: 1,
+        [idSymbol]: '',
+      },
     ]);
 
     // All fields take previous value if left off or set to undefined.
     await updateComment({id: 'a', issueID: '11'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '11', text: 'AAA text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '11',
+        text: 'AAA text',
+        [refCountSymbol]: 1,
+        [idSymbol]: '',
+      },
     ]);
 
     await updateComment({id: 'a', issueID: '11', text: undefined});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '11', text: 'AAA text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '11',
+        text: 'AAA text',
+        [refCountSymbol]: 1,
+        [idSymbol]: '',
+      },
     ]);
 
     // 'optional' fields can be explicitly set to null to overwrite previous
     // value.
     await updateComment({id: 'a', issueID: '11', text: null});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '11', text: null, [refCountSymbol]: 1},
+      {id: 'a', issueID: '11', text: null, [refCountSymbol]: 1, [idSymbol]: ''},
     ]);
   });
 
@@ -3038,17 +3123,17 @@ describe('CRUD', () => {
     const view = z.query.compoundPKTest.materialize();
     await z.mutate.compoundPKTest.insert({id1: 'a', id2: 'a', text: 'a'});
     expect(view.data).toEqual([
-      {id1: 'a', id2: 'a', text: 'a', [refCountSymbol]: 1},
+      {id1: 'a', id2: 'a', text: 'a', [refCountSymbol]: 1, [idSymbol]: ''},
     ]);
 
     await z.mutate.compoundPKTest.upsert({id1: 'a', id2: 'a', text: 'aa'});
     expect(view.data).toEqual([
-      {id1: 'a', id2: 'a', text: 'aa', [refCountSymbol]: 1},
+      {id1: 'a', id2: 'a', text: 'aa', [refCountSymbol]: 1, [idSymbol]: ''},
     ]);
 
     await z.mutate.compoundPKTest.update({id1: 'a', id2: 'a', text: 'aaa'});
     expect(view.data).toEqual([
-      {id1: 'a', id2: 'a', text: 'aaa', [refCountSymbol]: 1},
+      {id1: 'a', id2: 'a', text: 'aaa', [refCountSymbol]: 1, [idSymbol]: ''},
     ]);
 
     await z.mutate.compoundPKTest.delete({id1: 'a', id2: 'a'});
@@ -3119,13 +3204,13 @@ describe('CRUD with compound primary key', () => {
     const view = z.query.issue.materialize();
     await createIssue({ids: 'a', idn: 1, title: 'A'});
     expect(view.data).toEqual([
-      {ids: 'a', idn: 1, title: 'A', [refCountSymbol]: 1},
+      {ids: 'a', idn: 1, title: 'A', [refCountSymbol]: 1, [idSymbol]: ''},
     ]);
 
     // create again should not change anything
     await createIssue({ids: 'a', idn: 1, title: 'Again'});
     expect(view.data).toEqual([
-      {ids: 'a', idn: 1, title: 'A', [refCountSymbol]: 1},
+      {ids: 'a', idn: 1, title: 'A', [refCountSymbol]: 1, [idSymbol]: ''},
     ]);
   });
 
@@ -3148,6 +3233,7 @@ describe('CRUD with compound primary key', () => {
         issueIDn: 1,
         text: 'A text',
         [refCountSymbol]: 1,
+        [idSymbol]: '',
       },
     ]);
 
@@ -3168,6 +3254,7 @@ describe('CRUD with compound primary key', () => {
         issueIDn: 1,
         text: 'A text',
         [refCountSymbol]: 1,
+        [idSymbol]: '',
       },
       {
         ids: 'b',
@@ -3176,6 +3263,7 @@ describe('CRUD with compound primary key', () => {
         issueIDn: 2,
         text: 'B text',
         [refCountSymbol]: 1,
+        [idSymbol]: '',
       },
     ]);
 
@@ -3195,6 +3283,7 @@ describe('CRUD with compound primary key', () => {
         issueIDn: 11,
         text: 'AA text',
         [refCountSymbol]: 1,
+        [idSymbol]: '',
       },
       {
         ids: 'b',
@@ -3203,6 +3292,7 @@ describe('CRUD with compound primary key', () => {
         issueIDn: 2,
         text: 'B text',
         [refCountSymbol]: 1,
+        [idSymbol]: '',
       },
     ]);
   });
@@ -3225,6 +3315,7 @@ describe('CRUD with compound primary key', () => {
         issueIDn: 1,
         text: 'A text',
         [refCountSymbol]: 1,
+        [idSymbol]: '',
       },
     ]);
 
@@ -3244,6 +3335,7 @@ describe('CRUD with compound primary key', () => {
         issueIDn: 11,
         text: 'AA text',
         [refCountSymbol]: 1,
+        [idSymbol]: '',
       },
     ]);
 
@@ -3256,6 +3348,7 @@ describe('CRUD with compound primary key', () => {
         issueIDn: 11,
         text: 'AAA text',
         [refCountSymbol]: 1,
+        [idSymbol]: '',
       },
     ]);
 
@@ -3275,6 +3368,7 @@ describe('CRUD with compound primary key', () => {
         issueIDn: 11,
         text: 'AAA text',
         [refCountSymbol]: 1,
+        [idSymbol]: '',
       },
     ]);
   });
@@ -3322,13 +3416,16 @@ test('mutate is a function for batching', async () => {
 
   expect(x).toBe(123);
 
-  expect(issueView.data).toEqual([{id: 'a', title: 'A', [refCountSymbol]: 1}]);
+  expect(issueView.data).toEqual([
+    {id: 'a', title: 'A', [refCountSymbol]: 1, [idSymbol]: ''},
+  ]);
   expect(commentView.data).toEqual([
     {
       id: 'b',
       issueID: 'a',
       text: 'Comment for issue A was changed',
       [refCountSymbol]: 1,
+      [idSymbol]: '',
     },
   ]);
 
@@ -3465,11 +3562,13 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
       id: 'a',
       title: 'A',
       [refCountSymbol]: 1,
+      [idSymbol]: '',
     },
     {
       id: 'b',
       title: 'B',
       [refCountSymbol]: 1,
+      [idSymbol]: '',
     },
   ]);
 
@@ -3482,7 +3581,9 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
     }),
   ).rejects.toThrow('bonk');
 
-  expect(issueView.data).toEqual([{id: 'b', title: 'B', [refCountSymbol]: 1}]);
+  expect(issueView.data).toEqual([
+    {id: 'b', title: 'B', [refCountSymbol]: 1, [idSymbol]: ''},
+  ]);
 
   await z.mutateBatch(async m => {
     await m.issue.insert({id: 'c', title: 'C'});
@@ -3491,7 +3592,9 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
     });
   });
 
-  expect(issueView.data).toEqual([{id: 'c', title: 'C', [refCountSymbol]: 1}]);
+  expect(issueView.data).toEqual([
+    {id: 'c', title: 'C', [refCountSymbol]: 1, [idSymbol]: ''},
+  ]);
 });
 
 test('Logging stack on close', async () => {
