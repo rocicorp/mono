@@ -13,7 +13,7 @@ import type {Input} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import {Take} from '../../zql/src/ivm/take.ts';
 import {createSource} from '../../zql/src/ivm/test/source-factory.ts';
-import {refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
+import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {SolidView, createSolidViewFactory, type State} from './solid-view.ts';
 import {createStore} from 'solid-js/store';
@@ -58,8 +58,8 @@ test('basics', () => {
   );
 
   const data0 = [
-    {a: 1, b: 'a', [refCountSymbol]: 1},
-    {a: 2, b: 'b', [refCountSymbol]: 1},
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
   ];
   expect(data()).toEqual(data0);
 
@@ -70,9 +70,9 @@ test('basics', () => {
   commit();
 
   const data1 = [
-    {a: 1, b: 'a', [refCountSymbol]: 1},
-    {a: 2, b: 'b', [refCountSymbol]: 1},
-    {a: 3, b: 'c', [refCountSymbol]: 1},
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
+    {a: 3, b: 'c', [refCountSymbol]: 1, [idSymbol]: '3'},
   ];
   expect(data()).toEqual(data1);
 
@@ -82,7 +82,7 @@ test('basics', () => {
   expect(data()).toEqual(data1);
   commit();
 
-  const data2 = [{a: 3, b: 'c', [refCountSymbol]: 1}];
+  const data2 = [{a: 3, b: 'c', [refCountSymbol]: 1, [idSymbol]: '3'}];
   expect(data()).toEqual(data2);
 
   ms.push({row: {a: 3, b: 'c'}, type: 'remove'});
@@ -127,7 +127,7 @@ test('single-format', () => {
     setState,
   );
 
-  const data0 = {a: 1, b: 'a', [refCountSymbol]: 1};
+  const data0 = {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'};
   expect(data()).toEqual(data0);
 
   // trying to add another element should be an error
@@ -265,9 +265,11 @@ test('tree', () => {
           name: 'foobar',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -275,6 +277,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -286,9 +289,11 @@ test('tree', () => {
           name: 'monkey',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -296,6 +301,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
   expect(data()).toEqual(data0);
@@ -315,9 +321,11 @@ test('tree', () => {
           name: 'foobar',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '5',
     },
     {
       id: 1,
@@ -329,9 +337,11 @@ test('tree', () => {
           name: 'foobar',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -339,6 +349,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -350,9 +361,11 @@ test('tree', () => {
           name: 'monkey',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -360,6 +373,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
   expect(data()).toEqual(data1);
@@ -379,9 +393,11 @@ test('tree', () => {
           name: 'foobar',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -389,6 +405,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -400,9 +417,11 @@ test('tree', () => {
           name: 'monkey',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -410,6 +429,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
   expect(data()).toEqual(data2);
@@ -432,6 +452,7 @@ test('tree', () => {
       childID: 2,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 3,
@@ -443,9 +464,11 @@ test('tree', () => {
           name: 'monkey',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -453,6 +476,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
   expect(data()).toEqual(data3);
@@ -479,9 +503,11 @@ test('tree', () => {
           name: 'foobaz',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -489,6 +515,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -500,9 +527,11 @@ test('tree', () => {
           name: 'monkey',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -510,6 +539,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ]);
 });
@@ -589,8 +619,10 @@ test('tree-single', () => {
       name: 'foobar',
       childID: null,
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     [refCountSymbol]: 1,
+    [idSymbol]: '1',
   };
   expect(data()).toEqual(data0);
 
@@ -609,6 +641,7 @@ test('tree-single', () => {
     childID: 2,
     child: undefined,
     [refCountSymbol]: 1,
+    [idSymbol]: '1',
   };
   expect(data()).toEqual(data1);
 
@@ -758,10 +791,12 @@ test('collapse', () => {
           id: 1,
           name: 'label',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ];
   expect(data()).toEqual(data1);
@@ -872,15 +907,18 @@ test('collapse', () => {
           id: 1,
           name: 'label',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
         {
           id: 2,
           name: 'label2',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ];
   expect(data()).toEqual(data3);
@@ -992,15 +1030,18 @@ test('collapse', () => {
           id: 1,
           name: 'label',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
         {
           id: 2,
           name: 'label2',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ];
   expect(data()).toEqual(state4);
@@ -1113,15 +1154,18 @@ test('collapse', () => {
           id: 1,
           name: 'label',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
         {
           id: 2,
           name: 'label2x',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ]);
 });
@@ -1261,9 +1305,11 @@ test('collapse-single', () => {
         id: 1,
         name: 'label',
         [refCountSymbol]: 1,
+        [idSymbol]: '1',
       },
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ]);
 });
@@ -1303,8 +1349,8 @@ test('basic with edit pushes', () => {
   );
 
   const data0 = [
-    {id: 1, b: 'a', [refCountSymbol]: 1},
-    {id: 2, b: 'b', [refCountSymbol]: 1},
+    {id: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {id: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
   ];
   expect(data()).toEqual(data0);
 
@@ -1314,8 +1360,8 @@ test('basic with edit pushes', () => {
   commit();
 
   const data1 = [
-    {id: 1, b: 'a', [refCountSymbol]: 1},
-    {id: 2, b: 'b2', [refCountSymbol]: 1},
+    {id: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {id: 2, b: 'b2', [refCountSymbol]: 1, [idSymbol]: '2'},
   ];
   expect(data()).toEqual(data1);
 
@@ -1324,8 +1370,8 @@ test('basic with edit pushes', () => {
   expect(data()).toEqual(data1);
   commit();
   expect(data()).toEqual([
-    {id: 1, b: 'a', [refCountSymbol]: 1},
-    {id: 3, b: 'b3', [refCountSymbol]: 1},
+    {id: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {id: 3, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '3'},
   ]);
 });
 
@@ -1407,9 +1453,11 @@ test('tree edit', () => {
           data: 'b',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -1418,6 +1466,7 @@ test('tree edit', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -1431,9 +1480,11 @@ test('tree edit', () => {
           data: 'd',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -1442,6 +1493,7 @@ test('tree edit', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
   expect(data()).toEqual(data0);
@@ -1469,9 +1521,11 @@ test('tree edit', () => {
           data: 'b',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -1480,6 +1534,7 @@ test('tree edit', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -1493,9 +1548,11 @@ test('tree edit', () => {
           data: 'd',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -1504,6 +1561,7 @@ test('tree edit', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
   expect(data()).toEqual(data1);
@@ -1542,9 +1600,11 @@ test('tree edit', () => {
           data: 'b',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -1553,6 +1613,7 @@ test('tree edit', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -1566,9 +1627,11 @@ test('tree edit', () => {
           data: 'd2',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -1577,6 +1640,7 @@ test('tree edit', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
 
@@ -1623,9 +1687,9 @@ test('edit to change the order', () => {
   );
 
   const data0 = [
-    {a: 10, b: 'a', [refCountSymbol]: 1},
-    {a: 20, b: 'b', [refCountSymbol]: 1},
-    {a: 30, b: 'c', [refCountSymbol]: 1},
+    {a: 10, b: 'a', [refCountSymbol]: 1, [idSymbol]: '10'},
+    {a: 20, b: 'b', [refCountSymbol]: 1, [idSymbol]: '20'},
+    {a: 30, b: 'c', [refCountSymbol]: 1, [idSymbol]: '30'},
   ];
   expect(data()).toEqual(data0);
 
@@ -1639,9 +1703,9 @@ test('edit to change the order', () => {
   commit();
 
   const data1 = [
-    {a: 5, b: 'b2', [refCountSymbol]: 1},
-    {a: 10, b: 'a', [refCountSymbol]: 1},
-    {a: 30, b: 'c', [refCountSymbol]: 1},
+    {a: 5, b: 'b2', [refCountSymbol]: 1, [idSymbol]: '5'},
+    {a: 10, b: 'a', [refCountSymbol]: 1, [idSymbol]: '10'},
+    {a: 30, b: 'c', [refCountSymbol]: 1, [idSymbol]: '30'},
   ];
   expect(data()).toEqual(data1);
 
@@ -1655,9 +1719,9 @@ test('edit to change the order', () => {
   commit();
 
   const data2 = [
-    {a: 4, b: 'b3', [refCountSymbol]: 1},
-    {a: 10, b: 'a', [refCountSymbol]: 1},
-    {a: 30, b: 'c', [refCountSymbol]: 1},
+    {a: 4, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '4'},
+    {a: 10, b: 'a', [refCountSymbol]: 1, [idSymbol]: '10'},
+    {a: 30, b: 'c', [refCountSymbol]: 1, [idSymbol]: '30'},
   ];
   expect(data()).toEqual(data2);
 
@@ -1671,9 +1735,9 @@ test('edit to change the order', () => {
   commit();
 
   expect(data()).toEqual([
-    {a: 10, b: 'a', [refCountSymbol]: 1},
-    {a: 20, b: 'b4', [refCountSymbol]: 1},
-    {a: 30, b: 'c', [refCountSymbol]: 1},
+    {a: 10, b: 'a', [refCountSymbol]: 1, [idSymbol]: '10'},
+    {a: 20, b: 'b4', [refCountSymbol]: 1, [idSymbol]: '20'},
+    {a: 30, b: 'c', [refCountSymbol]: 1, [idSymbol]: '30'},
   ]);
 });
 
@@ -1788,10 +1852,12 @@ test('edit to preserve relationships', () => {
           id: 1,
           name: 'label1',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
       ],
       title: 'issue1',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -1800,10 +1866,12 @@ test('edit to preserve relationships', () => {
           id: 2,
           name: 'label2',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       title: 'issue2',
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
   ];
   expect(data()).toEqual(data1);
@@ -1828,10 +1896,12 @@ test('edit to preserve relationships', () => {
           id: 1,
           name: 'label1',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
       ],
       title: 'issue1 changed',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -1840,10 +1910,12 @@ test('edit to preserve relationships', () => {
           id: 2,
           name: 'label2',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       title: 'issue2',
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
   ];
   expect(data()).toEqual(data2);
@@ -1866,10 +1938,12 @@ test('edit to preserve relationships', () => {
           id: 2,
           name: 'label2',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       title: 'issue2',
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -1878,10 +1952,12 @@ test('edit to preserve relationships', () => {
           id: 1,
           name: 'label1',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
       ],
       title: 'issue1 is now issue3',
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
   ]);
 });
@@ -1999,10 +2075,12 @@ test('edit leaf', () => {
           labelId: 1,
           extra: 'a',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ];
   expect(data()).toEqual(data1);
@@ -2085,6 +2163,7 @@ test('edit leaf', () => {
           labelId: 1,
           extra: 'a',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
         {
           id: 2,
@@ -2092,10 +2171,12 @@ test('edit leaf', () => {
           labelId: 2,
           extra: 'b',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ];
   expect(data()).toEqual(data3);
@@ -2169,6 +2250,7 @@ test('edit leaf', () => {
           labelId: 1,
           extra: 'a',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
         {
           id: 2,
@@ -2176,10 +2258,12 @@ test('edit leaf', () => {
           labelId: 2,
           extra: 'b2',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ]);
 });
@@ -2225,11 +2309,13 @@ test('queryComplete promise', async () => {
         "a": 1,
         "b": "a",
         Symbol(rc): 1,
+        Symbol(id): "1",
       },
       {
         "a": 2,
         "b": "b",
         Symbol(rc): 1,
+        Symbol(id): "2",
       },
     ]
   `);

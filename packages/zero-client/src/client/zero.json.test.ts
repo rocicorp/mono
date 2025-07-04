@@ -5,7 +5,10 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
+import {
+  idSymbol,
+  refCountSymbol,
+} from '../../../zql/src/ivm/view-apply-change.ts';
 import {zeroForTest} from './test-utils.ts';
 
 test('we can create rows with json columns and query those rows', async () => {
@@ -42,12 +45,14 @@ test('we can create rows with json columns and query those rows', async () => {
       title: 'track 1',
       artists: ['artist 1', 'artist 2'],
       [refCountSymbol]: 1,
+      [idSymbol]: '',
     },
     {
       id: 'track-2',
       title: 'track 2',
       artists: ['artist 2', 'artist 3'],
       [refCountSymbol]: 1,
+      [idSymbol]: '',
     },
   ]);
 });

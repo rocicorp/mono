@@ -11,6 +11,7 @@ import {must} from '../../shared/src/must.ts';
 import {
   createSchema,
   number,
+  relationships,
   string,
   table,
   Zero,
@@ -19,7 +20,7 @@ import {
   type TTL,
 } from '../../zero/src/zero.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
-import {refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
+import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {useQuery, type UseQueryOptions} from './use-query.ts';
@@ -88,8 +89,8 @@ test('useQuery', async () => {
   } = useQueryWithZeroProvider('useQuery-id', querySignal);
 
   expect(rows()).toEqual([
-    {a: 1, b: 'a', [refCountSymbol]: 1},
-    {a: 2, b: 'b', [refCountSymbol]: 1},
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
   ]);
   expect(resultType()).toEqual({type: 'unknown'});
 
@@ -100,9 +101,9 @@ test('useQuery', async () => {
   queryDelegate.commit();
 
   expect(rows()).toEqual([
-    {a: 1, b: 'a', [refCountSymbol]: 1},
-    {a: 2, b: 'b', [refCountSymbol]: 1},
-    {a: 3, b: 'c', [refCountSymbol]: 1},
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
+    {a: 3, b: 'c', [refCountSymbol]: 1, [idSymbol]: '3'},
   ]);
   expect(resultType()).toEqual({type: 'complete'});
 });
@@ -162,16 +163,17 @@ test('useQuery query deps change', async () => {
 
   runWithOwner(renderHookResult.owner, () => {
     createEffect(() => {
-      rowLog.push(rows());
+      rowLog.push([...rows()]);
     });
     createEffect(() => {
       const details = resultDetails();
-      details.type;
-      resultDetailsLog.push(details);
+      resultDetailsLog.push({...details});
     });
   });
 
-  expect(rowLog).toEqual([[{a: 1, b: 'a', [refCountSymbol]: 1}]]);
+  expect(rowLog).toEqual([
+    [{a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'}],
+  ]);
   expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
   resetLogs();
 
@@ -183,7 +185,9 @@ test('useQuery query deps change', async () => {
   resetLogs();
 
   setA(2);
-  expect(rowLog).toEqual([[{a: 2, b: 'b', [refCountSymbol]: 1}]]);
+  expect(rowLog).toEqual([
+    [{a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'}],
+  ]);
   expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
   resetLogs();
 
@@ -191,6 +195,401 @@ test('useQuery query deps change', async () => {
   await 1;
 
   expect(rowLog).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'complete'}]);
+});
+
+test('useQuery query deps change, reconcile minimizes reactive updates', async () => {
+  const {tableQuery, queryDelegate} = setupTestEnvironment();
+
+  const [querySignal, setQuery] = createSignal(tableQuery.where('a', 1));
+
+  const renderHookResult = useQueryWithZeroProvider(
+    'useQuery-deps-change-id',
+    querySignal,
+  );
+
+  const [rows, resultDetails] = renderHookResult.result;
+
+  const row0Log: unknown[] = [];
+  const row1Log: unknown[] = [];
+  const resultDetailsLog: unknown[] = [];
+  const resetLogs = () => {
+    row0Log.length = 0;
+    row1Log.length = 0;
+    resultDetailsLog.length = 0;
+  };
+
+  runWithOwner(renderHookResult.owner, () => {
+    createEffect(() => {
+      row0Log.push(rows()[0]);
+    });
+    createEffect(() => {
+      row1Log.push(rows()[1]);
+    });
+    createEffect(() => {
+      const details = resultDetails();
+      resultDetailsLog.push({...details});
+    });
+  });
+
+  expect(row0Log).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ]);
+  expect(row1Log).toEqual([undefined]);
+  expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
+  resetLogs();
+
+  queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  await 1;
+
+  expect(row0Log).toEqual([]);
+  expect(row1Log).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'complete'}]);
+  resetLogs();
+
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  setQuery(tableQuery.where(({or, cmp}) => or(cmp('a', 1), cmp('a', 10))));
+  expect(row0Log).toEqual([]);
+  expect(row1Log).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
+  resetLogs();
+
+  queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  await 1;
+
+  expect(row0Log).toEqual([]);
+  expect(row1Log).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'complete'}]);
+  resetLogs();
+
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  setQuery(tableQuery.where(({or, cmp}) => or(cmp('a', 1), cmp('a', 2))));
+  expect(row0Log).toEqual([]);
+  expect(row1Log).toEqual([
+    {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
+  ]);
+  expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
+  resetLogs();
+
+  queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  await 1;
+
+  expect(row0Log).toEqual([]);
+  expect(row1Log).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'complete'}]);
+});
+
+test('useQuery query deps change, reconcile minimizes reactive updates, tree', async () => {
+  const issue = table('issue')
+    .columns({
+      id: string(),
+    })
+    .primaryKey('id');
+  const comment = table('comment')
+    .columns({
+      id: string(),
+      issueID: string(),
+    })
+    .primaryKey('id');
+  const schema = createSchema({
+    tables: [issue, comment],
+    relationships: [
+      relationships(issue, connect => ({
+        comments: connect.many({
+          sourceField: ['id'],
+          destField: ['issueID'],
+          destSchema: comment,
+        }),
+      })),
+    ],
+  });
+  const issueSource = new MemorySource(
+    schema.tables.issue.name,
+    schema.tables.issue.columns,
+    schema.tables.issue.primaryKey,
+  );
+  const commentSource = new MemorySource(
+    schema.tables.comment.name,
+    schema.tables.comment.columns,
+    schema.tables.comment.primaryKey,
+  );
+  issueSource.push({row: {id: 'i1'}, type: 'add'});
+  issueSource.push({row: {id: 'i2'}, type: 'add'});
+  commentSource.push({row: {id: 'c1', issueID: 'i1'}, type: 'add'});
+  commentSource.push({row: {id: 'c2', issueID: 'i1'}, type: 'add'});
+
+  const queryDelegate = new QueryDelegateImpl({
+    sources: {issue: issueSource, comment: commentSource},
+  });
+  const issueQuery = newQuery(queryDelegate, schema, 'issue');
+
+  const [querySignal, setQuery] = createSignal(
+    issueQuery.where('id', 'i1').related('comments'),
+  );
+
+  const renderHookResult = useQueryWithZeroProvider(
+    'useQuery-deps-change-id',
+    querySignal,
+  );
+
+  const [rows, resultDetails] = renderHookResult.result;
+
+  expect(rows()).toMatchInlineSnapshot(`
+    [
+      {
+        "comments": [
+          {
+            "id": "c1",
+            "issueID": "i1",
+            Symbol(rc): 1,
+            Symbol(id): ""c1"",
+          },
+          {
+            "id": "c2",
+            "issueID": "i1",
+            Symbol(rc): 1,
+            Symbol(id): ""c2"",
+          },
+        ],
+        "id": "i1",
+        Symbol(rc): 1,
+        Symbol(id): ""i1"",
+      },
+    ]
+  `);
+
+  const row0IDLog: unknown[] = [];
+  const row1IDLog: unknown[] = [];
+  const row00IDLog: unknown[] = [];
+  const row01IDLog: unknown[] = [];
+  const resultDetailsLog: unknown[] = [];
+  const resetLogs = () => {
+    row0IDLog.length = 0;
+    row1IDLog.length = 0;
+    row00IDLog.length = 0;
+    row01IDLog.length = 0;
+    resultDetailsLog.length = 0;
+  };
+
+  runWithOwner(renderHookResult.owner, () => {
+    createEffect(() => {
+      row0IDLog.push(rows()[0]?.id);
+    });
+    createEffect(() => {
+      row1IDLog.push(rows()[1]?.id);
+    });
+    createEffect(() => {
+      row00IDLog.push(rows()[0]?.['comments']?.[0]?.id);
+    });
+    createEffect(() => {
+      row01IDLog.push(rows()[0]?.['comments']?.[1]?.id);
+    });
+    createEffect(() => {
+      const details = resultDetails();
+      resultDetailsLog.push({...details});
+    });
+  });
+
+  expect(row0IDLog).toEqual(['i1']);
+  expect(row1IDLog).toEqual([undefined]);
+  expect(row00IDLog).toEqual(['c1']);
+  expect(row01IDLog).toEqual(['c2']);
+  expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
+  resetLogs();
+
+  queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  await 1;
+
+  expect(row0IDLog).toEqual([]);
+  expect(row1IDLog).toEqual([]);
+  expect(row00IDLog).toEqual([]);
+  expect(row01IDLog).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'complete'}]);
+  resetLogs();
+
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  setQuery(
+    issueQuery
+      .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i10')))
+      .related('comments'),
+  );
+  expect(rows()).toMatchInlineSnapshot(`
+    [
+      {
+        "comments": [
+          {
+            "id": "c1",
+            "issueID": "i1",
+            Symbol(rc): 1,
+            Symbol(id): ""c1"",
+          },
+          {
+            "id": "c2",
+            "issueID": "i1",
+            Symbol(rc): 1,
+            Symbol(id): ""c2"",
+          },
+        ],
+        "id": "i1",
+        Symbol(rc): 1,
+        Symbol(id): ""i1"",
+      },
+    ]
+  `);
+
+  expect(row0IDLog).toEqual([]);
+  expect(row1IDLog).toEqual([]);
+  expect(row00IDLog).toEqual([]);
+  expect(row01IDLog).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
+  resetLogs();
+
+  queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  await 1;
+
+  expect(row0IDLog).toEqual([]);
+  expect(row1IDLog).toEqual([]);
+  expect(row00IDLog).toEqual([]);
+  expect(row01IDLog).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'complete'}]);
+  resetLogs();
+
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  setQuery(
+    issueQuery
+      .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
+      .related('comments'),
+  );
+  expect(rows()).toMatchInlineSnapshot(`
+    [
+      {
+        "comments": [
+          {
+            "id": "c1",
+            "issueID": "i1",
+            Symbol(rc): 1,
+            Symbol(id): ""c1"",
+          },
+          {
+            "id": "c2",
+            "issueID": "i1",
+            Symbol(rc): 1,
+            Symbol(id): ""c2"",
+          },
+        ],
+        "id": "i1",
+        Symbol(rc): 1,
+        Symbol(id): ""i1"",
+      },
+      {
+        "comments": [],
+        "id": "i2",
+        Symbol(rc): 1,
+        Symbol(id): ""i2"",
+      },
+    ]
+  `);
+  expect(row0IDLog).toEqual([]);
+  expect(row1IDLog).toEqual(['i2']);
+  expect(row00IDLog).toEqual([]);
+  expect(row01IDLog).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
+  resetLogs();
+
+  queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  await 1;
+
+  expect(row0IDLog).toEqual([]);
+  expect(row1IDLog).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'complete'}]);
+  resetLogs();
+
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  setQuery(
+    issueQuery
+      .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
+      .related('comments', q => q.where('id', 'c1')),
+  );
+  expect(rows()).toMatchInlineSnapshot(`
+    [
+      {
+        "comments": [
+          {
+            "id": "c1",
+            "issueID": "i1",
+            Symbol(rc): 1,
+            Symbol(id): ""c1"",
+          },
+        ],
+        "id": "i1",
+        Symbol(rc): 1,
+        Symbol(id): ""i1"",
+      },
+      {
+        "comments": [],
+        "id": "i2",
+        Symbol(rc): 1,
+        Symbol(id): ""i2"",
+      },
+    ]
+  `);
+  expect(row0IDLog).toEqual([]);
+  expect(row1IDLog).toEqual([]);
+  expect(row00IDLog).toEqual([]);
+  expect(row01IDLog).toEqual([undefined]);
+  expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
+  resetLogs();
+
+  queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  await 1;
+
+  expect(row0IDLog).toEqual([]);
+  expect(row1IDLog).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'complete'}]);
+
+  resetLogs();
+
+  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  setQuery(
+    issueQuery
+      .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
+      .related('comments', q => q.where('id', 'c2')),
+  );
+  expect(rows()).toMatchInlineSnapshot(`
+    [
+      {
+        "comments": [
+          {
+            "id": "c2",
+            "issueID": "i1",
+            Symbol(rc): 1,
+            Symbol(id): ""c2"",
+          },
+        ],
+        "id": "i1",
+        Symbol(rc): 1,
+        Symbol(id): ""i1"",
+      },
+      {
+        "comments": [],
+        "id": "i2",
+        Symbol(rc): 1,
+        Symbol(id): ""i2"",
+      },
+    ]
+  `);
+  expect(row0IDLog).toEqual([]);
+  expect(row1IDLog).toEqual([]);
+  expect(row00IDLog).toEqual(['c2']);
+  expect(row01IDLog).toEqual([]);
+  expect(resultDetailsLog).toEqual([{type: 'unknown'}]);
+  resetLogs();
+
+  queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  await 1;
+
+  expect(row0IDLog).toEqual([]);
+  expect(row1IDLog).toEqual([]);
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
 });
 
@@ -210,14 +609,20 @@ test('useQuery query deps change testEffect', () => {
   return testEffect(done =>
     createEffect((run: number = 0) => {
       if (run === 0) {
-        expect(rows()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
+        expect(rows()).toEqual([
+          {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+        ]);
         ms.push({type: 'edit', oldRow: {a: 1, b: 'a'}, row: {a: 1, b: 'a2'}});
         queryDelegate.commit();
       } else if (run === 1) {
-        expect(rows()).toEqual([{a: 1, b: 'a2', [refCountSymbol]: 1}]);
+        expect(rows()).toEqual([
+          {a: 1, b: 'a2', [refCountSymbol]: 1, [idSymbol]: '1'},
+        ]);
         setA(2);
       } else if (run === 2) {
-        expect(rows()).toEqual([{a: 2, b: 'b', [refCountSymbol]: 1}]);
+        expect(rows()).toEqual([
+          {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
+        ]);
         done();
       }
       return run + 1;
@@ -238,7 +643,9 @@ test('useQuery ttl dep changed', () => {
     result: [rows],
   } = useQueryWithZeroProvider(clientID, querySignal, options);
 
-  expect(rows()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
+  expect(rows()).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ]);
 
   expect(materializeSpy).toHaveBeenCalledTimes(1);
 
@@ -267,7 +674,9 @@ test('useQuery view disposed when owner cleaned up', () => {
     cleanup,
   } = useQueryWithZeroProvider(clientID, querySignal);
 
-  expect(rows()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
+  expect(rows()).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ]);
 
   expect(materializeSpy).toHaveBeenCalledTimes(1);
 
@@ -295,7 +704,9 @@ test('useQuery view disposed when zero instance changes, new view created', () =
     result: [rows],
   } = useQueryWithZeroProvider(zero, querySignal);
 
-  expect(rows()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
+  expect(rows()).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ]);
 
   expect(materializeSpy).toHaveBeenCalledTimes(1);
 
@@ -334,7 +745,9 @@ test('useQuery view disposed when query changes and new view is created', () => 
     cleanup,
   } = useQueryWithZeroProvider(clientID, querySignal);
 
-  expect(rows()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
+  expect(rows()).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ]);
 
   expect(querySpies[0]).toHaveBeenCalledTimes(1);
   expect(querySpies[1]).toHaveBeenCalledTimes(0);
@@ -393,7 +806,9 @@ test('useQuery when ZeroProvider is used, view is reused if query instance chang
     cleanup,
   } = useQueryWithZeroProvider(clientID, querySignal);
 
-  expect(rows()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
+  expect(rows()).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ]);
 
   expect(querySpies[0]).toHaveBeenCalledTimes(1);
   expect(querySpies[1]).toHaveBeenCalledTimes(0);
@@ -429,7 +844,9 @@ test('useQuery when ZeroProvider is not-used, view is not-reused if query instan
     initialProps: [querySignal],
   });
 
-  expect(rows()).toEqual([{a: 1, b: 'a', [refCountSymbol]: 1}]);
+  expect(rows()).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ]);
 
   expect(querySpies[0]).toHaveBeenCalledTimes(1);
   expect(querySpies[1]).toHaveBeenCalledTimes(0);
