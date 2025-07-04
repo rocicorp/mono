@@ -252,29 +252,35 @@ export function applyChange(
           );
           assert(oldFound, 'old node does not exist');
           const oldEntry = view[oldPos];
-          oldEntry[refCountSymbol]--;
-          if (oldEntry[refCountSymbol] === 0) {
-            view.splice(oldPos, 1);
-          }
-
           const {pos, found} = binarySearch(
             view,
             change.node.row,
             schema.compareRows,
           );
-          let entryToEdit;
-          if (found) {
-            entryToEdit = view[pos];
+          if (oldPos === pos || oldPos + 1 === pos) {
+            applyEdit(oldEntry, change, schema, withIDs);
           } else {
-            view.splice(pos, 0, oldEntry);
-            entryToEdit = oldEntry;
-            if (oldEntry[refCountSymbol] > 0) {
-              const oldEntryCopy = {...oldEntry};
-              view[oldPos] = oldEntryCopy;
+            oldEntry[refCountSymbol]--;
+            let adjustedPos = pos;
+            if (oldEntry[refCountSymbol] === 0) {
+              view.splice(oldPos, 1);
+              adjustedPos = oldPos < pos ? pos - 1 : pos;
             }
+
+            let entryToEdit;
+            if (found) {
+              entryToEdit = view[adjustedPos];
+            } else {
+              view.splice(adjustedPos, 0, oldEntry);
+              entryToEdit = oldEntry;
+              if (oldEntry[refCountSymbol] > 0) {
+                const oldEntryCopy = {...oldEntry};
+                view[oldPos] = oldEntryCopy;
+              }
+            }
+            entryToEdit[refCountSymbol]++;
+            applyEdit(entryToEdit, change, schema, withIDs);
           }
-          entryToEdit[refCountSymbol]++;
-          applyEdit(entryToEdit, change, schema, withIDs);
         } else {
           const {pos, found} = binarySearch(
             view,
