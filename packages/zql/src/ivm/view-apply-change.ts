@@ -257,7 +257,10 @@ export function applyChange(
             change.node.row,
             schema.compareRows,
           );
-          if (oldPos === pos || oldPos + 1 === pos) {
+          if (
+            oldEntry[refCountSymbol] === 1 &&
+            (oldPos === pos || oldPos + 1 === pos)
+          ) {
             applyEdit(oldEntry, change, schema, withIDs);
           } else {
             oldEntry[refCountSymbol]--;
