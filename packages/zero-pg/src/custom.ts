@@ -156,29 +156,72 @@ export function makeSchemaCRUD<S extends Schema>(
     ) as SchemaCRUD<S>;
 }
 
-function removeUndefined<T extends Record<string, unknown>>(value: T): T {
-  const valueWithoutUndefined: Record<string, unknown> = {};
+/**
+ * If the column is not provided and has a server default function,
+ * we override the value with the result of the default function.
+ */
+function addDefaultToOptionalFields<T extends Record<string, unknown>>({
+  value,
+  schema,
+  type,
+}: {
+  value: T;
+  schema: TableSchema;
+  type?: 'insert' | 'update';
+}): T {
+  const rv: Record<string, unknown> = {};
+
   for (const [key, val] of Object.entries(value)) {
     if (val !== undefined) {
-      valueWithoutUndefined[key] = val;
+      rv[key] = val;
     }
   }
-  return valueWithoutUndefined as T;
+
+  if (type) {
+    for (const [key, colSchema] of Object.entries(schema.columns)) {
+      // if the column was not explicitly provided, we add the default
+      // or if the value is explicitly undefined, we add the default
+      if (!(key in value) || value[key] === undefined) {
+        const defaultConfig = colSchema?.defaultConfig;
+
+        if (
+          type === 'insert' &&
+          typeof defaultConfig?.insert?.server === 'function'
+        ) {
+          rv[key] = defaultConfig.insert.server();
+        } else if (
+          type === 'update' &&
+          typeof defaultConfig?.update?.server === 'function'
+        ) {
+          rv[key] = defaultConfig.update.server();
+        }
+      }
+    }
+  }
+
+  return rv as T;
 }
 
 function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
   return {
     async insert(this: WithHiddenTxAndSchema, value) {
-      value = removeUndefined(value);
+      const insertWithDefaults = addDefaultToOptionalFields({
+        value,
+        schema,
+        type: 'insert',
+      });
       const serverTableSchema = this[serverSchemaSymbol][serverName(schema)];
 
-      const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
+      const targetedColumns = origAndServerNamesFor(
+        Object.keys(insertWithDefaults),
+        schema,
+      );
       const stmt = formatPgInternalConvert(
         sql`INSERT INTO ${sql.ident(serverName(schema))} (${sql.join(
           targetedColumns.map(([, serverName]) => sql.ident(serverName)),
           ',',
         )}) VALUES (${sql.join(
-          Object.entries(value).map(([col, v]) =>
+          Object.entries(insertWithDefaults).map(([col, v]) =>
             sqlInsertValue(v, serverTableSchema[serverNameFor(col, schema)]),
           ),
           ', ',
@@ -188,9 +231,24 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       await tx.query(stmt.text, stmt.values);
     },
     async upsert(this: WithHiddenTxAndSchema, value) {
-      value = removeUndefined(value);
+      // we get both the insert and update defaults because we don't know if
+      // the row already exists in the database
+      const insertWithDefaults = addDefaultToOptionalFields({
+        value,
+        schema,
+        type: 'insert',
+      });
+      const updateWithDefaults = addDefaultToOptionalFields({
+        value,
+        schema,
+        type: 'update',
+      });
+
       const serverTableSchema = this[serverSchemaSymbol][serverName(schema)];
-      const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
+      const targetedColumns = origAndServerNamesFor(
+        Object.keys(insertWithDefaults),
+        schema,
+      );
       const primaryKeyColumns = origAndServerNamesFor(
         schema.primaryKey,
         schema,
@@ -200,7 +258,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
           targetedColumns.map(([, serverName]) => sql.ident(serverName)),
           ',',
         )}) VALUES (${sql.join(
-          Object.entries(value).map(([col, val]) =>
+          Object.entries(insertWithDefaults).map(([col, val]) =>
             sqlInsertValue(val, serverTableSchema[serverNameFor(col, schema)]),
           ),
           ', ',
@@ -208,7 +266,7 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
           primaryKeyColumns.map(([, serverName]) => sql.ident(serverName)),
           ', ',
         )}) DO UPDATE SET ${sql.join(
-          Object.entries(value).map(
+          Object.entries(updateWithDefaults).map(
             ([col, val]) =>
               sql`${sql.ident(
                 schema.columns[col].serverName ?? col,
@@ -221,28 +279,38 @@ function makeTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       await tx.query(stmt.text, stmt.values);
     },
     async update(this: WithHiddenTxAndSchema, value) {
-      value = removeUndefined(value);
+      const updateWithDefaults = addDefaultToOptionalFields({
+        value,
+        schema,
+        type: 'update',
+      });
       const serverTableSchema = this[serverSchemaSymbol][serverName(schema)];
-      const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
+      const targetedColumns = origAndServerNamesFor(
+        Object.keys(updateWithDefaults),
+        schema,
+      );
       const stmt = formatPgInternalConvert(
         sql`UPDATE ${sql.ident(serverName(schema))} SET ${sql.join(
           targetedColumns.map(
             ([origName, serverName]) =>
-              sql`${sql.ident(serverName)} = ${sqlInsertValue(value[origName], serverTableSchema[serverName])}`,
+              sql`${sql.ident(serverName)} = ${sqlInsertValue(updateWithDefaults[origName], serverTableSchema[serverName])}`,
           ),
           ', ',
-        )} WHERE ${primaryKeyClause(schema, serverTableSchema, value)}`,
+        )} WHERE ${primaryKeyClause(schema, serverTableSchema, updateWithDefaults)}`,
       );
       const tx = this[dbTxSymbol];
       await tx.query(stmt.text, stmt.values);
     },
     async delete(this: WithHiddenTxAndSchema, value) {
-      value = removeUndefined(value);
+      const deleteWithDefaults = addDefaultToOptionalFields({
+        value,
+        schema,
+      });
       const serverTableSchema = this[serverSchemaSymbol][serverName(schema)];
       const stmt = formatPgInternalConvert(
         sql`DELETE FROM ${sql.ident(
           serverName(schema),
-        )} WHERE ${primaryKeyClause(schema, serverTableSchema, value)}`,
+        )} WHERE ${primaryKeyClause(schema, serverTableSchema, deleteWithDefaults)}`,
       );
       const tx = this[dbTxSymbol];
       await tx.query(stmt.text, stmt.values);

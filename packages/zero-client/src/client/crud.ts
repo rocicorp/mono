@@ -1,4 +1,7 @@
-import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
+import type {
+  ReadonlyJSONObject,
+  ReadonlyJSONValue,
+} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
@@ -29,18 +32,28 @@ import type {
  */
 export type TableMutator<S extends TableSchema> = {
   /**
-   * Writes a row if a row with the same primary key doesn't already exists.
-   * Non-primary-key fields that are 'optional' can be omitted or set to
+   * Writes a row if a row with the same primary key doesn't already exist.
+   *
+   * Non-primary-key fields that are 'nullable' can be omitted or set to
    * `undefined`. Such fields will be assigned the value `null` optimistically
    * and then the default value as defined by the server.
+   *
+   * If there is a `default` function defined for a field, and no value is
+   * provided, it will be called to generate the value for that field.
    */
   insert: (value: InsertValue<S>) => Promise<void>;
 
   /**
    * Writes a row unconditionally, overwriting any existing row with the same
-   * primary key. Non-primary-key fields that are 'optional' can be omitted or
+   * primary key.
+   *
+   * Non-primary-key fields that are 'nullable' can be omitted or
    * set to `undefined`. Such fields will be assigned the value `null`
    * optimistically and then the default value as defined by the server.
+   *
+   * If there is a `default` function defined for a field, and
+   * no value is provided, then it will be called to generate the value for
+   * the field, depending on if the primary key already exists.
    */
   upsert: (value: UpsertValue<S>) => Promise<void>;
 
@@ -48,6 +61,9 @@ export type TableMutator<S extends TableSchema> = {
    * Updates a row with the same primary key. If no such row exists, this
    * function does nothing. All non-primary-key fields can be omitted or set to
    * `undefined`. Such fields will be left unchanged from previous value.
+   *
+   * If there is a `default` function defined for the field, and no value is
+   * provided, it will be called to generate the value for that field.
    */
   update: (value: UpdateValue<S>) => Promise<void>;
 
@@ -153,7 +169,7 @@ function makeEntityCRUDMutate<S extends TableSchema>(
 }
 
 /**
- * Creates the `{inesrt, upsert, update, delete}` object for use inside a
+ * Creates the `{insert, upsert, update, delete}` object for use inside a
  * batch.
  */
 export function makeBatchCRUDMutate<S extends TableSchema>(
@@ -245,16 +261,42 @@ export function makeCRUDMutator(schema: Schema): CRUDMutator {
   };
 }
 
-function defaultOptionalFieldsToNull(
-  schema: TableSchema,
-  value: ReadonlyJSONObject,
-): ReadonlyJSONObject {
-  let rv = value;
+function addDefaultToOptionalFields({
+  schema,
+  value,
+  operation,
+}: {
+  schema: TableSchema;
+  value: ReadonlyJSONObject;
+  operation: 'insert' | 'update';
+}): ReadonlyJSONObject {
+  const rv = {...value};
+
   for (const name in schema.columns) {
-    if (rv[name] === undefined) {
-      rv = {...rv, [name]: null};
+    // only apply overrides if the column was not explicitly provided
+    if (value[name] === undefined) {
+      let override: ReadonlyJSONValue | null = null;
+
+      const defaultConfig = schema.columns[name]?.defaultConfig;
+
+      if (
+        operation === 'insert' &&
+        defaultConfig?.insert?.client &&
+        typeof defaultConfig.insert.client === 'function'
+      ) {
+        override = defaultConfig.insert.client() as ReadonlyJSONValue;
+      } else if (
+        operation === 'update' &&
+        defaultConfig?.update?.client &&
+        typeof defaultConfig.update.client === 'function'
+      ) {
+        override = defaultConfig.update.client() as ReadonlyJSONValue;
+      }
+
+      rv[name] = override;
     }
   }
+
   return rv;
 }
 
@@ -264,17 +306,18 @@ export async function insertImpl(
   schema: Schema,
   ivmBranch: IVMSourceBranch | undefined,
 ): Promise<void> {
+  const value = addDefaultToOptionalFields({
+    schema: schema.tables[arg.tableName],
+    value: arg.value,
+    operation: 'insert',
+  });
   const key = toPrimaryKeyString(
     arg.tableName,
     schema.tables[arg.tableName].primaryKey,
-    arg.value,
+    value,
   );
   if (!(await tx.has(key))) {
-    const val = defaultOptionalFieldsToNull(
-      schema.tables[arg.tableName],
-      arg.value,
-    );
-    await tx.set(key, val);
+    await tx.set(key, value);
     if (ivmBranch) {
       must(ivmBranch.getSource(arg.tableName)).push({
         type: 'add',
@@ -290,16 +333,19 @@ export async function upsertImpl(
   schema: Schema,
   ivmBranch: IVMSourceBranch | undefined,
 ): Promise<void> {
+  const tableSchema = schema.tables[arg.tableName];
   const key = toPrimaryKeyString(
     arg.tableName,
-    schema.tables[arg.tableName].primaryKey,
+    tableSchema.primaryKey,
     arg.value,
   );
-  const val = defaultOptionalFieldsToNull(
-    schema.tables[arg.tableName],
-    arg.value,
-  );
-  await tx.set(key, val);
+  const prev = await tx.get(key);
+  const value = addDefaultToOptionalFields({
+    schema: tableSchema,
+    value: arg.value,
+    operation: prev === undefined ? 'insert' : 'update',
+  });
+  await tx.set(key, value);
   if (ivmBranch) {
     must(ivmBranch.getSource(arg.tableName)).push({
       type: 'set',
@@ -324,7 +370,19 @@ export async function updateImpl(
     return;
   }
   const update = arg.value;
+  const defaults = addDefaultToOptionalFields({
+    schema: schema.tables[arg.tableName],
+    value: update,
+    operation: 'update',
+  });
   const next = {...(prev as ReadonlyJSONObject)};
+  // we first update with the default values
+  for (const k in defaults) {
+    if (defaults[k] !== null) {
+      next[k] = defaults[k];
+    }
+  }
+  // then we update with the provided values
   for (const k in update) {
     if (update[k] !== undefined) {
       next[k] = update[k];

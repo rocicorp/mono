@@ -27,7 +27,6 @@ export function CommentComposer({
         id: nanoid(),
         issueID,
         body: currentBody,
-        created: Date.now(),
       });
       onDone?.();
       return;

@@ -39,6 +39,38 @@ test('building a schema', async () => {
   const user = table('user')
     .columns({
       id: string(),
+      createdAt: number().default({
+        insert: {
+          client: () => new Date().getTime(),
+          server: () => new Date().getTime(),
+        },
+      }),
+      updatedAt: number().default({
+        insert: {
+          client: () => new Date().getTime(),
+          server: () => new Date().getTime(),
+        },
+        update: {
+          client: () => new Date().getTime(),
+          server: () => new Date().getTime(),
+        },
+      }),
+      dbCreatedAt: number().default({
+        insert: {
+          client: () => new Date().getTime(),
+          server: 'db',
+        },
+      }),
+      dbUpdatedAt: number().default({
+        insert: {
+          client: () => new Date().getTime(),
+          server: 'db',
+        },
+        update: {
+          client: () => new Date().getTime(),
+          server: 'db',
+        },
+      }),
       name: string(),
       recruiterId: number(),
     })
@@ -49,6 +81,8 @@ test('building a schema', async () => {
       id: string(),
       title: string(),
       ownerId: number(),
+      optional: string().optional(),
+      nullable: string().nullable(),
     })
     .primaryKey('id');
 
@@ -127,16 +161,28 @@ test('building a schema', async () => {
   expectTypeOf<typeof r>().toEqualTypeOf<
     | {
         readonly id: string;
+        readonly createdAt: number;
+        readonly updatedAt: number;
+        readonly dbCreatedAt: number;
+        readonly dbUpdatedAt: number;
         readonly name: string;
         readonly recruiterId: number;
         readonly recruiter:
           | {
               readonly id: string;
+              readonly createdAt: number;
+              readonly updatedAt: number;
+              readonly dbCreatedAt: number;
+              readonly dbUpdatedAt: number;
               readonly name: string;
               readonly recruiterId: number;
               readonly recruiter:
                 | {
                     readonly id: string;
+                    readonly createdAt: number;
+                    readonly updatedAt: number;
+                    readonly dbCreatedAt: number;
+                    readonly dbUpdatedAt: number;
                     readonly name: string;
                     readonly recruiterId: number;
                   }
@@ -152,11 +198,19 @@ test('building a schema', async () => {
   expectTypeOf(await q.related('recruiter')).toEqualTypeOf<
     {
       readonly id: string;
+      readonly createdAt: number;
+      readonly updatedAt: number;
+      readonly dbCreatedAt: number;
+      readonly dbUpdatedAt: number;
       readonly name: string;
       readonly recruiterId: number;
       readonly recruiter:
         | {
             readonly id: string;
+            readonly createdAt: number;
+            readonly updatedAt: number;
+            readonly dbCreatedAt: number;
+            readonly dbUpdatedAt: number;
             readonly name: string;
             readonly recruiterId: number;
           }
@@ -168,11 +222,19 @@ test('building a schema', async () => {
   expectTypeOf(await q.related('recruiter', q => q)).toEqualTypeOf<
     {
       readonly id: string;
+      readonly createdAt: number;
+      readonly updatedAt: number;
+      readonly dbCreatedAt: number;
+      readonly dbUpdatedAt: number;
       readonly name: string;
       readonly recruiterId: number;
       readonly recruiter:
         | {
             readonly id: string;
+            readonly createdAt: number;
+            readonly updatedAt: number;
+            readonly dbCreatedAt: number;
+            readonly dbUpdatedAt: number;
             readonly name: string;
             readonly recruiterId: number;
           }
@@ -188,15 +250,23 @@ test('building a schema', async () => {
       readonly id: string;
       readonly title: string;
       readonly ownerId: number;
+      readonly optional: string | null;
+      readonly nullable: string | null;
       readonly owner:
         | {
             readonly id: string;
+            readonly createdAt: number;
+            readonly updatedAt: number;
+            readonly dbCreatedAt: number;
+            readonly dbUpdatedAt: number;
             readonly name: string;
             readonly recruiterId: number;
             readonly ownedIssues: readonly {
               readonly id: string;
               readonly title: string;
               readonly ownerId: number;
+              readonly optional: string | null;
+              readonly nullable: string | null;
             }[];
           }
         | undefined;
@@ -209,6 +279,8 @@ test('building a schema', async () => {
       readonly id: string;
       readonly title: string;
       readonly ownerId: number;
+      readonly optional: string | null;
+      readonly nullable: string | null;
       readonly labels: readonly {
         readonly id: number;
         readonly name: string;
@@ -226,6 +298,8 @@ test('building a schema', async () => {
         readonly id: string;
         readonly title: string;
         readonly ownerId: number;
+        readonly optional: string | null;
+        readonly nullable: string | null;
       }[];
     }[]
   >();
@@ -479,19 +553,19 @@ test('alternate db names', () => {
       "columns": {
         "id": {
           "customType": null,
-          "optional": false,
+          "nullable": false,
           "serverName": "user_id",
           "type": "string",
         },
         "name": {
           "customType": null,
-          "optional": false,
+          "nullable": false,
           "serverName": "user_name",
           "type": "string",
         },
         "recruiterId": {
           "customType": null,
-          "optional": false,
+          "nullable": false,
           "serverName": "user_recruiter_id",
           "type": "number",
         },
@@ -518,19 +592,19 @@ test('alternate db names', () => {
       "columns": {
         "bar": {
           "customType": null,
-          "optional": false,
+          "nullable": false,
           "serverName": "baz",
           "type": "string",
         },
         "baz": {
           "customType": null,
-          "optional": false,
+          "nullable": false,
           "serverName": "boo",
           "type": "string",
         },
         "boo": {
           "customType": null,
-          "optional": false,
+          "nullable": false,
           "serverName": "bar",
           "type": "number",
         },
@@ -584,7 +658,7 @@ test('clientSchemaFrom', () => {
           title: string(),
           description: string(),
           closed: boolean(),
-          ownerId: string().from('owner_id').optional(),
+          ownerId: string().from('owner_id').nullable(),
         })
         .primaryKey('id'),
       table('comment')
@@ -705,4 +779,94 @@ test('array column', () => {
       "hash": "qeez7tx1u29h"
     }"
   `);
+});
+
+test('defaults', () => {
+  const schemaWithoutOn = createSchema({
+    tables: [
+      table('issue')
+        .from('issues')
+        .columns({
+          id: string(),
+          createdAt: number(),
+          updatedAt: number(),
+          dbCreatedAt: number(),
+          dbUpdatedAt: number(),
+        })
+        .primaryKey('id'),
+    ],
+  });
+
+  const schema = createSchema({
+    tables: [
+      table('issue')
+        .from('issues')
+        .columns({
+          id: string(),
+          createdAt: number().default({
+            insert: {
+              client: () => new Date().getTime(),
+              server: () => new Date().getTime(),
+            },
+          }),
+          updatedAt: number().default({
+            insert: {
+              client: () => new Date().getTime(),
+              server: () => new Date().getTime(),
+            },
+            update: {
+              client: () => new Date().getTime(),
+              server: () => new Date().getTime(),
+            },
+          }),
+          dbCreatedAt: number().default({
+            insert: {
+              client: () => new Date().getTime(),
+              server: 'db',
+            },
+          }),
+          dbUpdatedAt: number().default({
+            update: {
+              client: () => new Date().getTime(),
+              server: 'db',
+            },
+          }),
+        })
+        .primaryKey('id'),
+    ],
+  });
+
+  expect(stringify(clientSchemaFrom(schema))).toMatchInlineSnapshot(`
+    "{
+      "clientSchema": {
+        "tables": {
+          "issues": {
+            "columns": {
+              "createdAt": {
+                "type": "number"
+              },
+              "dbCreatedAt": {
+                "type": "number"
+              },
+              "dbUpdatedAt": {
+                "type": "number"
+              },
+              "id": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      },
+      "hash": "insv3f5if348"
+    }"
+  `);
+
+  const hashWithoutOn = clientSchemaFrom(schemaWithoutOn).hash;
+  const hashWithOn = clientSchemaFrom(schema).hash;
+
+  expect(hashWithoutOn).toEqual(hashWithOn);
 });

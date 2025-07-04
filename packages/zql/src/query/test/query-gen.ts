@@ -168,13 +168,13 @@ function augmentQuery(
           ? selectRandom(rng, tableData)[columnName]
           : detailedType
             ? getDataForType(faker, rng, {
-                optional: !!column.optional,
+                nullable: !!column.nullable,
                 pgType: detailedType,
                 isEnum: false,
                 isPrimaryKey: false,
                 name: columnName,
               })
-            : randomValueForType(rng, faker, column.type, column.optional);
+            : randomValueForType(rng, faker, column.type, column.nullable);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       query = query.where(columnName as any, operator, value);
       generations.push(query);

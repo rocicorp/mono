@@ -10,7 +10,7 @@ test('Key name does not matter', () => {
 
   expectTypeOf(schema.tables.bar).toEqualTypeOf<{
     name: 'bar';
-    columns: {id: {type: 'string'; optional: false; customType: string}};
+    columns: {id: {type: 'string'; nullable: false; customType: string}};
     primaryKey: ['id'];
   }>({} as never);
   // @ts-expect-error - no foo table

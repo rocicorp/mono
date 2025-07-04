@@ -29,8 +29,6 @@ export function createServerMutators(
           id,
           title,
           description,
-          created: Date.now(),
-          modified: Date.now(),
         });
         await notify(
           tx,
@@ -54,10 +52,7 @@ export function createServerMutators(
           ? oldIssue.assigneeID
           : undefined;
 
-        await mutators.issue.update(tx, {
-          ...args,
-          modified: Date.now(),
-        });
+        await mutators.issue.update(tx, args);
 
         await notify(
           tx,
@@ -112,10 +107,7 @@ export function createServerMutators(
       ...mutators.emoji,
 
       async addToIssue(tx, args: AddEmojiArgs) {
-        await mutators.emoji.addToIssue(tx, {
-          ...args,
-          created: Date.now(),
-        });
+        await mutators.emoji.addToIssue(tx, args);
         await notify(
           tx,
           authData,
@@ -129,10 +121,7 @@ export function createServerMutators(
       },
 
       async addToComment(tx, args: AddEmojiArgs) {
-        await mutators.emoji.addToComment(tx, {
-          ...args,
-          created: Date.now(),
-        });
+        await mutators.emoji.addToComment(tx, args);
 
         const comment = await tx.query.comment
           .where('id', args.subjectID)
@@ -160,7 +149,6 @@ export function createServerMutators(
           id,
           issueID,
           body,
-          created: Date.now(),
         });
         await notify(
           tx,
