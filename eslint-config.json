@@ -22,6 +22,8 @@
               "zero/*",
               "zero-cache/*",
               "zero-client/*",
+              "zero-expo/*",
+              "zero-op-sqlite/*",
               "zero-protocol/*",
               "zero-react/*",
               "zero-schema/*",
