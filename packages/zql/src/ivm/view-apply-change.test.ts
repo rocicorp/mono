@@ -1386,7 +1386,7 @@ describe('applyChange', () => {
             "id": "2",
             "name": "Greg",
             Symbol(rc): 1,
-            Symbol(id): ""1"",
+            Symbol(id): ""2"",
           },
         }
       `);
@@ -1433,7 +1433,7 @@ describe('applyChange', () => {
             "id": "1",
             "name": "Aaron",
             Symbol(rc): 2,
-            Symbol(id): ""2"",
+            Symbol(id): ""1"",
           },
         }
       `);
