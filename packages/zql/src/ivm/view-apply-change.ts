@@ -124,9 +124,8 @@ export function applyChange(
   const {singular, relationships: childFormats} = format;
   switch (change.type) {
     case 'add': {
-      let newEntry: RCEntry;
+      let newEntry: RCEntry | undefined;
 
-      let rc = 1;
       if (singular) {
         const oldEntry = parentEntry[relationship] as RCEntry | undefined;
         if (oldEntry !== undefined) {
@@ -135,19 +134,19 @@ export function applyChange(
             `Singular relationship '${relationship}' should not have multiple rows. You may need to declare this relationship with the \`many\` helper instead of the \`one\` helper in your schema.`,
           );
           // adding same again.
-          rc = oldEntry[refCountSymbol] + 1;
+          oldEntry[refCountSymbol]++;
+        } else {
+          newEntry = makeNewEntryWithRefCount(
+            change.node.row,
+            schema,
+            withIDs,
+            1,
+          );
+
+          (parentEntry as Writable<Entry>)[relationship] = newEntry;
         }
-
-        newEntry = makeNewEntryWithRefCount(
-          change.node.row,
-          schema,
-          withIDs,
-          rc,
-        );
-
-        (parentEntry as Writable<Entry>)[relationship] = newEntry;
       } else {
-        newEntry = makeNewEntryAndInsert(
+        newEntry = add(
           change.node.row,
           getChildEntryList(parentEntry, relationship),
           schema,
@@ -155,28 +154,32 @@ export function applyChange(
         );
       }
 
-      for (const [relationship, children] of Object.entries(
-        change.node.relationships,
-      )) {
-        // TODO: Is there a flag to make TypeScript complain that dictionary access might be undefined?
-        const childSchema = must(schema.relationships[relationship]);
-        const childFormat = childFormats[relationship];
-        if (childFormat === undefined) {
-          continue;
-        }
+      if (newEntry) {
+        for (const [relationship, children] of Object.entries(
+          change.node.relationships,
+        )) {
+          // TODO: Is there a flag to make TypeScript complain that dictionary access might be undefined?
+          const childSchema = must(schema.relationships[relationship]);
+          const childFormat = childFormats[relationship];
+          if (childFormat === undefined) {
+            continue;
+          }
 
-        const newView = childFormat.singular ? undefined : ([] as RCEntryList);
-        newEntry[relationship] = newView;
+          const newView = childFormat.singular
+            ? undefined
+            : ([] as RCEntryList);
+          newEntry[relationship] = newView;
 
-        for (const node of children()) {
-          applyChange(
-            newEntry,
-            {type: 'add', node},
-            childSchema,
-            relationship,
-            childFormat,
-            withIDs,
-          );
+          for (const node of children()) {
+            applyChange(
+              newEntry,
+              {type: 'add', node},
+              childSchema,
+              relationship,
+              childFormat,
+              withIDs,
+            );
+          }
         }
       }
       break;
@@ -302,27 +305,20 @@ function applyEdit(
   }
 }
 
-function makeNewEntryAndInsert(
-  newRow: Row,
+function add(
+  row: Row,
   view: RCEntryList,
   schema: SourceSchema,
   withIDs: boolean,
-): RCEntry {
-  const {pos, found} = binarySearch(view, newRow, schema.compareRows);
+): RCEntry | undefined {
+  const {pos, found} = binarySearch(view, row, schema.compareRows);
 
-  let deleteCount = 0;
-  let rc = 1;
   if (found) {
-    deleteCount = 1;
-    rc = view[pos][refCountSymbol];
-    view[pos][refCountSymbol] = rc - 1;
-    rc++;
+    view[pos][refCountSymbol]++;
+    return undefined;
   }
-
-  const newEntry = makeNewEntryWithRefCount(newRow, schema, withIDs, rc);
-
-  view.splice(pos, deleteCount, newEntry);
-
+  const newEntry = makeNewEntryWithRefCount(row, schema, withIDs, 1);
+  view.splice(pos, 0, newEntry);
   return newEntry;
 }
 
