@@ -18,9 +18,4 @@ export {
   type PostgresJSClient,
   type PostgresJSTransaction,
 } from './postgresjs-connection.ts';
-export {
-  PushProcessor,
-  type Database,
-  type TransactionProviderInput,
-  type TransactionProviderHooks,
-} from './push-processor.ts';
+export {PushProcessor} from './push-processor.ts';

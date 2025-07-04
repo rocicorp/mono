@@ -1,9 +1,4 @@
 import type {
-  Database,
-  TransactionProviderHooks,
-  TransactionProviderInput,
-} from './push-processor.ts';
-import type {
   DBConnection,
   DBTransaction,
   SchemaCRUD,
@@ -15,6 +10,11 @@ import {makeSchemaQuery} from './query.ts';
 import {makeSchemaCRUD, TransactionImpl} from './custom.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {makeServerTransaction} from './custom.ts';
+import type {
+  Database,
+  TransactionProviderHooks,
+  TransactionProviderInput,
+} from '../../zero-server/src/process-mutations.ts';
 
 /**
  * Implements a Database for use with PushProcessor that is backed by Postgres.

@@ -1,13 +1,13 @@
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {type AnyQuery} from '../../../zql/src/query/query-impl.ts';
-import * as v from '../../../shared/src/valita.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {type AnyQuery} from '../../zql/src/query/query-impl.ts';
+import * as v from '../../shared/src/valita.ts';
 import {
   transformRequestMessageSchema,
   type TransformResponseMessage,
-} from '../../../zero-protocol/src/custom-queries.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
-import {mapAST} from '../../../zero-protocol/src/ast.ts';
+} from '../../zero-protocol/src/custom-queries.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import {mapAST} from '../../zero-protocol/src/ast.ts';
 
 /**
  * Invokes the callback `cb` for each query in the request or JSON body.
