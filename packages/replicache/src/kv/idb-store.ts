@@ -1,15 +1,15 @@
-import {resolver} from '@rocicorp/resolver';
-import {assertNotNull} from '../../../shared/src/asserts.ts';
-import {mustGetBrowserGlobal} from '../../../shared/src/browser-env.ts';
-import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import { resolver } from '@rocicorp/resolver';
+import { assertNotNull } from '../../../shared/src/asserts.ts';
+import { mustGetBrowserGlobal } from '../../../shared/src/browser-env.ts';
+import { promiseVoid } from '../../../shared/src/resolved-promises.ts';
 import {
   type FrozenJSONValue,
   deepFreezeAllowUndefined,
 } from '../frozen-json.ts';
-import type {Read, Store, Write} from './store.ts';
-import {WriteImplBase, deleteSentinel} from './write-impl-base.ts';
+import type { Read, Store, Write } from './store.ts';
+import { WriteImplBase, deleteSentinel } from './write-impl-base.ts';
 
-const RELAXED = {durability: 'relaxed'} as const;
+const RELAXED = { durability: 'relaxed' } as const;
 const OBJECT_STORE = 'chunks';
 
 export class IDBStore implements Store {
@@ -45,7 +45,7 @@ export class IDBStore implements Store {
     // Tries to reopen an IndexedDB, and rejects if the database needs
     // upgrading (is missing for whatever reason).
     const reopenExistingDB = async (name: string): Promise<IDBDatabase> => {
-      const {promise, resolve, reject} = resolver<IDBDatabase>();
+      const { promise, resolve, reject } = resolver<IDBDatabase>();
       const req = indexedDB.open(name);
 
       req.onupgradeneeded = () => {
@@ -53,7 +53,7 @@ export class IDBStore implements Store {
         assertNotNull(tx);
         tx.abort();
         this.#idbDeleted = true;
-        reject(new IDBNotFoundError(`Replicache IndexedDB not found: ${name}`));
+        reject(new IDBNotFoundError(`Expected IndexedDB not found: ${name}. This likely means that the user deleted IndexedDB instances while the app was running. This is non-fatal. The app will continue running in memory until reload.`));
       };
 
       req.onsuccess = () => resolve(req.result);
@@ -88,7 +88,7 @@ export class IDBStore implements Store {
           this.#idbDeleted = true;
           mustGetBrowserGlobal('indexedDB').deleteDatabase(db.name);
           throw new IDBNotFoundError(
-            `Replicache IndexedDB ${db.name} missing object store. Deleting db.`,
+            `Expected IndexedDB ${db.name} missing object store. Deleting db. This is non-fatal, the app will continue working in memory until it is reloaded.`,
           );
         }
       }
