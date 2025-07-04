@@ -50,9 +50,8 @@ for (let i = 0; i < N; i++) {
 // fractional err exceeds maxErr.
 // Always fails if the total count differs.
 function compareQuantiles(td1: TDigest, td2: TDigest, maxErr: number) {
-  if (td1.count() !== td2.count()) {
-    throw new Error(`counts are not equal, ${td1.count()} vs ${td2.count()}`);
-  }
+  expect(td1.count()).toBe(td2.count());
+
   for (let q = 0.05; q < 1; q += 0.05) {
     if (
       Math.abs(td1.quantile(q) - td2.quantile(q)) / td1.quantile(q) >
@@ -194,7 +193,7 @@ describe('TDigest', () => {
         }
       }
       const got = td.quantile(quantile);
-      expect(got).toBeCloseTo(want);
+      expect(got).toBe(want);
     });
   });
 
@@ -222,7 +221,7 @@ describe('TDigest', () => {
         name: 'normal mean',
         cdf: 10,
         data: normalData,
-        want: 0.49996954414693867,
+        want: 0.5,
       },
       {
         name: 'normal high',
@@ -240,7 +239,7 @@ describe('TDigest', () => {
         name: 'uniform 50',
         cdf: 50,
         data: uniformData,
-        want: 0.499999,
+        want: 0.5,
       },
       {
         name: 'uniform min',
@@ -258,13 +257,13 @@ describe('TDigest', () => {
         name: 'uniform 10',
         cdf: 10,
         data: uniformData,
-        want: 0.099999,
+        want: 0.1,
       },
       {
         name: 'uniform 90',
         cdf: 90,
         data: uniformData,
-        want: 0.899999,
+        want: 0.9,
       },
     ];
     test.each(tests)('$name', ({data, cdf, want}) => {
@@ -288,11 +287,10 @@ describe('TDigest', () => {
     for (const x of normalData) {
       td.add(x, 1);
     }
-    if (q1 === undefined) {
-      throw new Error('q1 is undefined');
-    }
+    expect(q1).toBeDefined;
+
     const q2 = td.quantile(0.9);
-    expect(q2).toBeCloseTo(q1);
+    expect(q2).toBe(q1);
   });
 
   test('Odd inputs', () => {
