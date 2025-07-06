@@ -63,7 +63,7 @@ export function ZeroProvider<
     setZero(z);
 
     return () => {
-      void zero?.close();
+      void z.close();
       setZero(undefined);
     };
   }, [init, ...Object.values(props)]);
