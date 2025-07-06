@@ -5,6 +5,7 @@ import {
   assertNumber,
   assertString,
 } from '../../../shared/src/asserts.ts';
+import {binarySearch as binarySearchWithFunc} from '../../../shared/src/binary-search.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {joinIterables} from '../../../shared/src/iterables.ts';
 import {
@@ -12,7 +13,6 @@ import {
   type ReadonlyJSONValue,
   assertJSONValue,
 } from '../../../shared/src/json.ts';
-import {binarySearch as binarySearchWithFunc} from '../binary-search.ts';
 import {skipBTreeNodeAsserts} from '../config.ts';
 import type {IndexKey} from '../db/index.ts';
 import * as FormatVersion from '../format-version-enum.ts';

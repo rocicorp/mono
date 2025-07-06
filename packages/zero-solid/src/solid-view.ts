@@ -1,4 +1,4 @@
-import {produce, type SetStoreFunction} from 'solid-js/store';
+import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
 import {
   applyChange,
   type Change,
@@ -15,6 +15,7 @@ import {
   type ViewChange,
   type ViewFactory,
 } from '../../zero-client/src/mod.js';
+import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 
 export type QueryResultDetails = {
   readonly type: ResultType;
@@ -69,7 +70,12 @@ export class SolidView implements Output {
     );
 
     this.#setState = setState;
-    this.#setState([initialRoot, queryComplete === true ? COMPLETE : UNKNOWN]);
+    this.#setState(
+      reconcile([initialRoot, queryComplete === true ? COMPLETE : UNKNOWN], {
+        // solidjs's types want a string, but a symbol works
+        key: idSymbol as unknown as string,
+      }),
+    );
 
     if (isEmptyRoot(initialRoot)) {
       this.#builderRoot = this.#createEmptyRoot();
@@ -90,6 +96,13 @@ export class SolidView implements Output {
     const builderRoot = this.#builderRoot;
     if (builderRoot) {
       if (!isEmptyRoot(builderRoot)) {
+        this.#setState(
+          0,
+          reconcile(builderRoot, {
+            // solidjs's types want a string, but a symbol works
+            key: idSymbol as unknown as string,
+          }),
+        );
         this.#setState(prev => [builderRoot, prev[1]]);
         this.#builderRoot = undefined;
       }
@@ -138,7 +151,14 @@ export class SolidView implements Output {
   }
 
   #applyChangeToRoot(change: ViewChange, root: Entry) {
-    applyChange(root, change, this.#input.getSchema(), '', this.#format);
+    applyChange(
+      root,
+      change,
+      this.#input.getSchema(),
+      '',
+      this.#format,
+      true /* withIDs */,
+    );
   }
 
   #createEmptyRoot(): Entry {

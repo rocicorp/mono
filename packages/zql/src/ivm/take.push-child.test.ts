@@ -103,17 +103,20 @@ test('child change, parent is within bound', () => {
             "issueID": "i1",
             "text": "i1 c1 text",
             Symbol(rc): 1,
+            Symbol(id): "",
           },
           {
             "id": "c2",
             "issueID": "i1",
             "text": "i1 c2 text",
             Symbol(rc): 1,
+            Symbol(id): "",
           },
         ],
         "id": "i1",
         "text": "first issue",
         Symbol(rc): 1,
+        Symbol(id): "",
       },
       {
         "comments": [
@@ -122,11 +125,13 @@ test('child change, parent is within bound', () => {
             "issueID": "i2",
             "text": "i2 c3 text",
             Symbol(rc): 1,
+            Symbol(id): "",
           },
         ],
         "id": "i2",
         "text": "second issue",
         Symbol(rc): 1,
+        Symbol(id): "",
       },
     ]
   `);
@@ -214,23 +219,27 @@ test('child change, parent is after bound', () => {
             "issueID": "i1",
             "text": "i1 c1 text",
             Symbol(rc): 1,
+            Symbol(id): "",
           },
           {
             "id": "c2",
             "issueID": "i1",
             "text": "i1 c2 text",
             Symbol(rc): 1,
+            Symbol(id): "",
           },
         ],
         "id": "i1",
         "text": "first issue",
         Symbol(rc): 1,
+        Symbol(id): "",
       },
       {
         "comments": [],
         "id": "i2",
         "text": "second issue",
         Symbol(rc): 1,
+        Symbol(id): "",
       },
     ]
   `);

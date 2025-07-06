@@ -178,6 +178,7 @@ test('null compare', async () => {
         "owner_id": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
+        Symbol(id): "",
       },
       {
         "closed": false,
@@ -187,6 +188,7 @@ test('null compare', async () => {
         "owner_id": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
+        Symbol(id): "",
       },
     ]
   `);
