@@ -190,6 +190,7 @@ function makeSchemaQuery<S extends Schema>(
     () => emptyFunction,
     emptyFunction,
     emptyFunction,
+    emptyFunction,
     applyViewUpdates => applyViewUpdates(),
     slowMaterializeThreshold,
     assertValidRunOptions,

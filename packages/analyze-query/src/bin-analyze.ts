@@ -263,6 +263,7 @@ const host: QueryDelegate = {
   batchViewUpdates<T>(applyViewUpdates: () => T): T {
     return applyViewUpdates();
   },
+  flushQueryChanges() {},
   assertValidRunOptions() {},
   defaultQueryComplete: true,
 };
@@ -365,10 +366,9 @@ async function runHash(hash: string) {
     must(config.cvr.db, 'CVR DB must be provided when using the hash option'),
   );
 
-  const rows =
-    await cvrDB`select "clientAST", "internal" from ${cvrDB(upstreamSchema(getShardID(config)) + '/cvr')}."queries" where "queryHash" = ${must(
-      hash,
-    )} limit 1;`;
+  const rows = await cvrDB`select "clientAST", "internal" from ${cvrDB(
+    upstreamSchema(getShardID(config)) + '/cvr',
+  )}."queries" where "queryHash" = ${must(hash)} limit 1;`;
   await cvrDB.end();
 
   colorConsole.log('ZQL from Hash:');

@@ -56,6 +56,8 @@ export class QueryDelegateImpl implements QueryDelegate {
     this.callGot = callGot;
   }
 
+  flushQueryChanges() {}
+
   assertValidRunOptions(): void {}
 
   batchViewUpdates<T>(applyViewUpdates: () => T): T {
