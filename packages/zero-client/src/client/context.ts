@@ -24,6 +24,7 @@ export type AddCustomQuery = QueryManager['addCustom'];
 
 export type UpdateQuery = QueryManager['updateLegacy'];
 export type UpdateCustomQuery = QueryManager['updateCustom'];
+export type FlushQueryChanges = QueryManager['flushBatch'];
 
 /**
  * ZeroContext glues together zql and Replicache. It listens to changes in
@@ -40,6 +41,7 @@ export class ZeroContext implements QueryDelegate {
   readonly #addCustomQuery: AddCustomQuery;
   readonly #updateQuery: UpdateQuery;
   readonly #updateCustomQuery: UpdateCustomQuery;
+  readonly #flushQueryChanges: () => void;
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
@@ -60,6 +62,7 @@ export class ZeroContext implements QueryDelegate {
     addCustomQuery: AddCustomQuery,
     updateQuery: UpdateQuery,
     updateCustomQuery: UpdateCustomQuery,
+    flushQueryChanges: () => void,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
     slowMaterializeThreshold: number,
     assertValidRunOptions: (options?: RunOptions) => void,
@@ -73,6 +76,7 @@ export class ZeroContext implements QueryDelegate {
     this.#slowMaterializeThreshold = slowMaterializeThreshold;
     this.assertValidRunOptions = assertValidRunOptions;
     this.#addCustomQuery = addCustomQuery;
+    this.#flushQueryChanges = flushQueryChanges;
   }
 
   getSource(name: string): Source | undefined {
@@ -102,6 +106,10 @@ export class ZeroContext implements QueryDelegate {
 
   updateCustomQuery(customQueryID: CustomQueryID, ttl: TTL): void {
     this.#updateCustomQuery(customQueryID.name, customQueryID.args, ttl);
+  }
+
+  flushQueryChanges() {
+    this.#flushQueryChanges();
   }
 
   onQueryMaterialized(hash: string, ast: AST, duration: number): void {

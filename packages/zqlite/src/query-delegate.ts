@@ -79,6 +79,7 @@ export class QueryDelegateImpl implements QueryDelegate {
   }
   updateServerQuery() {}
   updateCustomQuery() {}
+  flushQueryChanges() {}
   onQueryMaterialized() {}
   onTransactionCommit(cb: CommitListener) {
     this.#commitObservers.add(cb);

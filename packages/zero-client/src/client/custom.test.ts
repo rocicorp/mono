@@ -504,8 +504,7 @@ describe('server results and keeping read queries', () => {
     const q = z.query.issue.limit(1).materialize();
     q.destroy();
 
-    // tick a time to be sure everything is collected
-    await new Promise(resolve => setTimeout(resolve, 0));
+    z.queryDelegate.flushQueryChanges();
 
     // query is not removed, only put.
     expect(filter(messages)).toMatchInlineSnapshot(`
@@ -524,6 +523,8 @@ describe('server results and keeping read queries', () => {
       ],
     });
 
+    z.queryDelegate.flushQueryChanges();
+
     // mutation is no longer outstanding, query is removed.
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
@@ -537,8 +538,8 @@ describe('server results and keeping read queries', () => {
     const close = z.mutate.issue.close({});
     await close;
     q2.destroy();
-    // tick a time to be sure everything is collected
-    await new Promise(resolve => setTimeout(resolve, 0));
+
+    z.queryDelegate.flushQueryChanges();
 
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
@@ -557,6 +558,8 @@ describe('server results and keeping read queries', () => {
         },
       ],
     });
+
+    z.queryDelegate.flushQueryChanges();
 
     expect(messages).toMatchInlineSnapshot(`
       [

@@ -52,7 +52,10 @@ export class QueryManager {
   readonly #recentQueries: Set<string> = new Set();
   readonly #gotQueries: Set<string> = new Set();
   readonly #mutationTracker: MutationTracker;
+  readonly #pendingQueryChanges: UpQueriesPatchOp[] = [];
+  readonly #queryChangeThrottleMs: number;
   #pendingRemovals: Array<() => void> = [];
+  #batchTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     mutationTracker: MutationTracker,
@@ -61,12 +64,14 @@ export class QueryManager {
     send: (change: ChangeDesiredQueriesMessage) => void,
     experimentalWatch: ReplicacheImpl['experimentalWatch'],
     recentQueriesMaxSize: number,
+    queryChangeThrottleMs: number,
   ) {
     this.#clientID = clientID;
     this.#clientToServer = clientToServer(tables);
     this.#recentQueriesMaxSize = recentQueriesMaxSize;
     this.#send = send;
     this.#mutationTracker = mutationTracker;
+    this.#queryChangeThrottleMs = queryChangeThrottleMs;
 
     this.#mutationTracker.onAllMutationsConfirmed(() => {
       if (this.#pendingRemovals.length === 0) {
@@ -234,21 +239,14 @@ export class QueryManager {
         ttl,
       };
       this.#queries.set(queryId, entry);
-      this.#send([
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [
-            {
-              op: 'put',
-              hash: queryId,
-              ast: normalized,
-              name,
-              args,
-              ttl: parseTTL(ttl),
-            },
-          ],
-        },
-      ]);
+      this.#queueQueryChange({
+        op: 'put',
+        hash: queryId,
+        ast: normalized,
+        name,
+        args,
+        ttl: parseTTL(ttl),
+      });
     } else {
       ++entry.count;
       this.#updateEntry(entry, queryId, ttl);
@@ -300,21 +298,44 @@ export class QueryManager {
     // we send a changeDesiredQueries message to the server to update the ttl.
     if (compareTTL(ttl, entry.ttl) > 0) {
       entry.ttl = ttl;
+      this.#queueQueryChange({
+        op: 'put',
+        hash,
+        ast: entry.normalized,
+        name: entry.name,
+        args: entry.args,
+        ttl: parseTTL(ttl),
+      });
+    }
+  }
+
+  #queueQueryChange(op: UpQueriesPatchOp) {
+    this.#pendingQueryChanges.push(op);
+    this.#scheduleBatch();
+  }
+
+  #scheduleBatch() {
+    if (this.#batchTimer === undefined) {
+      this.#batchTimer = setTimeout(
+        () => this.flushBatch(),
+        this.#queryChangeThrottleMs,
+      );
+    }
+  }
+
+  flushBatch() {
+    if (this.#batchTimer !== undefined) {
+      clearTimeout(this.#batchTimer);
+      this.#batchTimer = undefined;
+    }
+    if (this.#pendingQueryChanges.length > 0) {
       this.#send([
         'changeDesiredQueries',
         {
-          desiredQueriesPatch: [
-            {
-              op: 'put',
-              hash,
-              ast: entry.normalized,
-              name: entry.name,
-              args: entry.args,
-              ttl: parseTTL(ttl),
-            },
-          ],
+          desiredQueriesPatch: [...this.#pendingQueryChanges],
         },
       ]);
+      this.#pendingQueryChanges.length = 0;
     }
   }
 
@@ -331,12 +352,7 @@ export class QueryManager {
         assert(lruAstHash);
         this.#queries.delete(lruAstHash);
         this.#recentQueries.delete(lruAstHash);
-        this.#send([
-          'changeDesiredQueries',
-          {
-            desiredQueriesPatch: [{op: 'del', hash: lruAstHash}],
-          },
-        ]);
+        this.#queueQueryChange({op: 'del', hash: lruAstHash});
       }
     }
   }

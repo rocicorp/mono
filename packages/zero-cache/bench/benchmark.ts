@@ -81,6 +81,7 @@ export function bench(opts: Options) {
       return applyViewUpdates();
     },
     assertValidRunOptions() {},
+    flushQueryChanges() {},
     defaultQueryComplete: true,
   };
 

@@ -229,6 +229,14 @@ export interface ZeroOptions<
    * @deprecated Use ttl instead
    */
   maxRecentQueries?: number | undefined;
+
+  /**
+   * Changes to queries are sent to server in batches. This option controls
+   * the number of milliseconds to wait before sending the next batch.
+   *
+   * Defaults is 10.
+   */
+  queryChangeThrottleMs?: number | undefined;
 }
 
 /**

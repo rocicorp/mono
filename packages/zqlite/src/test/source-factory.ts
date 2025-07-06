@@ -187,6 +187,7 @@ export function newQueryDelegate(
       return applyViewUpdates();
     },
     assertValidRunOptions() {},
+    flushQueryChanges() {},
     defaultQueryComplete: true,
   };
 }

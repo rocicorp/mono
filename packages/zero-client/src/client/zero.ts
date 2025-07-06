@@ -216,6 +216,8 @@ const CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY = 6;
 
 const NULL_LAST_MUTATION_ID_SENT = {clientID: '', id: -1} as const;
 
+const DEFAULT_QUERY_CHANGE_THROTTLE_MS = 10;
+
 function convertOnUpdateNeededReason(
   reason: ReplicacheUpdateNeededReason,
 ): UpdateNeededReason {
@@ -566,6 +568,7 @@ export class Zero<
         this.#queryManager.addCustom(queryName, queryArgs, ttl, gotCallback),
       (ast, ttl) => this.#queryManager.updateLegacy(ast, ttl),
       (name, args, ttl) => this.#queryManager.updateCustom(name, args, ttl),
+      () => this.#queryManager.flushBatch(),
       batchViewUpdates,
       slowMaterializeThreshold,
       assertValidRunOptions,
@@ -674,6 +677,7 @@ export class Zero<
       msg => this.#send(msg),
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
+      options.queryChangeThrottleMs ?? DEFAULT_QUERY_CHANGE_THROTTLE_MS,
     );
     this.#clientToServer = clientToServer(schema.tables);
 

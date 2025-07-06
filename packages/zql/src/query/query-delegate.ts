@@ -35,6 +35,7 @@ export interface QueryDelegate extends BuilderDelegate {
   ): () => void;
   updateServerQuery(ast: AST, ttl: TTL): void;
   updateCustomQuery(customQueryID: CustomQueryID, ttl: TTL): void;
+  flushQueryChanges(): void;
   onTransactionCommit(cb: CommitListener): () => void;
   batchViewUpdates<T>(applyViewUpdates: () => T): T;
   onQueryMaterialized(hash: string, ast: AST, duration: number): void;

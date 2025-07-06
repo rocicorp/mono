@@ -539,6 +539,7 @@ beforeEach(() => {
       return applyViewUpdates();
     },
     assertValidRunOptions() {},
+    flushQueryChanges() {},
     defaultQueryComplete: true,
   };
 
