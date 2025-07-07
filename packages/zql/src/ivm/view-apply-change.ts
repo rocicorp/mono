@@ -16,7 +16,7 @@ export const idSymbol = Symbol('id');
 
 type MetaEntry = Writable<Entry> & {
   [refCountSymbol]: number;
-  [idSymbol]: string;
+  [idSymbol]?: string | undefined;
 };
 type MetaEntryList = MetaEntry[];
 
@@ -136,12 +136,7 @@ export function applyChange(
           // adding same again.
           oldEntry[refCountSymbol]++;
         } else {
-          newEntry = makeNewEntryWithRefCount(
-            change.node.row,
-            schema,
-            withIDs,
-            1,
-          );
+          newEntry = makeNewMetaEntry(change.node.row, schema, withIDs, 1);
 
           (parentEntry as Writable<Entry>)[relationship] = newEntry;
         }
@@ -341,7 +336,7 @@ function add(
     view[pos][refCountSymbol]++;
     return undefined;
   }
-  const newEntry = makeNewEntryWithRefCount(row, schema, withIDs, 1);
+  const newEntry = makeNewMetaEntry(row, schema, withIDs, 1);
   view.splice(pos, 0, newEntry);
   return newEntry;
 }
@@ -404,14 +399,16 @@ function getSingularEntry(parentEntry: Entry, relationship: string): MetaEntry {
   return e as MetaEntry;
 }
 
-function makeNewEntryWithRefCount(
+function makeNewMetaEntry(
   row: Row,
   schema: SourceSchema,
   withIDs: boolean,
   rc: number,
 ): MetaEntry {
-  const id = withIDs ? makeID(row, schema) : '';
-  return {...row, [refCountSymbol]: rc, [idSymbol]: id};
+  if (withIDs) {
+    return {...row, [refCountSymbol]: rc, [idSymbol]: makeID(row, schema)};
+  }
+  return {...row, [refCountSymbol]: rc};
 }
 function makeID(row: Row, schema: SourceSchema) {
   // optimization for case of non-compound primary key

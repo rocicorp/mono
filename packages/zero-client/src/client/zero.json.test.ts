@@ -45,14 +45,12 @@ test('we can create rows with json columns and query those rows', async () => {
       title: 'track 1',
       artists: ['artist 1', 'artist 2'],
       [refCountSymbol]: 1,
-      [idSymbol]: '',
     },
     {
       id: 'track-2',
       title: 'track 2',
       artists: ['artist 2', 'artist 3'],
       [refCountSymbol]: 1,
-      [idSymbol]: '',
     },
   ]);
 });
