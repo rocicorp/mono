@@ -605,9 +605,10 @@ export const zeroOptions = {
   enableUsageAnalytics: {
     type: v.boolean().default(true),
     desc: [
-      `Enable anonymous usage analytics telemetry. Set to false to opt out of`,
-      `telemetry collection. This helps us improve Zero Cache by collecting`,
-      `anonymous usage statistics.`,
+      `Set to false to opt out of telemetry collection. `,
+      `This helps us improve Zero Cache by collecting`,
+      `anonymous usage statistics. Setting the DO_NOT_TRACK environment variable`,
+      `will also disable telemetry collection.`,
     ],
   },
 };

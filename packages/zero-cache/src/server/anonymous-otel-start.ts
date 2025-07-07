@@ -298,7 +298,8 @@ class AnonymousTelemetryManager {
   #getPlatform(): string {
     if (process.env.FLY_APP_NAME || process.env.FLY_REGION) return 'fly.io';
     if (
-      process.env.AWS_LAMBDA_FUNCTION_NAME ||
+      process.env.ECS_CONTAINER_METADATA_URI_V4 ||
+      process.env.ECS_CONTAINER_METADATA_URI ||
       process.env.AWS_REGION ||
       process.env.AWS_EXECUTION_ENV
     )
@@ -306,6 +307,12 @@ class AnonymousTelemetryManager {
     if (process.env.RAILWAY_ENV || process.env.RAILWAY_STATIC_URL)
       return 'railway';
     if (process.env.RENDER || process.env.RENDER_SERVICE_ID) return 'render';
+    if (
+      process.env.GCP_PROJECT ||
+      process.env.GCLOUD_PROJECT ||
+      process.env.GOOGLE_CLOUD_PROJECT
+    )
+      return 'gcp';
     return 'unknown';
   }
 
