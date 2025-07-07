@@ -259,9 +259,13 @@ export function applyChange(
           // A special case:
           // when refCount is 1 (so the row is being moved
           // without leaving a placeholder behind), and the new pos is
-          // the same as the old, or directly adjacent to the old:
+          // the same as the old, or directly after the old (so after the remove
+          // of the old it would be in the same pos):
           // the row does not need to be moved, it can just be edited in place.
-          if (oldEntry[refCountSymbol] === 1 && Math.abs(oldPos - pos) <= 1) {
+          if (
+            oldEntry[refCountSymbol] === 1 &&
+            (pos === oldPos || pos - 1 === oldPos)
+          ) {
             applyEdit(oldEntry, change, schema, withIDs);
           } else {
             // Move the row.  If the row has > 1 ref count, an edit should
