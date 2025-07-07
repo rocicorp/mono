@@ -37,6 +37,7 @@ import {type ZeroConfig} from '../../config/zero-config.ts';
 import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
+import {hydrationSampler} from '../../observability/sampling.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
@@ -1020,16 +1021,26 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       const elapsed = timer.totalElapsed();
-      counters.queryHydrations().add(1, {
-        clientGroupID: this.id,
-        hash,
-        transformationHash,
-      });
-      histograms.hydrationTime().record(elapsed, {
-        clientGroupID: this.id,
-        hash,
-        transformationHash,
-      });
+
+      // Sample metrics to reduce data volume - only record 1 in 10 hydrations
+      if (hydrationSampler.shouldSample(`hydration-${this.id}`)) {
+        counters.queryHydrations().add(10, {
+          // Multiply by sample rate to maintain accuracy
+          clientGroupID: this.id,
+          // Removed hash and transformationHash to reduce cardinality
+          // hash,
+          // transformationHash,
+        });
+        histograms.hydrationTime().record(elapsed, {
+          clientGroupID: this.id,
+          // Removed high-cardinality labels to prevent metric explosion
+          // With 27 unique hashes and 33 transformationHashes, each combination
+          // creates separate time series. Keeping only clientGroupID reduces
+          // cardinality from 27*33=891 combinations to just 7 client groups.
+          // hash,
+          // transformationHash,
+        });
+      }
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
     }
   }
