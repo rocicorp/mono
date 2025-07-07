@@ -80,6 +80,7 @@ import {
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
+import {wrapIterable} from '../../../../shared/src/iterables.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -1006,6 +1007,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           for (const _ of this.#pipelines.addQuery(
             transformationHash,
             transformedAst,
+            hash,
             timer.start(),
           )) {
             if (++count % TIME_SLICE_CHECK_SIZE === 0) {
@@ -1046,7 +1048,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async () => {
       assert(this.#pipelines.initialized());
 
-      const hydratedQueries = this.#pipelines.addedQueries();
+      const [hydratedQueries, byOriginalHash] = this.#pipelines.addedQueries();
 
       // Convert queries to their transformed ast's and hashes
       const hashToIDs = new Map<string, string[]>();
@@ -1071,7 +1073,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }[] = [];
       for (const [id, query] of cvrQueryEntires) {
         if (query.type === 'custom') {
-          // This should always match, no?
           assert(id === query.id, 'custom query id mismatch');
           customQueries.set(id, query);
         } else {
@@ -1079,24 +1080,78 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
       }
 
+      // Options:
+      // 1. look thru the pipelines for existing query and use that as the transformed version
+      //  - what if a single query has many transformed versions?
+      //  - add them all. should not be possible now though with this new change.
+      //  -
+
+      /*
+      Pipeline driver becomes keyed by original hash? Maps to transformed hashes and related pipelines?
+
+      Pipeline driver can call xform code?
+      We add query and only xform if the pipeline is not running? Egh, lots of changes.
+
+      How to remove a pipeline? Remove by orig has, removes all. No. We can never remove by orig hash
+      since two orig hashes can map to the same xform hash.
+      
+      Remove by xform hash, removes just that 1 pipeline.
+
+      This setup forces a relationship:
+      1 orig hash -> many xform hashes
+
+      We cannot have many orig hashes for a single xform hash. Well if that happens
+      then two different queries are transforming to the same thing.
+
+      What all information do we need to track for option 1?
+      - id / orig hash
+      - orig query record ()
+      - transformed ast
+      - transformation hash
+
+      Well if we strictly store orig hash, xform hash, and transformed ast we can
+      get the record from the cvr I do believe.
+      */
+
+      // 2. do not call transformer for queries we have in pipeline set. Server queries will be to small so
+      // - need to check if expired so need reference to orig query.
+      //   - but we expire based on xform hash
+
       for (const {id, query: origQuery} of otherQueries) {
-        // This should always match, no?
         assert(id === origQuery.id, 'query id mismatch');
-        const transformed = transformAndHashQuery(
-          lc,
-          origQuery.id,
-          origQuery.ast,
-          must(this.#pipelines.currentPermissions()).permissions ?? {
-            tables: {},
-          },
-          this.#authData?.decoded,
-          origQuery.type === 'internal',
-        );
-        transformedQueries.push({
-          id,
-          origQuery,
-          transformed,
-        });
+
+        const existing = byOriginalHash.get(origQuery.id);
+
+        // We do not re-transform queries that are already hydrated.
+        if (existing) {
+          for (const transformed of existing) {
+            transformedQueries.push({
+              id,
+              origQuery,
+              transformed: {
+                id,
+                transformationHash: transformed.transformationHash,
+                transformedAst: transformed.transformedAst,
+              },
+            });
+          }
+        } else {
+          const transformed = transformAndHashQuery(
+            lc,
+            origQuery.id,
+            origQuery.ast,
+            must(this.#pipelines.currentPermissions()).permissions ?? {
+              tables: {},
+            },
+            this.#authData?.decoded,
+            origQuery.type === 'internal',
+          );
+          transformedQueries.push({
+            id,
+            origQuery,
+            transformed,
+          });
+        }
       }
 
       if (customQueries.size > 0 && !this.#customQueryTransformer) {
@@ -1106,6 +1161,34 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       if (this.#customQueryTransformer && customQueries.size > 0) {
+        // Removes queries from `customQueries` that are already
+        // transformed and in the pipelines. We do not want to re-transform
+        // a query that has already been transformed. The reason is that
+        // we do not want divergent error responses for different clients
+        // within the same client group. All clients within the same
+        // group are expected to receive the same transformations.
+        const filteredCustomQueries = wrapIterable(
+          customQueries.values(),
+        ).filter(origQuery => {
+          const existing = byOriginalHash.get(origQuery.id);
+          if (existing) {
+            for (const transformed of existing) {
+              transformedQueries.push({
+                id: origQuery.id,
+                origQuery,
+                transformed: {
+                  id: origQuery.id,
+                  transformationHash: transformed.transformationHash,
+                  transformedAst: transformed.transformedAst,
+                },
+              });
+            }
+            return false;
+          }
+
+          return true;
+        });
+
         const transformedCustomQueries =
           await this.#customQueryTransformer.transform(
             {
@@ -1113,7 +1196,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               token: this.#authData?.raw,
               cookie: this.#httpCookie,
             },
-            customQueries.values(),
+            filteredCustomQueries,
           );
 
         // TODO: collected errors need to make it downstream to the client.
@@ -1261,7 +1344,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('transformationHash', q.transformationHash);
           lc.debug?.(`adding pipeline for query`, q.ast);
 
-          yield* pipelines.addQuery(q.transformationHash, q.ast, timer.start());
+          yield* pipelines.addQuery(
+            q.transformationHash,
+            q.ast,
+            q.id,
+            timer.start(),
+          );
           const elapsed = timer.stop();
 
           totalProcessTime += elapsed;
