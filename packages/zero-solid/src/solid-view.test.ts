@@ -1399,7 +1399,7 @@ test('edit trigger reactivity at the column level', () => {
     },
     {type: 'unknown'},
   ]);
-  const data: () => EntryList = () => state[0][''] as EntryList;
+  const data = () => state[0][''] as EntryList;
 
   const row0Log: unknown[] = [];
   const row1Log: unknown[] = [];
