@@ -1140,6 +1140,10 @@ textarea.autoResize {
     margin: 2rem 0;
     padding: 1rem;
     overflow-x: auto;
+
+    code {
+      padding: 0;
+    }
   }
 
   code {
