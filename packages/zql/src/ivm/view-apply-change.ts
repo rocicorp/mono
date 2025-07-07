@@ -14,8 +14,11 @@ import type {Entry, Format} from './view.ts';
 export const refCountSymbol = Symbol('rc');
 export const idSymbol = Symbol('id');
 
-type RCEntry = Writable<Entry> & {[refCountSymbol]: number};
-type RCEntryList = RCEntry[];
+type MetaEntry = Writable<Entry> & {
+  [refCountSymbol]: number;
+  [idSymbol]: string;
+};
+type MetaEntryList = MetaEntry[];
 
 /**
  * `applyChange` does not consume the `relationships` of `ChildChange#node`,
@@ -121,30 +124,29 @@ export function applyChange(
   const {singular, relationships: childFormats} = format;
   switch (change.type) {
     case 'add': {
-      let newEntry: RCEntry;
+      let newEntry: MetaEntry | undefined;
 
-      let rc = 1;
       if (singular) {
-        const oldEntry = parentEntry[relationship] as RCEntry | undefined;
+        const oldEntry = parentEntry[relationship] as MetaEntry | undefined;
         if (oldEntry !== undefined) {
           assert(
             schema.compareRows(oldEntry, change.node.row) === 0,
             `Singular relationship '${relationship}' should not have multiple rows. You may need to declare this relationship with the \`many\` helper instead of the \`one\` helper in your schema.`,
           );
           // adding same again.
-          rc = oldEntry[refCountSymbol] + 1;
+          oldEntry[refCountSymbol]++;
+        } else {
+          newEntry = makeNewEntryWithRefCount(
+            change.node.row,
+            schema,
+            withIDs,
+            1,
+          );
+
+          (parentEntry as Writable<Entry>)[relationship] = newEntry;
         }
-
-        newEntry = makeNewEntryWithRefCount(
-          change.node.row,
-          schema,
-          withIDs,
-          rc,
-        );
-
-        (parentEntry as Writable<Entry>)[relationship] = newEntry;
       } else {
-        newEntry = makeNewEntryAndInsert(
+        newEntry = add(
           change.node.row,
           getChildEntryList(parentEntry, relationship),
           schema,
@@ -152,35 +154,39 @@ export function applyChange(
         );
       }
 
-      for (const [relationship, children] of Object.entries(
-        change.node.relationships,
-      )) {
-        // TODO: Is there a flag to make TypeScript complain that dictionary access might be undefined?
-        const childSchema = must(schema.relationships[relationship]);
-        const childFormat = childFormats[relationship];
-        if (childFormat === undefined) {
-          continue;
-        }
+      if (newEntry) {
+        for (const [relationship, children] of Object.entries(
+          change.node.relationships,
+        )) {
+          // TODO: Is there a flag to make TypeScript complain that dictionary access might be undefined?
+          const childSchema = must(schema.relationships[relationship]);
+          const childFormat = childFormats[relationship];
+          if (childFormat === undefined) {
+            continue;
+          }
 
-        const newView = childFormat.singular ? undefined : ([] as RCEntryList);
-        newEntry[relationship] = newView;
+          const newView = childFormat.singular
+            ? undefined
+            : ([] as MetaEntryList);
+          newEntry[relationship] = newView;
 
-        for (const node of children()) {
-          applyChange(
-            newEntry,
-            {type: 'add', node},
-            childSchema,
-            relationship,
-            childFormat,
-            withIDs,
-          );
+          for (const node of children()) {
+            applyChange(
+              newEntry,
+              {type: 'add', node},
+              childSchema,
+              relationship,
+              childFormat,
+              withIDs,
+            );
+          }
         }
       }
       break;
     }
     case 'remove': {
       if (singular) {
-        const oldEntry = parentEntry[relationship] as RCEntry | undefined;
+        const oldEntry = parentEntry[relationship] as MetaEntry | undefined;
         assert(oldEntry !== undefined, 'node does not exist');
         const rc = oldEntry[refCountSymbol];
         if (rc === 1) {
@@ -199,7 +205,7 @@ export function applyChange(
       break;
     }
     case 'child': {
-      let existing: RCEntry;
+      let existing: MetaEntry;
       if (singular) {
         existing = getSingularEntry(parentEntry, relationship);
       } else {
@@ -232,56 +238,75 @@ export function applyChange(
     case 'edit': {
       if (singular) {
         const existing = parentEntry[relationship];
-        assertRCEntry(existing);
-        const rc = existing[refCountSymbol];
-        const newEntry = {
-          ...existing,
-          ...change.node.row,
-          [refCountSymbol]: rc,
-        };
-        existing[refCountSymbol] = 0;
-        (parentEntry as Writable<Entry>)[relationship] = newEntry;
+        assertMetaEntry(existing);
+        applyEdit(existing, change, schema, withIDs);
       } else {
         const view = getChildEntryList(parentEntry, relationship);
-        // If the order changed due to the edit, we need to remove and reinsert.
-        if (schema.compareRows(change.oldNode.row, change.node.row) === 0) {
+        // The position of the row in the list may have changed due to the edit.
+        if (schema.compareRows(change.oldNode.row, change.node.row) !== 0) {
+          const {pos: oldPos, found: oldFound} = binarySearch(
+            view,
+            change.oldNode.row,
+            schema.compareRows,
+          );
+          assert(oldFound, 'old node does not exist');
+          const oldEntry = view[oldPos];
+          const {pos, found} = binarySearch(
+            view,
+            change.node.row,
+            schema.compareRows,
+          );
+          // A special case:
+          // when refCount is 1 (so the row is being moved
+          // without leaving a placeholder behind), and the new pos is
+          // the same as the old, or directly after the old (so after the remove
+          // of the old it would be in the same pos):
+          // the row does not need to be moved, it can just be edited in place.
+          if (
+            oldEntry[refCountSymbol] === 1 &&
+            (pos === oldPos || pos - 1 === oldPos)
+          ) {
+            applyEdit(oldEntry, change, schema, withIDs);
+          } else {
+            // Move the row.  If the row has > 1 ref count, an edit should
+            // be received for each ref count.  On the first edit, the original
+            // row is moved, the edit is applied to it and its ref count is set
+            // to 1.  A shallow copy of the row is left at the old pos for
+            // processing of the remaining edit, and the copy's ref count
+            // is decremented.  As each edit is received the ref count of the
+            // copy is decrement, and the ref count of the row at the new
+            // position is incremented.  When the copy's ref count goes to 0,
+            // it is removed.
+            oldEntry[refCountSymbol]--;
+            let adjustedPos = pos;
+            if (oldEntry[refCountSymbol] === 0) {
+              view.splice(oldPos, 1);
+              adjustedPos = oldPos < pos ? pos - 1 : pos;
+            }
+
+            let entryToEdit;
+            if (found) {
+              entryToEdit = view[adjustedPos];
+            } else {
+              view.splice(adjustedPos, 0, oldEntry);
+              entryToEdit = oldEntry;
+              if (oldEntry[refCountSymbol] > 0) {
+                const oldEntryCopy = {...oldEntry};
+                view[oldPos] = oldEntryCopy;
+              }
+            }
+            entryToEdit[refCountSymbol]++;
+            applyEdit(entryToEdit, change, schema, withIDs);
+          }
+        } else {
+          // Position could not have changed, so simply edit in place.
           const {pos, found} = binarySearch(
             view,
             change.oldNode.row,
             schema.compareRows,
           );
           assert(found, 'node does not exist');
-          const oldEntry = view[pos];
-          const rc = oldEntry[refCountSymbol];
-          oldEntry[refCountSymbol] = 0;
-
-          const newEntry = makeEntryPreserveRelationships(
-            change.node.row,
-            oldEntry,
-            format.relationships,
-            schema,
-            withIDs,
-            rc,
-          );
-
-          view[pos] = newEntry;
-        } else {
-          // Remove
-          const oldEntry = removeAndUpdateRefCount(
-            view,
-            change.oldNode.row,
-            schema.compareRows,
-          );
-
-          // Insert
-          insertAndSetRefCount(
-            view,
-            change.node.row,
-            oldEntry,
-            format.relationships,
-            schema,
-            withIDs,
-          );
+          applyEdit(view[pos], change, schema, withIDs);
         }
       }
 
@@ -292,66 +317,40 @@ export function applyChange(
   }
 }
 
-function makeNewEntryAndInsert(
-  newRow: Row,
-  view: RCEntryList,
+function applyEdit(
+  existing: MetaEntry,
+  change: EditViewChange,
   schema: SourceSchema,
   withIDs: boolean,
-): RCEntry {
-  const {pos, found} = binarySearch(view, newRow, schema.compareRows);
-
-  let deleteCount = 0;
-  let rc = 1;
-  if (found) {
-    deleteCount = 1;
-    rc = view[pos][refCountSymbol];
-    view[pos][refCountSymbol] = rc - 1;
-    rc++;
+) {
+  Object.assign(existing, change.node.row);
+  if (withIDs) {
+    existing[idSymbol] = makeID(change.node.row, schema);
   }
+}
 
-  const newEntry = makeNewEntryWithRefCount(newRow, schema, withIDs, rc);
+function add(
+  row: Row,
+  view: MetaEntryList,
+  schema: SourceSchema,
+  withIDs: boolean,
+): MetaEntry | undefined {
+  const {pos, found} = binarySearch(view, row, schema.compareRows);
 
-  view.splice(pos, deleteCount, newEntry);
-
+  if (found) {
+    view[pos][refCountSymbol]++;
+    return undefined;
+  }
+  const newEntry = makeNewEntryWithRefCount(row, schema, withIDs, 1);
+  view.splice(pos, 0, newEntry);
   return newEntry;
 }
 
-function insertAndSetRefCount(
-  view: RCEntryList,
-  newRow: Row,
-  oldEntry: RCEntry,
-  relationships: {[key: string]: Format},
-  schema: SourceSchema,
-  withIDs: boolean,
-): void {
-  const {pos, found} = binarySearch(view, newRow, schema.compareRows);
-
-  let deleteCount = 0;
-  let rc = 1;
-  if (found) {
-    deleteCount = 1;
-    const oldEntry = view[pos];
-    rc = oldEntry[refCountSymbol] + 1;
-    oldEntry[refCountSymbol] = 0;
-  }
-
-  const newEntry = makeEntryPreserveRelationships(
-    newRow,
-    oldEntry,
-    relationships,
-    schema,
-    withIDs,
-    rc,
-  );
-
-  view.splice(pos, deleteCount, newEntry);
-}
-
 function removeAndUpdateRefCount(
-  view: RCEntryList,
+  view: MetaEntryList,
   row: Row,
   compareRows: Comparator,
-): RCEntry {
+): MetaEntry {
   const {pos, found} = binarySearch(view, row, compareRows);
   assert(found, 'node does not exist');
   const oldEntry = view[pos];
@@ -365,7 +364,11 @@ function removeAndUpdateRefCount(
 }
 
 // TODO: Do not return an object. It puts unnecessary pressure on the GC.
-function binarySearch(view: RCEntryList, target: Row, comparator: Comparator) {
+function binarySearch(
+  view: MetaEntryList,
+  target: Row,
+  comparator: Comparator,
+) {
   let low = 0;
   let high = view.length - 1;
   while (low <= high) {
@@ -382,39 +385,23 @@ function binarySearch(view: RCEntryList, target: Row, comparator: Comparator) {
   return {pos: low, found: false};
 }
 
-function makeEntryPreserveRelationships(
-  newRow: Row,
-  oldEntry: RCEntry,
-  relationships: {[key: string]: Format},
-  schema: SourceSchema,
-  withIDs: boolean,
-  rc: number,
-): RCEntry {
-  const entry = makeNewEntryWithRefCount(newRow, schema, withIDs, rc);
-  for (const relationship in relationships) {
-    assert(!(relationship in newRow), 'Relationship already exists');
-    entry[relationship] = oldEntry[relationship];
-  }
-  return entry;
-}
-
 function getChildEntryList(
   parentEntry: Entry,
   relationship: string,
-): RCEntryList {
+): MetaEntryList {
   const view = parentEntry[relationship];
   assertArray(view);
-  return view as RCEntryList;
+  return view as MetaEntryList;
 }
 
-function assertRCEntry(v: unknown): asserts v is RCEntry {
-  assertNumber((v as Partial<RCEntry>)[refCountSymbol]);
+function assertMetaEntry(v: unknown): asserts v is MetaEntry {
+  assertNumber((v as Partial<MetaEntry>)[refCountSymbol]);
 }
 
-function getSingularEntry(parentEntry: Entry, relationship: string): RCEntry {
+function getSingularEntry(parentEntry: Entry, relationship: string): MetaEntry {
   const e = parentEntry[relationship];
-  assertNumber((e as Partial<RCEntry>)[refCountSymbol]);
-  return e as RCEntry;
+  assertNumber((e as Partial<MetaEntry>)[refCountSymbol]);
+  return e as MetaEntry;
 }
 
 function makeNewEntryWithRefCount(
@@ -422,7 +409,7 @@ function makeNewEntryWithRefCount(
   schema: SourceSchema,
   withIDs: boolean,
   rc: number,
-): RCEntry {
+): MetaEntry {
   const id = withIDs ? makeID(row, schema) : '';
   return {...row, [refCountSymbol]: rc, [idSymbol]: id};
 }
