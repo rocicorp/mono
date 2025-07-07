@@ -29,7 +29,18 @@ const clearOpSchema = v.object({
   op: v.literal('clear'),
 });
 
-const patchOpSchema = v.union(putOpSchema, delOpSchema, clearOpSchema);
+const errorOpSchema = v.object({
+  op: v.literal('error'),
+  hash: v.string(),
+  error: v.string(),
+});
+
+const patchOpSchema = v.union(
+  putOpSchema,
+  delOpSchema,
+  clearOpSchema,
+  errorOpSchema,
+);
 const upPatchOpSchema = v.union(upPutOpSchema, delOpSchema, clearOpSchema);
 
 export const queriesPatchSchema = v.array(patchOpSchema);

@@ -238,28 +238,28 @@ export function mergePokes(
         for (const [clientID, queriesPatch] of Object.entries(
           pokePart.desiredQueriesPatches,
         )) {
-          mergedPatch.push(
-            ...queriesPatch.map(op =>
+          for (const op of queriesPatch) {
+            mergedPatch.push(
               queryPatchOpToReplicachePatchOp(op, hash =>
                 toDesiredQueriesKey(clientID, hash),
               ),
-            ),
-          );
+            );
+          }
         }
       }
       if (pokePart.gotQueriesPatch) {
-        mergedPatch.push(
-          ...pokePart.gotQueriesPatch.map(op =>
+        for (const op of pokePart.gotQueriesPatch) {
+          mergedPatch.push(
             queryPatchOpToReplicachePatchOp(op, toGotQueriesKey),
-          ),
-        );
+          );
+        }
       }
       if (pokePart.rowsPatch) {
-        mergedPatch.push(
-          ...pokePart.rowsPatch.map(p =>
+        for (const p of pokePart.rowsPatch) {
+          mergedPatch.push(
             rowsPatchOpToReplicachePatchOp(p, schema, serverToClient),
-          ),
-        );
+          );
+        }
       }
     }
   }
@@ -281,17 +281,24 @@ function queryPatchOpToReplicachePatchOp(
     case 'clear':
       return op;
     case 'del':
+    case 'error':
       return {
         op: 'del',
         key: toKey(op.hash),
       };
     case 'put':
-    default:
       return {
         op: 'put',
         key: toKey(op.hash),
         value: null,
       };
+    // case 'error':
+    //   // error'ed queries are not yet persisted so we do not need to convert this to `del`.
+    //   // This is because queries can only error on the transform step.
+    //   // Hmm.. a got query could be re-transformed on reconnect.
+    //   // So we do want to delete it. but hopefully that does not throw
+    //   // if it does not exist as that is not an error.
+    //   return undefined;
   }
 }
 
@@ -337,8 +344,6 @@ function rowsPatchOpToReplicachePatchOp(
           : undefined,
         constrain: serverToClient.columns(op.tableName, op.constrain),
       };
-    default:
-      throw new Error('to be implemented');
   }
 }
 
