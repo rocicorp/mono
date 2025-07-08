@@ -174,6 +174,7 @@ async function reserveAndGetSnapshotLocation(
       lc,
       shardID,
       change.db,
+      undefined,
     );
 
     const sub = await changeStreamerClient.reserveSnapshot(taskID);
