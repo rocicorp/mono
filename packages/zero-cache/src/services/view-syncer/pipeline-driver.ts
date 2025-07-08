@@ -25,7 +25,6 @@ import type {LogConfig} from '../../config/zero-config.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import * as histograms from '../../observability/histograms.ts';
-import {changeAdvanceSampler} from '../../observability/sampling.ts';
 import type {RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
 import type {ShardID} from '../../types/shards.ts';
@@ -439,14 +438,11 @@ export class PipelineDriver {
       }
 
       const elapsed = performance.now() - start;
-
-      // Sample metrics to reduce data volume - only record 1 in 5 change advances
-      if (changeAdvanceSampler.shouldSample(`change-advance-${table}`)) {
-        histograms.changeAdvanceTime().record(elapsed, {
-          table,
-          type,
-        });
-      }
+      histograms.changeAdvanceTime().record(elapsed, {
+        clientGroupID: this.#clientGroupID,
+        table,
+        type,
+      });
     }
 
     // Set the new snapshot on all TableSources.

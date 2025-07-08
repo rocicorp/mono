@@ -37,7 +37,6 @@ import {type ZeroConfig} from '../../config/zero-config.ts';
 import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
-import {hydrationSampler} from '../../observability/sampling.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
@@ -1021,12 +1020,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       const elapsed = timer.totalElapsed();
-
-      // Sample metrics to reduce data volume - only record 1 in 10 hydrations
-      if (hydrationSampler.shouldSample(`hydration-${this.id}`)) {
-        counters.queryHydrations().add(10);
-        histograms.hydrationTime().record(elapsed);
-      }
+      counters.queryHydrations().add(1);
+      histograms.hydrationTime().record(elapsed);
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
     }
   }
