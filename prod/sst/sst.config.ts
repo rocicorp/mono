@@ -181,6 +181,15 @@ export default $config({
         ZERO_CHANGE_MAX_CONNS: '3',
         ZERO_NUM_SYNC_WORKERS: '0',
       },
+      loadBalancer: {
+        public: false,
+        ports: [
+          {
+            listen: '80/http',
+            forward: '4849/http',
+          },
+        ],
+      },
       logging: {
         retention: '1 month',
       },
