@@ -439,7 +439,6 @@ export class PipelineDriver {
 
       const elapsed = performance.now() - start;
       histograms.changeAdvanceTime().record(elapsed, {
-        clientGroupID: this.#clientGroupID,
         table,
         type,
       });
