@@ -87,10 +87,11 @@ export default async function runWorker(
   const shard = getShardID(config);
   const {
     taskID,
-    changeStreamer: {mode: changeStreamerMode},
+    changeStreamer: {mode: changeStreamerMode, uri: changeStreamerURI},
     litestream,
   } = config;
-  const runChangeStreamer = changeStreamerMode !== 'discover';
+  const runChangeStreamer =
+    changeStreamerMode === 'dedicated' && changeStreamerURI === undefined;
 
   let restoreStart = new Date();
   if (litestream.backupURL || (litestream.executable && !runChangeStreamer)) {

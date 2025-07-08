@@ -317,17 +317,28 @@ export const zeroOptions = {
   },
 
   changeStreamer: {
+    uri: {
+      type: v.string().optional(),
+      desc: [
+        `When set, connects to the {bold change-streamer} at the given URI.`,
+        `In a multi-node setup, this should be specified in {bold view-syncer} options,`,
+        `pointing to the {bold replication-manager} URI, which runs a {bold change-streamer}`,
+        `on port 4849.`,
+      ],
+    },
+
     mode: {
       type: v.literalUnion('dedicated', 'discover').default('dedicated'),
       desc: [
-        `The mode for running or connecting to the change-streamer:`,
-        `* {bold dedicated}: runs the change-streamer and shuts down when another`,
-        `      change-streamer takes over the replication slot. This is appropriate in a `,
-        `      single-node configuration, or for the {bold replication-manager} in a `,
-        `      multi-node configuration.`,
-        `* {bold discover}: connects to the change-streamer as internally advertised in the`,
-        `      change-db. This is appropriate for the {bold view-syncers} in a multi-node `,
-        `      configuration.`,
+        `As an alternative to {bold ZERO_CHANGE_STREAMER_URI}, the {bold ZERO_CHANGE_STREAMER_MODE}`,
+        `can be set to "{bold discover}" to instruct the {bold view-syncer} to connect to the `,
+        `ip address registered by the {bold replication-manager} upon startup.`,
+        ``,
+        `This may not work in all networking configurations, e.g. certain private `,
+        `networking or port forwarding configurations. Using the {bold ZERO_CHANGE_STREAMER_URI}`,
+        `with an explicit routable hostname is recommended instead.`,
+        ``,
+        `Note: This option is ignored if the {bold ZERO_CHANGE_STREAMER_URI} is set.`,
       ],
     },
 
@@ -345,29 +356,19 @@ export const zeroOptions = {
     address: {
       type: v.string().optional(),
       desc: [
-        `The {bold host:port} for other processes to use when connecting to this `,
-        `change-streamer. When unspecified, the machine's IP address and the`,
-        `{bold --change-streamer-port} will be advertised for discovery.`,
-        ``,
-        `In most cases, the default behavior (unspecified) is sufficient, including in a`,
-        `single-node configuration or a multi-node configuration with host/awsvpc networking`,
-        `(e.g. Fargate).`,
-        ``,
-        `For a multi-node configuration in which the process is unable to determine the`,
-        `externally addressable port (e.g. a container running with {bold bridge} mode networking),`,
-        `the {bold --change-streamer-address} must be specified manually (e.g. a load balancer or`,
-        `service discovery address).`,
+        `DEPRECATED: Use the {bold ZERO_CHANGE_STREAMER_URI} when routing to`,
+        `a hostname.`,
       ],
+      hidden: true,
     },
 
     protocol: {
       type: v.literalUnion('ws', 'wss').default('ws'),
       desc: [
-        `The {bold protocol} for other processes to use when connecting to this `,
-        `change-streamer.`,
-        ``,
-        `If unspecified, defaults to ws.`,
+        `DEPRECATED: Use the {bold ZERO_CHANGE_STREAMER_URI} when routing to`,
+        `a hostname.`,
       ],
+      hidden: true,
     },
 
     discoveryInterfacePreferences: {
@@ -384,19 +385,6 @@ export const zeroOptions = {
       // More confusing than it's worth to advertise this. The default list should be
       // adjusted to make things work for all environments; it is controlled as a
       // hidden flag as an emergency to unblock people with outlier network configs.
-      hidden: true,
-    },
-
-    uri: {
-      type: v
-        .string()
-        .assert(() => {
-          throw new Error(
-            `ZERO_CHANGE_STREAMER_URI is deprecated. Please see notes for ` +
-              `ZERO_CHANGE_STREAMER_MODE: https://github.com/rocicorp/mono/pull/4335`,
-          );
-        })
-        .optional(),
       hidden: true,
     },
   },
