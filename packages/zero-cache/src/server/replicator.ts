@@ -40,8 +40,23 @@ export default async function runWorker(
   const replica = await setupReplica(lc, fileMode, config.replica);
 
   const shard = getShardConfig(config);
-  const {taskID, change} = config;
-  const changeStreamer = new ChangeStreamerHttpClient(lc, shard, change.db);
+  const {
+    taskID,
+    change,
+    changeStreamer: {
+      port,
+      mode: m,
+      uri: changeStreamerURI = m === 'dedicated'
+        ? `http://localhost:${port}/`
+        : undefined,
+    },
+  } = config;
+  const changeStreamer = new ChangeStreamerHttpClient(
+    lc,
+    shard,
+    change.db,
+    changeStreamerURI,
+  );
 
   const replicator = new ReplicatorService(
     lc,

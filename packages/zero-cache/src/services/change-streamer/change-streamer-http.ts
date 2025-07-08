@@ -134,8 +134,14 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
   readonly #lc: LogContext;
   readonly #shardID: ShardID;
   readonly #changeDB: PostgresDB;
+  readonly #changeStreamerURI: string | undefined;
 
-  constructor(lc: LogContext, shardID: ShardID, changeDB: string) {
+  constructor(
+    lc: LogContext,
+    shardID: ShardID,
+    changeDB: string,
+    changeStreamerURI: string | undefined,
+  ) {
     this.#lc = lc;
     this.#shardID = shardID;
     // Create a pg client with a single short-lived connection for the purpose
@@ -145,20 +151,22 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
       ['idle_timeout']: 15,
       connection: {['application_name']: 'change-streamer-discovery'},
     });
+    this.#changeStreamerURI = changeStreamerURI;
   }
 
   async #resolveChangeStreamer(path: string) {
-    const address = await discoverChangeStreamerAddress(
-      this.#shardID,
-      this.#changeDB,
-    );
-    if (!address) {
-      throw new Error(`no change-streamer is running`);
+    let baseURL = this.#changeStreamerURI;
+    if (!baseURL) {
+      const address = await discoverChangeStreamerAddress(
+        this.#shardID,
+        this.#changeDB,
+      );
+      if (!address) {
+        throw new Error(`no change-streamer is running`);
+      }
+      baseURL = address.includes('://') ? `${address}/` : `ws://${address}/`;
     }
-    const uri = new URL(
-      path,
-      address.includes('://') ? `${address}/` : `ws://${address}/`,
-    );
+    const uri = new URL(path, baseURL);
     this.#lc.info?.(`connecting to change-streamer@${uri}`);
     return uri;
   }
