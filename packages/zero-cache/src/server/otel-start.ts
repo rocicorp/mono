@@ -42,11 +42,11 @@ class OtelManager {
     }
     this.#started = true;
 
-    // Enable exponential histograms for better cardinality management
-    // This reduces the number of buckets from ~15-28 to a more efficient exponential scale
+    // Use exponential histograms by default to reduce cardinality from auto-instrumentation
+    // This affects HTTP server/client and other auto-instrumented histogram metrics
+    // Exponential histograms automatically adjust bucket boundaries and use fewer buckets
     process.env.OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION =
-      process.env.OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION ||
-      'exponential_bucket_histogram';
+      'base2_exponential_bucket_histogram';
 
     const logRecordProcessors: LogRecordProcessor[] = [];
     const envResource = detectResources({

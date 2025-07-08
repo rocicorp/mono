@@ -1031,15 +1031,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           // hash,
           // transformationHash,
         });
-        histograms.hydrationTime().record(elapsed, {
-          clientGroupID: this.id,
-          // Removed high-cardinality labels to prevent metric explosion
-          // With 27 unique hashes and 33 transformationHashes, each combination
-          // creates separate time series. Keeping only clientGroupID reduces
-          // cardinality from 27*33=891 combinations to just 7 client groups.
-          // hash,
-          // transformationHash,
-        });
+        histograms.hydrationTime().record(elapsed);
       }
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
     }
@@ -1587,9 +1579,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc.info?.(
         `finished processing advancement of ${numChanges} changes (${elapsed} ms)`,
       );
-      histograms.transactionAdvanceTime().record(elapsed, {
-        clientGroupID: this.id,
-      });
+      histograms.transactionAdvanceTime().record(elapsed);
       return 'success';
     });
   }

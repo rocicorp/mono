@@ -447,7 +447,6 @@ export class PipelineDriver {
         )
       ) {
         histograms.changeAdvanceTime().record(elapsed, {
-          clientGroupID: this.#clientGroupID,
           table,
           type,
         });
