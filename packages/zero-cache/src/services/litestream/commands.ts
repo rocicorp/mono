@@ -167,14 +167,18 @@ async function reserveAndGetSnapshotLocation(
   const {promise: backupURL, resolve, reject} = resolver<string>();
   try {
     assertNormalized(config);
-    const {taskID, change} = config;
+    const {
+      taskID,
+      change,
+      changeStreamer: {uri},
+    } = config;
     const shardID = getShardConfig(config);
 
     const changeStreamerClient = new ChangeStreamerHttpClient(
       lc,
       shardID,
       change.db,
-      undefined,
+      uri,
     );
 
     const sub = await changeStreamerClient.reserveSnapshot(taskID);
