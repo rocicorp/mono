@@ -331,7 +331,7 @@ export const zeroOptions = {
       type: v.literalUnion('dedicated', 'discover').default('dedicated'),
       desc: [
         `As an alternative to {bold ZERO_CHANGE_STREAMER_URI}, the {bold ZERO_CHANGE_STREAMER_MODE}`,
-        `can be set to {bold discover} to instruct the {bold view-syncer} to connect to the `,
+        `can be set to "{bold discover}" to instruct the {bold view-syncer} to connect to the `,
         `ip address registered by the {bold replication-manager} upon startup.`,
         ``,
         `This may not work in all networking configurations, e.g. certain private `,
