@@ -2,6 +2,7 @@ import websocket from '@fastify/websocket';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {type FastifyInstance} from 'fastify';
+import {getDefaultHighWaterMark} from 'stream';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import WebSocket from 'ws';
 import {unreachable} from '../../../shared/src/asserts.ts';
@@ -137,30 +138,31 @@ describe('streams with flow control', () => {
   });
 
   test('stream in', async () => {
+    const msgSize = getDefaultHighWaterMark(false) / 2;
     const inMsgs = [
       {
         from: 1,
         to: 2,
-        str: 'w'.repeat(8192),
+        str: 'w'.repeat(msgSize),
         bigint: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
         passthrough: true,
       },
       {
         from: 2,
         to: 3,
-        str: 'x'.repeat(8192),
+        str: 'x'.repeat(msgSize),
         bigint: BigInt(Number.MAX_SAFE_INTEGER) + 2n,
       },
       {
         from: 3,
         to: 4,
-        str: 'y'.repeat(8192),
+        str: 'y'.repeat(msgSize),
         bigint: BigInt(Number.MAX_SAFE_INTEGER) + 3n,
       },
       {
         from: 4,
         to: 5,
-        str: 'z'.repeat(8192),
+        str: 'z'.repeat(msgSize),
         bigint: BigInt(Number.MAX_SAFE_INTEGER) + 4n,
       },
     ];

@@ -84,24 +84,28 @@ describe('copy-runner', () => {
 
   // This is a meta-test to verify that the database setup in
   // beforeEach() successfully triggers the Postgres hang in the
-  // connection-reusing TransactionPool.
-  test('transaction_pool', async () => {
-    const pool = new TransactionPool(
-      lc,
-      READONLY,
-      undefined,
-      undefined,
-      NUM_COPIERS,
-    );
-    pool.run(sql);
+  // connection-reusing TransactionPool in Node versions <= 20.
+  // The problem does not manifest in Node 22.
+  test.skipIf(parseInt(process.versions.node) > 20)(
+    'transaction_pool',
+    async () => {
+      const pool = new TransactionPool(
+        lc,
+        READONLY,
+        undefined,
+        undefined,
+        NUM_COPIERS,
+      );
+      pool.run(sql);
 
-    for (let table = 0; table < NUM_TABLES; table++) {
-      void pool.processReadTask(tx => doCopy(tx, table));
-    }
-    pool.setDone();
+      for (let table = 0; table < NUM_TABLES; table++) {
+        void pool.processReadTask(tx => doCopy(tx, table));
+      }
+      pool.setDone();
 
-    // If this succeeds, then the test setup did not successfully
-    // reproduce the conditions that make Postgres hang.
-    expect(await orTimeout(pool.done(), 2000)).toBe('timed-out');
-  });
+      // If this succeeds, then the test setup did not successfully
+      // reproduce the conditions that make Postgres hang.
+      expect(await orTimeout(pool.done(), 2000)).toBe('timed-out');
+    },
+  );
 });
