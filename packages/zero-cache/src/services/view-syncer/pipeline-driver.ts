@@ -289,18 +289,18 @@ export class PipelineDriver {
           .withContext('hash', hash)
           .withContext('hydrationTimeMs', hydrationTimeMs);
         for (const tableName of this.#tables.keys()) {
-          const entires = [
+          const entries = [
             ...(runtimeDebugStats
               .getVendedRowCounts()
               .get(this.#clientGroupID)
               ?.get(tableName)
               ?.entries() ?? []),
           ];
-          totalRowsConsidered += entires.reduce(
+          totalRowsConsidered += entries.reduce(
             (acc, entry) => acc + entry[1],
             0,
           );
-          lc.info?.(tableName + ' VENDED: ', entires);
+          lc.info?.(tableName + ' VENDED: ', entries);
         }
         lc.info?.(`Total rows considered: ${totalRowsConsidered}`);
       }
