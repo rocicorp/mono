@@ -441,11 +441,7 @@ export class PipelineDriver {
       const elapsed = performance.now() - start;
 
       // Sample metrics to reduce data volume - only record 1 in 5 change advances
-      if (
-        changeAdvanceSampler.shouldSample(
-          `change-advance-${this.#clientGroupID}-${table}`,
-        )
-      ) {
+      if (changeAdvanceSampler.shouldSample(`change-advance-${table}`)) {
         histograms.changeAdvanceTime().record(elapsed, {
           table,
           type,
