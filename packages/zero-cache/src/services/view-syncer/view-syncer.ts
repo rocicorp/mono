@@ -1024,13 +1024,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       // Sample metrics to reduce data volume - only record 1 in 10 hydrations
       if (hydrationSampler.shouldSample(`hydration-${this.id}`)) {
-        counters.queryHydrations().add(10, {
-          // Multiply by sample rate to maintain accuracy
-          clientGroupID: this.id,
-          // Removed hash and transformationHash to reduce cardinality
-          // hash,
-          // transformationHash,
-        });
+        counters.queryHydrations().add(10);
         histograms.hydrationTime().record(elapsed);
       }
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
