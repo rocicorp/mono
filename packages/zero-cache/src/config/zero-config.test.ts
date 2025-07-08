@@ -197,7 +197,7 @@ test('zero-cache --help', () => {
      --change-streamer-mode dedicated,discover                   default: "dedicated"                                                                              
        ZERO_CHANGE_STREAMER_MODE env                                                                                                                               
                                                                  As an alternative to ZERO_CHANGE_STREAMER_URI, the ZERO_CHANGE_STREAMER_MODE                      
-                                                                 can be set to discover to instruct the view-syncer to connect to the                              
+                                                                 can be set to "discover" to instruct the view-syncer to connect to the                            
                                                                  ip address registered by the replication-manager upon startup.                                    
                                                                                                                                                                    
                                                                  This may not work in all networking configurations, e.g. certain private                          
