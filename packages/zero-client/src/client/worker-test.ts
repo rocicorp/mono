@@ -54,7 +54,9 @@ async function testBasics(userID: string) {
   const view = q.materialize();
   const log: (readonly E[])[] = [];
   const removeListener = view.addListener(rows => {
-    log.push([...rows]);
+    // the array view nodes are edited in place, so we need to clone them
+    // https://github.com/rocicorp/mono/pull/4576
+    log.push([...rows.map(row => ({...row}))]);
   });
 
   await r.triggerConnected();
