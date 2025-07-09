@@ -12,7 +12,6 @@ import {
   recordConnectionAttempted,
   addActiveQuery,
   removeActiveQuery,
-  updateCvrSize,
   addClientGroup,
   removeClientGroup,
   shutdownAnonymousTelemetry,
@@ -300,7 +299,6 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Test basic metric recording without histogram functions
       expect(() => recordMutation()).not.toThrow();
       expect(() => recordRowsSynced(42)).not.toThrow();
-      expect(() => updateCvrSize(1024)).not.toThrow();
       expect(() => recordConnectionSuccess()).not.toThrow();
       expect(() => recordConnectionAttempted()).not.toThrow();
     });
@@ -323,15 +321,6 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
       // Should not throw and values should be accumulated internally
       expect(() => recordRowsSynced(1)).not.toThrow();
-    });
-
-    test('should handle CVR size updates', () => {
-      const cvrSize = 1024 * 1024; // 1MB
-
-      updateCvrSize(cvrSize);
-
-      // Should not throw
-      expect(() => updateCvrSize(cvrSize * 2)).not.toThrow();
     });
 
     test('should accumulate connection success counts', () => {
@@ -526,7 +515,6 @@ describe('Anonymous Telemetry Integration Tests', () => {
         addActiveQuery('attr-test-group', 'test-query');
         recordMutation();
         recordRowsSynced(50);
-        updateCvrSize(1024);
         removeActiveQuery('attr-test-group', 'test-query');
         removeClientGroup('attr-test-group');
       }).not.toThrow();
@@ -654,7 +642,6 @@ describe('Anonymous Telemetry Integration Tests', () => {
       addActiveQuery('group-1', 'query-1');
       addActiveQuery('group-1', 'query-2');
       addActiveQuery('group-2', 'query-3');
-      updateCvrSize(2048);
       recordMutation();
       recordMutation();
       recordRowsSynced(100);

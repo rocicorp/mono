@@ -28,7 +28,6 @@ class AnonymousTelemetryManager {
   #totalConnectionsAttempted = 0;
   #connectedClientGroups = new Set<string>();
   #activeQueries = new Map<string, Set<string>>();
-  #cvrSize = 0;
   #lc: LogContext | undefined;
   #config: ZeroConfig | undefined;
   #workerId = 'unknown';
@@ -119,10 +118,6 @@ class AnonymousTelemetryManager {
       'zero.active_queries_per_client_group',
       {description: 'Number of active queries per client group'},
     );
-    const cvrSizeGauge = this.#meter.createObservableGauge('zero.cvr_size', {
-      description: 'Current CVR size in bytes',
-      unit: 'bytes',
-    });
 
     // Observable counters
     const uptimeCounter = this.#meter.createObservableCounter(
@@ -194,10 +189,6 @@ class AnonymousTelemetryManager {
         });
       }
     });
-    cvrSizeGauge.addCallback((result: ObservableResult) => {
-      result.observe(this.#cvrSize, attrs);
-      this.#lc?.debug?.(`Telemetry: cvr_size=${this.#cvrSize} bytes`);
-    });
     mutationsCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalMutations, attrs);
       this.#lc?.debug?.(
@@ -253,10 +244,6 @@ class AnonymousTelemetryManager {
         this.#activeQueries.delete(clientGroupID);
       }
     }
-  }
-
-  updateCvrSize(sizeBytes: number) {
-    this.#cvrSize = sizeBytes;
   }
 
   addClientGroup(clientGroupID: string) {
@@ -366,8 +353,6 @@ export const addActiveQuery = (clientGroupID: string, queryID: string) =>
   manager().addActiveQuery(clientGroupID, queryID);
 export const removeActiveQuery = (clientGroupID: string, queryID: string) =>
   manager().removeActiveQuery(clientGroupID, queryID);
-export const updateCvrSize = (sizeBytes: number) =>
-  manager().updateCvrSize(sizeBytes);
 export const addClientGroup = (clientGroupID: string) =>
   manager().addClientGroup(clientGroupID);
 export const removeClientGroup = (clientGroupID: string) =>

@@ -45,7 +45,6 @@ import {
 import {
   addActiveQuery,
   removeActiveQuery,
-  updateCvrSize,
 } from '../../server/anonymous-otel-start.ts';
 
 export type RowUpdate = {
@@ -167,11 +166,6 @@ export class CVRUpdater {
     );
     counters.cvrRowsFlushed().add(flushed.rows);
     histograms.cvrFlushTime().record(elapsed);
-
-    // Update telemetry with estimated CVR size
-    // Use JSON string length as an approximation of CVR size
-    const cvrSizeBytes = JSON.stringify(this._cvr).length;
-    updateCvrSize(cvrSizeBytes);
 
     return {cvr: this._cvr, flushed};
   }
