@@ -16,7 +16,13 @@ const exit = () => {
 test('zero-cache --help', () => {
   const logger = {info: vi.fn()};
   expect(() =>
-    parseOptions(zeroOptions, ['--help'], 'ZERO_', [], {}, logger, exit),
+    parseOptions(zeroOptions, {
+      argv: ['--help'],
+      envNamePrefix: 'ZERO_',
+      env: {},
+      logger,
+      exit,
+    }),
   ).toThrow(ExitAfterUsage);
   expect(logger.info).toHaveBeenCalled();
   expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
@@ -368,17 +374,15 @@ test.each([['has/slashes'], ['has-dashes'], ['has.dots']])(
   appID => {
     const logger = {info: vi.fn()};
     expect(() =>
-      parseOptionsAdvanced(
-        zeroOptions,
-        ['--app-id', appID],
-        'ZERO_',
-        [],
-        false, // allow unknown
-        true, // allow partial
-        {},
+      parseOptionsAdvanced(zeroOptions, {
+        argv: ['--app-id', appID],
+        envNamePrefix: 'ZERO_',
+        allowUnknown: false,
+        allowPartial: true,
+        env: {},
         logger,
         exit,
-      ),
+      }),
     ).toThrowError(INVALID_APP_ID_MESSAGE);
   },
 );
@@ -386,14 +390,12 @@ test.each([['has/slashes'], ['has-dashes'], ['has.dots']])(
 test.each([['isok'], ['has_underscores'], ['1'], ['123']])(
   '--app-id %s',
   appID => {
-    const {config} = parseOptionsAdvanced(
-      zeroOptions,
-      ['--app-id', appID],
-      'ZERO_',
-      [],
-      false,
-      true,
-    );
+    const {config} = parseOptionsAdvanced(zeroOptions, {
+      argv: ['--app-id', appID],
+      envNamePrefix: 'ZERO_',
+      allowUnknown: false,
+      allowPartial: true,
+    });
     expect(config.app.id).toBe(appID);
   },
 );
@@ -401,18 +403,16 @@ test.each([['isok'], ['has_underscores'], ['1'], ['123']])(
 test('--shard-id disallowed', () => {
   const logger = {info: vi.fn()};
   expect(() =>
-    parseOptionsAdvanced(
-      zeroOptions,
-      ['--shard-id', 'prod'],
-      'ZERO_',
-      [],
-      false, // allow unknown
-      true, // allow partial
-      {},
+    parseOptionsAdvanced(zeroOptions, {
+      argv: ['--shard-id', 'prod'],
+      envNamePrefix: 'ZERO_',
+      allowUnknown: false,
+      allowPartial: true,
+      env: {},
       logger,
       exit,
-    ),
+    }),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: ZERO_SHARD_ID is deprecated. Please use ZERO_APP_ID instead.]`,
+    `[Error: ZERO_SHARD_ID is no longer an option. Please use ZERO_APP_ID instead.]`,
   );
 });

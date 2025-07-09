@@ -31,7 +31,7 @@ export default async function runWorker(
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
-  const config = getZeroConfig(env, args.slice(1));
+  const config = getZeroConfig({env, argv: args.slice(1)});
   assertNormalized(config);
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;

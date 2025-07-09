@@ -1,4 +1,3 @@
-import '../../shared/src/dotenv.ts';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid';
 import {pipeline, Writable} from 'node:stream';
@@ -8,6 +7,7 @@ import * as v from '../../../packages/shared/src/valita.ts';
 import {initConnectionMessageSchema} from '../../../packages/zero-protocol/src/connect.ts';
 import {downstreamSchema} from '../../../packages/zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../packages/zero-protocol/src/protocol-version.ts';
+import '../../shared/src/dotenv.ts';
 import initConnectionJSON from './init-connection.json' with {type: 'json'};
 
 const options = {
@@ -22,8 +22,7 @@ function run() {
   const lc = new LogContext('debug', {}, consoleLogSink);
   const {viewSyncers, numConnections, millisBetweenMessages} = parseOptions(
     options,
-    process.argv.slice(2),
-    'ZERO_',
+    {envNamePrefix: 'ZERO_'},
   );
 
   const initConnectionMessage = v.parse(
