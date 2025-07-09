@@ -20,8 +20,8 @@ export async function runWorker(
   parent: Worker | null,
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
-  // Note: This is top-level options parse, and the only time we emit
-  //       warnings for deprecated options.
+  // Note: Deprecation warnings are only emitted at this top-level parse;
+  //       they are suppressed when parsed in subprocesses.
   const cfg = getZeroConfig({env, emitDeprecationWarnings: true});
   const lc = createLogContext(cfg, {worker: 'runner'});
 
