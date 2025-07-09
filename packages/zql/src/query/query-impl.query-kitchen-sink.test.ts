@@ -1,9 +1,9 @@
 import {describe, expect, test} from 'vitest';
 import {must} from '../../../shared/src/must.ts';
+import type {QueryDelegate} from './query-delegate.ts';
 import {newQuery} from './query-impl.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
-import type {QueryDelegate} from './query-delegate.ts';
 
 function addData(queryDelegate: QueryDelegate) {
   const userSource = must(queryDelegate.getSource('user'));
@@ -514,7 +514,7 @@ describe('kitchen sink query', () => {
             },
           },
           "name": undefined,
-          "ttl": "1s",
+          "ttl": 1000,
         },
       ]
     `);
