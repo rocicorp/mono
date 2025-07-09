@@ -1,10 +1,12 @@
 /* eslint-disable no-console */
-import '../../shared/src/dotenv.ts';
 import chalk from 'chalk';
 import fs from 'node:fs';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
+import {logLevel, logOptions} from '../../otel/src/log-options.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import '../../shared/src/dotenv.ts';
 import {colorConsole, createLogContext} from '../../shared/src/logging.ts';
 import {must} from '../../shared/src/must.ts';
 import {parseOptions} from '../../shared/src/options.ts';
@@ -16,26 +18,31 @@ import {
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
 } from '../../zero-cache/src/config/zero-config.ts';
+import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import {
   deployPermissionsOptions,
   loadSchemaAndPermissions,
 } from '../../zero-cache/src/scripts/permissions.ts';
-import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
+import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 import {
   mapAST,
   type AST,
   type CompoundKey,
 } from '../../zero-protocol/src/ast.ts';
+import type {Row} from '../../zero-protocol/src/data.ts';
+import {hashOfAST} from '../../zero-protocol/src/query-hash.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,
   serverToClient,
 } from '../../zero-schema/src/name-mapper.ts';
 import {buildPipeline} from '../../zql/src/builder/builder.ts';
+import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../zql/src/ivm/operator.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
 import {type PullRow, type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
@@ -44,13 +51,6 @@ import {
   runtimeDebugStats,
 } from '../../zqlite/src/runtime-debug.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
-import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
-import {hashOfAST} from '../../zero-protocol/src/query-hash.ts';
-import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
-import type {Row} from '../../zero-protocol/src/data.ts';
-import {assert} from '../../shared/src/asserts.ts';
-import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
-import {logLevel, logOptions} from '../../otel/src/log-options.ts';
 
 const options = {
   schema: deployPermissionsOptions.schema,
@@ -133,14 +133,13 @@ const options = {
   },
 };
 
-const cfg = parseOptions(
-  options,
+const cfg = parseOptions(options, {
   // the command line parses drops all text after the first newline
   // so we need to replace newlines with spaces
   // before parsing
-  process.argv.slice(2).map(s => s.replaceAll('\n', ' ')),
-  ZERO_ENV_VAR_PREFIX,
-  [
+  argv: process.argv.slice(2).map(s => s.replaceAll('\n', ' ')),
+  envNamePrefix: ZERO_ENV_VAR_PREFIX,
+  description: [
     {
       header: 'analyze-query',
       content: `Analyze a ZQL query and show information about how it runs against a SQLite replica.
@@ -178,7 +177,7 @@ const cfg = parseOptions(
   `,
     },
   ],
-);
+});
 const config = {
   ...cfg,
   cvr: {

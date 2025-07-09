@@ -37,6 +37,9 @@ export type WrappedOptionType = {
   /** Description lines to be displayed in --help. */
   desc?: string[];
 
+  /** Logged as a warning when parsed. */
+  deprecated?: string[];
+
   /** One-character alias for getopt-style short flags, e.g. -m */
   alias?: string;
 
@@ -276,42 +279,58 @@ function getRequiredOrDefault(type: OptionType) {
   };
 }
 
+export type ParseOptions = {
+  /** Defaults to process.argv.slice(2) */
+  argv?: string[];
+
+  envNamePrefix?: string;
+
+  description?: {header: string; content: string}[];
+
+  /** Defaults to `false` */
+  allowUnknown?: boolean;
+
+  /** Defaults to `false` */
+  allowPartial?: boolean;
+
+  /** Defaults to `process.env`. */
+  env?: NodeJS.ProcessEnv;
+
+  /** Defaults to `true`. */
+  emitDeprecationWarnings?: boolean;
+
+  /** Defaults to `console` */
+  logger?: OptionalLogger;
+
+  /** Defaults to `process.exit` */
+  exit?: (code?: number | string | null | undefined) => never;
+};
+
 export function parseOptions<T extends Options>(
-  options: T,
-  argv: string[] = process.argv.slice(2),
-  envNamePrefix = '',
-  description: {header: string; content: string}[] = [],
-  processEnv = process.env,
-  logger: OptionalLogger = console,
-  exit = process.exit,
+  appOptions: T,
+  opts: ParseOptions = {},
 ): Config<T> {
-  return parseOptionsAdvanced(
-    options,
-    argv,
-    envNamePrefix,
-    description,
-    false,
-    false,
-    processEnv,
-    logger,
-    exit,
-  ).config;
+  return parseOptionsAdvanced(appOptions, opts).config;
 }
 
 export function parseOptionsAdvanced<T extends Options>(
-  options: T,
-  argv: string[],
-  envNamePrefix = '',
-  description: {header: string; content: string}[] = [],
-  allowUnknown = false,
-  allowPartial = false,
-  processEnv = process.env,
-  logger: OptionalLogger = console,
-  exit = process.exit,
+  appOptions: T,
+  opts: ParseOptions = {},
 ): {config: Config<T>; env: Record<string, string>; unknown?: string[]} {
+  const {
+    argv = process.argv.slice(2),
+    envNamePrefix = '',
+    description = [],
+    allowUnknown = false,
+    allowPartial = false,
+    env: processEnv = process.env,
+    emitDeprecationWarnings = true,
+    logger = console,
+    exit = process.exit,
+  } = opts;
   // The main logic for converting a valita Type spec to an Option (i.e. flag) spec.
   function addOption(field: string, option: WrappedOptionType, group?: string) {
-    const {type, desc = [], alias, hidden} = option;
+    const {type, desc = [], deprecated, alias, hidden} = option;
 
     // The group name is prepended to the flag name.
     const flag = group ? toKebabCase(`${group}-${field}`) : toKebabCase(field);
@@ -384,7 +403,12 @@ export function parseOptionsAdvanced<T extends Options>(
     const opt = {
       name: flag,
       alias,
-      type: valueParser(env, terminalType),
+      type: valueParser(
+        env,
+        terminalType,
+        logger,
+        emitDeprecationWarnings ? deprecated : undefined,
+      ),
       multiple,
       group,
       description: spec.join('\n') + '\n',
@@ -401,7 +425,7 @@ export function parseOptionsAdvanced<T extends Options>(
   const envArgv: string[] = [];
 
   try {
-    for (const [name, val] of Object.entries(options)) {
+    for (const [name, val] of Object.entries(appOptions)) {
       const {type} = val as {type: unknown};
       if (v.instanceOfAbstractType(val)) {
         addOption(name, {type: val});
@@ -442,7 +466,7 @@ export function parseOptionsAdvanced<T extends Options>(
     const parsedArgs = defu(withoutDefaults, fromEnv, defaults);
     const env = {...env1, ...env2, ...env3};
 
-    let schema = configSchema(options, envNamePrefix);
+    let schema = configSchema(appOptions, envNamePrefix);
     if (allowPartial) {
       // TODO: Type configSchema() to return a v.ObjectType<...>
       schema = v.deepPartial(schema as v.ObjectType) as v.Type<Config<T>>;
@@ -459,8 +483,20 @@ export function parseOptionsAdvanced<T extends Options>(
   }
 }
 
-function valueParser(optionName: string, typeName: string) {
+function valueParser(
+  optionName: string,
+  typeName: string,
+  logger: OptionalLogger,
+  deprecated: string[] | undefined,
+) {
   return (input: string) => {
+    if (deprecated) {
+      logger.warn?.(
+        template(
+          `\n${optionName} is deprecated:\n` + deprecated.join('\n') + '\n',
+        ),
+      );
+    }
     switch (typeName) {
       case 'string':
         return input;

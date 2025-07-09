@@ -38,7 +38,7 @@ export default async function runWorker(
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
   const startMs = Date.now();
-  const config = getZeroConfig(env);
+  const config = getZeroConfig({env});
   assertNormalized(config);
   const lc = createLogContext(config, {worker: 'dispatcher'});
 

@@ -39,7 +39,7 @@ export default function runWorker(
   env: NodeJS.ProcessEnv,
   ...args: string[]
 ): Promise<void> {
-  const config = getZeroConfig(env, args.slice(1));
+  const config = getZeroConfig({env, argv: args.slice(1)});
   assertNormalized(config);
   startOtelAuto();
 

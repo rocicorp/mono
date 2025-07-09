@@ -1,6 +1,7 @@
-import '../../../shared/src/dotenv.ts';
 import {writeFile} from 'node:fs/promises';
 import {ident as id, literal} from 'pg-format';
+import '../../../shared/src/dotenv.ts';
+import {colorConsole, createLogContext} from '../../../shared/src/logging.ts';
 import {parseOptions} from '../../../shared/src/options.ts';
 import {difference} from '../../../shared/src/set-utils.ts';
 import {mapCondition} from '../../../zero-protocol/src/ast.ts';
@@ -23,13 +24,11 @@ import {
   deployPermissionsOptions,
   loadSchemaAndPermissions,
 } from './permissions.ts';
-import {colorConsole, createLogContext} from '../../../shared/src/logging.ts';
 
-const config = parseOptions(
-  deployPermissionsOptions,
-  process.argv.slice(2),
-  ZERO_ENV_VAR_PREFIX,
-);
+const config = parseOptions(deployPermissionsOptions, {
+  argv: process.argv.slice(2),
+  envNamePrefix: ZERO_ENV_VAR_PREFIX,
+});
 
 const shard = getShardID(config);
 const app = appSchema(shard);
@@ -196,6 +195,9 @@ if (!ret) {
   } else {
     colorConsole.error(`No --output-file or --upstream-db specified`);
     // Shows the usage text.
-    parseOptions(deployPermissionsOptions, ['--help'], ZERO_ENV_VAR_PREFIX);
+    parseOptions(deployPermissionsOptions, {
+      argv: ['--help'],
+      envNamePrefix: ZERO_ENV_VAR_PREFIX,
+    });
   }
 }

@@ -3,7 +3,11 @@
  */
 
 import {logOptions} from '../../../otel/src/log-options.ts';
-import {parseOptions, type Config} from '../../../shared/src/options.ts';
+import {
+  parseOptions,
+  type Config,
+  type ParseOptions,
+} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {runtimeDebugFlags} from '../../../zqlite/src/runtime-debug.ts';
 import {singleProcessMode} from '../types/processes.ts';
@@ -68,7 +72,7 @@ export const shardOptions = {
       .string()
       .assert(() => {
         throw new Error(
-          `ZERO_SHARD_ID is deprecated. Please use ZERO_APP_ID instead.`,
+          `ZERO_SHARD_ID is no longer an option. Please use ZERO_APP_ID instead.`,
           // TODO: Link to release / migration notes?
         );
       })
@@ -355,18 +359,16 @@ export const zeroOptions = {
 
     address: {
       type: v.string().optional(),
-      desc: [
-        `DEPRECATED: Use the {bold ZERO_CHANGE_STREAMER_URI} when routing to`,
-        `a hostname.`,
+      deprecated: [
+        `Set the {bold ZERO_CHANGE_STREAMER_URI} on view-syncers instead.`,
       ],
       hidden: true,
     },
 
     protocol: {
       type: v.literalUnion('ws', 'wss').default('ws'),
-      desc: [
-        `DEPRECATED: Use the {bold ZERO_CHANGE_STREAMER_URI} when routing to`,
-        `a hostname.`,
+      deprecated: [
+        `Set the {bold ZERO_CHANGE_STREAMER_URI} on view-syncers instead.`,
       ],
       hidden: true,
     },
@@ -607,18 +609,13 @@ export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
 
 let loadedConfig: Config<typeof zeroOptions> | undefined;
 
-export function getZeroConfig(
-  env: NodeJS.ProcessEnv = process.env,
-  argv = process.argv.slice(2),
-) {
+export function getZeroConfig(opts: Omit<ParseOptions, 'envNamePrefix'> = {}) {
   if (!loadedConfig || singleProcessMode()) {
-    loadedConfig = parseOptions(
-      zeroOptions,
-      argv,
-      ZERO_ENV_VAR_PREFIX,
-      [],
-      env,
-    );
+    loadedConfig = parseOptions(zeroOptions, {
+      envNamePrefix: ZERO_ENV_VAR_PREFIX,
+      emitDeprecationWarnings: false, // overridden at the top level parse
+      ...opts,
+    });
 
     if (loadedConfig.queryHydrationStats) {
       runtimeDebugFlags.trackRowCountsVended = true;

@@ -31,7 +31,7 @@ export default async function runWorker(
   assert(args.length > 0, `parent startMs not specified`);
   const parentStartMs = parseInt(args[0]);
 
-  const config = getZeroConfig(env, args.slice(1));
+  const config = getZeroConfig({env, argv: args.slice(1)});
   assertNormalized(config);
   const {
     taskID,

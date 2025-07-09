@@ -51,6 +51,11 @@ const options = {
       ),
     ])
     .optional(() => ['a', 'b']),
+  deprecatedFlag: {
+    type: v.string().optional(),
+    deprecated: [`don't set me anymore`],
+    hidden: true,
+  },
   hideMe: {
     type: v.string().optional(),
     hidden: true,
@@ -557,29 +562,25 @@ test.each([
   Record<string, string>,
   string[] | undefined,
 ][])('%s', (_name, argv, env, allowPartial, result, envObj, unknown) => {
-  const parsed = parseOptionsAdvanced(
-    options,
+  const parsed = parseOptionsAdvanced(options, {
     argv,
-    'Z_',
-    [],
-    true,
+    envNamePrefix: 'Z_',
+    allowUnknown: true,
     allowPartial,
     env,
-  );
+  });
   expect(parsed.config).toEqual(result);
   expect(parsed.env).toEqual(envObj);
   expect(parsed.unknown).toEqual(unknown);
 
   // Sanity check: Ensure that parsing the parsed.env computes the same result.
-  const reparsed = parseOptionsAdvanced(
-    options,
-    [],
-    'Z_',
-    [],
-    true,
+  const reparsed = parseOptionsAdvanced(options, {
+    argv: [],
+    envNamePrefix: 'Z_',
+    allowUnknown: true,
     allowPartial,
-    parsed.env,
-  );
+    env: parsed.env,
+  });
   expect(reparsed.config).toEqual(result);
   expect(reparsed.env).toEqual(envObj);
 });
@@ -687,6 +688,19 @@ test('envSchema', () => {
           },
           "name": "optional"
         },
+        "ZERO_DEPRECATED_FLAG": {
+          "type": {
+            "name": "string",
+            "issue": {
+              "ok": false,
+              "code": "invalid_type",
+              "expected": [
+                "string"
+              ]
+            }
+          },
+          "name": "optional"
+        },
         "ZERO_HIDE_ME": {
           "type": {
             "name": "string",
@@ -738,7 +752,7 @@ test('duplicate flag detection', () => {
         fooBar: v.string().optional(),
         foo: {bar: v.number().optional()},
       },
-      [],
+      {argv: []},
     ),
   ).toThrowError('Two or more option definitions have the same name');
 });
@@ -756,7 +770,7 @@ test('duplicate short flag', () => {
           alias: 'b',
         },
       },
-      [],
+      {argv: []},
     ),
   ).toThrowError('Two or more option definitions have the same alias');
 });
@@ -827,7 +841,12 @@ test.each([
   (_name, opts, argv, errorMsg) => {
     let message;
     try {
-      parseOptions(opts, argv, 'ZORRO_', [], {}, new SilentLogger());
+      parseOptions(opts, {
+        argv,
+        envNamePrefix: 'ZORRO_',
+        env: {},
+        logger: new SilentLogger(),
+      });
     } catch (e) {
       expect(e).toBeInstanceOf(TypeError);
       message = (e as TypeError).message;
@@ -841,10 +860,59 @@ const exit = () => {
   throw new ExitAfterUsage();
 };
 
+test('deprecation warning (flag)', () => {
+  const logger = {warn: vi.fn()};
+  parseOptions(options, {
+    argv: [
+      '--replica-db-file',
+      'bar',
+      '--log-level',
+      'info',
+      '--deprecated-flag',
+      'foo',
+    ],
+    envNamePrefix: 'Z_',
+    env: {},
+    logger,
+    exit,
+  });
+  expect(logger.warn).toHaveBeenCalled();
+  expect(stripAnsi(logger.warn.mock.calls[0][0])).toMatchInlineSnapshot(`
+    "
+    Z_DEPRECATED_FLAG is deprecated:
+    don't set me anymore
+    "
+  `);
+});
+
+test('deprecation warning (env)', () => {
+  const logger = {warn: vi.fn()};
+  parseOptions(options, {
+    argv: ['--replica-db-file', 'bar', '--log-level', 'info'],
+    envNamePrefix: 'Z_',
+    env: {['Z_DEPRECATED_FLAG']: 'boo'},
+    logger,
+    exit,
+  });
+  expect(logger.warn).toHaveBeenCalled();
+  expect(stripAnsi(logger.warn.mock.calls[0][0])).toMatchInlineSnapshot(`
+    "
+    Z_DEPRECATED_FLAG is deprecated:
+    don't set me anymore
+    "
+  `);
+});
+
 test('--help', () => {
   const logger = {info: vi.fn()};
   expect(() =>
-    parseOptions(options, ['--help'], 'Z_', [], {}, logger, exit),
+    parseOptions(options, {
+      argv: ['--help'],
+      envNamePrefix: 'Z_',
+      env: {},
+      logger,
+      exit,
+    }),
   ).toThrow(ExitAfterUsage);
   expect(logger.info).toHaveBeenCalled();
   expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
@@ -882,7 +950,13 @@ test('--help', () => {
 test('-h', () => {
   const logger = {info: vi.fn()};
   expect(() =>
-    parseOptions(options, ['-h'], 'ZERO_', [], {}, logger, exit),
+    parseOptions(options, {
+      argv: ['-h'],
+      envNamePrefix: 'ZERO_',
+      env: {},
+      logger,
+      exit,
+    }),
   ).toThrow(ExitAfterUsage);
   expect(logger.info).toHaveBeenCalled();
   expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
@@ -920,7 +994,7 @@ test('-h', () => {
 test('unknown arguments', () => {
   const logger = {info: vi.fn(), error: vi.fn()};
   expect(() =>
-    parseOptions(options, ['--shardID', 'foo'], '', [], {}, logger, exit),
+    parseOptions(options, {argv: ['--shardID', 'foo'], env: {}, logger, exit}),
   ).toThrow(ExitAfterUsage);
   expect(logger.error).toHaveBeenCalled();
   expect(logger.error.mock.calls[0]).toMatchInlineSnapshot(`
@@ -979,9 +1053,8 @@ test('ungrouped config', () => {
     topLevelCamel: v.string().optional(),
   };
 
-  const result = parseOptions(
-    ungroupedOptions,
-    [
+  const result = parseOptions(ungroupedOptions, {
+    argv: [
       '--top-level-camel',
       'case',
       '--name',
@@ -994,10 +1067,9 @@ test('ungrouped config', () => {
       '123',
       '456',
     ],
-    'Z_',
-    [],
-    {},
-  );
+    envNamePrefix: 'Z_',
+    env: {},
+  });
 
   expect(result).toEqual({
     port: 4848,
@@ -1008,15 +1080,11 @@ test('ungrouped config', () => {
     topLevelCamel: 'case',
   });
 
-  const envResult = parseOptions(
-    ungroupedOptions,
-    ['--name', 'test2'],
-    'x',
-    [],
-    {
-      xFORMAT: 'text',
-    },
-  );
+  const envResult = parseOptions(ungroupedOptions, {
+    argv: ['--name', 'test2'],
+    envNamePrefix: 'x',
+    env: {xFORMAT: 'text'},
+  });
 
   expect(envResult).toEqual({
     port: 4848,
