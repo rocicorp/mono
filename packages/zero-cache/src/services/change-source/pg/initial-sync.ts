@@ -16,6 +16,7 @@ import {
 } from '../../../db/pg-to-lite.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
+import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import {
   JSON_STRINGIFIED,
   liteValue,
@@ -34,7 +35,6 @@ import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
 import {initChangeLog} from '../../replicator/schema/change-log.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
-import {CopyRunner} from './copy-runner.ts';
 import {toLexiVersion} from './lsn.ts';
 import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo} from './schema/published.ts';
@@ -66,12 +66,15 @@ export async function initialSync(
   const {tableCopyWorkers: numWorkers, profileCopy} = syncOptions;
   const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
   const sql = pgClient(lc, upstreamURI);
-  // The typeClient's reason for existence is to configure the type
-  // parsing for the copy workers, which skip JSON parsing for efficiency.
-  const typeClient = pgClient(lc, upstreamURI, {}, 'json-as-string');
-  // Fire off an innocuous request to initialize a connection and thus fetch
-  // the array types that will be used to parse the COPY stream.
-  void typeClient`SELECT 1`.execute();
+  const copyPool = pgClient(
+    lc,
+    upstreamURI,
+    {
+      max: numWorkers,
+      connection: {['application_name']: 'initial-sync-copy-worker'},
+    },
+    'json-as-string',
+  );
   const replicationSession = pgClient(lc, upstreamURI, {
     ['fetch_types']: false, // Necessary for the streaming protocol
     connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
@@ -116,20 +119,7 @@ export async function initialSync(
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const start = performance.now();
-    const copyRunner = new CopyRunner(
-      lc,
-      () =>
-        pgClient(lc, upstreamURI, {
-          // No need to fetch array types for these connections, as pgClient
-          // streams the COPY data as plain text; type parsing is done in the
-          // copy worker, which gets its types from the typeClient. This
-          // eliminates one round trip when each db connection is established.
-          ['fetch_types']: false,
-          connection: {['application_name']: 'initial-sync-copy-worker'},
-        }),
-      numWorkers,
-      snapshot,
-    );
+    const copiers = startTableCopyWorkers(lc, copyPool, snapshot, numWorkers);
     try {
       // Retrieve the published schema at the consistent_point.
       const published = await sql.begin(Mode.READONLY, async tx => {
@@ -147,7 +137,9 @@ export async function initialSync(
       void copyProfiler?.start();
       const rowCounts = await Promise.all(
         tables.map(table =>
-          copyRunner.run((db, lc) => copy(lc, table, typeClient, db, tx)),
+          copiers.processReadTask((db, lc) =>
+            copy(lc, table, copyPool, db, tx),
+          ),
         ),
       );
       void copyProfiler?.stopAndDispose(lc, 'initial-copy');
@@ -173,7 +165,7 @@ export async function initialSync(
           `(flush: ${total.flushTime.toFixed(3)}, index: ${index.toFixed(3)}, total: ${elapsed.toFixed(3)} ms)`,
       );
     } finally {
-      copyRunner.close();
+      copiers.setDone();
     }
   } catch (e) {
     // If initial-sync did not succeed, make a best effort to drop the
@@ -188,7 +180,7 @@ export async function initialSync(
   } finally {
     await replicationSession.end();
     await sql.end();
-    await typeClient.end();
+    await copyPool.end();
   }
 }
 
@@ -238,6 +230,37 @@ async function ensurePublishedTables(
     }
   }
   return {publications};
+}
+
+function startTableCopyWorkers(
+  lc: LogContext,
+  db: PostgresDB,
+  snapshot: string,
+  numWorkers: number,
+): TransactionPool {
+  const {init} = importSnapshot(snapshot);
+  const tableCopiers = new TransactionPool(
+    lc,
+    Mode.READONLY,
+    init,
+    undefined,
+    numWorkers,
+  );
+  tableCopiers.run(db);
+
+  lc.info?.(`Started ${numWorkers} workers to copy tables`);
+
+  if (parseInt(process.versions.node) < 22) {
+    lc.warn?.(
+      `\n\n\n` +
+        `Older versions of Node have a bug that results in an unresponsive\n` +
+        `Postgres connection after running certain combinations of COPY commands.\n` +
+        `If initial sync hangs, run zero-cache with Node v22+. This has the additional\n` +
+        `benefit of being consistent with the Node version run in the production container image.` +
+        `\n\n\n`,
+    );
+  }
+  return tableCopiers;
 }
 
 /* eslint-disable @typescript-eslint/naming-convention */
