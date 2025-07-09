@@ -1746,7 +1746,26 @@ test('pull mutate options', async () => {
 
   await tickUntilTimeIs(1000);
 
-  while (Date.now() < 1150) {
+  // If we iterated till `Date.now() < 1150`
+  // then this makes the test flaky.
+  //
+  // The reason is that going to `1150` will
+  // cause the sleep promise to resolve at `1150`
+  // which will then:
+  // 1. run the fetch (ok, that's fine)
+  // 2. update `lastSendTime` to `1150`
+  // 3. then we check `if (clampedDelay > timeSinceLastSend) {`
+  //     (that check is in connection-loop.ts)
+  //
+  // The problem is that (3) may or may not happen before
+  // we change `req.requestOptions.minDelayMs` to 500 below.
+  //
+  // If it happens before, then the next pull will be at `1150 + 500 = 1650`
+  // If it happens after, then the next pull will be at `1150 + 30 = 1180`
+  //
+  // The reason it can race is because there are awaits within the loop
+  // in connection-loop.ts
+  while (Date.now() < 1130) {
     rep.pullIgnorePromise();
     await vi.advanceTimersByTimeAsync(10);
   }
@@ -1769,8 +1788,8 @@ test('pull mutate options', async () => {
   expect(log[0]).to.be.within(1000, 1060);
   expect(log.slice(1)).to.deep.equal([
     // 1000, checked above
-    1030, 1060, 1090, 1120, 1150, 1180, 1680, 2180, 2205, 2230, 2255, 2280,
-    2305, 2330, 2355, 2380, 2405, 2430, 2455, 2480,
+    1030, 1060, 1090, 1120, 1150, 1650, 2150, 2175, 2200, 2225, 2250, 2275,
+    2300, 2325, 2350, 2375, 2400, 2425, 2450, 2475, 2500,
   ]);
 });
 
