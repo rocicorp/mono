@@ -13,7 +13,11 @@ import {
   PROTOCOL_VERSION,
 } from '../../../zero-protocol/src/protocol-version.ts';
 import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
-import {findErrorForClient, getLogLevel} from '../types/error-for-client.ts';
+import {
+  ErrorWithLevel,
+  findErrorForClient,
+  getLogLevel,
+} from '../types/error-for-client.ts';
 import type {Source} from '../types/streams.ts';
 import type {ConnectParams} from './connect-params.ts';
 
@@ -313,13 +317,14 @@ export class Connection {
   }
 }
 
-function send(
+// Exported for testing purposes.
+export function send(
   lc: LogContext,
-  ws: WebSocket,
+  ws: Pick<WebSocket, 'readyState' | 'send'>,
   data: Downstream,
   callback: ((err?: Error | null) => void) | 'ignore-backpressure',
 ) {
-  if (ws.readyState === ws.OPEN) {
+  if (ws.readyState === WebSocket.OPEN) {
     ws.send(
       JSON.stringify(data),
       callback === 'ignore-backpressure' ? undefined : callback,
@@ -329,7 +334,7 @@ function send(
       dropped: data,
     });
     if (callback !== 'ignore-backpressure') {
-      callback(new Error('websocket closed'));
+      callback(new ErrorWithLevel('websocket closed', 'info'));
     }
   }
 }
