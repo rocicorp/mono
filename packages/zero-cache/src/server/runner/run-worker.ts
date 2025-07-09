@@ -1,5 +1,5 @@
-import '../../../../shared/src/dotenv.ts';
 import {resolver, type Resolver} from '@rocicorp/resolver';
+import '../../../../shared/src/dotenv.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import {normalizeZeroConfig} from '../../config/normalize.ts';
 import {getZeroConfig} from '../../config/zero-config.ts';
@@ -20,7 +20,9 @@ export async function runWorker(
   parent: Worker | null,
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
-  const cfg = getZeroConfig(env);
+  // Note: This is top-level options parse, and the only time we emit
+  //       warnings for deprecated options.
+  const cfg = getZeroConfig({env, emitDeprecationWarnings: true});
   const lc = createLogContext(cfg, {worker: 'runner'});
 
   const defaultTaskID = await getTaskID(lc);
