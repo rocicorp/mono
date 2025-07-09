@@ -252,10 +252,12 @@ function startTableCopyWorkers(
 
   if (parseInt(process.versions.node) < 22) {
     lc.warn?.(
-      `Older versions of Node have a bug that results in an unresponsive\n` +
+      `\n\n\n` +
+        `Older versions of Node have a bug that results in an unresponsive\n` +
         `Postgres connection after running certain combinations of COPY commands.\n` +
         `If initial sync hangs, run zero-cache with Node v22+. This has the additional\n` +
-        `benefit of being consistent with the Node version run in the production container image.`,
+        `benefit of being consistent with the Node version run in the production container image.` +
+        `\n\n\n`,
     );
   }
   return tableCopiers;
