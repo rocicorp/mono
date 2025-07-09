@@ -1,26 +1,6 @@
-export {
-  makeServerTransaction,
-  makeSchemaCRUD,
-  type CustomMutatorDefs,
-  type CustomMutatorImpl,
-} from './custom.ts';
-export {makeSchemaQuery} from './query.ts';
-export type {
-  Transaction,
-  ServerTransaction,
-  DBTransaction,
-  DBConnection,
-  Row,
-} from '../../zql/src/mutate/custom.ts';
-export {ZQLDatabase} from './zql-database.ts';
-export {
-  PostgresJSConnection,
-  type PostgresJSClient,
-  type PostgresJSTransaction,
-} from './postgresjs-connection.ts';
-export {
-  PushProcessor,
-  type Database,
-  type TransactionProviderInput,
-  type TransactionProviderHooks,
-} from './push-processor.ts';
+// zero-pg is deprecated in favor of zero-server.
+// Export all the things from zero-server for backwards compatibility until people have stopped using zero-pg.
+
+// eslint-disable-next-line no-restricted-imports
+export * from '../../zero-server/src/mod.ts';
+export * from '../../zero-server/src/adapters/postgresjs.ts';

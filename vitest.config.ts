@@ -6,6 +6,7 @@ const special = [
   'zero-cache',
   'z2s',
   'zero-pg',
+  'zero-server',
   'zql-integration-tests',
 ];
 
