@@ -5,9 +5,6 @@ import {astSchema} from './ast.ts';
 export const putOpSchema = v.object({
   op: v.literal('put'),
   hash: v.string(),
-  // Deprecated. The server does not need to poke the AST back down
-  // to the client.
-  ast: astSchema.optional(),
   ttl: v.number().optional(),
 });
 
