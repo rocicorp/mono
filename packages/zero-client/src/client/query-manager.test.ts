@@ -1,4 +1,13 @@
-import {beforeEach, describe, expect, test, vi, type Mock} from 'vitest';
+import {LogContext, type LogSink} from '@rocicorp/logger';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+  type Mock,
+} from 'vitest';
 import type {IndexKey} from '../../../replicache/src/db/index.ts';
 import {
   makeScanResult,
@@ -14,16 +23,16 @@ import {
   type ReadTransaction,
 } from '../../../replicache/src/transactions.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import {upPutOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
-import type {TTL} from '../../../zql/src/query/ttl.ts';
+import {MAX_TTL_MS, type TTL} from '../../../zql/src/query/ttl.ts';
 import {toGotQueriesKey} from './keys.ts';
-import {QueryManager} from './query-manager.ts';
 import {MutationTracker} from './mutation-tracker.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {QueryManager} from './query-manager.ts';
 
 function createExperimentalWatchMock() {
   return vi.fn();
@@ -36,6 +45,7 @@ test('add', () => {
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
+    lc,
     mutationTracker,
     'client1',
     schema.tables,
@@ -63,7 +73,7 @@ test('add', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: MAX_TTL_MS,
         },
       ],
     },
@@ -79,6 +89,7 @@ test('add and remove a custom query', () => {
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
+    lc,
     mutationTracker,
     'client1',
     schema.tables,
@@ -156,6 +167,7 @@ test('add renamed fields', () => {
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
+    lc,
     mutationTracker,
     'client1',
     schema.tables,
@@ -221,109 +233,109 @@ test('add renamed fields', () => {
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
   expect(send.mock.calls[0][0]).toMatchInlineSnapshot(`
-    [
-      "changeDesiredQueries",
-      {
-        "desiredQueriesPatch": [
-          {
-            "args": undefined,
-            "ast": {
-              "alias": undefined,
-              "limit": undefined,
-              "orderBy": [
-                [
-                  "owner_id",
-                  "desc",
-                ],
-                [
-                  "id",
-                  "asc",
-                ],
-              ],
-              "related": [
+          [
+            "changeDesiredQueries",
+            {
+              "desiredQueriesPatch": [
                 {
-                  "correlation": {
-                    "childField": [
-                      "id",
-                    ],
-                    "parentField": [
-                      "owner_id",
-                    ],
-                  },
-                  "hidden": undefined,
-                  "subquery": {
+                  "args": undefined,
+                  "ast": {
                     "alias": undefined,
                     "limit": undefined,
-                    "orderBy": undefined,
-                    "related": undefined,
+                    "orderBy": [
+                      [
+                        "owner_id",
+                        "desc",
+                      ],
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
+                    "related": [
+                      {
+                        "correlation": {
+                          "childField": [
+                            "id",
+                          ],
+                          "parentField": [
+                            "owner_id",
+                          ],
+                        },
+                        "hidden": undefined,
+                        "subquery": {
+                          "alias": undefined,
+                          "limit": undefined,
+                          "orderBy": undefined,
+                          "related": undefined,
+                          "schema": undefined,
+                          "start": undefined,
+                          "table": "users",
+                          "where": undefined,
+                        },
+                        "system": undefined,
+                      },
+                    ],
                     "schema": undefined,
-                    "start": undefined,
-                    "table": "users",
-                    "where": undefined,
+                    "start": {
+                      "exclusive": false,
+                      "row": {
+                        "id": "123",
+                        "owner_id": "foobar",
+                      },
+                    },
+                    "table": "issues",
+                    "where": {
+                      "conditions": [
+                        {
+                          "left": {
+                            "name": "owner_id",
+                            "type": "column",
+                          },
+                          "op": "IS NOT",
+                          "right": {
+                            "type": "literal",
+                            "value": "null",
+                          },
+                          "type": "simple",
+                        },
+                        {
+                          "op": "EXISTS",
+                          "related": {
+                            "correlation": {
+                              "childField": [
+                                "issue_id",
+                              ],
+                              "parentField": [
+                                "id",
+                              ],
+                            },
+                            "subquery": {
+                              "alias": undefined,
+                              "limit": undefined,
+                              "orderBy": undefined,
+                              "related": undefined,
+                              "schema": undefined,
+                              "start": undefined,
+                              "table": "comments",
+                              "where": undefined,
+                            },
+                          },
+                          "type": "correlatedSubquery",
+                        },
+                      ],
+                      "type": "and",
+                    },
                   },
-                  "system": undefined,
+                  "hash": "2courpv3kf7et",
+                  "name": undefined,
+                  "op": "put",
+                  "ttl": 600000,
                 },
               ],
-              "schema": undefined,
-              "start": {
-                "exclusive": false,
-                "row": {
-                  "id": "123",
-                  "owner_id": "foobar",
-                },
-              },
-              "table": "issues",
-              "where": {
-                "conditions": [
-                  {
-                    "left": {
-                      "name": "owner_id",
-                      "type": "column",
-                    },
-                    "op": "IS NOT",
-                    "right": {
-                      "type": "literal",
-                      "value": "null",
-                    },
-                    "type": "simple",
-                  },
-                  {
-                    "op": "EXISTS",
-                    "related": {
-                      "correlation": {
-                        "childField": [
-                          "issue_id",
-                        ],
-                        "parentField": [
-                          "id",
-                        ],
-                      },
-                      "subquery": {
-                        "alias": undefined,
-                        "limit": undefined,
-                        "orderBy": undefined,
-                        "related": undefined,
-                        "schema": undefined,
-                        "start": undefined,
-                        "table": "comments",
-                        "where": undefined,
-                      },
-                    },
-                    "type": "correlatedSubquery",
-                  },
-                ],
-                "type": "and",
-              },
             },
-            "hash": "2courpv3kf7et",
-            "name": undefined,
-            "op": "put",
-            "ttl": -1,
-          },
-        ],
-      },
-    ]
-  `);
+          ]
+        `);
 });
 
 test('remove, recent queries max size 0', () => {
@@ -331,6 +343,7 @@ test('remove, recent queries max size 0', () => {
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
+    lc,
     mutationTracker,
     'client1',
     schema.tables,
@@ -359,7 +372,7 @@ test('remove, recent queries max size 0', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: MAX_TTL_MS,
         },
       ],
     },
@@ -397,6 +410,7 @@ test('remove, max recent queries size 2', () => {
   const maxRecentQueriesSize = 2;
   const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
+    lc,
     mutationTracker,
     'client1',
     schema.tables,
@@ -440,7 +454,7 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: MAX_TTL_MS,
         },
       ],
     },
@@ -465,7 +479,7 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: MAX_TTL_MS,
         },
       ],
     },
@@ -486,7 +500,7 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: MAX_TTL_MS,
         },
       ],
     },
@@ -507,7 +521,7 @@ test('remove, max recent queries size 2', () => {
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: MAX_TTL_MS,
         },
       ],
     },
@@ -560,6 +574,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
   const maxRecentQueriesSize = 2;
   const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
+    lc,
     mutationTracker,
     'client1',
     schema.tables,
@@ -603,7 +618,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: MAX_TTL_MS,
         },
       ],
     },
@@ -624,7 +639,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: MAX_TTL_MS,
         },
       ],
     },
@@ -645,7 +660,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'asc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: MAX_TTL_MS,
         },
       ],
     },
@@ -666,7 +681,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
             where: undefined,
             orderBy: [['id', 'desc']],
           } satisfies AST,
-          ttl: -1,
+          ttl: MAX_TTL_MS,
         },
       ],
     },
@@ -776,6 +791,7 @@ describe('getQueriesPatch', () => {
     const maxRecentQueriesSize = 0;
     const mutationTracker = new MutationTracker(lc);
     const queryManager = new QueryManager(
+      lc,
       mutationTracker,
       'client1',
       schema.tables,
@@ -820,7 +836,7 @@ describe('getQueriesPatch', () => {
               table: 'issues',
               orderBy: [['id', 'desc']],
             } satisfies AST,
-            ttl: -1,
+            ttl: MAX_TTL_MS,
           },
         ].map(x => [x.hash, x] as const),
       ),
@@ -837,6 +853,7 @@ describe('getQueriesPatch', () => {
       const maxRecentQueriesSize = 0;
       const mutationTracker = new MutationTracker(lc);
       queryManager = new QueryManager(
+        lc,
         mutationTracker,
         'client1',
         schema.tables,
@@ -944,7 +961,7 @@ describe('getQueriesPatch', () => {
       expect(send).toBeCalledTimes(0);
 
       send.mockClear();
-      expect(await add('forever')).toBe(-1);
+      expect(await add('forever')).toBe(MAX_TTL_MS);
       expect(send).toBeCalledTimes(1);
     });
 
@@ -1027,7 +1044,7 @@ describe('getQueriesPatch', () => {
       `);
 
       send.mockClear();
-      expect(await add('forever')).toBe(-1);
+      expect(await add('forever')).toBe(MAX_TTL_MS);
       expect(send).toBeCalledTimes(1);
     });
   });
@@ -1037,6 +1054,7 @@ describe('getQueriesPatch', () => {
     const maxRecentQueriesSize = 2;
     const mutationTracker = new MutationTracker(lc);
     const queryManager = new QueryManager(
+      lc,
       mutationTracker,
       'client1',
       schema.tables,
@@ -1088,61 +1106,61 @@ describe('getQueriesPatch', () => {
 
     const patch = await queryManager.getQueriesPatch(testReadTransaction);
     expect(patch).toMatchInlineSnapshot(`
-      Map {
-        "12hwg3ihkijhm" => {
-          "hash": "12hwg3ihkijhm",
-          "op": "del",
-        },
-        "shouldBeDeleted" => {
-          "hash": "shouldBeDeleted",
-          "op": "del",
-        },
-        "3c5d3uiyypuxu" => {
-          "args": undefined,
-          "ast": {
-            "alias": undefined,
-            "limit": undefined,
-            "orderBy": [
-              [
-                "id",
-                "asc",
-              ],
-            ],
-            "related": undefined,
-            "schema": undefined,
-            "start": undefined,
-            "table": "users",
-            "where": undefined,
+        Map {
+          "12hwg3ihkijhm" => {
+            "hash": "12hwg3ihkijhm",
+            "op": "del",
           },
-          "hash": "3c5d3uiyypuxu",
-          "name": undefined,
-          "op": "put",
-          "ttl": -1,
-        },
-        "2q7cds8pild5w" => {
-          "args": undefined,
-          "ast": {
-            "alias": undefined,
-            "limit": undefined,
-            "orderBy": [
-              [
-                "id",
-                "desc",
-              ],
-            ],
-            "related": undefined,
-            "schema": undefined,
-            "start": undefined,
-            "table": "users",
-            "where": undefined,
+          "shouldBeDeleted" => {
+            "hash": "shouldBeDeleted",
+            "op": "del",
           },
-          "hash": "2q7cds8pild5w",
-          "name": undefined,
-          "op": "put",
-          "ttl": -1,
-        },
-      }
-    `);
+          "3c5d3uiyypuxu" => {
+            "args": undefined,
+            "ast": {
+              "alias": undefined,
+              "limit": undefined,
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
+              "table": "users",
+              "where": undefined,
+            },
+            "hash": "3c5d3uiyypuxu",
+            "name": undefined,
+            "op": "put",
+            "ttl": 600000,
+          },
+          "2q7cds8pild5w" => {
+            "args": undefined,
+            "ast": {
+              "alias": undefined,
+              "limit": undefined,
+              "orderBy": [
+                [
+                  "id",
+                  "desc",
+                ],
+              ],
+              "related": undefined,
+              "schema": undefined,
+              "start": undefined,
+              "table": "users",
+              "where": undefined,
+            },
+            "hash": "2q7cds8pild5w",
+            "name": undefined,
+            "op": "put",
+            "ttl": 600000,
+          },
+        }
+      `);
     expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
   });
 });
@@ -1155,6 +1173,7 @@ test('gotCallback, query already got', () => {
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
+    lc,
     mutationTracker,
     'client1',
     schema.tables,
@@ -1224,6 +1243,7 @@ test('gotCallback, query got after add', () => {
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
+    lc,
     mutationTracker,
     'client1',
     schema.tables,
@@ -1262,7 +1282,7 @@ test('gotCallback, query got after add', () => {
             limit: undefined,
             schema: undefined,
           } satisfies AST,
-          ttl: -1,
+          ttl: MAX_TTL_MS,
         },
       ],
     },
@@ -1288,6 +1308,7 @@ test('gotCallback, query got after add then removed', () => {
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
+    lc,
     mutationTracker,
     'client1',
     schema.tables,
@@ -1362,6 +1383,7 @@ test('gotCallback, query got after subscription removed', () => {
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
+    lc,
     mutationTracker,
     'client1',
     schema.tables,
@@ -1440,6 +1462,7 @@ describe('queriesPatch with lastPatch', () => {
     const maxRecentQueriesSize = 0;
     const mutationTracker = new MutationTracker(lc);
     const queryManager = new QueryManager(
+      lc,
       mutationTracker,
       'client1',
       schema.tables,
@@ -1467,7 +1490,7 @@ describe('queriesPatch with lastPatch', () => {
         },
         hash: '12hwg3ihkijhm',
         op: 'put',
-        ttl: -1,
+        ttl: MAX_TTL_MS,
       },
     ]);
   });
@@ -1478,6 +1501,7 @@ describe('queriesPatch with lastPatch', () => {
     );
     const mutationTracker = new MutationTracker(lc);
     const queryManager = new QueryManager(
+      lc,
       mutationTracker,
       'client1',
       schema.tables,
@@ -1550,6 +1574,7 @@ test('gotCallback, add same got callback twice', () => {
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
+    lc,
     mutationTracker,
     'client1',
     schema.tables,
@@ -1592,7 +1617,7 @@ test('gotCallback, add same got callback twice', () => {
             orderBy: [['id', 'asc']],
             ...normalizingFields,
           } satisfies AST,
-          ttl: -1,
+          ttl: MAX_TTL_MS,
         },
       ],
     },
@@ -1619,6 +1644,7 @@ test('batching multiple operations in same microtask', () => {
   const maxRecentQueriesSize = 0;
   const mutationTracker = new MutationTracker(lc);
   const queryManager = new QueryManager(
+    lc,
     mutationTracker,
     'client1',
     schema.tables,
@@ -1667,6 +1693,7 @@ describe('query manager & mutator interaction', () => {
     send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
     mutationTracker = new MutationTracker(lc);
     queryManager = new QueryManager(
+      lc,
       mutationTracker,
       'client1',
       schema.tables,
@@ -1730,5 +1757,98 @@ describe('query manager & mutator interaction', () => {
     remove2();
     queryManager.flushBatch();
     expect(send).toBeCalledTimes(4);
+  });
+});
+
+describe('Adding a query with TTL too large should warn', () => {
+  const context = {['QueryManager']: undefined} as const;
+  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+  const logSink = {
+    log: vi.fn<LogSink['log']>(),
+  };
+  const lc = new LogContext('debug', {}, logSink);
+  const maxRecentQueriesSize = 0;
+  const mutationTracker = new MutationTracker(lc);
+  const queryManager = new QueryManager(
+    lc,
+    mutationTracker,
+    'client1',
+    schema.tables,
+    send,
+    () => () => {},
+    maxRecentQueriesSize,
+    queryChangeThrottleMs,
+  );
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('addCustom', () => {
+    // Test with TTL larger than MAX_TTL_MS (600,000ms = 10 minutes)
+    const largeTTL = MAX_TTL_MS + 1; // 600,001ms
+    queryManager.addCustom('testQuery', ['arg1'], largeTTL);
+    queryManager.flushBatch();
+
+    expect(logSink.log).toHaveBeenCalledExactlyOnceWith(
+      'warn',
+      context,
+      `TTL (${largeTTL}) is too high, clamping to 10m`,
+    );
+
+    // Test with 'forever' TTL which should also warn
+    logSink.log.mockClear();
+    queryManager.addCustom('testQuery2', ['arg2'], 'forever');
+    queryManager.flushBatch();
+
+    expect(logSink.log).toHaveBeenCalledExactlyOnceWith(
+      'warn',
+      context,
+      'TTL (forever) is too high, clamping to 10m',
+    );
+
+    // Test with valid TTL that should not warn
+    logSink.log.mockClear();
+    queryManager.addCustom('testQuery3', ['arg3'], '5m');
+    queryManager.flushBatch();
+
+    expect(logSink.log).not.toHaveBeenCalled();
+  });
+
+  test('addLegacy', () => {
+    const ast: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+    };
+
+    // Test with TTL larger than MAX_TTL_MS (600,000ms = 10 minutes)
+    const largeTTL = MAX_TTL_MS + 1; // 600,001ms
+    queryManager.addLegacy(ast, largeTTL);
+    queryManager.flushBatch();
+
+    expect(logSink.log).toHaveBeenCalledExactlyOnceWith(
+      'warn',
+      context,
+      `TTL (${largeTTL}) is too high, clamping to 10m`,
+    );
+
+    // Test with 'forever' TTL which should also warn
+    logSink.log.mockClear();
+    queryManager.addLegacy(ast, 'forever');
+    queryManager.flushBatch();
+
+    expect(logSink.log).toHaveBeenCalledExactlyOnceWith(
+      'warn',
+      context,
+      'TTL (forever) is too high, clamping to 10m',
+    );
+    expect(logSink.log).toHaveBeenCalledTimes(1);
+
+    // Test with valid TTL that should not warn
+    logSink.log.mockClear();
+    queryManager.addLegacy(ast, '5m');
+    queryManager.flushBatch();
+
+    expect(logSink.log).not.toHaveBeenCalled();
   });
 });
