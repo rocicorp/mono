@@ -1,6 +1,7 @@
 import {
   PG_ADMIN_SHUTDOWN,
   PG_OBJECT_IN_USE,
+  PG_OBJECT_NOT_IN_PREREQUISITE_STATE,
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {defu} from 'defu';
@@ -10,6 +11,7 @@ import {getTypeParsers} from '../../../../db/pg-type-parser.ts';
 import {type PostgresDB} from '../../../../types/pg.ts';
 import {pipe, type Sink, type Source} from '../../../../types/streams.ts';
 import {Subscription} from '../../../../types/subscription.ts';
+import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import {fromBigInt} from '../lsn.ts';
 import {PgoutputParser} from './pgoutput-parser.ts';
 import type {Message} from './pgoutput.types.ts';
@@ -136,19 +138,27 @@ async function startReplicationStream(
         .execute();
       return await Promise.all([stream.readable(), stream.writable()]);
     } catch (e) {
-      if (
+      if (e instanceof postgres.PostgresError) {
         // error: replication slot "zero_slot_change_source_test_id" is active for PID 268
-        e instanceof postgres.PostgresError &&
-        e.code === PG_OBJECT_IN_USE
-      ) {
-        // The freeing up of the replication slot is not transactional;
-        // sometimes it takes time for Postgres to consider the slot
-        // inactive.
-        lc.warn?.(`attempt ${i + 1}: ${String(e)}`, e);
-        await sleep(10);
-      } else {
-        throw e;
+        if (e.code === PG_OBJECT_IN_USE) {
+          // The freeing up of the replication slot is not transactional;
+          // sometimes it takes time for Postgres to consider the slot
+          // inactive.
+          lc.warn?.(`attempt ${i + 1}: ${String(e)}`, e);
+          await sleep(10);
+          continue;
+        }
+        // error: This slot has been invalidated because it exceeded the maximum reserved size.
+        // (This is a different manifestation of a slot being invalidated when
+        //  the wal exceeds the max_slot_wal_keep_size)
+        if (e.code === PG_OBJECT_NOT_IN_PREREQUISITE_STATE) {
+          lc.error?.(`error starting replication stream`, e);
+          throw new AutoResetSignal(`unable to start replication stream`, {
+            cause: e,
+          });
+        }
       }
+      throw e;
     }
   }
   throw new Error(
