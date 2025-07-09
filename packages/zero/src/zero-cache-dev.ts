@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
-import '../../shared/src/dotenv.ts';
 import {resolver} from '@rocicorp/resolver';
 import {watch} from 'chokidar';
 import {spawn, type ChildProcess} from 'node:child_process';
+import '../../shared/src/dotenv.ts';
+import {createLogContext} from '../../shared/src/logging.ts';
 import {parseOptionsAdvanced} from '../../shared/src/options.ts';
 import {
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
 } from '../../zero-cache/src/config/zero-config.ts';
 import {deployPermissionsOptions} from '../../zero-cache/src/scripts/permissions.ts';
-import {createLogContext} from '../../shared/src/logging.ts';
 
 const deployPermissionsScript = 'zero-deploy-permissions';
 const zeroCacheScript = 'zero-cache';
@@ -34,11 +34,11 @@ async function main() {
       ...deployPermissionsOptions,
       ...zeroOptions,
     },
-    process.argv.slice(2),
-    ZERO_ENV_VAR_PREFIX,
-    [],
-    false,
-    true, // allowPartial, required by server/runner/config.ts
+    {
+      envNamePrefix: ZERO_ENV_VAR_PREFIX,
+      // TODO: This may no longer be necessary since multi-tenant was removed.
+      allowPartial: true, // required by server/runner/config.ts
+    },
   );
 
   const lc = createLogContext(config);
@@ -51,19 +51,13 @@ async function main() {
 
   const {unknown: zeroCacheArgs} = parseOptionsAdvanced(
     deployPermissionsOptions,
-    process.argv.slice(2),
-    ZERO_ENV_VAR_PREFIX,
-    [],
-    true,
+    {envNamePrefix: ZERO_ENV_VAR_PREFIX, allowUnknown: true},
   );
 
-  const {unknown: deployPermissionsArgs} = parseOptionsAdvanced(
-    zeroOptions,
-    process.argv.slice(2),
-    ZERO_ENV_VAR_PREFIX,
-    [],
-    true,
-  );
+  const {unknown: deployPermissionsArgs} = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: ZERO_ENV_VAR_PREFIX,
+    allowUnknown: true,
+  });
 
   const {path} = config.schema;
 
