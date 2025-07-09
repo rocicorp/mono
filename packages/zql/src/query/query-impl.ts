@@ -45,7 +45,7 @@ import {
   type Query,
   type RunOptions,
 } from './query.ts';
-import {DEFAULT_PRELOAD_TTL, DEFAULT_TTL, type TTL} from './ttl.ts';
+import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 export type AnyQuery = Query<Schema, string, any>;
@@ -727,7 +727,7 @@ export class QueryImpl<
 
   materialize<T>(
     factoryOrTTL?: ViewFactory<TSchema, TTable, TReturn, T> | TTL,
-    ttl: TTL = DEFAULT_TTL,
+    ttl: TTL = DEFAULT_TTL_MS,
   ): T {
     const delegate = must(
       this._delegate,
@@ -738,7 +738,7 @@ export class QueryImpl<
     if (typeof factoryOrTTL === 'function') {
       factory = factoryOrTTL;
     } else {
-      ttl = factoryOrTTL ?? DEFAULT_TTL;
+      ttl = factoryOrTTL ?? DEFAULT_TTL_MS;
     }
     const ast = this._completeAst();
     const queryCompleteResolver = resolver<true>();
@@ -820,35 +820,28 @@ export class QueryImpl<
       this._delegate,
       'preload requires a query delegate to be set',
     );
+    const ttl = options?.ttl ?? DEFAULT_PRELOAD_TTL_MS;
     const {resolve, promise: complete} = resolver<void>();
     if (this.customQueryID) {
-      const unsub = delegate.addCustomQuery(
-        this.customQueryID,
-        options?.ttl ?? DEFAULT_PRELOAD_TTL,
-        got => {
-          if (got) {
-            resolve();
-          }
-        },
-      );
+      const cleanup = delegate.addCustomQuery(this.customQueryID, ttl, got => {
+        if (got) {
+          resolve();
+        }
+      });
       return {
-        cleanup: unsub,
+        cleanup,
         complete,
       };
     }
 
     const ast = this._completeAst();
-    const unsub = delegate.addServerQuery(
-      ast,
-      options?.ttl ?? DEFAULT_TTL,
-      got => {
-        if (got) {
-          resolve();
-        }
-      },
-    );
+    const cleanup = delegate.addServerQuery(ast, ttl, got => {
+      if (got) {
+        resolve();
+      }
+    });
     return {
-      cleanup: unsub,
+      cleanup,
       complete,
     };
   }

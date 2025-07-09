@@ -1,20 +1,20 @@
 import {createComputed, onCleanup, type Accessor} from 'solid-js';
+import {createStore} from 'solid-js/store';
 import {
-  DEFAULT_TTL,
   type ClientID,
   type HumanReadable,
   type Query,
   type Schema,
   type TTL,
 } from '../../zero/src/zero.ts';
+import {DEFAULT_TTL_MS} from '../../zql/src/query/ttl.ts';
 import {
   createSolidViewFactory,
-  type State,
+  UNKNOWN,
   type QueryResultDetails,
   type SolidView,
-  UNKNOWN,
+  type State,
 } from './solid-view.ts';
-import {createStore} from 'solid-js/store';
 import {useZero} from './use-zero.ts';
 
 export type QueryResult<TReturn> = readonly [
@@ -79,7 +79,7 @@ export function useQuery<
       const clientID = useZero()()?.clientID;
       const query = querySignal();
       const queryHash = query.hash();
-      const ttl = normalize(options)?.ttl ?? DEFAULT_TTL;
+      const ttl = normalize(options)?.ttl ?? DEFAULT_TTL_MS;
       if (
         !prevView ||
         clientID !== prevClientID ||

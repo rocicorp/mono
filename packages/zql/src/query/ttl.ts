@@ -17,10 +17,13 @@ export type TimeUnit = 's' | 'm' | 'h' | 'd' | 'y';
 export type TTL = `${number}${TimeUnit}` | 'forever' | 'none' | number;
 
 export const DEFAULT_TTL: TTL = '1s';
+export const DEFAULT_TTL_MS = 1_000;
 
 export const DEFAULT_PRELOAD_TTL: TTL = '5s';
+export const DEFAULT_PRELOAD_TTL_MS = 5_000;
 
 export const MAX_TTL: TTL = '10m';
+export const MAX_TTL_MS = 600_000;
 
 const multiplier = {
   s: 1000,
@@ -83,7 +86,7 @@ export function normalizeTTL(ttl: TTL): TTL {
   return (shortest.length < lengthOfNumber ? shortest : ttl) as TTL;
 }
 
-export function clampTTL(ttl: TTL, lc?: LogContext): number {
+export function clampTTL(ttl: TTL, lc?: Pick<LogContext, 'warn'>): number {
   const parsedTTL = parseTTL(ttl);
   if (parsedTTL === -1 || parsedTTL > 10 * 60 * 1000) {
     // 10 minutes in milliseconds
