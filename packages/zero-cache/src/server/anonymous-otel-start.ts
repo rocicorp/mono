@@ -11,8 +11,9 @@ import packageJson from '../../../zero/package.json' with {type: 'json'};
 import {getZeroConfig, type ZeroConfig} from '../config/zero-config.js';
 import {execSync} from 'child_process';
 import {randomUUID} from 'crypto';
-import {existsSync} from 'fs';
+import {existsSync, readFileSync, writeFileSync, mkdirSync} from 'fs';
 import {join, dirname} from 'path';
+import {homedir} from 'os';
 
 
 class AnonymousTelemetryManager {
@@ -271,6 +272,7 @@ class AnonymousTelemetryManager {
         'zero.worker.id': this.#workerId,
         'zero.project.id': this.#getGitProjectId(),
         'zero.session.id': this.#sessionId,
+        'zero.fs.id': this.#getOrSetFsID(),
       };
       this.#lc?.debug?.(
         `Telemetry: cached attributes=${JSON.stringify(this.#cachedAttributes)}`,
@@ -327,6 +329,33 @@ class AnonymousTelemetryManager {
       return rootCommitHash.length === 40 ? rootCommitHash : 'unknown';
     } catch (error) {
       this.#lc?.debug?.('Unable to get Git root commit:', error);
+      return 'unknown';
+    }
+  }
+
+  #getOrSetFsID(): string {
+    try {
+      const fsidPath = join(homedir(), '.rocicorp', 'fsid');
+      const fsidDir = dirname(fsidPath);
+
+      // Check if the file exists
+      if (existsSync(fsidPath)) {
+        // Read and return the existing GUID
+        const existingId = readFileSync(fsidPath, 'utf8').trim();
+        return existingId;
+      }
+
+      // File doesn't exist, create directory if needed
+      if (!existsSync(fsidDir)) {
+        mkdirSync(fsidDir, {recursive: true});
+      }
+
+      // Generate a new random GUID and write it to the file
+      const newId = randomUUID();
+      writeFileSync(fsidPath, newId, 'utf8');
+      return newId;
+    } catch (error) {
+      this.#lc?.debug?.('Unable to get or set filesystem ID:', error);
       return 'unknown';
     }
   }
