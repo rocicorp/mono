@@ -13,14 +13,20 @@ describe('OTEL Proxy Handler', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     // Reset env vars to defaults
     vi.stubEnv('ROCICORP_TELEMETRY_TOKEN', 'test-token');
-    vi.stubEnv('GRAFANA_OTLP_ENDPOINT', 'https://test-grafana.com/otlp/v1/metrics');
-    
+    vi.stubEnv(
+      'GRAFANA_OTLP_ENDPOINT',
+      'https://test-grafana.com/otlp/v1/metrics',
+    );
+
     req = {
       method: 'POST',
       body: Buffer.from('test-metrics-data'),
+      headers: {
+        'content-type': 'application/x-protobuf',
+      },
     };
 
     res = {
@@ -48,7 +54,7 @@ describe('OTEL Proxy Handler', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-protobuf',
-          authorization: 'Bearer test-token',
+          'authorization': 'Bearer test-token',
         },
         body: req.body,
       },
@@ -123,7 +129,7 @@ describe('OTEL Proxy Handler', () => {
 
   it('should use default endpoint when GRAFANA_OTLP_ENDPOINT is not set', async () => {
     vi.stubEnv('GRAFANA_OTLP_ENDPOINT', '');
-    
+
     const mockResponse = {
       status: 200,
       headers: {
@@ -144,10 +150,10 @@ describe('OTEL Proxy Handler', () => {
   it('should validate request body exists', async () => {
     req.body = undefined;
 
-    await expect(handler(req as VercelRequest, res as VercelResponse)).rejects.toThrow(
-      'Request body is required for metrics forwarding',
-    );
+    await handler(req as VercelRequest, res as VercelResponse);
 
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({error: 'Failed to forward metrics'});
     expect(mockFetch).not.toHaveBeenCalled();
   });
 });

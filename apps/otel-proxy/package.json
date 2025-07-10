@@ -27,11 +27,15 @@
     "vitest": "3.2.4"
   },
   "eslintConfig": {
-    "extends": ["@rocicorp/eslint-config"],
+    "extends": [
+      "@rocicorp/eslint-config"
+    ],
     "rules": {
       "no-restricted-imports": "off"
     },
-    "ignorePatterns": ["dist"]
+    "ignorePatterns": [
+      "dist"
+    ]
   },
   "prettier": "@rocicorp/prettier-config"
 }
