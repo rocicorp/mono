@@ -7,6 +7,43 @@ import handler from './index';
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
+// Sample OTEL metrics data
+const validOtelData = {
+  resourceMetrics: [
+    {
+      resource: {
+        attributes: [
+          {
+            key: 'service.name',
+            value: {stringValue: 'test-service'},
+          },
+        ],
+      },
+      scopeMetrics: [
+        {
+          scope: {
+            name: 'test-scope',
+          },
+          metrics: [
+            {
+              name: 'test_metric',
+              unit: 'count',
+              sum: {
+                dataPoints: [
+                  {
+                    timeUnixNano: '1234567890000000000',
+                    value: 42,
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ],
+};
+
 describe('OTEL Proxy Handler', () => {
   let req: Partial<VercelRequest>;
   let res: Partial<VercelResponse>;
@@ -23,9 +60,9 @@ describe('OTEL Proxy Handler', () => {
 
     req = {
       method: 'POST',
-      body: Buffer.from('test-metrics-data'),
+      body: validOtelData,
       headers: {
-        'content-type': 'application/x-protobuf',
+        'content-type': 'application/json',
       },
     };
 
@@ -53,10 +90,10 @@ describe('OTEL Proxy Handler', () => {
       {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-protobuf',
+          'Content-Type': 'application/json',
           'authorization': 'Bearer test-token',
         },
-        body: req.body,
+        body: JSON.stringify(validOtelData),
       },
     );
 
@@ -90,6 +127,58 @@ describe('OTEL Proxy Handler', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
+  it('should reject non-JSON content type', async () => {
+    req.headers = {'content-type': 'application/x-protobuf'};
+
+    await handler(req as VercelRequest, res as VercelResponse);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({error: 'Invalid request type'});
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('should reject requests with missing content type', async () => {
+    req.headers = {};
+
+    await handler(req as VercelRequest, res as VercelResponse);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({error: 'Invalid request type'});
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('should reject requests without OTEL data', async () => {
+    req.body = {some: 'random', data: 'without otel fields'};
+
+    await handler(req as VercelRequest, res as VercelResponse);
+
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({error: 'Invalid request body'});
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('should accept requests with resource field', async () => {
+    req.body = {
+      resource: {
+        attributes: [{key: 'service.name', value: {stringValue: 'test'}}],
+      },
+    };
+
+    const mockResponse = {
+      status: 200,
+      headers: {
+        get: vi.fn().mockReturnValue('application/json'),
+      },
+      json: vi.fn().mockResolvedValue({success: true}),
+    };
+    mockFetch.mockResolvedValue(mockResponse);
+
+    await handler(req as VercelRequest, res as VercelResponse);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockFetch).toHaveBeenCalled();
+  });
+
   it('should handle missing ROCICORP_TELEMETRY_TOKEN', async () => {
     vi.stubEnv('ROCICORP_TELEMETRY_TOKEN', '');
 
@@ -97,7 +186,7 @@ describe('OTEL Proxy Handler', () => {
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({
-      error: 'ROCICORP_TELEMETRY_TOKEN not configured',
+      error: 'Telemetry token not configured',
     });
     expect(mockFetch).not.toHaveBeenCalled();
   });
