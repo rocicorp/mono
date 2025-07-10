@@ -793,7 +793,7 @@ export class QueryImpl<
       'run requires a query delegate to be set',
     );
     delegate.assertValidRunOptions(options);
-    const v: TypedView<HumanReadable<TReturn>> = this.materialize();
+    const v: TypedView<HumanReadable<TReturn>> = this.materialize(options?.ttl);
     if (options?.type === 'complete') {
       return new Promise(resolve => {
         v.addListener((data, type) => {
