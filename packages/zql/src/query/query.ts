@@ -422,8 +422,8 @@ export interface Query<
    * @param options Options to control the result type.
    * @param options.type The type of result to return.
    * @param options.ttl Time To Live. This is the amount of time to keep the rows
-   *                  associated with this query after {@linkcode cleanup} has
-   *                  been called.
+   *                  associated with this query after the returned promise has
+   *                  resolved.
    * @returns A promise resolving to the query result.
    *
    * @example
@@ -483,7 +483,7 @@ export type HumanReadableRecursive<T> = undefined extends T
  * By default, `run` uses `{type: 'unknown'}` to avoid waiting for the server.
  *
  * The `ttl` option is used to specify the time to live for the query. This is the amount of
- * time to keep the rows associated with this query after {@linkcode cleanup} has been called.
+ * time to keep the rows associated with this query after the promise has resolved.
  */
 export type RunOptions = {
   type: 'unknown' | 'complete';
