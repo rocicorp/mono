@@ -58,7 +58,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const open = status === 'open' ? true : status === 'closed' ? false : null;
 
-  const pageSize = 10;
+  const pageSize = 20;
   const [limit, setLimit] = useState(pageSize);
   const q = issueList(
     {
