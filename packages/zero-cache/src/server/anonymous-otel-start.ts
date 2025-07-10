@@ -14,8 +14,6 @@ import {randomUUID} from 'crypto';
 import {existsSync} from 'fs';
 import {join, dirname} from 'path';
 
-const ROCICORP_TELEMETRY_TOKEN =
-  process.env.ROCICORP_TELEMETRY_TOKEN || 'anonymous-token';
 
 class AnonymousTelemetryManager {
   static #instance: AnonymousTelemetryManager;
@@ -80,8 +78,7 @@ class AnonymousTelemetryManager {
     const metricReader = new PeriodicExportingMetricReader({
       exportIntervalMillis: 60000,
       exporter: new OTLPMetricExporter({
-        url: 'https://otlp-gateway-prod-us-east-2.grafana.net/otlp/v1/metrics',
-        headers: {authorization: `Bearer ${ROCICORP_TELEMETRY_TOKEN}`},
+        url: 'https://metrics.rocicorp.dev',
       }),
     });
 
