@@ -298,6 +298,9 @@ class AnonymousTelemetryManager {
       process.env.GOOGLE_CLOUD_PROJECT
     )
       return 'gcp';
+    if (process.env.COOLIFY_URL || process.env.COOLIFY_CONTAINER_NAME)
+      return 'coolify';
+
     return 'unknown';
   }
 
