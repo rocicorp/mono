@@ -408,7 +408,8 @@ export interface Query<
 
   /**
    * Executes the query and returns the result once. The `options` parameter
-   * specifies whether to wait for complete results or return immediately.
+   * specifies whether to wait for complete results or return immediately,
+   * and the time to live for the query.
    *
    * - `{type: 'unknown'}`: Returns a snapshot of the data immediately.
    * - `{type: 'complete'}`: Waits for the latest, complete results from the server.
@@ -418,12 +419,16 @@ export interface Query<
    * `Query` implements `PromiseLike`, and calling `then` on it will invoke `run`
    * with the default behavior (`unknown`).
    *
-   * @param options Options to control the result type. Defaults to `{type: 'unknown'}`.
+   * @param options Options to control the result type.
+   * @param options.type The type of result to return.
+   * @param options.ttl Time To Live. This is the amount of time to keep the rows
+   *                  associated with this query after {@linkcode cleanup} has
+   *                  been called.
    * @returns A promise resolving to the query result.
    *
    * @example
    * ```js
-   * const result = await query.run({type: 'complete'});
+   * const result = await query.run({type: 'complete', ttl: '1m'});
    * ```
    */
   run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
@@ -476,9 +481,13 @@ export type HumanReadableRecursive<T> = undefined extends T
  * this query you can preload it before calling run. See {@link preload}.
  *
  * By default, `run` uses `{type: 'unknown'}` to avoid waiting for the server.
+ *
+ * The `ttl` option is used to specify the time to live for the query. This is the amount of
+ * time to keep the rows associated with this query after {@linkcode cleanup} has been called.
  */
 export type RunOptions = {
   type: 'unknown' | 'complete';
+  ttl?: TTL;
 };
 
 export const DEFAULT_RUN_OPTIONS_UNKNOWN = {
