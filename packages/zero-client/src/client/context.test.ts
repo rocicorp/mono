@@ -52,6 +52,7 @@ test('getSource', () => {
     null as unknown as UpdateCustomQuery,
     null as unknown as FlushQueryChanges,
     testBatchViewUpdates,
+    () => {},
     5_000,
     assertValidRunOptions,
   );
@@ -129,6 +130,7 @@ test('processChanges', () => {
     null as unknown as UpdateCustomQuery,
     null as unknown as FlushQueryChanges,
     testBatchViewUpdates,
+    () => {},
     5_000,
     assertValidRunOptions,
   );
@@ -199,6 +201,7 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
     null as unknown as UpdateCustomQuery,
     null as unknown as FlushQueryChanges,
     batchViewUpdates,
+    () => {},
     5_000,
     assertValidRunOptions,
   );
@@ -258,6 +261,7 @@ test('transactions', () => {
     null as unknown as UpdateCustomQuery,
     null as unknown as FlushQueryChanges,
     testBatchViewUpdates,
+    () => {},
     5_000,
     assertValidRunOptions,
   );
@@ -338,6 +342,7 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
     null as unknown as UpdateCustomQuery,
     null as unknown as FlushQueryChanges,
     batchViewUpdates,
+    () => {},
     5_000,
     assertValidRunOptions,
   );
@@ -362,6 +367,7 @@ test('batchViewUpdates returns value', () => {
     null as unknown as UpdateCustomQuery,
     null as unknown as FlushQueryChanges,
     batchViewUpdates,
+    () => {},
     5_000,
     assertValidRunOptions,
   );

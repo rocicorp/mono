@@ -265,6 +265,7 @@ const host: QueryDelegate = {
   flushQueryChanges() {},
   assertValidRunOptions() {},
   defaultQueryComplete: true,
+  addMetric() {},
 };
 
 let start: number;
