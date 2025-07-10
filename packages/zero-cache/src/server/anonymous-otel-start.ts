@@ -15,7 +15,6 @@ import {existsSync, readFileSync, writeFileSync, mkdirSync} from 'fs';
 import {join, dirname} from 'path';
 import {homedir} from 'os';
 
-
 class AnonymousTelemetryManager {
   static #instance: AnonymousTelemetryManager;
   #started = false;
