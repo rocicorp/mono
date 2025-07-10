@@ -3,6 +3,7 @@ import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
+import {TDigest} from '../../../shared/src/tdigest.ts';
 import {
   mapAST,
   normalizeAST,
@@ -19,8 +20,11 @@ import {
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
+import type {CustomQueryID} from '../../../zql/src/query/named.ts';
 import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
 import {clampTTL, compareTTL, type TTL} from '../../../zql/src/query/ttl.ts';
+import type {InspectorMetricsDelegate} from './inspector/inspector.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
@@ -39,12 +43,16 @@ type Entry = {
   ttl: TTL;
 };
 
+type Metric = {
+  [K in keyof MetricMap]: TDigest;
+};
+
 /**
  * Tracks what queries the client is currently subscribed to on the server.
  * Sends `changeDesiredQueries` message to server when this changes.
  * Deduplicates requests so that we only listen to a given unique query once.
  */
-export class QueryManager {
+export class QueryManager implements InspectorMetricsDelegate {
   readonly #clientID: ClientID;
   readonly #clientToServer: NameMapper;
   readonly #send: (change: ChangeDesiredQueriesMessage) => void;
@@ -58,6 +66,10 @@ export class QueryManager {
   #pendingRemovals: Array<() => void> = [];
   #batchTimer: ReturnType<typeof setTimeout> | undefined;
   readonly #lc: ZeroLogContext;
+  readonly #metrics: Metric = {
+    'query-materialization-client': new TDigest(),
+  };
+  readonly #queryMetrics: Map<string, Metric> = new Map();
 
   constructor(
     lc: ZeroLogContext,
@@ -185,8 +197,7 @@ export class QueryManager {
   }
 
   addCustom(
-    name: string,
-    args: readonly ReadonlyJSONValue[],
+    {name, args}: CustomQueryID,
     ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ): () => void {
@@ -288,7 +299,7 @@ export class QueryManager {
     };
   }
 
-  updateCustom(name: string, args: readonly ReadonlyJSONValue[], ttl: TTL) {
+  updateCustom({name, args}: CustomQueryID, ttl: TTL) {
     const hash = hashOfNameAndArgs(name, args);
     const entry = must(this.#queries.get(hash));
     this.#updateEntry(entry, hash, ttl);
@@ -357,12 +368,39 @@ export class QueryManager {
     if (entry.count === 0) {
       this.#recentQueries.add(astHash);
       if (this.#recentQueries.size > this.#recentQueriesMaxSize) {
-        const lruAstHash = this.#recentQueries.values().next().value;
-        assert(lruAstHash);
-        this.#queries.delete(lruAstHash);
-        this.#recentQueries.delete(lruAstHash);
-        this.#queueQueryChange({op: 'del', hash: lruAstHash});
+        const lruQueryID = this.#recentQueries.values().next().value;
+        assert(lruQueryID);
+        this.#queries.delete(lruQueryID);
+        this.#recentQueries.delete(lruQueryID);
+        this.#queryMetrics.delete(lruQueryID);
+        this.#queueQueryChange({op: 'del', hash: lruQueryID});
       }
     }
+  }
+
+  get metrics() {
+    return this.#metrics;
+  }
+
+  addMetric(metric: keyof MetricMap, value: number, queryID: string): void {
+    // We track of all materializations of queries as well as per
+    // query materializations.
+    if (metric === 'query-materialization-client') {
+      this.#metrics[metric].add(value);
+    }
+
+    // The query manager manages metrics that are per query.
+    let existing = this.#queryMetrics.get(queryID);
+    if (!existing) {
+      existing = {
+        'query-materialization-client': new TDigest(),
+      };
+      this.#queryMetrics.set(queryID, existing);
+    }
+    existing[metric].add(value);
+  }
+
+  getQueryMetrics(queryID: string): Metric | undefined {
+    return this.#queryMetrics.get(queryID);
   }
 }

@@ -100,7 +100,7 @@ test('add and remove a custom query', () => {
     maxRecentQueriesSize,
     queryChangeThrottleMs,
   );
-  const rm1 = queryManager.addCustom('customQuery', [1], '1m');
+  const rm1 = queryManager.addCustom({name: 'customQuery', args: [1]}, '1m');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
@@ -118,20 +118,20 @@ test('add and remove a custom query', () => {
     },
   ]);
 
-  const rm2 = queryManager.addCustom('customQuery', [1], '1m');
+  const rm2 = queryManager.addCustom({name: 'customQuery', args: [1]}, '1m');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
 
   rm2();
   queryManager.flushBatch();
-  const rm3 = queryManager.addCustom('customQuery', [1], '1m');
+  const rm3 = queryManager.addCustom({name: 'customQuery', args: [1]}, '1m');
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
   rm1();
   queryManager.flushBatch();
   rm3();
   queryManager.flushBatch();
-  queryManager.addCustom('customQuery', [1], '1m');
+  queryManager.addCustom({name: 'customQuery', args: [1]}, '1m');
   queryManager.flushBatch();
   // once for del, another for put
   expect(send).toBeCalledTimes(3);
@@ -139,7 +139,7 @@ test('add and remove a custom query', () => {
   send.mockClear();
 
   // now update the custom query
-  queryManager.updateCustom('customQuery', [1], '2m');
+  queryManager.updateCustom({name: 'customQuery', args: [1]}, '2m');
   queryManager.flushBatch();
   // update event sent
   expect(send).toBeCalledTimes(1);
@@ -158,7 +158,7 @@ test('add and remove a custom query', () => {
     },
   ]);
 
-  queryManager.updateCustom('customQuery', [1], '1m');
+  queryManager.updateCustom({name: 'customQuery', args: [1]}, '1m');
   queryManager.flushBatch();
   // send not called with lower ttl
   expect(send).toBeCalledTimes(1);
@@ -1662,8 +1662,8 @@ test('batching multiple operations in same microtask', () => {
     {table: 'issue', orderBy: [['id', 'desc']]},
     'forever',
   );
-  queryManager.addCustom('customQuery1', [1], '1m');
-  queryManager.addCustom('customQuery2', [2], '1m');
+  queryManager.addCustom({name: 'customQuery1', args: [1]}, '1m');
+  queryManager.addCustom({name: 'customQuery2', args: [2]}, '1m');
 
   expect(send).toBeCalledTimes(0); // No calls yet
 
@@ -1790,7 +1790,7 @@ describe('Adding a query with TTL too large should warn', () => {
   test('addCustom', () => {
     // Test with TTL larger than MAX_TTL_MS (600,000ms = 10 minutes)
     const largeTTL = MAX_TTL_MS + 1; // 600,001ms
-    queryManager.addCustom('testQuery', ['arg1'], largeTTL);
+    queryManager.addCustom({name: 'testQuery', args: ['arg1']}, largeTTL);
     queryManager.flushBatch();
 
     expect(logSink.log).toHaveBeenCalledExactlyOnceWith(
@@ -1801,7 +1801,7 @@ describe('Adding a query with TTL too large should warn', () => {
 
     // Test with 'forever' TTL which should also warn
     logSink.log.mockClear();
-    queryManager.addCustom('testQuery2', ['arg2'], 'forever');
+    queryManager.addCustom({name: 'testQuery2', args: ['arg2']}, 'forever');
     queryManager.flushBatch();
 
     expect(logSink.log).toHaveBeenCalledExactlyOnceWith(
@@ -1812,7 +1812,7 @@ describe('Adding a query with TTL too large should warn', () => {
 
     // Test with valid TTL that should not warn
     logSink.log.mockClear();
-    queryManager.addCustom('testQuery3', ['arg3'], '5m');
+    queryManager.addCustom({name: 'testQuery3', args: ['arg3']}, '5m');
     queryManager.flushBatch();
 
     expect(logSink.log).not.toHaveBeenCalled();

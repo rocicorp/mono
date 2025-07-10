@@ -78,6 +78,7 @@ import {
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
+import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {
@@ -570,12 +571,14 @@ export class Zero<
       this.#ivmMain,
       (ast, ttl, gotCallback) =>
         this.#queryManager.addLegacy(ast, ttl, gotCallback),
-      (queryName, queryArgs, ttl, gotCallback) =>
-        this.#queryManager.addCustom(queryName, queryArgs, ttl, gotCallback),
+      (customQueryID, ttl, gotCallback) =>
+        this.#queryManager.addCustom(customQueryID, ttl, gotCallback),
       (ast, ttl) => this.#queryManager.updateLegacy(ast, ttl),
-      (name, args, ttl) => this.#queryManager.updateCustom(name, args, ttl),
+      (customQueryID, ttl) =>
+        this.#queryManager.updateCustom(customQueryID, ttl),
       () => this.#queryManager.flushBatch(),
       batchViewUpdates,
+      this.#addMetric,
       slowMaterializeThreshold,
       assertValidRunOptions,
     );
@@ -1938,12 +1941,32 @@ export class Zero<
     BUNDLE_SIZE: {
       const m = await import('./inspector/inspector.ts');
       // Wait for the web socket to be available
-      return m.newInspector(this.#rep, this.#schema, async () => {
-        await this.#connectResolver.promise;
-        return this.#socket!;
-      });
+      return m.newInspector(
+        this.#rep,
+        this.#queryManager,
+        this.#schema,
+        async () => {
+          await this.#connectResolver.promise;
+          return this.#socket!;
+        },
+      );
     }
   }
+
+  #addMetric: (
+    metric: keyof MetricMap,
+    value: number,
+    ...args: MetricMap[typeof metric]
+  ) => void = (metric, value, ...args) => {
+    function isQueryMetric(metric: string): metric is `query-${string}` {
+      return metric.startsWith('query-');
+    }
+    if (isQueryMetric(metric)) {
+      this.#queryManager.addMetric(metric, value, args[0]);
+    } else {
+      unreachable(metric);
+    }
+  };
 }
 
 export class OnlineManager extends Subscribable<boolean> {

@@ -158,6 +158,8 @@ export class QueryDelegateImpl implements QueryDelegate {
     }
     this.gotCallbacks.length = 0;
   }
+
+  addMetric() {}
 }
 
 function makeSources() {
