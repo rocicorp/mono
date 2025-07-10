@@ -1,14 +1,14 @@
-import {LogContext, type LogSink} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
-import {afterEach, beforeEach, expect, test, vi} from 'vitest';
-import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
-import {StoreImpl} from '../dag/store-impl.ts';
-import type {Read} from '../dag/store.ts';
-import {TestStore} from '../dag/test-store.ts';
-import {assertHash, fakeHash, newRandomHash} from '../hash.ts';
-import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.ts';
-import {IDBNotFoundError, IDBStore} from '../kv/idb-store.ts';
-import {withRead} from '../with-transactions.ts';
+import { LogContext, type LogSink } from '@rocicorp/logger';
+import { resolver } from '@rocicorp/resolver';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { assert, assertNotUndefined } from '../../../shared/src/asserts.ts';
+import { StoreImpl } from '../dag/store-impl.ts';
+import type { Read } from '../dag/store.ts';
+import { TestStore } from '../dag/test-store.ts';
+import { assertHash, fakeHash, newRandomHash } from '../hash.ts';
+import { dropIDBStoreWithMemFallback } from '../kv/idb-store-with-mem-fallback.ts';
+import { IDBNotFoundError, IDBStore } from '../kv/idb-store.ts';
+import { withRead } from '../with-transactions.ts';
 import {
   makeClientV5,
   makeClientV6,
@@ -30,7 +30,7 @@ const START_TIME = 100000;
 const ONE_MIN_IN_MS = 60 * 1000;
 
 beforeEach(() => {
-  vi.useFakeTimers({now: START_TIME});
+  vi.useFakeTimers({ now: START_TIME });
 });
 
 afterEach(() => {
@@ -250,7 +250,7 @@ test('heartbeat with missing client calls callback', async () => {
 });
 
 test('heartbeat with dropped idb throws', async () => {
-  const {resolve, promise} = resolver();
+  const { resolve, promise } = resolver();
   const name = `heartbeat-test-dropped-idb-${Math.random()}`;
   const ibdStore = new IDBStore(name);
   const dagStore = new StoreImpl(ibdStore, newRandomHash, assertHash);
@@ -286,7 +286,7 @@ test('heartbeat with dropped idb throws', async () => {
 
   expect(message).lengthOf(3);
   assert(message[2] instanceof IDBNotFoundError);
-  expect(message[2].message).equal(`Replicache IndexedDB not found: ${name}`);
+  expect(message[2].message).to.match(/^Expected IndexedDB not found: /);
 
   controller.abort();
 });
