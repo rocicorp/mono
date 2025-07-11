@@ -84,7 +84,7 @@ class OtelManager {
         : [],
       traceExporter: new OTLPTraceExporter(),
       metricReader: new PeriodicExportingMetricReader({
-        exportIntervalMillis: 5000,
+        exportIntervalMillis: 60000,
         exporter: new OTLPMetricExporter(),
       }),
       logRecordProcessors,
