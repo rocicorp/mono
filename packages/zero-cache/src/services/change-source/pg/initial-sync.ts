@@ -1,4 +1,7 @@
-import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
+import {
+  PG_CONFIGURATION_LIMIT_EXCEEDED,
+  PG_INSUFFICIENT_PRIVILEGE,
+} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
@@ -43,6 +46,7 @@ import {
   dropShard,
   getInternalShardConfig,
   newReplicationSlot,
+  replicationSlotExpression,
   validatePublications,
 } from './schema/shard.ts';
 
@@ -95,18 +99,32 @@ export async function initialSync(
         slot = await createReplicationSlot(lc, replicationSession, slotName);
         break;
       } catch (e) {
-        if (
-          first &&
-          e instanceof postgres.PostgresError &&
-          e.code === PG_INSUFFICIENT_PRIVILEGE
-        ) {
-          // Some Postgres variants (e.g. Google Cloud SQL) require that
-          // the user have the REPLICATION role in order to create a slot.
-          // Note that this must be done by the upstreamDB connection, and
-          // does not work in the replicationSession itself.
-          await sql`ALTER ROLE current_user WITH REPLICATION`;
-          lc.info?.(`Added the REPLICATION role to database user`);
-          continue;
+        if (first && e instanceof postgres.PostgresError) {
+          if (e.code === PG_INSUFFICIENT_PRIVILEGE) {
+            // Some Postgres variants (e.g. Google Cloud SQL) require that
+            // the user have the REPLICATION role in order to create a slot.
+            // Note that this must be done by the upstreamDB connection, and
+            // does not work in the replicationSession itself.
+            await sql`ALTER ROLE current_user WITH REPLICATION`;
+            lc.info?.(`Added the REPLICATION role to database user`);
+            continue;
+          }
+          if (e.code === PG_CONFIGURATION_LIMIT_EXCEEDED) {
+            const slotExpression = replicationSlotExpression(shard);
+
+            const dropped = await sql<{slot: string}[]>`
+              SELECT slot_name as slot, pg_drop_replication_slot(slot_name) 
+                FROM pg_replication_slots
+                WHERE slot_name LIKE ${slotExpression} AND NOT active`;
+            if (dropped.length) {
+              lc.warn?.(
+                `Dropped inactive replication slots: ${dropped.map(({slot}) => slot)}`,
+                e,
+              );
+              continue;
+            }
+            lc.error?.(`Unable to drop replication slots`, e);
+          }
         }
         throw e;
       }
