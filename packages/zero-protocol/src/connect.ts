@@ -60,13 +60,19 @@ export function encodeSecProtocols(
     initConnectionMessage,
     authToken,
   };
-  // base64 encoding the JSON before URI encoding it results in a smaller payload.
-  return encodeURIComponent(btoa(JSON.stringify(protocols)));
+  // WS sec protocols needs to be URI encoded. To save space, we base64 encode
+  // the JSON before URI encoding it. But InitConnectionMessage can contain
+  // arbitrary unicode strings, so we need to encode the JSON as UTF-8 first.
+  // Phew!
+  const bytes = new TextEncoder().encode(JSON.stringify(protocols));
+  return encodeURIComponent(btoa(String.fromCharCode(...bytes)));
 }
 
 export function decodeSecProtocols(secProtocol: string): {
   initConnectionMessage: InitConnectionMessage | undefined;
   authToken: string | undefined;
 } {
-  return JSON.parse(atob(decodeURIComponent(secProtocol)));
+  const binString = atob(decodeURIComponent(secProtocol));
+  const bytes = Uint8Array.from(binString, c => c.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes));
 }
