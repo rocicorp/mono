@@ -534,7 +534,26 @@ describe('integration', {timeout: 30000}, () => {
       undefined,
     ],
     [
-      'multi-node',
+      'multi-node (routed)',
+      'pg',
+      () => [
+        // The replication-manager must be started first for initial-sync
+        {
+          ...env,
+          ['ZERO_PORT']: `${port2}`,
+          ['ZERO_NUM_SYNC_WORKERS']: '0',
+        },
+        // startZero() will then copy to replicaDbFile2 for the view-syncer
+        {
+          ...env,
+          ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
+          ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
+        },
+      ],
+      undefined,
+    ],
+    [
+      'multi-node (auto-discover)',
       'pg',
       () => [
         // The replication-manager must be started first for initial-sync
@@ -553,7 +572,27 @@ describe('integration', {timeout: 30000}, () => {
       undefined,
     ],
     [
-      'lazy view-syncer multi-node',
+      'lazy view-syncer multi-node (routed)',
+      'pg',
+      () => [
+        // The replication-manager must be started first for initial-sync
+        {
+          ...env,
+          ['ZERO_PORT']: `${port2}`,
+          ['ZERO_NUM_SYNC_WORKERS']: '0',
+        },
+        // startZero() will then copy to replicaDbFile2 for the view-syncer
+        {
+          ...env,
+          ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
+          ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
+          ['ZERO_LAZY_STARTUP']: 'true',
+        },
+      ],
+      undefined,
+    ],
+    [
+      'lazy view-syncer multi-node (auto-discover)',
       'pg',
       () => [
         // The replication-manager must be started first for initial-sync

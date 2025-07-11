@@ -36,7 +36,10 @@ export async function restoreReplica(
     if (restored) {
       return start;
     }
-    if (changeStreamer.mode === 'dedicated') {
+    if (
+      changeStreamer.mode === 'dedicated' &&
+      changeStreamer.uri === undefined
+    ) {
       lc.info?.('no litestream backup found');
       return start;
     }
@@ -106,7 +109,7 @@ async function tryRestore(lc: LogContext, config: ZeroConfig) {
   // (if there is one).
   const backupURL = reserveAndGetSnapshotLocation(lc, config);
   let backupURLOverride: string | undefined;
-  if (changeStreamer.mode === 'discover') {
+  if (changeStreamer.mode === 'discover' || changeStreamer.uri !== undefined) {
     // The return value is required by view-syncers ...
     backupURLOverride = await backupURL;
     lc.info?.(`restoring backup from ${backupURLOverride}`);
@@ -167,13 +170,14 @@ async function reserveAndGetSnapshotLocation(
   const {promise: backupURL, resolve, reject} = resolver<string>();
   try {
     assertNormalized(config);
-    const {taskID, change} = config;
+    const {taskID, change, changeStreamer} = config;
     const shardID = getShardConfig(config);
 
     const changeStreamerClient = new ChangeStreamerHttpClient(
       lc,
       shardID,
       change.db,
+      changeStreamer.uri,
     );
 
     const sub = await changeStreamerClient.reserveSnapshot(taskID);

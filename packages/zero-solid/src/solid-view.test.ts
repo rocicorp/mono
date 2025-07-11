@@ -17,6 +17,8 @@ import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {SolidView, createSolidViewFactory, type State} from './solid-view.ts';
 import {createStore} from 'solid-js/store';
+import type {EntryList} from '../../zql/src/ivm/view.ts';
+import {createEffect} from 'solid-js';
 
 const lc = createSilentLogContext();
 
@@ -1373,6 +1375,151 @@ test('basic with edit pushes', () => {
     {id: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
     {id: 3, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '3'},
   ]);
+});
+
+test('edit trigger reactivity at the column level', () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+
+  let commit: () => void = () => {};
+  const onTransactionCommit = (cb: () => void): void => {
+    commit = cb;
+  };
+
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''] as EntryList;
+
+  const row0Log: unknown[] = [];
+  const row1Log: unknown[] = [];
+  const row0ALog: unknown[] = [];
+  const row0BLog: unknown[] = [];
+  const row1ALog: unknown[] = [];
+  const row1BLog: unknown[] = [];
+
+  function clearLog() {
+    row0Log.length = 0;
+    row1Log.length = 0;
+    row0ALog.length = 0;
+    row0BLog.length = 0;
+    row1ALog.length = 0;
+    row1BLog.length = 0;
+  }
+
+  new SolidView(
+    ms.connect([['a', 'asc']]),
+    onTransactionCommit,
+    {singular: false, relationships: {}},
+    () => {},
+    true,
+    () => {},
+    setState,
+  );
+
+  createEffect(() => {
+    row0Log.push(data()[0]);
+  });
+  createEffect(() => {
+    row1Log.push(data()[1]);
+  });
+  createEffect(() => {
+    row0ALog.push(data()[0]?.a);
+  });
+  createEffect(() => {
+    row0BLog.push(data()[0]?.b);
+  });
+  createEffect(() => {
+    row1ALog.push(data()[1]?.a);
+  });
+  createEffect(() => {
+    row1BLog.push(data()[1]?.b);
+  });
+
+  const data0 = [
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
+  ];
+  expect(data()).toEqual(data0);
+  expect(row0Log).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ]);
+  expect(row1Log).toEqual([
+    {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
+  ]);
+  expect(row0ALog).toEqual([1]);
+  expect(row0BLog).toEqual(['a']);
+  expect(row1ALog).toEqual([2]);
+  expect(row1BLog).toEqual(['b']);
+
+  clearLog();
+
+  ms.push({type: 'edit', row: {a: 2, b: 'b2'}, oldRow: {a: 2, b: 'b'}});
+
+  expect(data()).toEqual(data0);
+  commit();
+
+  const data1 = [
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 2, b: 'b2', [refCountSymbol]: 1, [idSymbol]: '2'},
+  ];
+  expect(data()).toEqual(data1);
+  expect(row0Log).toEqual([]);
+  expect(row1Log).toEqual([]);
+  expect(row0ALog).toEqual([]);
+  expect(row0BLog).toEqual([]);
+  expect(row1ALog).toEqual([]);
+  expect(row1BLog).toEqual(['b2']);
+
+  clearLog();
+
+  ms.push({type: 'edit', row: {a: 3, b: 'b3'}, oldRow: {a: 2, b: 'b2'}});
+
+  expect(data()).toEqual(data1);
+  commit();
+  const data2 = [
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 3, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '3'},
+  ];
+  expect(data()).toEqual(data2);
+  expect(row0Log).toEqual([]);
+  expect(row1Log).toEqual([]);
+  expect(row0ALog).toEqual([]);
+  expect(row0BLog).toEqual([]);
+  expect(row1ALog).toEqual([3]);
+  expect(row1BLog).toEqual(['b3']);
+
+  clearLog();
+
+  ms.push({type: 'edit', row: {a: 0, b: 'b3'}, oldRow: {a: 3, b: 'b3'}});
+
+  expect(data()).toEqual(data2);
+  commit();
+  const data3 = [
+    {a: 0, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '0'},
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ];
+  expect(data()).toEqual(data3);
+  expect(row0Log).toEqual([
+    {a: 0, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '0'},
+  ]);
+  expect(row1Log).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ]);
+  expect(row0ALog).toEqual([0]);
+  expect(row0BLog).toEqual(['b3']);
+  expect(row1ALog).toEqual([1]);
+  expect(row1BLog).toEqual(['a']);
 });
 
 test('tree edit', () => {

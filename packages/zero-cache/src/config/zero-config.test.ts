@@ -16,7 +16,13 @@ const exit = () => {
 test('zero-cache --help', () => {
   const logger = {info: vi.fn()};
   expect(() =>
-    parseOptions(zeroOptions, ['--help'], 'ZERO_', [], {}, logger, exit),
+    parseOptions(zeroOptions, {
+      argv: ['--help'],
+      envNamePrefix: 'ZERO_',
+      env: {},
+      logger,
+      exit,
+    }),
   ).toThrow(ExitAfterUsage);
   expect(logger.info).toHaveBeenCalled();
   expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
@@ -187,16 +193,24 @@ test('zero-cache --help', () => {
        ZERO_PORT env                                                                                                                                               
                                                                  The port for sync connections.                                                                    
                                                                                                                                                                    
+     --change-streamer-uri string                                optional                                                                                          
+       ZERO_CHANGE_STREAMER_URI env                                                                                                                                
+                                                                 When set, connects to the change-streamer at the given URI.                                       
+                                                                 In a multi-node setup, this should be specified in view-syncer options,                           
+                                                                 pointing to the replication-manager URI, which runs a change-streamer                             
+                                                                 on port 4849.                                                                                     
+                                                                                                                                                                   
      --change-streamer-mode dedicated,discover                   default: "dedicated"                                                                              
        ZERO_CHANGE_STREAMER_MODE env                                                                                                                               
-                                                                 The mode for running or connecting to the change-streamer:                                        
-                                                                 * dedicated: runs the change-streamer and shuts down when another                                 
-                                                                       change-streamer takes over the replication slot. This is appropriate in a                   
-                                                                       single-node configuration, or for the replication-manager in a                              
-                                                                       multi-node configuration.                                                                   
-                                                                 * discover: connects to the change-streamer as internally advertised in the                       
-                                                                       change-db. This is appropriate for the view-syncers in a multi-node                         
-                                                                       configuration.                                                                              
+                                                                 As an alternative to ZERO_CHANGE_STREAMER_URI, the ZERO_CHANGE_STREAMER_MODE                      
+                                                                 can be set to "discover" to instruct the view-syncer to connect to the                            
+                                                                 ip address registered by the replication-manager upon startup.                                    
+                                                                                                                                                                   
+                                                                 This may not work in all networking configurations, e.g. certain private                          
+                                                                 networking or port forwarding configurations. Using the ZERO_CHANGE_STREAMER_URI                  
+                                                                 with an explicit routable hostname is recommended instead.                                        
+                                                                                                                                                                   
+                                                                 Note: This option is ignored if the ZERO_CHANGE_STREAMER_URI is set.                              
                                                                                                                                                                    
      --change-streamer-port number                               optional                                                                                          
        ZERO_CHANGE_STREAMER_PORT env                                                                                                                               
@@ -205,28 +219,6 @@ test('zero-cache --help', () => {
                                                                  runs in the same process tree in local development or a single-node configuration.                
                                                                                                                                                                    
                                                                  If unspecified, defaults to --port + 1.                                                           
-                                                                                                                                                                   
-     --change-streamer-address string                            optional                                                                                          
-       ZERO_CHANGE_STREAMER_ADDRESS env                                                                                                                            
-                                                                 The host:port for other processes to use when connecting to this                                  
-                                                                 change-streamer. When unspecified, the machine's IP address and the                               
-                                                                 --change-streamer-port will be advertised for discovery.                                          
-                                                                                                                                                                   
-                                                                 In most cases, the default behavior (unspecified) is sufficient, including in a                   
-                                                                 single-node configuration or a multi-node configuration with host/awsvpc networking               
-                                                                 (e.g. Fargate).                                                                                   
-                                                                                                                                                                   
-                                                                 For a multi-node configuration in which the process is unable to determine the                    
-                                                                 externally addressable port (e.g. a container running with bridge mode networking),               
-                                                                 the --change-streamer-address must be specified manually (e.g. a load balancer or                 
-                                                                 service discovery address).                                                                       
-                                                                                                                                                                   
-     --change-streamer-protocol ws,wss                           default: "ws"                                                                                     
-       ZERO_CHANGE_STREAMER_PROTOCOL env                                                                                                                           
-                                                                 The protocol for other processes to use when connecting to this                                   
-                                                                 change-streamer.                                                                                  
-                                                                                                                                                                   
-                                                                 If unspecified, defaults to ws.                                                                   
                                                                                                                                                                    
      --task-id string                                            optional                                                                                          
        ZERO_TASK_ID env                                                                                                                                            
@@ -382,17 +374,15 @@ test.each([['has/slashes'], ['has-dashes'], ['has.dots']])(
   appID => {
     const logger = {info: vi.fn()};
     expect(() =>
-      parseOptionsAdvanced(
-        zeroOptions,
-        ['--app-id', appID],
-        'ZERO_',
-        [],
-        false, // allow unknown
-        true, // allow partial
-        {},
+      parseOptionsAdvanced(zeroOptions, {
+        argv: ['--app-id', appID],
+        envNamePrefix: 'ZERO_',
+        allowUnknown: false,
+        allowPartial: true,
+        env: {},
         logger,
         exit,
-      ),
+      }),
     ).toThrowError(INVALID_APP_ID_MESSAGE);
   },
 );
@@ -400,14 +390,12 @@ test.each([['has/slashes'], ['has-dashes'], ['has.dots']])(
 test.each([['isok'], ['has_underscores'], ['1'], ['123']])(
   '--app-id %s',
   appID => {
-    const {config} = parseOptionsAdvanced(
-      zeroOptions,
-      ['--app-id', appID],
-      'ZERO_',
-      [],
-      false,
-      true,
-    );
+    const {config} = parseOptionsAdvanced(zeroOptions, {
+      argv: ['--app-id', appID],
+      envNamePrefix: 'ZERO_',
+      allowUnknown: false,
+      allowPartial: true,
+    });
     expect(config.app.id).toBe(appID);
   },
 );
@@ -415,18 +403,16 @@ test.each([['isok'], ['has_underscores'], ['1'], ['123']])(
 test('--shard-id disallowed', () => {
   const logger = {info: vi.fn()};
   expect(() =>
-    parseOptionsAdvanced(
-      zeroOptions,
-      ['--shard-id', 'prod'],
-      'ZERO_',
-      [],
-      false, // allow unknown
-      true, // allow partial
-      {},
+    parseOptionsAdvanced(zeroOptions, {
+      argv: ['--shard-id', 'prod'],
+      envNamePrefix: 'ZERO_',
+      allowUnknown: false,
+      allowPartial: true,
+      env: {},
       logger,
       exit,
-    ),
+    }),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: ZERO_SHARD_ID is deprecated. Please use ZERO_APP_ID instead.]`,
+    `[Error: ZERO_SHARD_ID is no longer an option. Please use ZERO_APP_ID instead.]`,
   );
 });

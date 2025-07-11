@@ -8,7 +8,6 @@ import {
   type MockInstance,
 } from 'vitest';
 import {Queue} from '../../../shared/src/queue.ts';
-import {sleep} from '../../../shared/src/sleep.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
 
@@ -466,16 +465,20 @@ describe('ActiveClientManager', () => {
       );
 
       ac1.abort();
-      await sleep(5); // Give some time for the change to propagate
 
-      expect(clientManager2.activeClients).toEqual(
-        new Set(['client2', 'client3']),
-      );
-      expect(clientManager2.activeClients).toEqual(
-        new Set(['client2', 'client3']),
-      );
-      expect(clientManager3.activeClients).toEqual(
-        new Set(['client2', 'client3']),
+      await vi.waitFor(
+        () => {
+          expect(clientManager2.activeClients).toEqual(
+            new Set(['client2', 'client3']),
+          );
+          expect(clientManager2.activeClients).toEqual(
+            new Set(['client2', 'client3']),
+          );
+          expect(clientManager3.activeClients).toEqual(
+            new Set(['client2', 'client3']),
+          );
+        },
+        {interval: 10, timeout: 100},
       );
 
       ac2.abort();
@@ -594,12 +597,16 @@ describe('ActiveClientManager', () => {
 
         // Abort client1 - client1 should not get notified of its own deletion
         ac1.abort();
-        await sleep(5); // Give some time for the change to propagate
 
-        // Only client2 should be notified about client1's deletion
-        expect(deletions.size()).toBe(1);
-        const deletedClient = await deletions.dequeue();
-        expect(deletedClient).toBe('client1');
+        await vi.waitFor(
+          async () => {
+            // Only client2 should be notified about client1's deletion
+            expect(deletions.size()).toBe(1);
+            const deletedClient = await deletions.dequeue();
+            expect(deletedClient).toBe('client1');
+          },
+          {interval: 10, timeout: 100},
+        );
 
         ac2.abort();
       },
@@ -632,10 +639,13 @@ describe('ActiveClientManager', () => {
 
         // This should not throw even though onDelete is undefined
         ac1.abort();
-        await sleep(5);
-
-        // Verify the client was actually removed from active clients
-        expect(clientManager2.activeClients).toEqual(new Set(['client2']));
+        await vi.waitFor(
+          () => {
+            // Verify the client was actually removed from active clients
+            expect(clientManager2.activeClients).toEqual(new Set(['client2']));
+          },
+          {interval: 10, timeout: 100},
+        );
 
         ac2.abort();
       },

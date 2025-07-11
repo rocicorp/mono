@@ -16,10 +16,10 @@ import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
 import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
-import {makeSchemaCRUD} from '../../../zero-pg/src/custom.ts';
-import {ZPGQuery} from '../../../zero-pg/src/query.ts';
-import {getServerSchema} from '../../../zero-pg/src/schema.ts';
-import {Transaction} from '../../../zero-pg/src/test/util.ts';
+import {makeSchemaCRUD} from '../../../zero-server/src/custom.ts';
+import {ZPGQuery} from '../../../zero-server/src/query.ts';
+import {getServerSchema} from '../../../zero-server/src/schema.ts';
+import {Transaction} from '../../../zero-server/src/test/util.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {

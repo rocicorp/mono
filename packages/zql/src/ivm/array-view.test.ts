@@ -12,7 +12,7 @@ import type {Input} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {Take} from './take.ts';
 import {createSource} from './test/source-factory.ts';
-import {idSymbol, refCountSymbol} from './view-apply-change.ts';
+import {refCountSymbol} from './view-apply-change.ts';
 
 const lc = createSilentLogContext();
 
@@ -52,13 +52,11 @@ test('basics', () => {
       a: 1,
       b: 'a',
       [refCountSymbol]: 1,
-      [idSymbol]: '',
     },
     {
       a: 2,
       b: 'b',
       [refCountSymbol]: 1,
-      [idSymbol]: '',
     },
   ]);
 
@@ -76,19 +74,16 @@ test('basics', () => {
       a: 1,
       b: 'a',
       [refCountSymbol]: 1,
-      [idSymbol]: '',
     },
     {
       a: 2,
       b: 'b',
       [refCountSymbol]: 1,
-      [idSymbol]: '',
     },
     {
       a: 3,
       b: 'c',
       [refCountSymbol]: 1,
-      [idSymbol]: '',
     },
   ]);
 
@@ -104,7 +99,6 @@ test('basics', () => {
       a: 3,
       b: 'c',
       [refCountSymbol]: 1,
-      [idSymbol]: '',
     },
   ]);
 
@@ -121,7 +115,6 @@ test('basics', () => {
       a: 3,
       b: 'c',
       [refCountSymbol]: 0,
-      [idSymbol]: '',
     },
   ]);
 });
@@ -276,13 +269,11 @@ test('tree', () => {
             "id": 2,
             "name": "foobar",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": null,
@@ -290,7 +281,6 @@ test('tree', () => {
         "id": 2,
         "name": "foobar",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": 4,
@@ -300,13 +290,11 @@ test('tree', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": null,
@@ -314,7 +302,6 @@ test('tree', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -332,13 +319,11 @@ test('tree', () => {
             "id": 2,
             "name": "foobar",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "id": 5,
         "name": "chocolate",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": 2,
@@ -348,13 +333,11 @@ test('tree', () => {
             "id": 2,
             "name": "foobar",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": null,
@@ -362,7 +345,6 @@ test('tree', () => {
         "id": 2,
         "name": "foobar",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": 4,
@@ -372,13 +354,11 @@ test('tree', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": null,
@@ -386,7 +366,6 @@ test('tree', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -404,13 +383,11 @@ test('tree', () => {
             "id": 2,
             "name": "foobar",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": null,
@@ -418,7 +395,6 @@ test('tree', () => {
         "id": 2,
         "name": "foobar",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": 4,
@@ -428,13 +404,11 @@ test('tree', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": null,
@@ -442,7 +416,6 @@ test('tree', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -465,7 +438,6 @@ test('tree', () => {
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": 4,
@@ -475,13 +447,11 @@ test('tree', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": null,
@@ -489,7 +459,6 @@ test('tree', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -514,13 +483,11 @@ test('tree', () => {
             "id": 2,
             "name": "foobaz",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": null,
@@ -528,7 +495,6 @@ test('tree', () => {
         "id": 2,
         "name": "foobaz",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": 4,
@@ -538,13 +504,11 @@ test('tree', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": null,
@@ -552,7 +516,6 @@ test('tree', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -766,12 +729,10 @@ test('collapse', () => {
             "id": 1,
             "name": "label",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "name": "issue",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -878,18 +839,15 @@ test('collapse', () => {
             "id": 1,
             "name": "label",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
           {
             "id": 2,
             "name": "label2",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "name": "issue",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1001,18 +959,15 @@ test('collapse', () => {
             "id": 1,
             "name": "label",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
           {
             "id": 2,
             "name": "label2",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "name": "issue",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1125,18 +1080,15 @@ test('collapse', () => {
             "id": 1,
             "name": "label",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
           {
             "id": 2,
             "name": "label2x",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "name": "issue",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1297,13 +1249,11 @@ test('basic with edit pushes', () => {
         "a": 1,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "a": 2,
         "b": "b",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1323,13 +1273,11 @@ test('basic with edit pushes', () => {
         "a": 1,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "a": 2,
         "b": "b2",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1344,13 +1292,11 @@ test('basic with edit pushes', () => {
         "a": 1,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "a": 3,
         "b": "b3",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1423,14 +1369,12 @@ test('tree edit', () => {
             "id": 2,
             "name": "foobar",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "data": "a",
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": null,
@@ -1439,7 +1383,6 @@ test('tree edit', () => {
         "id": 2,
         "name": "foobar",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": 4,
@@ -1450,14 +1393,12 @@ test('tree edit', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "data": "c",
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": null,
@@ -1466,7 +1407,6 @@ test('tree edit', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1489,14 +1429,12 @@ test('tree edit', () => {
             "id": 2,
             "name": "foobar",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "data": "a2",
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": null,
@@ -1505,7 +1443,6 @@ test('tree edit', () => {
         "id": 2,
         "name": "foobar",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": 4,
@@ -1516,14 +1453,12 @@ test('tree edit', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "data": "c",
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "childID": null,
@@ -1532,7 +1467,6 @@ test('tree edit', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1572,19 +1506,16 @@ test('edit to change the order', () => {
         "a": 10,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "a": 20,
         "b": "b",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "a": 30,
         "b": "c",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1601,19 +1532,16 @@ test('edit to change the order', () => {
         "a": 5,
         "b": "b2",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "a": 10,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "a": 30,
         "b": "c",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1631,19 +1559,16 @@ test('edit to change the order', () => {
         "a": 4,
         "b": "b3",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "a": 10,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "a": 30,
         "b": "c",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1660,19 +1585,16 @@ test('edit to change the order', () => {
         "a": 10,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "a": 20,
         "b": "b4",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "a": 30,
         "b": "c",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1770,12 +1692,10 @@ test('edit to preserve relationships', () => {
             "id": 1,
             "name": "label1",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "title": "issue1",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "id": 2,
@@ -1784,12 +1704,10 @@ test('edit to preserve relationships', () => {
             "id": 2,
             "name": "label2",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "title": "issue2",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1812,12 +1730,10 @@ test('edit to preserve relationships', () => {
             "id": 1,
             "name": "label1",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "title": "issue1 changed",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "id": 2,
@@ -1826,12 +1742,10 @@ test('edit to preserve relationships', () => {
             "id": 2,
             "name": "label2",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "title": "issue2",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1852,12 +1766,10 @@ test('edit to preserve relationships', () => {
             "id": 2,
             "name": "label2",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "title": "issue2",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "id": 3,
@@ -1866,12 +1778,10 @@ test('edit to preserve relationships', () => {
             "id": 1,
             "name": "label1",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "title": "issue1 is now issue3",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);

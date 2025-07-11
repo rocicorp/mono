@@ -20,7 +20,7 @@ const options = {
   },
 };
 
-const config = parseOptions(options, process.argv.slice(2));
+const config = parseOptions(options);
 
 let schema: Schema | undefined;
 if (config.schema) {

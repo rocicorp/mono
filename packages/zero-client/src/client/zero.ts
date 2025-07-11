@@ -671,6 +671,7 @@ export class Zero<
     this.mutateBatch = mutateBatch;
 
     this.#queryManager = new QueryManager(
+      this.#lc,
       this.#mutationTracker,
       rep.clientID,
       schema.tables,

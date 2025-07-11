@@ -2,7 +2,7 @@ import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {ast, QueryImpl} from '../../../zql/src/query/query-impl.ts';
 import type {AnyQuery} from '../../../zql/src/query/test/util.ts';
 import {type bootstrap} from './runner.ts';
-import {ZPGQuery} from '../../../zero-pg/src/query.ts';
+import {ZPGQuery} from '../../../zero-server/src/query.ts';
 
 export function staticToRunnable<TSchema extends Schema>({
   query,

@@ -31,7 +31,7 @@ export default async function runWorker(
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
-  const config = getZeroConfig(env, args.slice(1));
+  const config = getZeroConfig({env, argv: args.slice(1)});
   assertNormalized(config);
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;
@@ -40,8 +40,23 @@ export default async function runWorker(
   const replica = await setupReplica(lc, fileMode, config.replica);
 
   const shard = getShardConfig(config);
-  const {taskID, change} = config;
-  const changeStreamer = new ChangeStreamerHttpClient(lc, shard, change.db);
+  const {
+    taskID,
+    change,
+    changeStreamer: {
+      port,
+      mode: m,
+      uri: changeStreamerURI = m === 'dedicated'
+        ? `http://localhost:${port}/`
+        : undefined,
+    },
+  } = config;
+  const changeStreamer = new ChangeStreamerHttpClient(
+    lc,
+    shard,
+    change.db,
+    changeStreamerURI,
+  );
 
   const replicator = new ReplicatorService(
     lc,

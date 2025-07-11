@@ -2,8 +2,11 @@ import {expect, test} from 'vitest';
 import {sleep} from '../../../shared/src/sleep.ts';
 
 test('worker test', async () => {
-  const url = new URL('./worker-test.ts', import.meta.url);
-  const w = new Worker(url, {type: 'module'});
+  // Need to have the 'new URL' call inside `new Worker` for vite to
+  // correctly bundle the worker file.
+  const w = new Worker(new URL('./worker-test.ts', import.meta.url), {
+    type: 'module',
+  });
   // Wait for the worker "test harness" to be ready since it may have async
   // modules.
   await waitForReady(w);

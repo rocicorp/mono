@@ -1,10 +1,10 @@
-import '../../shared/src/dotenv.ts';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid/non-secure';
 import {ident as id, literal} from 'pg-format';
 import postgres from 'postgres';
 import {parseOptions} from '../../../packages/shared/src/options.ts';
 import * as v from '../../../packages/shared/src/valita.ts';
+import '../../shared/src/dotenv.ts';
 
 const options = {
   upstream: {
@@ -36,8 +36,7 @@ async function run() {
   const lc = new LogContext('debug', {}, consoleLogSink);
   const {upstream, insert, perturb, qps, maxConnections} = parseOptions(
     options,
-    process.argv.slice(2),
-    'ZERO_',
+    {envNamePrefix: 'ZERO_'},
   );
   const db = postgres(upstream.db, {
     max: Math.max(1, Math.min(maxConnections, qps / 10)),

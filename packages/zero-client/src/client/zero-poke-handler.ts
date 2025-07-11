@@ -25,6 +25,7 @@ import {
   toPrimaryKeyString,
 } from './keys.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
+import {unreachable} from '../../../shared/src/asserts.ts';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
@@ -238,28 +239,28 @@ export function mergePokes(
         for (const [clientID, queriesPatch] of Object.entries(
           pokePart.desiredQueriesPatches,
         )) {
-          mergedPatch.push(
-            ...queriesPatch.map(op =>
+          for (const op of queriesPatch) {
+            mergedPatch.push(
               queryPatchOpToReplicachePatchOp(op, hash =>
                 toDesiredQueriesKey(clientID, hash),
               ),
-            ),
-          );
+            );
+          }
         }
       }
       if (pokePart.gotQueriesPatch) {
-        mergedPatch.push(
-          ...pokePart.gotQueriesPatch.map(op =>
+        for (const op of pokePart.gotQueriesPatch) {
+          mergedPatch.push(
             queryPatchOpToReplicachePatchOp(op, toGotQueriesKey),
-          ),
-        );
+          );
+        }
       }
       if (pokePart.rowsPatch) {
-        mergedPatch.push(
-          ...pokePart.rowsPatch.map(p =>
+        for (const p of pokePart.rowsPatch) {
+          mergedPatch.push(
             rowsPatchOpToReplicachePatchOp(p, schema, serverToClient),
-          ),
-        );
+          );
+        }
       }
     }
   }
@@ -286,12 +287,13 @@ function queryPatchOpToReplicachePatchOp(
         key: toKey(op.hash),
       };
     case 'put':
-    default:
       return {
         op: 'put',
         key: toKey(op.hash),
         value: null,
       };
+    default:
+      unreachable(op);
   }
 }
 
@@ -338,7 +340,7 @@ function rowsPatchOpToReplicachePatchOp(
         constrain: serverToClient.columns(op.tableName, op.constrain),
       };
     default:
-      throw new Error('to be implemented');
+      unreachable(op);
   }
 }
 

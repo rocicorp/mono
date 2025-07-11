@@ -661,7 +661,6 @@ describe('joins and filters', () => {
                 },
                 "name": "Alice",
                 Symbol(rc): 1,
-                Symbol(id): "",
               },
               "authorId": "0001",
               "createdAt": 1,
@@ -674,12 +673,10 @@ describe('joins and filters', () => {
                   "id": "0001",
                   "text": "revision 1",
                   Symbol(rc): 1,
-                  Symbol(id): "",
                 },
               ],
               "text": "comment 1",
               Symbol(rc): 1,
-              Symbol(id): "",
             },
             {
               "author": {
@@ -695,7 +692,6 @@ describe('joins and filters', () => {
                 },
                 "name": "Bob",
                 Symbol(rc): 1,
-                Symbol(id): "",
               },
               "authorId": "0002",
               "createdAt": 2,
@@ -704,7 +700,6 @@ describe('joins and filters', () => {
               "revisions": [],
               "text": "comment 2",
               Symbol(rc): 1,
-              Symbol(id): "",
             },
           ],
           "createdAt": 1,
@@ -718,12 +713,10 @@ describe('joins and filters', () => {
             },
             "name": "Alice",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
       ]
     `);
@@ -751,12 +744,10 @@ describe('joins and filters', () => {
             "issueId": "0001",
             "text": "comment 1",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
         {
           "closed": false,
@@ -767,7 +758,6 @@ describe('joins and filters', () => {
           "ownerId": "0002",
           "title": "issue 2",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
         {
           "closed": false,
@@ -778,7 +768,6 @@ describe('joins and filters', () => {
           "ownerId": null,
           "title": "issue 3",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
       ]
     `);
@@ -841,7 +830,6 @@ test('run', async () => {
             "issueId": "0001",
             "text": "comment 1",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
           {
             "authorId": "0002",
@@ -850,7 +838,6 @@ test('run', async () => {
             "issueId": "0001",
             "text": "comment 2",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "createdAt": 1,
@@ -861,7 +848,6 @@ test('run', async () => {
             "id": "0001",
             "name": "label 1",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "owner": {
@@ -872,12 +858,10 @@ test('run', async () => {
           },
           "name": "Alice",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "closed": false,
@@ -899,12 +883,10 @@ test('run', async () => {
           },
           "name": "Bob",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
         "ownerId": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "closed": false,
@@ -917,7 +899,6 @@ test('run', async () => {
         "ownerId": null,
         "title": "issue 3",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -943,7 +924,6 @@ describe('pk lookup optimization', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
       ]
     `);
@@ -959,7 +939,6 @@ describe('pk lookup optimization', () => {
           },
           "name": "Alice",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
       ]
     `);
@@ -980,7 +959,6 @@ describe('pk lookup optimization', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
       ]
     `);
@@ -999,7 +977,6 @@ describe('pk lookup optimization', () => {
           },
           "name": "Alice",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
       ]
     `);
@@ -1022,7 +999,6 @@ describe('pk lookup optimization', () => {
               "issueId": "0001",
               "text": "comment 1",
               Symbol(rc): 1,
-              Symbol(id): "",
             },
           ],
           "createdAt": 1,
@@ -1031,7 +1007,6 @@ describe('pk lookup optimization', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
       ]
     `);
@@ -1052,7 +1027,6 @@ describe('pk lookup optimization', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
       ]
     `);
@@ -1075,13 +1049,11 @@ describe('pk lookup optimization', () => {
               "id": "0001",
               "name": "label 1",
               Symbol(rc): 1,
-              Symbol(id): "",
             },
           ],
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
       ]
     `);
@@ -1102,7 +1074,6 @@ describe('pk lookup optimization', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
       ]
     `);
@@ -1126,7 +1097,6 @@ describe('pk lookup optimization', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
       ]
     `);
@@ -1147,7 +1117,6 @@ describe('pk lookup optimization', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(id): "",
         },
       ]
     `);
@@ -1189,7 +1158,6 @@ test('run with options', async () => {
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1235,7 +1203,6 @@ test('json columns are returned as JS objects', async () => {
         },
         "name": "Alice",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "id": "0002",
@@ -1250,7 +1217,6 @@ test('json columns are returned as JS objects', async () => {
         },
         "name": "Bob",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1273,7 +1239,6 @@ test('complex expression', async () => {
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "closed": false,
@@ -1283,7 +1248,6 @@ test('complex expression', async () => {
         "ownerId": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1306,7 +1270,6 @@ test('complex expression', async () => {
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1331,7 +1294,6 @@ test('null compare', async () => {
         "ownerId": null,
         "title": "issue 3",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1352,7 +1314,6 @@ test('null compare', async () => {
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "closed": false,
@@ -1362,7 +1323,6 @@ test('null compare', async () => {
         "ownerId": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1391,7 +1351,6 @@ test('literal filter', async () => {
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "closed": false,
@@ -1401,7 +1360,6 @@ test('literal filter', async () => {
         "ownerId": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "closed": false,
@@ -1411,7 +1369,6 @@ test('literal filter', async () => {
         "ownerId": null,
         "title": "issue 3",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1507,7 +1464,6 @@ test('join with compound keys', async () => {
             "b3": 3,
             "id": 0,
             Symbol(rc): 1,
-            Symbol(id): "",
           },
           {
             "b1": 1,
@@ -1515,12 +1471,10 @@ test('join with compound keys', async () => {
             "b3": 4,
             "id": 1,
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "id": 0,
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "a1": 2,
@@ -1533,12 +1487,10 @@ test('join with compound keys', async () => {
             "b3": 5,
             "id": 2,
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "id": 1,
         Symbol(rc): 1,
-        Symbol(id): "",
       },
       {
         "a1": 2,
@@ -1551,12 +1503,10 @@ test('join with compound keys', async () => {
             "b3": 5,
             "id": 2,
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "id": 2,
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1625,13 +1575,11 @@ test('where exists', () => {
             "id": "0001",
             "name": "bug",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "ownerId": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);
@@ -1711,13 +1659,11 @@ test('duplicative where exists', () => {
             "id": "0001",
             "name": "bug",
             Symbol(rc): 1,
-            Symbol(id): "",
           },
         ],
         "ownerId": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
-        Symbol(id): "",
       },
     ]
   `);

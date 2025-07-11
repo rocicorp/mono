@@ -1,11 +1,8 @@
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {assert} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
-import {
-  hashOfAST,
-  hashOfNameAndArgs,
-} from '../../../zero-protocol/src/query-hash.ts';
 import {
   mapAST,
   normalizeAST,
@@ -14,16 +11,25 @@ import {
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import {
+  hashOfAST,
+  hashOfNameAndArgs,
+} from '../../../zero-protocol/src/query-hash.ts';
+import {
   clientToServer,
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import {compareTTL, parseTTL, type TTL} from '../../../zql/src/query/ttl.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
+import {
+  clampTTL,
+  compareTTL,
+  parseTTL,
+  type TTL,
+} from '../../../zql/src/query/ttl.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
-import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
+import type {ZeroLogContext} from './zero-log-context.ts';
 
 type QueryHash = string;
 
@@ -56,8 +62,10 @@ export class QueryManager {
   readonly #queryChangeThrottleMs: number;
   #pendingRemovals: Array<() => void> = [];
   #batchTimer: ReturnType<typeof setTimeout> | undefined;
+  readonly #lc: ZeroLogContext;
 
   constructor(
+    lc: ZeroLogContext,
     mutationTracker: MutationTracker,
     clientID: ClientID,
     tables: Record<string, TableSchema>,
@@ -66,6 +74,7 @@ export class QueryManager {
     recentQueriesMaxSize: number,
     queryChangeThrottleMs: number,
   ) {
+    this.#lc = lc.withContext('QueryManager');
     this.#clientID = clientID;
     this.#clientToServer = clientToServer(tables);
     this.#recentQueriesMaxSize = recentQueriesMaxSize;
@@ -152,7 +161,7 @@ export class QueryManager {
           ast: normalized,
           name,
           args,
-          ttl: parseTTL(ttl),
+          ttl: clampTTL(ttl), // no lc here since no need to log here
         });
       }
     }
@@ -224,6 +233,7 @@ export class QueryManager {
         (normalized !== undefined && name === undefined && args === undefined),
       'Either normalized or name and args must be defined, but not both.',
     );
+    ttl = clampTTL(ttl, this.#lc);
     let entry = this.#queries.get(queryId);
     this.#recentQueries.delete(queryId);
     if (!entry) {
@@ -245,7 +255,7 @@ export class QueryManager {
         ast: normalized,
         name,
         args,
-        ttl: parseTTL(ttl),
+        ttl,
       });
     } else {
       ++entry.count;

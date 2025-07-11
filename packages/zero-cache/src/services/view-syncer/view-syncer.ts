@@ -1020,16 +1020,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       const elapsed = timer.totalElapsed();
-      counters.queryHydrations().add(1, {
-        clientGroupID: this.id,
-        hash,
-        transformationHash,
-      });
-      histograms.hydrationTime().record(elapsed, {
-        clientGroupID: this.id,
-        hash,
-        transformationHash,
-      });
+      counters.queryHydrations().add(1);
+      histograms.hydrationTime().record(elapsed);
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
     }
   }
@@ -1576,9 +1568,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc.info?.(
         `finished processing advancement of ${numChanges} changes (${elapsed} ms)`,
       );
-      histograms.transactionAdvanceTime().record(elapsed, {
-        clientGroupID: this.id,
-      });
+      histograms.transactionAdvanceTime().record(elapsed);
       return 'success';
     });
   }

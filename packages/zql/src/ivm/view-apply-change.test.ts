@@ -653,7 +653,7 @@ describe('applyChange', () => {
           node: {
             row: {
               id: '2',
-              name: 'N/A',
+              name: 'Greg',
             },
             relationships: {},
           },
@@ -683,7 +683,7 @@ describe('applyChange', () => {
         node: {
           row: {
             id: '2',
-            name: 'N/A',
+            name: 'Greg',
           },
           relationships: {},
         },
@@ -708,36 +708,12 @@ describe('applyChange', () => {
           node: {
             row: {
               id: '2',
-              name: 'N/A', // when removing the non primary keys are ignored
+              name: 'Greg',
             },
             relationships: {},
           },
         }),
       ).toThrowError(new Error('node does not exist'));
-
-      // Add id:1 again but with a different name
-      apply({
-        type: 'add',
-        node: {
-          row: {
-            id: '1',
-            name: 'Darick',
-          },
-          relationships: {},
-        },
-      });
-      expect(root).toMatchInlineSnapshot(`
-        {
-          "": [
-            {
-              "id": "1",
-              "name": "Darick",
-              Symbol(rc): 2,
-              Symbol(id): ""1"",
-            },
-          ],
-        }
-      `);
     });
 
     test('singular: true', () => {
@@ -806,7 +782,7 @@ describe('applyChange', () => {
         node: {
           row: {
             id: '1',
-            name: 'Greg',
+            name: 'Aaron',
           },
           relationships: {},
         },
@@ -815,7 +791,7 @@ describe('applyChange', () => {
         {
           "": {
             "id": "1",
-            "name": "Greg",
+            "name": "Aaron",
             Symbol(rc): 2,
             Symbol(id): ""1"",
           },
@@ -828,7 +804,7 @@ describe('applyChange', () => {
           node: {
             row: {
               id: '1',
-              name: 'Greg',
+              name: 'Aaron',
             },
             relationships: {},
           },
@@ -838,7 +814,7 @@ describe('applyChange', () => {
         {
           "": {
             "id": "1",
-            "name": "Greg",
+            "name": "Aaron",
             Symbol(rc): 5,
             Symbol(id): ""1"",
           },
@@ -851,7 +827,7 @@ describe('applyChange', () => {
           node: {
             row: {
               id: '1',
-              name: 'N/A',
+              name: 'Aaron',
             },
             relationships: {},
           },
@@ -861,7 +837,7 @@ describe('applyChange', () => {
         {
           "": {
             "id": "1",
-            "name": "Greg",
+            "name": "Aaron",
             Symbol(rc): 1,
             Symbol(id): ""1"",
           },
@@ -873,7 +849,7 @@ describe('applyChange', () => {
         node: {
           row: {
             id: '1',
-            name: 'N/A',
+            name: 'Aaron',
           },
           relationships: {},
         },
@@ -890,7 +866,7 @@ describe('applyChange', () => {
           node: {
             row: {
               id: '1',
-              name: 'N/A',
+              name: 'Aaron',
             },
             relationships: {},
           },
@@ -949,7 +925,7 @@ describe('applyChange', () => {
         oldNode: {
           row: {
             id: '1',
-            name: 'N/A',
+            name: 'Aaron',
           },
         },
         node: {
@@ -978,7 +954,7 @@ describe('applyChange', () => {
           node: {
             row: {
               id: '1',
-              name: 'Aaron',
+              name: 'Greg',
             },
             relationships: {},
           },
@@ -989,7 +965,7 @@ describe('applyChange', () => {
           "": [
             {
               "id": "1",
-              "name": "Aaron",
+              "name": "Greg",
               Symbol(rc): 3,
               Symbol(id): ""1"",
             },
@@ -1002,13 +978,13 @@ describe('applyChange', () => {
         oldNode: {
           row: {
             id: '1',
-            name: 'Aaron',
+            name: 'Greg',
           },
         },
         node: {
           row: {
             id: '1',
-            name: 'Greg',
+            name: 'Aaron',
           },
         },
       });
@@ -1017,7 +993,7 @@ describe('applyChange', () => {
           "": [
             {
               "id": "1",
-              "name": "Greg",
+              "name": "Aaron",
               Symbol(rc): 3,
               Symbol(id): ""1"",
             },
@@ -1077,7 +1053,7 @@ describe('applyChange', () => {
         oldNode: {
           row: {
             id: '1',
-            name: 'N/A',
+            name: 'Aaron',
           },
         },
         node: {
@@ -1252,7 +1228,7 @@ describe('applyChange', () => {
         oldNode: {
           row: {
             id: '1',
-            name: 'N/A',
+            name: 'Aaron',
           },
         },
         node: {
@@ -1370,7 +1346,7 @@ describe('applyChange', () => {
         oldNode: {
           row: {
             id: '1',
-            name: 'N/A',
+            name: 'Aaron',
           },
         },
         node: {
@@ -1386,7 +1362,7 @@ describe('applyChange', () => {
             "id": "2",
             "name": "Greg",
             Symbol(rc): 1,
-            Symbol(id): ""1"",
+            Symbol(id): ""2"",
           },
         }
       `);
@@ -1433,7 +1409,7 @@ describe('applyChange', () => {
             "id": "1",
             "name": "Aaron",
             Symbol(rc): 2,
-            Symbol(id): ""2"",
+            Symbol(id): ""1"",
           },
         }
       `);

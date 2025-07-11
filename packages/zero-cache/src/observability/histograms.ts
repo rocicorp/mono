@@ -4,9 +4,15 @@ import {cache, getMeter} from './view-syncer-instruments.ts';
 const getOrCreate = cache<Histogram>();
 
 function getOrCreateHistogram(name: string, description: string) {
-  return getOrCreate(name, name =>
-    getMeter().createHistogram(name, {description, unit: 'milliseconds'}),
-  );
+  return getOrCreate(name, name => {
+    const options: {description: string; unit: string; boundaries?: number[]} =
+      {
+        description,
+        unit: 'milliseconds',
+      };
+
+    return getMeter().createHistogram(name, options);
+  });
 }
 
 export function wsMessageProcessingTime() {
