@@ -21,6 +21,7 @@ import {Subscription, type Result} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {RefCountedService, Service} from '../service.ts';
 import {fetchFromAPIServer} from '../../custom/fetch.ts';
+import {recordMutation} from '../../server/anonymous-otel-start.ts';
 
 type Fatal = {
   error: 'forClient';
@@ -355,6 +356,9 @@ class PushWorker {
     counters.pushes().add(1, {
       clientGroupID: entry.push.clientGroupID,
     });
+
+    // Record custom mutations for telemetry
+    recordMutation(entry.push.mutations.length);
 
     try {
       const response = await fetchFromAPIServer(

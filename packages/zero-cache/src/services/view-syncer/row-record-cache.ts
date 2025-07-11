@@ -25,6 +25,7 @@ import {
   versionString,
   versionToNullableCookie,
 } from './schema/types.ts';
+import {recordRowsSynced} from '../../server/anonymous-otel-start.ts';
 
 /**
  * The RowRecordCache is an in-memory cache of the `cvr.rows` tables that
@@ -205,6 +206,8 @@ export class RowRecordCache {
             Date.now() - start
           } ms)`,
         );
+        // Record telemetry for successfully synced rows
+        recordRowsSynced(rows);
         this.#flushedRowsVersion = rowsVersion;
         // Note: apply() may have called while the transaction was committing,
         //       which will result in looping to commit the next #pendingRowsVersion.
