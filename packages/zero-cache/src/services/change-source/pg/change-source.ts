@@ -5,6 +5,7 @@ import {
 import {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
+import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
@@ -23,7 +24,6 @@ import type {
   TableSpec,
 } from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
-import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {
   oneAfter,
   versionFromLexi,
@@ -183,14 +183,16 @@ async function checkAndUpdateUpstream(
   }
 
   const {slot} = upstreamReplica;
-  const result = await sql<{restartLSN: LSN | null}[]>`
-    SELECT restart_lsn as "restartLSN" FROM pg_replication_slots
+  const result = await sql<
+    {restartLSN: LSN | null; walStatus: string | null}[]
+  >/*sql*/ `
+    SELECT restart_lsn as "restartLSN", wal_status as "walStatus" FROM pg_replication_slots
       WHERE slot_name = ${slot}`;
   if (result.length === 0) {
     throw new AutoResetSignal(`replication slot ${slot} is missing`);
   }
-  const [{restartLSN}] = result;
-  if (restartLSN === null) {
+  const [{restartLSN, walStatus}] = result;
+  if (restartLSN === null || walStatus === 'lost') {
     throw new AutoResetSignal(
       `replication slot ${slot} has been invalidated for exceeding the max_slot_wal_keep_size`,
     );
