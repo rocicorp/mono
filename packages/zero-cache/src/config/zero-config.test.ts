@@ -44,6 +44,7 @@ test('zero-cache --help', () => {
                                                                                                                                                                    
      --push-url string                                           optional                                                                                          
        ZERO_PUSH_URL env                                                                                                                                           
+                                                                 DEPRECATED. Use query_url instead.                                                                
                                                                  The URL of the API server to which zero-cache will push mutations.                                
                                                                                                                                                                    
      --push-api-key string                                       optional                                                                                          
@@ -52,27 +53,39 @@ test('zero-cache --help', () => {
                                                                                                                                                                    
      --push-forward-cookies boolean                              default: false                                                                                    
        ZERO_PUSH_FORWARD_COOKIES env                                                                                                                               
-                                                                 If true, zero-cache will forward cookies from the request to the push URL.                        
+                                                                 If true, zero-cache will forward cookies from the request.                                        
                                                                  This is useful for passing authentication cookies to the API server.                              
                                                                  If false, cookies are not forwarded.                                                              
                                                                                                                                                                    
-                                                                 Note that this option is only relevant if the push-url is set.                                    
+     --mutate-url string                                         optional                                                                                          
+       ZERO_MUTATE_URL env                                                                                                                                         
                                                                                                                                                                    
-     --pull-url string                                           optional                                                                                          
-       ZERO_PULL_URL env                                                                                                                                           
+                                                                 The URL of the API server to which zero-cache will push mutations.                                
+                                                                                                                                                                   
+     --mutate-api-key string                                     optional                                                                                          
+       ZERO_MUTATE_API_KEY env                                                                                                                                     
+                                                                 An optional secret used to authorize zero-cache to call the API server handling writes.           
+                                                                                                                                                                   
+     --mutate-forward-cookies boolean                            default: false                                                                                    
+       ZERO_MUTATE_FORWARD_COOKIES env                                                                                                                             
+                                                                 If true, zero-cache will forward cookies from the request.                                        
+                                                                 This is useful for passing authentication cookies to the API server.                              
+                                                                 If false, cookies are not forwarded.                                                              
+                                                                                                                                                                   
+     --query-url string                                          optional                                                                                          
+       ZERO_QUERY_URL env                                                                                                                                          
+                                                                                                                                                                   
                                                                  The URL of the API server to which zero-cache will send named queries.                            
                                                                                                                                                                    
-     --pull-api-key string                                       optional                                                                                          
-       ZERO_PULL_API_KEY env                                                                                                                                       
-                                                                 An optional secret used to authorize zero-cache to call the API server handling reads.            
+     --query-api-key string                                      optional                                                                                          
+       ZERO_QUERY_API_KEY env                                                                                                                                      
+                                                                 An optional secret used to authorize zero-cache to call the API server handling writes.           
                                                                                                                                                                    
-     --pull-forward-cookies boolean                              default: false                                                                                    
-       ZERO_PULL_FORWARD_COOKIES env                                                                                                                               
-                                                                 If true, zero-cache will forward cookies from the request to the pull URL.                        
+     --query-forward-cookies boolean                             default: false                                                                                    
+       ZERO_QUERY_FORWARD_COOKIES env                                                                                                                              
+                                                                 If true, zero-cache will forward cookies from the request.                                        
                                                                  This is useful for passing authentication cookies to the API server.                              
                                                                  If false, cookies are not forwarded.                                                              
-                                                                                                                                                                   
-                                                                 Note that this option is only relevant if the pull-url is set.                                    
                                                                                                                                                                    
      --cvr-db string                                             optional                                                                                          
        ZERO_CVR_DB env                                                                                                                                             

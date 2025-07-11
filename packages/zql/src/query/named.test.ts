@@ -4,17 +4,15 @@ import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
-import {namedQuery, querify, type NamedQuery} from './named.ts';
+import {named, createBuilder, type NamedQuery} from './named.ts';
 import {ast} from './query-impl.ts';
 import {StaticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
 
 test('defining a named query', () => {
-  const queryBuilder = querify(schema);
-  const named = namedQuery('myName', (id: string) =>
-    queryBuilder.issue.where('id', id),
-  );
-  const q = named('123');
+  const queryBuilder = createBuilder(schema);
+  const x = named('myName', (id: string) => queryBuilder.issue.where('id', id));
+  const q = x('123');
   expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
     Promise<
       {
@@ -27,7 +25,7 @@ test('defining a named query', () => {
       }[]
     >
   >();
-  check(named);
+  check(x);
 });
 
 function check(named: NamedQuery<[string], any>) {
@@ -62,7 +60,7 @@ function check(named: NamedQuery<[string], any>) {
 }
 
 test('makeSchemaQuery', () => {
-  const builders = querify(schema);
+  const builders = createBuilder(schema);
   const q1 = builders.issue.where('id', '123').nameAndArgs('myName', ['123']);
   expect(ast(q1)).toMatchInlineSnapshot(`
     {
