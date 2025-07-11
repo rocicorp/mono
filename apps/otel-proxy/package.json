@@ -1,0 +1,41 @@
+{
+  "name": "otel-proxy",
+  "version": "1.0.0",
+  "description": "OTEL metrics proxy for Grafana",
+  "main": "api/index.ts",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vercel/node": "^3.0.0"
+  },
+  "devDependencies": {
+    "@rocicorp/eslint-config": "^0.7.0",
+    "@rocicorp/prettier-config": "^0.3.0",
+    "@types/node": "^20.8.4",
+    "@vitest/coverage-v8": "3.2.4",
+    "eslint": "^8.15.0",
+    "prettier": "^3.5.3",
+    "typescript": "~5.8.2",
+    "vitest": "3.2.4"
+  },
+  "eslintConfig": {
+    "extends": [
+      "@rocicorp/eslint-config"
+    ],
+    "rules": {
+      "no-restricted-imports": "off"
+    },
+    "ignorePatterns": [
+      "dist"
+    ]
+  },
+  "prettier": "@rocicorp/prettier-config"
+}
