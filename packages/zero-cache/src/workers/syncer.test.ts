@@ -129,6 +129,7 @@ describe('cleanup', () => {
         clientID: `${clientID}`,
         userID: 'anon',
         wsID: '1',
+        protocolVersion: 21, // Valid protocol version (current PROTOCOL_VERSION)
       },
       {} as any,
     );
@@ -273,7 +274,7 @@ describe('connection telemetry', () => {
         clientID: `${clientID}`,
         userID: 'anon',
         wsID: '1',
-        protocolVersion: 6, // Valid protocol version
+        protocolVersion: 21, // Valid protocol version (current PROTOCOL_VERSION)
         ...params,
       },
       {} as any,
@@ -283,7 +284,7 @@ describe('connection telemetry', () => {
 
   test('should record connection success for valid protocol version', () => {
     // Create a connection with valid protocol version
-    newConnection(1, {protocolVersion: 6});
+    newConnection(1, {protocolVersion: 21});
 
     // Should record connection success
     expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(1);
@@ -291,9 +292,9 @@ describe('connection telemetry', () => {
 
   test('should record multiple successful connections', () => {
     // Create multiple connections with valid protocol version
-    newConnection(1, {protocolVersion: 6});
-    newConnection(2, {protocolVersion: 6});
-    newConnection(3, {protocolVersion: 6});
+    newConnection(1, {protocolVersion: 21});
+    newConnection(2, {protocolVersion: 21});
+    newConnection(3, {protocolVersion: 21});
 
     // Should record multiple connection successes
     expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(3);
@@ -301,8 +302,8 @@ describe('connection telemetry', () => {
 
   test('should record connection attempted for each connection', () => {
     // Create connections - both should record attempts
-    newConnection(1, {protocolVersion: 6});
-    newConnection(2, {protocolVersion: 6});
+    newConnection(1, {protocolVersion: 21});
+    newConnection(2, {protocolVersion: 21});
 
     // Should record connection attempts
     expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(2);
@@ -321,6 +322,11 @@ afterAll(async () => {
 });
 
 class MockWebSocket {
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  static readonly OPEN = 1;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  static readonly CLOSED = 3;
+
   #listeners: Map<string, ((event: any) => void)[]> = new Map();
   addEventListener(type: string, fn: (event: any) => void) {
     if (!this.#listeners.has(type)) {

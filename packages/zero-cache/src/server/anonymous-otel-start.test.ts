@@ -15,7 +15,7 @@ import {
   addClientGroup,
   removeClientGroup,
   shutdownAnonymousTelemetry,
-} from './anonymous-otel-start.ts';
+} from './anonymous-otel-start.js';
 
 // Mock the OTLP exporter and related OpenTelemetry components
 vi.mock('@opentelemetry/exporter-metrics-otlp-http');
@@ -56,9 +56,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
       upstream: {
         db: 'postgresql://test@localhost/test',
       },
-      serverVersion: '1.0.0-test',
-      // Add other config properties as needed for tests
-    } as Partial<ZeroConfig> as ZeroConfig);
+    } as unknown as ZeroConfig);
 
     // Mock histogram
     mockHistogram = {
@@ -191,8 +189,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
       // Verify OTLP exporter was created with correct configuration
       expect(OTLPMetricExporter).toHaveBeenCalledWith({
-        url: 'https://otlp-gateway-prod-us-east-2.grafana.net/otlp/v1/metrics',
-        headers: {authorization: 'Bearer anonymous-token'},
+        url: 'https://metrics.rocicorp.dev',
       });
 
       // Verify metric reader was created
@@ -240,14 +237,6 @@ describe('Anonymous Telemetry Integration Tests', () => {
         },
       );
 
-      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith(
-        'zero.cvr_size',
-        {
-          description: 'Current CVR size in bytes',
-          unit: 'bytes',
-        },
-      );
-
       expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
         'zero.uptime_counter',
         {
@@ -289,7 +278,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
     test('should register callbacks for observable metrics', () => {
       // Each observable should have a callback registered
-      expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(5); // 5 gauges
+      expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(4); // 4 gauges (uptime, client_groups, active_queries, active_queries_per_client_group)
       expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(5); // 5 counters (uptime_counter, mutations, rows_synced, connections_success, connections_attempted)
     });
   });
@@ -577,9 +566,8 @@ describe('Anonymous Telemetry Integration Tests', () => {
         upstream: {
           db: 'postgresql://test@localhost/test',
         },
-        serverVersion: '1.0.0-test',
         // taskID is undefined
-      } as Partial<ZeroConfig> as ZeroConfig;
+      } as unknown as ZeroConfig;
 
       // Start telemetry without taskID
       startAnonymousTelemetry(lc, configWithoutTaskID);
@@ -956,7 +944,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
       const {
         addClientGroup: addClientGroupSpy,
         removeClientGroup: removeClientGroupSpy,
-      } = await import('./anonymous-otel-start.ts');
+      } = await import('./anonymous-otel-start.js');
 
       // Create spies to track calls
       const addSpy = vi.fn();
