@@ -1659,24 +1659,25 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   inspect(context: SyncContext, msg: InspectUpMessage): Promise<void> {
-    return this.#runInLockForClient(context, msg, this.#handleInspect);
+    return this.#runInLockForClient(
+      context,
+      msg,
+      async (
+        lc: LogContext,
+        clientID: string,
+        body: InspectUpBody,
+        _cvr: CVRSnapshot,
+      ): Promise<void> => {
+        const client = must(this.#clients.get(clientID));
+        body.op satisfies 'queries';
+        client.sendInspectResponse(lc, {
+          op: 'queries',
+          id: body.id,
+          value: await this.#cvrStore.inspectQueries(lc, body.clientID),
+        });
+      },
+    );
   }
-
-  // eslint-disable-next-line require-await
-  #handleInspect = async (
-    lc: LogContext,
-    clientID: string,
-    body: InspectUpBody,
-    _cvr: CVRSnapshot,
-  ): Promise<void> => {
-    const client = must(this.#clients.get(clientID));
-    body.op satisfies 'queries';
-    client.sendInspectResponse(lc, {
-      op: 'queries',
-      id: body.id,
-      value: await this.#cvrStore.inspectQueries(lc, body.clientID),
-    });
-  };
 
   stop(): Promise<void> {
     this.#lc.info?.('stopping view syncer');

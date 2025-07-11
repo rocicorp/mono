@@ -83,6 +83,7 @@ export function bench(opts: Options) {
     assertValidRunOptions() {},
     flushQueryChanges() {},
     defaultQueryComplete: true,
+    addMetric() {},
   };
 
   const issueQuery = newQuery(host, schema, 'issue');
