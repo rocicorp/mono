@@ -148,7 +148,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
   readonly #slowHydrateThreshold: number;
-  readonly #pullConfig: ZeroConfig['pull'];
+  readonly #queryConfig: ZeroConfig['query'];
 
   // The ViewSyncerService is only started in response to a connection,
   // so #lastConnectTime is always initialized to now(). This is necessary
@@ -222,7 +222,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #customQueryTransformer: CustomQueryTransformer | undefined;
 
   constructor(
-    pullConfig: ZeroConfig['pull'],
+    pullConfig: ZeroConfig['query'],
     lc: LogContext,
     shard: ShardID,
     taskID: string,
@@ -238,7 +238,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ) {
     this.id = clientGroupID;
     this.#shard = shard;
-    this.#pullConfig = pullConfig;
+    this.#queryConfig = pullConfig;
     this.#lc = lc;
     this.#pipelines = pipelineDriver;
     this.#stateChanges = versionChanges;
@@ -950,9 +950,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const transformedCustomQueries =
         await this.#customQueryTransformer.transform(
           {
-            apiKey: this.#pullConfig.apiKey,
+            apiKey: this.#queryConfig.apiKey,
             token: this.#authData?.raw,
-            cookie: this.#pullConfig.forwardCookies
+            cookie: this.#queryConfig.forwardCookies
               ? this.#httpCookie
               : undefined,
           },
@@ -1106,7 +1106,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         const transformedCustomQueries =
           await this.#customQueryTransformer.transform(
             {
-              apiKey: this.#pullConfig.apiKey,
+              apiKey: this.#queryConfig.apiKey,
               token: this.#authData?.raw,
               cookie: this.#httpCookie,
             },

@@ -15,7 +15,7 @@ import {handlePush} from '../server/push-handler.ts';
 import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {getQuery} from '../server/get-query.ts';
 import type {ServerContext} from '../server/server-queries.ts';
-import {processQueries} from '@rocicorp/zero/server';
+import {getQueries} from '@rocicorp/zero/server';
 import {schema} from '../shared/schema.ts';
 
 declare module 'fastify' {
@@ -159,7 +159,7 @@ fastify.post<{
     role: authData?.role,
   };
   reply.send(
-    await processQueries(
+    await getQueries(
       async (name, args) => ({query: getQuery(context, name, args)}),
       schema,
       request.body,

@@ -96,7 +96,7 @@ export default function runWorker(
       .withContext('instance', randomID());
     lc.debug?.(`creating view syncer`);
     return new ViewSyncerService(
-      config.pull,
+      config.query,
       logger,
       shard,
       config.taskID,
@@ -128,14 +128,18 @@ export default function runWorker(
     );
 
   const pusherFactory =
-    config.push.url === undefined
+    config.push.url === undefined && config.mutate.url === undefined
       ? undefined
       : (id: string) =>
           new PusherService(
             config,
             {
               ...config.push,
-              url: must(config.push.url),
+              ...config.mutate,
+              url: must(
+                config.push.url ?? config.mutate.url,
+                'No push or mutate URL configured',
+              ),
             },
             lc.withContext('clientGroupID', id),
             id,

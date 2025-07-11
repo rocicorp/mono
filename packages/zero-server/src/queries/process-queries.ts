@@ -17,7 +17,7 @@ import {mapAST} from '../../../zero-protocol/src/ast.ts';
  *
  * If you need to limit concurrency, you can use a library like `p-limit` to wrap the `cb` function.
  */
-export async function processQueries<S extends Schema>(
+export async function getQueries<S extends Schema>(
   cb: (
     name: string,
     args: readonly ReadonlyJSONValue[],
