@@ -56,8 +56,6 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
       id,
       title,
       description: description ?? '',
-      created: Date.now(),
-      modified: Date.now(),
     });
     reset();
     onDismiss(id);

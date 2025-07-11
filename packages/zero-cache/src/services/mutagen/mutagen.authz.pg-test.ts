@@ -200,10 +200,10 @@ const schema = createSchema({
     table('dataTypeTest')
       .columns({
         id: string(),
-        j: json().optional(),
-        b: boolean().optional(),
-        r: number().optional(),
-        i: number().optional(),
+        j: json().nullable(),
+        b: boolean().nullable(),
+        r: number().nullable(),
+        i: number().nullable(),
       })
       .primaryKey('id'),
   ],

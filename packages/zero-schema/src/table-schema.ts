@@ -1,34 +1,55 @@
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {ValueType} from '../../zero-protocol/src/client-schema.ts';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
 
 export type {ValueType} from '../../zero-protocol/src/client-schema.ts';
 
+export type DefaultValueFunction<T> = () => T;
+
+export type BaseSchemaValue = {
+  type: ValueType;
+  serverName?: string | undefined;
+  nullable?: boolean | undefined;
+};
+
+export type SchemaValueWithCustomType<
+  T extends ReadonlyJSONValue = ReadonlyJSONValue,
+> = BaseSchemaValue & {
+  customType: T;
+};
+
+export type DefaultConfig<T> = {
+  insert?: {
+    client: DefaultValueFunction<T>;
+    server: DefaultValueFunction<T> | 'db';
+  };
+  update?: {
+    client: DefaultValueFunction<T>;
+    server: DefaultValueFunction<T> | 'db';
+  };
+};
+
 /**
  * `related` calls need to know what the available relationships are.
  * The `schema` type encodes this information.
  */
-export type SchemaValue<T = unknown> =
-  | {
-      type: ValueType;
-      serverName?: string | undefined;
-      optional?: boolean | undefined;
-    }
+export type SchemaValue<T extends ReadonlyJSONValue = ReadonlyJSONValue> = (
+  | BaseSchemaValue
   | EnumSchemaValue<T>
-  | SchemaValueWithCustomType<T>;
+  | SchemaValueWithCustomType<T>
+) &
+  (Record<string, never> | SchemaValueWithDefaults<T>);
 
-export type SchemaValueWithCustomType<T> = {
-  type: ValueType;
-  serverName?: string | undefined;
-  optional?: boolean;
-  customType: T;
+export type SchemaValueWithDefaults<T> = {
+  defaultConfig?: DefaultConfig<T> | undefined;
 };
 
-export type EnumSchemaValue<T> = {
+export type EnumSchemaValue<T extends ReadonlyJSONValue> = Omit<
+  SchemaValueWithCustomType<T>,
+  'type'
+> & {
   kind: 'enum';
   type: 'string';
-  serverName?: string | undefined;
-  optional?: boolean;
-  customType: T;
 };
 
 export type TableSchema = {
@@ -61,6 +82,11 @@ export type TypeNameToTypeMap = {
 export type ColumnTypeName<T extends SchemaValue | ValueType> =
   T extends SchemaValue ? T['type'] : T;
 
+type SchemaValueWithTypeOverride<T extends SchemaValue | ValueType> =
+  T extends SchemaValueWithCustomType<infer V>
+    ? V
+    : TypeNameToTypeMap[ColumnTypeName<T>];
+
 /**
  * Given a schema value, return the TypeScript type.
  *
@@ -71,16 +97,10 @@ export type SchemaValueToTSType<T extends SchemaValue | ValueType> =
   T extends ValueType
     ? TypeNameToTypeMap[T]
     : T extends {
-          optional: true;
+          nullable: true;
         }
-      ?
-          | (T extends SchemaValueWithCustomType<infer V>
-              ? V
-              : TypeNameToTypeMap[ColumnTypeName<T>])
-          | null
-      : T extends SchemaValueWithCustomType<infer V>
-        ? V
-        : TypeNameToTypeMap[ColumnTypeName<T>];
+      ? SchemaValueWithTypeOverride<T> | null
+      : SchemaValueWithTypeOverride<T>;
 
 type Connection = {
   readonly sourceField: readonly string[];

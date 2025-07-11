@@ -12,7 +12,7 @@ const schema = createSchema({
         title: string(),
         description: string(),
         closed: boolean(),
-        ownerId: string().from('owner_id').optional(),
+        ownerId: string().from('owner_id').nullable(),
       })
       .primaryKey('id'),
     table('comment')

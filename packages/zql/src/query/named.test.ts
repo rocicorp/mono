@@ -24,6 +24,7 @@ test('defining a named query', () => {
         readonly closed: boolean;
         readonly ownerId: string | null;
         readonly createdAt: number;
+        readonly updatedAt: number;
       }[]
     >
   >();

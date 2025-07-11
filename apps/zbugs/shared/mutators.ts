@@ -15,49 +15,37 @@ export type AddEmojiArgs = {
   unicode: string;
   annotation: string;
   subjectID: string;
-  created: number;
 };
 
 export type CreateIssueArgs = {
   id: string;
   title: string;
   description?: string | undefined;
-  created: number;
-  modified: number;
 };
 
 export type AddCommentArgs = {
   id: string;
   issueID: string;
   body: string;
-  created: number;
 };
 
 export function createMutators(authData: AuthData | undefined) {
   return {
     issue: {
-      async create(
-        tx,
-        {id, title, description, created, modified}: CreateIssueArgs,
-      ) {
+      async create(tx, {id, title, description}: CreateIssueArgs) {
         assertIsLoggedIn(authData);
         const creatorID = authData.sub;
         await tx.mutate.issue.insert({
           id,
           title,
           description: description ?? '',
-          created,
           creatorID,
-          modified,
           open: true,
           visibility: 'public',
         });
       },
 
-      async update(
-        tx,
-        change: UpdateValue<typeof schema.tables.issue> & {modified: number},
-      ) {
+      async update(tx, change: UpdateValue<typeof schema.tables.issue>) {
         await assertIsCreatorOrAdmin(authData, tx.query.issue, change.id);
         await tx.mutate.issue.update(change);
       },
@@ -100,13 +88,13 @@ export function createMutators(authData: AuthData | undefined) {
     },
 
     comment: {
-      async add(tx, {id, issueID, body, created}: AddCommentArgs) {
+      async add(tx, {id, issueID, body}: AddCommentArgs) {
         assertIsLoggedIn(authData);
         const creatorID = authData.sub;
 
         await assertUserCanSeeIssue(tx, authData, issueID);
 
-        await tx.mutate.comment.insert({id, issueID, creatorID, body, created});
+        await tx.mutate.comment.insert({id, issueID, creatorID, body});
       },
 
       async edit(tx, {id, body}: {id: string; body: string}) {
@@ -160,7 +148,7 @@ export function createMutators(authData: AuthData | undefined) {
   async function addEmoji(
     tx: Transaction<typeof schema, unknown>,
     subjectType: 'issue' | 'comment',
-    {id, unicode, annotation, subjectID, created}: AddEmojiArgs,
+    {id, unicode, annotation, subjectID}: AddEmojiArgs,
   ) {
     assertIsLoggedIn(authData);
     const creatorID = authData.sub;
@@ -177,7 +165,6 @@ export function createMutators(authData: AuthData | undefined) {
       annotation,
       subjectID,
       creatorID,
-      created,
     });
   }
 }

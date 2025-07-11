@@ -71,7 +71,7 @@ const testSchema = table('test')
 const testSchemaWithNulls = table('testWithNulls')
   .columns({
     n: number(),
-    s: string().optional(),
+    s: string().nullable(),
   })
   .primaryKey('n');
 
@@ -104,6 +104,86 @@ const schemaWithAdvancedTypes = table('schemaWithAdvancedTypes')
   })
   .primaryKey('s');
 
+const schemaWithUpdateDefaults = table('schemaWithUpdateDefaults')
+  .columns({
+    s: string(),
+    n: number<Timestamp>().default({
+      update: {
+        client: () => timestamp(42),
+        server: 'db',
+      },
+    }),
+    b: boolean()
+      .default({
+        update: {
+          client: () => true,
+          server: 'db',
+        },
+      })
+      .nullable(),
+    j: json<{foo: string; bar: boolean}>().default({
+      update: {
+        client: () => ({
+          foo: 'bar',
+          bar: true,
+        }),
+        server: 'db',
+      },
+    }),
+    e: enumeration<'open' | 'closed'>().default({
+      update: {
+        client: () => 'open',
+        server: 'db',
+      },
+    }),
+    otherId: string<`custom_${string}`>().default({
+      update: {
+        client: () => 'custom_1',
+        server: 'db',
+      },
+    }),
+  })
+  .primaryKey('s');
+
+const schemaWithInsertDefaults = table('schemaWithInsertDefaults')
+  .columns({
+    s: string(),
+    n: number<Timestamp>().default({
+      insert: {
+        client: () => timestamp(42),
+        server: 'db',
+      },
+    }),
+    b: boolean().default({
+      insert: {
+        client: () => true,
+        server: 'db',
+      },
+    }),
+    j: json<{foo: string; bar: boolean}>().default({
+      insert: {
+        client: () => ({
+          foo: 'bar',
+          bar: true,
+        }),
+        server: 'db',
+      },
+    }),
+    e: enumeration<'open' | 'closed'>().default({
+      insert: {
+        client: () => 'open',
+        server: 'db',
+      },
+    }),
+    otherId: string<`custom_${string}`>().default({
+      insert: {
+        client: () => 'custom_1',
+        server: 'db',
+      },
+    }),
+  })
+  .primaryKey('s');
+
 const withAdvancedTypesRelationships = relationships(
   schemaWithAdvancedTypes,
   connect => ({
@@ -119,7 +199,7 @@ const schemaWithJson = table('testWithJson')
   .columns({
     a: string(),
     j: json(),
-    maybeJ: json().optional(),
+    maybeJ: json().nullable(),
   })
   .primaryKey('a');
 
@@ -131,9 +211,9 @@ const schemaWithArray = table('testWithArray')
     arrayOfString: json<string[]>(),
     arrayOfBoolean: json<boolean[]>(),
 
-    optionalArrayOfNumber: json<number[]>().optional(),
-    optionalArrayOfString: json<string[]>().optional(),
-    optionalArrayOfBoolean: json<boolean[]>().optional(),
+    nullableArrayOfNumber: json<number[]>().nullable(),
+    nullableArrayOfString: json<string[]>().nullable(),
+    nullableArrayOfBoolean: json<boolean[]>().nullable(),
   })
   .primaryKey('id');
 
@@ -212,6 +292,8 @@ const schema = createSchema({
     schemaWithJson,
     schemaWithArray,
     schemaWithAdvancedTypes,
+    schemaWithUpdateDefaults,
+    schemaWithInsertDefaults,
     testWithRelationships,
     testWithMoreRelationships,
     testWithOneRelationships,
@@ -276,6 +358,133 @@ describe('types', () => {
     q2.where('n', '>', 42);
 
     q2.where('n', '>', timestamp(42));
+  });
+
+  test('schema with update defaults', () => {
+    const query = mockQuery as unknown as Query<
+      Schema,
+      'schemaWithUpdateDefaults'
+    >;
+
+    expectTypeOf(query.run()).toExtend<
+      Promise<
+        ReadonlyArray<{
+          s: string;
+          n: Timestamp;
+          b: boolean | null;
+          j: {foo: string; bar: boolean};
+          e: 'open' | 'closed';
+          otherId: `custom_${string}`;
+        }>
+      >
+    >();
+
+    // Test where clauses work with all field types
+    query.where('s', '=', 'test');
+    query.where('n', '>', timestamp(100));
+    query.where('b', '=', true);
+    query.where('e', '=', 'open');
+    query.where('e', '=', 'closed');
+    query.where('otherId', '=', 'custom_123');
+
+    // @ts-expect-error - invalid enum value
+    query.where('e', '=', 'bogus');
+
+    // @ts-expect-error - invalid custom string type
+    query.where('otherId', '=', 'invalid_format');
+
+    // @ts-expect-error - 42 is not a timestamp
+    query.where('n', '>', 42);
+
+    // Test complex expressions
+    query.where(({cmp, or}) => or(cmp('e', '=', 'open'), cmp('b', '=', true)));
+
+    query.where(({cmp, and}) =>
+      and(cmp('n', '>', timestamp(50)), cmp('otherId', '=', 'custom_test')),
+    );
+  });
+
+  test('schema with insert defaults', () => {
+    const query = mockQuery as unknown as Query<
+      Schema,
+      'schemaWithInsertDefaults'
+    >;
+
+    expectTypeOf(query.run()).toExtend<
+      Promise<
+        ReadonlyArray<{
+          s: string;
+          n: Timestamp;
+          b: boolean;
+          j: {foo: string; bar: boolean};
+          e: 'open' | 'closed';
+          otherId: `custom_${string}`;
+        }>
+      >
+    >();
+
+    // Test where clauses work with all field types
+    query.where('s', '=', 'test');
+    query.where('n', '>', timestamp(100));
+    query.where('b', '=', true);
+    query.where('e', '=', 'open');
+    query.where('e', '=', 'closed');
+    query.where('otherId', '=', 'custom_456');
+
+    // @ts-expect-error - invalid enum value
+    query.where('e', '=', 'invalid');
+
+    // @ts-expect-error - invalid custom string type
+    query.where('otherId', '=', 'wrong_prefix_123');
+
+    // @ts-expect-error - 42 is not a timestamp
+    query.where('n', '>', 42);
+
+    // Test one() returns correct type
+    expectTypeOf(query.one().run()).toExtend<
+      Promise<
+        | {
+            readonly s: string;
+            readonly n: Timestamp;
+            readonly b: boolean;
+            readonly j: {foo: string; bar: boolean};
+            readonly e: 'open' | 'closed';
+            readonly otherId: `custom_${string}`;
+          }
+        | undefined
+      >
+    >();
+  });
+
+  test('defaults schemas with complex expressions', () => {
+    const updateQuery = mockQuery as unknown as Query<
+      Schema,
+      'schemaWithUpdateDefaults'
+    >;
+    const insertQuery = mockQuery as unknown as Query<
+      Schema,
+      'schemaWithInsertDefaults'
+    >;
+
+    // Test complex where expressions work
+    updateQuery.where(({cmp, or, and}) =>
+      and(
+        cmp('e', '=', 'open'),
+        or(cmp('b', '=', true), cmp('n', '>', timestamp(42))),
+      ),
+    );
+
+    insertQuery.where(({cmp, not}) => not(cmp('otherId', '=', 'custom_test')));
+
+    // Test IN clauses
+    updateQuery.where('e', 'IN', ['open', 'closed']);
+    insertQuery.where('otherId', 'IN', ['custom_1', 'custom_2']);
+
+    // @ts-expect-error - IN with invalid enum values
+    updateQuery.where('e', 'IN', ['open', 'invalid']);
+
+    // @ts-expect-error - IN with invalid custom string values
+    insertQuery.where('otherId', 'IN', ['custom_1', 'invalid_format']);
   });
 
   test('related with advanced types', () => {
@@ -653,7 +862,7 @@ describe('types', () => {
     q2.where('s', 'IS NOT', null);
 
     // @ts-expect-error - IS cannot compare with undefined, even when field is
-    // optional.
+    // nullable.
     q2.where('s', 'IS', undefined);
     // @ts-expect-error - Same with IS NOT
     q2.where('s', 'IS NOT', undefined);
@@ -801,9 +1010,9 @@ test('array type', () => {
         readonly arrayOfString: string[];
         readonly arrayOfBoolean: boolean[];
 
-        readonly optionalArrayOfNumber: number[] | null;
-        readonly optionalArrayOfString: string[] | null;
-        readonly optionalArrayOfBoolean: boolean[] | null;
+        readonly nullableArrayOfNumber: number[] | null;
+        readonly nullableArrayOfString: string[] | null;
+        readonly nullableArrayOfBoolean: boolean[] | null;
       }
     | undefined
   >();
@@ -816,9 +1025,9 @@ test('array type', () => {
       readonly arrayOfString: string[];
       readonly arrayOfBoolean: boolean[];
 
-      readonly optionalArrayOfNumber: number[] | null;
-      readonly optionalArrayOfString: string[] | null;
-      readonly optionalArrayOfBoolean: boolean[] | null;
+      readonly nullableArrayOfNumber: number[] | null;
+      readonly nullableArrayOfString: string[] | null;
+      readonly nullableArrayOfBoolean: boolean[] | null;
     }[]
   >();
 

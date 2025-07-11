@@ -20,7 +20,7 @@ const album = table('album')
 const artist = table('artist')
   .columns({
     id: number().from('artist_id'),
-    name: string().optional(),
+    name: string().nullable(),
   })
   .primaryKey('id');
 
@@ -29,16 +29,16 @@ const customer = table('customer')
     id: number().from('customer_id'),
     firstName: string().from('first_name'),
     lastName: string().from('last_name'),
-    company: string().optional(),
-    address: string().optional(),
-    city: string().optional(),
-    state: string().optional(),
-    country: string().optional(),
-    postalCode: string().optional().from('postal_code'),
-    phone: string().optional(),
-    fax: string().optional(),
+    company: string().nullable(),
+    address: string().nullable(),
+    city: string().nullable(),
+    state: string().nullable(),
+    country: string().nullable(),
+    postalCode: string().nullable().from('postal_code'),
+    phone: string().nullable(),
+    fax: string().nullable(),
     email: string(),
-    supportRepId: number().optional().from('support_rep_id'),
+    supportRepId: number().nullable().from('support_rep_id'),
   })
   .primaryKey('id');
 
@@ -47,25 +47,25 @@ const employee = table('employee')
     id: number().from('employee_id'),
     lastName: string().from('last_name'),
     firstName: string().from('first_name'),
-    title: string().optional(),
-    reportsTo: number().optional().from('reports_to'),
-    birthDate: number().optional().from('birth_date'),
-    hireDate: number().optional().from('hire_date'),
-    address: string().optional(),
-    city: string().optional(),
-    state: string().optional(),
-    country: string().optional(),
-    postalCode: string().optional().from('postal_code'),
-    phone: string().optional(),
-    fax: string().optional(),
-    email: string().optional(),
+    title: string().nullable(),
+    reportsTo: number().nullable().from('reports_to'),
+    birthDate: number().nullable().from('birth_date'),
+    hireDate: number().nullable().from('hire_date'),
+    address: string().nullable(),
+    city: string().nullable(),
+    state: string().nullable(),
+    country: string().nullable(),
+    postalCode: string().nullable().from('postal_code'),
+    phone: string().nullable(),
+    fax: string().nullable(),
+    email: string().nullable(),
   })
   .primaryKey('id');
 
 const genre = table('genre')
   .columns({
     id: number().from('genre_id'),
-    name: string().optional(),
+    name: string().nullable(),
   })
   .primaryKey('id');
 
@@ -74,11 +74,11 @@ const invoice = table('invoice')
     id: number().from('invoice_id'),
     customerId: number().from('customer_id'),
     invoiceDate: number().from('invoice_date'),
-    billingAddress: string().optional().from('billing_address'),
-    billingCity: string().optional().from('billing_city'),
-    billingState: string().optional().from('billing_state'),
-    billingCountry: string().optional().from('billing_country'),
-    billingPostalCode: string().optional().from('billing_postal_code'),
+    billingAddress: string().nullable().from('billing_address'),
+    billingCity: string().nullable().from('billing_city'),
+    billingState: string().nullable().from('billing_state'),
+    billingCountry: string().nullable().from('billing_country'),
+    billingPostalCode: string().nullable().from('billing_postal_code'),
     total: number(),
   })
   .primaryKey('id');
@@ -98,14 +98,14 @@ const mediaType = table('mediaType')
   .from('media_type')
   .columns({
     id: number().from('media_type_id'),
-    name: string().optional(),
+    name: string().nullable(),
   })
   .primaryKey('id');
 
 const playlist = table('playlist')
   .columns({
     id: number().from('playlist_id'),
-    name: string().optional(),
+    name: string().nullable(),
   })
   .primaryKey('id');
 
@@ -121,12 +121,12 @@ const track = table('track')
   .columns({
     id: number().from('track_id'),
     name: string(),
-    albumId: number().optional().from('album_id'),
+    albumId: number().nullable().from('album_id'),
     mediaTypeId: number().from('media_type_id'),
-    genreId: number().optional().from('genre_id'),
-    composer: string().optional(),
+    genreId: number().nullable().from('genre_id'),
+    composer: string().nullable(),
     milliseconds: number(),
-    bytes: number().optional(),
+    bytes: number().nullable(),
     unitPrice: number().from('unit_price'),
   })
   .primaryKey('id');

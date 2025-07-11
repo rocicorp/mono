@@ -259,14 +259,8 @@ describe('checkSchemasAreCompatible', () => {
 
   test('should handle all PostgreSQL types correctly', () => {
     // Generate column definitions for incompatible schema (all types wrong)
-    const incompatibleColumns: Record<
-      string,
-      ColumnBuilder<SchemaValue<unknown>>
-    > = {};
-    const compatibleColumns: Record<
-      string,
-      ColumnBuilder<SchemaValue<unknown>>
-    > = {};
+    const incompatibleColumns: Record<string, ColumnBuilder<SchemaValue>> = {};
+    const compatibleColumns: Record<string, ColumnBuilder<SchemaValue>> = {};
     const serverColumns: Record<string, ServerColumnSchema> = {};
 
     // Helper to get the wrong type for a given PostgreSQL type

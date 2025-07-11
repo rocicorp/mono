@@ -20,7 +20,7 @@ type TableOptions = {
 };
 
 type ColumnInfo = {
-  optional: boolean;
+  nullable: boolean;
   pgType: string;
   isEnum: boolean;
   isPrimaryKey: boolean;
@@ -77,7 +77,7 @@ export function generateData(
           isEnum: serverColumnSchema.isEnum,
           isPrimaryKey: tableSchema.primaryKey.includes(columnName),
           name: columnName,
-          optional: !!zqlColumnSchema.optional,
+          nullable: !!zqlColumnSchema.nullable,
           pgType: serverColumnSchema.type,
         });
       }
@@ -90,7 +90,7 @@ export function generateData(
 }
 
 export function getDataForType(faker: Faker, rng: Rng, column: ColumnInfo) {
-  if (column.optional) {
+  if (column.nullable) {
     if (rng() < 0.1) {
       return null;
     }
