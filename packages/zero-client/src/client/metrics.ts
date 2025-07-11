@@ -9,7 +9,7 @@ import type {ZeroLogContext} from './zero-log-context.ts';
 // than any other value.
 export const DID_NOT_CONNECT_VALUE = 100 * 1000;
 
-export const REPORT_INTERVAL_MS = 60_000;
+export const REPORT_INTERVAL_MS = 5_000;
 
 type ClientDisconnectReason =
   | 'AbruptClose'
