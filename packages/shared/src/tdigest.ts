@@ -4,10 +4,16 @@
 import {binarySearch} from './binary-search.ts';
 import {Centroid, sortCentroidList, type CentroidList} from './centroid.ts';
 
+export interface ReadonlyTDigest {
+  readonly count: () => number;
+  readonly quantile: (q: number) => number;
+  readonly cdf: (x: number) => number;
+}
+
 // TDigest is a data structure for accurate on-line accumulation of
 // rank-based statistics such as quantiles and trimmed means.
 export class TDigest {
-  compression: number;
+  readonly compression: number;
 
   #maxProcessed: number;
   #maxUnprocessed: number;
@@ -36,15 +42,12 @@ export class TDigest {
     this.#max = -Number.MAX_VALUE;
   }
 
-  add(mean: number, weight: number) {
+  add(mean: number, weight: number = 1) {
     this.addCentroid(new Centroid(mean, weight));
   }
 
   /** AddCentroidList can quickly add multiple centroids. */
   addCentroidList(centroidList: CentroidList) {
-    // It's possible to optimize this by bulk-copying the slice, but this
-    // yields just a 1-2% speedup (most time is in process()), so not worth
-    // the complexity.
     for (const c of centroidList) {
       this.addCentroid(c);
     }

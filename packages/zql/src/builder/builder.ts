@@ -29,7 +29,7 @@ import {Filter} from '../ivm/filter.ts';
 import {Join} from '../ivm/join.ts';
 import type {Input, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
-import type {Source} from '../ivm/source.ts';
+import type {Source, SourceInput} from '../ivm/source.ts';
 import {Take} from '../ivm/take.ts';
 import {createPredicate, type NoSubqueryCondition} from './filter.ts';
 
@@ -59,6 +59,8 @@ export interface BuilderDelegate {
   decorateInput(input: Input, name: string): Input;
 
   decorateFilterInput(input: FilterInput, name: string): FilterInput;
+
+  decorateSourceInput(input: SourceInput, queryID: string): Input;
 
   /**
    * The AST is mapped on-the-wire between client and server names.
@@ -93,10 +95,15 @@ export interface BuilderDelegate {
  * const sink = new MySink(input);
  * ```
  */
-export function buildPipeline(ast: AST, delegate: BuilderDelegate): Input {
+export function buildPipeline(
+  ast: AST,
+  delegate: BuilderDelegate,
+  queryID: string,
+): Input {
   return buildPipelineInternal(
     delegate.mapAst ? delegate.mapAst(ast) : ast,
     delegate,
+    queryID,
     '',
   );
 }
@@ -181,6 +188,7 @@ function isParameter(value: ValuePosition): value is Parameter {
 function buildPipelineInternal(
   ast: AST,
   delegate: BuilderDelegate,
+  queryID: string,
   name: string,
   partitionKey?: CompoundKey | undefined,
 ): Input {
@@ -211,7 +219,9 @@ function buildPipelineInternal(
     }
   }
   const conn = source.connect(must(ast.orderBy), ast.where, splitEditKeys);
-  let end: Input = delegate.decorateInput(conn, `${name}:source(${ast.table})`);
+
+  let end: Input = delegate.decorateSourceInput(conn, queryID);
+  end = delegate.decorateInput(end, `${name}:source(${ast.table})`);
   const {fullyAppliedFilters} = conn;
 
   if (ast.start) {
@@ -219,7 +229,7 @@ function buildPipelineInternal(
   }
 
   for (const csq of csqsFromCondition) {
-    end = applyCorrelatedSubQuery(csq, delegate, end, name, true);
+    end = applyCorrelatedSubQuery(csq, delegate, queryID, end, name, true);
   }
 
   if (ast.where && !fullyAppliedFilters) {
@@ -236,7 +246,7 @@ function buildPipelineInternal(
 
   if (ast.related) {
     for (const csq of ast.related) {
-      end = applyCorrelatedSubQuery(csq, delegate, end, name, false);
+      end = applyCorrelatedSubQuery(csq, delegate, queryID, end, name, false);
     }
   }
 
@@ -360,6 +370,7 @@ function applySimpleCondition(
 function applyCorrelatedSubQuery(
   sq: CorrelatedSubquery,
   delegate: BuilderDelegate,
+  queryID: string,
   end: Input,
   name: string,
   fromCondition: boolean,
@@ -374,6 +385,7 @@ function applyCorrelatedSubQuery(
   const child = buildPipelineInternal(
     sq.subquery,
     delegate,
+    queryID,
     `${name}.${sq.subquery.alias}`,
     sq.correlation.childField,
   );

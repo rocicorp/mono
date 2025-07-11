@@ -3,9 +3,9 @@ import type {JSONObject} from '../../../shared/src/json.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {FilterInput} from '../ivm/filter-operators.ts';
 import {MemoryStorage} from '../ivm/memory-storage.ts';
-import type {Storage, Input} from '../ivm/operator.ts';
+import type {Input, Storage} from '../ivm/operator.ts';
 import {FilterSnitch, Snitch, type SnitchMessage} from '../ivm/snitch.ts';
-import type {Source} from '../ivm/source.ts';
+import type {Source, SourceInput} from '../ivm/source.ts';
 import type {BuilderDelegate} from './builder.ts';
 
 export class TestBuilderDelegate implements BuilderDelegate {
@@ -53,6 +53,10 @@ export class TestBuilderDelegate implements BuilderDelegate {
       return input;
     }
     return new FilterSnitch(input, name, this.#log);
+  }
+
+  decorateSourceInput(input: SourceInput): Input {
+    return input;
   }
 
   clearLog() {
