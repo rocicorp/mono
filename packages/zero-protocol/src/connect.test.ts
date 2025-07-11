@@ -16,6 +16,7 @@ test('encode/decodeSecProtocols round-trip', () => {
                     {
                       op: fc.constant<'put'>('put'),
                       hash: fc.string(),
+                      data: fc.fullUnicodeString(),
                       ast: fc.constant({
                         table: 'table',
                       }),
