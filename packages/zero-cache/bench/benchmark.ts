@@ -3,9 +3,7 @@
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
-import type {Input} from '../../zql/src/ivm/operator.ts';
 import type {Source} from '../../zql/src/ivm/source.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
@@ -59,12 +57,9 @@ export function bench(opts: Options) {
       // TODO: table storage!!
       return new MemoryStorage();
     },
-    decorateInput(input: Input): Input {
-      return input;
-    },
-    decorateFilterInput(input: FilterInput): FilterInput {
-      return input;
-    },
+    decorateInput: input => input,
+    decorateSourceInput: input => input,
+    decorateFilterInput: input => input,
     addServerQuery() {
       return () => {};
     },

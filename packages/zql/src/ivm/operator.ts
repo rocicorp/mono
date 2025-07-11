@@ -2,7 +2,7 @@ import type {JSONValue} from '../../../shared/src/json.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import type {Constraint} from './constraint.ts';
-import {type Node} from './data.ts';
+import type {Node} from './data.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
 

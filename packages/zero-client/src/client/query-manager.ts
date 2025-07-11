@@ -69,6 +69,7 @@ export class QueryManager implements InspectorMetricsDelegate {
   readonly #metrics: Metric = {
     'query-materialization-client': new TDigest(),
     'query-materialization-end-to-end': new TDigest(),
+    'query-update-client': new TDigest(),
   };
   readonly #queryMetrics: Map<string, Metric> = new Map();
   readonly #slowMaterializeThreshold: number;
@@ -394,6 +395,10 @@ export class QueryManager implements InspectorMetricsDelegate {
     value: number,
     ...args: MetricMap[K]
   ): void {
+    // Only query metrics are tracked at this point.
+    // If this check fails then we need to add a runtime check.
+    metric satisfies `query-${string}`;
+
     // We track all materializations of queries as well as per
     // query materializations.
     this.#metrics[metric].add(value);
@@ -430,6 +435,7 @@ export class QueryManager implements InspectorMetricsDelegate {
       existing = {
         'query-materialization-client': new TDigest(),
         'query-materialization-end-to-end': new TDigest(),
+        'query-update-client': new TDigest(),
       };
       this.#queryMetrics.set(queryID, existing);
     }

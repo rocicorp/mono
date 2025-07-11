@@ -1,10 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {LogConfig} from '../../otel/src/log-options.ts';
+import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../zql/src/ivm/operator.ts';
-import type {Source} from '../../zql/src/ivm/source.ts';
+import type {Source, SourceInput} from '../../zql/src/ivm/source.ts';
 import type {
   CommitListener,
   QueryDelegate,
@@ -40,6 +41,8 @@ export class QueryDelegateImpl implements QueryDelegate {
     };
   }
 
+  mapAst?: ((ast: AST) => AST) | undefined;
+
   getSource(tableName: string): Source {
     let source = this.#sources.get(tableName);
     if (source) {
@@ -65,18 +68,27 @@ export class QueryDelegateImpl implements QueryDelegate {
   createStorage() {
     return new MemoryStorage();
   }
+
+  decorateSourceInput(input: SourceInput): Input {
+    return input;
+  }
+
   decorateInput(input: Input): Input {
     return input;
   }
+
   decorateFilterInput(input: FilterInput): FilterInput {
     return input;
   }
+
   addServerQuery() {
     return () => {};
   }
+
   addCustomQuery() {
     return () => {};
   }
+
   updateServerQuery() {}
   updateCustomQuery() {}
   flushQueryChanges() {}
