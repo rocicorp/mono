@@ -1,5 +1,6 @@
 export type MetricMap = {
   'query-materialization-client': [queryID: string];
+  'query-update-client': [queryID: string];
 };
 
 export interface MetricsDelegate {
