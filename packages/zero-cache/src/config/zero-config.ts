@@ -154,6 +154,37 @@ const authOptions = {
   },
 };
 
+const makeMutatorQueryOptions = (
+  replacement: string | undefined,
+  suffix: string,
+) => ({
+  url: {
+    type: v.string().optional(), // optional until we remove CRUD mutations
+    desc: [
+      replacement ? `DEPRECATED. Use ${replacement} instead.` : ``,
+      `The URL of the API server to which zero-cache will ${suffix}.`,
+    ],
+  },
+  apiKey: {
+    type: v.string().optional(),
+    desc: [
+      `An optional secret used to authorize zero-cache to call the API server handling writes.`,
+    ],
+  },
+  forwardCookies: {
+    type: v.boolean().default(false),
+    desc: [
+      `If true, zero-cache will forward cookies from the request.`,
+      `This is useful for passing authentication cookies to the API server.`,
+      `If false, cookies are not forwarded.`,
+    ],
+  },
+});
+
+const mutateOptions = makeMutatorQueryOptions(undefined, 'push mutations');
+const pushOptions = makeMutatorQueryOptions('query_url', 'push mutations');
+const queryOptions = makeMutatorQueryOptions(undefined, 'send named queries');
+
 export type AuthConfig = Config<typeof authOptions>;
 
 // Note: --help will list flags in the order in which they are defined here,
@@ -199,55 +230,9 @@ export const zeroOptions = {
     },
   },
 
-  push: {
-    url: {
-      type: v.string().optional(), // optional until we remove CRUD mutations
-      desc: [
-        `The URL of the API server to which zero-cache will push mutations.`,
-      ],
-    },
-    apiKey: {
-      type: v.string().optional(),
-      desc: [
-        `An optional secret used to authorize zero-cache to call the API server handling writes.`,
-      ],
-    },
-    forwardCookies: {
-      type: v.boolean().default(false),
-      desc: [
-        `If true, zero-cache will forward cookies from the request to the push URL.`,
-        `This is useful for passing authentication cookies to the API server.`,
-        `If false, cookies are not forwarded.`,
-        ``,
-        `Note that this option is only relevant if the {bold push-url} is set.`,
-      ],
-    },
-  },
-
-  pull: {
-    url: {
-      type: v.string().optional(),
-      desc: [
-        `The URL of the API server to which zero-cache will send named queries.`,
-      ],
-    },
-    apiKey: {
-      type: v.string().optional(),
-      desc: [
-        `An optional secret used to authorize zero-cache to call the API server handling reads.`,
-      ],
-    },
-    forwardCookies: {
-      type: v.boolean().default(false),
-      desc: [
-        `If true, zero-cache will forward cookies from the request to the pull URL.`,
-        `This is useful for passing authentication cookies to the API server.`,
-        `If false, cookies are not forwarded.`,
-        ``,
-        `Note that this option is only relevant if the {bold pull-url} is set.`,
-      ],
-    },
-  },
+  push: pushOptions,
+  mutate: mutateOptions,
+  query: queryOptions,
 
   cvr: {
     db: {
