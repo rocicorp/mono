@@ -21,10 +21,7 @@ type ErrorType =
   | Error
   | unknown;
 
-const transientPushErrorTypes: PushError['error'][] = [
-  'zeroPusher',
-  'http',
-
+const completeFailureTypes: PushError['error'][] = [
   // These should never actually be received as they cause the websocket
   // connection to be closed.
   'unsupportedPushVersion',
@@ -48,15 +45,21 @@ export class MutationTracker {
     }
   >;
   readonly #ephemeralIDsByMutationID: Map<number, EphemeralID>;
-  readonly #allMutationsConfirmedListeners: Set<() => void>;
+  readonly #allMutationsAppliedListeners: Set<() => void>;
   readonly #lc: ZeroLogContext;
+  readonly #limboMutations: Set<EphemeralID>;
   #clientID: string | undefined;
+  #largestOutstandingMutationID: number;
+  #currentMutationID: number;
 
   constructor(lc: ZeroLogContext) {
     this.#lc = lc.withContext('MutationTracker');
     this.#outstandingMutations = new Map();
     this.#ephemeralIDsByMutationID = new Map();
-    this.#allMutationsConfirmedListeners = new Set();
+    this.#allMutationsAppliedListeners = new Set();
+    this.#limboMutations = new Set();
+    this.#largestOutstandingMutationID = 0;
+    this.#currentMutationID = 0;
   }
 
   set clientID(clientID: string) {
@@ -78,6 +81,10 @@ export class MutationTracker {
     if (entry) {
       entry.mutationID = mutationID;
       this.#ephemeralIDsByMutationID.set(mutationID, id);
+      this.#largestOutstandingMutationID = Math.max(
+        this.#largestOutstandingMutationID,
+        mutationID,
+      );
     }
   }
 
@@ -112,7 +119,7 @@ export class MutationTracker {
    * to those mutations have been lost.
    *
    * An example case: the API server responds while the connection
-   * is down. Those responses are dropped.
+   * is down. Those responses are lost.
    *
    * Mutations whose LMID is > the lastMutationID are not resolved
    * since they will be retried by the client, giving us another chance
@@ -121,9 +128,6 @@ export class MutationTracker {
    * The only way to ensure that all API server responses are
    * received would be to have the API server write them
    * to the DB while writing the LMID.
-   *
-   * This would have the downside of not being able to provide responses to a
-   * mutation with data gathered after the transaction.
    */
   onConnected(lastMutationID: number) {
     for (const [id, entry] of this.#outstandingMutations) {
@@ -139,28 +143,129 @@ export class MutationTracker {
         break;
       }
     }
+
+    for (const [id, entry] of this.#outstandingMutations) {
+      if (entry.mutationID && entry.mutationID > lastMutationID) {
+        // We don't know the state of these mutations.
+        // They could have been applied by the server
+        // or not since we sent them before the connection was lost.
+        // Adding to `limbo` will cause them to be resolved
+        // when the next lmid bump is received.
+        this.#limboMutations.add(id);
+      }
+    }
+    this.lmidAdvanced(lastMutationID);
+  }
+
+  /**
+   * lmid advance will:
+   * 1. notify "allMutationsApplied" listeners if the lastMutationID
+   *    is greater than or equal to the largest outstanding mutation ID.
+   * 2. resolve all limbo mutations whose mutation ID is less than or equal to
+   *    the lastMutationID.
+   *
+   * We only resolve "limbo mutations" since we want to give the mutation
+   * responses a chance to be received. `poke` and `pushResponse` are non transactional
+   * so they race.
+   *
+   * E.g., a `push` may call the api server which:
+   * writes to PG, replicates to zero-cache, then pokes the lmid down before the
+   * push response is sent.
+   *
+   * The only fix for this would be to have mutation responses be written to the database
+   * and sent down through the poke protocol.
+   *
+   * The artifact the user sees is that promise resolutions for mutations is not transactional
+   * with the update to synced data.
+   *
+   * It was a mistake to not just write the mutation responses to the database
+   * in the first place as this route ends up being more complicated
+   * and less reliable.
+   */
+  lmidAdvanced(lastMutationID: number): void {
+    assert(
+      lastMutationID >= this.#currentMutationID,
+      'lmid must be greater than or equal to current lmid',
+    );
+    if (lastMutationID === this.#currentMutationID) {
+      return;
+    }
+    try {
+      this.#currentMutationID = lastMutationID;
+      this.#resolveLimboMutations(lastMutationID);
+    } finally {
+      if (lastMutationID >= this.#largestOutstandingMutationID) {
+        // this is very important otherwise we hang query de-registration
+        this.#notifyAllMutationsAppliedListeners();
+      }
+    }
   }
 
   get size() {
     return this.#outstandingMutations.size;
   }
 
+  /**
+   * Push errors fall into two categories:
+   * - Those where we know the mutations were not applied
+   * - Those where we do not know the state of the mutations.
+   *
+   * The first category includes errors like "unsupportedPushVersion"
+   * and "unsupportedSchemaVersion". The mutations were never applied in those cases.
+   *
+   * The second category includes errors like "http" errors. E.g., a 500 on the user's
+   * API server or a network error.
+   *
+   * The mutations may have been applied by the API server but we never
+   * received the response.
+   *
+   * In this latter case, we must mark the mutations as being in limbo.
+   * This allows us to resolve them when we receive the next
+   * lmid bump if their lmids are lesser.
+   */
   #processPushError(error: PushError): void {
-    // Mutations suffering from transient errors are not removed from the
-    // outstanding mutations list. The client will retry.
-    if (transientPushErrorTypes.includes(error.error)) {
+    if (completeFailureTypes.includes(error.error)) {
       return;
     }
 
     const mids = error.mutationIDs;
-
     // TODO: remove this check once the server always sends mutationIDs
     if (!mids) {
       return;
     }
 
+    // If the push request failed then we do not know the state of the mutations that were
+    // included in that request.
+    // Maybe they were applied. Whatever happened, we've lost the response.
+    // Given that, we mark them as "in limbo."
     for (const mid of mids) {
-      this.#processMutationError(mid, error);
+      const ephemeralID = this.#ephemeralIDsByMutationID.get(mid.id);
+      if (ephemeralID) {
+        // if the lmid has already moved past the mutations we can settle them.
+        if (mid.id <= this.#currentMutationID) {
+          const entry = this.#outstandingMutations.get(ephemeralID);
+          if (entry) {
+            this.#settleMutation(ephemeralID, entry, 'resolve', emptyObject);
+          }
+          continue;
+        }
+        // otherwise put in limbo and wait for next lmid bump
+        this.#limboMutations.add(ephemeralID);
+      }
+    }
+  }
+
+  #resolveLimboMutations(lastMutationID: number): void {
+    for (const id of this.#limboMutations) {
+      const entry = this.#outstandingMutations.get(id);
+      if (!entry || !entry.mutationID) {
+        this.#limboMutations.delete(id);
+        continue;
+      }
+      if (entry.mutationID <= lastMutationID) {
+        this.#limboMutations.delete(id);
+        this.#settleMutation(id, entry, 'resolve', emptyObject);
+      }
     }
   }
 
@@ -244,21 +349,29 @@ export class MutationTracker {
         break;
     }
 
-    const removed = this.#outstandingMutations.delete(ephemeralID);
+    this.#outstandingMutations.delete(ephemeralID);
     if (entry.mutationID) {
       this.#ephemeralIDsByMutationID.delete(entry.mutationID);
     }
-    if (removed && this.#outstandingMutations.size === 0) {
-      this.#notifyAllMutationsConfirmedListeners();
-    }
+    this.#limboMutations.delete(ephemeralID);
   }
 
-  onAllMutationsConfirmed(listener: () => void): void {
-    this.#allMutationsConfirmedListeners.add(listener);
+  /**
+   * Be notified when all mutations have been included in the server snapshot.
+   *
+   * The query manager will not de-register queries from the server until there
+   * are no pending mutations.
+   *
+   * The reason is that a mutation may need to be rebased. We do not want
+   * data that was available the first time it was run to not be available
+   * on a rebase.
+   */
+  onAllMutationsApplied(listener: () => void): void {
+    this.#allMutationsAppliedListeners.add(listener);
   }
 
-  #notifyAllMutationsConfirmedListeners() {
-    for (const listener of this.#allMutationsConfirmedListeners) {
+  #notifyAllMutationsAppliedListeners() {
+    for (const listener of this.#allMutationsAppliedListeners) {
       listener();
     }
   }

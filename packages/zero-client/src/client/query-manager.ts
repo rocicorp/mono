@@ -82,7 +82,7 @@ export class QueryManager {
     this.#mutationTracker = mutationTracker;
     this.#queryChangeThrottleMs = queryChangeThrottleMs;
 
-    this.#mutationTracker.onAllMutationsConfirmed(() => {
+    this.#mutationTracker.onAllMutationsApplied(() => {
       if (this.#pendingRemovals.length === 0) {
         return;
       }

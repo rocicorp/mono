@@ -1,4 +1,4 @@
-import {describe, test, expect} from 'vitest';
+import {describe, test, expect, vi} from 'vitest';
 import {MutationTracker} from './mutation-tracker.ts';
 import type {PushResponse} from '../../../zero-protocol/src/push.ts';
 import {makeReplicacheMutator} from './custom.ts';
@@ -227,7 +227,7 @@ describe('MutationTracker', () => {
     tracker.clientID = CLIENT_ID;
 
     let callCount = 0;
-    tracker.onAllMutationsConfirmed(() => {
+    tracker.onAllMutationsApplied(() => {
       callCount++;
     });
 
@@ -241,6 +241,7 @@ describe('MutationTracker', () => {
         },
       ],
     });
+    tracker.lmidAdvanced(1);
 
     expect(callCount).toBe(1);
 
@@ -297,6 +298,7 @@ describe('MutationTracker', () => {
         },
       ],
     });
+    tracker.lmidAdvanced(4);
 
     expect(callCount).toBe(2);
 
@@ -400,5 +402,140 @@ describe('MutationTracker', () => {
         ],
       }),
     ).toThrow('ephemeral ID is missing for mutation error: app.');
+  });
+
+  test('advancing lmid past outstanding lmid notifies "all mutations applied" listeners', () => {
+    const tracker = new MutationTracker(lc);
+    tracker.clientID = CLIENT_ID;
+
+    const listener = vi.fn();
+    tracker.onAllMutationsApplied(listener);
+
+    tracker.lmidAdvanced(2);
+
+    expect(listener).toHaveBeenCalled();
+
+    const data = tracker.trackMutation();
+    tracker.mutationIDAssigned(data.ephemeralID, 4);
+
+    tracker.lmidAdvanced(3);
+    expect(listener).toHaveBeenCalledTimes(1);
+    tracker.lmidAdvanced(4);
+    expect(listener).toHaveBeenCalledTimes(2);
+    tracker.lmidAdvanced(5);
+    expect(listener).toHaveBeenCalledTimes(3);
+  });
+
+  test('advancing lmid clears limbo mutations up to that lmid', async () => {
+    const tracker = new MutationTracker(lc);
+    tracker.clientID = CLIENT_ID;
+
+    const mutation1 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
+    const mutation2 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation2.ephemeralID, 2);
+    const mutation3 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation3.ephemeralID, 3);
+
+    tracker.processPushResponse({
+      error: 'http',
+      status: 500,
+      details: 'Internal Server Error',
+      mutationIDs: [
+        {clientID: CLIENT_ID, id: 1},
+        {clientID: CLIENT_ID, id: 2},
+        {clientID: CLIENT_ID, id: 3},
+      ],
+    });
+
+    tracker.lmidAdvanced(2);
+
+    let mutation3Resolved = false;
+    void mutation3.serverPromise.finally(() => {
+      mutation3Resolved = true;
+    });
+
+    await Promise.all([mutation1.serverPromise, mutation2.serverPromise]);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mutation3Resolved).toBe(false);
+
+    tracker.lmidAdvanced(3);
+    await mutation3.serverPromise;
+    expect(mutation3Resolved).toBe(true);
+  });
+
+  test('failed push causes mutations to resolve that are under the current lmid', async () => {
+    const tracker = new MutationTracker(lc);
+    tracker.clientID = CLIENT_ID;
+
+    const mutation1 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
+    const mutation2 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation2.ephemeralID, 2);
+    const mutation3 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation3.ephemeralID, 3);
+
+    tracker.lmidAdvanced(2);
+
+    tracker.processPushResponse({
+      error: 'http',
+      status: 500,
+      details: 'Internal Server Error',
+      mutationIDs: [
+        {clientID: CLIENT_ID, id: 1},
+        {clientID: CLIENT_ID, id: 2},
+        {clientID: CLIENT_ID, id: 3},
+      ],
+    });
+
+    let mutation3Resolved = false;
+    void mutation3.serverPromise.finally(() => {
+      mutation3Resolved = true;
+    });
+    await Promise.all([mutation1.serverPromise, mutation2.serverPromise]);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mutation3Resolved).toBe(false);
+  });
+
+  test('reconnecting puts outstanding mutations in limbo', async () => {
+    const tracker = new MutationTracker(lc);
+    tracker.clientID = CLIENT_ID;
+
+    const mutation1 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation1.ephemeralID, 3);
+    const mutation2 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation2.ephemeralID, 4);
+    const mutation3 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation3.ephemeralID, 5);
+
+    tracker.onConnected(1);
+
+    tracker.lmidAdvanced(5);
+    expect(tracker.size).toBe(0);
+    await Promise.all([
+      mutation1.serverPromise,
+      mutation2.serverPromise,
+      mutation3.serverPromise,
+    ]);
+  });
+
+  test('advancing lmid does not resolve mutations that are not in limbo', () => {
+    const tracker = new MutationTracker(lc);
+    tracker.clientID = CLIENT_ID;
+
+    const mutation1 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
+    const mutation2 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation2.ephemeralID, 2);
+    const mutation3 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation3.ephemeralID, 3);
+
+    tracker.lmidAdvanced(5);
+
+    expect(tracker.size).toBe(3);
+
+    tracker.lmidAdvanced(8);
+
+    expect(tracker.size).toBe(3);
   });
 });
