@@ -523,6 +523,18 @@ describe('server results and keeping read queries', () => {
       ],
     });
 
+    // confirm the mutation
+    await z.triggerPokeStart({
+      pokeID: '1',
+      baseCookie: null,
+      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+    });
+    await z.triggerPokePart({
+      pokeID: '1',
+      lastMutationIDChanges: {[z.clientID]: 1},
+    });
+    await z.triggerPokeEnd({pokeID: '1', cookie: '1'});
+
     z.queryDelegate.flushQueryChanges();
 
     // mutation is no longer outstanding, query is removed.
@@ -558,6 +570,17 @@ describe('server results and keeping read queries', () => {
         },
       ],
     });
+
+    await z.triggerPokeStart({
+      pokeID: '2',
+      baseCookie: '1',
+      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+    });
+    await z.triggerPokePart({
+      pokeID: '2',
+      lastMutationIDChanges: {[z.clientID]: 2},
+    });
+    await z.triggerPokeEnd({pokeID: '2', cookie: '2'});
 
     z.queryDelegate.flushQueryChanges();
 

@@ -201,8 +201,16 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const useQueryOptions = {
     enabled: listContext !== undefined && issueSnapshot !== undefined,
   } as const;
+  // Don't need to send entire issue to server, just the sort columns plus PK.
+  const start = displayed
+    ? {
+        id: displayed.id,
+        created: displayed.created,
+        modified: displayed.modified,
+      }
+    : null;
   const [next] = useQuery(
-    prevNext(listContext?.params ?? null, displayed ?? null, 'next'),
+    prevNext(listContext?.params ?? null, start, 'next'),
     useQueryOptions,
   );
   useKeypress('j', () => {
@@ -212,7 +220,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   });
 
   const [prev] = useQuery(
-    prevNext(listContext?.params ?? null, displayed ?? null, 'prev'),
+    prevNext(listContext?.params ?? null, start, 'prev'),
     useQueryOptions,
   );
   useKeypress('k', () => {
