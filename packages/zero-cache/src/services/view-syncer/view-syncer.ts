@@ -29,6 +29,7 @@ import type {
   InspectUpBody,
   InspectUpMessage,
 } from '../../../../zero-protocol/src/inspect-up.ts';
+import {MAX_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {
   transformAndHashQuery,
   type TransformedAndHashed,
@@ -162,7 +163,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * The TTL clock is used to determine the time at which queries are considered
    * expired.
    */
-  #ttlClock = Date.now();
+  #ttlClock: number | undefined;
 
   /**
    * The base time for the TTL clock. This is used to compute the current TTL
@@ -176,10 +177,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * time that has passed since the last time we set it.
    */
   #ttlClockBase = Date.now();
-
-  get ttlClockBase(): number {
-    return this.#ttlClockBase;
-  }
 
   /**
    * We update the ttlClock every minute to ensure that it is not too much
@@ -217,7 +214,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   maxRowCount: number;
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
-  #nextExpiredQueryTime: number = 0;
   readonly #setTimeout: SetTimeout;
   readonly #customQueryTransformer: CustomQueryTransformer | undefined;
 
@@ -475,7 +471,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#lc.debug?.('Stopping expired queries timer');
     clearTimeout(this.#expiredQueriesTimer);
     this.#expiredQueriesTimer = 0;
-    this.#nextExpiredQueryTime = 0;
   }
 
   initConnection(
@@ -579,7 +574,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #getTTLClock(now: number): number {
     // We will update ttlClock with delta from the ttlClockBase to the current time.
     const delta = now - this.#ttlClockBase;
+    assert(this.#ttlClock !== undefined);
     const ttlClock = this.#ttlClock + delta;
+    assert(ttlClock <= now);
     this.#ttlClock = ttlClock;
     this.#ttlClockBase = now;
     return ttlClock;
@@ -762,6 +759,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const deletedClientGroupIDs: string[] = [];
 
       cvr = await this.#updateCVRConfig(lc, cvr, clientID, updater => {
+        const now = Date.now();
+        const ttlClock = this.#getTTLClock(now);
         const patches: PatchToVersion[] = [];
 
         if (clientSchema) {
@@ -771,7 +770,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // Apply requested patches.
         lc.debug?.(`applying ${desiredQueriesPatch?.length} query patches`);
         if (desiredQueriesPatch?.length) {
-          const now = Date.now();
           for (const patch of desiredQueriesPatch) {
             switch (patch.op) {
               case 'put':
@@ -782,7 +780,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                   ...updater.markDesiredQueriesAsInactive(
                     clientID,
                     [patch.hash],
-                    now,
+                    ttlClock,
                   ),
                 );
                 break;
@@ -814,7 +812,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
 
         for (const cid of clientIDsToDelete) {
-          const patchesDueToClient = updater.deleteClient(cid);
+          const patchesDueToClient = updater.deleteClient(cid, ttlClock);
           patches.push(...patchesDueToClient);
           deletedClientIDs.push(cid);
         }
@@ -862,30 +860,23 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       return;
     }
 
-    if (this.#nextExpiredQueryTime === next) {
+    if (this.#expiredQueriesTimer) {
       lc.debug?.('eviction timer already scheduled');
       return;
     }
 
-    if (this.#expiredQueriesTimer) {
-      clearTimeout(this.#expiredQueriesTimer);
-    }
-
     const now = Date.now();
-    this.#nextExpiredQueryTime = next;
     const ttlClock = this.#getTTLClock(now);
-    lc.debug?.('Scheduling eviction timer to run in ', next - ttlClock, 'ms');
-    this.#expiredQueriesTimer = this.#setTimeout(
-      () =>
-        this.#runInLockWithCVR(this.#removeExpiredQueries).catch(e =>
-          // If an error occurs (e.g. ownership change), propagate the error
-          // to the main run() loop via the #stateChanges Subscription.
-          this.#stateChanges.fail(e),
-        ),
-      // If the expire time is too far in the future we will run it in an hour.
-      // At that point in time it will be rescheduled as needed again.
-      Math.min(next - ttlClock, 60 * 60 * 1000), // 1 hour
-    );
+    const delay = Math.min(next - ttlClock, MAX_TTL_MS);
+    lc.debug?.('Scheduling eviction timer to run in ', delay, 'ms');
+    this.#expiredQueriesTimer = this.#setTimeout(() => {
+      this.#expiredQueriesTimer = 0;
+      this.#runInLockWithCVR(this.#removeExpiredQueries).catch(e =>
+        // If an error occurs (e.g. ownership change), propagate the error
+        // to the main run() loop via the #stateChanges Subscription.
+        this.#stateChanges.fail(e),
+      );
+    }, delay);
   }
 
   /**
@@ -1209,7 +1200,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           removeQueries.length > 0 ||
           unhydrateQueries.length > 0,
       );
-      const start = Date.now();
+      const start = performance.now();
 
       const stateVersion = this.#pipelines.currentVersion();
       lc = lc.withContext('stateVersion', stateVersion);
@@ -1303,7 +1294,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Signal clients to commit.
       await pokers.end(finalVersion);
 
-      const wallTime = Date.now() - start;
+      const wallTime = performance.now() - start;
       lc.info?.(
         `finished processing queries (process: ${totalProcessTime} ms, wall: ${wallTime} ms)`,
       );
@@ -1419,14 +1410,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     hashToIDs: Map<string, string[]>,
   ) {
     return startAsyncSpan(tracer, 'vs.#processChanges', async () => {
-      const start = Date.now();
+      const start = performance.now();
 
       const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
       let total = 0;
 
       const processBatch = () =>
         startAsyncSpan(tracer, 'processBatch', async () => {
-          const wallElapsed = Date.now() - start;
+          const wallElapsed = performance.now() - start;
           total += rows.size;
           lc.debug?.(
             `processing ${rows.size} (of ${total}) rows (${wallElapsed} ms)`,
@@ -1687,9 +1678,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #cleanup(err?: unknown) {
     removeClientGroup(this.id);
     this.#stopTTLClockInterval();
-    clearTimeout(this.#expiredQueriesTimer);
-    this.#expiredQueriesTimer = 0;
-    this.#nextExpiredQueryTime = 0;
+    this.#stopExpireTimer();
 
     this.#pipelines.destroy();
     for (const client of this.#clients.values()) {

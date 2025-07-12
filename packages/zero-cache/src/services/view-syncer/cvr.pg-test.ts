@@ -5863,7 +5863,7 @@ describe('view-syncer/cvr', () => {
     const cvr = await cvrStore.load(lc, LAST_CONNECT);
     const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
-    expect(updater.deleteClient('client-b')).toMatchInlineSnapshot(`
+    expect(updater.deleteClient('client-b', Date.now())).toMatchInlineSnapshot(`
       [
         {
           "patch": {
@@ -6267,7 +6267,7 @@ describe('view-syncer/cvr', () => {
     const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     // No patches because client-b is from a different group.
-    expect(updater.deleteClient('client-b')).toEqual([]);
+    expect(updater.deleteClient('client-b', Date.now())).toEqual([]);
 
     const {cvr: updated} = await updater.flush(
       lc,
