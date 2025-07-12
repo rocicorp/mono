@@ -21,6 +21,10 @@ import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts'
 import {clampTTL, compareTTL} from '../../../../zql/src/query/ttl.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
+import {
+  addActiveQuery,
+  removeActiveQuery,
+} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
@@ -42,10 +46,6 @@ import {
   type RowID,
   type RowRecord,
 } from './schema/types.ts';
-import {
-  addActiveQuery,
-  removeActiveQuery,
-} from '../../server/anonymous-otel-start.ts';
 
 export type RowUpdate = {
   version?: string; // Undefined for an unref.
@@ -336,9 +336,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   markDesiredQueriesAsInactive(
     clientID: string,
     queryHashes: string[],
-    now: number,
+    ttlClock: number,
   ): PatchToVersion[] {
-    return this.#deleteQueries(clientID, queryHashes, now);
+    return this.#deleteQueries(clientID, queryHashes, ttlClock);
   }
 
   /**
@@ -426,7 +426,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     return this.#deleteQueries(clientID, client.desiredQueryIDs, undefined);
   }
 
-  deleteClient(clientID: string): PatchToVersion[] {
+  deleteClient(clientID: string, ttlClock: number): PatchToVersion[] {
     // clientID might not be part of this client group but if it is, this delete
     // may generate changes to the desired queries.
 
@@ -444,7 +444,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     const patches = this.markDesiredQueriesAsInactive(
       clientID,
       client.desiredQueryIDs,
-      Date.now(),
+      ttlClock,
     );
     delete this._cvr.clients[clientID];
     this._cvrStore.deleteClient(clientID);
@@ -943,9 +943,7 @@ export function getInactiveQueries(cvr: CVR): {
 export function nextEvictionTime(cvr: CVR): number | undefined {
   let next: number | undefined;
   for (const {inactivatedAt, ttl} of getInactiveQueries(cvr)) {
-    // We no longer support a TTL larger than 10 minutes. So, ttl < 0 means 10 minutes.
-    const clampedTTL = clampTTL(ttl);
-    const expire = inactivatedAt + clampedTTL;
+    const expire = inactivatedAt + ttl;
     if (next === undefined || expire < next) {
       next = expire;
     }
