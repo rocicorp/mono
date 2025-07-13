@@ -96,7 +96,10 @@ export const prevNext = namedQuery(
   'prevNext',
   (
     listContext: ListContext['params'] | null,
-    issue: Row<Schema['tables']['issue']> | null,
+    issue: Pick<
+      Row<Schema['tables']['issue']>,
+      'id' | 'created' | 'modified'
+    > | null,
     dir: 'next' | 'prev',
   ) => buildListQuery(listContext, issue, dir).one(),
 );
@@ -112,7 +115,10 @@ export const issueList = namedQuery(
 
 function buildListQuery(
   listContext: ListContext['params'] | null,
-  start: Row<Schema['tables']['issue']> | null,
+  start: Pick<
+    Row<Schema['tables']['issue']>,
+    'id' | 'created' | 'modified'
+  > | null,
   dir: 'next' | 'prev',
 ) {
   if (!listContext) {

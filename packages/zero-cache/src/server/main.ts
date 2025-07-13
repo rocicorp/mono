@@ -31,6 +31,7 @@ import {
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
 import {WorkerDispatcher} from './worker-dispatcher.ts';
+
 const clientConnectionBifurcated = false;
 
 export default async function runWorker(

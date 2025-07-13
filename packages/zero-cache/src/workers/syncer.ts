@@ -26,6 +26,10 @@ import type {ConnectParams} from './connect-params.ts';
 import {Connection, sendError} from './connection.ts';
 import {createNotifierFrom, subscribeTo} from './replicator.ts';
 import {SyncerWsMessageHandler} from './syncer-ws-message-handler.ts';
+import {
+  recordConnectionSuccess,
+  recordConnectionAttempted,
+} from '../server/anonymous-otel-start.ts';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -96,6 +100,7 @@ export class Syncer implements SingletonService {
       params.clientGroupID,
       params.clientID,
     );
+    recordConnectionAttempted();
     const {clientID, clientGroupID, auth, userID} = params;
     const existing = this.#connections.get(clientID);
     if (existing) {
@@ -172,7 +177,9 @@ export class Syncer implements SingletonService {
     }
 
     this.#connections.set(clientID, connection);
-    connection.init();
+
+    connection.init() && recordConnectionSuccess();
+
     if (params.initConnectionMsg) {
       this.#lc.debug?.(
         'handling init connection message from sec header',
