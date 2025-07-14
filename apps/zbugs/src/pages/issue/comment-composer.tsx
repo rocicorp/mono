@@ -1,6 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.tsx';
-import {ImageUploadButton} from '../../components/image-upload-button.tsx';
 import {ImageUploadArea} from '../../components/image-upload-area.tsx';
 import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
@@ -121,7 +120,6 @@ export function CommentComposer({
         >
           {id ? 'Save' : 'Add comment'}
         </Button>
-        <ImageUploadButton onUpload={handleImageUpload} />
       </div>
       {id ? (
         <Button

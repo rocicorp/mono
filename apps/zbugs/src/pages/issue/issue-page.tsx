@@ -36,7 +36,6 @@ import {Combobox} from '../../components/combobox.tsx';
 import {Confirm} from '../../components/confirm.tsx';
 import {EmojiPanel} from '../../components/emoji-panel.tsx';
 import {ImageUploadArea} from '../../components/image-upload-area.tsx';
-import {ImageUploadButton} from '../../components/image-upload-button.tsx';
 import {LabelPicker} from '../../components/label-picker.tsx';
 import {Link} from '../../components/link.tsx';
 import {Markdown} from '../../components/markdown.tsx';
@@ -514,7 +513,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                   ref={editDescriptionRef}
                 />
               </ImageUploadArea>
-              <ImageUploadButton onUpload={handleDescriptionImageUpload} />
             </div>
           )}
         </div>

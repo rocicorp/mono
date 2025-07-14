@@ -1,7 +1,6 @@
 import {nanoid} from 'nanoid';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.tsx';
-import {ImageUploadButton} from '../../components/image-upload-button.tsx';
 import {ImageUploadArea} from '../../components/image-upload-area.tsx';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
@@ -141,7 +140,6 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
               ref={textareaRef}
             ></textarea>
           </ImageUploadArea>
-          <ImageUploadButton onUpload={handleImageUpload} />
         </div>
       </ModalBody>
       <ModalActions>

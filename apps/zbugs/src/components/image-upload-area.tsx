@@ -1,6 +1,7 @@
-import {useRef, useState} from 'react';
+import {useRef, useState, useEffect} from 'react';
 import type {ReactNode} from 'react';
 import {useImageUpload} from '../hooks/use-image-upload.ts';
+import {Button} from './button.tsx';
 
 interface ImageUploadAreaProps {
   onUpload: (markdown: string) => void;
@@ -14,8 +15,52 @@ export function ImageUploadArea({
   className = '',
 }: ImageUploadAreaProps) {
   const [isDragOver, setIsDragOver] = useState(false);
+  const [textareaRect, setTextareaRect] = useState<DOMRect | null>(null);
   const dragCounterRef = useRef(0);
-  const {isUploading, uploadFiles} = useImageUpload({onUpload});
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const {isUploading, uploadFile, uploadFiles} = useImageUpload({onUpload});
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      await uploadFiles(files);
+    }
+    // Reset the input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  // Update textarea rect when drag starts or component mounts
+  useEffect(() => {
+    const updateRect = () => {
+      if (wrapperRef.current) {
+        // Find textarea within the wrapper
+        const textarea = wrapperRef.current.querySelector('textarea');
+        if (textarea) {
+          // Get the textarea's position relative to the wrapper using offsetTop/offsetLeft
+          setTextareaRect({
+            top: textarea.offsetTop,
+            left: textarea.offsetLeft,
+            width: textarea.offsetWidth,
+            height: textarea.offsetHeight,
+          } as DOMRect);
+        }
+      }
+    };
+
+    // Update rect on mount and when dragging
+    updateRect();
+    if (isDragOver) {
+      updateRect();
+    }
+  }, [isDragOver]);
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
@@ -86,6 +131,7 @@ export function ImageUploadArea({
 
   return (
     <div
+      ref={wrapperRef}
       className={dropZoneClasses}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
@@ -94,22 +140,17 @@ export function ImageUploadArea({
       onPaste={handlePaste}
       style={{
         position: 'relative',
-        ...(isDragOver && {
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          border: '2px dashed #3b82f6',
-          borderRadius: '4px',
-        }),
       }}
     >
       {children}
-      {isDragOver && (
+      {isDragOver && textareaRect && (
         <div
           style={{
             position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
+            top: textareaRect.top,
+            left: textareaRect.left,
+            width: textareaRect.width,
+            height: textareaRect.height,
             backgroundColor: 'rgba(59, 130, 246, 0.1)',
             border: '2px dashed #3b82f6',
             borderRadius: '4px',
@@ -126,12 +167,12 @@ export function ImageUploadArea({
           Drop images here to upload
         </div>
       )}
-      {isUploading && (
+      {isUploading && textareaRect && (
         <div
           style={{
             position: 'absolute',
-            top: '50%',
-            left: '50%',
+            top: textareaRect.top + textareaRect.height / 2,
+            left: textareaRect.left + textareaRect.width / 2,
             transform: 'translate(-50%, -50%)',
             backgroundColor: 'rgba(0, 0, 0, 0.8)',
             color: 'white',
@@ -145,6 +186,34 @@ export function ImageUploadArea({
           Uploading image...
         </div>
       )}
+      {/* Image upload button positioned inside textarea */}
+      {textareaRect && (
+        <Button
+          className="add-image-button secondary-button icon-button"
+          eventName="Upload image"
+          onAction={handleButtonClick}
+          disabled={isUploading}
+          style={{
+            position: 'absolute',
+            top: textareaRect.top + 16,
+            left: textareaRect.left + 16,
+            fontSize: '12px',
+            padding: '4px 8px',
+            zIndex: 5,
+          }}
+        >
+          Add image
+        </Button>
+      )}
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+        onChange={handleFileSelect}
+        style={{display: 'none'}}
+      />
     </div>
   );
 }
