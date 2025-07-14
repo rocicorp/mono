@@ -11,8 +11,8 @@ import {schema} from './test/test-schemas.ts';
 
 test('defining a named query', () => {
   const queryBuilder = createBuilder(schema);
-  const x = named('myName', (id: string) => queryBuilder.issue.where('id', id));
-  const q = x('123');
+  const x = named({myName: (id: string) => queryBuilder.issue.where('id', id)});
+  const q = x.myName('123');
   expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
     Promise<
       {
@@ -25,14 +25,39 @@ test('defining a named query', () => {
       }[]
     >
   >();
-  check(x);
+  check(x.myName);
+
+  // define many at once
+  const y = named({
+    myName: (id: string) => queryBuilder.issue.where('id', id),
+    myOtherName: (id: string) => queryBuilder.issue.where('id', id),
+    myThirdName: (id: string) => queryBuilder.issue.where('id', id),
+  });
+  check(y.myName, 'myName');
+  check(y.myOtherName, 'myOtherName');
+  check(y.myThirdName, 'myThirdName');
+  const q1 = y.myName('123');
+  const q2 = y.myOtherName('123');
+  const q3 = y.myThirdName('123');
+  expectTypeOf<ReturnType<typeof q1.run>>().toEqualTypeOf<
+    ReturnType<typeof q.run>
+  >();
+  expectTypeOf<ReturnType<typeof q2.run>>().toEqualTypeOf<
+    ReturnType<typeof q.run>
+  >();
+  expectTypeOf<ReturnType<typeof q3.run>>().toEqualTypeOf<
+    ReturnType<typeof q.run>
+  >();
 });
 
-function check(named: NamedQuery<[string], any>) {
+function check(
+  named: NamedQuery<[string], any>,
+  expectedName: string = 'myName',
+) {
   const r = named('123');
 
   const id = r.customQueryID;
-  expect(id?.name).toBe('myName');
+  expect(id?.name).toBe(expectedName);
   expect(id?.args).toEqual(['123']);
   expect(ast(r)).toMatchInlineSnapshot(`
     {
