@@ -1,6 +1,6 @@
 import type {NamedQuery, ReadonlyJSONValue} from '@rocicorp/zero';
 import * as serverQueries from '../server/server-queries.ts';
-import * as sharedQueries from '../shared/queries.ts';
+import {queries as sharedQueries} from '../shared/queries.ts';
 
 export function getQuery(
   context: serverQueries.ServerContext,

@@ -13,7 +13,7 @@ import {AvatarImage} from './avatar-image.tsx';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {Button} from './button.tsx';
 import {Link} from './link.tsx';
-import {user as userQuery, type ListContext} from '../../shared/queries.ts';
+import {queries, type ListContext} from '../../shared/queries.ts';
 
 export const Nav = memo(() => {
   const search = useSearch();
@@ -25,7 +25,7 @@ export const Nav = memo(() => {
   const login = useLogin();
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
-  const [user] = useQuery(userQuery(login.loginState?.decoded.sub ?? ''));
+  const [user] = useQuery(queries.user(login.loginState?.decoded.sub ?? ''));
 
   const [showIssueModal, setShowIssueModal] = useState(false);
 

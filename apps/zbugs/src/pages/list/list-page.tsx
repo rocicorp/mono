@@ -27,7 +27,7 @@ import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import {preload} from '../../zero-preload.ts';
 import {CACHE_AWHILE, CACHE_NONE} from '../../query-cache-policy.ts';
-import {issueList, type ListContext} from '../../../shared/queries.ts';
+import {queries, type ListContext} from '../../../shared/queries.ts';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -60,7 +60,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const pageSize = 20;
   const [limit, setLimit] = useState(pageSize);
-  const q = issueList(
+  const q = queries.issueList(
     {
       sortDirection,
       sortField,
