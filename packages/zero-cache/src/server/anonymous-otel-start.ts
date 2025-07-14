@@ -24,8 +24,6 @@ class AnonymousTelemetryManager {
   #totalRowsSynced = 0;
   #totalConnectionsSuccess = 0;
   #totalConnectionsAttempted = 0;
-  #connectedClientGroups = new Set<string>();
-  #activeQueries = new Map<string, Set<string>>();
   #lc: LogContext | undefined;
   #config: ZeroConfig | undefined;
   #workerId = 'unknown';
@@ -99,22 +97,6 @@ class AnonymousTelemetryManager {
       description: 'System uptime in seconds',
       unit: 'seconds',
     });
-    const clientGroupsGauge = this.#meter.createObservableGauge(
-      'zero.client_groups',
-      {
-        description: 'Number of connected client groups',
-      },
-    );
-    const activeQueriesGauge = this.#meter.createObservableGauge(
-      'zero.active_queries',
-      {
-        description: 'Total number of active queries across all client groups',
-      },
-    );
-    const activeQueriesPerClientGroupGauge = this.#meter.createObservableGauge(
-      'zero.active_queries_per_client_group',
-      {description: 'Number of active queries per client group'},
-    );
 
     // Observable counters
     const uptimeCounter = this.#meter.createObservableCounter(
@@ -164,28 +146,6 @@ class AnonymousTelemetryManager {
       result.observe(uptimeSeconds, attrs);
       this.#lc?.debug?.(`Telemetry: uptime_counter=${uptimeSeconds}s`);
     });
-    clientGroupsGauge.addCallback((result: ObservableResult) => {
-      result.observe(this.#connectedClientGroups.size, attrs);
-      this.#lc?.debug?.(
-        `Telemetry: client_groups=${this.#connectedClientGroups.size}`,
-      );
-    });
-    activeQueriesGauge.addCallback((result: ObservableResult) => {
-      const totalQueries = Array.from(this.#activeQueries.values()).reduce(
-        (sum, queries) => sum + queries.size,
-        0,
-      );
-      result.observe(totalQueries, attrs);
-      this.#lc?.debug?.(`Telemetry: active_queries=${totalQueries}`);
-    });
-    activeQueriesPerClientGroupGauge.addCallback((result: ObservableResult) => {
-      for (const [clientGroupID, queries] of this.#activeQueries) {
-        result.observe(queries.size, {
-          ...attrs,
-          'zero.client_group.id': clientGroupID,
-        });
-      }
-    });
     mutationsCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalMutations, attrs);
       this.#lc?.debug?.(
@@ -226,30 +186,20 @@ class AnonymousTelemetryManager {
     this.#totalConnectionsAttempted++;
   }
 
-  addActiveQuery(clientGroupID: string, queryID: string) {
-    if (!this.#activeQueries.has(clientGroupID)) {
-      this.#activeQueries.set(clientGroupID, new Set());
-    }
-    this.#activeQueries.get(clientGroupID)!.add(queryID);
+  addActiveQuery(_clientGroupID: string, _queryID: string) {
+    // No active queries to add
   }
 
-  removeActiveQuery(clientGroupID: string, queryID: string) {
-    const queries = this.#activeQueries.get(clientGroupID);
-    if (queries) {
-      queries.delete(queryID);
-      if (queries.size === 0) {
-        this.#activeQueries.delete(clientGroupID);
-      }
-    }
+  removeActiveQuery(_clientGroupID: string, _queryID: string) {
+    // No active queries to remove
   }
 
-  addClientGroup(clientGroupID: string) {
-    this.#connectedClientGroups.add(clientGroupID);
+  addClientGroup(_clientGroupID: string) {
+    // No client groups to add
   }
 
-  removeClientGroup(clientGroupID: string) {
-    this.#connectedClientGroups.delete(clientGroupID);
-    this.#activeQueries.delete(clientGroupID);
+  removeClientGroup(_clientGroupID: string) {
+    // No client groups to remove
   }
 
   shutdown() {
@@ -377,12 +327,4 @@ export const recordConnectionSuccess = () =>
   manager().recordConnectionSuccess();
 export const recordConnectionAttempted = () =>
   manager().recordConnectionAttempted();
-export const addActiveQuery = (clientGroupID: string, queryID: string) =>
-  manager().addActiveQuery(clientGroupID, queryID);
-export const removeActiveQuery = (clientGroupID: string, queryID: string) =>
-  manager().removeActiveQuery(clientGroupID, queryID);
-export const addClientGroup = (clientGroupID: string) =>
-  manager().addClientGroup(clientGroupID);
-export const removeClientGroup = (clientGroupID: string) =>
-  manager().removeClientGroup(clientGroupID);
 export const shutdownAnonymousTelemetry = () => manager().shutdown();
