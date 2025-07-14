@@ -26,12 +26,10 @@ class AnonymousTelemetryManager {
   #totalConnectionsAttempted = 0;
   #lc: LogContext | undefined;
   #config: ZeroConfig | undefined;
-  #workerId = 'unknown';
-  #sessionId: string;
   #cachedAttributes: Record<string, string> | undefined;
 
   private constructor() {
-    this.#sessionId = randomUUID();
+    // No initialization needed
   }
 
   static getInstance(): AnonymousTelemetryManager {
@@ -41,7 +39,7 @@ class AnonymousTelemetryManager {
     return AnonymousTelemetryManager.#instance;
   }
 
-  start(lc?: LogContext, config?: ZeroConfig, workerId?: string) {
+  start(lc?: LogContext, config?: ZeroConfig) {
     if (!config) {
       try {
         config = getZeroConfig();
@@ -68,8 +66,7 @@ class AnonymousTelemetryManager {
     }
     this.#lc = lc;
     this.#config = config;
-    this.#workerId = workerId || 'unknown';
-    // Clear cached attributes when config/workerId changes
+    // Clear cached attributes when config changes
     this.#cachedAttributes = undefined;
 
     const resource = resourceFromAttributes(this.#getAttributes());
@@ -218,9 +215,7 @@ class AnonymousTelemetryManager {
         'zero.infra.platform': this.#getPlatform(),
         'zero.version': this.#config?.serverVersion ?? packageJson.version,
         'zero.task.id': this.#config?.taskID || 'unknown',
-        'zero.worker.id': this.#workerId,
         'zero.project.id': this.#getGitProjectId(),
-        'zero.session.id': this.#sessionId,
         'zero.fs.id': this.#getOrSetFsID(),
       };
       this.#lc?.debug?.(
@@ -315,11 +310,8 @@ class AnonymousTelemetryManager {
 
 const manager = () => AnonymousTelemetryManager.getInstance();
 
-export const startAnonymousTelemetry = (
-  lc?: LogContext,
-  config?: ZeroConfig,
-  workerId?: string,
-) => manager().start(lc, config, workerId);
+export const startAnonymousTelemetry = (lc?: LogContext, config?: ZeroConfig) =>
+  manager().start(lc, config);
 export const recordMutation = (count = 1) => manager().recordMutation(count);
 export const recordRowsSynced = (count: number) =>
   manager().recordRowsSynced(count);
