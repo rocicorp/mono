@@ -55,7 +55,7 @@ export default $config({
       ZERO_APP_PUBLICATIONS: process.env.ZERO_APP_PUBLICATIONS!,
       ZERO_UPSTREAM_DB: process.env.ZERO_UPSTREAM_DB!,
       ZERO_PUSH_URL: process.env.ZERO_PUSH_URL!,
-      ZERO_PULL_URL: process.env.ZERO_PULL_URL!,
+      ZERO_QUERY_URL: process.env.ZERO_QUERY_URL!,
       ZERO_CVR_DB: process.env.ZERO_CVR_DB!,
       ZERO_CHANGE_DB: process.env.ZERO_CHANGE_DB!,
       ZERO_AUTH_JWK: process.env.ZERO_AUTH_JWK!,
