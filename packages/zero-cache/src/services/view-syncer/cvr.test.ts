@@ -1,11 +1,12 @@
 import {expect, test} from 'vitest';
 import {getInactiveQueries, type CVR} from './cvr.ts';
 import type {ClientQueryRecord} from './schema/types.ts';
+import {ttlClockFromNumber, type TTLClock} from './ttl-clock.ts';
 
 type QueryDef = {
   hash: string;
   ttl: number;
-  inactivatedAt: number | undefined;
+  inactivatedAt: TTLClock | undefined;
 };
 
 function makeCVR(clients: Record<string, QueryDef[]>): CVR {
@@ -21,7 +22,7 @@ function makeCVR(clients: Record<string, QueryDef[]>): CVR {
     ),
     id: 'abc123',
     lastActive: Date.UTC(2024, 1, 20),
-    ttlClock: Date.UTC(2024, 1, 20),
+    ttlClock: ttlClockFromNumber(Date.UTC(2024, 1, 20)),
     queries: {},
     replicaVersion: '120',
     version: {
@@ -63,43 +64,43 @@ test.each([
   {
     clients: {
       clientX: [
-        {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-        {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
-        {hash: 'h3', ttl: 1000, inactivatedAt: 3000},
+        {hash: 'h1', ttl: 1000, inactivatedAt: ttlClockFromNumber(1000)},
+        {hash: 'h2', ttl: 1000, inactivatedAt: ttlClockFromNumber(2000)},
+        {hash: 'h3', ttl: 1000, inactivatedAt: ttlClockFromNumber(3000)},
       ],
     },
     expected: [
-      {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-      {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
-      {hash: 'h3', ttl: 1000, inactivatedAt: 3000},
+      {hash: 'h1', ttl: 1000, inactivatedAt: ttlClockFromNumber(1000)},
+      {hash: 'h2', ttl: 1000, inactivatedAt: ttlClockFromNumber(2000)},
+      {hash: 'h3', ttl: 1000, inactivatedAt: ttlClockFromNumber(3000)},
     ],
   },
   {
     clients: {
       clientX: [
-        {hash: 'h1', ttl: 2000, inactivatedAt: 1000},
-        {hash: 'h2', ttl: 1000, inactivatedAt: 1000},
-        {hash: 'h3', ttl: 3000, inactivatedAt: 1000},
+        {hash: 'h1', ttl: 2000, inactivatedAt: ttlClockFromNumber(1000)},
+        {hash: 'h2', ttl: 1000, inactivatedAt: ttlClockFromNumber(1000)},
+        {hash: 'h3', ttl: 3000, inactivatedAt: ttlClockFromNumber(1000)},
       ],
     },
     expected: [
-      {hash: 'h2', ttl: 1000, inactivatedAt: 1000},
-      {hash: 'h1', ttl: 2000, inactivatedAt: 1000},
-      {hash: 'h3', ttl: 3000, inactivatedAt: 1000},
+      {hash: 'h2', ttl: 1000, inactivatedAt: ttlClockFromNumber(1000)},
+      {hash: 'h1', ttl: 2000, inactivatedAt: ttlClockFromNumber(1000)},
+      {hash: 'h3', ttl: 3000, inactivatedAt: ttlClockFromNumber(1000)},
     ],
   },
   {
     clients: {
       clientX: [
-        {hash: 'h1', ttl: -1, inactivatedAt: 1000},
-        {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
-        {hash: 'h3', ttl: -1, inactivatedAt: 3000},
+        {hash: 'h1', ttl: -1, inactivatedAt: ttlClockFromNumber(1000)},
+        {hash: 'h2', ttl: 2000, inactivatedAt: ttlClockFromNumber(1000)},
+        {hash: 'h3', ttl: -1, inactivatedAt: ttlClockFromNumber(3000)},
       ],
     },
     expected: [
-      {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
-      {hash: 'h1', ttl: minutes(10), inactivatedAt: 1000},
-      {hash: 'h3', ttl: minutes(10), inactivatedAt: 3000},
+      {hash: 'h2', ttl: 2000, inactivatedAt: ttlClockFromNumber(1000)},
+      {hash: 'h1', ttl: minutes(10), inactivatedAt: ttlClockFromNumber(1000)},
+      {hash: 'h3', ttl: minutes(10), inactivatedAt: ttlClockFromNumber(3000)},
     ],
   },
   {
@@ -107,22 +108,22 @@ test.each([
       clientX: [
         {hash: 'h1', ttl: 500, inactivatedAt: undefined},
         {hash: 'h2', ttl: -1, inactivatedAt: undefined},
-        {hash: 'h3', ttl: 1000, inactivatedAt: 500},
+        {hash: 'h3', ttl: 1000, inactivatedAt: ttlClockFromNumber(500)},
       ],
     },
-    expected: [{hash: 'h3', ttl: 1000, inactivatedAt: 500}],
+    expected: [{hash: 'h3', ttl: 1000, inactivatedAt: ttlClockFromNumber(500)}],
   },
   {
     clients: {
       clientX: [
-        {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-        {hash: 'h2', ttl: -1, inactivatedAt: 2000},
+        {hash: 'h1', ttl: 1000, inactivatedAt: ttlClockFromNumber(1000)},
+        {hash: 'h2', ttl: -1, inactivatedAt: ttlClockFromNumber(2000)},
         {hash: 'h3', ttl: -1, inactivatedAt: undefined},
       ],
     },
     expected: [
       {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-      {hash: 'h2', ttl: minutes(10), inactivatedAt: 2000},
+      {hash: 'h2', ttl: minutes(10), inactivatedAt: ttlClockFromNumber(2000)},
     ],
   },
 
@@ -130,19 +131,19 @@ test.each([
   {
     clients: {
       clientX: [
-        {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-        {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
+        {hash: 'h1', ttl: 1000, inactivatedAt: ttlClockFromNumber(1000)},
+        {hash: 'h2', ttl: 1000, inactivatedAt: ttlClockFromNumber(2000)},
       ],
       clientY: [
-        {hash: 'h3', ttl: 1000, inactivatedAt: 3000},
-        {hash: 'h4', ttl: 1000, inactivatedAt: 4000},
+        {hash: 'h3', ttl: 1000, inactivatedAt: ttlClockFromNumber(3000)},
+        {hash: 'h4', ttl: 1000, inactivatedAt: ttlClockFromNumber(4000)},
       ],
     },
     expected: [
-      {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-      {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
-      {hash: 'h3', ttl: 1000, inactivatedAt: 3000},
-      {hash: 'h4', ttl: 1000, inactivatedAt: 4000},
+      {hash: 'h1', ttl: 1000, inactivatedAt: ttlClockFromNumber(1000)},
+      {hash: 'h2', ttl: 1000, inactivatedAt: ttlClockFromNumber(2000)},
+      {hash: 'h3', ttl: 1000, inactivatedAt: ttlClockFromNumber(3000)},
+      {hash: 'h4', ttl: 1000, inactivatedAt: ttlClockFromNumber(4000)},
     ],
   },
 
@@ -150,86 +151,86 @@ test.each([
   {
     clients: {
       clientX: [
-        {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-        {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
-        {hash: 'h3', ttl: 1000, inactivatedAt: 3000},
+        {hash: 'h1', ttl: 1000, inactivatedAt: ttlClockFromNumber(1000)},
+        {hash: 'h2', ttl: 1000, inactivatedAt: ttlClockFromNumber(2000)},
+        {hash: 'h3', ttl: 1000, inactivatedAt: ttlClockFromNumber(3000)},
       ],
       clientY: [
-        {hash: 'h1', ttl: 1000, inactivatedAt: 6000},
-        {hash: 'h2', ttl: 1000, inactivatedAt: 5000},
-        {hash: 'h3', ttl: 1000, inactivatedAt: 4000},
+        {hash: 'h1', ttl: 1000, inactivatedAt: ttlClockFromNumber(6000)},
+        {hash: 'h2', ttl: 1000, inactivatedAt: ttlClockFromNumber(5000)},
+        {hash: 'h3', ttl: 1000, inactivatedAt: ttlClockFromNumber(4000)},
       ],
     },
     expected: [
-      {hash: 'h3', ttl: 1000, inactivatedAt: 4000},
-      {hash: 'h2', ttl: 1000, inactivatedAt: 5000},
-      {hash: 'h1', ttl: 1000, inactivatedAt: 6000},
+      {hash: 'h3', ttl: 1000, inactivatedAt: ttlClockFromNumber(4000)},
+      {hash: 'h2', ttl: 1000, inactivatedAt: ttlClockFromNumber(5000)},
+      {hash: 'h1', ttl: 1000, inactivatedAt: ttlClockFromNumber(6000)},
     ],
   },
 
   {
     clients: {
       clientX: [
-        {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-        {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
+        {hash: 'h1', ttl: 1000, inactivatedAt: ttlClockFromNumber(1000)},
+        {hash: 'h2', ttl: 1000, inactivatedAt: ttlClockFromNumber(2000)},
       ],
       clientY: [
-        {hash: 'h1', ttl: 500, inactivatedAt: 1500},
-        {hash: 'h2', ttl: 1500, inactivatedAt: 1500},
+        {hash: 'h1', ttl: 500, inactivatedAt: ttlClockFromNumber(1500)},
+        {hash: 'h2', ttl: 1500, inactivatedAt: ttlClockFromNumber(1500)},
       ],
     },
     expected: [
-      {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-      {hash: 'h2', ttl: 1000, inactivatedAt: 2000},
+      {hash: 'h1', ttl: 1000, inactivatedAt: ttlClockFromNumber(1000)},
+      {hash: 'h2', ttl: 1000, inactivatedAt: ttlClockFromNumber(2000)},
     ],
   },
 
   {
     clients: {
       clientX: [
-        {hash: 'h1', ttl: 2000, inactivatedAt: 1000},
-        {hash: 'h2', ttl: 1000, inactivatedAt: 3000},
+        {hash: 'h1', ttl: 2000, inactivatedAt: ttlClockFromNumber(1000)},
+        {hash: 'h2', ttl: 1000, inactivatedAt: ttlClockFromNumber(3000)},
       ],
       clientY: [
-        {hash: 'h1', ttl: 3000, inactivatedAt: 2000},
-        {hash: 'h2', ttl: -1, inactivatedAt: 4000},
+        {hash: 'h1', ttl: 3000, inactivatedAt: ttlClockFromNumber(2000)},
+        {hash: 'h2', ttl: -1, inactivatedAt: ttlClockFromNumber(4000)},
       ],
     },
     expected: [
-      {hash: 'h1', ttl: 3000, inactivatedAt: 2000},
-      {hash: 'h2', ttl: minutes(10), inactivatedAt: 4000},
+      {hash: 'h1', ttl: 3000, inactivatedAt: ttlClockFromNumber(2000)},
+      {hash: 'h2', ttl: minutes(10), inactivatedAt: ttlClockFromNumber(4000)},
     ],
   },
   {
     clients: {
       clientX: [
-        {hash: 'h1', ttl: 1000, inactivatedAt: 1000},
-        {hash: 'h2', ttl: -1, inactivatedAt: 2000},
+        {hash: 'h1', ttl: 1000, inactivatedAt: ttlClockFromNumber(1000)},
+        {hash: 'h2', ttl: -1, inactivatedAt: ttlClockFromNumber(2000)},
       ],
       clientY: [
-        {hash: 'h1', ttl: -1, inactivatedAt: 3000},
-        {hash: 'h2', ttl: 2000, inactivatedAt: 1500},
+        {hash: 'h1', ttl: -1, inactivatedAt: ttlClockFromNumber(3000)},
+        {hash: 'h2', ttl: 2000, inactivatedAt: ttlClockFromNumber(1500)},
       ],
     },
     expected: [
-      {hash: 'h2', ttl: minutes(10), inactivatedAt: 2000},
-      {hash: 'h1', ttl: minutes(10), inactivatedAt: 3000},
+      {hash: 'h2', ttl: minutes(10), inactivatedAt: ttlClockFromNumber(2000)},
+      {hash: 'h1', ttl: minutes(10), inactivatedAt: ttlClockFromNumber(3000)},
     ],
   },
   {
     clients: {
       clientX: [
         {hash: 'h1', ttl: 1000, inactivatedAt: undefined},
-        {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
+        {hash: 'h2', ttl: 2000, inactivatedAt: ttlClockFromNumber(1000)},
       ],
       clientY: [
-        {hash: 'h1', ttl: -1, inactivatedAt: 2000},
+        {hash: 'h1', ttl: -1, inactivatedAt: ttlClockFromNumber(2000)},
         {hash: 'h2', ttl: -1, inactivatedAt: undefined},
       ],
     },
     expected: [
-      {hash: 'h2', ttl: 2000, inactivatedAt: 1000},
-      {hash: 'h1', ttl: minutes(10), inactivatedAt: 2000},
+      {hash: 'h2', ttl: 2000, inactivatedAt: ttlClockFromNumber(1000)},
+      {hash: 'h1', ttl: minutes(10), inactivatedAt: ttlClockFromNumber(2000)},
     ],
   },
 ])('getInactiveQueries %o', ({clients, expected}) => {

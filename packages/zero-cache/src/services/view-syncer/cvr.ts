@@ -46,6 +46,7 @@ import {
   type RowID,
   type RowRecord,
 } from './schema/types.ts';
+import {ttlClockAsNumber, type TTLClock} from './ttl-clock.ts';
 
 export type RowUpdate = {
   version?: string; // Undefined for an unref.
@@ -58,7 +59,7 @@ export type CVR = {
   id: string;
   version: CVRVersion;
   lastActive: number;
-  ttlClock: number;
+  ttlClock: TTLClock;
   replicaVersion: string | null;
   clients: Record<string, ClientRecord>;
   queries: Record<string, QueryRecord>;
@@ -71,7 +72,7 @@ export type CVRSnapshot = {
   readonly id: string;
   readonly version: CVRVersion;
   readonly lastActive: number;
-  readonly ttlClock: number;
+  readonly ttlClock: TTLClock;
   readonly replicaVersion: string | null;
   readonly clients: Readonly<Record<string, ClientRecord>>;
   readonly queries: Readonly<Record<string, QueryRecord>>;
@@ -141,7 +142,7 @@ export class CVRUpdater {
     lc: LogContext,
     lastConnectTime: number,
     lastActive: number,
-    ttlClock: number,
+    ttlClock: TTLClock,
   ): Promise<{
     cvr: CVRSnapshot;
     flushed: CVRFlushStats | false;
@@ -336,7 +337,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   markDesiredQueriesAsInactive(
     clientID: string,
     queryHashes: string[],
-    ttlClock: number,
+    ttlClock: TTLClock,
   ): PatchToVersion[] {
     return this.#deleteQueries(clientID, queryHashes, ttlClock);
   }
@@ -346,7 +347,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
    */
   getInactiveQueries(): {
     hash: string;
-    inactivatedAt: number;
+    inactivatedAt: TTLClock;
     ttl: number | undefined;
   }[] {
     return getInactiveQueries(this._cvr);
@@ -362,7 +363,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   #deleteQueries(
     clientID: string,
     queryHashes: string[],
-    inactivatedAt: number | undefined,
+    inactivatedAt: TTLClock | undefined,
   ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
     const client = this.ensureClient(clientID);
@@ -426,7 +427,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     return this.#deleteQueries(clientID, client.desiredQueryIDs, undefined);
   }
 
-  deleteClient(clientID: string, ttlClock: number): PatchToVersion[] {
+  deleteClient(clientID: string, ttlClock: TTLClock): PatchToVersion[] {
     // clientID might not be part of this client group but if it is, this delete
     // may generate changes to the desired queries.
 
@@ -889,7 +890,7 @@ function mergeRefCounts(
 
 export function getInactiveQueries(cvr: CVR): {
   hash: string;
-  inactivatedAt: number;
+  inactivatedAt: TTLClock;
   ttl: number;
 }[] {
   // We no longer support a TTL larger than 10 minutes.
@@ -897,7 +898,7 @@ export function getInactiveQueries(cvr: CVR): {
     string,
     {
       hash: string;
-      inactivatedAt: number;
+      inactivatedAt: TTLClock;
       ttl: number;
     }
   > = new Map();
@@ -914,8 +915,8 @@ export function getInactiveQueries(cvr: CVR): {
           // Use the last eviction time.
           const existingTTL = clampTTL(existing.ttl);
           if (
-            existingTTL + existing.inactivatedAt <
-            inactivatedAt + clampedTTL
+            existingTTL + ttlClockAsNumber(existing.inactivatedAt) <
+            ttlClockAsNumber(inactivatedAt) + clampedTTL
           ) {
             existing.ttl = clampedTTL;
             existing.inactivatedAt = inactivatedAt;
@@ -934,21 +935,28 @@ export function getInactiveQueries(cvr: CVR): {
   // First sort all the queries that have TTL. Oldest first.
   return [...inactive.values()].sort((a, b) => {
     if (a.ttl === b.ttl) {
-      return a.inactivatedAt - b.inactivatedAt;
+      return (
+        ttlClockAsNumber(a.inactivatedAt) - ttlClockAsNumber(b.inactivatedAt)
+      );
     }
-    return a.inactivatedAt + a.ttl - b.inactivatedAt - b.ttl;
+    return (
+      ttlClockAsNumber(a.inactivatedAt) +
+      a.ttl -
+      ttlClockAsNumber(b.inactivatedAt) -
+      b.ttl
+    );
   });
 }
 
-export function nextEvictionTime(cvr: CVR): number | undefined {
+export function nextEvictionTime(cvr: CVR): TTLClock | undefined {
   let next: number | undefined;
   for (const {inactivatedAt, ttl} of getInactiveQueries(cvr)) {
-    const expire = inactivatedAt + ttl;
+    const expire = (inactivatedAt as unknown as number) + ttl;
     if (next === undefined || expire < next) {
       next = expire;
     }
   }
-  return next;
+  return next as TTLClock | undefined;
 }
 
 function normalizeTTL(ttl: number): number {

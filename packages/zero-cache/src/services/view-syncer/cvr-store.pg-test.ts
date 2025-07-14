@@ -27,6 +27,7 @@ import type {
   CustomQueryRecord,
   CVRVersion,
 } from './schema/types.ts';
+import {ttlClockFromNumber} from './ttl-clock.ts';
 
 const APP_ID = 'roze';
 const SHARD_NUM = 1;
@@ -467,6 +468,7 @@ describe('view-syncer/cvr-store', () => {
 
   test('deferred row updates', async () => {
     const now = Date.UTC(2024, 10, 23);
+    const ttlClock = ttlClockFromNumber(now);
     let cvr = await store.load(lc, CONNECT_TIME);
 
     // 12 rows set up in beforeEach().
@@ -490,7 +492,7 @@ describe('view-syncer/cvr-store', () => {
       );
     }
     await updater.received(lc, rows);
-    cvr = (await updater.flush(lc, CONNECT_TIME, now, now)).cvr;
+    cvr = (await updater.flush(lc, CONNECT_TIME, now, ttlClock)).cvr;
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
@@ -546,7 +548,7 @@ describe('view-syncer/cvr-store', () => {
       );
     }
     await updater.received(lc, rows);
-    await updater.flush(lc, CONNECT_TIME, now, now);
+    await updater.flush(lc, CONNECT_TIME, now, ttlClock);
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
@@ -602,6 +604,7 @@ describe('view-syncer/cvr-store', () => {
 
   test('deferred row stress test', async () => {
     const now = Date.UTC(2024, 10, 23);
+    const ttlClock = ttlClockFromNumber(now);
     let cvr = await store.load(lc, CONNECT_TIME);
 
     // Use real setTimeout.
@@ -631,7 +634,7 @@ describe('view-syncer/cvr-store', () => {
         );
       }
       await updater.received(lc, rows);
-      cvr = (await updater.flush(lc, CONNECT_TIME, now, now)).cvr;
+      cvr = (await updater.flush(lc, CONNECT_TIME, now, ttlClock)).cvr;
 
       // add a random sleep for varying the asynchronicity
       // between the CVR flush and the async row flush.
@@ -676,6 +679,7 @@ describe('view-syncer/cvr-store', () => {
 
   test('deferred row stress test with empty updates', async () => {
     const now = Date.UTC(2024, 10, 23);
+    const ttlClock = ttlClockFromNumber(now);
     let cvr = await store.load(lc, CONNECT_TIME);
 
     // Use real setTimeout.
@@ -705,7 +709,7 @@ describe('view-syncer/cvr-store', () => {
         );
       }
       await updater.received(lc, rows);
-      cvr = (await updater.flush(lc, CONNECT_TIME, now, now)).cvr;
+      cvr = (await updater.flush(lc, CONNECT_TIME, now, ttlClock)).cvr;
 
       // add a random sleep for varying the asynchronicity
       // between the CVR flush and the async row flush.
@@ -726,7 +730,7 @@ describe('view-syncer/cvr-store', () => {
     // Empty rows.
     const rows = new CustomKeyMap<RowID, RowUpdate>(rowIDString);
     await updater.received(lc, rows);
-    await updater.flush(lc, CONNECT_TIME, now, now);
+    await updater.flush(lc, CONNECT_TIME, now, ttlClock);
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`
@@ -766,6 +770,7 @@ describe('view-syncer/cvr-store', () => {
 
   test('large batch row updates', async () => {
     const now = Date.UTC(2024, 10, 23);
+    const ttlClock = ttlClockFromNumber(now);
     let cvr = await store.load(lc, CONNECT_TIME);
 
     // 12 rows set up in beforeEach().
@@ -790,7 +795,7 @@ describe('view-syncer/cvr-store', () => {
       );
     }
     await updater.received(lc, rows);
-    cvr = (await updater.flush(lc, CONNECT_TIME, now, now)).cvr;
+    cvr = (await updater.flush(lc, CONNECT_TIME, now, ttlClock)).cvr;
 
     expect(await db`SELECT * FROM "roze_1/cvr".instances`)
       .toMatchInlineSnapshot(`

@@ -85,6 +85,11 @@ import {
   type RowID,
 } from './schema/types.ts';
 import {ResetPipelinesSignal} from './snapshotter.ts';
+import {
+  ttlClockAsNumber,
+  ttlClockFromNumber,
+  type TTLClock,
+} from './ttl-clock.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -163,7 +168,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * The TTL clock is used to determine the time at which queries are considered
    * expired.
    */
-  #ttlClock: number | undefined;
+  #ttlClock: TTLClock | undefined;
 
   /**
    * The base time for the TTL clock. This is used to compute the current TTL
@@ -183,6 +188,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * out of sync with the current time.
    */
   #ttlClockInterval: ReturnType<SetTimeout> | 0 = 0;
+
+  #ttlClockInitializedPromise: Promise<TTLClock> | undefined;
 
   // Note: It is okay to add/remove clients without acquiring the lock.
   readonly #clients = new Map<string, ClientHandler>();
@@ -510,14 +517,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#ttlClockBase = now;
 
         // Get the TTL clock from the CVR store, or initialize it to now.
-        this.#cvrStore
-          .getTTLClock()
-          .then(ttlClock => {
-            this.#ttlClock = ttlClock ?? now;
-          })
-          .catch(e => {
-            this.#lc.error?.('failed to get TTL clock', e);
-          });
+        this.#readTTLClockFromCVR(now).catch(e => {
+          lc.error?.('failed to read TTL clock', e);
+        });
+
+        // this.#cvrStore
+        //   .getTTLClock()
+        //   .then(ttlClock => {
+        //     this.#ttlClock = ttlClock ?? ttlClockFromNumber(now);
+        //   })
+        //   .catch(e => {
+        //     this.#lc.error?.('failed to get TTL clock', e);
+        //   });
       }
 
       const newClient = new ClientHandler(
@@ -571,15 +582,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
   }
 
-  #getTTLClock(now: number): number {
+  #hasTTLClock(): boolean {
+    return this.#ttlClock !== undefined;
+  }
+
+  #getTTLClock(now: number): TTLClock {
     // We will update ttlClock with delta from the ttlClockBase to the current time.
     const delta = now - this.#ttlClockBase;
     assert(this.#ttlClock !== undefined);
-    const ttlClock = this.#ttlClock + delta;
-    assert(ttlClock <= now);
+    const ttlClock = ttlClockFromNumber(
+      ttlClockAsNumber(this.#ttlClock) + delta,
+    );
+    assert(ttlClockAsNumber(ttlClock) <= now);
     this.#ttlClock = ttlClock;
     this.#ttlClockBase = now;
-    return ttlClock;
+    return ttlClock as TTLClock;
   }
 
   async #flushUpdater(
@@ -867,7 +884,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     const now = Date.now();
     const ttlClock = this.#getTTLClock(now);
-    const delay = Math.min(next - ttlClock, MAX_TTL_MS);
+    const delay = Math.min(
+      ttlClockAsNumber(next) - ttlClockAsNumber(ttlClock),
+      MAX_TTL_MS,
+    );
     lc.debug?.('Scheduling eviction timer to run in ', delay, 'ms');
     this.#expiredQueriesTimer = this.#setTimeout(() => {
       this.#expiredQueriesTimer = 0;
@@ -1022,6 +1042,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
   }
 
+  async #readTTLClockFromCVR(now: number): Promise<TTLClock> {
+    if (this.#ttlClockInitializedPromise) {
+      return this.#ttlClockInitializedPromise;
+    }
+
+    this.#ttlClockInitializedPromise = this.#cvrStore
+      .getTTLClock()
+      .then(t => t ?? ttlClockFromNumber(now));
+    return (this.#ttlClock = await this.#ttlClockInitializedPromise);
+  }
+
   /**
    * Adds and/or removes queries to/from the PipelineDriver to bring it
    * in sync with the set of queries in the CVR (both got and desired).
@@ -1039,7 +1070,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Convert queries to their transformed ast's and hashes
       const hashToIDs = new Map<string, string[]>();
       const now = Date.now();
-      const ttlClock = this.#getTTLClock(now);
+      let ttlClock: TTLClock;
+      if (!this.#hasTTLClock()) {
+        // Fetch it from the CVR or initialize it to now.
+        ttlClock = await this.#readTTLClockFromCVR(now);
+      } else {
+        ttlClock = this.#getTTLClock(now);
+      }
 
       // group cvr queries into:
       // 1. custom queries
@@ -1804,12 +1841,13 @@ export function pickToken(
 }
 
 function expired(
-  ttlClock: number,
+  ttlClock: TTLClock,
   q: InternalQueryRecord | ClientQueryRecord | CustomQueryRecord,
 ): boolean {
   if (q.type === 'internal') {
     return false;
   }
+
   const {clientState} = q;
   for (const clientID in clientState) {
     if (hasOwn(clientState, clientID)) {
@@ -1817,7 +1855,10 @@ function expired(
       if (ttl < 0 || inactivatedAt === undefined) {
         return false;
       }
-      if (inactivatedAt + ttl > ttlClock) {
+      if (
+        (inactivatedAt as unknown as number) + ttl >
+        (ttlClock as unknown as number)
+      ) {
         return false;
       }
     }
@@ -1825,7 +1866,7 @@ function expired(
   return true;
 }
 
-function hasExpiredQueries(cvr: CVRSnapshot, ttlClock: number): boolean {
+function hasExpiredQueries(cvr: CVRSnapshot, ttlClock: TTLClock): boolean {
   for (const q of Object.values(cvr.queries)) {
     if (expired(ttlClock, q)) {
       return true;

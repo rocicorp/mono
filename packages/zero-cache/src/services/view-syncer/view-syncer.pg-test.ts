@@ -79,6 +79,7 @@ import {DrainCoordinator} from './drain-coordinator.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
+import {ttlClockFromNumber} from './ttl-clock.ts';
 import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
 
 const APP_ID = 'this_app';
@@ -2349,6 +2350,7 @@ describe('view-syncer/service', () => {
   });
 
   test('initial hydration, schemaVersion unsupported with bad query', async () => {
+    vi.setSystemTime(Date.UTC(2025, 6, 14));
     // Simulate a connection when the replica is already ready.
     stateChanges.push({state: 'version-ready'});
     await sleep(5);
@@ -2364,6 +2366,8 @@ describe('view-syncer/service', () => {
         },
       },
     ]);
+
+    await sleep(5);
 
     let err;
     try {
@@ -3568,12 +3572,13 @@ describe('view-syncer/service', () => {
       ON_FAILURE,
     );
     const now = Date.now();
+    const ttlClock = ttlClockFromNumber(now);
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, now),
       '07',
       REPLICA_VERSION,
-    ).flush(lc, now, now, now);
+    ).flush(lc, now, now, ttlClock);
 
     // Connect the client.
     const client = connect(SYNC_CONTEXT, [
@@ -3679,12 +3684,13 @@ describe('view-syncer/service', () => {
       ON_FAILURE,
     );
     const now = Date.now();
+    const ttlClock = ttlClockFromNumber(now);
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, now),
       '07',
       '1' + REPLICA_VERSION, // CVR is at a newer replica version.
-    ).flush(lc, now, now, now);
+    ).flush(lc, now, now, ttlClock);
 
     // Connect the client.
     const client = connect(SYNC_CONTEXT, [
@@ -3736,13 +3742,14 @@ describe('view-syncer/service', () => {
       ON_FAILURE,
     );
     const now = Date.now();
+    const ttlClock = ttlClockFromNumber(now);
     const otherTaskOwnershipTime = now - 600_000;
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, otherTaskOwnershipTime),
       '07',
       REPLICA_VERSION, // CVR is at a newer replica version.
-    ).flush(lc, otherTaskOwnershipTime, now, now);
+    ).flush(lc, otherTaskOwnershipTime, now, ttlClock);
 
     expect(await getCVROwner()).toBe('some-other-task-id');
 
@@ -3767,13 +3774,14 @@ describe('view-syncer/service', () => {
       ON_FAILURE,
     );
     const now = Date.now();
+    const ttlClock = ttlClockFromNumber(now);
     const otherTaskOwnershipTime = now;
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, otherTaskOwnershipTime),
       '07',
       REPLICA_VERSION, // CVR is at a newer replica version.
-    ).flush(lc, otherTaskOwnershipTime, now, now);
+    ).flush(lc, otherTaskOwnershipTime, now, ttlClock);
 
     expect(await getCVROwner()).toBe('some-other-task-id');
 
@@ -3799,12 +3807,13 @@ describe('view-syncer/service', () => {
       ON_FAILURE,
     );
     const now = Date.now();
+    const ttlClock = ttlClockFromNumber(now);
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, now),
       '07',
       REPLICA_VERSION,
-    ).flush(lc, now, now, now);
+    ).flush(lc, now, now, ttlClock);
 
     // Connect the client with a base cookie from the future.
     const client = connect({...SYNC_CONTEXT, baseCookie: '08'}, [
