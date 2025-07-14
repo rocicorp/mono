@@ -3,7 +3,7 @@ import classNames from 'classnames';
 import {memo, useCallback, useEffect, useMemo, useState} from 'react';
 import {useRoute, useSearch} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
-import {useQuery} from 'zero-react/src/use-query.js';
+import {useQuery} from '@rocicorp/zero/react';
 import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.tsx';
