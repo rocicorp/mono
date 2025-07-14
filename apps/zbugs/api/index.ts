@@ -16,6 +16,7 @@ import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {getQuery} from '../server/get-query.ts';
 import {getQueries} from '@rocicorp/zero/server';
 import {schema} from '../shared/schema.ts';
+import {getPresignedUrl} from '../src/server/upload.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -120,29 +121,11 @@ fastify.get<{
     );
 });
 
-fastify.post<{
-  Querystring: Record<string, string>;
-  Body: ReadonlyJSONValue;
-}>('/api/push', async function (request, reply) {
-  let jwtData: JWTData | undefined;
-  try {
-    jwtData = await maybeVerifyAuth(request.headers);
-  } catch (e) {
-    if (e instanceof Error) {
-      reply.status(401).send(e.message);
-      return;
-    }
-    throw e;
-  }
-
-  const response = await handlePush(jwtData, request.query, request.body);
-  reply.send(response);
-});
-
-fastify.post<{
-  Querystring: Record<string, string>;
-  Body: ReadonlyJSONValue;
-}>('/api/pull', async (request, reply) => {
+async function withAuth<T extends {headers: IncomingHttpHeaders}>(
+  request: T,
+  reply: FastifyReply,
+  handler: (authData: JWTData | undefined) => Promise<void>,
+) {
   let authData: JWTData | undefined;
   try {
     authData = await maybeVerifyAuth(request.headers);
@@ -154,13 +137,54 @@ fastify.post<{
     throw e;
   }
 
-  reply.send(
-    await getQueries(
-      async (name, args) => ({query: getQuery(authData, name, args)}),
-      schema,
-      request.body,
-    ),
-  );
+  await handler(authData);
+}
+
+fastify.post<{
+  Querystring: Record<string, string>;
+  Body: ReadonlyJSONValue;
+}>('/api/push', async function (request, reply) {
+  await withAuth(request, reply, async jwtData => {
+    const response = await handlePush(jwtData, request.query, request.body);
+    reply.send(response);
+  });
+});
+
+fastify.post<{
+  Querystring: Record<string, string>;
+  Body: ReadonlyJSONValue;
+}>('/api/pull', async (request, reply) => {
+  await withAuth(request, reply, async authData => {
+    reply.send(
+      await getQueries(
+        async (name, args) => ({query: getQuery(authData, name, args)}),
+        schema,
+        request.body,
+      ),
+    );
+  });
+});
+
+fastify.post<{
+  Body: {contentType: string};
+}>('/api/upload/presigned-url', async (request, reply) => {
+  await withAuth(request, reply, async authData => {
+    if (!authData) {
+      reply.status(401).send('Authentication required');
+      return;
+    }
+
+    try {
+      const result = await getPresignedUrl(request.body.contentType);
+      reply.send(result);
+    } catch (error) {
+      if (error instanceof Error) {
+        reply.status(500).send(error.message);
+        return;
+      }
+      reply.status(500).send('Failed to generate presigned URL');
+    }
+  });
 });
 
 fastify.get<{

@@ -1,6 +1,10 @@
 import {nanoid} from 'nanoid';
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.tsx';
+import {
+  ImageUploadArea,
+  type TextAreaPatch,
+} from '../../components/image-upload-area.tsx';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {
@@ -24,6 +28,7 @@ const focusInput = (input: HTMLInputElement | null) => {
 export function IssueComposer({isOpen, onDismiss}: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState<string>('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const z = useZero();
 
   // Function to handle textarea resizing
@@ -82,6 +87,10 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
     }
   };
 
+  const onInsert = (patch: TextAreaPatch) => {
+    setDescription(prev => patch.apply(prev));
+  };
+
   return (
     <Modal
       title="New Issue"
@@ -107,14 +116,17 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
           />
         </div>
         <div className="w-full px-4">
-          <textarea
-            className="new-issue-description autoResize"
-            value={description || ''}
-            onChange={e => setDescription(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Add description..."
-            maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
-          ></textarea>
+          <ImageUploadArea textAreaRef={textareaRef} onInsert={onInsert}>
+            <textarea
+              className="new-issue-description autoResize"
+              value={description || ''}
+              onChange={e => setDescription(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Add description..."
+              maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
+              ref={textareaRef}
+            ></textarea>
+          </ImageUploadArea>
         </div>
       </ModalBody>
       <ModalActions>
