@@ -7,7 +7,7 @@ import {
   string,
   table,
   type Row,
-  querify,
+  createBuilder,
   definePermissions,
 } from '@rocicorp/zero';
 import type {Role} from './auth.ts';
@@ -199,7 +199,7 @@ export type IssueRow = Row<typeof schema.tables.issue>;
 export type CommentRow = Row<typeof schema.tables.comment>;
 export type UserRow = Row<typeof schema.tables.user>;
 
-export const builder = querify(schema);
+export const builder = createBuilder(schema);
 
 export const permissions: ReturnType<typeof definePermissions> =
   definePermissions<unknown, Schema>(schema, () => ({}));

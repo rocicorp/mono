@@ -118,7 +118,7 @@ export class Connection {
    * This is early in the connection lifecycle because {@link #handleMessage}
    * will only parse messages with schema(s) of supported protocol versions.
    */
-  init() {
+  init(): boolean {
     if (
       this.#protocolVersion > PROTOCOL_VERSION ||
       this.#protocolVersion < MIN_SERVER_SUPPORTED_SYNC_PROTOCOL
@@ -137,7 +137,9 @@ export class Connection {
         {wsid: this.#wsID, timestamp: Date.now()},
       ];
       this.send(connectedMessage, 'ignore-backpressure');
+      return true;
     }
+    return false;
   }
 
   close(reason: string, ...args: unknown[]) {

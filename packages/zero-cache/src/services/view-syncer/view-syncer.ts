@@ -37,6 +37,10 @@ import {type ZeroConfig} from '../../config/zero-config.ts';
 import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
+import {
+  addClientGroup,
+  removeClientGroup,
+} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
@@ -144,7 +148,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
   readonly #slowHydrateThreshold: number;
-  readonly #pullConfig: ZeroConfig['pull'];
+  readonly #queryConfig: ZeroConfig['query'];
 
   // The ViewSyncerService is only started in response to a connection,
   // so #lastConnectTime is always initialized to now(). This is necessary
@@ -218,7 +222,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #customQueryTransformer: CustomQueryTransformer | undefined;
 
   constructor(
-    pullConfig: ZeroConfig['pull'],
+    pullConfig: ZeroConfig['query'],
     lc: LogContext,
     shard: ShardID,
     taskID: string,
@@ -234,7 +238,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ) {
     this.id = clientGroupID;
     this.#shard = shard;
-    this.#pullConfig = pullConfig;
+    this.#queryConfig = pullConfig;
     this.#lc = lc;
     this.#pipelines = pipelineDriver;
     this.#stateChanges = versionChanges;
@@ -302,6 +306,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   async run(): Promise<void> {
+    addClientGroup(this.id);
     try {
       for await (const {state} of this.#stateChanges) {
         if (this.#drainCoordinator.shouldDrain()) {
@@ -945,9 +950,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const transformedCustomQueries =
         await this.#customQueryTransformer.transform(
           {
-            apiKey: this.#pullConfig.apiKey,
+            apiKey: this.#queryConfig.apiKey,
             token: this.#authData?.raw,
-            cookie: this.#pullConfig.forwardCookies
+            cookie: this.#queryConfig.forwardCookies
               ? this.#httpCookie
               : undefined,
           },
@@ -1101,7 +1106,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         const transformedCustomQueries =
           await this.#customQueryTransformer.transform(
             {
-              apiKey: this.#pullConfig.apiKey,
+              apiKey: this.#queryConfig.apiKey,
               token: this.#authData?.raw,
               cookie: this.#httpCookie,
             },
@@ -1680,6 +1685,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #cleanup(err?: unknown) {
+    removeClientGroup(this.id);
     this.#stopTTLClockInterval();
     clearTimeout(this.#expiredQueriesTimer);
     this.#expiredQueriesTimer = 0;

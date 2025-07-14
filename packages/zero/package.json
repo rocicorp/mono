@@ -148,7 +148,7 @@
     "transform-query": "./out/zero/src/transform-query.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "files": [
     "out",

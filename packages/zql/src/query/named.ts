@@ -19,7 +19,7 @@ export type CustomQueryID = {
 /**
  * Returns a set of query builders for the given schema.
  */
-export function querify<S extends Schema>(s: S): SchemaQuery<S> {
+export function createBuilder<S extends Schema>(s: S): SchemaQuery<S> {
   return makeQueryBuilders(s) as SchemaQuery<S>;
 }
 
@@ -32,7 +32,7 @@ export function querify<S extends Schema>(s: S): SchemaQuery<S> {
  * The main use case here is to apply permissions to the requested query or
  * to expand the scope of the query to include additional data. E.g., for preloading.
  */
-export function namedQuery<
+export function named<
   TArg extends ReadonlyArray<ReadonlyJSONValue>,
   TReturnQuery extends Query<any, any, any>,
 >(

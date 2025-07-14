@@ -1123,32 +1123,33 @@ describe('pk lookup optimization', () => {
   });
 });
 
-test('run with options', async () => {
-  const queryDelegate = new QueryDelegateImpl();
-  const {issueSource} = addData(queryDelegate);
-  const issueQuery = newQuery(queryDelegate, schema, 'issue').where(
-    'title',
-    '=',
-    'issue 1',
-  );
-  const singleFilterRowsUnknownP = issueQuery.run({type: 'unknown'});
-  const singleFilterRowsCompleteP = issueQuery.run({type: 'complete'});
-  issueSource.push({
-    type: 'remove',
-    row: {
-      id: '0001',
-      title: 'issue 1',
-      description: 'description 1',
-      closed: false,
-      ownerId: '0001',
-      createdAt: 10,
-    },
-  });
-  queryDelegate.callAllGotCallbacks();
-  const singleFilterRowsUnknown = await singleFilterRowsUnknownP;
-  const singleFilterRowsComplete = await singleFilterRowsCompleteP;
+describe('run with options', () => {
+  test('run with type', async () => {
+    const queryDelegate = new QueryDelegateImpl();
+    const {issueSource} = addData(queryDelegate);
+    const issueQuery = newQuery(queryDelegate, schema, 'issue').where(
+      'title',
+      '=',
+      'issue 1',
+    );
+    const singleFilterRowsUnknownP = issueQuery.run({type: 'unknown'});
+    const singleFilterRowsCompleteP = issueQuery.run({type: 'complete'});
+    issueSource.push({
+      type: 'remove',
+      row: {
+        id: '0001',
+        title: 'issue 1',
+        description: 'description 1',
+        closed: false,
+        ownerId: '0001',
+        createdAt: 10,
+      },
+    });
+    queryDelegate.callAllGotCallbacks();
+    const singleFilterRowsUnknown = await singleFilterRowsUnknownP;
+    const singleFilterRowsComplete = await singleFilterRowsCompleteP;
 
-  expect(singleFilterRowsUnknown).toMatchInlineSnapshot(`
+    expect(singleFilterRowsUnknown).toMatchInlineSnapshot(`
     [
       {
         "closed": false,
@@ -1161,7 +1162,31 @@ test('run with options', async () => {
       },
     ]
   `);
-  expect(singleFilterRowsComplete).toMatchInlineSnapshot(`[]`);
+    expect(singleFilterRowsComplete).toMatchInlineSnapshot(`[]`);
+  });
+
+  test('run with ttl', async () => {
+    const queryDelegate = new QueryDelegateImpl();
+    const issueQuery = newQuery(queryDelegate, schema, 'issue').where(
+      'title',
+      '=',
+      'issue 1',
+    );
+    const unknownP = issueQuery.run({ttl: '1s', type: 'unknown'});
+    const completeP = issueQuery.run({ttl: '1m', type: 'complete'});
+    const hourP = issueQuery.run({ttl: '1h', type: 'unknown'});
+    queryDelegate.callAllGotCallbacks();
+    await Promise.all([unknownP, completeP, hourP]);
+
+    expect(queryDelegate.addedServerQueries.map(q => q.ttl))
+      .toMatchInlineSnapshot(`
+      [
+        "1s",
+        "1m",
+        "1h",
+      ]
+    `);
+  });
 });
 
 test('view creation is wrapped in context.batchViewUpdates call', () => {

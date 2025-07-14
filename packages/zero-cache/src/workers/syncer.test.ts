@@ -18,8 +18,20 @@ vi.mock('../types/websocket-handoff.ts', () => ({
     }),
 }));
 
+// Mock the anonymous telemetry functions
+vi.mock('../server/anonymous-otel-start.ts', () => ({
+  addClientGroup: vi.fn(),
+  removeClientGroup: vi.fn(),
+  recordConnectionSuccess: vi.fn(),
+  recordConnectionAttempted: vi.fn(),
+}));
+
 import {Syncer} from './syncer.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {
+  recordConnectionSuccess,
+  recordConnectionAttempted,
+} from '../server/anonymous-otel-start.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
 import type {ActivityBasedService} from '../services/service.ts';
@@ -117,6 +129,7 @@ describe('cleanup', () => {
         clientID: `${clientID}`,
         userID: 'anon',
         wsID: '1',
+        protocolVersion: 21, // Valid protocol version (current PROTOCOL_VERSION)
       },
       {} as any,
     );
@@ -186,6 +199,117 @@ describe('cleanup', () => {
   });
 });
 
+describe('connection telemetry', () => {
+  let syncer: Syncer;
+  let mutagens: MutagenService[];
+  let pushers: PusherService[];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mutagens = [];
+    pushers = [];
+    syncer = new Syncer(
+      lc,
+      {} as ZeroConfig,
+      id =>
+        ({
+          id,
+          keepalive: () => true,
+          stop() {
+            return Promise.resolve();
+          },
+          run() {
+            return Promise.resolve();
+          },
+        }) as ViewSyncer & ActivityBasedService,
+      id => {
+        const ret = new MutagenService(
+          lc,
+          {
+            appID: 'test-app',
+            shardNum: 0,
+          },
+          id,
+          {} as any,
+          {
+            replica: {
+              file: tempFile,
+            },
+            perUserMutationLimit: {},
+          } as ZeroConfig,
+        );
+        mutagens.push(ret);
+        return ret;
+      },
+      id => {
+        const ret = new PusherService(
+          {} as ZeroConfig,
+          {
+            url: 'http://example.com',
+            forwardCookies: false,
+          },
+          lc,
+          id,
+        );
+        pushers.push(ret);
+        return ret;
+      },
+      {
+        onMessageType: () => {},
+        send: () => {},
+      } as any,
+    );
+  });
+
+  afterEach(async () => {
+    await syncer.stop();
+  });
+
+  function newConnection(clientID: number, params: any = {}) {
+    const ws = new MockWebSocket() as unknown as WebSocket;
+    receiver(
+      ws,
+      {
+        clientGroupID: '1',
+        clientID: `${clientID}`,
+        userID: 'anon',
+        wsID: '1',
+        protocolVersion: 21, // Valid protocol version (current PROTOCOL_VERSION)
+        ...params,
+      },
+      {} as any,
+    );
+    return ws;
+  }
+
+  test('should record connection success for valid protocol version', () => {
+    // Create a connection with valid protocol version
+    newConnection(1, {protocolVersion: 21});
+
+    // Should record connection success
+    expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(1);
+  });
+
+  test('should record multiple successful connections', () => {
+    // Create multiple connections with valid protocol version
+    newConnection(1, {protocolVersion: 21});
+    newConnection(2, {protocolVersion: 21});
+    newConnection(3, {protocolVersion: 21});
+
+    // Should record multiple connection successes
+    expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(3);
+  });
+
+  test('should record connection attempted for each connection', () => {
+    // Create connections - both should record attempts
+    newConnection(1, {protocolVersion: 21});
+    newConnection(2, {protocolVersion: 21});
+
+    // Should record connection attempts
+    expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(2);
+  });
+});
+
 afterAll(async () => {
   try {
     await fs.rm(tempDir, {recursive: true, force: true});
@@ -198,6 +322,11 @@ afterAll(async () => {
 });
 
 class MockWebSocket {
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  static readonly OPEN = 1;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  static readonly CLOSED = 3;
+
   #listeners: Map<string, ((event: any) => void)[]> = new Map();
   addEventListener(type: string, fn: (event: any) => void) {
     if (!this.#listeners.has(type)) {
