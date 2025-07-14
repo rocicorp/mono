@@ -35,6 +35,8 @@ import {CanEdit} from '../../components/can-edit.tsx';
 import {Combobox} from '../../components/combobox.tsx';
 import {Confirm} from '../../components/confirm.tsx';
 import {EmojiPanel} from '../../components/emoji-panel.tsx';
+import {ImageUploadArea} from '../../components/image-upload-area.tsx';
+import {ImageUploadButton} from '../../components/image-upload-button.tsx';
 import {LabelPicker} from '../../components/label-picker.tsx';
 import {Link} from '../../components/link.tsx';
 import {Markdown} from '../../components/markdown.tsx';
@@ -165,6 +167,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const [editing, setEditing] = useState<typeof displayed | null>(null);
   const [edits, setEdits] = useState<Partial<typeof displayed>>({});
+  const editDescriptionRef = useRef<HTMLTextAreaElement>(null);
+
   useEffect(() => {
     if (displayed?.shortID != null && idField !== 'shortID') {
       navigate(links.issue(displayed), {
@@ -186,6 +190,26 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const cancel = () => {
     setEditing(null);
     setEdits({});
+  };
+
+  const handleDescriptionImageUpload = (markdown: string) => {
+    const textarea = editDescriptionRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+      const newText = text.substring(0, start) + markdown + text.substring(end);
+      setEdits({...edits, description: newText});
+
+      // Set cursor position after the inserted markdown
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(
+          start + markdown.length,
+          start + markdown.length,
+        );
+      }, 0);
+    }
   };
 
   // A snapshot before any edits/comments added to the issue in this view is
@@ -478,15 +502,19 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           ) : (
             <div className="edit-description-container">
               <p className="issue-detail-label">Edit description</p>
-              <TextareaAutosize
-                className="edit-description"
-                value={rendering.description}
-                onChange={e =>
-                  setEdits({...edits, description: e.target.value})
-                }
-                onKeyDown={e => isCtrlEnter(e) && save()}
-                maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
-              />
+              <ImageUploadArea onUpload={handleDescriptionImageUpload}>
+                <TextareaAutosize
+                  className="edit-description"
+                  value={rendering.description}
+                  onChange={e =>
+                    setEdits({...edits, description: e.target.value})
+                  }
+                  onKeyDown={e => isCtrlEnter(e) && save()}
+                  maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
+                  ref={editDescriptionRef}
+                />
+              </ImageUploadArea>
+              <ImageUploadButton onUpload={handleDescriptionImageUpload} />
             </div>
           )}
         </div>

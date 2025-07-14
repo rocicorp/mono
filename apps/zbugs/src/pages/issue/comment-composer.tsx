@@ -1,6 +1,7 @@
 import {useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.tsx';
 import {ImageUploadButton} from '../../components/image-upload-button.tsx';
+import {ImageUploadArea} from '../../components/image-upload-area.tsx';
 import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
@@ -78,17 +79,39 @@ export function CommentComposer({
     return null;
   }
 
+  const handleImageUpload = (markdown: string) => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const text = textarea.value;
+      const newText = text.substring(0, start) + markdown + text.substring(end);
+      setCurrentBody(newText);
+
+      // Set cursor position after the inserted markdown
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(
+          start + markdown.length,
+          start + markdown.length,
+        );
+      }, 0);
+    }
+  };
+
   return (
     <>
-      <textarea
-        value={currentBody}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        className="comment-input autoResize"
-        /* The launch post has a speical maxLength because trolls */
-        maxLength={maxCommentLength(issueID)}
-        ref={textareaRef}
-      />
+      <ImageUploadArea onUpload={handleImageUpload}>
+        <textarea
+          value={currentBody}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          className="comment-input autoResize"
+          /* The launch post has a speical maxLength because trolls */
+          maxLength={maxCommentLength(issueID)}
+          ref={textareaRef}
+        />
+      </ImageUploadArea>
       <div style={{display: 'flex', gap: '0.5rem', alignItems: 'center'}}>
         <Button
           className="secondary-button"
@@ -98,19 +121,7 @@ export function CommentComposer({
         >
           {id ? 'Save' : 'Add comment'}
         </Button>
-        <ImageUploadButton
-          onUpload={markdown => {
-            const textarea = textareaRef.current;
-            if (textarea) {
-              const start = textarea.selectionStart;
-              const end = textarea.selectionEnd;
-              const text = textarea.value;
-              const newText =
-                text.substring(0, start) + markdown + text.substring(end);
-              setCurrentBody(newText);
-            }
-          }}
-        />
+        <ImageUploadButton onUpload={handleImageUpload} />
       </div>
       {id ? (
         <Button
