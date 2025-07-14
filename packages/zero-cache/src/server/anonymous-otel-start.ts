@@ -28,10 +28,6 @@ class AnonymousTelemetryManager {
   #config: ZeroConfig | undefined;
   #cachedAttributes: Record<string, string> | undefined;
 
-  private constructor() {
-    // No initialization needed
-  }
-
   static getInstance(): AnonymousTelemetryManager {
     if (!AnonymousTelemetryManager.#instance) {
       AnonymousTelemetryManager.#instance = new AnonymousTelemetryManager();
@@ -44,7 +40,6 @@ class AnonymousTelemetryManager {
       try {
         config = getZeroConfig();
       } catch (e) {
-        // Gracefully handle cases where config cannot be parsed (e.g., in test environments)
         this.#lc?.debug?.(
           'Anonymous telemetry disabled: unable to parse config',
           e,
@@ -53,7 +48,6 @@ class AnonymousTelemetryManager {
       }
     }
 
-    // Check for DO_NOT_TRACK environment variable
     if (process.env.DO_NOT_TRACK) {
       this.#lc?.debug?.(
         'Anonymous telemetry disabled: DO_NOT_TRACK environment variable is set',
@@ -66,7 +60,6 @@ class AnonymousTelemetryManager {
     }
     this.#lc = lc;
     this.#config = config;
-    // Clear cached attributes when config changes
     this.#cachedAttributes = undefined;
 
     const resource = resourceFromAttributes(this.#getAttributes());
@@ -183,22 +176,6 @@ class AnonymousTelemetryManager {
     this.#totalConnectionsAttempted++;
   }
 
-  addActiveQuery(_clientGroupID: string, _queryID: string) {
-    // No active queries to add
-  }
-
-  removeActiveQuery(_clientGroupID: string, _queryID: string) {
-    // No active queries to remove
-  }
-
-  addClientGroup(_clientGroupID: string) {
-    // No client groups to add
-  }
-
-  removeClientGroup(_clientGroupID: string) {
-    // No client groups to remove
-  }
-
   shutdown() {
     if (this.#meterProvider) {
       this.#lc?.info?.('Shutting down anonymous telemetry');
@@ -285,19 +262,15 @@ class AnonymousTelemetryManager {
       const fsidPath = join(homedir(), '.rocicorp', 'fsid');
       const fsidDir = dirname(fsidPath);
 
-      // Check if the file exists
       if (existsSync(fsidPath)) {
-        // Read and return the existing GUID
         const existingId = readFileSync(fsidPath, 'utf8').trim();
         return existingId;
       }
 
-      // File doesn't exist, create directory if needed
       if (!existsSync(fsidDir)) {
         mkdirSync(fsidDir, {recursive: true});
       }
 
-      // Generate a new random GUID and write it to the file
       const newId = randomUUID();
       writeFileSync(fsidPath, newId, 'utf8');
       return newId;
