@@ -1,11 +1,11 @@
-import {escapeLike, namedQuery, type Row} from '@rocicorp/zero';
+import {escapeLike, named, type Row} from '@rocicorp/zero';
 import {builder, type Schema} from './schema.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 
-export const allLabels = namedQuery('allLabels', () => builder.label);
-export const allUsers = namedQuery('allUsers', () => builder.user);
+export const allLabels = named('allLabels', () => builder.label);
+export const allUsers = named('allUsers', () => builder.user);
 
-export const issuePreload = namedQuery('issuePreload', (userID: string) =>
+export const issuePreload = named('issuePreload', (userID: string) =>
   builder.issue
     .related('labels')
     .related('viewState', q => q.where('userID', userID))
@@ -21,15 +21,15 @@ export const issuePreload = namedQuery('issuePreload', (userID: string) =>
     ),
 );
 
-export const user = namedQuery('user', (userID: string) =>
+export const user = named('user', (userID: string) =>
   builder.user.where('id', userID).one(),
 );
 
-export const userPref = namedQuery('userPref', (key: string, userID: string) =>
+export const userPref = named('userPref', (key: string, userID: string) =>
   builder.userPref.where('key', key).where('userID', userID).one(),
 );
 
-export const userPicker = namedQuery(
+export const userPicker = named(
   'userPicker',
   (
     disabled: boolean,
@@ -54,7 +54,7 @@ export const userPicker = namedQuery(
   },
 );
 
-export const issueDetail = namedQuery(
+export const issueDetail = named(
   'issueDetail',
   (idField: 'shortID' | 'id', id: string | number, userID: string) =>
     builder.issue
@@ -92,7 +92,7 @@ export type ListContext = {
   };
 };
 
-export const prevNext = namedQuery(
+export const prevNext = named(
   'prevNext',
   (
     listContext: ListContext['params'] | null,
@@ -104,7 +104,7 @@ export const prevNext = namedQuery(
   ) => buildListQuery(listContext, issue, dir).one(),
 );
 
-export const issueList = namedQuery(
+export const issueList = named(
   'issueList',
   (listContext: ListContext['params'], userID: string, limit: number) =>
     buildListQuery(listContext, null, 'next')
@@ -166,7 +166,7 @@ function buildListQuery(
   );
 }
 
-export const emojiChange = namedQuery('emojiChange', (subjectID: string) =>
+export const emojiChange = named('emojiChange', (subjectID: string) =>
   builder.emoji
     .where('subjectID', subjectID ?? '')
     .related('creator', creator => creator.one()),

@@ -119,7 +119,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
             if (mutations[0].type === 'custom') {
               assert(
                 this.#pusher,
-                'A ZERO_PUSH_URL must be set in order to process custom mutations.',
+                'A ZERO_MUTATE_URL must be set in order to process custom mutations.',
               );
               return [
                 this.#pusher.enqueuePush(
