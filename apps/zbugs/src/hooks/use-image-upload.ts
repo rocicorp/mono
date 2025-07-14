@@ -9,9 +9,9 @@ export function useImageUpload({onUpload}: UseImageUploadOptions) {
   const [isUploading, setIsUploading] = useState(false);
 
   const validateFile = (file: File): string | null => {
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     if (!validTypes.includes(file.type)) {
-      return 'Invalid file type. Please select a JPG, PNG, or WEBP image.';
+      return 'Invalid file type. Please select a JPG, PNG, WEBP, or GIF image.';
     }
 
     if (file.size > 10 * 1024 * 1024) {

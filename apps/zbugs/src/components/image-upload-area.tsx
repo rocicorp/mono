@@ -209,7 +209,7 @@ export function ImageUploadArea({
       <input
         ref={fileInputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept="image/jpeg,image/png,image/webp,image/gif"
         multiple
         onChange={handleFileSelect}
         style={{display: 'none'}}
