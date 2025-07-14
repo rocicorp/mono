@@ -6,7 +6,9 @@ export function useCanEdit(ownerUserID: string | undefined): boolean {
   const login = useLogin();
   const currentUserID = login.loginState?.decoded.sub;
   const [isCrew] = useQuery(
-    queries.user(currentUserID || '').where('role', 'crew'),
+    queries
+      .user(login.loginState?.decoded, currentUserID || '')
+      .where('role', 'crew'),
   );
   return (
     import.meta.env.VITE_PUBLIC_SANDBOX ||

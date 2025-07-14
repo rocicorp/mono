@@ -81,12 +81,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const idStr = must(params.id);
   const idField = /[^\d]/.test(idStr) ? 'id' : 'shortID';
   const id = idField === 'shortID' ? parseInt(idStr) : idStr;
+  const login = useLogin();
 
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
   const listContext = zbugsHistoryState?.zbugsListContext;
 
   const [issue, issueResult] = useQuery(
-    issueDetail(idField, id, z.userID),
+    issueDetail(login.loginState?.decoded, idField, id, z.userID),
     CACHE_AWHILE,
   );
   useEffect(() => {
@@ -94,8 +95,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
       onReady();
     }
   }, [issue, onReady, issueResult.type]);
-
-  const login = useLogin();
 
   const isScrolling = useIsScrolling();
   const [displayed, setDisplayed] = useState(issue);
@@ -141,9 +140,9 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     if (issueResult.type === 'complete') {
       recordPageLoad('issue-page');
-      preload(z);
+      preload(login.loginState?.decoded, z);
     }
-  }, [issueResult.type, z]);
+  }, [issueResult.type, login.loginState?.decoded, z]);
 
   useEffect(() => {
     // only push viewed forward if the issue has been modified since the last viewing
@@ -212,7 +211,12 @@ export function IssuePage({onReady}: {onReady: () => void}) {
       }
     : null;
   const [next] = useQuery(
-    prevNext(listContext?.params ?? null, start, 'next'),
+    prevNext(
+      login.loginState?.decoded,
+      listContext?.params ?? null,
+      start,
+      'next',
+    ),
     useQueryOptions,
   );
   useKeypress('j', () => {
@@ -222,7 +226,12 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   });
 
   const [prev] = useQuery(
-    prevNext(listContext?.params ?? null, start, 'prev'),
+    prevNext(
+      login.loginState?.decoded,
+      listContext?.params ?? null,
+      start,
+      'prev',
+    ),
     useQueryOptions,
   );
   useKeypress('k', () => {
@@ -916,9 +925,13 @@ function useEmojiChangeListener(
   issue: Issue | undefined,
   cb: (added: readonly Emoji[], removed: readonly Emoji[]) => void,
 ) {
+  const login = useLogin();
   const enabled = issue !== undefined;
   const issueID = issue?.id;
-  const [emojis, result] = useQuery(emojiChange(issueID ?? ''), {enabled});
+  const [emojis, result] = useQuery(
+    emojiChange(login.loginState?.decoded, issueID ?? ''),
+    {enabled},
+  );
 
   const lastEmojis = useRef<Map<string, Emoji> | undefined>();
 

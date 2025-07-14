@@ -7,6 +7,7 @@ import {Button} from './button.tsx';
 import {Combobox} from './combobox.tsx';
 import {UserPicker} from './user-picker.tsx';
 import {queries} from '../../shared/queries.ts';
+import {useLogin} from '../hooks/use-login.tsx';
 
 export type Selection =
   | {creator: string}
@@ -19,8 +20,9 @@ type Props = {
 
 export const Filter = memo(function Filter({onSelect}: Props) {
   const [isOpen, setIsOpen] = useState(false);
+  const auth = useLogin().loginState?.decoded;
 
-  const [unsortedLabels] = useQuery(queries.allLabels());
+  const [unsortedLabels] = useQuery(queries.allLabels(auth));
   // TODO: Support case-insensitive sorting in ZQL.
   const labels = useMemo(
     () => toSorted(unsortedLabels, (a, b) => a.name.localeCompare(b.name)),

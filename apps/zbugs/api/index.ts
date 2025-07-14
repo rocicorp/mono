@@ -14,7 +14,6 @@ import {must} from '../../../packages/shared/src/must.ts';
 import {handlePush} from '../server/push-handler.ts';
 import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {getQuery} from '../server/get-query.ts';
-import type {ServerContext} from '../server/server-queries.ts';
 import {getQueries} from '@rocicorp/zero/server';
 import {schema} from '../shared/schema.ts';
 
@@ -144,7 +143,7 @@ fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
 }>('/api/pull', async (request, reply) => {
-  let authData;
+  let authData: JWTData | undefined;
   try {
     authData = await maybeVerifyAuth(request.headers);
   } catch (e) {
@@ -155,12 +154,9 @@ fastify.post<{
     throw e;
   }
 
-  const context: ServerContext = {
-    role: authData?.role,
-  };
   reply.send(
     await getQueries(
-      async (name, args) => ({query: getQuery(context, name, args)}),
+      async (name, args) => ({query: getQuery(authData, name, args)}),
       schema,
       request.body,
     ),
