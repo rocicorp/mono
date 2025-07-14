@@ -59,9 +59,11 @@ import {links, type ZbugsHistoryState} from '../../routes.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {emojiChange, issueDetail, prevNext} from '../../../shared/queries.ts';
+import {queries} from '../../../shared/queries.ts';
 import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
 import {preload} from '../../zero-preload.ts';
+
+const {emojiChange, issueDetail, prevNext} = queries;
 
 function softNavigate(path: string, state?: ZbugsHistoryState) {
   navigate(path, {state});
