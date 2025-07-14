@@ -64,8 +64,6 @@ export function useImageUpload({onUpload}: UseImageUploadOptions) {
 
   return {
     isUploading,
-    uploadFile,
     uploadFiles,
-    validateFile,
   };
 }

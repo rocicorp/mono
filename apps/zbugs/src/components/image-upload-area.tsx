@@ -17,10 +17,9 @@ export function ImageUploadArea({
   const [isDragOver, setIsDragOver] = useState(false);
   const [textareaRect, setTextareaRect] = useState<DOMRect | null>(null);
   const dragCounterRef = useRef(0);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const {isUploading, uploadFile, uploadFiles} = useImageUpload({onUpload});
+  const {isUploading, uploadFiles} = useImageUpload({onUpload});
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
