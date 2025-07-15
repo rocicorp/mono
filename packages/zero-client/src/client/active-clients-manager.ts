@@ -69,7 +69,7 @@ export class ActiveClientsManager {
   readonly clientID: string;
   readonly #resolver = resolver<void>();
   readonly #lockManager: ClientLockManager;
-  #activeClients: Set<string> = new Set();
+  readonly #activeClients: Set<string> = new Set();
 
   /**
    * A callback that is called when a client is added to the client group.
@@ -95,7 +95,7 @@ export class ActiveClientsManager {
     signal: AbortSignal,
   ): Promise<ActiveClientsManager> {
     const instance = new ActiveClientsManager(clientGroupID, clientID, signal);
-    await instance.#init(clientGroupID, clientID, signal);
+    await instance.#init(signal);
     return instance;
   }
 
@@ -110,11 +110,8 @@ export class ActiveClientsManager {
     this.#activeClients.add(clientID);
   }
 
-  async #init(
-    clientGroupID: string,
-    clientID: string,
-    signal: AbortSignal,
-  ): Promise<void> {
+  async #init(signal: AbortSignal): Promise<void> {
+    const {clientGroupID, clientID} = this;
     const name = toLockName(clientGroupID, clientID);
 
     // The BroadcastChannel is used to notify other clients in the same client
