@@ -1093,3 +1093,39 @@ test('ungrouped config', () => {
     pids: [],
   });
 });
+
+test('deprecated options are hidden in help by default', () => {
+  const optionsWithDeprecated = {
+    normalFlag: v.string(),
+    deprecatedButNotExplicitlyHidden: {
+      type: v.string().optional(),
+      deprecated: ['This flag is deprecated'],
+    },
+    explicitlyHiddenDeprecated: {
+      type: v.string().optional(),
+      deprecated: ['This flag is also deprecated'],
+      hidden: true,
+    },
+  };
+
+  const logger = {info: vi.fn()};
+  expect(() =>
+    parseOptions(optionsWithDeprecated, {
+      argv: ['--help'],
+      envNamePrefix: 'TEST_',
+      env: {},
+      logger,
+      exit,
+    }),
+  ).toThrow(ExitAfterUsage);
+
+  expect(logger.info).toHaveBeenCalled();
+  const helpOutput = stripAnsi(logger.info.mock.calls[0][0]);
+
+  // Normal flag should be shown
+  expect(helpOutput).toContain('--normal-flag');
+
+  // Deprecated flags should be hidden (regardless of explicit hidden property)
+  expect(helpOutput).not.toContain('--deprecated-but-not-explicitly-hidden');
+  expect(helpOutput).not.toContain('--explicitly-hidden-deprecated');
+});
