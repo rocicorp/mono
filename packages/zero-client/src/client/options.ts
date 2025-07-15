@@ -2,7 +2,10 @@ import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import * as v from '../../../shared/src/valita.ts';
-import type {UserPushParams} from '../../../zero-protocol/src/connect.ts';
+import type {
+  UserMutateParams,
+  UserQueryParams,
+} from '../../../zero-protocol/src/connect.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {OnError} from './on-error.ts';
@@ -105,8 +108,12 @@ export interface ZeroOptions<
    * push.queryParams can be used to augment the URL
    * used to connect to your API server so it includes
    * variables in the query string.
+   *
+   * DEPRECATED: Use `userMutateParams` instead.
    */
-  push?: UserPushParams;
+  push?: UserMutateParams;
+  mutate?: UserMutateParams;
+  query?: UserQueryParams;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
