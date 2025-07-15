@@ -12,6 +12,16 @@ export type NamedQuery<
   TReturnQuery extends Query<any, any, any> = Query<any, any, any>,
 > = (...args: TArg) => TReturnQuery;
 
+export type ContextualizedNamedQuery<
+  TContext,
+  TArg extends
+    ReadonlyArray<ReadonlyJSONValue> = ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any> = Query<any, any, any>,
+> = {
+  (context: TContext, ...args: TArg): TReturnQuery;
+  contextualized?: boolean;
+};
+
 export type CustomQueryID = {
   name: string;
   args: ReadonlyArray<ReadonlyJSONValue>;
@@ -44,6 +54,29 @@ function namedQuery(
   >;
 }
 
+function contextualizedNamedQuery<TContext>(
+  name: string,
+  fn: ContextualizedNamedQuery<
+    TContext,
+    ReadonlyArray<ReadonlyJSONValue>,
+    Query<any, any, any>
+  >,
+): ContextualizedNamedQuery<
+  TContext,
+  ReadonlyArray<ReadonlyJSONValue>,
+  Query<any, any, any>
+> {
+  const ret = ((context: TContext, ...args: ReadonlyArray<ReadonlyJSONValue>) =>
+    fn(context, ...args).nameAndArgs(name, args)) as ContextualizedNamedQuery<
+    TContext,
+    ReadonlyArray<ReadonlyJSONValue>,
+    Query<any, any, any>
+  >;
+  ret.contextualized = true;
+
+  return ret;
+}
+
 export function named<
   TQueries extends {
     [K in keyof TQueries]: TQueries[K] extends NamedQuery<
@@ -59,6 +92,26 @@ export function named<
   return mapEntries(queries, (name, query) => [
     name,
     namedQuery(name, query as any),
+  ]) as TQueries;
+}
+
+export function namedWithContext<
+  TContext,
+  TQueries extends {
+    [K in keyof TQueries]: TQueries[K] extends ContextualizedNamedQuery<
+      TContext,
+      infer TArgs,
+      Query<any, any, any>
+    >
+      ? TArgs extends ReadonlyArray<ReadonlyJSONValue>
+        ? ContextualizedNamedQuery<TContext, TArgs, Query<any, any, any>>
+        : never
+      : never;
+  },
+>(queries: TQueries): TQueries {
+  return mapEntries(queries, (name, query) => [
+    name,
+    contextualizedNamedQuery(name, query as any),
   ]) as TQueries;
 }
 

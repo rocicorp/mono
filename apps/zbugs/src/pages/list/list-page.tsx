@@ -61,6 +61,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const pageSize = 20;
   const [limit, setLimit] = useState(pageSize);
   const q = queries.issueList(
+    login.loginState?.decoded,
     {
       sortDirection,
       sortField,
@@ -97,9 +98,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     if (issuesResult.type === 'complete') {
       recordPageLoad('list-page');
-      preload(z);
+      preload(login.loginState?.decoded, z);
     }
-  }, [issuesResult.type, z]);
+  }, [login.loginState?.decoded, issuesResult.type, z]);
 
   let title;
   if (creator || assignee || labels.length > 0 || textFilter) {

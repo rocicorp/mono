@@ -122,6 +122,7 @@ export {
   type CustomQueryID,
   type NamedQuery,
   named,
+  namedWithContext,
 } from '../../zql/src/query/named.ts';
 export type {
   HumanReadable,

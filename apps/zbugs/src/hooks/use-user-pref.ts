@@ -1,13 +1,13 @@
 import type {Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {type Schema} from '../../shared/schema.ts';
-import {useZero} from './use-zero.ts';
 import type {Mutators} from '../../shared/mutators.ts';
 import {queries} from '../../shared/queries.ts';
+import {useLogin} from './use-login.tsx';
 
 export function useUserPref(key: string): string | undefined {
-  const z = useZero();
-  const [pref] = useQuery(queries.userPref(key, z.userID));
+  const login = useLogin();
+  const [pref] = useQuery(queries.userPref(login.loginState?.decoded, key));
   return pref?.value;
 }
 

@@ -1,20 +1,20 @@
-import type {NamedQuery, ReadonlyJSONValue} from '@rocicorp/zero';
-import * as serverQueries from '../server/server-queries.ts';
-import {queries as sharedQueries} from '../shared/queries.ts';
+import type {AnyQuery, ReadonlyJSONValue} from '@rocicorp/zero';
+import {queries} from '../shared/queries.ts';
+import type {AuthData} from '../shared/auth.ts';
 
 export function getQuery(
-  context: serverQueries.ServerContext,
+  context: AuthData | undefined,
   name: string,
   args: readonly ReadonlyJSONValue[],
 ) {
   let query;
-  if (isServerQuery(name)) {
-    query = (serverQueries[name] as serverQueries.ServerQuery)(
-      context,
-      ...args,
-    );
-  } else if (isSharedQuery(name)) {
-    query = (sharedQueries[name] as NamedQuery)(...args);
+  if (isSharedQuery(name)) {
+    query = (
+      queries[name] as (
+        context: AuthData | undefined,
+        ...args: readonly ReadonlyJSONValue[]
+      ) => AnyQuery
+    )(context, ...args);
   } else {
     throw new Error(`Unknown query: ${name}`);
   }
@@ -22,10 +22,6 @@ export function getQuery(
   return query;
 }
 
-function isServerQuery(key: string): key is keyof typeof serverQueries {
-  return key in serverQueries;
-}
-
-function isSharedQuery(key: string): key is keyof typeof sharedQueries {
-  return key in sharedQueries;
+function isSharedQuery(key: string): key is keyof typeof queries {
+  return key in queries;
 }

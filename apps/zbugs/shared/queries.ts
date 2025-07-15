@@ -1,33 +1,57 @@
-import {escapeLike, named, type Row} from '@rocicorp/zero';
+import {
+  escapeLike,
+  type Query,
+  type Row,
+  namedWithContext,
+} from '@rocicorp/zero';
 import {builder, type Schema} from './schema.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
+import type {AuthData, Role} from './auth.ts';
 
-export const queries = named({
-  allLabels: () => builder.label,
+function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  q: TQuery,
+  role: Role | undefined,
+): TQuery {
+  return q.where(({or, cmp, cmpLit}) =>
+    or(cmp('visibility', '=', 'public'), cmpLit(role ?? null, '=', 'crew')),
+  ) as TQuery;
+}
 
-  allUsers: () => builder.user,
+export const queries = namedWithContext({
+  allLabels: (_auth: AuthData | undefined) => builder.label,
 
-  issuePreload: (userID: string) =>
-    builder.issue
-      .related('labels')
-      .related('viewState', q => q.where('userID', userID))
-      .related('creator')
-      .related('assignee')
-      .related('emoji', emoji => emoji.related('creator'))
-      .related('comments', comments =>
-        comments
-          .related('creator')
-          .related('emoji', emoji => emoji.related('creator'))
-          .limit(10)
-          .orderBy('created', 'desc'),
-      ),
+  allUsers: (_auth: AuthData | undefined) => builder.user,
 
-  user: (userID: string) => builder.user.where('id', userID).one(),
+  issuePreload: (auth: AuthData | undefined, userID: string) =>
+    applyIssuePermissions(
+      builder.issue
+        .related('labels')
+        .related('viewState', q => q.where('userID', userID))
+        .related('creator')
+        .related('assignee')
+        .related('emoji', emoji => emoji.related('creator'))
+        .related('comments', comments =>
+          comments
+            .related('creator')
+            .related('emoji', emoji => emoji.related('creator'))
+            .limit(10)
+            .orderBy('created', 'desc'),
+        ),
+      auth?.role,
+    ),
 
-  userPref: (key: string, userID: string) =>
-    builder.userPref.where('key', key).where('userID', userID).one(),
+  user: (_auth: AuthData | undefined, userID: string) =>
+    builder.user.where('id', userID).one(),
+
+  userPref: (auth: AuthData | undefined, key: string) =>
+    builder.userPref
+      .where('key', key)
+      .where('userID', auth?.sub ?? '')
+      .one(),
 
   userPicker: (
+    _auth: AuthData | undefined,
     disabled: boolean,
     login: string | null,
     filter: 'crew' | 'creators' | null,
@@ -50,50 +74,63 @@ export const queries = named({
   },
 
   issueDetail: (
+    auth: AuthData | undefined,
     idField: 'shortID' | 'id',
     id: string | number,
     userID: string,
   ) =>
-    builder.issue
-      .where(idField, id)
-      .related('emoji', emoji => emoji.related('creator'))
-      .related('creator')
-      .related('assignee')
-      .related('labels')
-      .related('viewState', viewState =>
-        viewState.where('userID', userID).one(),
-      )
-      .related('comments', comments =>
-        comments
-          .related('creator')
-          .related('emoji', emoji => emoji.related('creator'))
-          // One more than we display so we can detect if there are more to load.
-          .limit(INITIAL_COMMENT_LIMIT + 1)
-          .orderBy('created', 'desc')
-          .orderBy('id', 'desc'),
-      )
-      .one(),
+    applyIssuePermissions(
+      builder.issue
+        .where(idField, id)
+        .related('emoji', emoji => emoji.related('creator'))
+        .related('creator')
+        .related('assignee')
+        .related('labels')
+        .related('viewState', viewState =>
+          viewState.where('userID', userID).one(),
+        )
+        .related('comments', comments =>
+          comments
+            .related('creator')
+            .related('emoji', emoji => emoji.related('creator'))
+            // One more than we display so we can detect if there are more to load.
+            .limit(INITIAL_COMMENT_LIMIT + 1)
+            .orderBy('created', 'desc')
+            .orderBy('id', 'desc'),
+        )
+        .one(),
+      auth?.role,
+    ),
 
   prevNext: (
+    auth: AuthData | undefined,
     listContext: ListContext['params'] | null,
     issue: Pick<
       Row<Schema['tables']['issue']>,
       'id' | 'created' | 'modified'
     > | null,
     dir: 'next' | 'prev',
-  ) => buildListQuery(listContext, issue, dir).one(),
+  ) =>
+    applyIssuePermissions(
+      buildListQuery(listContext, issue, dir).one(),
+      auth?.role,
+    ),
 
   issueList: (
+    auth: AuthData | undefined,
     listContext: ListContext['params'],
     userID: string,
     limit: number,
   ) =>
-    buildListQuery(listContext, null, 'next')
-      .limit(limit)
-      .related('viewState', q => q.where('userID', userID).one())
-      .related('labels'),
+    applyIssuePermissions(
+      buildListQuery(listContext, null, 'next')
+        .limit(limit)
+        .related('viewState', q => q.where('userID', userID).one())
+        .related('labels'),
+      auth?.role,
+    ),
 
-  emojiChange: (subjectID: string) =>
+  emojiChange: (_auth: AuthData | undefined, subjectID: string) =>
     builder.emoji
       .where('subjectID', subjectID ?? '')
       .related('creator', creator => creator.one()),

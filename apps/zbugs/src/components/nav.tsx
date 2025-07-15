@@ -25,7 +25,12 @@ export const Nav = memo(() => {
   const login = useLogin();
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
-  const [user] = useQuery(queries.user(login.loginState?.decoded.sub ?? ''));
+  const [user] = useQuery(
+    queries.user(
+      login.loginState?.decoded,
+      login.loginState?.decoded.sub ?? '',
+    ),
+  );
 
   const [showIssueModal, setShowIssueModal] = useState(false);
 
