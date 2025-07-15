@@ -1,4 +1,4 @@
-import {vi} from 'vitest';
+import {expect, vi} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {h128} from '../../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
@@ -6,6 +6,7 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
+import type {PokePartBody} from '../../../../zero-protocol/src/poke.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
 import {
@@ -19,7 +20,10 @@ import {
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
-import {definePermissions} from '../../../../zero-schema/src/permissions.ts';
+import {
+  ANYONE_CAN_DO_ANYTHING,
+  definePermissions,
+} from '../../../../zero-schema/src/permissions.ts';
 import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
@@ -41,6 +45,31 @@ import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
 export const APP_ID = 'this_app';
 export const SHARD_NUM = 2;
 export const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
+
+export const EXPECTED_LMIDS_AST: AST = {
+  schema: '',
+  table: 'this_app_2.clients',
+  where: {
+    type: 'simple',
+    op: '=',
+    left: {
+      type: 'column',
+      name: 'clientGroupID',
+    },
+    right: {
+      type: 'literal',
+      value: '9876',
+    },
+  },
+  orderBy: [
+    ['clientGroupID', 'asc'],
+    ['clientID', 'asc'],
+  ],
+};
+
+export const ON_FAILURE = (e: unknown) => {
+  throw e;
+};
 
 export const queryConfig: ZeroConfig['query'] = {
   url: ['http://my-pull-endpoint.dev/api/zero/pull'],
@@ -69,6 +98,223 @@ export const ISSUES_QUERY: AST = {
 
 export const COMMENTS_QUERY: AST = {
   table: 'comments',
+  orderBy: [['id', 'asc']],
+};
+
+export const ISSUES_QUERY_WITH_EXISTS: AST = {
+  table: 'issues',
+  orderBy: [['id', 'asc']],
+  where: {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      system: 'client',
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueID'],
+      },
+      subquery: {
+        table: 'issueLabels',
+        alias: 'labels',
+        orderBy: [
+          ['issueID', 'asc'],
+          ['labelID', 'asc'],
+        ],
+        where: {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            system: 'client',
+            correlation: {
+              parentField: ['labelID'],
+              childField: ['id'],
+            },
+            subquery: {
+              table: 'labels',
+              alias: 'labels',
+              orderBy: [['id', 'asc']],
+              where: {
+                type: 'simple',
+                left: {
+                  type: 'column',
+                  name: 'name',
+                },
+                op: '=',
+                right: {
+                  type: 'literal',
+                  value: 'bug',
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+export const ISSUES_QUERY_WITH_RELATED: AST = {
+  table: 'issues',
+  orderBy: [['id', 'asc']],
+  where: {
+    type: 'simple',
+    left: {
+      type: 'column',
+      name: 'id',
+    },
+    op: 'IN',
+    right: {
+      type: 'literal',
+      value: ['1', '2'],
+    },
+  },
+  related: [
+    {
+      system: 'client',
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueID'],
+      },
+      hidden: true,
+      subquery: {
+        table: 'issueLabels',
+        alias: 'labels',
+        orderBy: [
+          ['issueID', 'asc'],
+          ['labelID', 'asc'],
+        ],
+        related: [
+          {
+            system: 'client',
+            correlation: {
+              parentField: ['labelID'],
+              childField: ['id'],
+            },
+            subquery: {
+              table: 'labels',
+              alias: 'labels',
+              orderBy: [['id', 'asc']],
+            },
+          },
+        ],
+      },
+    },
+  ],
+};
+
+export const ISSUES_QUERY_WITH_EXISTS_AND_RELATED: AST = {
+  table: 'issues',
+  orderBy: [['id', 'asc']],
+  where: {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      system: 'client',
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueID'],
+      },
+      subquery: {
+        table: 'comments',
+        alias: 'exists_comments',
+        orderBy: [
+          ['issueID', 'asc'],
+          ['id', 'asc'],
+        ],
+        where: {
+          type: 'simple',
+          left: {
+            type: 'column',
+            name: 'text',
+          },
+          op: '=',
+          right: {
+            type: 'literal',
+            value: 'foo',
+          },
+        },
+      },
+    },
+  },
+  related: [
+    {
+      system: 'client',
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueID'],
+      },
+      subquery: {
+        table: 'comments',
+        alias: 'comments',
+        orderBy: [
+          ['issueID', 'asc'],
+          ['id', 'asc'],
+        ],
+      },
+    },
+  ],
+};
+
+export const ISSUES_QUERY_WITH_NOT_EXISTS_AND_RELATED: AST = {
+  table: 'issues',
+  orderBy: [['id', 'asc']],
+  where: {
+    type: 'correlatedSubquery',
+    op: 'NOT EXISTS',
+    related: {
+      system: 'client',
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueID'],
+      },
+      subquery: {
+        table: 'comments',
+        alias: 'exists_comments',
+        orderBy: [
+          ['issueID', 'asc'],
+          ['id', 'asc'],
+        ],
+        where: {
+          type: 'simple',
+          left: {
+            type: 'column',
+            name: 'text',
+          },
+          op: '=',
+          right: {
+            type: 'literal',
+            value: 'bar',
+          },
+        },
+      },
+    },
+  },
+  related: [
+    {
+      system: 'client',
+      correlation: {
+        parentField: ['id'],
+        childField: ['issueID'],
+      },
+      subquery: {
+        table: 'comments',
+        alias: 'comments',
+        orderBy: [
+          ['issueID', 'asc'],
+          ['id', 'asc'],
+        ],
+      },
+    },
+  ],
+};
+
+export const ISSUES_QUERY2: AST = {
+  table: 'issues',
+  orderBy: [['id', 'asc']],
+};
+
+export const USERS_QUERY: AST = {
+  table: 'users',
   orderBy: [['id', 'asc']],
 };
 
@@ -156,6 +402,17 @@ export const permissions = await definePermissions<AuthData, typeof schema>(
   }),
 );
 
+export const permissionsAll = await definePermissions<AuthData, typeof schema>(
+  schema,
+  () => ({
+    issues: ANYONE_CAN_DO_ANYTHING,
+    comments: ANYONE_CAN_DO_ANYTHING,
+    issueLabels: ANYONE_CAN_DO_ANYTHING,
+    labels: ANYONE_CAN_DO_ANYTHING,
+    users: ANYONE_CAN_DO_ANYTHING,
+  }),
+);
+
 export async function nextPoke(
   client: Queue<Downstream>,
 ): Promise<Downstream[]> {
@@ -168,6 +425,21 @@ export async function nextPoke(
     }
   }
   return received;
+}
+
+export async function nextPokeParts(
+  client: Queue<Downstream>,
+): Promise<PokePartBody[]> {
+  const pokes = await nextPoke(client);
+  return pokes
+    .filter((msg: Downstream) => msg[0] === 'pokePart')
+    .map(([, body]) => body);
+}
+
+export async function expectNoPokes(client: Queue<Downstream>) {
+  // Use the dequeue() API that cancels the dequeue() request after a timeout.
+  const timedOut = 'nothing' as unknown as Downstream;
+  expect(await client.dequeue(timedOut, 10)).toBe(timedOut);
 }
 
 export async function setup(
@@ -355,10 +627,23 @@ export async function setup(
   };
 }
 
+export const messages = new ReplicationMessages({
+  issues: 'id',
+  users: 'id',
+  issueLabels: ['issueID', 'labelID'],
+  comments: 'id',
+});
 export const appMessages = new ReplicationMessages(
   {
     schemaVersions: 'lock',
     permissions: 'lock',
   },
   'this_app',
+);
+
+export const app2Messages = new ReplicationMessages(
+  {
+    clients: ['clientGroupID', 'clientID'],
+  },
+  'this_app_2',
 );
