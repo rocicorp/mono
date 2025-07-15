@@ -143,6 +143,7 @@ describe('CustomQueryTransformer', () => {
     // Verify the API was called correctly
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
       pullUrl,
+      [pullUrl],
       mockShard,
       headerOptions,
       undefined,
@@ -348,6 +349,7 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
       'https://api.example.com/pull',
+      ['https://api.example.com/pull'],
       mockShard,
       headerOptions,
       undefined,
@@ -359,6 +361,7 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
       pullUrl,
+      [pullUrl],
       mockShard,
       headerOptions,
       undefined,
@@ -401,6 +404,7 @@ describe('CustomQueryTransformer', () => {
 
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
       pullUrl,
+      [pullUrl],
       mockShard,
       headerOptions, // Cookies should not be forwarded
       undefined,
@@ -438,6 +442,7 @@ describe('CustomQueryTransformer', () => {
 
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
       pullUrl,
+      [pullUrl],
       mockShard,
       {...headerOptions, cookie: 'test-cookie'}, // Cookies should be forwarded
       undefined,

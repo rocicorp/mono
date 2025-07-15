@@ -6,7 +6,7 @@ import {
   type MockedFunction,
   test,
 } from 'vitest';
-import {fetchFromAPIServer} from './fetch.ts';
+import {fetchFromAPIServer, urlMatch} from './fetch.ts';
 import {ErrorForClient} from '../types/error-for-client.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import type {ShardID} from '../types/shards.ts';
@@ -44,6 +44,7 @@ describe('fetchFromAPIServer', () => {
 
     await fetchFromAPIServer(
       baseUrl,
+      [baseUrl],
       mockShard,
       headerOptions,
       queryParams,
@@ -71,6 +72,7 @@ describe('fetchFromAPIServer', () => {
 
     await fetchFromAPIServer(
       baseUrl,
+      [baseUrl],
       mockShard,
       {apiKey: 'my-key'},
       undefined,
@@ -93,6 +95,7 @@ describe('fetchFromAPIServer', () => {
 
     await fetchFromAPIServer(
       baseUrl,
+      [baseUrl],
       mockShard,
       {token: 'my-token'},
       undefined,
@@ -114,7 +117,14 @@ describe('fetchFromAPIServer', () => {
     const mockResponse = new Response('{}', {status: 200});
     mockFetch.mockResolvedValue(mockResponse);
 
-    await fetchFromAPIServer(baseUrl, mockShard, {}, undefined, body);
+    await fetchFromAPIServer(
+      baseUrl,
+      [baseUrl],
+      mockShard,
+      {},
+      undefined,
+      body,
+    );
 
     const callArgs = mockFetch.mock.calls[0];
     const headers = callArgs[1]?.headers as Record<string, string>;
@@ -128,7 +138,14 @@ describe('fetchFromAPIServer', () => {
     const mockResponse = new Response('{}', {status: 200});
     mockFetch.mockResolvedValue(mockResponse);
 
-    await fetchFromAPIServer(baseUrl, mockShard, {}, queryParams, body);
+    await fetchFromAPIServer(
+      baseUrl,
+      [baseUrl],
+      mockShard,
+      {},
+      queryParams,
+      body,
+    );
 
     const calledUrl = mockFetch.mock.calls[0][0] as string;
     const url = new URL(calledUrl);
@@ -141,7 +158,14 @@ describe('fetchFromAPIServer', () => {
     const mockResponse = new Response('{}', {status: 200});
     mockFetch.mockResolvedValue(mockResponse);
 
-    await fetchFromAPIServer(baseUrl, mockShard, {}, undefined, body);
+    await fetchFromAPIServer(
+      baseUrl,
+      [baseUrl],
+      mockShard,
+      {},
+      undefined,
+      body,
+    );
 
     const calledUrl = mockFetch.mock.calls[0][0] as string;
     const url = new URL(calledUrl);
@@ -155,7 +179,14 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValue(mockResponse);
     const urlWithParams = 'https://api.example.com/endpoint?existing=param';
 
-    await fetchFromAPIServer(urlWithParams, mockShard, {}, queryParams, body);
+    await fetchFromAPIServer(
+      urlWithParams,
+      [baseUrl],
+      mockShard,
+      {},
+      queryParams,
+      body,
+    );
 
     const calledUrl = mockFetch.mock.calls[0][0] as string;
     const url = new URL(calledUrl);
@@ -169,7 +200,14 @@ describe('fetchFromAPIServer', () => {
     const urlWithReserved = 'https://api.example.com/endpoint?schema=reserved';
 
     await expect(
-      fetchFromAPIServer(urlWithReserved, mockShard, {}, undefined, body),
+      fetchFromAPIServer(
+        urlWithReserved,
+        [baseUrl],
+        mockShard,
+        {},
+        undefined,
+        body,
+      ),
     ).rejects.toThrow(
       'The push URL cannot contain the reserved query param "schema"',
     );
@@ -179,7 +217,14 @@ describe('fetchFromAPIServer', () => {
     const urlWithReserved = 'https://api.example.com/endpoint?appID=reserved';
 
     await expect(
-      fetchFromAPIServer(urlWithReserved, mockShard, {}, undefined, body),
+      fetchFromAPIServer(
+        urlWithReserved,
+        [baseUrl],
+        mockShard,
+        {},
+        undefined,
+        body,
+      ),
     ).rejects.toThrow(
       'The push URL cannot contain the reserved query param "appID"',
     );
@@ -189,7 +234,14 @@ describe('fetchFromAPIServer', () => {
     const reservedQueryParams = {schema: 'reserved'};
 
     await expect(
-      fetchFromAPIServer(baseUrl, mockShard, {}, reservedQueryParams, body),
+      fetchFromAPIServer(
+        baseUrl,
+        [baseUrl],
+        mockShard,
+        {},
+        reservedQueryParams,
+        body,
+      ),
     ).rejects.toThrow(
       'The push URL cannot contain the reserved query param "schema"',
     );
@@ -199,7 +251,14 @@ describe('fetchFromAPIServer', () => {
     const reservedQueryParams = {appID: 'reserved'};
 
     await expect(
-      fetchFromAPIServer(baseUrl, mockShard, {}, reservedQueryParams, body),
+      fetchFromAPIServer(
+        baseUrl,
+        [baseUrl],
+        mockShard,
+        {},
+        reservedQueryParams,
+        body,
+      ),
     ).rejects.toThrow(
       'The push URL cannot contain the reserved query param "appID"',
     );
@@ -213,6 +272,7 @@ describe('fetchFromAPIServer', () => {
 
     const result = await fetchFromAPIServer(
       baseUrl,
+      [baseUrl],
       mockShard,
       {},
       undefined,
@@ -230,7 +290,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValueOnce(mockResponse1);
 
     await expect(
-      fetchFromAPIServer(baseUrl, mockShard, {}, undefined, body),
+      fetchFromAPIServer(baseUrl, [baseUrl], mockShard, {}, undefined, body),
     ).rejects.toThrow(ErrorForClient);
 
     // Second call - test the error details
@@ -238,7 +298,14 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValueOnce(mockResponse2);
 
     try {
-      await fetchFromAPIServer(baseUrl, mockShard, {}, undefined, body);
+      await fetchFromAPIServer(
+        baseUrl,
+        [baseUrl],
+        mockShard,
+        {},
+        undefined,
+        body,
+      );
     } catch (error) {
       expect(error).toBeInstanceOf(ErrorForClient);
       const errorForClient = error as ErrorForClient;
@@ -253,6 +320,7 @@ describe('fetchFromAPIServer', () => {
 
     const result = await fetchFromAPIServer(
       baseUrl,
+      [baseUrl],
       mockShard,
       {},
       undefined,
@@ -266,7 +334,14 @@ describe('fetchFromAPIServer', () => {
     const mockResponse = new Response('{}', {status: 200});
     mockFetch.mockResolvedValue(mockResponse);
 
-    await fetchFromAPIServer(baseUrl, mockShard, {}, undefined, body);
+    await fetchFromAPIServer(
+      baseUrl,
+      [baseUrl],
+      mockShard,
+      {},
+      undefined,
+      body,
+    );
 
     const calledUrl = mockFetch.mock.calls[0][0] as string;
     const url = new URL(calledUrl);
@@ -285,7 +360,14 @@ describe('fetchFromAPIServer', () => {
       },
     };
 
-    await fetchFromAPIServer(baseUrl, mockShard, {}, undefined, complexBody);
+    await fetchFromAPIServer(
+      baseUrl,
+      [baseUrl],
+      mockShard,
+      {},
+      undefined,
+      complexBody,
+    );
 
     expect(mockFetch).toHaveBeenCalledWith(
       expect.any(String),
@@ -293,5 +375,105 @@ describe('fetchFromAPIServer', () => {
         body: JSON.stringify(complexBody),
       }),
     );
+  });
+});
+
+describe('urlMatch', () => {
+  test('should return true for matching URLs', () => {
+    expect(
+      urlMatch('https://api.example.com/endpoint', [
+        'https://api.example.com/endpoint',
+      ]),
+    ).toBe(true);
+
+    expect(
+      urlMatch('https://api.example.com/endpoint', [
+        'https://*.example.com/endpoint',
+      ]),
+    ).toBe(true);
+
+    expect(
+      urlMatch('https://api.v1.example.com/endpoint', [
+        'https://*.*.example.com/endpoint',
+      ]),
+    ).toBe(true);
+
+    expect(
+      urlMatch('https://api.example.com/endpoint?existing=param', [
+        'https://api.example.com/endpoint',
+      ]),
+    ).toBe(true);
+
+    expect(
+      urlMatch('https://api.example.com/endpoint?existing=param', [
+        'https://api.example.com/endpoint?other=param',
+      ]),
+    ).toBe(true);
+  });
+
+  test('should return false for non-matching URLs', () => {
+    expect(
+      urlMatch('https://api.example.com/other-endpoint', [
+        'https://api.example.com/endpoint',
+      ]),
+    ).toBe(false);
+
+    expect(
+      urlMatch('https://another-domain.com/endpoint', [
+        'https://api.example.com/endpoint',
+      ]),
+    ).toBe(false);
+
+    // Wildcard with no subdomain
+    expect(
+      urlMatch('https://example.com/endpoint', [
+        'https://*.example.com/endpoint',
+      ]),
+    ).toBe(false);
+
+    // Wildcard with trailing path
+    expect(
+      urlMatch('https://api.example.com/endpoint/path', [
+        'https://*.example.com/endpoint',
+      ]),
+    ).toBe(false);
+
+    // Wrong number of subdomains for wildcard
+    expect(
+      urlMatch('https://api.example.com/endpoint', [
+        'https://*.*.example.com/endpoint',
+      ]),
+    ).toBe(false);
+
+    // wildcards can only match subdomains, not paths or anything else
+    expect(
+      urlMatch('https://api.example.com/endpoint', [
+        'https://*example.com/endpoint',
+      ]),
+    ).toBe(false);
+    expect(
+      urlMatch('https://example.com/endpoint', [
+        'https://*example.com/endpoint',
+      ]),
+    ).toBe(false);
+    expect(
+      urlMatch('https://apiexample.com/endpoint', [
+        'https://*example.com/endpoint',
+      ]),
+    ).toBe(false);
+    expect(() =>
+      urlMatch('https://*example.com/endpoint', [
+        'https://*example.com/endpoint',
+      ]),
+    ).toThrow();
+    expect(
+      urlMatch('https://api.example.com/endpoint', [
+        'https://api.example.com/*',
+      ]),
+    ).toBe(false);
+  });
+
+  test('should handle empty allowed URLs array', () => {
+    expect(urlMatch('https://api.example.com/endpoint', [])).toBe(false);
   });
 });

@@ -363,6 +363,7 @@ class PushWorker {
     try {
       const response = await fetchFromAPIServer(
         must(this.#pushURLs[0], 'ZERO_MUTATE_URL is not set'),
+        this.#pushURLs,
         {
           appID: this.#config.app.id,
           shardNum: this.#config.shard.num,

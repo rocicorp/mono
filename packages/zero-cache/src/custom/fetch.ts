@@ -13,11 +13,17 @@ export type HeaderOptions = {
 
 export async function fetchFromAPIServer(
   url: string,
+  allowedUrls: string[],
   shard: ShardID,
   headerOptions: HeaderOptions,
   queryParams: Record<string, string> | undefined,
   body: ReadonlyJSONValue,
 ) {
+  if (!urlMatch(url, allowedUrls)) {
+    throw new Error(
+      `URL "${url}" is not allowed by the ZERO_MUTATE/QUERY_URL configuration`,
+    );
+  }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -75,4 +81,65 @@ export async function fetchFromAPIServer(
   }
 
   return response;
+}
+
+/**
+ * Returns true if:
+ * 1. the url is an exact match with one of the allowedUrls
+ * 2. an "allowedUrl" has a wildcard for a subdomain, e.g. "https://*.example.com" and the url matches that pattern
+ *
+ * Valid wildcard patterns:
+ * - "https://*.example.com" matches "https://api.example.com" and "https://www.example.com"
+ * - "https://*.example.com" does not match "https://example.com" (no subdomain)
+ * - "https://*.example.com" does not match "https://api.example.com/path" (no trailing path)
+ * - "https://*.*.example.com" matches "https://api.v1.example.com" and "https://www.v2.example.com"
+ * - "https://*.*.example.com" does not match "https://api.example.com" (only one subdomain)
+ */
+export function urlMatch(url: string, allowedUrls: string[]): boolean {
+  assert(
+    url.includes('*') === false,
+    'Client provided URLs may not include `*`',
+  );
+  // ignore query parameters in the URL
+  url = url.split('?')[0];
+
+  for (let allowedUrl of allowedUrls) {
+    // ignore query parameters in the allowed URL
+    allowedUrl = allowedUrl.split('?')[0];
+    if (url === allowedUrl) {
+      return true; // exact match
+    }
+
+    const parts = allowedUrl.split('*');
+
+    if (parts.length === 1) {
+      continue; // no wildcard, already checked above
+    }
+
+    let currentStr = url;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (!currentStr.startsWith(part)) {
+        break;
+      }
+
+      currentStr = currentStr.slice(part.length);
+      if (currentStr === '' && i < parts.length - 1) {
+        // if we reach the end of the string but still have more parts to match, it's not a match
+        break;
+      } else if (currentStr === '' && i === parts.length - 1) {
+        // if we reach the end of the string and this is the last part, it's a match
+        return true;
+      }
+
+      // consume the rest of the string up to a .
+      const nextDotIndex = currentStr.indexOf('.');
+      if (nextDotIndex === -1) {
+        // no dot? then the wildcard rules don't apply, so we can stop checking
+        break;
+      }
+      currentStr = currentStr.slice(nextDotIndex);
+    }
+  }
+  return false;
 }
