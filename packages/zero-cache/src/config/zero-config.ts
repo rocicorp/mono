@@ -159,10 +159,15 @@ const makeMutatorQueryOptions = (
   suffix: string,
 ) => ({
   url: {
-    type: v.string().optional(), // optional until we remove CRUD mutations
+    type: v.array(v.string()).optional(), // optional until we remove CRUD mutations
     desc: [
       replacement ? `DEPRECATED. Use ${replacement} instead.` : ``,
       `The URL of the API server to which zero-cache will ${suffix}.`,
+      ``,
+      `* is allowed if you would like to allow the client to specify a subdomain to use.`,
+      `e.g., *.example.com/api/mutate`,
+      `You can specify multiple URLs as well which the client can choose from.`,
+      `e.g., ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]`,
     ],
   },
   apiKey: {

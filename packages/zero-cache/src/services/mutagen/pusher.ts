@@ -64,14 +64,14 @@ export class PusherService implements Service, Pusher {
   readonly id: string;
   readonly #pusher: PushWorker;
   readonly #queue: Queue<PusherEntryOrStop>;
-  readonly #pushConfig: ZeroConfig['push'] & {url: string};
+  readonly #pushConfig: ZeroConfig['push'] & {url: string[]};
   #stopped: Promise<void> | undefined;
   #refCount = 0;
   #isStopped = false;
 
   constructor(
     appConfig: Config,
-    pushConfig: ZeroConfig['push'] & {url: string},
+    pushConfig: ZeroConfig['push'] & {url: string[]},
     lc: LogContext,
     clientGroupID: string,
   ) {
@@ -88,7 +88,7 @@ export class PusherService implements Service, Pusher {
   }
 
   get pushURL(): string | undefined {
-    return this.#pusher.pushURL;
+    return this.#pusher.pushURL[0];
   }
 
   initConnection(
@@ -160,7 +160,7 @@ type PusherEntryOrStop = PusherEntry | 'stop';
  * to the user's API server.
  */
 class PushWorker {
-  readonly #pushURL: string;
+  readonly #pushURLs: string[];
   readonly #apiKey: string | undefined;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
@@ -177,11 +177,11 @@ class PushWorker {
   constructor(
     config: Config,
     lc: LogContext,
-    pushURL: string,
+    pushURL: string[],
     apiKey: string | undefined,
     queue: Queue<PusherEntryOrStop>,
   ) {
-    this.#pushURL = pushURL;
+    this.#pushURLs = pushURL;
     this.#apiKey = apiKey;
     this.#queue = queue;
     this.#lc = lc.withContext('component', 'pusher');
@@ -190,7 +190,7 @@ class PushWorker {
   }
 
   get pushURL() {
-    return this.#pushURL;
+    return this.#pushURLs;
   }
 
   /**
@@ -362,7 +362,7 @@ class PushWorker {
 
     try {
       const response = await fetchFromAPIServer(
-        this.#pushURL,
+        must(this.#pushURLs[0], 'ZERO_MUTATE_URL is not set'),
         {
           appID: this.#config.app.id,
           shardNum: this.#config.shard.num,
