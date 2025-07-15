@@ -2367,8 +2367,6 @@ describe('view-syncer/service', () => {
       },
     ]);
 
-    await sleep(5);
-
     let err;
     try {
       // Depending on the ordering of events, the error can happen on
