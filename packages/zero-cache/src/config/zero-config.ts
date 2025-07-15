@@ -561,12 +561,12 @@ export const zeroOptions = {
 
   targetClientRowCount: {
     type: v.number().default(20_000),
-
     deprecated: [
       'This option is no longer used and will be removed in a future version.',
       'The client-side cache no longer enforces a row limit. Instead, TTL-based expiration',
       'automatically manages cache size to prevent unbounded growth.',
     ],
+    hidden: true,
   },
 
   lazyStartup: {

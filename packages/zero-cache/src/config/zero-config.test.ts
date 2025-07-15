@@ -357,9 +357,6 @@ test('zero-cache --help', () => {
                                                                  workers may improve initial sync speed; however, note that local disk throughput                  
                                                                  (i.e. IOPS), upstream CPU, and network bandwidth may also be bottlenecks.                         
                                                                                                                                                                    
-     --target-client-row-count number                            default: 20000                                                                                    
-       ZERO_TARGET_CLIENT_ROW_COUNT env                                                                                                                            
-                                                                                                                                                                   
      --lazy-startup boolean                                      default: false                                                                                    
        ZERO_LAZY_STARTUP env                                                                                                                                       
                                                                  Delay starting the majority of zero-cache until first request.                                    
