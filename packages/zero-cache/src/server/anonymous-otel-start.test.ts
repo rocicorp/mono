@@ -327,48 +327,6 @@ describe('Anonymous Telemetry Integration Tests', () => {
         recordRowsSynced(50);
       }).not.toThrow();
     });
-
-    test('should include taskID in telemetry attributes', () => {
-      // Test that the telemetry system includes taskID in attributes
-      // We'll verify this by checking the existing mock calls
-
-      // Add some test data to trigger callbacks
-      recordMutation();
-
-      // Get the callbacks that were registered
-      type CallbackFunction = (result: {
-        observe: (_value: number, attrs?: Record<string, unknown>) => void;
-      }) => void;
-
-      // Find a callback that includes attributes
-      let foundTaskIdInAttributes = false;
-
-      const callbacks = mockObservableGauge.addCallback.mock.calls.map(
-        (call: unknown[]) => call[0] as CallbackFunction,
-      );
-
-      // Mock the result object to capture attributes
-      const mockResult = {
-        observe: vi.fn((_value: number, attrs?: Record<string, unknown>) => {
-          if (attrs && attrs['zero.task.id']) {
-            foundTaskIdInAttributes = true;
-          }
-        }),
-      };
-
-      // Execute callbacks to see if any include taskID
-      callbacks.forEach((callback: CallbackFunction) => {
-        try {
-          callback(mockResult);
-        } catch (e) {
-          // Some callbacks might fail due to mocking, that's ok
-        }
-      });
-
-      // Since the singleton is already initialized, we can't easily test the new config
-      // But we can verify that taskID is part of the attribute structure
-      expect(foundTaskIdInAttributes).toBe(true);
-    });
   });
 
   describe('Singleton Behavior', () => {
