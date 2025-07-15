@@ -296,7 +296,7 @@ describe('pusher service', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         forwardCookies: false,
       },
       lc,
@@ -319,7 +319,7 @@ describe('pusher service', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -352,7 +352,7 @@ describe('pusher service', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -383,7 +383,7 @@ describe('pusher service', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -433,7 +433,7 @@ describe('pusher service', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -459,7 +459,7 @@ describe('pusher service', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: true,
       },
@@ -485,7 +485,7 @@ describe('initConnection', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -502,7 +502,7 @@ describe('initConnection', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -520,7 +520,7 @@ describe('initConnection', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -547,7 +547,7 @@ describe('initConnection', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -594,7 +594,7 @@ describe('pusher streaming', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -631,7 +631,7 @@ describe('pusher streaming', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -715,7 +715,7 @@ describe('pusher streaming', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -775,7 +775,7 @@ describe('pusher streaming', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -809,7 +809,7 @@ describe('pusher streaming', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -834,7 +834,7 @@ describe('pusher streaming', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -877,7 +877,7 @@ describe('pusher streaming', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -936,7 +936,7 @@ describe('pusher streaming', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },
@@ -965,7 +965,7 @@ describe('pusher streaming', () => {
     const pusher = new PusherService(
       config,
       {
-        url: 'http://example.com',
+        url: ['http://example.com'],
         apiKey: 'api-key',
         forwardCookies: false,
       },

@@ -42,10 +42,15 @@ test('zero-cache --help', () => {
                                                                  Note that this number must allow for at least one connection per                                  
                                                                  sync worker, or zero-cache will fail to start. See num-sync-workers                               
                                                                                                                                                                    
-     --push-url string                                           optional                                                                                          
+     --push-url string[]                                         optional                                                                                          
        ZERO_PUSH_URL env                                                                                                                                           
                                                                  DEPRECATED. Use query_url instead.                                                                
                                                                  The URL of the API server to which zero-cache will push mutations.                                
+                                                                                                                                                                   
+                                                                 * is allowed if you would like to allow the client to specify a subdomain to use.                 
+                                                                 e.g., *.example.com/api/mutate                                                                    
+                                                                 You can specify multiple URLs as well which the client can choose from.                           
+                                                                 e.g., ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                      
                                                                                                                                                                    
      --push-api-key string                                       optional                                                                                          
        ZERO_PUSH_API_KEY env                                                                                                                                       
@@ -57,10 +62,15 @@ test('zero-cache --help', () => {
                                                                  This is useful for passing authentication cookies to the API server.                              
                                                                  If false, cookies are not forwarded.                                                              
                                                                                                                                                                    
-     --mutate-url string                                         optional                                                                                          
+     --mutate-url string[]                                       optional                                                                                          
        ZERO_MUTATE_URL env                                                                                                                                         
                                                                                                                                                                    
                                                                  The URL of the API server to which zero-cache will push mutations.                                
+                                                                                                                                                                   
+                                                                 * is allowed if you would like to allow the client to specify a subdomain to use.                 
+                                                                 e.g., *.example.com/api/mutate                                                                    
+                                                                 You can specify multiple URLs as well which the client can choose from.                           
+                                                                 e.g., ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                      
                                                                                                                                                                    
      --mutate-api-key string                                     optional                                                                                          
        ZERO_MUTATE_API_KEY env                                                                                                                                     
@@ -72,10 +82,15 @@ test('zero-cache --help', () => {
                                                                  This is useful for passing authentication cookies to the API server.                              
                                                                  If false, cookies are not forwarded.                                                              
                                                                                                                                                                    
-     --query-url string                                          optional                                                                                          
+     --query-url string[]                                        optional                                                                                          
        ZERO_QUERY_URL env                                                                                                                                          
                                                                                                                                                                    
                                                                  The URL of the API server to which zero-cache will send named queries.                            
+                                                                                                                                                                   
+                                                                 * is allowed if you would like to allow the client to specify a subdomain to use.                 
+                                                                 e.g., *.example.com/api/mutate                                                                    
+                                                                 You can specify multiple URLs as well which the client can choose from.                           
+                                                                 e.g., ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                      
                                                                                                                                                                    
      --query-api-key string                                      optional                                                                                          
        ZERO_QUERY_API_KEY env                                                                                                                                      

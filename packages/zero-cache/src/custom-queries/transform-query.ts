@@ -11,6 +11,7 @@ import type {ShardID} from '../types/shards.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import {TimedCache} from '../../../shared/src/cache.ts';
+import {must} from '../../../shared/src/must.ts';
 
 type HttpError = {
   error: 'http';
@@ -36,13 +37,13 @@ export class CustomQueryTransformer {
   readonly #shard: ShardID;
   readonly #cache: TimedCache<TransformedAndHashed>;
   readonly #config: {
-    url: string;
+    url: string[];
     forwardCookies: boolean;
   };
 
   constructor(
     config: {
-      url: string;
+      url: string[];
       forwardCookies: boolean;
     },
     shard: ShardID,
@@ -86,7 +87,10 @@ export class CustomQueryTransformer {
     }
 
     const response = await fetchFromAPIServer(
-      this.#config.url,
+      must(
+        this.#config.url[0],
+        'A ZERO_QUERY_URL must be configured for custom queries',
+      ),
       this.#shard,
       headerOptions,
       undefined,

@@ -100,7 +100,7 @@ describe('cleanup', () => {
         const ret = new PusherService(
           {} as ZeroConfig,
           {
-            url: 'http://example.com',
+            url: ['http://example.com'],
             forwardCookies: false,
           },
           lc,
@@ -245,7 +245,7 @@ describe('connection telemetry', () => {
         const ret = new PusherService(
           {} as ZeroConfig,
           {
-            url: 'http://example.com',
+            url: ['http://example.com'],
             forwardCookies: false,
           },
           lc,

@@ -111,7 +111,7 @@ const ON_FAILURE = (e: unknown) => {
 };
 
 const queryConfig: ZeroConfig['query'] = {
-  url: 'http://my-pull-endpoint.dev/api/zero/pull',
+  url: ['http://my-pull-endpoint.dev/api/zero/pull'],
   forwardCookies: true,
 };
 

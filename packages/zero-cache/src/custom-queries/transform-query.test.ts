@@ -133,7 +133,7 @@ describe('CustomQueryTransformer', () => {
 
     const transformer = new CustomQueryTransformer(
       {
-        url: pullUrl,
+        url: [pullUrl],
         forwardCookies: false,
       },
       mockShard,
@@ -180,7 +180,7 @@ describe('CustomQueryTransformer', () => {
 
     const transformer = new CustomQueryTransformer(
       {
-        url: pullUrl,
+        url: [pullUrl],
         forwardCookies: false,
       },
       mockShard,
@@ -210,7 +210,7 @@ describe('CustomQueryTransformer', () => {
 
     const transformer = new CustomQueryTransformer(
       {
-        url: pullUrl,
+        url: [pullUrl],
         forwardCookies: false,
       },
       mockShard,
@@ -234,7 +234,7 @@ describe('CustomQueryTransformer', () => {
 
     const transformer = new CustomQueryTransformer(
       {
-        url: pullUrl,
+        url: [pullUrl],
         forwardCookies: false,
       },
       mockShard,
@@ -259,7 +259,7 @@ describe('CustomQueryTransformer', () => {
 
     const transformer = new CustomQueryTransformer(
       {
-        url: pullUrl,
+        url: [pullUrl],
         forwardCookies: false,
       },
       mockShard,
@@ -290,7 +290,7 @@ describe('CustomQueryTransformer', () => {
 
     const transformer = new CustomQueryTransformer(
       {
-        url: pullUrl,
+        url: [pullUrl],
         forwardCookies: false,
       },
       mockShard,
@@ -337,7 +337,7 @@ describe('CustomQueryTransformer', () => {
 
     const transformer = new CustomQueryTransformer(
       {
-        url: pullUrl,
+        url: [pullUrl],
         forwardCookies: false,
       },
       mockShard,
@@ -387,7 +387,7 @@ describe('CustomQueryTransformer', () => {
 
     const transformer = new CustomQueryTransformer(
       {
-        url: pullUrl,
+        url: [pullUrl],
         forwardCookies: false,
       },
       mockShard,
@@ -424,7 +424,7 @@ describe('CustomQueryTransformer', () => {
 
     const transformer = new CustomQueryTransformer(
       {
-        url: pullUrl,
+        url: [pullUrl],
         forwardCookies: true,
       },
       mockShard,
@@ -468,7 +468,7 @@ describe('CustomQueryTransformer', () => {
 
     const transformer = new CustomQueryTransformer(
       {
-        url: pullUrl,
+        url: [pullUrl],
         forwardCookies: false,
       },
       mockShard,
@@ -508,7 +508,7 @@ describe('CustomQueryTransformer', () => {
 
     const transformer = new CustomQueryTransformer(
       {
-        url: pullUrl,
+        url: [pullUrl],
         forwardCookies: false,
       },
       mockShard,
