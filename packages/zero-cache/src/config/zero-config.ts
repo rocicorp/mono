@@ -561,13 +561,12 @@ export const zeroOptions = {
 
   targetClientRowCount: {
     type: v.number().default(20_000),
-    desc: [
-      'The target number of rows to keep per client in the client side cache.',
-      'This limit is a soft limit. When the number of rows in the cache exceeds',
-      'this limit, zero-cache will evict inactive queries in order of ttl-based expiration.',
-      'Active queries, on the other hand, are never evicted and are allowed to use more',
-      'rows than the limit.',
+    deprecated: [
+      'This option is no longer used and will be removed in a future version.',
+      'The client-side cache no longer enforces a row limit. Instead, TTL-based expiration',
+      'automatically manages cache size to prevent unbounded growth.',
     ],
+    hidden: true,
   },
 
   lazyStartup: {
