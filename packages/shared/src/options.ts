@@ -43,7 +43,10 @@ export type WrappedOptionType = {
   /** One-character alias for getopt-style short flags, e.g. -m */
   alias?: string;
 
-  /** Exclude this flag from --help text. Used for internal flags. */
+  /**
+   * Exclude this flag from --help text. Used for internal flags.
+   * Deprecated options are hidden by default.
+   */
   hidden?: boolean;
 };
 
@@ -413,7 +416,7 @@ export function parseOptionsAdvanced<T extends Options>(
       group,
       description: spec.join('\n') + '\n',
       typeLabel: typeLabel.join('\n') + '\n',
-      hidden,
+      hidden: hidden === undefined ? deprecated !== undefined : hidden,
     };
     optsWithoutDefaults.push(opt);
     optsWithDefaults.push({...opt, defaultValue});
