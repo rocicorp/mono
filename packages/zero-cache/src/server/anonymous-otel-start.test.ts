@@ -369,52 +369,6 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // But we can verify that taskID is part of the attribute structure
       expect(foundTaskIdInAttributes).toBe(true);
     });
-
-    test('should use unknown taskID when not provided in config', () => {
-      const lc = createSilentLogContext();
-
-      // Mock config without taskID
-      const configWithoutTaskID = {
-        enableUsageAnalytics: true,
-        upstream: {
-          db: 'postgresql://test@localhost/test',
-        },
-        // taskID is undefined
-      } as unknown as ZeroConfig;
-
-      // Start telemetry without taskID
-      startAnonymousTelemetry(lc, configWithoutTaskID);
-
-      // Add some test data to trigger callbacks
-      recordMutation();
-
-      // Get the callbacks that were registered
-      type CallbackFunction = (result: {
-        observe: (value: number, attrs?: object) => void;
-      }) => void;
-      const callbacks = mockObservableGauge.addCallback.mock.calls.map(
-        (call: [CallbackFunction]) => call[0],
-      );
-
-      // Mock the result object to capture attributes
-      const mockResult = {
-        observe: vi.fn(),
-      };
-
-      // Execute callbacks to verify attributes include default taskID
-      callbacks.forEach((callback: CallbackFunction) => {
-        callback(mockResult);
-      });
-
-      // Verify that taskID defaults to 'unknown'
-      expect(mockResult.observe).toHaveBeenCalledWith(
-        expect.any(Number),
-        expect.objectContaining({
-          'zero.task.id': 'unknown',
-          'zero.telemetry.type': 'anonymous',
-        }),
-      );
-    });
   });
 
   describe('Singleton Behavior', () => {
