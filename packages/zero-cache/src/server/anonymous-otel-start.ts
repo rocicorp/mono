@@ -24,17 +24,9 @@ class AnonymousTelemetryManager {
   #totalRowsSynced = 0;
   #totalConnectionsSuccess = 0;
   #totalConnectionsAttempted = 0;
-  #connectedClientGroups = new Set<string>();
-  #activeQueries = new Map<string, Set<string>>();
   #lc: LogContext | undefined;
   #config: ZeroConfig | undefined;
-  #workerId = 'unknown';
-  #sessionId: string;
   #cachedAttributes: Record<string, string> | undefined;
-
-  private constructor() {
-    this.#sessionId = randomUUID();
-  }
 
   static getInstance(): AnonymousTelemetryManager {
     if (!AnonymousTelemetryManager.#instance) {
@@ -43,12 +35,11 @@ class AnonymousTelemetryManager {
     return AnonymousTelemetryManager.#instance;
   }
 
-  start(lc?: LogContext, config?: ZeroConfig, workerId?: string) {
+  start(lc?: LogContext, config?: ZeroConfig) {
     if (!config) {
       try {
         config = getZeroConfig();
       } catch (e) {
-        // Gracefully handle cases where config cannot be parsed (e.g., in test environments)
         this.#lc?.debug?.(
           'Anonymous telemetry disabled: unable to parse config',
           e,
@@ -57,7 +48,6 @@ class AnonymousTelemetryManager {
       }
     }
 
-    // Check for DO_NOT_TRACK environment variable
     if (process.env.DO_NOT_TRACK) {
       this.#lc?.debug?.(
         'Anonymous telemetry disabled: DO_NOT_TRACK environment variable is set',
@@ -70,8 +60,6 @@ class AnonymousTelemetryManager {
     }
     this.#lc = lc;
     this.#config = config;
-    this.#workerId = workerId || 'unknown';
-    // Clear cached attributes when config/workerId changes
     this.#cachedAttributes = undefined;
 
     const resource = resourceFromAttributes(this.#getAttributes());
@@ -99,22 +87,6 @@ class AnonymousTelemetryManager {
       description: 'System uptime in seconds',
       unit: 'seconds',
     });
-    const clientGroupsGauge = this.#meter.createObservableGauge(
-      'zero.client_groups',
-      {
-        description: 'Number of connected client groups',
-      },
-    );
-    const activeQueriesGauge = this.#meter.createObservableGauge(
-      'zero.active_queries',
-      {
-        description: 'Total number of active queries across all client groups',
-      },
-    );
-    const activeQueriesPerClientGroupGauge = this.#meter.createObservableGauge(
-      'zero.active_queries_per_client_group',
-      {description: 'Number of active queries per client group'},
-    );
 
     // Observable counters
     const uptimeCounter = this.#meter.createObservableCounter(
@@ -164,28 +136,6 @@ class AnonymousTelemetryManager {
       result.observe(uptimeSeconds, attrs);
       this.#lc?.debug?.(`Telemetry: uptime_counter=${uptimeSeconds}s`);
     });
-    clientGroupsGauge.addCallback((result: ObservableResult) => {
-      result.observe(this.#connectedClientGroups.size, attrs);
-      this.#lc?.debug?.(
-        `Telemetry: client_groups=${this.#connectedClientGroups.size}`,
-      );
-    });
-    activeQueriesGauge.addCallback((result: ObservableResult) => {
-      const totalQueries = Array.from(this.#activeQueries.values()).reduce(
-        (sum, queries) => sum + queries.size,
-        0,
-      );
-      result.observe(totalQueries, attrs);
-      this.#lc?.debug?.(`Telemetry: active_queries=${totalQueries}`);
-    });
-    activeQueriesPerClientGroupGauge.addCallback((result: ObservableResult) => {
-      for (const [clientGroupID, queries] of this.#activeQueries) {
-        result.observe(queries.size, {
-          ...attrs,
-          'zero.client_group.id': clientGroupID,
-        });
-      }
-    });
     mutationsCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalMutations, attrs);
       this.#lc?.debug?.(
@@ -226,32 +176,6 @@ class AnonymousTelemetryManager {
     this.#totalConnectionsAttempted++;
   }
 
-  addActiveQuery(clientGroupID: string, queryID: string) {
-    if (!this.#activeQueries.has(clientGroupID)) {
-      this.#activeQueries.set(clientGroupID, new Set());
-    }
-    this.#activeQueries.get(clientGroupID)!.add(queryID);
-  }
-
-  removeActiveQuery(clientGroupID: string, queryID: string) {
-    const queries = this.#activeQueries.get(clientGroupID);
-    if (queries) {
-      queries.delete(queryID);
-      if (queries.size === 0) {
-        this.#activeQueries.delete(clientGroupID);
-      }
-    }
-  }
-
-  addClientGroup(clientGroupID: string) {
-    this.#connectedClientGroups.add(clientGroupID);
-  }
-
-  removeClientGroup(clientGroupID: string) {
-    this.#connectedClientGroups.delete(clientGroupID);
-    this.#activeQueries.delete(clientGroupID);
-  }
-
   shutdown() {
     if (this.#meterProvider) {
       this.#lc?.info?.('Shutting down anonymous telemetry');
@@ -268,9 +192,7 @@ class AnonymousTelemetryManager {
         'zero.infra.platform': this.#getPlatform(),
         'zero.version': this.#config?.serverVersion ?? packageJson.version,
         'zero.task.id': this.#config?.taskID || 'unknown',
-        'zero.worker.id': this.#workerId,
         'zero.project.id': this.#getGitProjectId(),
-        'zero.session.id': this.#sessionId,
         'zero.fs.id': this.#getOrSetFsID(),
       };
       this.#lc?.debug?.(
@@ -340,19 +262,15 @@ class AnonymousTelemetryManager {
       const fsidPath = join(homedir(), '.rocicorp', 'fsid');
       const fsidDir = dirname(fsidPath);
 
-      // Check if the file exists
       if (existsSync(fsidPath)) {
-        // Read and return the existing GUID
         const existingId = readFileSync(fsidPath, 'utf8').trim();
         return existingId;
       }
 
-      // File doesn't exist, create directory if needed
       if (!existsSync(fsidDir)) {
         mkdirSync(fsidDir, {recursive: true});
       }
 
-      // Generate a new random GUID and write it to the file
       const newId = randomUUID();
       writeFileSync(fsidPath, newId, 'utf8');
       return newId;
@@ -365,11 +283,8 @@ class AnonymousTelemetryManager {
 
 const manager = () => AnonymousTelemetryManager.getInstance();
 
-export const startAnonymousTelemetry = (
-  lc?: LogContext,
-  config?: ZeroConfig,
-  workerId?: string,
-) => manager().start(lc, config, workerId);
+export const startAnonymousTelemetry = (lc?: LogContext, config?: ZeroConfig) =>
+  manager().start(lc, config);
 export const recordMutation = (count = 1) => manager().recordMutation(count);
 export const recordRowsSynced = (count: number) =>
   manager().recordRowsSynced(count);
@@ -377,12 +292,4 @@ export const recordConnectionSuccess = () =>
   manager().recordConnectionSuccess();
 export const recordConnectionAttempted = () =>
   manager().recordConnectionAttempted();
-export const addActiveQuery = (clientGroupID: string, queryID: string) =>
-  manager().addActiveQuery(clientGroupID, queryID);
-export const removeActiveQuery = (clientGroupID: string, queryID: string) =>
-  manager().removeActiveQuery(clientGroupID, queryID);
-export const addClientGroup = (clientGroupID: string) =>
-  manager().addClientGroup(clientGroupID);
-export const removeClientGroup = (clientGroupID: string) =>
-  manager().removeClientGroup(clientGroupID);
 export const shutdownAnonymousTelemetry = () => manager().shutdown();

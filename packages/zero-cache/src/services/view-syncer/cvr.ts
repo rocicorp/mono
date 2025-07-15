@@ -42,10 +42,6 @@ import {
   type RowID,
   type RowRecord,
 } from './schema/types.ts';
-import {
-  addActiveQuery,
-  removeActiveQuery,
-} from '../../server/anonymous-otel-start.ts';
 
 export type RowUpdate = {
   version?: string; // Undefined for an unref.
@@ -327,8 +323,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         inactivatedAt,
         normalizeTTL(ttl),
       );
-      // Record telemetry for active query
-      addActiveQuery(this._cvr.id, id);
     }
     return patches;
   }
@@ -415,8 +409,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         toVersion: newVersion,
         patch: {type: 'query', op: 'del', id, clientID},
       });
-      // Record telemetry for removed active query
-      removeActiveQuery(this._cvr.id, id);
     }
     return patches;
   }

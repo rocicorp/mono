@@ -46,11 +46,8 @@ export default function runWorker(
 
   const lc = createLogContext(config, {worker: 'syncer'});
 
-  // Use process PID as worker identifier since worker index isn't in args
-  const workerId = `syncer-${pid}`;
-
-  // Start telemetry in all workers with worker dimension
-  startAnonymousTelemetry(lc, config, workerId);
+  // Start telemetry in all workers
+  startAnonymousTelemetry(lc, config);
 
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
