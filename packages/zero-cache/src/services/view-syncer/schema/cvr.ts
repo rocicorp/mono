@@ -11,6 +11,7 @@ import {stringCompare} from '../../../../../shared/src/string-compare.ts';
 import type {ClientSchema} from '../../../../../zero-protocol/src/client-schema.ts';
 import {normalizedKeyOrder, type RowKey} from '../../../types/row-key.ts';
 import {cvrSchema, type ShardID} from '../../../types/shards.ts';
+import type {TTLClock} from '../ttl-clock.ts';
 import {
   type RowID,
   type RowRecord,
@@ -31,7 +32,7 @@ export type InstancesRow = {
   clientGroupID: string;
   version: string;
   lastActive: number;
-  ttlClock: number;
+  ttlClock: TTLClock;
   replicaVersion: string | null;
   owner: string | null;
   grantedAt: number | null;
@@ -141,7 +142,7 @@ export type DesiresRow = {
   patchVersion: string;
   deleted: boolean | null;
   ttl: number | null;
-  inactivatedAt: number | null;
+  inactivatedAt: TTLClock | null;
 };
 
 function createDesiresTable(shard: ShardID) {

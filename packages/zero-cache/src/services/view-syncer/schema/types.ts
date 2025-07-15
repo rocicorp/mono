@@ -1,8 +1,9 @@
+import {jsonValueSchema} from '../../../../../shared/src/bigint-json.ts';
 import {jsonSchema} from '../../../../../shared/src/json-schema.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../../zero-protocol/src/ast.ts';
-import {jsonValueSchema} from '../../../../../shared/src/bigint-json.ts';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
+import {ttlClockSchema} from '../ttl-clock.ts';
 import type {QueriesRow} from './cvr.ts';
 
 export const cvrVersionSchema = v.object({
@@ -173,7 +174,7 @@ const clientStateSchema = v.object({
    *
    * Desired queries are always active and have an undefined inactivatedAt.
    */
-  inactivatedAt: v.number().optional(),
+  inactivatedAt: ttlClockSchema.optional(),
 
   /**
    * TTL, time to live in milliseconds. If the query is not updated within this

@@ -49,6 +49,7 @@ import {
   versionFromString,
   versionString,
 } from './schema/types.ts';
+import {type TTLClock, ttlClockFromNumber} from './ttl-clock.ts';
 
 export type CVRFlushStats = {
   instances: number;
@@ -202,7 +203,7 @@ export class CVRStore {
       id,
       version: EMPTY_CVR_VERSION,
       lastActive: 0,
-      ttlClock: 0,
+      ttlClock: ttlClockFromNumber(0),
       replicaVersion: null,
       clients: {},
       queries: {},
@@ -248,7 +249,7 @@ export class CVRStore {
       this.putInstance({
         version: cvr.version,
         lastActive: 0,
-        ttlClock: 0,
+        ttlClock: ttlClockFromNumber(0),
         replicaVersion: null,
         clientSchema: null,
       });
@@ -386,7 +387,7 @@ export class CVRStore {
   /**
    * Updates the `ttlClock` of the CVR instance.
    */
-  async updateTTLClock(ttlClock: number, lastActive: number): Promise<void> {
+  async updateTTLClock(ttlClock: TTLClock, lastActive: number): Promise<void> {
     await this.#db`UPDATE ${this.#cvr('instances')}
           SET "lastActive" = ${lastActive},
               "ttlClock" = ${ttlClock}
@@ -399,7 +400,7 @@ export class CVRStore {
    *          CVR has never been initialized for this client group, it returns
    *          `undefined`.
    */
-  async getTTLClock(): Promise<number | undefined> {
+  async getTTLClock(): Promise<TTLClock | undefined> {
     const result = await this.#db<Pick<InstancesRow, 'ttlClock'>[]>`
       SELECT "ttlClock" FROM ${this.#cvr('instances')}
       WHERE "clientGroupID" = ${this.#id}`.values();
@@ -569,7 +570,7 @@ export class CVRStore {
     query: {id: string},
     client: {id: string},
     deleted: boolean,
-    inactivatedAt: number | undefined,
+    inactivatedAt: TTLClock | undefined,
     ttl: number,
   ): void {
     const change: DesiresRow = {
