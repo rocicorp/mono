@@ -1,37 +1,33 @@
-import {escapeLike, namedQuery, type Row} from '@rocicorp/zero';
+import {escapeLike, named, type Row} from '@rocicorp/zero';
 import {builder, type Schema} from './schema.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 
-export const allLabels = namedQuery('allLabels', () => builder.label);
-export const allUsers = namedQuery('allUsers', () => builder.user);
+export const queries = named({
+  allLabels: () => builder.label,
 
-export const issuePreload = namedQuery('issuePreload', (userID: string) =>
-  builder.issue
-    .related('labels')
-    .related('viewState', q => q.where('userID', userID))
-    .related('creator')
-    .related('assignee')
-    .related('emoji', emoji => emoji.related('creator'))
-    .related('comments', comments =>
-      comments
-        .related('creator')
-        .related('emoji', emoji => emoji.related('creator'))
-        .limit(10)
-        .orderBy('created', 'desc'),
-    ),
-);
+  allUsers: () => builder.user,
 
-export const user = namedQuery('user', (userID: string) =>
-  builder.user.where('id', userID).one(),
-);
+  issuePreload: (userID: string) =>
+    builder.issue
+      .related('labels')
+      .related('viewState', q => q.where('userID', userID))
+      .related('creator')
+      .related('assignee')
+      .related('emoji', emoji => emoji.related('creator'))
+      .related('comments', comments =>
+        comments
+          .related('creator')
+          .related('emoji', emoji => emoji.related('creator'))
+          .limit(10)
+          .orderBy('created', 'desc'),
+      ),
 
-export const userPref = namedQuery('userPref', (key: string, userID: string) =>
-  builder.userPref.where('key', key).where('userID', userID).one(),
-);
+  user: (userID: string) => builder.user.where('id', userID).one(),
 
-export const userPicker = namedQuery(
-  'userPicker',
-  (
+  userPref: (key: string, userID: string) =>
+    builder.userPref.where('key', key).where('userID', userID).one(),
+
+  userPicker: (
     disabled: boolean,
     login: string | null,
     filter: 'crew' | 'creators' | null,
@@ -52,11 +48,12 @@ export const userPicker = namedQuery(
     }
     return q;
   },
-);
 
-export const issueDetail = namedQuery(
-  'issueDetail',
-  (idField: 'shortID' | 'id', id: string | number, userID: string) =>
+  issueDetail: (
+    idField: 'shortID' | 'id',
+    id: string | number,
+    userID: string,
+  ) =>
     builder.issue
       .where(idField, id)
       .related('emoji', emoji => emoji.related('creator'))
@@ -76,7 +73,31 @@ export const issueDetail = namedQuery(
           .orderBy('id', 'desc'),
       )
       .one(),
-);
+
+  prevNext: (
+    listContext: ListContext['params'] | null,
+    issue: Pick<
+      Row<Schema['tables']['issue']>,
+      'id' | 'created' | 'modified'
+    > | null,
+    dir: 'next' | 'prev',
+  ) => buildListQuery(listContext, issue, dir).one(),
+
+  issueList: (
+    listContext: ListContext['params'],
+    userID: string,
+    limit: number,
+  ) =>
+    buildListQuery(listContext, null, 'next')
+      .limit(limit)
+      .related('viewState', q => q.where('userID', userID).one())
+      .related('labels'),
+
+  emojiChange: (subjectID: string) =>
+    builder.emoji
+      .where('subjectID', subjectID ?? '')
+      .related('creator', creator => creator.one()),
+});
 
 export type ListContext = {
   readonly href: string;
@@ -91,27 +112,6 @@ export type ListContext = {
     readonly sortDirection: 'asc' | 'desc';
   };
 };
-
-export const prevNext = namedQuery(
-  'prevNext',
-  (
-    listContext: ListContext['params'] | null,
-    issue: Pick<
-      Row<Schema['tables']['issue']>,
-      'id' | 'created' | 'modified'
-    > | null,
-    dir: 'next' | 'prev',
-  ) => buildListQuery(listContext, issue, dir).one(),
-);
-
-export const issueList = namedQuery(
-  'issueList',
-  (listContext: ListContext['params'], userID: string, limit: number) =>
-    buildListQuery(listContext, null, 'next')
-      .limit(limit)
-      .related('viewState', q => q.where('userID', userID).one())
-      .related('labels'),
-);
 
 function buildListQuery(
   listContext: ListContext['params'] | null,
@@ -165,9 +165,3 @@ function buildListQuery(
     ),
   );
 }
-
-export const emojiChange = namedQuery('emojiChange', (subjectID: string) =>
-  builder.emoji
-    .where('subjectID', subjectID ?? '')
-    .related('creator', creator => creator.one()),
-);

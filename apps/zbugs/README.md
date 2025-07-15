@@ -11,6 +11,8 @@ We deploy this continuously (on trunk) to aws and is our dogfood of Zero.
 
 ## Setup
 
+### 1. Install dependencies
+
 First, install and build dependencies the `mono` repository root:
 
 ```bash
@@ -26,78 +28,37 @@ Then, install dependencies in the `zbugs` directory:
 npm install
 ```
 
-### Run the "upstream" Postgres database
+### 2. Run the "upstream" Postgres database
 
 ```bash
 cd docker
 docker compose up
 ```
 
-### Run the zero-cache server
+### 3. Run the zero-cache server
 
-Create a `.env` file in the `zbugs` directory:
+> In a a new terminal window
 
-```ini
-#### zero.config.js Variables ####
+Create a `.env` file in the `zbugs` directory based on the example:
 
-# The "upstream" authoritative postgres database
-# In the future we will support other types of upstreams besides PG
-ZERO_UPSTREAM_DB = "postgresql://user:password@127.0.0.1:6434/postgres"
-
-# Where to send custom mutations
-ZERO_PUSH_URL = "http://localhost:5173/api/push"
-
-# Place to store the SQLite data zero-cache maintains. This can be lost, but if
-# it is, zero-cache will have to re-replicate next time it starts up.
-ZERO_REPLICA_FILE = "/tmp/zbugs-sync-replica.db"
-
-ZERO_LOG_LEVEL = "info"
-
-# Use "json" for logs consumed by structured logging services.
-ZERO_LOG_FORMAT = "text"
-
-# Public key used to verify JWTs.
-# You can create a JWK pair via `npm run create-keys`
-# in the `zbugs` directory.
-#
-# The public key goes here and in `VITE_PUBLIC_JWK`.
-# The private key goes in `PRIVATE_JWK`
-ZERO_AUTH_JWK=''
-
-#### ZBugs API Server Variables ####
-
-# The client id for the GitHub OAuth app responisble for OAuth:
-# https://docs.github.com/en/apps/creating-github-apps
-# Rocicorp team, see:
-# https://docs.google.com/document/d/1aGHaB0L15SY67wkXQMsST80uHh4-IooTUVzKcUlzjdk/edit#bookmark=id.bb6lqbetv2lm
-GITHUB_CLIENT_ID = ""
-# The secret for the client
-GITHUB_CLIENT_SECRET = ""
-# See comment on `ZERO_AUTH_JWK`
-PRIVATE_JWK = ""
-
-
-#### Vite Variables ####
-VITE_PUBLIC_SERVER="http://localhost:4848"
-# See comment on `ZERO_AUTH_JWK`
-VITE_PUBLIC_JWK=''
-
-# Discord webhook to send notifications to. Not required. Notifications won't
-# be sent if absent.
-DISCORD_WEBHOOK_URL=''
+```bash
+# In apps/zbugs
+cp .env.example .env
 ```
 
 Then start the server:
 
 ```bash
+# In apps/zbugs
 npm run zero-cache-dev
 ```
 
-### Run the web app
+### 4. Run the web app
 
-In still another tab:
+> In yet another another terminal window
 
 ```bash
+# In apps/zbugs
 npm run dev
 ```
 

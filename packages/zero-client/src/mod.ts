@@ -118,10 +118,10 @@ export type {
   ExpressionFactory,
 } from '../../zql/src/query/expression.ts';
 export {
-  querify,
+  createBuilder,
   type CustomQueryID,
   type NamedQuery,
-  namedQuery,
+  named,
 } from '../../zql/src/query/named.ts';
 export type {
   HumanReadable,

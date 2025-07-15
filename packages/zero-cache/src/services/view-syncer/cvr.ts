@@ -21,10 +21,6 @@ import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts'
 import {clampTTL, compareTTL} from '../../../../zql/src/query/ttl.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
-import {
-  addActiveQuery,
-  removeActiveQuery,
-} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
@@ -328,8 +324,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         inactivatedAt,
         normalizeTTL(ttl),
       );
-      // Record telemetry for active query
-      addActiveQuery(this._cvr.id, id);
     }
     return patches;
   }
@@ -416,8 +410,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         toVersion: newVersion,
         patch: {type: 'query', op: 'del', id, clientID},
       });
-      // Record telemetry for removed active query
-      removeActiveQuery(this._cvr.id, id);
     }
     return patches;
   }

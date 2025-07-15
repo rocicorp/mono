@@ -22,6 +22,10 @@ export async function sendEmail({
     data: string; // base64-encoded string
   }[];
 }) {
+  // Email notifications temporarily disabled
+  // See: https://bugs.rocicorp.dev/issue/3877
+  return;
+
   const apiKey = process.env.LOOPS_EMAIL_API_KEY;
   const transactionalId = process.env.LOOPS_TRANSACTIONAL_ID;
   const idempotencyKey = `${tx.clientID}:${tx.mutationID}:${email}`;

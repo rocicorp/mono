@@ -2,12 +2,7 @@ import type {AnyQuery, ReadonlyJSONValue, Row} from '@rocicorp/zero';
 import type {Schema} from '../shared/schema.ts';
 import type {Role} from '../shared/auth.ts';
 import type {ListContext} from '../shared/queries.ts';
-import {
-  issuePreload as sharedIssuePreload,
-  prevNext as sharedPrevNext,
-  issueList as sharedIssueList,
-  issueDetail as sharedIssueDetail,
-} from '../shared/queries.ts';
+import {queries as sharedQueries} from '../shared/queries.ts';
 import {applyIssuePermissions} from './read-permissions.ts';
 
 export type ServerContext = {
@@ -20,7 +15,7 @@ export type ServerQuery = (
 ) => AnyQuery;
 
 export function issuePreload(c: ServerContext, userID: string) {
-  return applyIssuePermissions(sharedIssuePreload(userID), c.role);
+  return applyIssuePermissions(sharedQueries.issuePreload(userID), c.role);
 }
 
 export function prevNext(
@@ -29,7 +24,10 @@ export function prevNext(
   issue: Row<Schema['tables']['issue']> | null,
   dir: 'next' | 'prev',
 ) {
-  return applyIssuePermissions(sharedPrevNext(listContext, issue, dir), c.role);
+  return applyIssuePermissions(
+    sharedQueries.prevNext(listContext, issue, dir),
+    c.role,
+  );
 }
 
 export function issueList(
@@ -39,7 +37,7 @@ export function issueList(
   limit: number,
 ) {
   return applyIssuePermissions(
-    sharedIssueList(listContext, userID, limit),
+    sharedQueries.issueList(listContext, userID, limit),
     c.role,
   );
 }
@@ -50,5 +48,8 @@ export function issueDetail(
   id: string | number,
   userID: string,
 ) {
-  return applyIssuePermissions(sharedIssueDetail(idField, id, userID), c.role);
+  return applyIssuePermissions(
+    sharedQueries.issueDetail(idField, id, userID),
+    c.role,
+  );
 }
