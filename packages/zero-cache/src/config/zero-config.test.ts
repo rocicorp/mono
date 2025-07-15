@@ -359,11 +359,6 @@ test('zero-cache --help', () => {
                                                                                                                                                                    
      --target-client-row-count number                            default: 20000                                                                                    
        ZERO_TARGET_CLIENT_ROW_COUNT env                                                                                                                            
-                                                                 The target number of rows to keep per client in the client side cache.                            
-                                                                 This limit is a soft limit. When the number of rows in the cache exceeds                          
-                                                                 this limit, zero-cache will evict inactive queries in order of ttl-based expiration.              
-                                                                 Active queries, on the other hand, are never evicted and are allowed to use more                  
-                                                                 rows than the limit.                                                                              
                                                                                                                                                                    
      --lazy-startup boolean                                      default: false                                                                                    
        ZERO_LAZY_STARTUP env                                                                                                                                       

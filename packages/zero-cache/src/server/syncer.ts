@@ -27,9 +27,9 @@ import {getShardID} from '../types/shards.ts';
 import {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
+import {startAnonymousTelemetry} from './anonymous-otel-start.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
-import {startAnonymousTelemetry} from './anonymous-otel-start.ts';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -110,8 +110,6 @@ export default function runWorker(
       sub,
       drainCoordinator,
       config.log.slowHydrateThreshold,
-      undefined,
-      config.targetClientRowCount,
     );
   };
 

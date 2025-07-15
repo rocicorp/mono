@@ -59,7 +59,6 @@ import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
   CVRUpdater,
-  getInactiveQueries,
   nextEvictionTime,
   type CVRSnapshot,
   type RowUpdate,
@@ -120,10 +119,6 @@ export interface ViewSyncer {
 }
 
 const DEFAULT_KEEPALIVE_MS = 5_000;
-
-// We have previously said that the goal is to have 20MB on the client.
-// If we assume each row is ~1KB, then we can have 20,000 rows.
-const DEFAULT_MAX_ROW_COUNT = 20_000;
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
@@ -204,18 +199,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #authData: TokenData | undefined;
   #httpCookie: string | undefined;
 
-  /**
-   * The {@linkcode maxRowCount} is used for the eviction of inactive queries.
-   * An inactive query is a query that is no longer desired but is kept alive
-   * due to its TTL. When the number of rows in the CVR exceeds
-   * {@linkcode maxRowCount} we keep removing inactive queries (even if they are
-   * not expired yet) until the actual row count is below the max row count.
-   *
-   * There is no guarantee that the number of rows in the CVR will be below this
-   * if there are active queries that have a lot of rows.
-   */
-  maxRowCount: number;
-
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
   readonly #setTimeout: SetTimeout;
   readonly #customQueryTransformer: CustomQueryTransformer | undefined;
@@ -232,7 +215,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     drainCoordinator: DrainCoordinator,
     slowHydrateThreshold: number,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
-    maxRowCount = DEFAULT_MAX_ROW_COUNT,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
     this.id = clientGroupID;
@@ -254,7 +236,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // loop will then await #cvrStore.flushed() which rejects if necessary.
       () => this.#stateChanges.cancel(),
     );
-    this.maxRowCount = maxRowCount;
     this.#setTimeout = setTimeoutFn;
 
     if (pullConfig.url) {
@@ -859,7 +840,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       this.#scheduleExpireEviction(lc, cvr);
-      await this.#evictInactiveQueries(lc, cvr);
     });
 
   #scheduleExpireEviction(lc: LogContext, cvr: CVRSnapshot): void {
@@ -1590,94 +1570,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Signal clients to commit.
       await pokers.end(finalVersion);
 
-      await this.#evictInactiveQueries(lc, this.#cvr);
-
       const elapsed = performance.now() - start;
       lc.info?.(
         `finished processing advancement of ${numChanges} changes (${elapsed} ms)`,
       );
       histograms.transactionAdvanceTime().record(elapsed);
       return 'success';
-    });
-  }
-
-  // This must be called from within the #lock.
-  #evictInactiveQueries(lc: LogContext, cvr: CVRSnapshot): Promise<void> {
-    lc = lc.withContext('method', '#evictInactiveQueries');
-    return startAsyncSpan(tracer, 'vs.#evictInactiveQueries', async () => {
-      const {rowCount: rowCountBeforeEvictions} = this.#cvrStore;
-      if (rowCountBeforeEvictions <= this.maxRowCount) {
-        lc.debug?.(
-          `rowCount: ${rowCountBeforeEvictions} <= maxRowCount: ${this.maxRowCount}`,
-        );
-        return;
-      }
-
-      lc.info?.(
-        `Trying to evict inactive queries, rowCount: ${rowCountBeforeEvictions} > maxRowCount: ${this.maxRowCount}`,
-      );
-
-      const inactiveQueries = getInactiveQueries(cvr);
-      if (!inactiveQueries.length) {
-        lc.info?.('No inactive queries to evict');
-        return;
-      }
-
-      const hashToIDs = createHashToIDs(cvr);
-
-      for (const inactiveQuery of inactiveQueries) {
-        const {hash} = inactiveQuery;
-        const q = cvr.queries[hash];
-        assert(q, 'query not found in CVR');
-        assert(q.type !== 'internal', 'internal queries should not be evicted');
-
-        const rowCountBeforeCurrentEviction = this.#cvrStore.rowCount;
-
-        await this.#addAndRemoveQueries(
-          lc,
-          cvr,
-          [],
-          [
-            {
-              id: hash,
-              transformationHash: must(q.transformationHash),
-            },
-          ],
-          [],
-          hashToIDs,
-        );
-
-        lc.debug?.(
-          'Evicted',
-          hash,
-          'Reduced rowCount from',
-          rowCountBeforeCurrentEviction,
-          'to',
-          this.#cvrStore.rowCount,
-        );
-
-        if (this.#cvrStore.rowCount <= this.maxRowCount) {
-          lc.info?.(
-            'Evicted',
-            hash,
-            'Reduced rowCount from',
-            rowCountBeforeEvictions,
-            'to',
-            this.#cvrStore.rowCount,
-          );
-          break;
-        }
-
-        // We continue with the updated/current state of the CVR.
-        cvr = must(this.#cvr);
-      }
-
-      const cvrVersion = must(this.#cvr).version;
-      const dbVersion = this.#pipelines.currentVersion();
-      assert(
-        cvrVersion.stateVersion === dbVersion,
-        `CVR@${versionString(cvrVersion)}" does not match DB@${dbVersion}`,
-      );
     });
   }
 

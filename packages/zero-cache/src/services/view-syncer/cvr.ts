@@ -336,17 +336,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     return this.#deleteQueries(clientID, queryHashes, ttlClock);
   }
 
-  /**
-   * Returns non active queries in the order that we want to remove them.
-   */
-  getInactiveQueries(): {
-    hash: string;
-    inactivatedAt: TTLClock;
-    ttl: number | undefined;
-  }[] {
-    return getInactiveQueries(this._cvr);
-  }
-
   deleteDesiredQueries(
     clientID: string,
     queryHashes: string[],
