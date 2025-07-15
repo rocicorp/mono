@@ -7,14 +7,12 @@ import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Input, Storage} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
-import type {CustomQueryID} from '../../../zql/src/query/named.ts';
+import type {MetricsDelegate} from '../../../zql/src/query/metrics-delegate.ts';
 import type {
   CommitListener,
-  GotCallback,
   QueryDelegate,
 } from '../../../zql/src/query/query-delegate.ts';
 import type {RunOptions} from '../../../zql/src/query/query.ts';
-import type {TTL} from '../../../zql/src/query/ttl.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
@@ -37,11 +35,11 @@ export class ZeroContext implements QueryDelegate {
   // pipelines *synchronously* and the core Replicache infra is all async. So
   // that needs to be fixed.
   readonly #mainSources: IVMSourceBranch;
-  readonly #addQuery: AddQuery;
-  readonly #addCustomQuery: AddCustomQuery;
-  readonly #updateQuery: UpdateQuery;
-  readonly #updateCustomQuery: UpdateCustomQuery;
-  readonly #flushQueryChanges: () => void;
+  readonly addServerQuery: AddQuery;
+  readonly addCustomQuery: AddCustomQuery;
+  readonly updateServerQuery: UpdateQuery;
+  readonly updateCustomQuery: UpdateCustomQuery;
+  readonly flushQueryChanges: () => void;
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
@@ -55,6 +53,8 @@ export class ZeroContext implements QueryDelegate {
    */
   readonly defaultQueryComplete = false;
 
+  readonly addMetric: MetricsDelegate['addMetric'];
+
   constructor(
     lc: ZeroLogContext,
     mainSources: IVMSourceBranch,
@@ -64,52 +64,25 @@ export class ZeroContext implements QueryDelegate {
     updateCustomQuery: UpdateCustomQuery,
     flushQueryChanges: () => void,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
+    addMetric: MetricsDelegate['addMetric'],
     slowMaterializeThreshold: number,
     assertValidRunOptions: (options?: RunOptions) => void,
   ) {
     this.#mainSources = mainSources;
-    this.#addQuery = addQuery;
-    this.#updateQuery = updateQuery;
-    this.#updateCustomQuery = updateCustomQuery;
+    this.addServerQuery = addQuery;
+    this.updateServerQuery = updateQuery;
+    this.updateCustomQuery = updateCustomQuery;
     this.#batchViewUpdates = batchViewUpdates;
     this.#lc = lc;
     this.#slowMaterializeThreshold = slowMaterializeThreshold;
     this.assertValidRunOptions = assertValidRunOptions;
-    this.#addCustomQuery = addCustomQuery;
-    this.#flushQueryChanges = flushQueryChanges;
+    this.addCustomQuery = addCustomQuery;
+    this.flushQueryChanges = flushQueryChanges;
+    this.addMetric = addMetric;
   }
 
   getSource(name: string): Source | undefined {
     return this.#mainSources.getSource(name);
-  }
-
-  addCustomQuery(
-    customQueryID: CustomQueryID,
-    ttl: TTL,
-    gotCallback?: GotCallback | undefined,
-  ): () => void {
-    return this.#addCustomQuery(
-      customQueryID.name,
-      customQueryID.args,
-      ttl,
-      gotCallback,
-    );
-  }
-
-  addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback | undefined) {
-    return this.#addQuery(ast, ttl, gotCallback);
-  }
-
-  updateServerQuery(ast: AST, ttl: TTL): void {
-    this.#updateQuery(ast, ttl);
-  }
-
-  updateCustomQuery(customQueryID: CustomQueryID, ttl: TTL): void {
-    this.#updateCustomQuery(customQueryID.name, customQueryID.args, ttl);
-  }
-
-  flushQueryChanges() {
-    this.#flushQueryChanges();
   }
 
   onQueryMaterialized(hash: string, ast: AST, duration: number): void {
