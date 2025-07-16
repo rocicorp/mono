@@ -163,6 +163,36 @@ fastify.post<{
   );
 });
 
+fastify.post<{
+  Body: {contentType: string};
+}>('/api/upload/presigned-url', async (request, reply) => {
+  let authData: JWTData | undefined;
+  try {
+    authData = await maybeVerifyAuth(request.headers);
+  } catch (e) {
+    if (e instanceof Error) {
+      reply.status(401).send(e.message);
+      return;
+    }
+    throw e;
+  }
+
+  if (!authData) {
+    reply.status(401).send('Authentication required');
+    return;
+  }
+
+  const {getPresignedUrl} = await import('../src/server/upload.ts');
+  
+  try {
+    const result = await getPresignedUrl(request.body.contentType);
+    reply.send(result);
+  } catch (error) {
+    console.error('Error generating presigned URL:', error);
+    reply.status(500).send('Failed to generate presigned URL');
+  }
+});
+
 async function maybeVerifyAuth(
   headers: IncomingHttpHeaders,
 ): Promise<JWTData | undefined> {

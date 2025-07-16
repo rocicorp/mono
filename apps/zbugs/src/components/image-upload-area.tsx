@@ -61,11 +61,9 @@ export function ImageUploadArea({
     e.preventDefault();
     e.stopPropagation();
 
-    if (
-      e.currentTarget === e.target &&
-      e.dataTransfer.items &&
-      e.dataTransfer.items.length > 0
-    ) {
+    dragCounterRef.current++;
+
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
       setIsDragOver(true);
     }
   };
@@ -74,7 +72,9 @@ export function ImageUploadArea({
     e.preventDefault();
     e.stopPropagation();
 
-    if (e.currentTarget === e.target) {
+    dragCounterRef.current--;
+
+    if (dragCounterRef.current === 0) {
       setIsDragOver(false);
     }
   };

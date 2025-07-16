@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {getPresignedUrl} from '../server/upload.ts';
+import {useLogin} from './use-login.tsx';
 
 interface UseImageUploadOptions {
   onUpload: (markdown: string) => void;
@@ -7,6 +7,7 @@ interface UseImageUploadOptions {
 
 export function useImageUpload({onUpload}: UseImageUploadOptions) {
   const [isUploading, setIsUploading] = useState(false);
+  const {loginState} = useLogin();
 
   const validateFile = (file: File): string | null => {
     const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -21,10 +22,32 @@ export function useImageUpload({onUpload}: UseImageUploadOptions) {
     return null;
   };
 
+  const getPresignedUrl = async (contentType: string): Promise<{url: string; key: string}> => {
+    const response = await fetch('/api/upload/presigned-url', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${loginState?.encoded}`,
+      },
+      body: JSON.stringify({contentType}),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get presigned URL: ${response.statusText}`);
+    }
+
+    return response.json();
+  };
+
   const uploadFile = async (file: File): Promise<void> => {
     const validationError = validateFile(file);
     if (validationError) {
       alert(validationError);
+      return;
+    }
+
+    if (!loginState) {
+      alert('You must be logged in to upload images.');
       return;
     }
 

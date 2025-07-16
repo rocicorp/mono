@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react';
-import {defineConfig, loadEnv, type ViteDevServer} from 'vite';
+import {defineConfig, type ViteDevServer} from 'vite';
 import svgr from 'vite-plugin-svgr';
 import tsconfigPaths from 'vite-tsconfig-paths';
 import {makeDefine} from '../../packages/shared/src/build.ts';
@@ -15,8 +15,7 @@ async function configureServer(server: ViteDevServer) {
   });
 }
 
-export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, process.cwd(), '');
+export default defineConfig(() => {
   return {
     plugins: [
       tsconfigPaths(),
@@ -29,11 +28,6 @@ export default defineConfig(({mode}) => {
     ],
     define: {
       ...makeDefine(),
-      'process.env.AWS_REGION': JSON.stringify(env.AWS_REGION),
-      'process.env.AWS_ACCESS_KEY_ID': JSON.stringify(env.AWS_ACCESS_KEY_ID),
-      'process.env.AWS_SECRET_ACCESS_KEY': JSON.stringify(
-        env.AWS_SECRET_ACCESS_KEY,
-      ),
     },
     build: {
       target: 'esnext',
