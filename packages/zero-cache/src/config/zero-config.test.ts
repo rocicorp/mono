@@ -44,7 +44,7 @@ test('zero-cache --help', () => {
                                                                                                                                                                    
      --push-url string[]                                         optional                                                                                          
        ZERO_PUSH_URL env                                                                                                                                           
-                                                                 DEPRECATED. Use query_url instead.                                                                
+                                                                 DEPRECATED. Use mutate-url instead.                                                               
                                                                  The URL of the API server to which zero-cache will push mutations.                                
                                                                                                                                                                    
                                                                  * is allowed if you would like to allow the client to specify a subdomain to use.                 
