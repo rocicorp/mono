@@ -1,4 +1,4 @@
-import {tmpdir} from 'node:os';
+import {tmpdir, availableParallelism} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.ts';
@@ -146,8 +146,14 @@ export default function runWorker(
     parent,
   );
 
-  // Start telemetry with view-syncer count
-  startAnonymousTelemetry(lc, config, syncer.viewSyncerCount);
+  // Start telemetry with the actual configured number of sync workers
+  // This matches the calculation in main.ts for numSyncers
+  const numSyncWorkers =
+    config.numSyncWorkers !== undefined
+      ? config.numSyncWorkers
+      : Math.max(1, availableParallelism() - 1);
+
+  startAnonymousTelemetry(lc, config, numSyncWorkers);
 
   void dbWarmup.then(() => parent.send(['ready', {ready: true}]));
 

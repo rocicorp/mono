@@ -27,11 +27,11 @@ class AnonymousTelemetryManager {
   #totalConnectionsAttempted = 0;
   #lc: LogContext | undefined;
   #config: ZeroConfig | undefined;
-  #sessionId: string;
+  #processId: string;
   #cachedAttributes: Record<string, string> | undefined;
 
   private constructor() {
-    this.#sessionId = randomUUID();
+    this.#processId = randomUUID();
   }
 
   static getInstance(): AnonymousTelemetryManager {
@@ -42,6 +42,9 @@ class AnonymousTelemetryManager {
   }
 
   start(lc?: LogContext, config?: ZeroConfig, viewSyncerCount = 1) {
+    // Ensure viewSyncerCount is always positive
+    viewSyncerCount = Math.max(viewSyncerCount, 1);
+
     if (!config) {
       try {
         config = getZeroConfig();
@@ -213,7 +216,7 @@ class AnonymousTelemetryManager {
         'zero.version': this.#config?.serverVersion ?? packageJson.version,
         'zero.task.id': this.#config?.taskID || 'unknown',
         'zero.project.id': this.#getGitProjectId(),
-        'zero.session.id': this.#sessionId,
+        'zero.process.id': this.#processId,
         'zero.fs.id': this.#getOrSetFsID(),
       };
       this.#lc?.debug?.(
