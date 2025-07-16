@@ -18,7 +18,8 @@ import {homedir} from 'os';
 class AnonymousTelemetryManager {
   static #instance: AnonymousTelemetryManager;
   #started = false;
-  #shouldStart = false;
+  #starting = false;
+  #stopped = false;
   #meter!: Meter;
   #meterProvider!: MeterProvider;
   #totalMutations = 0;
@@ -29,6 +30,7 @@ class AnonymousTelemetryManager {
   #config: ZeroConfig | undefined;
   #processId: string;
   #cachedAttributes: Record<string, string> | undefined;
+  #viewSyncerCount = 1;
 
   private constructor() {
     this.#processId = randomUUID();
@@ -64,43 +66,47 @@ class AnonymousTelemetryManager {
       return;
     }
 
-    if (this.#started || this.#shouldStart || !config.enableUsageAnalytics) {
+    if (this.#starting || !config.enableUsageAnalytics) {
       return;
     }
+
+    this.#starting = true;
     this.#lc = lc;
     this.#config = config;
+    this.#viewSyncerCount = viewSyncerCount;
     this.#cachedAttributes = undefined;
+
+    this.#lc?.info?.(`Anonymous telemetry will start in 1 minute`);
+
+    // Delay telemetry startup by 1 minute to avoid potential boot loop issues
+    setTimeout(() => this.#run(), 60000);
+  }
+
+  #run() {
+    if (this.#stopped) {
+      return;
+    }
 
     const resource = resourceFromAttributes(this.#getAttributes());
 
-    // Delay telemetry startup by 1 minute to avoid potential boot loop issues
-    this.#shouldStart = true;
-    setTimeout(() => {
-      if (!this.#shouldStart) {
-        return;
-      }
+    const metricReader = new PeriodicExportingMetricReader({
+      exportIntervalMillis: 60000 * this.#viewSyncerCount,
+      exporter: new OTLPMetricExporter({
+        url: 'https://metrics.rocicorp.dev',
+      }),
+    });
 
-      const metricReader = new PeriodicExportingMetricReader({
-        exportIntervalMillis: 60000 * viewSyncerCount,
-        exporter: new OTLPMetricExporter({
-          url: 'https://metrics.rocicorp.dev',
-        }),
-      });
+    this.#meterProvider = new MeterProvider({
+      resource,
+      readers: [metricReader],
+    });
+    this.#meter = this.#meterProvider.getMeter('zero-anonymous-telemetry');
 
-      this.#meterProvider = new MeterProvider({
-        resource,
-        readers: [metricReader],
-      });
-      this.#meter = this.#meterProvider.getMeter('zero-anonymous-telemetry');
-
-      this.#setupMetrics();
-      this.#lc?.info?.(
-        `Anonymous telemetry started (exports every ${60 * viewSyncerCount} seconds, scaled by ${viewSyncerCount} view-syncers)`,
-      );
-      this.#started = true;
-    }, 60000); // 1 minute delay
-
-    this.#lc?.info?.(`Anonymous telemetry will start in 1 minute`);
+    this.#setupMetrics();
+    this.#lc?.info?.(
+      `Anonymous telemetry started (exports every ${60 * this.#viewSyncerCount} seconds, scaled by ${this.#viewSyncerCount} view-syncers)`,
+    );
+    this.#started = true;
   }
 
   #setupMetrics() {
@@ -199,7 +205,7 @@ class AnonymousTelemetryManager {
   }
 
   shutdown() {
-    this.#shouldStart = false;
+    this.#stopped = true;
     if (this.#meterProvider) {
       this.#lc?.info?.('Shutting down anonymous telemetry');
       void this.#meterProvider.shutdown();
@@ -309,6 +315,10 @@ class AnonymousTelemetryManager {
 
   #isInContainer(): boolean {
     try {
+      if (process.env.ZERO_IN_CONTAINER) {
+        return true;
+      }
+
       if (existsSync('/.dockerenv')) {
         return true;
       }
