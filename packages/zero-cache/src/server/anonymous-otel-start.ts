@@ -42,10 +42,7 @@ class AnonymousTelemetryManager {
     return AnonymousTelemetryManager.#instance;
   }
 
-  start(lc?: LogContext, config?: ZeroConfig, viewSyncerCount = 1) {
-    // Ensure viewSyncerCount is always positive
-    viewSyncerCount = Math.max(viewSyncerCount, 1);
-
+  start(lc?: LogContext, config?: ZeroConfig) {
     if (!config) {
       try {
         config = getZeroConfig();
@@ -72,7 +69,7 @@ class AnonymousTelemetryManager {
     this.#starting = true;
     this.#lc = lc;
     this.#config = config;
-    this.#viewSyncerCount = viewSyncerCount;
+    this.#viewSyncerCount = config.numSyncWorkers ?? 1;
     this.#cachedAttributes = undefined;
 
     this.#lc?.info?.(`Anonymous telemetry will start in 1 minute`);
@@ -357,11 +354,8 @@ class AnonymousTelemetryManager {
 
 const manager = () => AnonymousTelemetryManager.getInstance();
 
-export const startAnonymousTelemetry = (
-  lc?: LogContext,
-  config?: ZeroConfig,
-  viewSyncerCount?: number,
-) => manager().start(lc, config, viewSyncerCount);
+export const startAnonymousTelemetry = (lc?: LogContext, config?: ZeroConfig) =>
+  manager().start(lc, config);
 export const recordMutation = (count = 1) => manager().recordMutation(count);
 export const recordRowsSynced = (count: number) =>
   manager().recordRowsSynced(count);

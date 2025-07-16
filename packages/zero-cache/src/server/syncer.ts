@@ -146,14 +146,7 @@ export default function runWorker(
     parent,
   );
 
-  // Start telemetry with the actual configured number of sync workers
-  // This matches the calculation in main.ts for numSyncers
-  const numSyncWorkers =
-    config.numSyncWorkers !== undefined
-      ? config.numSyncWorkers
-      : Math.max(1, availableParallelism() - 1);
-
-  startAnonymousTelemetry(lc, config, numSyncWorkers);
+  startAnonymousTelemetry(lc, config);
 
   void dbWarmup.then(() => parent.send(['ready', {ready: true}]));
 
