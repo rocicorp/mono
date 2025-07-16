@@ -187,7 +187,7 @@ const makeMutatorQueryOptions = (
 });
 
 const mutateOptions = makeMutatorQueryOptions(undefined, 'push mutations');
-const pushOptions = makeMutatorQueryOptions('query_url', 'push mutations');
+const pushOptions = makeMutatorQueryOptions('mutate-url', 'push mutations');
 const queryOptions = makeMutatorQueryOptions(undefined, 'send named queries');
 
 export type AuthConfig = Config<typeof authOptions>;
