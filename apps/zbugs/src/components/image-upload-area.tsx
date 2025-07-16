@@ -1,4 +1,4 @@
-import {useRef, useState, useEffect} from 'react';
+import {useRef, useState, useEffect, type ChangeEvent} from 'react';
 import type {ReactNode} from 'react';
 import {useImageUpload} from '../hooks/use-image-upload.ts';
 import {Button} from './button.tsx';
@@ -21,8 +21,8 @@ export function ImageUploadArea({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {isUploading, uploadFiles} = useImageUpload({onUpload});
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+  const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = [...(e.target.files ?? [])];
     if (files.length > 0) {
       await uploadFiles(files);
     }
@@ -54,19 +54,18 @@ export function ImageUploadArea({
       }
     };
 
-    // Update rect on mount and when dragging
     updateRect();
-    if (isDragOver) {
-      updateRect();
-    }
   }, [isDragOver]);
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    dragCounterRef.current++;
 
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+    if (
+      e.currentTarget === e.target &&
+      e.dataTransfer.items &&
+      e.dataTransfer.items.length > 0
+    ) {
       setIsDragOver(true);
     }
   };
@@ -74,9 +73,8 @@ export function ImageUploadArea({
   const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    dragCounterRef.current--;
 
-    if (dragCounterRef.current === 0) {
+    if (e.currentTarget === e.target) {
       setIsDragOver(false);
     }
   };
@@ -92,7 +90,7 @@ export function ImageUploadArea({
     setIsDragOver(false);
     dragCounterRef.current = 0;
 
-    const files = Array.from(e.dataTransfer.files).filter(file =>
+    const files = [...e.dataTransfer.files].filter(file =>
       file.type.startsWith('image/'),
     );
 
@@ -102,7 +100,7 @@ export function ImageUploadArea({
   };
 
   const handlePaste = async (e: React.ClipboardEvent) => {
-    const items = Array.from(e.clipboardData.items);
+    const items = [...e.clipboardData.items];
     const imageItems = items.filter(item => item.type.startsWith('image/'));
 
     if (imageItems.length > 0) {
