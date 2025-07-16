@@ -17,7 +17,6 @@ import {homedir} from 'os';
 
 class AnonymousTelemetryManager {
   static #instance: AnonymousTelemetryManager;
-  #started = false;
   #starting = false;
   #stopped = false;
   #meter!: Meter;
@@ -106,7 +105,6 @@ class AnonymousTelemetryManager {
     this.#lc?.info?.(
       `Anonymous telemetry started (exports every ${60 * this.#viewSyncerCount} seconds, scaled by ${this.#viewSyncerCount} view-syncers)`,
     );
-    this.#started = true;
   }
 
   #setupMetrics() {
