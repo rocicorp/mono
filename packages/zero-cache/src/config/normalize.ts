@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid';
-import {assert} from '../../../shared/src/asserts.ts';
+import {availableParallelism} from 'node:os';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
 import {getHostIp} from './network.ts';
 import type {ZeroConfig} from './zero-config.ts';
 
@@ -20,6 +21,7 @@ export type NormalizedZeroConfig = ZeroConfig & {
   litestream: {
     port: number;
   };
+  numSyncWorkers: number;
 };
 
 export function assertNormalized(
@@ -31,6 +33,7 @@ export function assertNormalized(
   assert(config.litestream.port, 'missing --litestream-port');
   assert(config.change.db, 'missing --change-db');
   assert(config.cvr.db, 'missing --cvr-db');
+  assertNotUndefined(config.numSyncWorkers, 'missing --num-sync-workers');
 }
 
 /**
@@ -60,6 +63,12 @@ export function normalizeZeroConfig(
     const port = config.port + 2;
     config.litestream.port = port;
     env['ZERO_LITESTREAM_PORT'] = String(port);
+  }
+  if (config.numSyncWorkers === undefined) {
+    // Reserve 1 core for the replicator. The change-streamer is not CPU heavy.
+    const numSyncers = Math.max(1, availableParallelism() - 1);
+    config.numSyncWorkers = numSyncers;
+    env['ZERO_NUM_SYNC_WORKERS'] = String(numSyncers);
   }
 
   const hostIP = getHostIp(
@@ -109,5 +118,7 @@ export function normalizeZeroConfig(
       ...config.cvr,
       db: config.cvr.db,
     },
+
+    numSyncWorkers: config.numSyncWorkers,
   };
 }
