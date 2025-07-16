@@ -191,6 +191,7 @@ class AnonymousTelemetryManager {
         'zero.telemetry.type': 'anonymous',
         'zero.infra.platform': this.#getPlatform(),
         'zero.version': this.#config?.serverVersion ?? packageJson.version,
+        'zero.task.id': this.#config?.taskID || 'unknown',
         'zero.project.id': this.#getGitProjectId(),
         'zero.fs.id': this.#getOrSetFsID(),
       };
@@ -258,10 +259,6 @@ class AnonymousTelemetryManager {
 
   #getOrSetFsID(): string {
     try {
-      if (this.#isInContainer()) {
-        return 'container';
-      }
-
       const fsidPath = join(homedir(), '.rocicorp', 'fsid');
       const fsidDir = dirname(fsidPath);
 
@@ -280,42 +277,6 @@ class AnonymousTelemetryManager {
     } catch (error) {
       this.#lc?.debug?.('Unable to get or set filesystem ID:', error);
       return 'unknown';
-    }
-  }
-
-  #isInContainer(): boolean {
-    try {
-      // Check for Docker environment file
-      if (existsSync('/.dockerenv')) {
-        return true;
-      }
-
-      if (process.env.KUBERNETES_SERVICE_HOST) {
-        return true;
-      }
-
-      if (
-        process.env.DOCKER_CONTAINER_ID ||
-        process.env.HOSTNAME?.match(/^[a-f0-9]{12}$/)
-      ) {
-        return true;
-      }
-
-      if (existsSync('/proc/1/cgroup')) {
-        const cgroup = readFileSync('/proc/1/cgroup', 'utf8');
-        if (
-          cgroup.includes('docker') ||
-          cgroup.includes('kubepods') ||
-          cgroup.includes('containerd')
-        ) {
-          return true;
-        }
-      }
-
-      return false;
-    } catch (error) {
-      this.#lc?.debug?.('Unable to detect container environment:', error);
-      return false;
     }
   }
 }
