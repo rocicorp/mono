@@ -22,6 +22,13 @@ vi.mock('../config/zero-config.js', () => ({
   getZeroConfig: vi.fn(),
 }));
 
+// Mock setTimeout to execute immediately in tests
+const _originalSetTimeout = global.setTimeout;
+vi.stubGlobal('setTimeout', (fn: () => void) => {
+  fn();
+  return 1 as unknown as NodeJS.Timeout;
+});
+
 describe('Anonymous Telemetry Integration Tests', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mockExporter: any;
@@ -102,6 +109,9 @@ describe('Anonymous Telemetry Integration Tests', () => {
   afterAll(() => {
     // Restore environment
     process.env = originalEnv;
+
+    // Restore setTimeout
+    vi.unstubAllGlobals();
 
     // Shutdown telemetry
     shutdownAnonymousTelemetry();
