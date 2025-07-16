@@ -1,4 +1,4 @@
-import {tmpdir, availableParallelism} from 'node:os';
+import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.ts';
