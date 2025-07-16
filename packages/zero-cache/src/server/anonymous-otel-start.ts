@@ -290,18 +290,20 @@ class AnonymousTelemetryManager {
       const fsidPath = join(homedir(), '.rocicorp', 'fsid');
       const fsidDir = dirname(fsidPath);
 
-      if (existsSync(fsidPath)) {
-        const existingId = readFileSync(fsidPath, 'utf8').trim();
-        return existingId;
-      }
+      mkdirSync(fsidDir, {recursive: true});
 
-      if (!existsSync(fsidDir)) {
-        mkdirSync(fsidDir, {recursive: true});
-      }
-
+      // Always try atomic file creation first - this eliminates any race conditions
       const newId = randomUUID();
-      writeFileSync(fsidPath, newId, 'utf8');
-      return newId;
+      try {
+        writeFileSync(fsidPath, newId, {encoding: 'utf8', flag: 'wx'});
+        return newId;
+      } catch (writeError) {
+        if ((writeError as NodeJS.ErrnoException).code === 'EEXIST') {
+          const existingId = readFileSync(fsidPath, 'utf8').trim();
+          return existingId;
+        }
+        throw writeError;
+      }
     } catch (error) {
       this.#lc?.debug?.('Unable to get or set filesystem ID:', error);
       return 'unknown';
