@@ -20,12 +20,7 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
-import {
-  clampTTL,
-  compareTTL,
-  parseTTL,
-  type TTL,
-} from '../../../zql/src/query/ttl.ts';
+import {clampTTL, compareTTL, type TTL} from '../../../zql/src/query/ttl.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
@@ -153,6 +148,7 @@ export class QueryManager {
         patch.set(hash, {op: 'del', hash});
       }
     }
+
     for (const [hash, {normalized, ttl, name, args}] of this.#queries) {
       if (!existingQueryHashes.has(hash)) {
         patch.set(hash, {
@@ -161,6 +157,8 @@ export class QueryManager {
           ast: normalized,
           name,
           args,
+          // We get TTL out of the DagStore so it is possible that the TTL was written
+          // with a too high TTL.
           ttl: clampTTL(ttl), // no lc here since no need to log here
         });
       }
@@ -306,6 +304,7 @@ export class QueryManager {
   #updateEntry(entry: Entry, hash: string, ttl: TTL): void {
     // If the query already exists and the new ttl is larger than the old one
     // we send a changeDesiredQueries message to the server to update the ttl.
+    ttl = clampTTL(ttl, this.#lc);
     if (compareTTL(ttl, entry.ttl) > 0) {
       entry.ttl = ttl;
       this.#queueQueryChange({
@@ -314,7 +313,7 @@ export class QueryManager {
         ast: entry.normalized,
         name: entry.name,
         args: entry.args,
-        ttl: parseTTL(ttl),
+        ttl,
       });
     }
   }

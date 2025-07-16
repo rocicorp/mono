@@ -1852,3 +1852,145 @@ describe('Adding a query with TTL too large should warn', () => {
     expect(logSink.log).not.toHaveBeenCalled();
   });
 });
+
+describe('update clamps TTL correctly', () => {
+  const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
+  const maxRecentQueriesSize = 0;
+  const mutationTracker = new MutationTracker(lc);
+  const queryManager = new QueryManager(
+    lc,
+    mutationTracker,
+    'client1',
+    schema.tables,
+    send,
+    () => () => {},
+    maxRecentQueriesSize,
+    queryChangeThrottleMs,
+  );
+
+  afterEach(() => {
+    send.mockClear();
+  });
+
+  test('updateLegacy', () => {
+    const ast: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+    };
+
+    // Add a query with a specific TTL
+    queryManager.addLegacy(ast, '1m');
+    queryManager.flushBatch();
+
+    // Update the query with a larger TTL
+    queryManager.updateLegacy(ast, '2m');
+    queryManager.flushBatch();
+
+    expect(send).toBeCalledTimes(2);
+    expect(send).toHaveBeenLastCalledWith([
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [
+          {
+            op: 'put',
+            hash: '12hwg3ihkijhm',
+            ast: {
+              table: 'issues',
+              where: undefined,
+              orderBy: [['id', 'asc']],
+            } satisfies AST,
+            ttl: 120000, // Clamped TTL value
+          },
+        ],
+      },
+    ]);
+  });
+
+  test('updateCustom', () => {
+    // Add a custom query with a specific TTL
+    queryManager.addCustom('customQuery', [1], '1m');
+    queryManager.flushBatch();
+
+    // Update the query with a larger TTL
+    queryManager.updateCustom('customQuery', [1], '2m');
+    queryManager.flushBatch();
+
+    expect(send).toBeCalledTimes(2);
+    expect(send).toHaveBeenLastCalledWith([
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [
+          {
+            op: 'put',
+            hash: '2l1ig6e3tnu0a',
+            name: 'customQuery',
+            args: [1],
+            ttl: 120000, // Clamped TTL value
+          },
+        ],
+      },
+    ]);
+  });
+
+  test('updateLegacy does not send when TTL is already at max', () => {
+    const ast: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+    };
+
+    // Add a query with max TTL
+    queryManager.addLegacy(ast, 'forever');
+    queryManager.flushBatch();
+
+    // Update the query with a larger TTL (should be no-op since already at max)
+    queryManager.updateLegacy(ast, MAX_TTL_MS + 1000);
+    queryManager.flushBatch();
+
+    // Only one send should happen (the initial add)
+    expect(send).toBeCalledTimes(1);
+    expect(send).toHaveBeenLastCalledWith([
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [
+          {
+            op: 'put',
+            hash: '12hwg3ihkijhm',
+            ast: {
+              table: 'issues',
+              where: undefined,
+              orderBy: [['id', 'asc']],
+            } satisfies AST,
+            ttl: MAX_TTL_MS, // Already at max TTL
+          },
+        ],
+      },
+    ]);
+  });
+
+  test('updateCustom does not send when TTL is already at max', () => {
+    // Add a custom query with max TTL
+    queryManager.addCustom('customQuery', [1], 'forever');
+    queryManager.flushBatch();
+
+    // Update the query with a larger TTL (should be no-op since already at max)
+    queryManager.updateCustom('customQuery', [1], MAX_TTL_MS + 1000);
+    queryManager.flushBatch();
+
+    // Only one send should happen (the initial add)
+    expect(send).toBeCalledTimes(1);
+    expect(send).toHaveBeenLastCalledWith([
+      'changeDesiredQueries',
+      {
+        desiredQueriesPatch: [
+          {
+            op: 'put',
+            hash: '2l1ig6e3tnu0a',
+            name: 'customQuery',
+            args: [1],
+            ttl: MAX_TTL_MS, // Already at max TTL
+          },
+        ],
+      },
+    ]);
+  });
+});
