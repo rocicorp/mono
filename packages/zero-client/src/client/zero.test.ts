@@ -416,6 +416,7 @@ describe('createSocket', () => {
         debugPerf,
         new ZeroLogContext('error', undefined, new TestLogSink()),
         undefined,
+        undefined,
         1048 * 8,
         additionalConnectParams,
         {activeClients},
@@ -453,6 +454,7 @@ describe('createSocket', () => {
         'wsidx',
         debugPerf,
         new ZeroLogContext('error', undefined, new TestLogSink()),
+        undefined,
         undefined,
         0, // do not put any extra information into headers
         additionalConnectParams,

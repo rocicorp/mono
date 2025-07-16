@@ -35,7 +35,8 @@ import type {Writable} from '../../../shared/src/writable.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {
   ConnectedMessage,
-  UserPushParams,
+  UserMutateParams,
+  UserQueryParams,
 } from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
 import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.ts';
@@ -1153,7 +1154,8 @@ export class Zero<
           // The clientSchema only needs to be sent for the very first request.
           // Henceforth it is stored with the CVR and verified automatically.
           ...(this.#connectCookie === null ? {clientSchema} : {}),
-          userPushParams: this.#options.push,
+          userPushParams: this.#options.mutate ?? this.#options.push,
+          userQueryParams: this.#options.query,
         },
       ]);
       this.#deletedClients = undefined;
@@ -1247,7 +1249,8 @@ export class Zero<
       wsid,
       this.#options.logLevel === 'debug',
       lc,
-      this.#options.push,
+      this.#options.mutate ?? this.#options.push,
+      this.#options.query,
       this.#options.maxHeaderLength,
       additionalConnectParams,
       await this.#activeClientsManager,
@@ -1936,7 +1939,8 @@ export async function createSocket(
   wsid: string,
   debugPerf: boolean,
   lc: ZeroLogContext,
-  userPushParams: UserPushParams | undefined,
+  userPushParams: UserMutateParams | undefined,
+  userQueryParams: UserQueryParams | undefined,
   maxHeaderLength = 1024 * 8,
   additionalConnectParams: Record<string, string> | undefined,
   activeClientsManager: Pick<ActiveClientsManager, 'activeClients'>,
@@ -1996,6 +2000,7 @@ export async function createSocket(
         // Henceforth it is stored with the CVR and verified automatically.
         ...(baseCookie === null ? {clientSchema} : {}),
         userPushParams,
+        userQueryParams,
         activeClients: [...activeClients],
       },
     ],

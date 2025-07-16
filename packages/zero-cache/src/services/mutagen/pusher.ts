@@ -4,7 +4,7 @@ import {assert} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import type {UserPushParams} from '../../../../zero-protocol/src/connect.ts';
+import type {UserMutateParams} from '../../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {
@@ -41,7 +41,7 @@ export interface Pusher extends RefCountedService {
   initConnection(
     clientID: string,
     wsID: string,
-    userPushParams: UserPushParams | undefined,
+    userPushParams: UserMutateParams | undefined,
   ): Source<Downstream>;
 }
 
@@ -94,7 +94,7 @@ export class PusherService implements Service, Pusher {
   initConnection(
     clientID: string,
     wsID: string,
-    userPushParams: UserPushParams | undefined,
+    userPushParams: UserMutateParams | undefined,
   ) {
     return this.#pusher.initConnection(clientID, wsID, userPushParams);
   }
@@ -169,7 +169,7 @@ class PushWorker {
     string,
     {
       wsID: string;
-      userParams?: UserPushParams | undefined;
+      userParams?: UserMutateParams | undefined;
       downstream: Subscription<Downstream>;
     }
   >;
@@ -200,7 +200,7 @@ class PushWorker {
   initConnection(
     clientID: string,
     wsID: string,
-    userParams: UserPushParams | undefined,
+    userParams: UserMutateParams | undefined,
   ) {
     const existing = this.#clients.get(clientID);
     if (existing && existing.wsID === wsID) {
