@@ -46,9 +46,6 @@ export default function runWorker(
 
   const lc = createLogContext(config, {worker: 'syncer'});
 
-  // Start telemetry in all workers
-  startAnonymousTelemetry(lc, config);
-
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
@@ -148,6 +145,9 @@ export default function runWorker(
     pusherFactory,
     parent,
   );
+
+  // Start telemetry with view-syncer count
+  startAnonymousTelemetry(lc, config, syncer.viewSyncerCount);
 
   void dbWarmup.then(() => parent.send(['ready', {ready: true}]));
 

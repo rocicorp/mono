@@ -18,6 +18,7 @@ import {homedir} from 'os';
 class AnonymousTelemetryManager {
   static #instance: AnonymousTelemetryManager;
   #started = false;
+  #shouldStart = false;
   #meter!: Meter;
   #meterProvider!: MeterProvider;
   #totalMutations = 0;
@@ -26,7 +27,12 @@ class AnonymousTelemetryManager {
   #totalConnectionsAttempted = 0;
   #lc: LogContext | undefined;
   #config: ZeroConfig | undefined;
+  #sessionId: string;
   #cachedAttributes: Record<string, string> | undefined;
+
+  private constructor() {
+    this.#sessionId = randomUUID();
+  }
 
   static getInstance(): AnonymousTelemetryManager {
     if (!AnonymousTelemetryManager.#instance) {
@@ -35,7 +41,7 @@ class AnonymousTelemetryManager {
     return AnonymousTelemetryManager.#instance;
   }
 
-  start(lc?: LogContext, config?: ZeroConfig) {
+  start(lc?: LogContext, config?: ZeroConfig, viewSyncerCount = 1) {
     if (!config) {
       try {
         config = getZeroConfig();
@@ -55,7 +61,7 @@ class AnonymousTelemetryManager {
       return;
     }
 
-    if (this.#started || !config.enableUsageAnalytics) {
+    if (this.#started || this.#shouldStart || !config.enableUsageAnalytics) {
       return;
     }
     this.#lc = lc;
@@ -63,22 +69,35 @@ class AnonymousTelemetryManager {
     this.#cachedAttributes = undefined;
 
     const resource = resourceFromAttributes(this.#getAttributes());
-    const metricReader = new PeriodicExportingMetricReader({
-      exportIntervalMillis: 60000,
-      exporter: new OTLPMetricExporter({
-        url: 'https://metrics.rocicorp.dev',
-      }),
-    });
 
-    this.#meterProvider = new MeterProvider({
-      resource,
-      readers: [metricReader],
-    });
-    this.#meter = this.#meterProvider.getMeter('zero-anonymous-telemetry');
+    // Delay telemetry startup by 1 minute to avoid potential boot loop issues
+    this.#shouldStart = true;
+    setTimeout(() => {
+      if (!this.#shouldStart) {
+        return;
+      }
 
-    this.#setupMetrics();
-    this.#lc?.info?.('Anonymous telemetry started (exports every 60 seconds)');
-    this.#started = true;
+      const metricReader = new PeriodicExportingMetricReader({
+        exportIntervalMillis: 60000 * viewSyncerCount,
+        exporter: new OTLPMetricExporter({
+          url: 'https://metrics.rocicorp.dev',
+        }),
+      });
+
+      this.#meterProvider = new MeterProvider({
+        resource,
+        readers: [metricReader],
+      });
+      this.#meter = this.#meterProvider.getMeter('zero-anonymous-telemetry');
+
+      this.#setupMetrics();
+      this.#lc?.info?.(
+        `Anonymous telemetry started (exports every ${60 * viewSyncerCount} seconds, scaled by ${viewSyncerCount} view-syncers)`,
+      );
+      this.#started = true;
+    }, 60000); // 1 minute delay
+
+    this.#lc?.info?.(`Anonymous telemetry will start in 1 minute`);
   }
 
   #setupMetrics() {
@@ -177,6 +196,7 @@ class AnonymousTelemetryManager {
   }
 
   shutdown() {
+    this.#shouldStart = false;
     if (this.#meterProvider) {
       this.#lc?.info?.('Shutting down anonymous telemetry');
       void this.#meterProvider.shutdown();
@@ -193,6 +213,7 @@ class AnonymousTelemetryManager {
         'zero.version': this.#config?.serverVersion ?? packageJson.version,
         'zero.task.id': this.#config?.taskID || 'unknown',
         'zero.project.id': this.#getGitProjectId(),
+        'zero.session.id': this.#sessionId,
         'zero.fs.id': this.#getOrSetFsID(),
       };
       this.#lc?.debug?.(
@@ -259,6 +280,9 @@ class AnonymousTelemetryManager {
 
   #getOrSetFsID(): string {
     try {
+      if (this.#isInContainer()) {
+        return 'container';
+      }
       const fsidPath = join(homedir(), '.rocicorp', 'fsid');
       const fsidDir = dirname(fsidPath);
 
@@ -279,12 +303,54 @@ class AnonymousTelemetryManager {
       return 'unknown';
     }
   }
+
+  #isInContainer(): boolean {
+    try {
+      if (existsSync('/.dockerenv')) {
+        return true;
+      }
+
+      if (existsSync('/usr/local/bin/docker-entrypoint.sh')) {
+        return true;
+      }
+
+      if (process.env.KUBERNETES_SERVICE_HOST) {
+        return true;
+      }
+
+      if (
+        process.env.DOCKER_CONTAINER_ID ||
+        process.env.HOSTNAME?.match(/^[a-f0-9]{12}$/)
+      ) {
+        return true;
+      }
+
+      if (existsSync('/proc/1/cgroup')) {
+        const cgroup = readFileSync('/proc/1/cgroup', 'utf8');
+        if (
+          cgroup.includes('docker') ||
+          cgroup.includes('kubepods') ||
+          cgroup.includes('containerd')
+        ) {
+          return true;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      this.#lc?.debug?.('Unable to detect container environment:', error);
+      return false;
+    }
+  }
 }
 
 const manager = () => AnonymousTelemetryManager.getInstance();
 
-export const startAnonymousTelemetry = (lc?: LogContext, config?: ZeroConfig) =>
-  manager().start(lc, config);
+export const startAnonymousTelemetry = (
+  lc?: LogContext,
+  config?: ZeroConfig,
+  viewSyncerCount?: number,
+) => manager().start(lc, config, viewSyncerCount);
 export const recordMutation = (count = 1) => manager().recordMutation(count);
 export const recordRowsSynced = (count: number) =>
   manager().recordRowsSynced(count);

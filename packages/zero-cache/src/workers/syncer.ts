@@ -196,6 +196,10 @@ export class Syncer implements SingletonService {
     return this.#stopped.promise;
   }
 
+  get viewSyncerCount(): number {
+    return this.#viewSyncers.size;
+  }
+
   /**
    * Graceful shutdown involves shutting down view syncers one at a time, pausing
    * for the duration of view syncer's hydration between each one. This paces the
