@@ -72,6 +72,9 @@ export default async function runWorker(
           String(Math.floor(config.upstream.maxConns / numSyncers)),
           '--cvr-max-conns-per-worker',
           String(Math.floor(config.cvr.maxConns / numSyncers)),
+          // let subprocesses know how many sync workers are running
+          '--num-sync-workers',
+          String(numSyncers),
         ];
 
   function loadWorker(
