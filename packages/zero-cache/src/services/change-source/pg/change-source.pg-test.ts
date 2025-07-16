@@ -740,9 +740,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
           {component: 'change-source'},
           [
             expect.stringMatching(
-              'UnsupportedSchemaChangeError: Replication halted. ' +
-                'Schema changes cannot be reliably replicated without event trigger support. ' +
-                'Resync the replica to recover.',
+              'UnsupportedSchemaChangeError: Replication halted. Resync the replica to recover',
             ),
             {tag: 'relation'},
           ],
