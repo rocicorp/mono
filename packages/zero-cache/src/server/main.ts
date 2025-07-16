@@ -1,5 +1,4 @@
 import {resolver} from '@rocicorp/resolver';
-import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {must} from '../../../shared/src/must.ts';
 import {assertNormalized} from '../config/normalize.ts';
@@ -45,12 +44,7 @@ export default async function runWorker(
 
   const processes = new ProcessManager(lc, parent);
 
-  const numSyncers =
-    config.numSyncWorkers !== undefined
-      ? config.numSyncWorkers
-      : // Reserve 1 core for the replicator. The change-streamer is not CPU heavy.
-        Math.max(1, availableParallelism() - 1);
-
+  const {numSyncWorkers: numSyncers} = config;
   if (config.upstream.maxConns < numSyncers) {
     throw new Error(
       `Insufficient upstream connections (${config.upstream.maxConns}) for ${numSyncers} syncers.` +
