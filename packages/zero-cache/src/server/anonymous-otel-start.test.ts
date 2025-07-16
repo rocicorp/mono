@@ -23,7 +23,6 @@ vi.mock('../config/zero-config.js', () => ({
 }));
 
 // Mock setTimeout to execute immediately in tests
-const _originalSetTimeout = global.setTimeout;
 vi.stubGlobal('setTimeout', (fn: () => void) => {
   fn();
   return 1 as unknown as NodeJS.Timeout;
