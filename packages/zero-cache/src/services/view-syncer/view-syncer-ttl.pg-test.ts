@@ -527,6 +527,20 @@ describe('ttl', () => {
     expect(desiresAfterEviction).toEqual([{deleted: true}]);
   });
 
+  test('no error when deleting client before TTL clock is read', () => {
+    vi.setSystemTime(Date.UTC(2025, 5, 4, 24));
+
+    // Connect a client but don't wait for the TTL clock to be initialized
+    const {queue: _client, source} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: 1000},
+    ]);
+
+    // Immediately disconnect the client before any state changes are pushed
+    // This should trigger the #deleteClientDueToDisconnect path where
+    // #hasTTLClock() returns false
+    expect(() => source.cancel()).not.toThrow();
+  });
+
   describe('expired queries', () => {
     test('expired query is removed', async () => {
       const ttl = 100;
