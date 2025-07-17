@@ -16,6 +16,7 @@ import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {getQuery} from '../server/get-query.ts';
 import {getQueries} from '@rocicorp/zero/server';
 import {schema} from '../shared/schema.ts';
+import {getPresignedUrl} from '../src/server/upload.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -181,8 +182,6 @@ fastify.post<{
     reply.status(401).send('Authentication required');
     return;
   }
-
-  const {getPresignedUrl} = await import('../src/server/upload.ts');
 
   try {
     const result = await getPresignedUrl(request.body.contentType);
