@@ -3,6 +3,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.tsx';
 import {ImageUploadArea} from '../../components/image-upload-area.tsx';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.tsx';
+import {useTextareaImageInsert} from '../../hooks/use-textarea-image-insert.ts';
 import {useZero} from '../../hooks/use-zero.ts';
 import {
   MAX_ISSUE_DESCRIPTION_LENGTH,
@@ -84,25 +85,7 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
     }
   };
 
-  const handleImageUpload = (markdown: string) => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const text = textarea.value;
-      const newText = text.substring(0, start) + markdown + text.substring(end);
-      setDescription(newText);
-
-      // Set cursor position after the inserted markdown
-      setTimeout(() => {
-        textarea.focus();
-        textarea.setSelectionRange(
-          start + markdown.length,
-          start + markdown.length,
-        );
-      }, 0);
-    }
-  };
+  const handleImageUpload = useTextareaImageInsert(textareaRef, setDescription);
 
   return (
     <Modal

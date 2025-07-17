@@ -1,11 +1,12 @@
 import {useEffect, useRef, useState} from 'react';
+import {nanoid} from 'nanoid';
 import {Button} from '../../components/button.tsx';
 import {ImageUploadArea} from '../../components/image-upload-area.tsx';
 import {useLogin} from '../../hooks/use-login.tsx';
+import {useTextareaImageInsert} from '../../hooks/use-textarea-image-insert.ts';
 import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {nanoid} from 'nanoid';
 
 export function CommentComposer({
   id,
@@ -78,25 +79,7 @@ export function CommentComposer({
     return null;
   }
 
-  const handleImageUpload = (markdown: string) => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const text = textarea.value;
-      const newText = text.substring(0, start) + markdown + text.substring(end);
-      setCurrentBody(newText);
-
-      // Set cursor position after the inserted markdown
-      setTimeout(() => {
-        textarea.focus();
-        textarea.setSelectionRange(
-          start + markdown.length,
-          start + markdown.length,
-        );
-      }, 0);
-    }
-  };
+  const handleImageUpload = useTextareaImageInsert(textareaRef, setCurrentBody);
 
   return (
     <>

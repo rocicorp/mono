@@ -48,6 +48,7 @@ import {useEmojiDataSourcePreload} from '../../hooks/use-emoji-data-source-prelo
 import {useIsScrolling} from '../../hooks/use-is-scrolling.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
+import {useTextareaImageInsert} from '../../hooks/use-textarea-image-insert.ts';
 import {useZero} from '../../hooks/use-zero.ts';
 import {
   MAX_ISSUE_DESCRIPTION_LENGTH,
@@ -191,25 +192,11 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     setEdits({});
   };
 
-  const handleDescriptionImageUpload = (markdown: string) => {
-    const textarea = editDescriptionRef.current;
-    if (textarea) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const text = textarea.value;
-      const newText = text.substring(0, start) + markdown + text.substring(end);
-      setEdits({...edits, description: newText});
-
-      // Set cursor position after the inserted markdown
-      setTimeout(() => {
-        textarea.focus();
-        textarea.setSelectionRange(
-          start + markdown.length,
-          start + markdown.length,
-        );
-      }, 0);
-    }
-  };
+  const handleDescriptionImageUpload = useTextareaImageInsert(
+    editDescriptionRef,
+    (newDescription: string) =>
+      setEdits({...edits, description: newDescription}),
+  );
 
   // A snapshot before any edits/comments added to the issue in this view is
   // used for finding the next/prev items so that a user can open an item
