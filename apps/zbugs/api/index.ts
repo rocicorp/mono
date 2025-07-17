@@ -187,7 +187,10 @@ fastify.post<{
     const result = await getPresignedUrl(request.body.contentType);
     reply.send(result);
   } catch (error) {
-    console.error('Error generating presigned URL:', error);
+    if (error instanceof Error) {
+      reply.status(500).send(error.message);
+      return;
+    }
     reply.status(500).send('Failed to generate presigned URL');
   }
 });

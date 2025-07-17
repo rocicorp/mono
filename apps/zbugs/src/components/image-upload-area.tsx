@@ -1,7 +1,9 @@
 import {useRef, useState, useEffect, type ChangeEvent} from 'react';
 import type {ReactNode} from 'react';
+import classNames from 'classnames';
 import {useImageUpload} from '../hooks/use-image-upload.ts';
 import {Button} from './button.tsx';
+import styles from './image-upload-area.module.css';
 
 interface ImageUploadAreaProps {
   onUpload: (markdown: string) => void;
@@ -119,45 +121,30 @@ export function ImageUploadArea({
     }
   };
 
-  const dropZoneClasses = `
-    ${className}
-    ${isDragOver ? 'drag-over' : ''}
-    ${isUploading ? 'uploading' : ''}
-  `.trim();
+  const dropZoneClasses = classNames(className, {
+    'drag-over': isDragOver,
+    'uploading': isUploading,
+  });
 
   return (
     <div
       ref={wrapperRef}
-      className={dropZoneClasses}
+      className={classNames(dropZoneClasses, styles.wrapper)}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
       onPaste={handlePaste}
-      style={{
-        position: 'relative',
-      }}
     >
       {children}
       {isDragOver && textareaRect && (
         <div
+          className={styles.dragOverlay}
           style={{
-            position: 'absolute',
             top: textareaRect.top,
             left: textareaRect.left,
             width: textareaRect.width,
             height: textareaRect.height,
-            backgroundColor: 'rgba(59, 130, 246, 0.1)',
-            border: '2px dashed #3b82f6',
-            borderRadius: '4px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '14px',
-            color: '#3b82f6',
-            fontWeight: 'medium',
-            pointerEvents: 'none',
-            zIndex: 10,
           }}
         >
           Drop images here to upload
@@ -165,18 +152,10 @@ export function ImageUploadArea({
       )}
       {isUploading && textareaRect && (
         <div
+          className={styles.uploadingOverlay}
           style={{
-            position: 'absolute',
             top: textareaRect.top + textareaRect.height / 2,
             left: textareaRect.left + textareaRect.width / 2,
-            transform: 'translate(-50%, -50%)',
-            backgroundColor: 'rgba(0, 0, 0, 0.8)',
-            color: 'white',
-            padding: '8px 16px',
-            borderRadius: '4px',
-            fontSize: '14px',
-            zIndex: 20,
-            pointerEvents: 'none',
           }}
         >
           Uploading image...
@@ -185,17 +164,16 @@ export function ImageUploadArea({
       {/* Image upload button positioned inside textarea */}
       {textareaRect && (
         <Button
-          className="add-image-button secondary-button icon-button"
+          className={classNames(
+            'add-image-button secondary-button icon-button',
+            styles.uploadButton,
+          )}
           eventName="Upload image"
           onAction={handleButtonClick}
           disabled={isUploading}
           style={{
-            position: 'absolute',
             top: textareaRect.top + 16,
             left: textareaRect.left + 16,
-            fontSize: '12px',
-            padding: '4px 8px',
-            zIndex: 5,
           }}
         >
           Add image
@@ -208,7 +186,7 @@ export function ImageUploadArea({
         accept="image/jpeg,image/png,image/webp,image/gif"
         multiple
         onChange={handleFileSelect}
-        style={{display: 'none'}}
+        className={styles.hiddenInput}
       />
     </div>
   );
