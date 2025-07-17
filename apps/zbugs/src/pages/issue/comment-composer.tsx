@@ -3,7 +3,6 @@ import {nanoid} from 'nanoid';
 import {Button} from '../../components/button.tsx';
 import {ImageUploadArea} from '../../components/image-upload-area.tsx';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {useTextareaImageInsert} from '../../hooks/use-textarea-image-insert.ts';
 import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
@@ -23,7 +22,6 @@ export function CommentComposer({
   const login = useLogin();
   const [currentBody, setCurrentBody] = useState(body ?? '');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const handleImageUpload = useTextareaImageInsert(textareaRef, setCurrentBody);
 
   const save = () => {
     setCurrentBody(body ?? '');
@@ -83,7 +81,7 @@ export function CommentComposer({
 
   return (
     <>
-      <ImageUploadArea onUpload={handleImageUpload}>
+      <ImageUploadArea>
         <textarea
           value={currentBody}
           onChange={handleChange}

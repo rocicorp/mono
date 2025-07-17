@@ -48,7 +48,6 @@ import {useEmojiDataSourcePreload} from '../../hooks/use-emoji-data-source-prelo
 import {useIsScrolling} from '../../hooks/use-is-scrolling.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {useTextareaImageInsert} from '../../hooks/use-textarea-image-insert.ts';
 import {useZero} from '../../hooks/use-zero.ts';
 import {
   MAX_ISSUE_DESCRIPTION_LENGTH,
@@ -191,12 +190,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     setEditing(null);
     setEdits({});
   };
-
-  const handleDescriptionImageUpload = useTextareaImageInsert(
-    editDescriptionRef,
-    (newDescription: string) =>
-      setEdits({...edits, description: newDescription}),
-  );
 
   // A snapshot before any edits/comments added to the issue in this view is
   // used for finding the next/prev items so that a user can open an item
@@ -488,7 +481,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           ) : (
             <div className="edit-description-container">
               <p className="issue-detail-label">Edit description</p>
-              <ImageUploadArea onUpload={handleDescriptionImageUpload}>
+              <ImageUploadArea>
                 <TextareaAutosize
                   className="edit-description"
                   value={rendering.description}

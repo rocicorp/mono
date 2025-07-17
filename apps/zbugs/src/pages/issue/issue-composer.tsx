@@ -3,7 +3,6 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.tsx';
 import {ImageUploadArea} from '../../components/image-upload-area.tsx';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.tsx';
-import {useTextareaImageInsert} from '../../hooks/use-textarea-image-insert.ts';
 import {useZero} from '../../hooks/use-zero.ts';
 import {
   MAX_ISSUE_DESCRIPTION_LENGTH,
@@ -85,8 +84,6 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
     }
   };
 
-  const handleImageUpload = useTextareaImageInsert(textareaRef, setDescription);
-
   return (
     <Modal
       title="New Issue"
@@ -112,7 +109,7 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
           />
         </div>
         <div className="w-full px-4">
-          <ImageUploadArea onUpload={handleImageUpload}>
+          <ImageUploadArea>
             <textarea
               className="new-issue-description autoResize"
               value={description || ''}
