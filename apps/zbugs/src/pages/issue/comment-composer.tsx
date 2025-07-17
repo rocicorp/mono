@@ -23,6 +23,8 @@ export function CommentComposer({
   const login = useLogin();
   const [currentBody, setCurrentBody] = useState(body ?? '');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const handleImageUpload = useTextareaImageInsert(textareaRef, setCurrentBody);
+
   const save = () => {
     setCurrentBody(body ?? '');
     if (!id) {
@@ -78,8 +80,6 @@ export function CommentComposer({
   if (!login.loginState) {
     return null;
   }
-
-  const handleImageUpload = useTextareaImageInsert(textareaRef, setCurrentBody);
 
   return (
     <>
