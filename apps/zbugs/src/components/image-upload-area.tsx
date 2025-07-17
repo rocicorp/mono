@@ -16,7 +16,6 @@ export function ImageUploadArea({
 }: ImageUploadAreaProps) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [textareaRect, setTextareaRect] = useState<DOMRect | null>(null);
-  const dragCounterRef = useRef(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {isUploading, uploadFiles} = useImageUpload({onUpload});
@@ -61,8 +60,6 @@ export function ImageUploadArea({
     e.preventDefault();
     e.stopPropagation();
 
-    dragCounterRef.current++;
-
     if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
       setIsDragOver(true);
     }
@@ -72,9 +69,12 @@ export function ImageUploadArea({
     e.preventDefault();
     e.stopPropagation();
 
-    dragCounterRef.current--;
+    // Only clear drag state if we're leaving the wrapper entirely
+    // Check if the relatedTarget (where we're going) is outside our wrapper
+    const wrapper = e.currentTarget as HTMLElement;
+    const relatedTarget = e.relatedTarget as HTMLElement;
 
-    if (dragCounterRef.current === 0) {
+    if (!relatedTarget || !wrapper.contains(relatedTarget)) {
       setIsDragOver(false);
     }
   };
@@ -88,7 +88,6 @@ export function ImageUploadArea({
     e.preventDefault();
     e.stopPropagation();
     setIsDragOver(false);
-    dragCounterRef.current = 0;
 
     const files = [...e.dataTransfer.files].filter(file =>
       file.type.startsWith('image/'),
