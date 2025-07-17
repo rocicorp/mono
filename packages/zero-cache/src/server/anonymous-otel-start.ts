@@ -232,7 +232,6 @@ class AnonymousTelemetryManager {
     if (
       process.env.ECS_CONTAINER_METADATA_URI_V4 ||
       process.env.ECS_CONTAINER_METADATA_URI ||
-      process.env.AWS_REGION ||
       process.env.AWS_EXECUTION_ENV
     )
       return 'aws';
