@@ -11,7 +11,8 @@ export function useTextareaImageInsert(
         const start = textarea.selectionStart;
         const end = textarea.selectionEnd;
         const text = textarea.value;
-        const newText = text.substring(0, start) + markdown + text.substring(end);
+        const newText =
+          text.substring(0, start) + markdown + text.substring(end);
         setValue(newText);
 
         // Set cursor position after the inserted markdown

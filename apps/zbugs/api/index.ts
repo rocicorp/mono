@@ -183,7 +183,7 @@ fastify.post<{
   }
 
   const {getPresignedUrl} = await import('../src/server/upload.ts');
-  
+
   try {
     const result = await getPresignedUrl(request.body.contentType);
     reply.send(result);

@@ -22,7 +22,9 @@ export function useImageUpload({onUpload}: UseImageUploadOptions) {
     return null;
   };
 
-  const getPresignedUrl = async (contentType: string): Promise<{url: string; key: string}> => {
+  const getPresignedUrl = async (
+    contentType: string,
+  ): Promise<{url: string; key: string}> => {
     const response = await fetch('/api/upload/presigned-url', {
       method: 'POST',
       headers: {
