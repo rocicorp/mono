@@ -433,7 +433,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return this.#clients.size === 0;
   }
 
-  #deleteClient(clientID: string, client: ClientHandler) {
+  #deleteClientDueToDisconnect(clientID: string, client: ClientHandler) {
     // Note: It is okay to delete / cleanup clients without acquiring the lock.
     // In fact, it is important to do so in order to guarantee that idle cleanup
     // is performed in a timely manner, regardless of the amount of work
@@ -443,7 +443,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#clients.delete(clientID);
 
       if (this.#clients.size === 0) {
-        this.#updateTTLClockInCVRWithoutLock(this.#lc);
+        // It is possible to delete a client before we read the ttl clock from
+        // the CVR.
+        if (this.#hasTTLClock()) {
+          this.#updateTTLClockInCVRWithoutLock(this.#lc);
+        }
         this.#stopExpireTimer();
         this.#scheduleShutdown();
       }
@@ -480,7 +484,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           err
             ? lc[getLogLevel(err)]?.(`client closed with error`, err)
             : lc.info?.('client closed');
-          this.#deleteClient(clientID, newClient);
+          this.#deleteClientDueToDisconnect(clientID, newClient);
         },
       });
 
@@ -1747,10 +1751,7 @@ function expired(
       if (ttl < 0 || inactivatedAt === undefined) {
         return false;
       }
-      if (
-        (inactivatedAt as unknown as number) + ttl >
-        (ttlClock as unknown as number)
-      ) {
+      if (ttlClockAsNumber(inactivatedAt) + ttl > ttlClockAsNumber(ttlClock)) {
         return false;
       }
     }
