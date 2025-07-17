@@ -16,6 +16,7 @@ import {astSchema} from '../../../../zero-protocol/src/ast.ts';
 import {clientSchemaSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import type {InspectQueryRow} from '../../../../zero-protocol/src/inspect-down.ts';
+import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
@@ -337,7 +338,7 @@ export class CVRStore {
       ) {
         query.clientState[row.clientID] = {
           inactivatedAt: row.inactivatedAt ?? undefined,
-          ttl: row.ttl ?? -1,
+          ttl: row.ttl ?? DEFAULT_TTL_MS,
           version: versionFromString(row.patchVersion),
         };
       }
@@ -833,6 +834,7 @@ export class CVRStore {
     lc: LogContext,
     clientID?: string,
   ): Promise<InspectQueryRow[]> {
+    // TODO: This used `now()` to compute expire which is not correct. We need to use the ttlClock.
     const db = this.#db;
     const clientGroupID = this.#id;
 
@@ -843,7 +845,7 @@ export class CVRStore {
   SELECT DISTINCT ON (d."clientID", d."queryHash")
     d."clientID",
     d."queryHash" AS "queryID",
-    COALESCE((EXTRACT(EPOCH FROM d."ttl") * 1000)::double precision, -1) AS "ttl",
+    COALESCE((EXTRACT(EPOCH FROM d."ttl") * 1000)::double precision, ${DEFAULT_TTL_MS}) AS "ttl",
     (EXTRACT(EPOCH FROM d."inactivatedAt") * 1000)::double precision AS "inactivatedAt",
     (SELECT COUNT(*)::INT FROM ${this.#cvr('rows')} r 
      WHERE r."clientGroupID" = d."clientGroupID" 

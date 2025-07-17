@@ -18,7 +18,11 @@ import {
 import {stringCompare} from '../../../../shared/src/string-compare.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
-import {clampTTL, compareTTL} from '../../../../zql/src/query/ttl.ts';
+import {
+  clampTTL,
+  compareTTL,
+  DEFAULT_TTL_MS,
+} from '../../../../zql/src/query/ttl.ts';
 import * as counters from '../../observability/counters.ts';
 import * as histograms from '../../observability/histograms.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
@@ -33,10 +37,10 @@ import {
   maxVersion,
   oneAfter,
   versionString,
-  type CVRVersion,
   type ClientQueryRecord,
   type ClientRecord,
   type CustomQueryRecord,
+  type CVRVersion,
   type InternalQueryRecord,
   type QueryRecord,
   type RowID,
@@ -263,7 +267,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
     // Find the new/changed desired queries.
     const needed: Set<string> = new Set();
-    for (const {hash, ttl = -1} of queries) {
+    for (const {hash, ttl = DEFAULT_TTL_MS} of queries) {
       const query = this._cvr.queries[hash];
       if (!query) {
         needed.add(hash);
@@ -292,12 +296,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     client.desiredQueryIDs = [...union(current, needed)].sort(stringCompare);
 
     for (const id of needed) {
-      const {
-        ast,
-        name,
-        args,
-        ttl = -1,
-      } = must(queries.find(({hash}) => hash === id));
+      const q = must(queries.find(({hash}) => hash === id));
+      const {ast, name, args} = q;
+      const ttl = clampTTL(q.ttl ?? DEFAULT_TTL_MS);
       const query =
         this._cvr.queries[id] ?? newQueryRecord(id, ast, name, args);
       assertNotInternal(query);
@@ -306,7 +307,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
       query.clientState[clientID] = {
         inactivatedAt,
-        ttl: normalizeTTL(ttl),
+        ttl,
         version: newVersion,
       };
       this._cvr.queries[id] = query;
@@ -322,7 +323,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         client,
         false,
         inactivatedAt,
-        normalizeTTL(ttl),
+        ttl,
       );
     }
     return patches;
@@ -369,7 +370,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       }
       assertNotInternal(query);
 
-      let ttl = -1;
+      let ttl = DEFAULT_TTL_MS;
       if (inactivatedAt === undefined) {
         delete query.clientState[clientID];
       } else {
@@ -889,12 +890,14 @@ export function getInactiveQueries(cvr: CVR): {
     }
     for (const clientState of Object.values(query.clientState)) {
       const {inactivatedAt, ttl} = clientState;
-      const clampedTTL = clampTTL(ttl);
       if (inactivatedAt !== undefined) {
+        const clampedTTL = clampTTL(ttl);
         const existing = inactive.get(queryID);
         if (existing) {
-          // Use the last eviction time.
+          // The stored one might be too large because from a previous version of
+          // zero
           const existingTTL = clampTTL(existing.ttl);
+          // Use the last eviction time.
           if (
             existingTTL + ttlClockAsNumber(existing.inactivatedAt) <
             ttlClockAsNumber(inactivatedAt) + clampedTTL
@@ -932,16 +935,12 @@ export function getInactiveQueries(cvr: CVR): {
 export function nextEvictionTime(cvr: CVR): TTLClock | undefined {
   let next: number | undefined;
   for (const {inactivatedAt, ttl} of getInactiveQueries(cvr)) {
-    const expire = (inactivatedAt as unknown as number) + ttl;
+    const expire = ttlClockAsNumber(inactivatedAt) + ttl;
     if (next === undefined || expire < next) {
       next = expire;
     }
   }
   return next as TTLClock | undefined;
-}
-
-function normalizeTTL(ttl: number): number {
-  return ttl < 0 ? -1 : ttl;
 }
 
 function newQueryRecord(
