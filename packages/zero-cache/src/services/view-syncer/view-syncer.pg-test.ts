@@ -26,6 +26,7 @@ import type {
 } from '../../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {testDBs} from '../../test/db.ts';
@@ -243,7 +244,7 @@ describe('view-syncer/service', () => {
           clientState: {
             foo: {
               inactivatedAt,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
               version: {minorVersion: 2, stateVersion: '00'},
             },
           },
@@ -255,7 +256,7 @@ describe('view-syncer/service', () => {
           clientState: {
             foo: {
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
               version: {stateVersion: '00', minorVersion: 2},
             },
           },

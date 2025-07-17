@@ -885,7 +885,7 @@ describe('view-syncer/cvr-store', () => {
             "clientState": {
               "client1": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 1000,
                 "version": {
                   "stateVersion": "01",
                 },
@@ -964,7 +964,7 @@ describe('view-syncer/cvr-store', () => {
           "name": null,
           "queryID": "bar",
           "rowCount": 6,
-          "ttl": -1,
+          "ttl": 1000,
         },
         {
           "args": null,
@@ -978,7 +978,7 @@ describe('view-syncer/cvr-store', () => {
           "name": null,
           "queryID": "foo",
           "rowCount": 6,
-          "ttl": -1,
+          "ttl": 1000,
         },
         {
           "args": null,
@@ -992,7 +992,7 @@ describe('view-syncer/cvr-store', () => {
           "name": null,
           "queryID": "bar",
           "rowCount": 6,
-          "ttl": -1,
+          "ttl": 1000,
         },
         {
           "args": [
@@ -1029,7 +1029,7 @@ describe('view-syncer/cvr-store', () => {
           "name": null,
           "queryID": "bar",
           "rowCount": 6,
-          "ttl": -1,
+          "ttl": 1000,
         },
         {
           "args": null,
@@ -1043,7 +1043,7 @@ describe('view-syncer/cvr-store', () => {
           "name": null,
           "queryID": "foo",
           "rowCount": 6,
-          "ttl": -1,
+          "ttl": 1000,
         },
       ]
     `);
@@ -1064,7 +1064,7 @@ describe('view-syncer/cvr-store', () => {
           "name": null,
           "queryID": "bar",
           "rowCount": 6,
-          "ttl": -1,
+          "ttl": 1000,
         },
         {
           "args": [

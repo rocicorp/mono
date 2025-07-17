@@ -29,7 +29,7 @@ import type {
   InspectUpBody,
   InspectUpMessage,
 } from '../../../../zero-protocol/src/inspect-up.ts';
-import {MAX_TTL_MS} from '../../../../zql/src/query/ttl.ts';
+import {clampTTL, MAX_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {
   transformAndHashQuery,
   type TransformedAndHashed,
@@ -1748,10 +1748,15 @@ function expired(
   for (const clientID in clientState) {
     if (hasOwn(clientState, clientID)) {
       const {ttl, inactivatedAt} = clientState[clientID];
-      if (ttl < 0 || inactivatedAt === undefined) {
+      if (inactivatedAt === undefined) {
         return false;
       }
-      if (ttlClockAsNumber(inactivatedAt) + ttl > ttlClockAsNumber(ttlClock)) {
+
+      const clampedTTL = clampTTL(ttl);
+      if (
+        ttlClockAsNumber(inactivatedAt) + clampedTTL >
+        ttlClockAsNumber(ttlClock)
+      ) {
         return false;
       }
     }
