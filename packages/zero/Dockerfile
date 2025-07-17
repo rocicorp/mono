@@ -43,7 +43,7 @@ ENV ZERO_LITESTREAM_EXECUTABLE=/usr/local/bin/litestream
 ENV ZERO_LITESTREAM_CONFIG_PATH=/etc/litestream.yml
 ENV ZERO_LOG_FORMAT=json
 ENV ZERO_SERVER_VERSION=${ZERO_VERSION}
-
+ENV ZERO_IN_CONTAINER=1
 # Install OpenTelemetry instrumentation
 ENV NODE_PATH=/usr/local/lib/node_modules
 RUN npm install -g @opentelemetry/auto-instrumentations-node
