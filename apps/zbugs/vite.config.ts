@@ -15,22 +15,18 @@ async function configureServer(server: ViteDevServer) {
   });
 }
 
-export default defineConfig(() => {
-  return {
-    plugins: [
-      tsconfigPaths(),
-      svgr(),
+export default defineConfig({
+  plugins: [
+    tsconfigPaths(),
+    svgr(),
     react(),
     {
       name: 'api-server',
       configureServer,
-      },
-    ],
-    define: {
-      ...makeDefine(),
     },
-    build: {
-      target: 'esnext',
-    },
-  };
+  ],
+  define: makeDefine(),
+  build: {
+    target: 'esnext',
+  },
 });
