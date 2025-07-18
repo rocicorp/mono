@@ -251,7 +251,6 @@ export class ClientHandler {
                 mutationRowSchema,
                 'passthrough',
               );
-              console.log('MUTATION RESULT', row.result);
               patches.push({
                 op: 'put',
                 // TODO: is this not already parsed?

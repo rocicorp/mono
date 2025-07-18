@@ -3,6 +3,7 @@ import type {MaybePromise} from '../../shared/src/types.ts';
 import type {Hash} from './hash.ts';
 import type {PullResponseV1, PullResponseV1Internal} from './puller.ts';
 import type {ReadTransactionImpl, WriteTransaction} from './transactions.ts';
+import type {MutationPatch} from '../../zero-protocol/src/mutations-patch.ts';
 
 export type BeginPullResult = {
   requestID: string;
@@ -16,6 +17,7 @@ export type Poke = {
 
 export type PokeInternal = {
   baseCookie: ReadonlyJSONValue;
+  mutationResults: MutationPatch[];
   pullResponse: PullResponseV1Internal;
 };
 
