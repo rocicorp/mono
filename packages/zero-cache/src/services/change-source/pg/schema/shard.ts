@@ -156,7 +156,7 @@ export function shardSetup(
   ${getMutationsTableDefinition(shard)}
 
   CREATE PUBLICATION ${id(metadataPublication)}
-    FOR TABLE ${app}."schemaVersions", ${app}."permissions", TABLE ${shard}."clients";
+    FOR TABLE ${app}."schemaVersions", ${app}."permissions", TABLE ${shard}."clients", ${shard}."mutations";
 
   CREATE TABLE ${shard}."${SHARD_CONFIG_TABLE}" (
     "publications"  TEXT[] NOT NULL,
