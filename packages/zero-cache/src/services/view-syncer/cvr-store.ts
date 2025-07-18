@@ -839,7 +839,6 @@ export class CVRStore {
     ttlClock: TTLClock,
     clientID?: string,
   ): Promise<InspectQueryRow[]> {
-    // TODO: This used `now()` to compute expire which is not correct. We need to use the ttlClock.
     const db = this.#db;
     const clientGroupID = this.#id;
 
