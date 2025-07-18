@@ -442,6 +442,109 @@ export async function expectNoPokes(client: Queue<Downstream>) {
   expect(await client.dequeue(timedOut, 10)).toBe(timedOut);
 }
 
+// Higher-level helper functions for TTL tests
+export function addQuery(
+  vs: ViewSyncerService,
+  ctx: SyncContext,
+  hash: string,
+  ast: AST,
+  ttl?: number,
+): Promise<void> {
+  return changeDesiredQueries(vs, ctx, [{op: 'put', hash, ast, ttl}]);
+}
+
+export function removeQuery(
+  vs: ViewSyncerService,
+  ctx: SyncContext,
+  hash: string,
+): Promise<void> {
+  return changeDesiredQueries(vs, ctx, [{op: 'del', hash}]);
+}
+
+function changeDesiredQueries(
+  vs: ViewSyncerService,
+  ctx: SyncContext,
+  desiredQueriesPatch: UpQueriesPatch,
+): Promise<void> {
+  return vs.changeDesiredQueries(ctx, [
+    'changeDesiredQueries',
+    {
+      desiredQueriesPatch,
+    },
+  ]);
+}
+
+export function inactivateQuery(
+  vs: ViewSyncerService,
+  ctx: SyncContext,
+  hash: string,
+) {
+  return removeQuery(vs, ctx, hash);
+}
+
+export async function expectQueryEvicted(
+  client: Queue<Downstream>,
+  queryHash: string,
+) {
+  const pokeParts = await nextPokeParts(client);
+  expect(pokeParts[0].gotQueriesPatch).toContainEqual({
+    hash: queryHash,
+    op: 'del',
+  });
+  return pokeParts;
+}
+
+export function expectGotPut(client: Queue<Downstream>, queryHash: string) {
+  return expectGot(client, queryHash, 'put');
+}
+
+export function expectGotDel(client: Queue<Downstream>, queryHash: string) {
+  return expectGot(client, queryHash, 'del');
+}
+
+async function expectGot(
+  client: Queue<Downstream>,
+  queryHash: string,
+  op: 'put' | 'del',
+) {
+  const pokeParts = await nextPokeParts(client);
+  expect(pokeParts[0].gotQueriesPatch).toContainEqual({
+    hash: queryHash,
+    op,
+  });
+  return pokeParts;
+}
+
+export function expectDesiredPut(
+  client: Queue<Downstream>,
+  queryHash: string,
+  clientID: string,
+) {
+  return expectDesired(client, queryHash, 'put', clientID);
+}
+
+export function expectDesiredDel(
+  client: Queue<Downstream>,
+  queryHash: string,
+  clientID: string,
+) {
+  return expectDesired(client, queryHash, 'del', clientID);
+}
+
+async function expectDesired(
+  client: Queue<Downstream>,
+  queryHash: string,
+  op: 'put' | 'del',
+  clientID: string,
+) {
+  const pokeParts = await nextPokeParts(client);
+  expect(pokeParts[0].desiredQueriesPatches?.[clientID]).toContainEqual({
+    hash: queryHash,
+    op,
+  });
+  return pokeParts;
+}
+
 export async function setup(
   testName: string,
   permissions: PermissionsConfig | undefined,

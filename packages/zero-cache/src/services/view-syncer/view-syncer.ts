@@ -134,7 +134,7 @@ type SetTimeout = (
  * some flushes do not write to the CVR and in those cases we
  * use a timer to update the ttlClock every minute.
  */
-const TTL_CLOCK_INTERVAL = 60_000;
+export const TTL_CLOCK_INTERVAL = 60_000;
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
@@ -361,17 +361,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #removeExpiredQueries = async (
     lc: LogContext,
     cvr: CVRSnapshot,
+    ttlClock: TTLClock,
   ): Promise<void> => {
-    const now = Date.now();
-    const ttlClock = this.#getTTLClock(now);
     if (hasExpiredQueries(cvr, ttlClock)) {
       lc = lc.withContext('method', '#removeExpiredQueries');
-      lc.info?.('Queries have expired');
+      lc.debug?.('Queries have expired');
       // #syncQueryPipelineSet() will remove the expired queries.
       await this.#syncQueryPipelineSet(lc, cvr);
       this.#pipelinesSynced = true;
-      this.#scheduleExpireEviction(lc, cvr);
     }
+
+    // Even if we have expired queries, we still need to schedule next eviction
+    // since there might be inactivated queries that need to be expired queries
+    // in the future.
+    this.#scheduleExpireEviction(lc, cvr, ttlClock);
   };
 
   #totalHydrationTimeMs(): number {
@@ -754,10 +757,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     startAsyncSpan(tracer, 'vs.#patchQueries', async () => {
       const deletedClientIDs: string[] = [];
       const deletedClientGroupIDs: string[] = [];
+      const now = Date.now();
+      const ttlClock = this.#getTTLClock(now);
 
       cvr = await this.#updateCVRConfig(lc, cvr, clientID, updater => {
-        const now = Date.now();
-        const ttlClock = this.#getTTLClock(now);
         const patches: PatchToVersion[] = [];
 
         if (clientSchema) {
@@ -843,34 +846,40 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
       }
 
-      this.#scheduleExpireEviction(lc, cvr);
+      this.#scheduleExpireEviction(lc, cvr, ttlClock);
     });
 
-  #scheduleExpireEviction(lc: LogContext, cvr: CVRSnapshot): void {
+  #scheduleExpireEviction(
+    lc: LogContext,
+    cvr: CVRSnapshot,
+    ttlClock: TTLClock,
+  ): void {
+    this.#stopExpireTimer();
+
     // first see if there is any inactive query with a ttl.
     const next = nextEvictionTime(cvr);
+
     if (next === undefined) {
       lc.debug?.('no inactive queries with ttl');
       // no inactive queries with a ttl. Cancel existing timeout if any.
-      this.#stopExpireTimer();
       return;
     }
 
-    if (this.#expiredQueriesTimer) {
-      lc.debug?.('eviction timer already scheduled');
-      return;
-    }
-
-    const now = Date.now();
-    const ttlClock = this.#getTTLClock(now);
-    const delay = Math.min(
-      ttlClockAsNumber(next) - ttlClockAsNumber(ttlClock),
-      MAX_TTL_MS,
+    const delay = Math.max(
+      // It is common for many queries to be evicted close to the same time, so
+      // we add a small delay so we can collapse multiple evictions into a
+      // single timer.
+      0, // TODO
+      Math.min(ttlClockAsNumber(next) - ttlClockAsNumber(ttlClock), MAX_TTL_MS),
     );
     lc.debug?.('Scheduling eviction timer to run in ', delay, 'ms');
     this.#expiredQueriesTimer = this.#setTimeout(() => {
       this.#expiredQueriesTimer = 0;
-      this.#runInLockWithCVR(this.#removeExpiredQueries).catch(e =>
+      const now = Date.now();
+      const ttlClock = this.#getTTLClock(now);
+      this.#runInLockWithCVR((lc, cvr) =>
+        this.#removeExpiredQueries(lc, cvr, ttlClock),
+      ).catch(e =>
         // If an error occurs (e.g. ownership change), propagate the error
         // to the main run() loop via the #stateChanges Subscription.
         this.#stateChanges.fail(e),
