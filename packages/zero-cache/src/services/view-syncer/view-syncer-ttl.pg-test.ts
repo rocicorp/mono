@@ -21,7 +21,13 @@ import {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {type FakeReplicator} from '../replicator/test-utils.ts';
 import {
+  addQuery,
+  expectDesiredDel,
+  expectDesiredPut,
+  expectGotDel,
+  expectGotPut,
   expectNoPokes,
+  inactivateQuery,
   ISSUES_QUERY,
   messages,
   nextPoke,
@@ -31,7 +37,11 @@ import {
   setup,
   USERS_QUERY,
 } from './view-syncer-test-util.ts';
-import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
+import {
+  type SyncContext,
+  TTL_CLOCK_INTERVAL,
+  ViewSyncerService,
+} from './view-syncer.ts';
 
 let replicaDbFile: DbFile;
 let cvrDB: PostgresDB;
@@ -56,11 +66,17 @@ let connectWithQueueAndSource: (
 };
 let setTimeoutFn: Mock<typeof setTimeout>;
 
-function callNextSetTimeout(delta: number) {
+function callNextSetTimeout(delta: number, expectedDelay?: number) {
   // Sanity check that the system time is the mocked time.
   expect(vi.getRealSystemTime()).not.toBe(vi.getMockedSystemTime());
+
+  const {lastCall} = setTimeoutFn.mock;
+  if (expectedDelay !== undefined) {
+    expect(lastCall?.[1]).toBe(expectedDelay);
+  }
+
   vi.setSystemTime(Date.now() + delta);
-  const fn = setTimeoutFn.mock.lastCall![0];
+  const fn = lastCall![0];
   fn();
 }
 
@@ -296,14 +312,9 @@ describe('ttl', () => {
     // Advance 5 minutes, then remove the query.
     const t1 = t0 + 5 * 60 * 1000;
     vi.setSystemTime(t1);
-    await vs.changeDesiredQueries(SYNC_CONTEXT, [
-      'changeDesiredQueries',
-      {
-        desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-      },
-    ]);
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
     // Should get a desiredQueriesPatches poke, but not expired yet.
-    await nextPokeParts(client);
+    await expectDesiredDel(client, 'query-hash1', 'foo');
 
     await expectNoPokes(client);
 
@@ -368,15 +379,7 @@ describe('ttl', () => {
     // Advance 5 minutes
     callNextSetTimeout(5 * 60 * 1000);
 
-    expect((await nextPokeParts(client2))[0].gotQueriesPatch)
-      .toMatchInlineSnapshot(`
-        [
-          {
-            "hash": "query-hash1",
-            "op": "del",
-          },
-        ]
-      `);
+    await expectGotDel(client2, 'query-hash1');
     await expectNoPokes(client2);
 
     expect(
@@ -410,12 +413,7 @@ describe('ttl', () => {
     // Advance 2 seconds, then inactivate the query.
     const t1 = t0 + 2 * 1000;
     vi.setSystemTime(t1);
-    await vs.changeDesiredQueries(SYNC_CONTEXT, [
-      'changeDesiredQueries',
-      {
-        desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-      },
-    ]);
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
     await nextPokeParts(client); // Should get a desiredQueriesPatches poke
 
     // Verify the query is inactivated at ttlClock t1.
@@ -471,49 +469,7 @@ describe('ttl', () => {
     callNextSetTimeout(ttl);
 
     // The eviction should trigger a poke to notify clients about the deletion.
-    expect(await nextPokeParts(client2)).toMatchInlineSnapshot(`
-      [
-        {
-          "gotQueriesPatch": [
-            {
-              "hash": "query-hash1",
-              "op": "del",
-            },
-          ],
-          "pokeID": "01:02",
-          "rowsPatch": [
-            {
-              "id": {
-                "id": "1",
-              },
-              "op": "del",
-              "tableName": "issues",
-            },
-            {
-              "id": {
-                "id": "2",
-              },
-              "op": "del",
-              "tableName": "issues",
-            },
-            {
-              "id": {
-                "id": "3",
-              },
-              "op": "del",
-              "tableName": "issues",
-            },
-            {
-              "id": {
-                "id": "4",
-              },
-              "op": "del",
-              "tableName": "issues",
-            },
-          ],
-        },
-      ]
-    `);
+    await expectGotDel(client2, 'query-hash1');
 
     await expectNoPokes(client2);
 
@@ -541,766 +497,226 @@ describe('ttl', () => {
     expect(() => source.cancel()).not.toThrow();
   });
 
-  describe('expired queries', () => {
-    test('expired query is removed', async () => {
-      const ttl = 100;
-      vi.setSystemTime(Date.now());
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
-      ]);
+  test('expired query is removed', async () => {
+    const ttl = 100;
+    vi.setSystemTime(Date.now());
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
+    ]);
 
-      stateChanges.push({state: 'version-ready'});
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
+    stateChanges.push({state: 'version-ready'});
+    await expectDesiredPut(client, 'query-hash1', 'foo');
 
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ]
-      `);
+    await expectGotPut(client, 'query-hash1');
 
-      // Mark query-hash1 as inactive
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-        },
-      ]);
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
 
-      // Make sure we do not get a delete of the gotQueriesPatch
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
+    // Make sure we do not get a delete of the gotQueriesPatch
+    await expectDesiredDel(client, 'query-hash1', 'foo');
 
-      await expectNoPokes(client);
+    await expectNoPokes(client);
 
-      callNextSetTimeout(ttl);
+    callNextSetTimeout(ttl);
 
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:02",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "1",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "3",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "4",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-            ],
-          },
-        ]
-      `);
+    await expectGotDel(client, 'query-hash1');
 
-      await expectNoPokes(client);
-    });
+    await expectNoPokes(client);
+  });
 
-    test('expired query is readded', async () => {
-      const ttl = 100;
-      vi.setSystemTime(Date.now());
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
-      ]);
+  test('expired query is readded', async () => {
+    const ttl = 100;
+    vi.setSystemTime(Date.now());
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
+    ]);
 
-      stateChanges.push({state: 'version-ready'});
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
+    stateChanges.push({state: 'version-ready'});
+    await expectDesiredPut(client, 'query-hash1', 'foo');
 
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ]
-      `);
+    await expectGotPut(client, 'query-hash1');
 
-      // Mark query-hash1 as inactive
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-        },
-      ]);
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
 
-      // Make sure we do not get a delete of the gotQueriesPatch
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
+    // Make sure we do not get a delete of the gotQueriesPatch
+    await expectDesiredDel(client, 'query-hash1', 'foo');
 
-      await expectNoPokes(client);
+    await expectNoPokes(client);
 
-      callNextSetTimeout(ttl / 2);
+    callNextSetTimeout(ttl / 2);
 
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [
-            {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: ttl * 2},
-          ],
-        },
-      ]);
+    await addQuery(vs, SYNC_CONTEXT, 'query-hash1', ISSUES_QUERY, ttl * 2);
 
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "01:02",
-          },
-        ]
-      `);
+    await expectDesiredPut(client, 'query-hash1', 'foo');
 
-      // No got queries patch since we newer removed.
-      await expectNoPokes(client);
+    // No got queries patch since we newer removed.
+    await expectNoPokes(client);
 
-      callNextSetTimeout(ttl);
+    callNextSetTimeout(ttl);
 
-      await expectNoPokes(client);
+    await expectNoPokes(client);
 
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-        },
-      ]);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:03",
-          },
-        ]
-      `);
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
+    await expectDesiredDel(client, 'query-hash1', 'foo');
 
-      await expectNoPokes(client);
+    await expectNoPokes(client);
 
-      callNextSetTimeout(ttl * 2);
+    callNextSetTimeout(ttl * 2);
 
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:04",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "1",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "3",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "4",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-            ],
-          },
-        ]
-      `);
-    });
+    await expectGotDel(client, 'query-hash1');
+  });
 
-    test('query is added twice with longer ttl', async () => {
-      const ttl = 100;
-      vi.setSystemTime(Date.now());
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
-      ]);
+  test('query is added twice with longer ttl', async () => {
+    const ttl = 100;
+    vi.setSystemTime(Date.now());
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
+    ]);
 
-      stateChanges.push({state: 'version-ready'});
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
+    stateChanges.push({state: 'version-ready'});
+    await expectDesiredPut(client, 'query-hash1', 'foo');
 
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ]
-      `);
+    await expectGotPut(client, 'query-hash1');
 
-      // Set the same query again but with 2*ttl
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [
-            {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: ttl * 2},
-          ],
-        },
-      ]);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
+    // Set the same query again but with 2*ttl
+    await addQuery(vs, SYNC_CONTEXT, 'query-hash1', ISSUES_QUERY, ttl * 2);
+    await expectDesiredPut(client, 'query-hash1', 'foo');
 
-      await expectNoPokes(client);
+    await expectNoPokes(client);
 
-      vi.setSystemTime(Date.now() + ttl * 2);
+    vi.setSystemTime(Date.now() + ttl * 2);
 
-      // Now delete it and make sure it takes 2 * ttl to get the got delete.
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-        },
-      ]);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:02",
-          },
-        ]
-      `);
+    // Now delete it and make sure it takes 2 * ttl to get the got delete.
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
+    await expectDesiredDel(client, 'query-hash1', 'foo');
 
-      await expectNoPokes(client);
+    await expectNoPokes(client);
 
-      callNextSetTimeout(2 * ttl);
+    callNextSetTimeout(2 * ttl);
 
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:03",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "1",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "3",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "4",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-            ],
-          },
-        ]
-      `);
+    await expectGotDel(client, 'query-hash1');
 
-      await expectNoPokes(client);
-    });
+    await expectNoPokes(client);
+  });
 
-    test('query is added twice with shorter ttl', async () => {
-      const ttl = 100;
-      vi.setSystemTime(Date.now());
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: ttl * 2},
-      ]);
+  test('query is added twice with shorter ttl', async () => {
+    const ttl = 100;
+    vi.setSystemTime(Date.now());
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: ttl * 2},
+    ]);
 
-      stateChanges.push({state: 'version-ready'});
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
+    stateChanges.push({state: 'version-ready'});
+    await expectDesiredPut(client, 'query-hash1', 'foo');
 
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ]
-      `);
+    await expectGotPut(client, 'query-hash1');
 
-      // Set the same query again but with lower ttl which has no effect
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [
-            {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
-          ],
-        },
-      ]);
-      await expectNoPokes(client);
+    // Set the same query again but with lower ttl which has no effect
+    await addQuery(vs, SYNC_CONTEXT, 'query-hash1', ISSUES_QUERY, ttl);
+    await expectNoPokes(client);
 
-      vi.setSystemTime(Date.now() + 2 * ttl);
+    vi.setSystemTime(Date.now() + 2 * ttl);
 
-      // Now delete it and make sure it takes 2 * ttl to get the got delete.
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-        },
-      ]);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
+    // Now delete it and make sure it takes 2 * ttl to get the got delete.
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
+    await expectDesiredDel(client, 'query-hash1', 'foo');
 
-      await expectNoPokes(client);
-      callNextSetTimeout(2 * ttl);
+    await expectNoPokes(client);
+    callNextSetTimeout(2 * ttl);
 
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:02",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "1",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "3",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "4",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-            ],
-          },
-        ]
-      `);
+    await expectGotDel(client, 'query-hash1');
 
-      await expectNoPokes(client);
-    });
+    await expectNoPokes(client);
+  });
+
+  test('two queries with different TTLs are evicted at their respective times', async () => {
+    const ttl10s = 10000; // 10 seconds
+    const ttl5s = 5000; // 5 seconds
+    vi.setSystemTime(new Date(2025, 6, 17));
+
+    // Start with just the 10s query to establish the timer
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: ttl10s},
+    ]);
+
+    stateChanges.push({state: 'version-ready'});
+
+    // Get the config and hydration pokes for the first query
+    await expectDesiredPut(client, 'query-hash1', 'foo');
+
+    await expectGotPut(client, 'query-hash1');
+
+    // Inactivate the first query
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
+    await expectDesiredDel(client, 'query-hash1', 'foo');
+
+    // Check timeout call
+    const [fn10s, delay] = setTimeoutFn.mock.lastCall!;
+    expect(fn10s).toBeDefined();
+    expect(delay).toBe(ttl10s); // Should schedule for the 10s
+    setTimeoutFn.mockClear();
+
+    // Now add the second query with 5s TTL
+    await addQuery(vs, SYNC_CONTEXT, 'query-hash2', USERS_QUERY, ttl5s);
+
+    await expectDesiredPut(client, 'query-hash2', 'foo');
+    await expectGotPut(client, 'query-hash2');
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash2');
+    await expectDesiredDel(client, 'query-hash2', 'foo');
+
+    // We should have cancelled the timeout for 10s and add a new timeout for 5s
+    expect(setTimeoutFn.mock.lastCall?.[1]).toBe(ttl5s);
+    callNextSetTimeout(ttl5s);
+
+    await expectGotDel(client, 'query-hash2');
+
+    // Remove the TTL_FLUSH_INTERVAL call
+    expect(setTimeoutFn.mock.calls.pop()?.[1]).toEqual(TTL_CLOCK_INTERVAL);
+
+    // Another timeout should be scheduled for the remaining 5s TTL
+    const [fn10sAgain, remainingDelay] = setTimeoutFn.mock.lastCall!;
+    expect(fn10sAgain).toBeDefined();
+    expect(remainingDelay).toBe(ttl10s - ttl5s); // Should schedule for the remaining 5s
+
+    callNextSetTimeout(ttl10s - ttl5s);
+
+    await expectGotDel(client, 'query-hash1');
+  });
+
+  test('reschedule timer when query with shorter TTL is added after inactivation', async () => {
+    const ttl10s = 10 * 1000; // 10 seconds
+    const ttl5s = 5 * 1000; // 5 seconds
+    vi.setSystemTime(new Date(2025, 6, 17));
+
+    // Start with a query that has 10s TTL
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: ttl10s},
+    ]);
+
+    stateChanges.push({state: 'version-ready'});
+    await expectDesiredPut(client, 'query-hash1', 'foo');
+    await expectGotPut(client, 'query-hash1');
+
+    // Inactivate the query - this should schedule eviction in 10s
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
+    await expectDesiredDel(client, 'query-hash1', 'foo');
+
+    // Verify the timer was scheduled for 10s
+    const [, delay] = setTimeoutFn.mock.lastCall!;
+    expect(delay).toBe(ttl10s);
+    setTimeoutFn.mockClear();
+
+    // Re-add the same query with a shorter TTL (5s)
+    // This should trigger rescheduling since the query is already inactive
+    await addQuery(vs, SYNC_CONTEXT, 'query-hash1', ISSUES_QUERY, ttl5s);
+    await expectDesiredPut(client, 'query-hash1', 'foo');
+    // and inactivate it again. We should use the new shorter TTL here.
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
+    await expectDesiredDel(client, 'query-hash1', 'foo');
+
+    // Verify the timer was rescheduled for 5s (the shorter TTL)
+    callNextSetTimeout(ttl5s, 5_000);
+
+    await expectGotDel(client, 'query-hash1');
+    await expectNoPokes(client);
   });
 });
