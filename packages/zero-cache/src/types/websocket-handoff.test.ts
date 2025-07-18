@@ -39,7 +39,7 @@ describe('types/websocket-handoff', () => {
       lc,
       () => ({
         payload: {foo: 'boo'},
-        receiver: child,
+        sender: child,
       }),
       server,
     );
@@ -76,7 +76,7 @@ describe('types/websocket-handoff', () => {
       (_, callback) =>
         callback({
           payload: {foo: 'boo'},
-          receiver: child,
+          sender: child,
         }),
       server,
     );
@@ -112,7 +112,7 @@ describe('types/websocket-handoff', () => {
       lc,
       () => ({
         payload: {foo: 'boo'},
-        receiver: grandParent,
+        sender: grandParent,
       }),
       server,
     );
@@ -122,7 +122,7 @@ describe('types/websocket-handoff', () => {
       lc,
       () => ({
         payload: {foo: 'boo'},
-        receiver: parent2,
+        sender: parent2,
       }),
       parent1,
     );
