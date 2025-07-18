@@ -2,6 +2,7 @@ import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
+import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {testDBs} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cvrSchema} from '../../types/shards.ts';
@@ -59,7 +60,7 @@ describe('view-syncer/cvr', () => {
     state: Partial<DBState>,
   ): Promise<void> {
     return db.begin(async tx => {
-      const {instances, rowsVersion} = state;
+      const {instances, rowsVersion, desires} = state;
       if (instances && !rowsVersion) {
         state = {
           ...state,
@@ -69,6 +70,19 @@ describe('view-syncer/cvr', () => {
           })),
         };
       }
+
+      // Fixup ttl for desires to use seconds instead of milliseconds.
+      if (desires) {
+        state = {
+          ...state,
+          desires: desires.map(desire => ({
+            ...desire,
+            ttl:
+              typeof desire.ttl === 'number' ? desire.ttl / 1000 : desire.ttl,
+          })),
+        };
+      }
+
       for (const [table, rows] of Object.entries(state)) {
         for (const row of rows) {
           await tx`INSERT INTO ${tx(`${cvrSchema(SHARD)}.` + table)} ${tx(
@@ -106,6 +120,9 @@ describe('view-syncer/cvr', () => {
             // expiresAt is deprecated. It is still in the db but we do not
             // want it in the js objects.
             delete row.expiresAt;
+
+            // Convert interval to ms.
+            row.ttl = intervalToMilliseconds(row.ttl);
           });
           (res as DesiresRow[]).sort(compareDesiresRows);
           (tableState as DesiresRow[]).sort(compareDesiresRows);
@@ -426,7 +443,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: false,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [],
@@ -465,7 +482,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -526,7 +543,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: false,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [],
@@ -574,7 +591,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -763,7 +780,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a8',
           deleted: false,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -772,7 +789,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: false,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [],
@@ -815,12 +832,12 @@ describe('view-syncer/cvr', () => {
             dooClient: {
               version: {stateVersion: '1a8'},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -1038,7 +1055,7 @@ describe('view-syncer/cvr', () => {
           clientState: {
             barClient: {
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
               version: {
                 minorVersion: 1,
                 stateVersion: '1aa',
@@ -1046,7 +1063,7 @@ describe('view-syncer/cvr', () => {
             },
             fooClient: {
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
               version: {
                 minorVersion: 1,
                 stateVersion: '1aa',
@@ -1067,7 +1084,7 @@ describe('view-syncer/cvr', () => {
             barClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -1080,12 +1097,12 @@ describe('view-syncer/cvr', () => {
             barClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
             fooClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
         },
@@ -1097,7 +1114,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
         },
@@ -1233,7 +1250,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1242,7 +1259,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'fourHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1251,7 +1268,7 @@ describe('view-syncer/cvr', () => {
           inactivatedAt: null,
           patchVersion: '1aa:01',
           queryHash: 'xCustomHash',
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1260,7 +1277,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'threeHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1269,7 +1286,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1278,7 +1295,7 @@ describe('view-syncer/cvr', () => {
           inactivatedAt: null,
           patchVersion: '1aa:01',
           queryHash: 'xCustomHash',
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1287,7 +1304,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'threeHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1296,7 +1313,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
 
@@ -1388,7 +1405,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: false,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [],
@@ -1535,7 +1552,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -1796,7 +1813,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           transformationHash: 'serverOneHash',
@@ -1893,7 +1910,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -2019,7 +2036,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -2248,7 +2265,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           transformationHash: 'serverTwoHash',
@@ -2333,7 +2350,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -2560,7 +2577,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -2569,7 +2586,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -2851,7 +2868,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           transformationHash: 'updatedServerOneHash',
@@ -2866,7 +2883,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           transformationHash: 'updatedServerTwoHash',
@@ -2970,7 +2987,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -2979,7 +2996,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           queryHash: 'twoHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -3487,7 +3504,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -3496,7 +3513,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -3584,7 +3601,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "fooClient": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 1000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -3609,7 +3626,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "fooClient": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 1000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -3887,7 +3904,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4118,7 +4135,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4205,7 +4222,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4354,7 +4371,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4420,7 +4437,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4562,7 +4579,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4628,7 +4645,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4831,7 +4848,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4897,7 +4914,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -5053,7 +5070,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -5213,7 +5230,7 @@ describe('view-syncer/cvr', () => {
             patchVersion: '1a9:01',
             deleted: null,
             inactivatedAt: null,
-            ttl: null,
+            ttl: DEFAULT_TTL_MS,
           },
         ],
         rows: [
@@ -5270,7 +5287,7 @@ describe('view-syncer/cvr', () => {
               "clientState": {
                 "fooClient": {
                   "inactivatedAt": undefined,
-                  "ttl": -1,
+                  "ttl": 1000,
                   "version": {
                     "minorVersion": 1,
                     "stateVersion": "1a9",
@@ -5320,7 +5337,7 @@ describe('view-syncer/cvr', () => {
             clientState: {
               fooClient: {
                 inactivatedAt: ttlClock,
-                ttl: -1,
+                ttl: DEFAULT_TTL_MS,
                 version: {
                   minorVersion: 1,
                   stateVersion: '1aa',
@@ -5386,7 +5403,7 @@ describe('view-syncer/cvr', () => {
             patchVersion: '1a9:01',
             deleted: null,
             inactivatedAt: null,
-            ttl: ttl / 1000,
+            ttl,
           },
         ],
         rows: [
@@ -5521,7 +5538,7 @@ describe('view-syncer/cvr', () => {
             patchVersion: '1a9:01',
             deleted: null,
             inactivatedAt: null,
-            ttl: null,
+            ttl: DEFAULT_TTL_MS,
           },
         ],
         rows: [
@@ -5578,7 +5595,7 @@ describe('view-syncer/cvr', () => {
               "clientState": {
                 "fooClient": {
                   "inactivatedAt": undefined,
-                  "ttl": -1,
+                  "ttl": 1000,
                   "version": {
                     "minorVersion": 1,
                     "stateVersion": "1a9",
@@ -5652,7 +5669,7 @@ describe('view-syncer/cvr', () => {
             clientState: {
               fooClient: {
                 inactivatedAt: ttlClock,
-                ttl: -1,
+                ttl: DEFAULT_TTL_MS,
                 version: {
                   minorVersion: 1,
                   stateVersion: '1aa',
@@ -5721,7 +5738,7 @@ describe('view-syncer/cvr', () => {
             patchVersion: '1a9:01',
             deleted: null,
             inactivatedAt: null,
-            ttl: 10 / 1000,
+            ttl: 10,
           },
         ],
         rows: [],
@@ -5790,7 +5807,7 @@ describe('view-syncer/cvr', () => {
       ).toMatchInlineSnapshot(`
         {
           "inactivatedAt": undefined,
-          "ttl": -1,
+          "ttl": 600000,
           "version": {
             "minorVersion": 1,
             "stateVersion": "1aa",
@@ -5849,7 +5866,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -5858,7 +5875,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -5867,7 +5884,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -5958,7 +5975,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 1000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -5966,7 +5983,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-b": {
                 "inactivatedAt": 1709683200000,
-                "ttl": -1,
+                "ttl": 1000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1aa",
@@ -5974,7 +5991,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 1000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6028,7 +6045,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": null,
+            "ttl": "00:00:01",
           },
           {
             "clientGroupID": "abc123",
@@ -6037,7 +6054,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": null,
+            "ttl": "00:00:01",
           },
           {
             "clientGroupID": "abc123",
@@ -6046,7 +6063,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": 1709683200000,
             "patchVersion": "1aa:01",
             "queryHash": "oneHash",
-            "ttl": null,
+            "ttl": "00:00:01",
           },
         ],
         "instances": Result [
@@ -6178,7 +6195,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'def456',
@@ -6187,7 +6204,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -6196,7 +6213,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -6278,7 +6295,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 1000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6286,7 +6303,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 1000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6342,7 +6359,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": null,
+            "ttl": "00:00:01",
           },
           {
             "clientGroupID": "def456",
@@ -6351,7 +6368,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": null,
+            "ttl": "00:00:01",
           },
           {
             "clientGroupID": "abc123",
@@ -6360,7 +6377,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": null,
+            "ttl": "00:00:01",
           },
         ],
         "instances": Result [
@@ -6499,7 +6516,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 1000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6507,7 +6524,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 1000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6563,7 +6580,7 @@ describe('view-syncer/cvr', () => {
               "inactivatedAt": null,
               "patchVersion": "1a9:01",
               "queryHash": "oneHash",
-              "ttl": null,
+              "ttl": "00:00:01",
             },
             {
               "clientGroupID": "abc123",
@@ -6572,7 +6589,7 @@ describe('view-syncer/cvr', () => {
               "inactivatedAt": null,
               "patchVersion": "1a9:01",
               "queryHash": "oneHash",
-              "ttl": null,
+              "ttl": "00:00:01",
             },
           ],
           "instances": Result [
@@ -6752,3 +6769,18 @@ describe('view-syncer/cvr', () => {
     expect(cvr3).toEqual(cvr2);
   });
 });
+
+function intervalToMilliseconds(ttl: string | null): number | null {
+  if (ttl === null) return null;
+
+  const parts = ttl.split(':');
+  if (parts.length !== 3) {
+    throw new Error(
+      `Interval format not supported in this test runner: ${ttl}`,
+    );
+  }
+  const hours = parseInt(parts[0], 10);
+  const minutes = parseInt(parts[1], 10);
+  const seconds = parseInt(parts[2], 10);
+  return (hours * 3600 + minutes * 60 + seconds) * 1000;
+}

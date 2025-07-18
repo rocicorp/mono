@@ -29,7 +29,7 @@ import type {
   InspectUpBody,
   InspectUpMessage,
 } from '../../../../zero-protocol/src/inspect-up.ts';
-import {MAX_TTL_MS} from '../../../../zql/src/query/ttl.ts';
+import {clampTTL, MAX_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {
   transformAndHashQuery,
   type TransformedAndHashed,
@@ -134,7 +134,15 @@ type SetTimeout = (
  * some flushes do not write to the CVR and in those cases we
  * use a timer to update the ttlClock every minute.
  */
-const TTL_CLOCK_INTERVAL = 60_000;
+export const TTL_CLOCK_INTERVAL = 60_000;
+
+/**
+ * This is some extra time we delay the TTL timer to allow for some
+ * slack in the timing of the timer. This is to allow multiple evictions
+ * to happen in a short period of time without having to wait for the
+ * next tick of the timer.
+ */
+export const TTL_TIMER_HYSTERESIS = 50; // ms
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
@@ -361,17 +369,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #removeExpiredQueries = async (
     lc: LogContext,
     cvr: CVRSnapshot,
+    ttlClock: TTLClock,
   ): Promise<void> => {
-    const now = Date.now();
-    const ttlClock = this.#getTTLClock(now);
     if (hasExpiredQueries(cvr, ttlClock)) {
       lc = lc.withContext('method', '#removeExpiredQueries');
-      lc.info?.('Queries have expired');
+      lc.debug?.('Queries have expired');
       // #syncQueryPipelineSet() will remove the expired queries.
       await this.#syncQueryPipelineSet(lc, cvr);
       this.#pipelinesSynced = true;
-      this.#scheduleExpireEviction(lc, cvr);
     }
+
+    // Even if we have expired queries, we still need to schedule next eviction
+    // since there might be inactivated queries that need to be expired queries
+    // in the future.
+    this.#scheduleExpireEviction(lc, cvr, ttlClock);
   };
 
   #totalHydrationTimeMs(): number {
@@ -433,7 +444,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return this.#clients.size === 0;
   }
 
-  #deleteClient(clientID: string, client: ClientHandler) {
+  #deleteClientDueToDisconnect(clientID: string, client: ClientHandler) {
     // Note: It is okay to delete / cleanup clients without acquiring the lock.
     // In fact, it is important to do so in order to guarantee that idle cleanup
     // is performed in a timely manner, regardless of the amount of work
@@ -443,7 +454,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#clients.delete(clientID);
 
       if (this.#clients.size === 0) {
-        this.#updateTTLClockInCVRWithoutLock(this.#lc);
+        // It is possible to delete a client before we read the ttl clock from
+        // the CVR.
+        if (this.#hasTTLClock()) {
+          this.#updateTTLClockInCVRWithoutLock(this.#lc);
+        }
         this.#stopExpireTimer();
         this.#scheduleShutdown();
       }
@@ -480,7 +495,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           err
             ? lc[getLogLevel(err)]?.(`client closed with error`, err)
             : lc.info?.('client closed');
-          this.#deleteClient(clientID, newClient);
+          this.#deleteClientDueToDisconnect(clientID, newClient);
         },
       });
 
@@ -493,18 +508,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#ttlClockBase = now;
 
         // Get the TTL clock from the CVR store, or initialize it to now.
-        this.#readTTLClockFromCVR(now).catch(e => {
+        this.#readTTLClockFromCVR().catch(e => {
           lc.error?.('failed to read TTL clock', e);
         });
-
-        // this.#cvrStore
-        //   .getTTLClock()
-        //   .then(ttlClock => {
-        //     this.#ttlClock = ttlClock ?? ttlClockFromNumber(now);
-        //   })
-        //   .catch(e => {
-        //     this.#lc.error?.('failed to get TTL clock', e);
-        //   });
       }
 
       const newClient = new ClientHandler(
@@ -750,10 +756,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     startAsyncSpan(tracer, 'vs.#patchQueries', async () => {
       const deletedClientIDs: string[] = [];
       const deletedClientGroupIDs: string[] = [];
+      const now = Date.now();
+      const ttlClock = this.#getTTLClock(now);
 
       cvr = await this.#updateCVRConfig(lc, cvr, clientID, updater => {
-        const now = Date.now();
-        const ttlClock = this.#getTTLClock(now);
         const patches: PatchToVersion[] = [];
 
         if (clientSchema) {
@@ -839,34 +845,47 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
       }
 
-      this.#scheduleExpireEviction(lc, cvr);
+      this.#scheduleExpireEviction(lc, cvr, ttlClock);
     });
 
-  #scheduleExpireEviction(lc: LogContext, cvr: CVRSnapshot): void {
+  #scheduleExpireEviction(
+    lc: LogContext,
+    cvr: CVRSnapshot,
+    ttlClock: TTLClock,
+  ): void {
+    this.#stopExpireTimer();
+
     // first see if there is any inactive query with a ttl.
     const next = nextEvictionTime(cvr);
+
     if (next === undefined) {
       lc.debug?.('no inactive queries with ttl');
       // no inactive queries with a ttl. Cancel existing timeout if any.
-      this.#stopExpireTimer();
       return;
     }
 
-    if (this.#expiredQueriesTimer) {
-      lc.debug?.('eviction timer already scheduled');
-      return;
-    }
-
-    const now = Date.now();
-    const ttlClock = this.#getTTLClock(now);
-    const delay = Math.min(
-      ttlClockAsNumber(next) - ttlClockAsNumber(ttlClock),
-      MAX_TTL_MS,
+    // It is common for many queries to be evicted close to the same time, so
+    // we add a small delay so we can collapse multiple evictions into a
+    // single timer. However, don't add the delay if we're already at the
+    // maximum timer limit, as that's not about collapsing.
+    const delay = Math.max(
+      TTL_TIMER_HYSTERESIS,
+      Math.min(
+        ttlClockAsNumber(next) -
+          ttlClockAsNumber(ttlClock) +
+          TTL_TIMER_HYSTERESIS,
+        MAX_TTL_MS,
+      ),
     );
+
     lc.debug?.('Scheduling eviction timer to run in ', delay, 'ms');
     this.#expiredQueriesTimer = this.#setTimeout(() => {
       this.#expiredQueriesTimer = 0;
-      this.#runInLockWithCVR(this.#removeExpiredQueries).catch(e =>
+      const now = Date.now();
+      const ttlClock = this.#getTTLClock(now);
+      this.#runInLockWithCVR((lc, cvr) =>
+        this.#removeExpiredQueries(lc, cvr, ttlClock),
+      ).catch(e =>
         // If an error occurs (e.g. ownership change), propagate the error
         // to the main run() loop via the #stateChanges Subscription.
         this.#stateChanges.fail(e),
@@ -1017,14 +1036,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
   }
 
-  async #readTTLClockFromCVR(now: number): Promise<TTLClock> {
+  async #readTTLClockFromCVR(): Promise<TTLClock> {
     if (this.#ttlClockInitializedPromise) {
       return this.#ttlClockInitializedPromise;
     }
 
     this.#ttlClockInitializedPromise = this.#cvrStore
       .getTTLClock()
-      .then(t => t ?? ttlClockFromNumber(now));
+      .then(t => t ?? ttlClockFromNumber(0));
     return (this.#ttlClock = await this.#ttlClockInitializedPromise);
   }
 
@@ -1048,7 +1067,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       let ttlClock: TTLClock;
       if (!this.#hasTTLClock()) {
         // Fetch it from the CVR or initialize it to now.
-        ttlClock = await this.#readTTLClockFromCVR(now);
+        ttlClock = await this.#readTTLClockFromCVR();
       } else {
         ttlClock = this.#getTTLClock(now);
       }
@@ -1588,14 +1607,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     clientID: string,
     body: InspectUpBody,
-    _cvr: CVRSnapshot,
+    cvr: CVRSnapshot,
   ): Promise<void> => {
     const client = must(this.#clients.get(clientID));
     body.op satisfies 'queries';
     client.sendInspectResponse(lc, {
       op: 'queries',
       id: body.id,
-      value: await this.#cvrStore.inspectQueries(lc, body.clientID),
+      value: await this.#cvrStore.inspectQueries(
+        lc,
+        cvr.ttlClock,
+        body.clientID,
+      ),
     });
   };
 
@@ -1744,12 +1767,14 @@ function expired(
   for (const clientID in clientState) {
     if (hasOwn(clientState, clientID)) {
       const {ttl, inactivatedAt} = clientState[clientID];
-      if (ttl < 0 || inactivatedAt === undefined) {
+      if (inactivatedAt === undefined) {
         return false;
       }
+
+      const clampedTTL = clampTTL(ttl);
       if (
-        (inactivatedAt as unknown as number) + ttl >
-        (ttlClock as unknown as number)
+        ttlClockAsNumber(inactivatedAt) + clampedTTL >
+        ttlClockAsNumber(ttlClock)
       ) {
         return false;
       }
