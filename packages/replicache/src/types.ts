@@ -17,8 +17,8 @@ export type Poke = {
 
 export type PokeInternal = {
   baseCookie: ReadonlyJSONValue;
-  mutationResults: MutationPatch[];
   pullResponse: PullResponseV1Internal;
+  mutationResults?: MutationPatch[] | undefined;
 };
 
 export type MutatorReturn<T extends ReadonlyJSONValue = ReadonlyJSONValue> =
