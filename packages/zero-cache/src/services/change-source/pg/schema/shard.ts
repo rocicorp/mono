@@ -129,7 +129,7 @@ export function getMutationsTableDefinition(schema: string) {
     "clientGroupID"  TEXT NOT NULL,
     "clientID"       TEXT NOT NULL,
     "mutationID"     BIGINT NOT NULL,
-    "result"         JSONB NOT NULL,
+    "result"         JSON NOT NULL,
     PRIMARY KEY("clientGroupID", "clientID", "mutationID")
   );`;
 }
