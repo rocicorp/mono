@@ -153,6 +153,7 @@ export function shardSetup(
   CREATE SCHEMA IF NOT EXISTS ${shard};
 
   ${getClientsTableDefinition(shard)}
+  ${getMutationsTableDefinition(shard)}
 
   CREATE PUBLICATION ${id(metadataPublication)}
     FOR TABLE ${app}."schemaVersions", ${app}."permissions", TABLE ${shard}."clients";
