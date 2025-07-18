@@ -118,6 +118,7 @@ export class ClientHandler {
   readonly clientID: string;
   readonly wsID: string;
   readonly #zeroClientsTable: string;
+  readonly #zeroMutationsTable: string;
   readonly #lc: LogContext;
   readonly #downstream: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
@@ -138,6 +139,7 @@ export class ClientHandler {
     this.clientID = clientID;
     this.wsID = wsID;
     this.#zeroClientsTable = `${upstreamSchema(shard)}.clients`;
+    this.#zeroMutationsTable = `${upstreamSchema(shard)}.mutations`;
     this.#lc = lc;
     this.#downstream = downstream;
     this.#baseVersion = cookieToVersion(baseCookie);
@@ -240,6 +242,8 @@ export class ClientHandler {
         case 'row':
           if (patch.id.table === this.#zeroClientsTable) {
             this.#updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
+          } else if (patch.id.table === this.#zeroMutationsTable) {
+            // no-op for now
           } else {
             (body.rowsPatch ??= []).push(makeRowPatch(patch));
           }
