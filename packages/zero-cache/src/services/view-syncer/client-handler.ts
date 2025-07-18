@@ -243,7 +243,23 @@ export class ClientHandler {
           if (patch.id.table === this.#zeroClientsTable) {
             this.#updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
           } else if (patch.id.table === this.#zeroMutationsTable) {
-            // no-op for now
+            const patches = (body.mutationsPatch ??= []);
+            if (op === 'put') {
+              const row = v.parse(
+                // TODO: must we use ensureSafeJSON here?
+                ensureSafeJSON(patch.contents),
+                mutationRowSchema,
+                'passthrough',
+              );
+              console.log('MUTATION RESULT', row.result);
+              patches.push({
+                op: 'put',
+                // TODO: is this not already parsed?
+                mutation: JSON.parse(row.result),
+              });
+            } else {
+              // no need to deal with `del` as the mutation results are ephemeral on the client.
+            }
           } else {
             (body.rowsPatch ??= []).push(makeRowPatch(patch));
           }
@@ -343,6 +359,13 @@ const lmidRowSchema = v.object({
   clientGroupID: v.string(),
   clientID: v.string(),
   lastMutationID: v.number(), // Actually returned as a bigint, but converted by ensureSafeJSON().
+});
+
+const mutationRowSchema = v.object({
+  clientGroupID: v.string(),
+  clientID: v.string(),
+  mutationID: v.number(),
+  result: v.string(),
 });
 
 function makeRowPatch(patch: RowPatch): RowPatchOp {
