@@ -136,6 +136,14 @@ type SetTimeout = (
  */
 export const TTL_CLOCK_INTERVAL = 60_000;
 
+/**
+ * This is some extra time we delay the TTL timer to allow for some
+ * slack in the timing of the timer. This is to allow multiple evictions
+ * to happen in a short period of time without having to wait for the
+ * next tick of the timer.
+ */
+export const TTL_TIMER_HYSTERESIS = 50; // ms
+
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
   readonly #shard: ShardID;
@@ -865,13 +873,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       return;
     }
 
+    // It is common for many queries to be evicted close to the same time, so
+    // we add a small delay so we can collapse multiple evictions into a
+    // single timer. However, don't add the delay if we're already at the
+    // maximum timer limit, as that's not about collapsing.
     const delay = Math.max(
-      // It is common for many queries to be evicted close to the same time, so
-      // we add a small delay so we can collapse multiple evictions into a
-      // single timer.
-      0, // TODO
-      Math.min(ttlClockAsNumber(next) - ttlClockAsNumber(ttlClock), MAX_TTL_MS),
+      TTL_TIMER_HYSTERESIS,
+      Math.min(
+        ttlClockAsNumber(next) -
+          ttlClockAsNumber(ttlClock) +
+          TTL_TIMER_HYSTERESIS,
+        MAX_TTL_MS,
+      ),
     );
+
     lc.debug?.('Scheduling eviction timer to run in ', delay, 'ms');
     this.#expiredQueriesTimer = this.#setTimeout(() => {
       this.#expiredQueriesTimer = 0;
