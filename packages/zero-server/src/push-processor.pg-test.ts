@@ -1,11 +1,14 @@
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {getClientsTableDefinition} from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
+import {
+  getClientsTableDefinition,
+  getMutationsTableDefinition,
+} from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
 
 import {OutOfOrderMutation, PushProcessor} from './push-processor.ts';
 import {PostgresJSConnection} from './adapters/postgresjs.ts';
-import type {PushBody} from '../../zero-protocol/src/push.ts';
+import type {MutationResult, PushBody} from '../../zero-protocol/src/push.ts';
 import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {ZQLDatabase} from './zql-database.ts';
 import {zip} from '../../shared/src/arrays.ts';
@@ -21,6 +24,7 @@ beforeEach(async () => {
   await pg.unsafe(`
     CREATE SCHEMA IF NOT EXISTS zero_0;
     ${getClientsTableDefinition('zero_0')}
+    ${getMutationsTableDefinition('zero_0')}
   `);
 });
 
@@ -635,6 +639,38 @@ test('mutators with and without namespaces', async () => {
         `);
 
   await checkClientsTable(pg, 4);
+  await checkMutationsTable(pg, [
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 1n,
+      result: {},
+    },
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 2n,
+      result: {},
+    },
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 3n,
+      result: {
+        error: 'app',
+        details: 'application error',
+      },
+    },
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 4n,
+      result: {
+        error: 'app',
+        details: 'application error',
+      },
+    },
+  ]);
 });
 
 async function checkClientsTable(
@@ -648,4 +684,19 @@ async function checkClientsTable(
   expect(result).toEqual(
     expectedLmid === undefined ? [] : [{lastMutationID: BigInt(expectedLmid)}],
   );
+}
+
+async function checkMutationsTable(
+  pg: PostgresDB,
+  expected: {
+    clientGroupID: string;
+    clientID: string;
+    mutationID: bigint;
+    result: MutationResult;
+  }[],
+) {
+  const result = await pg.unsafe(
+    `select "clientGroupID", "clientID", "mutationID", "result" from "zero_0"."mutations" order by "mutationID"`,
+  );
+  expect(result).toEqual(expected);
 }

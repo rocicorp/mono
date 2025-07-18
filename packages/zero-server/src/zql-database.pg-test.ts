@@ -8,10 +8,6 @@ import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {zeroPostgresJS} from './adapters/postgresjs.ts';
 
 let sql: PostgresDB;
-// let connection: PostgresJSConnection<{
-//   bigint: bigint;
-//   json: JSONValue;
-// }>;
 
 beforeEach(async () => {
   sql = await testDBs.create('zero-pg-web');
