@@ -508,18 +508,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#ttlClockBase = now;
 
         // Get the TTL clock from the CVR store, or initialize it to now.
-        this.#readTTLClockFromCVR(now).catch(e => {
+        this.#readTTLClockFromCVR().catch(e => {
           lc.error?.('failed to read TTL clock', e);
         });
-
-        // this.#cvrStore
-        //   .getTTLClock()
-        //   .then(ttlClock => {
-        //     this.#ttlClock = ttlClock ?? ttlClockFromNumber(now);
-        //   })
-        //   .catch(e => {
-        //     this.#lc.error?.('failed to get TTL clock', e);
-        //   });
       }
 
       const newClient = new ClientHandler(
@@ -1045,14 +1036,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
   }
 
-  async #readTTLClockFromCVR(now: number): Promise<TTLClock> {
+  async #readTTLClockFromCVR(): Promise<TTLClock> {
     if (this.#ttlClockInitializedPromise) {
       return this.#ttlClockInitializedPromise;
     }
 
     this.#ttlClockInitializedPromise = this.#cvrStore
       .getTTLClock()
-      .then(t => t ?? ttlClockFromNumber(now));
+      .then(t => t ?? ttlClockFromNumber(0));
     return (this.#ttlClock = await this.#ttlClockInitializedPromise);
   }
 
@@ -1076,7 +1067,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       let ttlClock: TTLClock;
       if (!this.#hasTTLClock()) {
         // Fetch it from the CVR or initialize it to now.
-        ttlClock = await this.#readTTLClockFromCVR(now);
+        ttlClock = await this.#readTTLClockFromCVR();
       } else {
         ttlClock = this.#getTTLClock(now);
       }
