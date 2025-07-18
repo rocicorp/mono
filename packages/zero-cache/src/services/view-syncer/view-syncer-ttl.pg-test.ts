@@ -40,6 +40,7 @@ import {
 import {
   type SyncContext,
   TTL_CLOCK_INTERVAL,
+  TTL_TIMER_HYSTERESIS,
   ViewSyncerService,
 } from './view-syncer.ts';
 
@@ -314,7 +315,7 @@ describe('ttl', () => {
     vi.setSystemTime(t1);
     await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
     // Should get a desiredQueriesPatches poke, but not expired yet.
-    await expectDesiredDel(client, 'query-hash1', 'foo');
+    await expectDesiredDel(client, 'foo', 'query-hash1');
 
     await expectNoPokes(client);
 
@@ -463,7 +464,7 @@ describe('ttl', () => {
     // A timer should be scheduled for the remaining TTL (10 seconds).
     expect(setTimeoutFn).toHaveBeenCalledTimes(1);
     const [, delay] = setTimeoutFn.mock.calls[0];
-    expect(delay).toBe(ttl); // Full 10 seconds since no service time passed
+    expect(delay).toBe(ttl + TTL_TIMER_HYSTERESIS); // Full 10 seconds since no service time passed
 
     // Now simulate the service running for 10 seconds to trigger eviction.
     callNextSetTimeout(ttl);
@@ -505,14 +506,14 @@ describe('ttl', () => {
     ]);
 
     stateChanges.push({state: 'version-ready'});
-    await expectDesiredPut(client, 'query-hash1', 'foo');
+    await expectDesiredPut(client, 'foo', 'query-hash1');
 
     await expectGotPut(client, 'query-hash1');
 
     await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
 
     // Make sure we do not get a delete of the gotQueriesPatch
-    await expectDesiredDel(client, 'query-hash1', 'foo');
+    await expectDesiredDel(client, 'foo', 'query-hash1');
 
     await expectNoPokes(client);
 
@@ -531,14 +532,14 @@ describe('ttl', () => {
     ]);
 
     stateChanges.push({state: 'version-ready'});
-    await expectDesiredPut(client, 'query-hash1', 'foo');
+    await expectDesiredPut(client, 'foo', 'query-hash1');
 
     await expectGotPut(client, 'query-hash1');
 
     await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
 
     // Make sure we do not get a delete of the gotQueriesPatch
-    await expectDesiredDel(client, 'query-hash1', 'foo');
+    await expectDesiredDel(client, 'foo', 'query-hash1');
 
     await expectNoPokes(client);
 
@@ -546,7 +547,7 @@ describe('ttl', () => {
 
     await addQuery(vs, SYNC_CONTEXT, 'query-hash1', ISSUES_QUERY, ttl * 2);
 
-    await expectDesiredPut(client, 'query-hash1', 'foo');
+    await expectDesiredPut(client, 'foo', 'query-hash1');
 
     // No got queries patch since we newer removed.
     await expectNoPokes(client);
@@ -556,7 +557,7 @@ describe('ttl', () => {
     await expectNoPokes(client);
 
     await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
-    await expectDesiredDel(client, 'query-hash1', 'foo');
+    await expectDesiredDel(client, 'foo', 'query-hash1');
 
     await expectNoPokes(client);
 
@@ -573,13 +574,13 @@ describe('ttl', () => {
     ]);
 
     stateChanges.push({state: 'version-ready'});
-    await expectDesiredPut(client, 'query-hash1', 'foo');
+    await expectDesiredPut(client, 'foo', 'query-hash1');
 
     await expectGotPut(client, 'query-hash1');
 
     // Set the same query again but with 2*ttl
     await addQuery(vs, SYNC_CONTEXT, 'query-hash1', ISSUES_QUERY, ttl * 2);
-    await expectDesiredPut(client, 'query-hash1', 'foo');
+    await expectDesiredPut(client, 'foo', 'query-hash1');
 
     await expectNoPokes(client);
 
@@ -587,7 +588,7 @@ describe('ttl', () => {
 
     // Now delete it and make sure it takes 2 * ttl to get the got delete.
     await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
-    await expectDesiredDel(client, 'query-hash1', 'foo');
+    await expectDesiredDel(client, 'foo', 'query-hash1');
 
     await expectNoPokes(client);
 
@@ -606,7 +607,7 @@ describe('ttl', () => {
     ]);
 
     stateChanges.push({state: 'version-ready'});
-    await expectDesiredPut(client, 'query-hash1', 'foo');
+    await expectDesiredPut(client, 'foo', 'query-hash1');
 
     await expectGotPut(client, 'query-hash1');
 
@@ -618,7 +619,7 @@ describe('ttl', () => {
 
     // Now delete it and make sure it takes 2 * ttl to get the got delete.
     await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
-    await expectDesiredDel(client, 'query-hash1', 'foo');
+    await expectDesiredDel(client, 'foo', 'query-hash1');
 
     await expectNoPokes(client);
     callNextSetTimeout(2 * ttl);
@@ -641,30 +642,30 @@ describe('ttl', () => {
     stateChanges.push({state: 'version-ready'});
 
     // Get the config and hydration pokes for the first query
-    await expectDesiredPut(client, 'query-hash1', 'foo');
+    await expectDesiredPut(client, 'foo', 'query-hash1');
 
     await expectGotPut(client, 'query-hash1');
 
     // Inactivate the first query
     await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
-    await expectDesiredDel(client, 'query-hash1', 'foo');
+    await expectDesiredDel(client, 'foo', 'query-hash1');
 
     // Check timeout call
     const [fn10s, delay] = setTimeoutFn.mock.lastCall!;
     expect(fn10s).toBeDefined();
-    expect(delay).toBe(ttl10s); // Should schedule for the 10s
+    expect(delay).toBe(ttl10s + TTL_TIMER_HYSTERESIS); // Should schedule for the 10s
     setTimeoutFn.mockClear();
 
     // Now add the second query with 5s TTL
     await addQuery(vs, SYNC_CONTEXT, 'query-hash2', USERS_QUERY, ttl5s);
 
-    await expectDesiredPut(client, 'query-hash2', 'foo');
+    await expectDesiredPut(client, 'foo', 'query-hash2');
     await expectGotPut(client, 'query-hash2');
     await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash2');
-    await expectDesiredDel(client, 'query-hash2', 'foo');
+    await expectDesiredDel(client, 'foo', 'query-hash2');
 
     // We should have cancelled the timeout for 10s and add a new timeout for 5s
-    expect(setTimeoutFn.mock.lastCall?.[1]).toBe(ttl5s);
+    expect(setTimeoutFn.mock.lastCall?.[1]).toBe(ttl5s + TTL_TIMER_HYSTERESIS);
     callNextSetTimeout(ttl5s);
 
     await expectGotDel(client, 'query-hash2');
@@ -675,7 +676,7 @@ describe('ttl', () => {
     // Another timeout should be scheduled for the remaining 5s TTL
     const [fn10sAgain, remainingDelay] = setTimeoutFn.mock.lastCall!;
     expect(fn10sAgain).toBeDefined();
-    expect(remainingDelay).toBe(ttl10s - ttl5s); // Should schedule for the remaining 5s
+    expect(remainingDelay).toBe(ttl10s - ttl5s + TTL_TIMER_HYSTERESIS);
 
     callNextSetTimeout(ttl10s - ttl5s);
 
@@ -693,30 +694,69 @@ describe('ttl', () => {
     ]);
 
     stateChanges.push({state: 'version-ready'});
-    await expectDesiredPut(client, 'query-hash1', 'foo');
+    await expectDesiredPut(client, 'foo', 'query-hash1');
     await expectGotPut(client, 'query-hash1');
 
     // Inactivate the query - this should schedule eviction in 10s
     await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
-    await expectDesiredDel(client, 'query-hash1', 'foo');
+    await expectDesiredDel(client, 'foo', 'query-hash1');
 
     // Verify the timer was scheduled for 10s
     const [, delay] = setTimeoutFn.mock.lastCall!;
-    expect(delay).toBe(ttl10s);
+    expect(delay).toBe(ttl10s + TTL_TIMER_HYSTERESIS);
     setTimeoutFn.mockClear();
 
     // Re-add the same query with a shorter TTL (5s)
     // This should trigger rescheduling since the query is already inactive
     await addQuery(vs, SYNC_CONTEXT, 'query-hash1', ISSUES_QUERY, ttl5s);
-    await expectDesiredPut(client, 'query-hash1', 'foo');
+    await expectDesiredPut(client, 'foo', 'query-hash1');
     // and inactivate it again. We should use the new shorter TTL here.
     await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
-    await expectDesiredDel(client, 'query-hash1', 'foo');
+    await expectDesiredDel(client, 'foo', 'query-hash1');
 
     // Verify the timer was rescheduled for 5s (the shorter TTL)
-    callNextSetTimeout(ttl5s, 5_000);
+    callNextSetTimeout(ttl5s, 5_000 + TTL_TIMER_HYSTERESIS);
 
     await expectGotDel(client, 'query-hash1');
+    await expectNoPokes(client);
+  });
+
+  test('Collapse multiple eviction that are close in time into one poke', async () => {
+    const ttl = 1000;
+    vi.setSystemTime(Date.now());
+
+    // Connect a client with two TTL queries
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
+      {op: 'put', hash: 'query-hash2', ast: USERS_QUERY, ttl},
+    ]);
+
+    stateChanges.push({state: 'version-ready'});
+
+    // Expect both queries to be added
+    await expectDesiredPut(client, 'foo', 'query-hash1', 'query-hash2');
+    await expectGotPut(client, 'query-hash1', 'query-hash2');
+
+    // Inactivate the first query
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
+    await expectDesiredDel(client, 'foo', 'query-hash1');
+
+    // Move time forward less than 50ms (the collapse delay)
+    vi.setSystemTime(Date.now() + 30);
+
+    // Inactivate the second query
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash2');
+    await expectDesiredDel(client, 'foo', 'query-hash2');
+
+    await expectNoPokes(client);
+
+    // Now advance the TTL time to trigger eviction
+    // This should trigger a single timer that removes both queries
+    callNextSetTimeout(ttl + TTL_TIMER_HYSTERESIS); // TTL + the collapse delay
+
+    // Both queries should be removed in a single poke
+    await expectGotDel(client, 'query-hash1', 'query-hash2');
+
     await expectNoPokes(client);
   });
 });
