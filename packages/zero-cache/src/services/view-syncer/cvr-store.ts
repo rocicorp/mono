@@ -50,7 +50,11 @@ import {
   versionFromString,
   versionString,
 } from './schema/types.ts';
-import {type TTLClock, ttlClockFromNumber} from './ttl-clock.ts';
+import {
+  type TTLClock,
+  ttlClockAsNumber,
+  ttlClockFromNumber,
+} from './ttl-clock.ts';
 
 export type CVRFlushStats = {
   instances: number;
@@ -832,9 +836,9 @@ export class CVRStore {
 
   async inspectQueries(
     lc: LogContext,
+    ttlClock: TTLClock,
     clientID?: string,
   ): Promise<InspectQueryRow[]> {
-    // TODO: This used `now()` to compute expire which is not correct. We need to use the ttlClock.
     const db = this.#db;
     const clientGroupID = this.#id;
 
@@ -861,10 +865,7 @@ export class CVRStore {
    AND q."queryHash" = d."queryHash"
   WHERE d."clientGroupID" = ${clientGroupID}
     ${clientID ? tx`AND d."clientID" = ${clientID}` : tx``}
-    AND NOT (
-      d."deleted" IS NOT DISTINCT FROM true AND
-      (d."inactivatedAt" IS NOT NULL AND d."ttl" IS NOT NULL AND d."inactivatedAt" + d."ttl" <= now())
-    )
+    AND NOT (d."inactivatedAt" IS NOT NULL AND d."ttl" IS NOT NULL AND d."inactivatedAt" + d."ttl" <= to_timestamp(${ttlClockAsNumber(ttlClock) / 1000}))
   ORDER BY d."clientID", d."queryHash"`,
       );
     } finally {

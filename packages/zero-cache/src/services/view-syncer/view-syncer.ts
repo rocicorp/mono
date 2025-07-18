@@ -1616,14 +1616,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     clientID: string,
     body: InspectUpBody,
-    _cvr: CVRSnapshot,
+    cvr: CVRSnapshot,
   ): Promise<void> => {
     const client = must(this.#clients.get(clientID));
     body.op satisfies 'queries';
     client.sendInspectResponse(lc, {
       op: 'queries',
       id: body.id,
-      value: await this.#cvrStore.inspectQueries(lc, body.clientID),
+      value: await this.#cvrStore.inspectQueries(
+        lc,
+        cvr.ttlClock,
+        body.clientID,
+      ),
     });
   };
 
