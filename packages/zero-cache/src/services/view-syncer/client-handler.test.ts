@@ -388,6 +388,67 @@ describe('view-syncer/client-handler', () => {
     ]);
   });
 
+  test('patches for the zeroMutationsTable are ignored', async () => {
+    const {subscription, close} = createSubscription();
+
+    const schemaVersion = 1;
+    const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      schemaVersion,
+      subscription,
+    );
+    const poker = handler.startPoke({stateVersion: '123'}, schemaVersions);
+
+    await poker.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {schema: '', table: 'zapp_6.mutations', rowKey: {id: 'boo'}},
+        contents: {id: 'boo', name: 'world', big: 12345231234123414n},
+      },
+    });
+
+    await poker.end({stateVersion: '123'});
+
+    const {received, err} = await close();
+    expect(received).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "121",
+            "pokeID": "123",
+            "schemaVersions": {
+              "maxSupportedVersion": 1,
+              "minSupportedVersion": 1,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "pokeID": "123",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "123",
+            "pokeID": "123",
+          },
+        ],
+      ]
+    `);
+    expect(err).toBeUndefined();
+  });
+
   test('schemaVersion unsupported', async () => {
     const received: Downstream[] = [];
     let e: Error | undefined = undefined;
