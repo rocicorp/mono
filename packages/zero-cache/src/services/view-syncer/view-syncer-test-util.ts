@@ -482,66 +482,61 @@ export function inactivateQuery(
   return removeQuery(vs, ctx, hash);
 }
 
-export async function expectQueryEvicted(
+export function expectGotPut(
   client: Queue<Downstream>,
-  queryHash: string,
+  ...queryHash: string[]
 ) {
-  const pokeParts = await nextPokeParts(client);
-  expect(pokeParts[0].gotQueriesPatch).toContainEqual({
-    hash: queryHash,
-    op: 'del',
-  });
-  return pokeParts;
+  return expectGot(client, 'put', queryHash);
 }
 
-export function expectGotPut(client: Queue<Downstream>, queryHash: string) {
-  return expectGot(client, queryHash, 'put');
-}
-
-export function expectGotDel(client: Queue<Downstream>, queryHash: string) {
-  return expectGot(client, queryHash, 'del');
+export function expectGotDel(
+  client: Queue<Downstream>,
+  ...queryHash: string[]
+) {
+  return expectGot(client, 'del', queryHash);
 }
 
 async function expectGot(
   client: Queue<Downstream>,
-  queryHash: string,
   op: 'put' | 'del',
+  queryHashes: string[],
 ) {
   const pokeParts = await nextPokeParts(client);
-  expect(pokeParts[0].gotQueriesPatch).toContainEqual({
-    hash: queryHash,
-    op,
-  });
+  const expectedPatches = queryHashes.map(hash => ({hash, op}));
+  expect(pokeParts[0].gotQueriesPatch).toEqual(
+    expect.arrayContaining(expectedPatches),
+  );
+  // Also verify we got exactly the expected number of patches
+  expect(pokeParts[0].gotQueriesPatch).toHaveLength(queryHashes.length);
   return pokeParts;
 }
 
 export function expectDesiredPut(
   client: Queue<Downstream>,
-  queryHash: string,
   clientID: string,
+  ...queryHash: string[]
 ) {
-  return expectDesired(client, queryHash, 'put', clientID);
+  return expectDesired(client, 'put', clientID, queryHash);
 }
 
 export function expectDesiredDel(
   client: Queue<Downstream>,
-  queryHash: string,
   clientID: string,
+  ...queryHash: string[]
 ) {
-  return expectDesired(client, queryHash, 'del', clientID);
+  return expectDesired(client, 'del', clientID, queryHash);
 }
 
 async function expectDesired(
   client: Queue<Downstream>,
-  queryHash: string,
   op: 'put' | 'del',
   clientID: string,
+  queryHash: string[],
 ) {
   const pokeParts = await nextPokeParts(client);
-  expect(pokeParts[0].desiredQueriesPatches?.[clientID]).toContainEqual({
-    hash: queryHash,
-    op,
-  });
+  expect(pokeParts[0].desiredQueriesPatches?.[clientID]).toEqual(
+    expect.arrayContaining(queryHash.map(hash => ({hash, op}))),
+  );
   return pokeParts;
 }
 
