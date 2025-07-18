@@ -26,6 +26,9 @@ import {
 } from './keys.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 import {unreachable} from '../../../shared/src/asserts.ts';
+import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
+import type {MutationTracker} from './mutation-tracker.ts';
+import {must} from '../../../shared/src/must.ts';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
@@ -56,6 +59,7 @@ export class PokeHandler {
   readonly #pokeLock = new Lock();
   readonly #schema: Schema;
   readonly #serverToClient: NameMapper;
+  readonly #mutationTracker: MutationTracker;
 
   readonly #raf =
     getBrowserGlobalMethod('requestAnimationFrame') ?? rafFallback;
@@ -66,6 +70,7 @@ export class PokeHandler {
     clientID: ClientID,
     schema: Schema,
     lc: ZeroLogContext,
+    mutationTracker: MutationTracker,
   ) {
     this.#replicachePoke = replicachePoke;
     this.#onPokeError = onPokeError;
@@ -73,6 +78,7 @@ export class PokeHandler {
     this.#schema = schema;
     this.#serverToClient = serverToClient(schema.tables);
     this.#lc = lc.withContext('PokeHandler');
+    this.#mutationTracker = mutationTracker;
   }
 
   handlePokeStart(pokeStart: PokeStartBody) {
@@ -174,6 +180,17 @@ export class PokeHandler {
         lc.debug?.('poking replicache');
         await this.#replicachePoke(merged);
         lc.debug?.('poking replicache took', performance.now() - start);
+
+        this.#mutationTracker.processMutationResponses(merged.mutationResults);
+        // Newer versions of zero-cache will send down `mutationResults`
+        // Old versions will not.
+        // The line below is for old versions.
+        // It is also a fail-safe if a mutation response is somehow lost.
+        if (!('error' in merged.pullResponse)) {
+          this.#mutationTracker.lmidAdvanced(
+            must(merged.pullResponse.lastMutationIDChanges[this.#clientID]),
+          );
+        }
       } catch (e) {
         this.#handlePokeError(e);
       }
@@ -203,7 +220,7 @@ export function mergePokes(
   pokeBuffer: PokeAccumulator[],
   schema: Schema,
   serverToClient: NameMapper,
-): PokeInternal | undefined {
+): (PokeInternal & {mutationResults: MutationPatch[]}) | undefined {
   if (pokeBuffer.length === 0) {
     return undefined;
   }
@@ -212,6 +229,7 @@ export function mergePokes(
   const {cookie} = lastPoke.pokeEnd;
   const mergedPatch: PatchOperationInternal[] = [];
   const mergedLastMutationIDChanges: Record<string, number> = {};
+  const mutationResults: MutationPatch[] = [];
 
   let prevPokeEnd = undefined;
   for (const pokeAccumulator of pokeBuffer) {
@@ -262,10 +280,14 @@ export function mergePokes(
           );
         }
       }
+      if (pokePart.mutationsPatch) {
+        mutationResults.push(...pokePart.mutationsPatch);
+      }
     }
   }
   return {
     baseCookie,
+    mutationResults,
     pullResponse: {
       lastMutationIDChanges: mergedLastMutationIDChanges,
       patch: mergedPatch,

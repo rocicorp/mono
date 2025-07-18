@@ -13,6 +13,7 @@ import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {serverToClient} from '../../../zero-schema/src/name-mapper.ts';
 import {PokeHandler, mergePokes} from './zero-poke-handler.ts';
+import {MutationTracker} from './mutation-tracker.ts';
 
 let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;
 // The FrameRequestCallback in PokeHandler does not use
@@ -59,6 +60,7 @@ test('completed poke plays on first raf', async () => {
     clientID,
     schema,
     logContext,
+    new MutationTracker(logContext),
   );
   expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -167,6 +169,7 @@ test('canceled poke is not applied', async () => {
     clientID,
     schema,
     logContext,
+    new MutationTracker(logContext),
   );
   expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -281,6 +284,7 @@ test('multiple pokes received before raf callback are merged', async () => {
     clientID,
     schema,
     logContext,
+    new MutationTracker(logContext),
   );
 
   expect(rafStub).toHaveBeenCalledTimes(0);
@@ -431,6 +435,7 @@ test('multiple pokes received before raf callback are merged, canceled pokes are
     clientID,
     schema,
     logContext,
+    new MutationTracker(logContext),
   );
 
   expect(rafStub).toHaveBeenCalledTimes(0);
@@ -612,6 +617,7 @@ test('playback over series of rafs', async () => {
     clientID,
     schema,
     logContext,
+    new MutationTracker(logContext),
   );
 
   expect(rafStub).toHaveBeenCalledTimes(0);
@@ -822,6 +828,7 @@ suite('onPokeErrors', () => {
         clientID,
         schema,
         logContext,
+        new MutationTracker(logContext),
       );
 
       expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
@@ -842,6 +849,7 @@ test('replicachePoke throwing error calls onPokeError and clears', async () => {
     clientID,
     schema,
     logContext,
+    new MutationTracker(logContext),
   );
   expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -948,6 +956,7 @@ test('cookie gap during mergePoke calls onPokeError and clears', async () => {
     clientID,
     schema,
     logContext,
+    new MutationTracker(logContext),
   );
   expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -1068,6 +1077,7 @@ test('onDisconnect clears pending pokes', async () => {
     clientID,
     schema,
     logContext,
+    new MutationTracker(logContext),
   );
   expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -1136,6 +1146,7 @@ test('handlePoke returns the last mutation id change for this client from pokePa
     clientID,
     schema,
     logContext,
+    new MutationTracker(logContext),
   );
   expect(rafStub).toHaveBeenCalledTimes(0);
 

@@ -8,3 +8,4 @@ export const putOpSchema = v.object({
 
 const patchOpSchema = putOpSchema;
 export const mutationsPatchSchema = v.array(patchOpSchema);
+export type MutationPatch = v.Infer<typeof patchOpSchema>;
