@@ -8,6 +8,8 @@ import {
   MAX_ISSUE_TITLE_LENGTH,
 } from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
+import {promiseRace} from '../../../../../packages/shared/src/promise.ts';
+import {sleep} from '../../../../../packages/shared/src/sleep.ts';
 
 interface Props {
   /** If id is defined the issue created by the composer. */
@@ -49,18 +51,25 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
     });
   }, [description]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const id = nanoid();
 
-    z.mutate.issue.create({
+    const result = z.mutate.issue.create({
       id,
       title,
       description: description ?? '',
       created: Date.now(),
       modified: Date.now(),
     });
+
     reset();
     onDismiss(id);
+
+    const raceResult = await promiseRace([sleep(5000), result.server]);
+    if (raceResult === 0) {
+      // TODO show toast
+      console.log('timed out');
+    }
   };
 
   const reset = () => {
