@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
+import {handleHeapzRequest} from '../../services/heapz.ts';
 import {HttpService, type Options} from '../../services/http-service.ts';
 import {handleStatzRequest} from '../../services/statz.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
@@ -8,7 +9,6 @@ import {
   installWebSocketHandoff,
   type HandoffSpec,
 } from '../../types/websocket-handoff.ts';
-import {handleHeapzRequest} from '../../services/heapz.ts';
 
 export class ZeroDispatcher extends HttpService {
   readonly id = 'zero-dispatcher';
@@ -38,7 +38,7 @@ export class ZeroDispatcher extends HttpService {
     onError: (error: unknown) => void,
   ) => {
     void this.#getWorker().then(
-      receiver => dispatch({payload: 'unused', receiver}),
+      sender => dispatch({payload: 'unused', sender}),
       onError,
     );
   };

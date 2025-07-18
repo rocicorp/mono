@@ -14,7 +14,7 @@ import {closeWithError, PROTOCOL_ERROR} from './ws.ts';
 
 export type HandoffSpec<P> = {
   payload: P;
-  receiver: Receiver;
+  sender: Sender;
 };
 
 /**
@@ -56,7 +56,7 @@ export function createWebSocketHandoffHandler<P>(
   return (message: IncomingMessageSubset, socket: Socket, head: Buffer) => {
     let sent = false;
 
-    function send({payload, receiver}: HandoffSpec<P>) {
+    function send({payload, sender}: HandoffSpec<P>) {
       assert(!sent, 'Handoff callback already invoked');
       sent = true;
 
@@ -71,7 +71,7 @@ export function createWebSocketHandoffHandler<P>(
 
       // "This event is guaranteed to be passed an instance of the <net.Socket> class"
       // https://nodejs.org/api/http.html#event-upgrade
-      receiver.send(data, socket);
+      sender.send(data, socket);
     }
 
     function onError(error: unknown) {
@@ -122,9 +122,9 @@ export function installWebSocketReceiver<P>(
   lc: LogContext,
   server: WebSocketServer,
   receive: WebSocketReceiver<P>,
-  sender: Sender,
+  receiver: Receiver,
 ) {
-  sender.onMessageType<Handoff<P>>('handoff', (msg, socket) => {
+  receiver.onMessageType<Handoff<P>>('handoff', (msg, socket) => {
     // Per https://nodejs.org/api/child_process.html#subprocesssendmessage-sendhandle-options-callback
     //
     // > Any 'message' handlers in the subprocess should verify that socket

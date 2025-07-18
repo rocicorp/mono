@@ -66,7 +66,7 @@ function onceMessageType<M extends Message<unknown>>(
   return e.on('message', listener);
 }
 
-export interface Receiver {
+export interface Sender {
   send<M extends Message<unknown>>(
     message: M,
     sendHandle?: SendHandle,
@@ -76,13 +76,13 @@ export interface Receiver {
   kill(signal?: NodeJS.Signals): void;
 }
 
-export interface Subprocess extends Receiver, EventEmitter {
+export interface Subprocess extends Sender, EventEmitter {
   pid?: number | undefined;
 }
 
-export interface Sender extends EventEmitter {
+export interface Receiver extends EventEmitter {
   /**
-   * The receiving side of {@link Receiver.send()} that is a wrapper around
+   * The receiving side of {@link Sender.send()} that is a wrapper around
    * {@link on}('message', ...) that invokes the `handler` for messages of
    * the specified `type`.
    */
@@ -92,7 +92,7 @@ export interface Sender extends EventEmitter {
   ): this;
 
   /**
-   * The receiving side of {@link Receiver.send()} that behaves like
+   * The receiving side of {@link Sender.send()} that behaves like
    * {@link once}('message', ...) that invokes the `handler` for the next
    * message of the specified `type` and then unsubscribes.
    */
@@ -102,13 +102,13 @@ export interface Sender extends EventEmitter {
   ): this;
 }
 
-export interface Worker extends Subprocess, Sender {}
+export interface Worker extends Subprocess, Receiver {}
 
 /**
- * Adds the {@link Sender.onMessageType()} and {@link Sender.onceMessageType()}
- * methods to convert the given `EventEmitter` to a `Sender`.
+ * Adds the {@link Receiver.onMessageType()} and {@link Receiver.onceMessageType()}
+ * methods to convert the given `EventEmitter` to a `Receiver`.
  */
-function wrap<P extends EventEmitter>(proc: P): P & Sender {
+function wrap<P extends EventEmitter>(proc: P): P & Receiver {
   return new Proxy(proc, {
     get(target: P, prop: string | symbol, receiver: unknown) {
       switch (prop) {
@@ -131,7 +131,7 @@ function wrap<P extends EventEmitter>(proc: P): P & Sender {
       }
       return Reflect.get(target, prop, receiver);
     },
-  }) as P & Sender;
+  }) as P & Receiver;
 }
 
 type Proc = Pick<ChildProcess, 'send' | 'kill' | 'pid'> & EventEmitter;

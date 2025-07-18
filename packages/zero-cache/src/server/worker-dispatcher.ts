@@ -48,7 +48,7 @@ export class WorkerDispatcher implements Service {
         mutator !== undefined,
         'Received a push for a custom mutation but no `push.url` was configured.',
       );
-      return {payload: connectParams(req), receiver: mutator};
+      return {payload: connectParams(req), sender: mutator};
     };
 
     const handleSync = (req: IncomingMessageSubset) => {
@@ -64,7 +64,7 @@ export class WorkerDispatcher implements Service {
       const syncer = h32(taskID + '/' + clientGroupID) % syncers.length;
 
       lc.debug?.(`connecting ${clientGroupID} to syncer ${syncer}`);
-      return {payload: params, receiver: syncers[syncer]};
+      return {payload: params, sender: syncers[syncer]};
     };
 
     const handleChangeStream = (req: IncomingMessageSubset) => {
@@ -90,7 +90,7 @@ export class WorkerDispatcher implements Service {
 
       return {
         payload: path.action,
-        receiver: changeStreamer,
+        sender: changeStreamer,
       };
     };
 
