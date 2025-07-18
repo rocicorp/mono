@@ -134,7 +134,7 @@ describe('ttl', () => {
         SELECT "ttlClock", "lastActive"
         FROM "this_app_2/cvr".instances
         WHERE "clientGroupID" = ${serviceID}`;
-      expect(result[0].ttlClock).toBe(t0);
+      expect(result[0].ttlClock).toBe(0);
       expect(result[0].lastActive).toBe(t0);
 
       {
@@ -154,7 +154,7 @@ describe('ttl', () => {
           WHERE "clientGroupID" = ${serviceID}`;
         expect(result).toEqual([
           {
-            ttlClock: t1,
+            ttlClock: 500,
             lastActive: t1,
           },
         ]);
@@ -189,7 +189,7 @@ describe('ttl', () => {
         SELECT "ttlClock", "lastActive"
         FROM "this_app_2/cvr".instances
         WHERE "clientGroupID" = ${serviceID}`;
-      expect(result).toEqual([{ttlClock: t0, lastActive: t0}]);
+      expect(result).toEqual([{ttlClock: 0, lastActive: t0}]);
 
       vi.setSystemTime(Date.now() + 500);
       // Close the first connection.
@@ -201,7 +201,7 @@ describe('ttl', () => {
           SELECT "ttlClock", "lastActive"
           FROM "this_app_2/cvr".instances
           WHERE "clientGroupID" = ${serviceID}`;
-      expect(result).toEqual([{ttlClock: t0, lastActive: t0}]);
+      expect(result).toEqual([{ttlClock: 0, lastActive: t0}]);
 
       // Move time forward and close the second connection.
       vi.setSystemTime(Date.now() + 500);
@@ -215,7 +215,7 @@ describe('ttl', () => {
           SELECT "ttlClock", "lastActive"
           FROM "this_app_2/cvr".instances
           WHERE "clientGroupID" = ${serviceID}`;
-      expect(result).toEqual([{ttlClock: t2, lastActive: t2}]);
+      expect(result).toEqual([{ttlClock: 1010, lastActive: t2}]);
     });
 
     test('one client - disconnect and reconnect', async () => {
@@ -237,7 +237,7 @@ describe('ttl', () => {
         SELECT "ttlClock", "lastActive"
         FROM "this_app_2/cvr".instances
         WHERE "clientGroupID" = ${serviceID}`;
-      expect(result[0].ttlClock).toBe(t0);
+      expect(result[0].ttlClock).toBe(0);
       expect(result[0].lastActive).toBe(t0);
 
       // Disconnect.
@@ -250,7 +250,7 @@ describe('ttl', () => {
         SELECT "ttlClock", "lastActive"
         FROM "this_app_2/cvr".instances
         WHERE "clientGroupID" = ${serviceID}`;
-      expect(result[0].ttlClock).toBe(t1);
+      expect(result[0].ttlClock).toBe(500);
       expect(result[0].lastActive).toBe(t1);
 
       // Wait some time while disconnected (should not advance ttlClock).
@@ -270,7 +270,7 @@ describe('ttl', () => {
           SELECT "ttlClock", "lastActive"
           FROM "this_app_2/cvr".instances
           WHERE "clientGroupID" = ${serviceID}`;
-      expect(result[0].ttlClock).toBe(t1);
+      expect(result[0].ttlClock).toBe(500);
       expect(result[0].lastActive).toBe(t1);
 
       // Make a change.
@@ -291,7 +291,7 @@ describe('ttl', () => {
           SELECT "ttlClock", "lastActive"
           FROM "this_app_2/cvr".instances
           WHERE "clientGroupID" = ${serviceID}`;
-      expect(result[0].ttlClock).toBe(t1);
+      expect(result[0].ttlClock).toBe(500);
       expect(result[0].lastActive).toBe(t2);
     });
   });
@@ -333,7 +333,7 @@ describe('ttl', () => {
     `,
     ).toEqual([
       {
-        ttlClock: t2,
+        ttlClock: 10 * 60 * 1000,
         lastActive: t2,
       },
     ]);
@@ -356,7 +356,7 @@ describe('ttl', () => {
     `,
     ).toEqual([
       {
-        ttlClock: t2,
+        ttlClock: 10 * 60 * 1000,
         lastActive: t2,
       },
     ]);
@@ -372,7 +372,7 @@ describe('ttl', () => {
     `,
     ).toEqual([
       {
-        ttlClock: t2,
+        ttlClock: 10 * 60 * 1000,
         lastActive: t2,
       },
     ]);
@@ -391,7 +391,7 @@ describe('ttl', () => {
     `,
     ).toEqual([
       {
-        ttlClock: t2 + 300_000,
+        ttlClock: 10 * 60 * 1000 + 5 * 60 * 1000,
         lastActive: t3 + 300_000,
       },
     ]);
@@ -412,7 +412,7 @@ describe('ttl', () => {
     await nextPoke(client); // hydration
 
     // Advance 2 seconds, then inactivate the query.
-    const t1 = t0 + 2 * 1000;
+    const t1 = t0 + 2_000;
     vi.setSystemTime(t1);
     await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
     await nextPokeParts(client); // Should get a desiredQueriesPatches poke
@@ -426,7 +426,7 @@ describe('ttl', () => {
     `,
     ).toEqual([
       {
-        ttlClock: t1,
+        ttlClock: 2_000,
         lastActive: t1,
       },
     ]);
@@ -457,7 +457,7 @@ describe('ttl', () => {
     expect(desires).toEqual([
       {
         deleted: true,
-        inactivatedAt: t1,
+        inactivatedAt: 2_000,
       },
     ]);
 

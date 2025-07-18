@@ -208,7 +208,7 @@ export class CVRStore {
       id,
       version: EMPTY_CVR_VERSION,
       lastActive: 0,
-      ttlClock: ttlClockFromNumber(0),
+      ttlClock: ttlClockFromNumber(0), // TTL clock starts at 0, not Date.now()
       replicaVersion: null,
       clients: {},
       queries: {},
@@ -254,7 +254,7 @@ export class CVRStore {
       this.putInstance({
         version: cvr.version,
         lastActive: 0,
-        ttlClock: ttlClockFromNumber(0),
+        ttlClock: ttlClockFromNumber(0), // TTL clock starts at 0 for new instances
         replicaVersion: null,
         clientSchema: null,
       });
@@ -390,7 +390,9 @@ export class CVRStore {
   }
 
   /**
-   * Updates the `ttlClock` of the CVR instance.
+   * Updates the `ttlClock` of the CVR instance. The ttlClock starts at 0 when
+   * the CVR instance is first created and increments based on elapsed time
+   * since the base time established by the ViewSyncerService.
    */
   async updateTTLClock(ttlClock: TTLClock, lastActive: number): Promise<void> {
     await this.#db`UPDATE ${this.#cvr('instances')}
@@ -400,9 +402,9 @@ export class CVRStore {
   }
 
   /**
-   *
-   * @returns This returns the current `ttlClock` of the CVR instance. If the
-   *          CVR has never been initialized for this client group, it returns
+   * @returns This returns the current `ttlClock` of the CVR instance. The ttlClock
+   *          represents elapsed time since the instance was created (starting from 0).
+   *          If the CVR has never been initialized for this client group, it returns
    *          `undefined`.
    */
   async getTTLClock(): Promise<TTLClock | undefined> {

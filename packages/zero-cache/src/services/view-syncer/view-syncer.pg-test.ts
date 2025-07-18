@@ -188,6 +188,7 @@ describe('view-syncer/service', () => {
 
   test('responds to changeDesiredQueries patch', async () => {
     const now = Date.UTC(2025, 1, 20);
+    const ttlClock = 0;
     vi.setSystemTime(now);
     connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
@@ -203,7 +204,7 @@ describe('view-syncer/service', () => {
       },
     ]);
 
-    const inactivatedAt = Date.now();
+    const inactivatedAt = ttlClock;
     // Change the set of queries.
     await vs.changeDesiredQueries(SYNC_CONTEXT, [
       'changeDesiredQueries',
@@ -1051,7 +1052,7 @@ describe('view-syncer/service', () => {
         {
           "clientID": "bar",
           "deleted": true,
-          "inactivatedAt": 1741046400000,
+          "inactivatedAt": 0,
           "queryHash": "query-hash2",
           "ttl": "00:00:05",
         },
@@ -1113,7 +1114,7 @@ describe('view-syncer/service', () => {
         {
           "clientID": "bar",
           "deleted": true,
-          "inactivatedAt": 1741046400000,
+          "inactivatedAt": 0,
           "queryHash": "query-hash2",
           "ttl": "00:00:05",
         },
@@ -1283,28 +1284,26 @@ describe('view-syncer/service', () => {
     // Verify that clientC's query remains present but is inactivated.
     expect(
       await cvrDB`SELECT "clientID", "deleted", "queryHash", "inactivatedAt" FROM "this_app_2/cvr".desires`,
-    ).toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientID": "clientA",
-          "deleted": false,
-          "inactivatedAt": null,
-          "queryHash": "query-hashA",
-        },
-        {
-          "clientID": "clientB",
-          "deleted": false,
-          "inactivatedAt": null,
-          "queryHash": "query-hashB",
-        },
-        {
-          "clientID": "clientC",
-          "deleted": true,
-          "inactivatedAt": 1751245200000,
-          "queryHash": "query-hashC",
-        },
-      ]
-    `);
+    ).toEqual([
+      {
+        clientID: 'clientA',
+        deleted: false,
+        inactivatedAt: null,
+        queryHash: 'query-hashA',
+      },
+      {
+        clientID: 'clientB',
+        deleted: false,
+        inactivatedAt: null,
+        queryHash: 'query-hashB',
+      },
+      {
+        clientID: 'clientC',
+        deleted: true,
+        inactivatedAt: 60 * 60 * 1000,
+        queryHash: 'query-hashC',
+      },
+    ]);
 
     // If we move time forward 5s the inactivated query should be deleted
     callNextSetTimeout(ttl);
