@@ -27,7 +27,11 @@ import type {
   CustomQueryRecord,
   CVRVersion,
 } from './schema/types.ts';
-import {ttlClockFromNumber} from './ttl-clock.ts';
+import {
+  ttlClockAsNumber,
+  ttlClockFromNumber,
+  type TTLClock,
+} from './ttl-clock.ts';
 
 const APP_ID = 'roze';
 const SHARD_NUM = 1;
@@ -949,7 +953,8 @@ describe('view-syncer/cvr-store', () => {
     `);
 
     // Test inspectQueries with no clientID (should return all queries)
-    const allQueries = await store.inspectQueries(lc);
+    const ttlClock = ttlClockFromNumber(Date.UTC(2024, 8, 4)); // 2024-09-04
+    const allQueries = await store.inspectQueries(lc, ttlClock);
     expect(allQueries).toMatchInlineSnapshot(`
       Result [
         {
@@ -1014,7 +1019,7 @@ describe('view-syncer/cvr-store', () => {
     `);
 
     // Test inspectQueries for client1
-    const client1Queries = await store.inspectQueries(lc, 'client1');
+    const client1Queries = await store.inspectQueries(lc, ttlClock, 'client1');
     expect(client1Queries).toMatchInlineSnapshot(`
       Result [
         {
@@ -1049,7 +1054,7 @@ describe('view-syncer/cvr-store', () => {
     `);
 
     // Test inspectQueries for client2
-    const client2Queries = await store.inspectQueries(lc, 'client2');
+    const client2Queries = await store.inspectQueries(lc, ttlClock, 'client2');
     expect(client2Queries).toMatchInlineSnapshot(`
       Result [
         {
@@ -1084,5 +1089,83 @@ describe('view-syncer/cvr-store', () => {
         },
       ]
     `);
+  });
+
+  test('inspectQueries filters out expired queries (inactivatedAt + ttl <= ttlClock)', async () => {
+    const ttlClock: TTLClock = ttlClockFromNumber(0); //Date.UTC(2025, 6, 17, 12, 0, 0); // July 17, 2025, 12:00:00 UTC
+    const expiredInactivatedAt = ttlClockFromNumber(
+      ttlClockAsNumber(ttlClock) - 120_000,
+    ); // 2 minutes ago
+    const expiredTTL = 60_000; // 1 minute TTL
+    const activeInactivatedAt = ttlClockFromNumber(
+      ttlClockAsNumber(ttlClock) - 30_000,
+    ); // 30 seconds ago
+    const activeTTL = 60_000; // 1 minute TTL
+    const deletedNotExpiredInactivatedAt = ttlClockFromNumber(
+      ttlClockAsNumber(ttlClock) - 10_000,
+    ); // 10 seconds ago
+    const deletedNotExpiredTTL = 60_000; // 1 minute TTL
+
+    // Setup clients and queries
+    await db.unsafe(`
+      -- Insert clients
+      INSERT INTO "roze_1/cvr".clients ("clientGroupID", "clientID")
+        VALUES('${CVR_ID}', 'test-client');
+      
+      -- Insert queries
+      INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", "patchVersion")
+        VALUES('${CVR_ID}', 'expired-query', '{"table":"expired"}', '01');
+      INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", "patchVersion")
+        VALUES('${CVR_ID}', 'active-query', '{"table":"active"}', '01');
+      INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", "patchVersion")
+        VALUES('${CVR_ID}', 'deleted-not-expired-query', '{"table":"deleted"}', '01');
+      
+      -- Insert desires with TTL: expired query (inactivatedAt + ttl <= ttlClock)
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAt", "ttl")
+        VALUES('${CVR_ID}', 'test-client', 'expired-query', '01', 
+               to_timestamp(${ttlClockAsNumber(expiredInactivatedAt) / 1000}), 
+               INTERVAL '${expiredTTL / 1000} seconds');
+      
+      -- Insert desires with TTL: active query (inactivatedAt + ttl > ttlClock)
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAt", "ttl")
+        VALUES('${CVR_ID}', 'test-client', 'active-query', '01', 
+               to_timestamp(${ttlClockAsNumber(activeInactivatedAt) / 1000}), 
+               INTERVAL '${activeTTL / 1000} seconds');
+      
+      -- Insert desires with TTL: deleted but not expired query (has deleted=true but inactivatedAt + ttl > ttlClock)
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAt", "ttl", "deleted")
+        VALUES('${CVR_ID}', 'test-client', 'deleted-not-expired-query', '01', 
+               to_timestamp(${ttlClockAsNumber(deletedNotExpiredInactivatedAt) / 1000}), 
+               INTERVAL '${deletedNotExpiredTTL / 1000} seconds',
+               true);
+    `);
+
+    // Query with ttlClock = now (expired query should be filtered out, but deleted non-expired should be included)
+    const results = await store.inspectQueries(lc, ttlClock, 'test-client');
+
+    // Active and deleted-but-not-expired queries should be returned
+    expect(results.map(r => r.queryID).sort()).toEqual([
+      'active-query',
+      'deleted-not-expired-query',
+    ]);
+    expect(results).toHaveLength(2);
+
+    // Query with ttlClock = now - 2min (all queries should be present since none are expired)
+    const olderTtlClock = ttlClockFromNumber(
+      ttlClockAsNumber(ttlClock) - 120_000,
+    );
+    const results2 = await store.inspectQueries(
+      lc,
+      olderTtlClock,
+      'test-client',
+    );
+
+    // All three queries should be returned when ttlClock is in the past
+    expect(results2.map(r => r.queryID).sort()).toEqual([
+      'active-query',
+      'deleted-not-expired-query',
+      'expired-query',
+    ]);
+    expect(results2).toHaveLength(3);
   });
 });
