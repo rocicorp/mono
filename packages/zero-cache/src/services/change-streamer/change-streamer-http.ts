@@ -7,7 +7,7 @@ import {must} from '../../../../shared/src/must.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
 import {pgClient, type PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
-import type {ShardID} from '../../types/shards.ts';
+import {type ShardID} from '../../types/shards.ts';
 import {streamIn, streamOut, type Source} from '../../types/streams.ts';
 import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
@@ -101,6 +101,7 @@ export class ChangeStreamerHttpServer extends HttpService {
         req.url ?? '',
         req.headers.origin ?? 'http://localhost',
       );
+      checkProtocolVersion(url.pathname);
       const taskID = url.searchParams.get('taskID');
       if (!taskID) {
         throw new Error('Missing taskID in snapshot request');
@@ -194,7 +195,7 @@ type RequestHeaders = Pick<IncomingMessage, 'url' | 'headers'>;
 
 export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
   const url = new URL(req.url ?? '', req.headers.origin ?? 'http://localhost');
-  const protocolVersion = checkPath(url.pathname);
+  const protocolVersion = checkProtocolVersion(url.pathname);
   const params = new URLParams(url);
 
   return {
@@ -208,7 +209,7 @@ export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
   };
 }
 
-function checkPath(pathname: string): number {
+function checkProtocolVersion(pathname: string): number {
   const match = PATH_REGEX.exec(pathname);
   if (!match) {
     throw new Error(`invalid path: ${pathname}`);
