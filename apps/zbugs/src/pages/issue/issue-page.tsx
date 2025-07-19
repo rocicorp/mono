@@ -54,7 +54,7 @@ import {
 } from '../../limits.ts';
 import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
-import {CACHE_AWHILE} from '../../query-cache-policy.ts';
+import {CACHE_NAV} from '../../query-cache-policy.ts';
 import {links, type ZbugsHistoryState} from '../../routes.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
@@ -88,7 +88,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const [issue, issueResult] = useQuery(
     issueDetail(login.loginState?.decoded, idField, id, z.userID),
-    CACHE_AWHILE,
+    CACHE_NAV,
   );
   useEffect(() => {
     if (issue || issueResult.type === 'complete') {
@@ -199,8 +199,9 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   ) {
     setIssueSnapshot(displayed);
   }
-  const useQueryOptions = {
+  const prevNextOptions = {
     enabled: listContext !== undefined && issueSnapshot !== undefined,
+    ...CACHE_NAV,
   } as const;
   // Don't need to send entire issue to server, just the sort columns plus PK.
   const start = displayed
@@ -217,7 +218,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
       start,
       'next',
     ),
-    useQueryOptions,
+    prevNextOptions,
   );
   useKeypress('j', () => {
     if (next) {
@@ -232,7 +233,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
       start,
       'prev',
     ),
-    useQueryOptions,
+    prevNextOptions,
   );
   useKeypress('k', () => {
     if (prev) {
@@ -249,7 +250,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const [allComments, allCommentsResult] = useQuery(
     commentQuery(z, displayed),
-    {enabled: displayAllComments && displayed !== undefined, ...CACHE_AWHILE},
+    {enabled: displayAllComments && displayed !== undefined, ...CACHE_NAV},
   );
 
   const [comments, hasOlderComments] = useMemo(() => {
