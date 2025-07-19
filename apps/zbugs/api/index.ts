@@ -16,6 +16,7 @@ import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {getQuery} from '../server/get-query.ts';
 import {getQueries} from '@rocicorp/zero/server';
 import {schema} from '../shared/schema.ts';
+import {getPresignedUrl} from '../src/server/upload.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -161,6 +162,37 @@ fastify.post<{
       request.body,
     ),
   );
+});
+
+fastify.post<{
+  Body: {contentType: string};
+}>('/api/upload/presigned-url', async (request, reply) => {
+  let authData: JWTData | undefined;
+  try {
+    authData = await maybeVerifyAuth(request.headers);
+  } catch (e) {
+    if (e instanceof Error) {
+      reply.status(401).send(e.message);
+      return;
+    }
+    throw e;
+  }
+
+  if (!authData) {
+    reply.status(401).send('Authentication required');
+    return;
+  }
+
+  try {
+    const result = await getPresignedUrl(request.body.contentType);
+    reply.send(result);
+  } catch (error) {
+    if (error instanceof Error) {
+      reply.status(500).send(error.message);
+      return;
+    }
+    reply.status(500).send('Failed to generate presigned URL');
+  }
 });
 
 async function maybeVerifyAuth(
