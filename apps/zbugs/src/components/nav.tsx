@@ -3,7 +3,7 @@ import classNames from 'classnames';
 import {memo, useCallback, useEffect, useMemo, useState} from 'react';
 import {useRoute, useSearch} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
-import {useQuery} from 'zero-react/src/use-query.js';
+import {useQuery, useZeroOnline} from '@rocicorp/zero/react';
 import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.tsx';
@@ -31,6 +31,7 @@ export const Nav = memo(() => {
       login.loginState?.decoded.sub ?? '',
     ),
   );
+  const isOnline = useZeroOnline();
 
   const [showIssueModal, setShowIssueModal] = useState(false);
 
@@ -111,6 +112,15 @@ export const Nav = memo(() => {
           {import.meta.env.DEV && (
             <FPSMeter className="fps-meter" width={192} height={38} />
           )}
+          <div className="online-status-pill-container">
+            <span className="online-status-pill">
+              <span
+                data-online={isOnline}
+                className="online-status-pill-indicator"
+              />
+              {isOnline ? 'Online' : 'Offline'}
+            </span>
+          </div>
           {login.loginState === undefined ? (
             <a href={loginHref}>Login</a>
           ) : (

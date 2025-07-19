@@ -4,6 +4,7 @@ import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
 } from '../../../replicache/src/impl.ts';
+import {promiseRace} from '../../../shared/src/promise.ts';
 import {dropDatabase} from '../../../replicache/src/persist/collect-idb-databases.ts';
 import type {Puller, PullerResult} from '../../../replicache/src/puller.ts';
 import type {Pusher, PusherResult} from '../../../replicache/src/pusher.ts';
@@ -144,6 +145,7 @@ import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
+import {Subscribable} from '../../../shared/src/subscribable.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -327,9 +329,8 @@ export class Zero<
 
   #onPong: () => void = () => undefined;
 
-  #online = false;
+  readonly #onlineManager: OnlineManager;
 
-  readonly #onOnlineChange: ((online: boolean) => void) | undefined;
   readonly #onUpdateNeeded: (
     reason: UpdateNeededReason,
     serverErrorMsg?: string,
@@ -454,7 +455,12 @@ export class Zero<
       );
     }
 
-    this.#onOnlineChange = onOnlineChange;
+    this.#onlineManager = new OnlineManager();
+
+    if (onOnlineChange) {
+      this.#onlineManager.subscribe(onOnlineChange);
+    }
+
     this.#options = options;
 
     this.#logOptions = this.#createLogOptions({
@@ -896,6 +902,9 @@ export class Zero<
     const lc = this.#lc.withContext('close');
 
     lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
+
+    // should we unsubscribe all listeners here?
+    // this.#onlineManager.cleanup();
 
     if (this.#connectionState !== ConnectionState.Disconnected) {
       this.#disconnect(
@@ -1787,21 +1796,31 @@ export class Zero<
   }
 
   #setOnline(online: boolean): void {
-    if (this.#online === online) {
-      return;
-    }
-
-    this.#online = online;
-    this.#onOnlineChange?.(online);
+    this.#onlineManager.setOnline(online);
   }
 
   /**
    * A rough heuristic for whether the client is currently online and
    * authenticated.
+   *
+   * This does *not* update in React when the online status changes.
+   * Use {@link useZeroOnline} or {@link addOnlineChangeListener} to subscribe
+   * to online status changes.
    */
   get online(): boolean {
-    return this.#online;
+    return this.#onlineManager.online;
   }
+
+  /**
+   * Subscribe to online status changes.
+   *
+   * This is useful when you want to update state based on the online status.
+   * @param listener - The listener to subscribe to.
+   * @returns A function to unsubscribe the listener.
+   */
+  addOnlineChangeListener = (
+    listener: (online: boolean) => void,
+  ): (() => void) => this.#onlineManager.subscribe(listener);
 
   /**
    * Starts a ping and waits for a pong.
@@ -1921,6 +1940,22 @@ export class Zero<
         return this.#socket!;
       });
     }
+  }
+}
+
+export class OnlineManager extends Subscribable<boolean> {
+  #online = false;
+
+  setOnline(online: boolean): void {
+    if (this.#online === online) {
+      return;
+    }
+    this.#online = online;
+    this.notify(online);
+  }
+
+  get online(): boolean {
+    return this.#online;
   }
 }
 
@@ -2072,13 +2107,6 @@ function addWebSocketIDToLogContext(
   lc: ZeroLogContext,
 ): ZeroLogContext {
   return lc.withContext('wsid', wsid);
-}
-
-/**
- * Like Promise.race but returns the index of the first promise that resolved.
- */
-function promiseRace(ps: Promise<unknown>[]): Promise<number> {
-  return Promise.race(ps.map((p, i) => p.then(() => i)));
 }
 
 class TimedOutError extends Error {
