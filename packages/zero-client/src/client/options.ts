@@ -26,8 +26,9 @@ export interface ZeroOptions<
    * - "https://myapp-myteam.zero.ms/zero"
    * - "https://myapp-myteam.zero.ms/db"
    *
-   * The latter is useful for configuring routing rules (e.g. "zero/**") when
-   * the zero-cache is hosted on the same domain as the application.
+   * The latter is useful for configuring routing rules (e.g. "/zero/\*") when
+   * the zero-cache is hosted on the same domain as the application. **Note that
+   * only a single path segment is allowed (e.g. it cannot be "/proxy/zero/\*")**.
    */
   server?: string | null | undefined;
 
