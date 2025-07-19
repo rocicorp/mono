@@ -175,6 +175,12 @@ describe('change-streamer/http', () => {
         `/replication/v${PROTOCOL_VERSION + 1}/changes` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
+      [
+        // Change the error message as necessary
+        `Cannot service client at protocol v4. Supported protocols: [v1 ... v3]`,
+        `/replication/v${PROTOCOL_VERSION + 1}/snapshot` +
+          `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
+      ],
     ])('%s: %s', async (error, path) => {
       for (const address of [serverAddress, dispatcherAddress]) {
         const {promise: result, resolve} = resolver<unknown>();
