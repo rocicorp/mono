@@ -134,6 +134,7 @@ test('client queries', async () => {
         got: true,
         id: '1',
         inactivatedAt: null,
+        histograms: new Map(),
         rowCount: 10,
         ttl: '1m',
         zql: 'issue',
@@ -166,6 +167,7 @@ test('client queries', async () => {
         got: true,
         id: '1',
         inactivatedAt: new Date(d),
+        histograms: new Map(),
         rowCount: 10,
         ttl: '1m',
         zql: 'issue',
@@ -246,9 +248,90 @@ test('clientGroup queries', async () => {
       got: true,
       id: '1',
       inactivatedAt: null,
+      histograms: new Map(),
       rowCount: 10,
       ttl: '1m',
       zql: "issue.where(({cmp, or}) => or(cmp('id', '1'), cmp('id', '!=', '2')))",
     },
   ]);
+});
+
+test('histogram for materialization durations', async () => {
+  // The RPC uses our nanoid which uses Math.random
+  vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+  let now = 0;
+  vi.spyOn(performance, 'now').mockImplementation(() => now);
+  expect(performance.now()).toEqual(0);
+
+  const userID = nanoid();
+  const z = zeroForTest({userID, schema, kvStore: 'mem'});
+  await z.triggerConnected();
+
+  const inspector = await z.inspect();
+  expect(await inspector.clients()).toEqual([
+    {
+      clientGroup: {
+        id: await z.clientGroupID,
+      },
+      id: z.clientID,
+    },
+  ]);
+
+  await z.socket;
+
+  const ast: AST = {
+    orderBy: [['id', 'asc']],
+    table: 'issue',
+  };
+  const q = z.query.issue;
+  expect(q.ast).toEqual(ast);
+
+  const qp = q.run({type: 'complete'});
+  now += 4;
+  await z.markQueryAsGot(q);
+  await qp;
+
+  const hash = z.query.issue.hash();
+
+  const response = [
+    {
+      clientID: z.clientID,
+      queryID: hash,
+      ast,
+      deleted: false,
+      got: true,
+      inactivatedAt: null,
+      rowCount: 10,
+      ttl: 0,
+    },
+  ];
+
+  (await z.socket).messages.length = 0;
+  const p = inspector.client.queries();
+  await Promise.resolve();
+  expect((await z.socket).messages.map(s => JSON.parse(s))).toEqual([
+    [
+      'inspect',
+      {
+        op: 'queries',
+        clientID: z.clientID,
+        id: '000000000000000000000',
+      },
+    ],
+  ]);
+  await z.triggerMessage([
+    'inspect',
+    {
+      op: 'queries',
+      id: '000000000000000000000',
+      value: response,
+    },
+  ] satisfies InspectDownMessage);
+  const queries = await p;
+  expect(queries[0].histograms.get('materialize')?.counts).toEqual(
+    new Uint32Array([0, 0, 0, 1]),
+  );
+
+  expect(inspector.advanceHistogram.counts).toEqual(new Uint32Array([2, 0]));
 });
