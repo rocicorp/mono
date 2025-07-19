@@ -8,6 +8,9 @@
     "build": "tsc && vite build",
     "check-types": "tsc && tsc -p tsconfig.node.json",
     "check-types:watch": "tsc --watch",
+    "db-up": "cd docker && docker compose up",
+    "db-down": "cd docker && docker compose down",
+    "clean": "cd docker && docker volume rm docker_zbugs_pgdata_sync && docker volume rm docker_zbugs_pgdata_upstream && rm -rf /tmp/zbugs-sync-replica.db*",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
@@ -53,7 +56,7 @@
     "remark-gfm": "^4.0.0",
     "use-debounce": "^10.0.4",
     "usehooks-ts": "^3.1.0",
-    "wouter": "^3.3.5"
+    "wouter": "^3.7.1"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",

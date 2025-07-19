@@ -86,6 +86,7 @@ export const queries = namedWithContext({
         .related('creator')
         .related('assignee')
         .related('labels')
+        .related('notificationState', q => q.where('userID', userID))
         .related('viewState', viewState =>
           viewState.where('userID', userID).one(),
         )
