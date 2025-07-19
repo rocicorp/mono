@@ -7,7 +7,9 @@ import {sleep} from '../../../../shared/src/sleep.ts';
 import {assertNormalized} from '../../config/normalize.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 import {getShardConfig} from '../../types/shards.ts';
+import type {Source} from '../../types/streams.ts';
 import {ChangeStreamerHttpClient} from '../change-streamer/change-streamer-http.ts';
+import type {SnapshotMessage} from '../change-streamer/snapshot.ts';
 
 // Retry for up to 3 minutes (60 times with 3 second delay).
 // Beyond that, let the container runner restart the task.
@@ -105,11 +107,14 @@ function getLitestream(
 async function tryRestore(lc: LogContext, config: ZeroConfig) {
   const {changeStreamer} = config;
 
+  const isViewSyncer =
+    changeStreamer.mode === 'discover' || changeStreamer.uri !== undefined;
+
   // Fire off a snapshot reservation to the current replication-manager
   // (if there is one).
-  const backupURL = reserveAndGetSnapshotLocation(lc, config);
+  const backupURL = reserveAndGetSnapshotLocation(lc, config, isViewSyncer);
   let backupURLOverride: string | undefined;
-  if (changeStreamer.mode === 'discover' || changeStreamer.uri !== undefined) {
+  if (isViewSyncer) {
     // The return value is required by view-syncers ...
     backupURLOverride = await backupURL;
     lc.info?.(`restoring backup from ${backupURLOverride}`);
@@ -163,42 +168,78 @@ export function startReplicaBackupProcess(config: ZeroConfig): ChildProcess {
   });
 }
 
-async function reserveAndGetSnapshotLocation(
+function reserveAndGetSnapshotLocation(
   lc: LogContext,
   config: ZeroConfig,
-) {
+  isViewSyncer: boolean,
+): Promise<string> {
   const {promise: backupURL, resolve, reject} = resolver<string>();
-  try {
-    assertNormalized(config);
-    const {taskID, change, changeStreamer} = config;
-    const shardID = getShardConfig(config);
 
-    const changeStreamerClient = new ChangeStreamerHttpClient(
-      lc,
-      shardID,
-      change.db,
-      changeStreamer.uri,
-    );
+  void (async function () {
+    const abort = new AbortController();
+    process.on('SIGINT', () => abort.abort());
+    process.on('SIGTERM', () => abort.abort());
 
-    const sub = await changeStreamerClient.reserveSnapshot(taskID);
-
-    // Capture the value of the status message that the change-streamer
-    // (i.e. BackupMonitor) returns, and hold the connection open to
-    // "reserve" the snapshot and prevent change log cleanup.
-    //
-    // The change-streamer itself will close the connection when the
-    // subscription is started (or the reservation retried).
-    void (async function () {
+    for (let i = 0; ; i++) {
+      let err: unknown | string = '';
       try {
-        for await (const msg of sub) {
+        let resolved = false;
+        const stream = await reserveSnapshot(lc, config);
+        for await (const msg of stream) {
+          // Capture the value of the status message that the change-streamer
+          // (i.e. BackupMonitor) returns, and hold the connection open to
+          // "reserve" the snapshot and prevent change log cleanup.
           resolve(msg[1].backupURL);
+          resolved = true;
+        }
+        // The change-streamer itself closes the connection when the
+        // subscription is started (or the reservation retried).
+        if (resolved) {
+          break;
         }
       } catch (e) {
-        reject(e);
+        err = e;
       }
-    })();
-  } catch (e) {
-    reject(e);
-  }
+      if (!isViewSyncer) {
+        return reject(err);
+      }
+      // Retry in the view-syncer since it cannot proceed until it connects
+      // to a (compatible) replication-manager. In particular, a
+      // replication-manager that does not support the view-syncer's
+      // change-streamer protocol will close the stream with an error; this
+      // retry logic essentially delays the startup of a view-syncer until
+      // a compatible replication-manager has been rolled out, allowing
+      // replication-manager and view-syncer services to be updated in
+      // parallel.
+      lc.warn?.(
+        `Unable to reserve snapshot (attempt ${i + 1}). Retrying in 5 seconds.`,
+        String(err),
+      );
+      try {
+        await sleep(5000, abort.signal);
+      } catch (e) {
+        return reject(e);
+      }
+    }
+  })();
+
   return backupURL;
+}
+
+function reserveSnapshot(
+  lc: LogContext,
+  config: ZeroConfig,
+): Promise<Source<SnapshotMessage>> {
+  assertNormalized(config);
+  const {taskID, change, changeStreamer} = config;
+  const shardID = getShardConfig(config);
+
+  const changeStreamerClient = new ChangeStreamerHttpClient(
+    lc,
+    shardID,
+    change.db,
+    changeStreamer.uri,
+  );
+
+  return changeStreamerClient.reserveSnapshot(taskID);
 }
