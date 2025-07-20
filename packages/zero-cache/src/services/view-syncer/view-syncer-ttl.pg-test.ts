@@ -144,8 +144,8 @@ describe('ttl', () => {
         // Close the connection.
         source.cancel();
 
-        await sleep(10);
-        vi.setSystemTime(Date.now() + 10);
+        await sleep(100);
+        vi.setSystemTime(Date.now() + 100);
 
         // Before closing, check initial values.
         const result = await cvrDB`
@@ -194,8 +194,8 @@ describe('ttl', () => {
       vi.setSystemTime(Date.now() + 500);
       // Close the first connection.
       source1.cancel();
-      await sleep(10);
-      vi.setSystemTime(Date.now() + 10);
+      await sleep(100);
+      vi.setSystemTime(Date.now() + 100);
 
       result = await cvrDB`
           SELECT "ttlClock", "lastActive"
@@ -208,14 +208,14 @@ describe('ttl', () => {
       const t2 = Date.now();
 
       source2.cancel();
-      await sleep(10);
-      vi.setSystemTime(Date.now() + 10);
+      await sleep(100);
+      vi.setSystemTime(Date.now() + 100);
 
       result = await cvrDB`
           SELECT "ttlClock", "lastActive"
           FROM "this_app_2/cvr".instances
           WHERE "clientGroupID" = ${serviceID}`;
-      expect(result).toEqual([{ttlClock: 1010, lastActive: t2}]);
+      expect(result).toEqual([{ttlClock: 1100, lastActive: t2}]);
     });
 
     test('one client - disconnect and reconnect', async () => {
@@ -323,20 +323,21 @@ describe('ttl', () => {
     const t2 = t1 + 5 * 60 * 1000;
     vi.setSystemTime(t2);
     source.cancel();
-    await sleep(10);
 
-    expect(
-      await cvrDB`
+    await vi.waitFor(async () => {
+      expect(
+        await cvrDB`
       SELECT "ttlClock", "lastActive"
       FROM "this_app_2/cvr".instances
       WHERE "clientGroupID" = ${serviceID}
     `,
-    ).toEqual([
-      {
-        ttlClock: 10 * 60 * 1000,
-        lastActive: t2,
-      },
-    ]);
+      ).toEqual([
+        {
+          ttlClock: 10 * 60 * 1000,
+          lastActive: t2,
+        },
+      ]);
+    });
 
     // Wait an hour while disconnected.
     const t3 = t2 + 60 * 60 * 1000;
