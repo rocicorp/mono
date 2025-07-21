@@ -995,10 +995,10 @@ describe('view-syncer/cvr', () => {
         "clients": 2,
         "desires": 8,
         "instances": 1,
-        "queries": 9,
+        "queries": 10,
         "rows": 0,
         "rowsDeferred": 0,
-        "statements": 21,
+        "statements": 22,
       }
     `);
     expect(updated).toEqual({
@@ -1049,6 +1049,48 @@ describe('view-syncer/cvr', () => {
               ['clientID', 'asc'],
             ],
           },
+        },
+        mutationResults: {
+          ast: {
+            orderBy: [
+              ['clientGroupID', 'asc'],
+              ['clientID', 'asc'],
+              ['mutationID', 'asc'],
+            ],
+            schema: '',
+            table: 'dapp_3.mutations',
+            where: {
+              conditions: [
+                {
+                  left: {
+                    name: 'clientGroupID',
+                    type: 'column',
+                  },
+                  op: '=',
+                  right: {
+                    type: 'literal',
+                    value: 'abc123',
+                  },
+                  type: 'simple',
+                },
+                {
+                  left: {
+                    name: 'clientID',
+                    type: 'column',
+                  },
+                  op: '=',
+                  right: {
+                    type: 'literal',
+                    value: 'barClient',
+                  },
+                  type: 'simple',
+                },
+              ],
+              type: 'and',
+            },
+          },
+          id: 'mutationResults',
+          type: 'internal',
         },
         xCustomHash: {
           args: [],
@@ -1210,6 +1252,55 @@ describe('view-syncer/cvr', () => {
           internal: true,
           patchVersion: null,
           queryHash: 'lmids',
+          transformationHash: null,
+          transformationVersion: null,
+        },
+        {
+          clientAST: {
+            orderBy: [
+              ['clientGroupID', 'asc'],
+              ['clientID', 'asc'],
+              ['mutationID', 'asc'],
+            ],
+            schema: '',
+            table: `${APP_ID}_${SHARD_NUM}.mutations`,
+            where: {
+              conditions: [
+                {
+                  left: {
+                    name: 'clientGroupID',
+                    type: 'column',
+                  },
+                  op: '=',
+                  right: {
+                    type: 'literal',
+                    value: 'abc123',
+                  },
+                  type: 'simple',
+                },
+                {
+                  left: {
+                    name: 'clientID',
+                    type: 'column',
+                  },
+                  op: '=',
+                  right: {
+                    type: 'literal',
+                    value: 'barClient',
+                  },
+                  type: 'simple',
+                },
+              ],
+              type: 'and',
+            },
+          },
+          clientGroupID: 'abc123',
+          deleted: false,
+          internal: true,
+          patchVersion: null,
+          queryArgs: null,
+          queryHash: 'mutationResults',
+          queryName: null,
           transformationHash: null,
           transformationVersion: null,
         },

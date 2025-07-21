@@ -26,7 +26,7 @@ import {useZero} from '../../hooks/use-zero.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import {preload} from '../../zero-preload.ts';
-import {CACHE_AWHILE, CACHE_NONE} from '../../query-cache-policy.ts';
+import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {queries, type ListContext} from '../../../shared/queries.ts';
 
 let firstRowRendered = false;
@@ -85,7 +85,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   // keystrokes for the URL, so we just reuse that.
   const [issues, issuesResult] = useQuery(
     q,
-    textFilterQuery === textFilter ? CACHE_AWHILE : CACHE_NONE,
+    textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
   );
   const isSearchComplete = issues.length < limit;
 

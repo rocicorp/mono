@@ -74,7 +74,7 @@ describe('change-streamer/http', () => {
     snapshotFn = vi.fn();
     endReservationFn = vi.fn();
 
-    const [parent, receiver] = inProcChannel();
+    const [parent, sender] = inProcChannel();
 
     const dispatcher = Fastify();
     installWebSocketHandoff(
@@ -82,7 +82,7 @@ describe('change-streamer/http', () => {
       req => {
         const {pathname} = new URL(req.url ?? '', 'http://unused/');
         const action = pathname.substring(pathname.lastIndexOf('/') + 1);
-        return {payload: action, receiver};
+        return {payload: action, sender};
       },
       dispatcher.server,
     );
@@ -173,6 +173,12 @@ describe('change-streamer/http', () => {
         // Change the error message as necessary
         `Cannot service client at protocol v4. Supported protocols: [v1 ... v3]`,
         `/replication/v${PROTOCOL_VERSION + 1}/changes` +
+          `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
+      ],
+      [
+        // Change the error message as necessary
+        `Cannot service client at protocol v4. Supported protocols: [v1 ... v3]`,
+        `/replication/v${PROTOCOL_VERSION + 1}/snapshot` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
     ])('%s: %s', async (error, path) => {
