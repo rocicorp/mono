@@ -208,6 +208,7 @@ export class MutationTracker {
     if (lastMutationID === this.#currentMutationID) {
       return;
     }
+
     try {
       this.#currentMutationID = lastMutationID;
       this.#resolveLimboMutations(lastMutationID);

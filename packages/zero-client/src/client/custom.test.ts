@@ -492,14 +492,15 @@ describe('server results and keeping read queries', () => {
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
 
-    await z.mutate.issue.create({
+    const create = z.mutate.issue.create({
       id: '1',
       title: 'foo',
       closed: false,
       description: '',
       ownerId: '',
       createdAt: 1743018138477,
-    }).client;
+    });
+    await create.client;
 
     const q = z.query.issue.limit(1).materialize();
     q.destroy();
@@ -537,12 +538,16 @@ describe('server results and keeping read queries', () => {
 
     z.queryDelegate.flushQueryChanges();
 
+    // lmid advancement is not in a RAF callback
+    // so tick a few times
+
     // mutation is no longer outstanding, query is removed.
-    expect(filter(messages)).toMatchInlineSnapshot(`
-      [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1vsd9vcx6ynd4"}]}]",
-      ]
-    `);
+    await vi.waitFor(() => {
+      expect(filter(messages)).toEqual([
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1vsd9vcx6ynd4"}]}]`,
+      ]);
+    });
+
     messages.length = 0;
 
     // check the error case
@@ -566,6 +571,7 @@ describe('server results and keeping read queries', () => {
           id: {clientID: z.clientID, id: 2},
           result: {
             error: 'app',
+            details: 'womp womp',
           },
         },
       ],
@@ -584,15 +590,20 @@ describe('server results and keeping read queries', () => {
 
     z.queryDelegate.flushQueryChanges();
 
-    expect(messages).toMatchInlineSnapshot(`
-      [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"12hwg3ihkijhm"}]}]",
-      ]
-    `);
+    await expect(close.server).rejects.toEqual({
+      error: 'app',
+      details: 'womp womp',
+    });
+
+    await vi.waitFor(() => {
+      expect(filter(messages)).toEqual([
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"12hwg3ihkijhm"}]}]`,
+      ]);
+    });
+
     messages.length = 0;
 
     await z.close();
-    await expect(close.server).rejects.toEqual({error: 'app'});
   });
 });
 

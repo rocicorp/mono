@@ -120,7 +120,11 @@ const mutationOkSchema = v.object({
 });
 const mutationErrorSchema = v.union(appErrorSchema, zeroErrorSchema);
 
-const mutationResultSchema = v.union(mutationOkSchema, mutationErrorSchema);
+export const mutationResultSchema = v.union(
+  mutationOkSchema,
+  mutationErrorSchema,
+);
+
 export const mutationResponseSchema = v.object({
   id: mutationIDSchema,
   result: mutationResultSchema,

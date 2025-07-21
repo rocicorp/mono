@@ -28,7 +28,6 @@ import type {ZeroLogContext} from './zero-log-context.ts';
 import {unreachable} from '../../../shared/src/asserts.ts';
 import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
-import {must} from '../../../shared/src/must.ts';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
@@ -181,15 +180,19 @@ export class PokeHandler {
         await this.#replicachePoke(merged);
         lc.debug?.('poking replicache took', performance.now() - start);
 
-        this.#mutationTracker.processMutationResponses(merged.mutationResults);
+        this.#mutationTracker.processMutationResponses(
+          merged.mutationResults ?? [],
+        );
         // Newer versions of zero-cache will send down `mutationResults`
         // Old versions will not.
         // The line below is for old versions.
         // It is also a fail-safe if a mutation response is somehow lost.
         if (!('error' in merged.pullResponse)) {
-          this.#mutationTracker.lmidAdvanced(
-            must(merged.pullResponse.lastMutationIDChanges[this.#clientID]),
-          );
+          const lmid =
+            merged.pullResponse.lastMutationIDChanges[this.#clientID];
+          if (lmid !== undefined) {
+            this.#mutationTracker.lmidAdvanced(lmid);
+          }
         }
       } catch (e) {
         this.#handlePokeError(e);
@@ -220,7 +223,9 @@ export function mergePokes(
   pokeBuffer: PokeAccumulator[],
   schema: Schema,
   serverToClient: NameMapper,
-): (PokeInternal & {mutationResults: MutationPatch[]}) | undefined {
+):
+  | (PokeInternal & {mutationResults?: MutationPatch[] | undefined})
+  | undefined {
   if (pokeBuffer.length === 0) {
     return undefined;
   }
@@ -285,15 +290,22 @@ export function mergePokes(
       }
     }
   }
-  return {
+  const ret: PokeInternal & {mutationResults?: MutationPatch[] | undefined} = {
     baseCookie,
-    mutationResults,
     pullResponse: {
       lastMutationIDChanges: mergedLastMutationIDChanges,
       patch: mergedPatch,
       cookie,
     },
   };
+
+  // For backwards compatibility. Because we're strict on our validation,
+  // zero-client must be able to parse pokes with this field before we introduce it.
+  // So users can update their clients and then start using custom mutators that write responses to the db.
+  if (mutationResults.length > 0) {
+    ret.mutationResults = mutationResults;
+  }
+  return ret;
 }
 
 function queryPatchOpToReplicachePatchOp(

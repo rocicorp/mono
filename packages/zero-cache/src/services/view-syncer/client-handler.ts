@@ -38,6 +38,7 @@ import {
   type PutQueryPatch,
   type RowID,
 } from './schema/types.ts';
+import {mutationResultSchema} from '../../../../zero-protocol/src/push.ts';
 
 export type PutRowPatch = {
   type: 'row';
@@ -246,15 +247,19 @@ export class ClientHandler {
             const patches = (body.mutationsPatch ??= []);
             if (op === 'put') {
               const row = v.parse(
-                // TODO: must we use ensureSafeJSON here?
                 ensureSafeJSON(patch.contents),
                 mutationRowSchema,
                 'passthrough',
               );
               patches.push({
                 op: 'put',
-                // TODO: is this not already parsed?
-                mutation: JSON.parse(row.result),
+                mutation: {
+                  id: {
+                    clientID: row.clientID,
+                    id: row.mutationID,
+                  },
+                  result: row.result,
+                },
               });
             } else {
               // no need to deal with `del` as the mutation results are ephemeral on the client.
@@ -364,7 +369,7 @@ const mutationRowSchema = v.object({
   clientGroupID: v.string(),
   clientID: v.string(),
   mutationID: v.number(),
-  result: v.string(),
+  result: mutationResultSchema,
 });
 
 function makeRowPatch(patch: RowPatch): RowPatchOp {
