@@ -24,8 +24,27 @@ import type {WriteTransaction} from './replicache-types.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
+import type {Row} from '../../../zql/src/query/query.ts';
+import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 
 type Schema = typeof schema;
+
+// beforeEach(() => {
+//   let frameId = 0;
+
+//   vi.stubGlobal(
+//     'requestAnimationFrame',
+//     vi.fn(callback => {
+//       frameId++;
+//       setTimeout(() => callback(performance.now()), 0);
+//       return frameId;
+//     }),
+//   );
+// });
+
+// afterEach(() => {
+//   vi.unstubAllGlobals();
+// });
 
 test('argument types are preserved on the generated mutator interface', () => {
   const mutators = {
@@ -492,6 +511,7 @@ describe('server results and keeping read queries', () => {
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
 
+    const q = z.query.issue.limit(1).materialize();
     const create = z.mutate.issue.create({
       id: '1',
       title: 'foo',
@@ -502,7 +522,6 @@ describe('server results and keeping read queries', () => {
     });
     await create.client;
 
-    const q = z.query.issue.limit(1).materialize();
     q.destroy();
 
     z.queryDelegate.flushQueryChanges();
@@ -602,6 +621,94 @@ describe('server results and keeping read queries', () => {
     });
 
     messages.length = 0;
+
+    await z.close();
+  });
+
+  test('after the server promise resolves (via poke), reads from the store return the data from the server', async () => {
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issue: {
+          create: async (
+            _tx,
+            _args: InsertValue<typeof schema.tables.issue>,
+          ) => {},
+        },
+      } as const satisfies CustomMutatorDefs<Schema>,
+    });
+
+    const mockSocket = await z.socket;
+    const messages: string[] = [];
+    mockSocket.onUpstream = msg => {
+      messages.push(msg);
+    };
+
+    await z.triggerConnected();
+    await z.waitForConnectionState(ConnectionState.Connected);
+
+    const create = z.mutate.issue.create({
+      id: '1',
+      title: 'foo',
+      closed: false,
+      description: '',
+      ownerId: '',
+      createdAt: 1743018138477,
+    });
+    await create.client;
+
+    let foundIssue: Row<typeof schema.tables.issue> | undefined;
+    void create.server.then(async () => {
+      foundIssue = await z.query.issue.where('id', '1').one();
+    });
+
+    // confirm the mutation
+    await z.triggerPokeStart({
+      pokeID: '1',
+      baseCookie: null,
+      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+    });
+    await z.triggerPokePart({
+      pokeID: '1',
+      lastMutationIDChanges: {[z.clientID]: 1},
+      rowsPatch: [
+        {
+          op: 'put',
+          tableName: 'issues',
+          value: {
+            id: '1',
+            title: 'server-foo',
+            closed: false,
+            description: 'server-desc',
+            ownerId: '',
+            createdAt: 1743018138477,
+          },
+        },
+      ],
+      mutationsPatch: [
+        {
+          op: 'put',
+          mutation: {
+            id: {clientID: z.clientID, id: 1},
+            result: {},
+          },
+        },
+      ],
+    });
+    await z.triggerPokeEnd({pokeID: '1', cookie: '1'});
+    z.queryDelegate.flushQueryChanges();
+
+    await vi.waitFor(() => {
+      expect(foundIssue).toEqual({
+        id: '1',
+        title: 'server-foo',
+        closed: false,
+        description: 'server-desc',
+        ownerId: '',
+        createdAt: 1743018138477,
+        [refCountSymbol]: 1,
+      });
+    });
 
     await z.close();
   });
