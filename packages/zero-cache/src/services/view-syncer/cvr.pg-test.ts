@@ -1052,7 +1052,11 @@ describe('view-syncer/cvr', () => {
         },
         mutationResults: {
           ast: {
-            orderBy: [['mutationID', 'asc']],
+            orderBy: [
+              ['clientGroupID', 'asc'],
+              ['clientID', 'asc'],
+              ['mutationID', 'asc'],
+            ],
             schema: '',
             table: 'dapp_3.mutations',
             where: {
@@ -1253,7 +1257,11 @@ describe('view-syncer/cvr', () => {
         },
         {
           clientAST: {
-            orderBy: [['mutationID', 'asc']],
+            orderBy: [
+              ['clientGroupID', 'asc'],
+              ['clientID', 'asc'],
+              ['mutationID', 'asc'],
+            ],
             schema: '',
             table: `${APP_ID}_${SHARD_NUM}.mutations`,
             where: {
