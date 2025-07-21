@@ -49,7 +49,10 @@ function defaultPublicationName(appID: string, shardID: string | number) {
   return `_${appID}_public_${shardID}`;
 }
 
-function metadataPublicationName(appID: string, shardID: string | number) {
+export function metadataPublicationName(
+  appID: string,
+  shardID: string | number,
+) {
   return `_${appID}_metadata_${shardID}`;
 }
 
@@ -115,6 +118,25 @@ export function getClientsTableDefinition(schema: string) {
   );`;
 }
 
+/**
+ * Tracks the results of mutations.
+ * 1. It is an error for the same mutation ID to be used twice.
+ * 2. The result is JSONB to allow for arbitrary results.
+ *
+ * The tables must be cleaned up as the clients
+ * receive the mutation responses and as clients are removed.
+ */
+export function getMutationsTableDefinition(schema: string) {
+  return /*sql*/ `
+  CREATE TABLE ${schema}."mutations" (
+    "clientGroupID"  TEXT NOT NULL,
+    "clientID"       TEXT NOT NULL,
+    "mutationID"     BIGINT NOT NULL,
+    "result"         JSON NOT NULL,
+    PRIMARY KEY("clientGroupID", "clientID", "mutationID")
+  );`;
+}
+
 export const SHARD_CONFIG_TABLE = 'shardConfig';
 
 export function shardSetup(
@@ -131,9 +153,10 @@ export function shardSetup(
   CREATE SCHEMA IF NOT EXISTS ${shard};
 
   ${getClientsTableDefinition(shard)}
+  ${getMutationsTableDefinition(shard)}
 
   CREATE PUBLICATION ${id(metadataPublication)}
-    FOR TABLE ${app}."schemaVersions", ${app}."permissions", TABLE ${shard}."clients";
+    FOR TABLE ${app}."schemaVersions", ${app}."permissions", TABLE ${shard}."clients", ${shard}."mutations";
 
   CREATE TABLE ${shard}."${SHARD_CONFIG_TABLE}" (
     "publications"  TEXT[] NOT NULL,

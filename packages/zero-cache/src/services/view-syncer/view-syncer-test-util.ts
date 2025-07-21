@@ -564,6 +564,14 @@ export async function setup(
     _0_version       TEXT NOT NULL,
     PRIMARY KEY ("clientGroupID", "clientID")
   );
+  CREATE TABLE "this_app_2.mutations" (
+    "clientGroupID"  TEXT,
+    "clientID"       TEXT,
+    "mutationID"     INTEGER,
+    "result"         TEXT,
+    _0_version       TEXT NOT NULL,
+    PRIMARY KEY ("clientGroupID", "clientID", "mutationID")
+  );
   CREATE TABLE "this_app.schemaVersions" (
     "lock"                INT PRIMARY KEY,
     "minSupportedVersion" INT,
