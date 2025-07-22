@@ -271,6 +271,24 @@ textarea.autoResize {
   cursor: default;
 }
 
+.offline-status-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.offline-status-pill {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 0.25rem 1rem;
+  border-color: var(--color-modal-outline);
+  border-width: 1px;
+  border-radius: 2rem;
+  font-size: var(--typo-label-size);
+  gap: 0.5rem;
+}
+
 .logout-button {
   display: block;
   height: 1.5rem;
@@ -1498,40 +1516,6 @@ emoji-picker {
   --border-radius: 0.5rem;
   --border-color: var(--color-modal-outline);
   --emoji-size: 1.25rem;
-}
-
-.online-status-pill-container {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.online-status-pill {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  padding: 0.25rem 1rem;
-  border-color: var(--color-modal-outline);
-  border-width: 1px;
-  border-radius: 2rem;
-  font-size: var(--typo-label-size);
-}
-
-.online-status-pill-indicator {
-  display: inline-block;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  margin-right: 0.5rem;
-}
-
-.online-status-pill-indicator[data-online='true'] {
-  background-color: var(--color-text-primary);
-}
-
-.online-status-pill-indicator[data-online='false'] {
-  background-color: red;
 }
 
 .popover-panel {
