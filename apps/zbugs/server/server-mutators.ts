@@ -1,14 +1,15 @@
-import {
-  createMutators,
-  type CreateIssueArgs,
-  type AddEmojiArgs,
-  type AddCommentArgs,
-} from '../shared/mutators.ts';
 import {type CustomMutatorDefs, type UpdateValue} from '@rocicorp/zero';
-import {schema} from '../shared/schema.ts';
-import {notify} from './notify.ts';
+import type {TransactionSql} from 'postgres';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import {type AuthData} from '../shared/auth.ts';
+import {
+  createMutators,
+  type AddCommentArgs,
+  type AddEmojiArgs,
+  type CreateIssueArgs,
+} from '../shared/mutators.ts';
+import {schema} from '../shared/schema.ts';
+import {notify} from './notify.ts';
 
 export type PostCommitTask = () => Promise<void>;
 
@@ -32,6 +33,8 @@ export function createServerMutators(
           created: Date.now(),
           modified: Date.now(),
         });
+
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -44,21 +47,12 @@ export function createServerMutators(
         tx,
         args: {id: string} & UpdateValue<typeof schema.tables.issue>,
       ) {
-        const oldIssue = await tx.query.issue.where('id', args.id).one();
-        assert(oldIssue);
-
-        const isAssigneeChange =
-          args.assigneeID !== undefined &&
-          args.assigneeID !== oldIssue.assigneeID;
-        const previousAssigneeID = isAssigneeChange
-          ? oldIssue.assigneeID
-          : undefined;
-
         await mutators.issue.update(tx, {
           ...args,
           modified: Date.now(),
         });
 
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -68,8 +62,6 @@ export function createServerMutators(
             update: args,
           },
           postCommitTasks,
-          isAssigneeChange,
-          previousAssigneeID,
         );
       },
 
@@ -78,6 +70,8 @@ export function createServerMutators(
         {issueID, labelID}: {issueID: string; labelID: string},
       ) {
         await mutators.issue.addLabel(tx, {issueID, labelID});
+
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -95,6 +89,8 @@ export function createServerMutators(
         {issueID, labelID}: {issueID: string; labelID: string},
       ) {
         await mutators.issue.removeLabel(tx, {issueID, labelID});
+
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -116,6 +112,8 @@ export function createServerMutators(
           ...args,
           created: Date.now(),
         });
+
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -138,6 +136,7 @@ export function createServerMutators(
           .where('id', args.subjectID)
           .one();
         assert(comment);
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -162,6 +161,7 @@ export function createServerMutators(
           body,
           created: Date.now(),
         });
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -181,6 +181,7 @@ export function createServerMutators(
         const comment = await tx.query.comment.where('id', id).one();
         assert(comment);
 
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -194,5 +195,5 @@ export function createServerMutators(
         );
       },
     },
-  } as const satisfies CustomMutatorDefs<typeof schema>;
+  } as const satisfies CustomMutatorDefs<typeof schema, TransactionSql>;
 }

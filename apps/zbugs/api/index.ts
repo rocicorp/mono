@@ -163,6 +163,53 @@ fastify.post<{
   );
 });
 
+fastify.get<{
+  Querystring: {id: string; email: string};
+}>('/api/unsubscribe', async (request, reply) => {
+  if (!request.query.email) {
+    reply.status(400).send('Email is required');
+    return;
+  }
+
+  // Look up the actual issue ID from the shortID
+  const shortID = parseInt(request.query.id);
+
+  if (isNaN(shortID)) {
+    reply.status(400).send('Invalid issue ID');
+    return;
+  }
+
+  const existingUserResult =
+    await sql`SELECT id, email FROM "user" WHERE "email" = ${request.query.email}`;
+
+  const existingUser = existingUserResult[0];
+
+  if (!existingUser) {
+    reply.status(401).send('Unauthorized');
+    return;
+  }
+
+  const issueResult =
+    await sql`SELECT id, title FROM "issue" WHERE "shortID" = ${shortID}`;
+
+  const issue = issueResult[0];
+
+  if (!issue) {
+    reply.status(404).send('Issue not found');
+    return;
+  }
+
+  await sql`INSERT INTO "issueNotifications" ("userID", "issueID", "subscribed") 
+    VALUES (${existingUser.id}, ${issue.id}, false)
+    ON CONFLICT ("userID", "issueID") 
+    DO UPDATE SET "subscribed" = false`;
+  reply
+    .type('text/html')
+    .send(
+      `OK! You are unsubscribed from <a href="https://bugs.rocicorp.dev/issue/${shortID}">${issue.title}</a>.`,
+    );
+});
+
 async function maybeVerifyAuth(
   headers: IncomingHttpHeaders,
 ): Promise<JWTData | undefined> {

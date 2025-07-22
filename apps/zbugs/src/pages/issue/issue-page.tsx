@@ -28,6 +28,7 @@ import {
 } from '../../../shared/schema.ts';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
+import circle from '../../assets/icons/circle.svg';
 import {commentQuery} from '../../comment-query.ts';
 import {AvatarImage} from '../../components/avatar-image.tsx';
 import {Button} from '../../components/button.tsx';
@@ -62,6 +63,7 @@ import {isCtrlEnter} from './is-ctrl-enter.ts';
 import {queries} from '../../../shared/queries.ts';
 import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
 import {preload} from '../../zero-preload.ts';
+import type {NotificationType} from '../../../shared/mutators.ts';
 
 const {emojiChange, issueDetail, prevNext} = queries;
 
@@ -382,6 +384,11 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const rendering = editing ? {...editing, ...edits} : displayed;
 
+  const isSubscribed = issue?.notificationState?.subscribed;
+  const currentState: NotificationType = isSubscribed
+    ? 'subscribe'
+    : 'unsubscribe';
+
   return (
     <div className="issue-detail-container">
       <MyToastContainer position="bottom" />
@@ -569,6 +576,33 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               />
             </div>
           ) : null}
+
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Notifications</p>
+            <Combobox<NotificationType>
+              disabled={!login.loginState?.decoded?.sub}
+              items={[
+                {
+                  text: 'Subscribed',
+                  value: 'subscribe',
+                  icon: statusClosed,
+                },
+                {
+                  text: 'Unsubscribed',
+                  value: 'unsubscribe',
+                  icon: circle,
+                },
+              ]}
+              selectedValue={currentState}
+              onChange={value =>
+                z.mutate.notification.update({
+                  issueID: displayed.id,
+                  subscribed: value,
+                  created: Date.now(),
+                })
+              }
+            />
+          </div>
 
           <div className="sidebar-item">
             <p className="issue-detail-label">Creator</p>

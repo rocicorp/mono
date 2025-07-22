@@ -89,6 +89,15 @@ const userPref = table('userPref')
   })
   .primaryKey('userID', 'key');
 
+const issueNotifications = table('issueNotifications')
+  .columns({
+    userID: string(),
+    issueID: string(),
+    subscribed: boolean(),
+    created: number(),
+  })
+  .primaryKey('userID', 'issueID');
+
 // Relationships
 const userRelationships = relationships(user, ({many}) => ({
   createdIssues: many({
@@ -135,6 +144,11 @@ const issueRelationships = relationships(issue, ({many, one}) => ({
     sourceField: ['id'],
     destField: ['subjectID'],
     destSchema: emoji,
+  }),
+  notificationState: one({
+    sourceField: ['id'],
+    destField: ['issueID'],
+    destSchema: issueNotifications,
   }),
 }));
 
@@ -183,7 +197,17 @@ const emojiRelationships = relationships(emoji, ({one}) => ({
 }));
 
 export const schema = createSchema({
-  tables: [user, issue, comment, label, issueLabel, viewState, emoji, userPref],
+  tables: [
+    user,
+    issue,
+    comment,
+    label,
+    issueLabel,
+    viewState,
+    emoji,
+    userPref,
+    issueNotifications,
+  ],
   relationships: [
     userRelationships,
     issueRelationships,
