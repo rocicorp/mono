@@ -38,6 +38,7 @@ import {
   type PutQueryPatch,
   type RowID,
 } from './schema/types.ts';
+import {mutationResultSchema} from '../../../../zero-protocol/src/push.ts';
 
 export type PutRowPatch = {
   type: 'row';
@@ -243,7 +244,26 @@ export class ClientHandler {
           if (patch.id.table === this.#zeroClientsTable) {
             this.#updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
           } else if (patch.id.table === this.#zeroMutationsTable) {
-            // no-op for now
+            const patches = (body.mutationsPatch ??= []);
+            if (op === 'put') {
+              const row = v.parse(
+                ensureSafeJSON(patch.contents),
+                mutationRowSchema,
+                'passthrough',
+              );
+              patches.push({
+                op: 'put',
+                mutation: {
+                  id: {
+                    clientID: row.clientID,
+                    id: row.mutationID,
+                  },
+                  result: row.result,
+                },
+              });
+            } else {
+              // no need to deal with `del` as the mutation results are ephemeral on the client.
+            }
           } else {
             (body.rowsPatch ??= []).push(makeRowPatch(patch));
           }
@@ -343,6 +363,13 @@ const lmidRowSchema = v.object({
   clientGroupID: v.string(),
   clientID: v.string(),
   lastMutationID: v.number(), // Actually returned as a bigint, but converted by ensureSafeJSON().
+});
+
+const mutationRowSchema = v.object({
+  clientGroupID: v.string(),
+  clientID: v.string(),
+  mutationID: v.number(),
+  result: mutationResultSchema,
 });
 
 function makeRowPatch(patch: RowPatch): RowPatchOp {
