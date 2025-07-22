@@ -1,5 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, beforeEach} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
@@ -16,6 +16,7 @@ import {
   ensureSafeJSON,
   startPoke,
   type Patch,
+  type PokeHandler,
 } from './client-handler.ts';
 
 const APP_ID = 'zapp';
@@ -388,37 +389,53 @@ describe('view-syncer/client-handler', () => {
     ]);
   });
 
-  test('patches for the zeroMutationsTable are ignored', async () => {
-    const {subscription, close} = createSubscription();
+  describe('mutation results', () => {
+    let poker: PokeHandler;
+    let closer: ReturnType<typeof createSubscription>['close'];
 
-    const schemaVersion = 1;
-    const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
-    const handler = new ClientHandler(
-      lc,
-      'g1',
-      'id1',
-      'ws1',
-      SHARD,
-      '121',
-      schemaVersion,
-      subscription,
-    );
-    const poker = handler.startPoke({stateVersion: '123'}, schemaVersions);
+    beforeEach(() => {
+      const {subscription, close} = createSubscription();
 
-    await poker.addPatch({
-      toVersion: {stateVersion: '123'},
-      patch: {
-        type: 'row',
-        op: 'put',
-        id: {schema: '', table: 'zapp_6.mutations', rowKey: {id: 'boo'}},
-        contents: {id: 'boo', name: 'world', big: 12345231234123414n},
-      },
+      const schemaVersion = 1;
+      const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
+      const handler = new ClientHandler(
+        lc,
+        'g1',
+        'id1',
+        'ws1',
+        SHARD,
+        '121',
+        schemaVersion,
+        subscription,
+      );
+      poker = handler.startPoke({stateVersion: '123'}, schemaVersions);
+      closer = close;
     });
 
-    await poker.end({stateVersion: '123'});
+    test('successful mutation result', async () => {
+      await poker.addPatch({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {
+            schema: '',
+            table: 'zapp_6.mutations',
+            rowKey: {clientGroupID: 'g1', clientID: 'boo', mutationID: 123n},
+          },
+          contents: {
+            clientGroupID: 'g1',
+            clientID: 'boo',
+            mutationID: 123n,
+            result: {},
+          },
+        },
+      });
 
-    const {received, err} = await close();
-    expect(received).toMatchInlineSnapshot(`
+      await poker.end({stateVersion: '123'});
+
+      const {received, err} = await closer();
+      expect(received).toMatchInlineSnapshot(`
       [
         [
           "pokeStart",
@@ -434,6 +451,18 @@ describe('view-syncer/client-handler', () => {
         [
           "pokePart",
           {
+            "mutationsPatch": [
+              {
+                "mutation": {
+                  "id": {
+                    "clientID": "boo",
+                    "id": 123,
+                  },
+                  "result": {},
+                },
+                "op": "put",
+              },
+            ],
             "pokeID": "123",
           },
         ],
@@ -446,7 +475,132 @@ describe('view-syncer/client-handler', () => {
         ],
       ]
     `);
-    expect(err).toBeUndefined();
+      expect(err).toBeUndefined();
+    });
+
+    test('failed mutation result', async () => {
+      await poker.addPatch({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {
+            schema: '',
+            table: 'zapp_6.mutations',
+            rowKey: {clientGroupID: 'g1', clientID: 'boo', mutationID: 123n},
+          },
+          contents: {
+            clientGroupID: 'g1',
+            clientID: 'boo',
+            mutationID: 123n,
+            result: {
+              error: 'app',
+              message: 'Something went wrong',
+            },
+          },
+        },
+      });
+
+      await poker.end({stateVersion: '123'});
+
+      const {received, err} = await closer();
+      expect(received).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "121",
+              "pokeID": "123",
+              "schemaVersions": {
+                "maxSupportedVersion": 1,
+                "minSupportedVersion": 1,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "mutationsPatch": [
+                {
+                  "mutation": {
+                    "id": {
+                      "clientID": "boo",
+                      "id": 123,
+                    },
+                    "result": {
+                      "error": "app",
+                      "message": "Something went wrong",
+                    },
+                  },
+                  "op": "put",
+                },
+              ],
+              "pokeID": "123",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "123",
+              "pokeID": "123",
+            },
+          ],
+        ]
+      `);
+      expect(err).toBeUndefined();
+    });
+
+    // nothing to do here.
+    // the client stores mutation results ephemerally and discards them on `put`
+    // so no need to send a `del` for the mutation result.
+    test('removed mutation result', async () => {
+      await poker.addPatch({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'del',
+          id: {
+            schema: '',
+            table: 'zapp_6.mutations',
+            rowKey: {clientGroupID: 'g1', clientID: 'boo', mutationID: 123n},
+          },
+        },
+      });
+
+      await poker.end({stateVersion: '123'});
+
+      const {received, err} = await closer();
+      expect(received).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "121",
+              "pokeID": "123",
+              "schemaVersions": {
+                "maxSupportedVersion": 1,
+                "minSupportedVersion": 1,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "mutationsPatch": [],
+              "pokeID": "123",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "123",
+              "pokeID": "123",
+            },
+          ],
+        ]
+      `);
+      expect(err).toBeUndefined();
+    });
   });
 
   test('schemaVersion unsupported', async () => {

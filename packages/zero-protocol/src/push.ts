@@ -99,7 +99,7 @@ export const pushBodySchema = v.object({
 });
 
 export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);
-const mutationIDSchema = v.object({
+export const mutationIDSchema = v.object({
   id: v.number(),
   clientID: v.string(),
 });
@@ -120,8 +120,12 @@ const mutationOkSchema = v.object({
 });
 const mutationErrorSchema = v.union(appErrorSchema, zeroErrorSchema);
 
-const mutationResultSchema = v.union(mutationOkSchema, mutationErrorSchema);
-const mutationResponseSchema = v.object({
+export const mutationResultSchema = v.union(
+  mutationOkSchema,
+  mutationErrorSchema,
+);
+
+export const mutationResponseSchema = v.object({
   id: mutationIDSchema,
   result: mutationResultSchema,
 });
