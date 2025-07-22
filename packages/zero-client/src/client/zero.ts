@@ -1809,13 +1809,12 @@ export class Zero<
    * Subscribe to online status changes.
    *
    * This is useful when you want to update state based on the online status.
-   * 
+   *
    * @param listener - The listener to subscribe to.
    * @returns A function to unsubscribe the listener.
    */
-  onOnline = (
-    listener: (online: boolean) => void,
-  ): (() => void) => this.#onlineManager.subscribe(listener);
+  onOnline = (listener: (online: boolean) => void): (() => void) =>
+    this.#onlineManager.subscribe(listener);
 
   /**
    * Starts a ping and waits for a pong.
