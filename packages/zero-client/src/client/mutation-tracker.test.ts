@@ -6,6 +6,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
+import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 
 const lc = createSilentLogContext();
 describe('MutationTracker', () => {
@@ -190,6 +191,40 @@ describe('MutationTracker', () => {
     };
     await mutator(tx as unknown as WriteTransaction, {});
     expect(mt.size).toBe(0);
+  });
+
+  test('mutation responses, received via poke, are processed', async () => {
+    const tracker = new MutationTracker(lc);
+    tracker.clientID = CLIENT_ID;
+
+    const mutation1 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
+    const mutation2 = tracker.trackMutation();
+    tracker.mutationIDAssigned(mutation2.ephemeralID, 2);
+
+    const patches: MutationPatch[] = [
+      {
+        op: 'put',
+        mutation: {
+          id: {clientID: CLIENT_ID, id: 1},
+          result: {},
+        },
+      },
+      {
+        op: 'put',
+        mutation: {
+          id: {clientID: CLIENT_ID, id: 2},
+          result: {error: 'app'},
+        },
+      },
+    ];
+
+    tracker.processMutationResponses(patches);
+
+    await expect(mutation1.serverPromise).resolves.toEqual({});
+    await expect(mutation2.serverPromise).rejects.toEqual({
+      error: 'app',
+    });
   });
 
   test('tracked mutations are resolved on reconnect', async () => {

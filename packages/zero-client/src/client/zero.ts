@@ -710,6 +710,7 @@ export class Zero<
       rep.clientID,
       schema,
       this.#lc,
+      this.#mutationTracker,
     );
 
     this.#visibilityWatcher = getDocumentVisibilityWatcher(
@@ -1376,7 +1377,6 @@ export class Zero<
   #handlePokeEnd(_lc: ZeroLogContext, pokeMessage: PokeEndMessage): void {
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
-    this.#mutationTracker.lmidAdvanced(this.#lastMutationIDReceived);
   }
 
   #onPokeError(): void {

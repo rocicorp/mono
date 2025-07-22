@@ -14,6 +14,7 @@ import type {
   PushResponse,
 } from '../../../zero-protocol/src/push.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
+import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 
 type ErrorType =
   | MutationError
@@ -96,6 +97,23 @@ export class MutationTracker {
     const entry = this.#outstandingMutations.get(id);
     if (entry) {
       this.#settleMutation(id, entry, 'reject', e);
+    }
+  }
+
+  /**
+   * Used when zero-cache pokes down mutation results.
+   */
+  processMutationResponses(patches: MutationPatch[]) {
+    for (const patch of patches) {
+      if (patch.mutation.id.clientID !== this.#clientID) {
+        continue; // Mutation for a different client. We will not have its promise.
+      }
+
+      if ('error' in patch.mutation.result) {
+        this.#processMutationError(patch.mutation.id, patch.mutation.result);
+      } else {
+        this.#processMutationOk(patch.mutation.id, patch.mutation.result);
+      }
     }
   }
 
@@ -190,6 +208,7 @@ export class MutationTracker {
     if (lastMutationID === this.#currentMutationID) {
       return;
     }
+
     try {
       this.#currentMutationID = lastMutationID;
       this.#resolveLimboMutations(lastMutationID);
@@ -274,7 +293,7 @@ export class MutationTracker {
       if ('error' in mutation.result) {
         this.#processMutationError(mutation.id, mutation.result);
       } else {
-        this.#processMutationOk(mutation.result, mutation.id);
+        this.#processMutationOk(mutation.id, mutation.result);
       }
     }
   }
@@ -315,7 +334,7 @@ export class MutationTracker {
     this.#settleMutation(ephemeralID, entry, 'reject', error);
   }
 
-  #processMutationOk(result: MutationOk, mid: MutationID): void {
+  #processMutationOk(mid: MutationID, result: MutationOk): void {
     assert(
       mid.clientID === this.#clientID,
       'received mutation for the wrong client',

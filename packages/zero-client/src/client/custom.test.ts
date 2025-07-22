@@ -24,6 +24,8 @@ import type {WriteTransaction} from './replicache-types.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
+import type {Row} from '../../../zql/src/query/query.ts';
+import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 
 type Schema = typeof schema;
 
@@ -492,16 +494,17 @@ describe('server results and keeping read queries', () => {
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
 
-    await z.mutate.issue.create({
+    const q = z.query.issue.limit(1).materialize();
+    const create = z.mutate.issue.create({
       id: '1',
       title: 'foo',
       closed: false,
       description: '',
       ownerId: '',
       createdAt: 1743018138477,
-    }).client;
+    });
+    await create.client;
 
-    const q = z.query.issue.limit(1).materialize();
     q.destroy();
 
     z.queryDelegate.flushQueryChanges();
@@ -537,12 +540,16 @@ describe('server results and keeping read queries', () => {
 
     z.queryDelegate.flushQueryChanges();
 
+    // lmid advancement is not in a RAF callback
+    // so tick a few times
+
     // mutation is no longer outstanding, query is removed.
-    expect(filter(messages)).toMatchInlineSnapshot(`
-      [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1vsd9vcx6ynd4"}]}]",
-      ]
-    `);
+    await vi.waitFor(() => {
+      expect(filter(messages)).toEqual([
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1vsd9vcx6ynd4"}]}]`,
+      ]);
+    });
+
     messages.length = 0;
 
     // check the error case
@@ -566,6 +573,7 @@ describe('server results and keeping read queries', () => {
           id: {clientID: z.clientID, id: 2},
           result: {
             error: 'app',
+            details: 'womp womp',
           },
         },
       ],
@@ -584,15 +592,108 @@ describe('server results and keeping read queries', () => {
 
     z.queryDelegate.flushQueryChanges();
 
-    expect(messages).toMatchInlineSnapshot(`
-      [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"12hwg3ihkijhm"}]}]",
-      ]
-    `);
+    await expect(close.server).rejects.toEqual({
+      error: 'app',
+      details: 'womp womp',
+    });
+
+    await vi.waitFor(() => {
+      expect(filter(messages)).toEqual([
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"12hwg3ihkijhm"}]}]`,
+      ]);
+    });
+
     messages.length = 0;
 
     await z.close();
-    await expect(close.server).rejects.toEqual({error: 'app'});
+  });
+
+  test('after the server promise resolves (via poke), reads from the store return the data from the server', async () => {
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issue: {
+          create: async (
+            _tx,
+            _args: InsertValue<typeof schema.tables.issue>,
+          ) => {},
+        },
+      } as const satisfies CustomMutatorDefs<Schema>,
+    });
+
+    const mockSocket = await z.socket;
+    const messages: string[] = [];
+    mockSocket.onUpstream = msg => {
+      messages.push(msg);
+    };
+
+    await z.triggerConnected();
+    await z.waitForConnectionState(ConnectionState.Connected);
+
+    const create = z.mutate.issue.create({
+      id: '1',
+      title: 'foo',
+      closed: false,
+      description: '',
+      ownerId: '',
+      createdAt: 1743018138477,
+    });
+    await create.client;
+
+    let foundIssue: Row<typeof schema.tables.issue> | undefined;
+    void create.server.then(async () => {
+      foundIssue = await z.query.issue.where('id', '1').one();
+    });
+
+    // confirm the mutation
+    await z.triggerPokeStart({
+      pokeID: '1',
+      baseCookie: null,
+      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+    });
+    await z.triggerPokePart({
+      pokeID: '1',
+      lastMutationIDChanges: {[z.clientID]: 1},
+      rowsPatch: [
+        {
+          op: 'put',
+          tableName: 'issues',
+          value: {
+            id: '1',
+            title: 'server-foo',
+            closed: false,
+            description: 'server-desc',
+            ownerId: '',
+            createdAt: 1743018138477,
+          },
+        },
+      ],
+      mutationsPatch: [
+        {
+          op: 'put',
+          mutation: {
+            id: {clientID: z.clientID, id: 1},
+            result: {},
+          },
+        },
+      ],
+    });
+    await z.triggerPokeEnd({pokeID: '1', cookie: '1'});
+    z.queryDelegate.flushQueryChanges();
+
+    await vi.waitFor(() => {
+      expect(foundIssue).toEqual({
+        id: '1',
+        title: 'server-foo',
+        closed: false,
+        description: 'server-desc',
+        ownerId: '',
+        createdAt: 1743018138477,
+        [refCountSymbol]: 1,
+      });
+    });
+
+    await z.close();
   });
 });
 

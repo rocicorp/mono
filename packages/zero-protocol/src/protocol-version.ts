@@ -28,7 +28,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- Version 20 changes inspector down message (0.22)
 // -- Version 21 removes `AST` in downstream query puts which was deprecated in Version 17, removes support for versions < 18 (0.22)
 // -- Version 22 adds an optional 'userQueryParams' field to `initConnection` (0.22)
-export const PROTOCOL_VERSION = 22;
+// -- Version 23 add `mutationResults` to poke (0.22)
+export const PROTOCOL_VERSION = 23;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version
