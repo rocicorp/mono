@@ -20,7 +20,7 @@ export class Subscribable<
 
   /**
    * Notify all listeners.
-   * 
+   *
    * @param update - The update to notify listeners with.
    */
   notify = (update: TArgs): void => {
