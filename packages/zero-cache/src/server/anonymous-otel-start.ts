@@ -47,19 +47,24 @@ class AnonymousTelemetryManager {
       try {
         config = getZeroConfig();
       } catch (e) {
-        this.#lc?.debug?.('telemetry disabled: unable to parse config', e);
+        this.#lc?.debug?.('telemetry: disabled - unable to parse config', e);
         return;
       }
     }
 
     if (process.env.DO_NOT_TRACK) {
       this.#lc?.debug?.(
-        'telemetry disabled: DO_NOT_TRACK environment variable is set',
+        'telemetry: disabled - DO_NOT_TRACK environment variable is set',
       );
       return;
     }
 
-    if (this.#starting || !config.enableTelemetry) {
+    if (!config.enableTelemetry) {
+      this.#lc?.debug?.('telemetry: disabled - enableTelemetry is false');
+      return;
+    }
+
+    if (this.#starting) {
       return;
     }
 
@@ -69,7 +74,7 @@ class AnonymousTelemetryManager {
     this.#viewSyncerCount = config.numSyncWorkers ?? 1;
     this.#cachedAttributes = undefined;
 
-    this.#lc?.info?.(`telemetry will start in 1 minute`);
+    this.#lc?.info?.(`telemetry: starting in 1 minute`);
 
     // Delay telemetry startup by 1 minute to avoid potential boot loop issues
     setTimeout(() => this.#run(), 60000);
@@ -97,7 +102,7 @@ class AnonymousTelemetryManager {
 
     this.#setupMetrics();
     this.#lc?.info?.(
-      `telemetry started (exports every ${60 * this.#viewSyncerCount} seconds, scaled by ${this.#viewSyncerCount} view-syncers)`,
+      `telemetry: started (exports every ${60 * this.#viewSyncerCount} seconds for ${this.#viewSyncerCount} view-syncers)`,
     );
   }
 
