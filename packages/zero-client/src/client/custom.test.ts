@@ -29,23 +29,6 @@ import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 
 type Schema = typeof schema;
 
-// beforeEach(() => {
-//   let frameId = 0;
-
-//   vi.stubGlobal(
-//     'requestAnimationFrame',
-//     vi.fn(callback => {
-//       frameId++;
-//       setTimeout(() => callback(performance.now()), 0);
-//       return frameId;
-//     }),
-//   );
-// });
-
-// afterEach(() => {
-//   vi.unstubAllGlobals();
-// });
-
 test('argument types are preserved on the generated mutator interface', () => {
   const mutators = {
     issue: {
