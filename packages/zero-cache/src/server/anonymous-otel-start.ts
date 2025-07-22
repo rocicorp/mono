@@ -47,22 +47,24 @@ class AnonymousTelemetryManager {
       try {
         config = getZeroConfig();
       } catch (e) {
-        this.#lc?.debug?.(
-          'Anonymous telemetry disabled: unable to parse config',
-          e,
-        );
+        this.#lc?.debug?.('telemetry: disabled - unable to parse config', e);
         return;
       }
     }
 
     if (process.env.DO_NOT_TRACK) {
       this.#lc?.debug?.(
-        'Anonymous telemetry disabled: DO_NOT_TRACK environment variable is set',
+        'telemetry: disabled - DO_NOT_TRACK environment variable is set',
       );
       return;
     }
 
-    if (this.#starting || !config.enableUsageAnalytics) {
+    if (!config.enableTelemetry) {
+      this.#lc?.debug?.('telemetry: disabled - enableTelemetry is false');
+      return;
+    }
+
+    if (this.#starting) {
       return;
     }
 
@@ -72,7 +74,7 @@ class AnonymousTelemetryManager {
     this.#viewSyncerCount = config.numSyncWorkers ?? 1;
     this.#cachedAttributes = undefined;
 
-    this.#lc?.info?.(`Anonymous telemetry will start in 1 minute`);
+    this.#lc?.info?.(`telemetry: starting in 1 minute`);
 
     // Delay telemetry startup by 1 minute to avoid potential boot loop issues
     setTimeout(() => this.#run(), 60000);
@@ -100,7 +102,7 @@ class AnonymousTelemetryManager {
 
     this.#setupMetrics();
     this.#lc?.info?.(
-      `Anonymous telemetry started (exports every ${60 * this.#viewSyncerCount} seconds, scaled by ${this.#viewSyncerCount} view-syncers)`,
+      `telemetry: started (exports every ${60 * this.#viewSyncerCount} seconds for ${this.#viewSyncerCount} view-syncers)`,
     );
   }
 
@@ -152,33 +154,31 @@ class AnonymousTelemetryManager {
     uptimeGauge.addCallback((result: ObservableResult) => {
       const uptimeSeconds = Math.floor(process.uptime());
       result.observe(uptimeSeconds, attrs);
-      this.#lc?.debug?.(`Telemetry: uptime=${uptimeSeconds}s`);
+      this.#lc?.debug?.(`telemetry: uptime=${uptimeSeconds}s`);
     });
     uptimeCounter.addCallback((result: ObservableResult) => {
       const uptimeSeconds = Math.floor(process.uptime());
       result.observe(uptimeSeconds, attrs);
-      this.#lc?.debug?.(`Telemetry: uptime_counter=${uptimeSeconds}s`);
+      this.#lc?.debug?.(`telemetry: uptime_counter=${uptimeSeconds}s`);
     });
     mutationsCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalMutations, attrs);
-      this.#lc?.debug?.(
-        `Telemetry: mutations_processed=${this.#totalMutations}`,
-      );
+      this.#lc?.debug?.(`telemetry: mutations=${this.#totalMutations}`);
     });
     rowsSyncedCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalRowsSynced, attrs);
-      this.#lc?.debug?.(`Telemetry: rows_synced=${this.#totalRowsSynced}`);
+      this.#lc?.debug?.(`telemetry: rows_synced=${this.#totalRowsSynced}`);
     });
     connectionsSuccessCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalConnectionsSuccess, attrs);
       this.#lc?.debug?.(
-        `Telemetry: connections_success=${this.#totalConnectionsSuccess}`,
+        `telemetry: connections_success=${this.#totalConnectionsSuccess}`,
       );
     });
     connectionsAttemptedCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalConnectionsAttempted, attrs);
       this.#lc?.debug?.(
-        `Telemetry: connections_attempted=${this.#totalConnectionsAttempted}`,
+        `telemetry: connections_attempted=${this.#totalConnectionsAttempted}`,
       );
     });
   }
@@ -202,7 +202,7 @@ class AnonymousTelemetryManager {
   shutdown() {
     this.#stopped = true;
     if (this.#meterProvider) {
-      this.#lc?.info?.('Shutting down anonymous telemetry');
+      this.#lc?.info?.('telemetry: shutting down');
       void this.#meterProvider.shutdown();
     }
   }
@@ -221,7 +221,7 @@ class AnonymousTelemetryManager {
         'zero.fs.id': this.#getOrSetFsID(),
       };
       this.#lc?.debug?.(
-        `Telemetry: cached attributes=${JSON.stringify(this.#cachedAttributes)}`,
+        `telemetry: cached attributes=${JSON.stringify(this.#cachedAttributes)}`,
       );
     }
     return this.#cachedAttributes;
@@ -276,7 +276,7 @@ class AnonymousTelemetryManager {
 
       return rootCommitHash.length === 40 ? rootCommitHash : 'unknown';
     } catch (error) {
-      this.#lc?.debug?.('Unable to get Git root commit:', error);
+      this.#lc?.debug?.('telemetry: unable to get Git root commit:', error);
       return 'unknown';
     }
   }
@@ -304,7 +304,10 @@ class AnonymousTelemetryManager {
         throw writeError;
       }
     } catch (error) {
-      this.#lc?.debug?.('Unable to get or set filesystem ID:', error);
+      this.#lc?.debug?.(
+        'telemetry: unable to get or set filesystem ID:',
+        error,
+      );
       return 'unknown';
     }
   }
@@ -347,7 +350,10 @@ class AnonymousTelemetryManager {
 
       return false;
     } catch (error) {
-      this.#lc?.debug?.('Unable to detect container environment:', error);
+      this.#lc?.debug?.(
+        'telemetry: unable to detect container environment:',
+        error,
+      );
       return false;
     }
   }
