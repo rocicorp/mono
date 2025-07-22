@@ -202,7 +202,7 @@ class AnonymousTelemetryManager {
   shutdown() {
     this.#stopped = true;
     if (this.#meterProvider) {
-      this.#lc?.info?.('shutting down telemetry');
+      this.#lc?.info?.('telemetry: shutting down');
       void this.#meterProvider.shutdown();
     }
   }
@@ -221,7 +221,7 @@ class AnonymousTelemetryManager {
         'zero.fs.id': this.#getOrSetFsID(),
       };
       this.#lc?.debug?.(
-        `cached attributes=${JSON.stringify(this.#cachedAttributes)}`,
+        `telemetry: cached attributes=${JSON.stringify(this.#cachedAttributes)}`,
       );
     }
     return this.#cachedAttributes;
@@ -276,7 +276,7 @@ class AnonymousTelemetryManager {
 
       return rootCommitHash.length === 40 ? rootCommitHash : 'unknown';
     } catch (error) {
-      this.#lc?.debug?.('Unable to get Git root commit:', error);
+      this.#lc?.debug?.('telemetry: unable to get Git root commit:', error);
       return 'unknown';
     }
   }
@@ -304,7 +304,10 @@ class AnonymousTelemetryManager {
         throw writeError;
       }
     } catch (error) {
-      this.#lc?.debug?.('Unable to get or set filesystem ID:', error);
+      this.#lc?.debug?.(
+        'telemetry: unable to get or set filesystem ID:',
+        error,
+      );
       return 'unknown';
     }
   }
@@ -347,7 +350,10 @@ class AnonymousTelemetryManager {
 
       return false;
     } catch (error) {
-      this.#lc?.debug?.('Unable to detect container environment:', error);
+      this.#lc?.debug?.(
+        'telemetry: unable to detect container environment:',
+        error,
+      );
       return false;
     }
   }
