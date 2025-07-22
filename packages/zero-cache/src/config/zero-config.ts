@@ -591,13 +591,12 @@ export const zeroOptions = {
     desc: [`The version string outputted to logs when the server starts up.`],
   },
 
-  enableUsageAnalytics: {
+  enableTelemetry: {
     type: v.boolean().default(true),
     desc: [
-      `Set to false to opt out of telemetry collection. `,
-      `This helps us improve Zero Cache by collecting`,
-      `anonymous usage statistics. Setting the DO_NOT_TRACK environment variable`,
-      `will also disable telemetry collection.`,
+      `Set to false to opt out of telemetry collection.`,
+      ``,
+      `This helps us improve Zero by collecting anonymous usage data. Setting the DO_NOT_TRACK environment variable also disables telemetry.`,
     ],
   },
 };

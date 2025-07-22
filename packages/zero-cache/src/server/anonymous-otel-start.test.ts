@@ -54,7 +54,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
     // Mock getZeroConfig to return default enabled state
     vi.mocked(getZeroConfig).mockReturnValue({
-      enableUsageAnalytics: true,
+      enableTelemetry: true,
       upstream: {
         db: 'postgresql://test@localhost/test',
       },
@@ -117,10 +117,10 @@ describe('Anonymous Telemetry Integration Tests', () => {
   });
 
   describe('Opt-out Configuration (test these first)', () => {
-    test('should respect opt-out via enableUsageAnalytics=false', () => {
+    test('should respect opt-out via enableTelemetry=false', () => {
       // Mock config to return disabled analytics
       vi.mocked(getZeroConfig).mockReturnValueOnce({
-        enableUsageAnalytics: false,
+        enableTelemetry: false,
       } as Partial<ZeroConfig> as ZeroConfig);
 
       startAnonymousTelemetry();
@@ -134,7 +134,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
     test('should respect opt-out when analytics explicitly disabled', () => {
       // Mock config to return disabled analytics
       vi.mocked(getZeroConfig).mockReturnValueOnce({
-        enableUsageAnalytics: false,
+        enableTelemetry: false,
       } as Partial<ZeroConfig> as ZeroConfig);
 
       startAnonymousTelemetry();
@@ -147,7 +147,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
       // Mock config to return enabled analytics
       vi.mocked(getZeroConfig).mockReturnValueOnce({
-        enableUsageAnalytics: true,
+        enableTelemetry: true,
       } as Partial<ZeroConfig> as ZeroConfig);
 
       startAnonymousTelemetry();
@@ -170,7 +170,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
         // Mock config to return enabled analytics
         vi.mocked(getZeroConfig).mockReturnValueOnce({
-          enableUsageAnalytics: true,
+          enableTelemetry: true,
         } as Partial<ZeroConfig> as ZeroConfig);
 
         startAnonymousTelemetry();
@@ -384,7 +384,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
       // Mock config without taskID
       const configWithoutTaskID = {
-        enableUsageAnalytics: true,
+        enableTelemetry: true,
         upstream: {
           db: 'postgresql://test@localhost/test',
         },
