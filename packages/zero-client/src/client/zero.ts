@@ -4,7 +4,6 @@ import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
 } from '../../../replicache/src/impl.ts';
-import {promiseRace} from '../../../shared/src/promise.ts';
 import {dropDatabase} from '../../../replicache/src/persist/collect-idb-databases.ts';
 import type {Puller, PullerResult} from '../../../replicache/src/puller.ts';
 import type {Pusher, PusherResult} from '../../../replicache/src/pusher.ts';
@@ -903,8 +902,7 @@ export class Zero<
 
     lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
 
-    // should we unsubscribe all listeners here?
-    // this.#onlineManager.cleanup();
+    this.#onlineManager.cleanup();
 
     if (this.#connectionState !== ConnectionState.Disconnected) {
       this.#disconnect(
@@ -1802,10 +1800,6 @@ export class Zero<
   /**
    * A rough heuristic for whether the client is currently online and
    * authenticated.
-   *
-   * This does *not* update in React when the online status changes.
-   * Use {@link useZeroOnline} or {@link addOnlineChangeListener} to subscribe
-   * to online status changes.
    */
   get online(): boolean {
     return this.#onlineManager.online;
@@ -1815,10 +1809,11 @@ export class Zero<
    * Subscribe to online status changes.
    *
    * This is useful when you want to update state based on the online status.
+   * 
    * @param listener - The listener to subscribe to.
    * @returns A function to unsubscribe the listener.
    */
-  addOnlineChangeListener = (
+  onOnline = (
     listener: (online: boolean) => void,
   ): (() => void) => this.#onlineManager.subscribe(listener);
 
@@ -2107,6 +2102,13 @@ function addWebSocketIDToLogContext(
   lc: ZeroLogContext,
 ): ZeroLogContext {
   return lc.withContext('wsid', wsid);
+}
+
+/**
+ * Like Promise.race but returns the index of the first promise that resolved.
+ */
+function promiseRace(ps: Promise<unknown>[]): Promise<number> {
+  return Promise.race(ps.map((p, i) => p.then(() => i)));
 }
 
 class TimedOutError extends Error {
