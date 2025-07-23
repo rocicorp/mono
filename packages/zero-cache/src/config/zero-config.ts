@@ -596,7 +596,8 @@ export const zeroOptions = {
     desc: [
       `Set to false to opt out of telemetry collection.`,
       ``,
-      `This helps us improve Zero by collecting anonymous usage data. Setting the DO_NOT_TRACK environment variable also disables telemetry.`,
+      `This helps us improve Zero by collecting anonymous usage data.`,
+      `Setting the DO_NOT_TRACK environment variable also disables telemetry.`,
     ],
   },
 };
