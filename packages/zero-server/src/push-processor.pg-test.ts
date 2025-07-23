@@ -35,7 +35,7 @@ function makePush(
   const mids = Array.isArray(mid) ? mid : [mid];
   const mutatorNames = Array.isArray(mutatorName) ? mutatorName : [mutatorName];
   return {
-    pushVersion: 1,
+    pushVersion: 2,
     clientGroupID: 'cgid',
     requestID: 'rid',
     schemaVersion: 1,

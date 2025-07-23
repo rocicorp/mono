@@ -29,6 +29,7 @@ import {
 
 export const PUSH_VERSION_SDD = 0;
 export const PUSH_VERSION_DD31 = 1;
+export const PUSH_VERSION_ZERO = 2;
 
 /**
  * Mutation describes a single mutation done on the client.
@@ -56,7 +57,7 @@ const mutationV1Schema: valita.Type<MutationV1> = valita.readonlyObject({
  * endpoint](/reference/server-push).
  */
 export type PushRequestV1 = {
-  pushVersion: 1;
+  pushVersion: typeof PUSH_VERSION_ZERO;
   /**
    * `schemaVersion` can optionally be used to specify to the push endpoint
    * version information about the mutators the app is using (e.g., format of
@@ -70,7 +71,7 @@ export type PushRequestV1 = {
 };
 
 const pushRequestV1Schema = valita.object({
-  pushVersion: valita.literal(1),
+  pushVersion: valita.literal(PUSH_VERSION_ZERO),
   schemaVersion: valita.string(),
   profileID: valita.string(),
   clientGroupID: clientGroupIDSchema,
@@ -115,7 +116,10 @@ export async function push(
   _clientID: ClientID,
   pusher: Pusher,
   schemaVersion: string,
-  pushVersion: typeof PUSH_VERSION_SDD | typeof PUSH_VERSION_DD31,
+  pushVersion:
+    | typeof PUSH_VERSION_SDD
+    | typeof PUSH_VERSION_DD31
+    | typeof PUSH_VERSION_ZERO,
 ): Promise<PusherResult | undefined> {
   // Find pending commits between the base snapshot and the main head and push
   // them to the data layer.
@@ -136,7 +140,7 @@ export async function push(
   // want tail first (in mutation id order).
   pending.reverse();
 
-  assert(pushVersion === PUSH_VERSION_DD31);
+  assert(pushVersion === PUSH_VERSION_ZERO);
 
   const pushMutations: FrozenMutationV1[] = [];
   for (const commit of pending) {
@@ -151,7 +155,7 @@ export async function push(
     profileID,
     clientGroupID,
     mutations: pushMutations,
-    pushVersion: PUSH_VERSION_DD31,
+    pushVersion: PUSH_VERSION_ZERO,
     schemaVersion,
   };
 

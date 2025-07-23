@@ -173,7 +173,7 @@ describe('combine pushes', () => {
         {
           push: {
             ...makePush(1, 'client1'),
-            pushVersion: 1,
+            pushVersion: 2,
           },
           jwt: 'a',
           httpCookie: undefined,
@@ -182,7 +182,7 @@ describe('combine pushes', () => {
         {
           push: {
             ...makePush(2, 'client1'),
-            pushVersion: 2, // Different push version
+            pushVersion: 3, // Different push version
           },
           jwt: 'a',
           httpCookie: undefined,
@@ -200,7 +200,7 @@ describe('combine pushes', () => {
         push: {
           ...makePush(1, 'client1'),
           schemaVersion: 1,
-          pushVersion: 1,
+          pushVersion: 2,
         },
         jwt: 'a',
         httpCookie: undefined,
@@ -210,7 +210,7 @@ describe('combine pushes', () => {
         push: {
           ...makePush(2, 'client1'),
           schemaVersion: 1,
-          pushVersion: 1,
+          pushVersion: 2,
         },
         jwt: 'a',
         httpCookie: undefined,
@@ -1061,7 +1061,7 @@ function makePush(numMutations: number, clientID?: string): PushBody {
   return {
     clientGroupID: 'cgid',
     mutations: Array.from({length: numMutations}, () => makeMutation(clientID)),
-    pushVersion: 1,
+    pushVersion: 2,
     requestID: 'rid',
     schemaVersion: 1,
     timestamp: ++timestamp,

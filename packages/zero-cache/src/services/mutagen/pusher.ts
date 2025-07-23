@@ -25,6 +25,7 @@ import {fetchFromAPIServer} from '../../custom/fetch.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {upstreamSchema} from '../../types/shards.ts';
+import {PUSH_VERSION_ZERO} from '../../../../replicache/src/sync/push.ts';
 
 type Fatal = {
   error: 'forClient';
@@ -247,7 +248,10 @@ class PushWorker {
       const [pushes, terminate] = combinePushes([task, ...rest]);
       for (const push of pushes) {
         const response = await this.#processPush(push);
-        await this.#fanOutResponses(response);
+        if (push.push.pushVersion !== PUSH_VERSION_ZERO) {
+          await this.#fanOutResponses(response);
+        }
+        // else: response will be sent via poke
       }
 
       if (terminate) {

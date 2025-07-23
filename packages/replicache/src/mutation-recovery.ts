@@ -33,7 +33,7 @@ import type {PullResponseOKV1, PullResponseV1, Puller} from './puller.ts';
 import type {PushResponse, Pusher} from './pusher.ts';
 import type {ClientGroupID, ClientID} from './sync/ids.ts';
 import {beginPullV1} from './sync/pull.ts';
-import {PUSH_VERSION_DD31, push} from './sync/push.ts';
+import {PUSH_VERSION_ZERO, push} from './sync/push.ts';
 import {withRead, withWrite} from './with-transactions.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
@@ -360,7 +360,7 @@ async function recoverMutationsOfClientGroupDD31(
             clientID,
             pusher,
             database.schemaVersion,
-            PUSH_VERSION_DD31,
+            PUSH_VERSION_ZERO,
           );
           return {
             result: pusherResult,

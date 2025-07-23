@@ -32,7 +32,7 @@ test('connection stays alive on rate limit error', async () => {
   const pushReq: PushRequest = {
     profileID: 'p1',
     clientGroupID: await z.clientGroupID,
-    pushVersion: 1,
+    pushVersion: 2,
     schemaVersion: '1',
     mutations: [
       {
