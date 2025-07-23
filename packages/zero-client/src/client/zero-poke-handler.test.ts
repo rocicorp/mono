@@ -22,6 +22,8 @@ let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;
 // its time argument, so use an arbitrary constant for it in tests.
 const UNUSED_RAF_ARG = 10;
 
+const ackMutationResponses = () => {};
+
 const schema = createSchema({
   tables: [
     table('issue')
@@ -63,7 +65,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext),
+      new MutationTracker(logContext, ackMutationResponses),
     );
     expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -172,7 +174,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext),
+      new MutationTracker(logContext, ackMutationResponses),
     );
     expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -287,7 +289,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext),
+      new MutationTracker(logContext, ackMutationResponses),
     );
 
     expect(rafStub).toHaveBeenCalledTimes(0);
@@ -438,7 +440,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext),
+      new MutationTracker(logContext, ackMutationResponses),
     );
 
     expect(rafStub).toHaveBeenCalledTimes(0);
@@ -620,7 +622,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext),
+      new MutationTracker(logContext, ackMutationResponses),
     );
 
     expect(rafStub).toHaveBeenCalledTimes(0);
@@ -831,7 +833,7 @@ describe('poke handler', () => {
           clientID,
           schema,
           logContext,
-          new MutationTracker(logContext),
+          new MutationTracker(logContext, ackMutationResponses),
         );
 
         expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
@@ -852,7 +854,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext),
+      new MutationTracker(logContext, ackMutationResponses),
     );
     expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -959,7 +961,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext),
+      new MutationTracker(logContext, ackMutationResponses),
     );
     expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -1080,7 +1082,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext),
+      new MutationTracker(logContext, ackMutationResponses),
     );
     expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -1149,7 +1151,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext),
+      new MutationTracker(logContext, ackMutationResponses),
     );
     expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -1591,7 +1593,7 @@ describe('mutation tracker interactions', () => {
     const replicachePokeStub = vi.fn();
     const clientID = 'c1';
     const logContext = new LogContext('error');
-    const tracker = new MutationTracker(logContext);
+    const tracker = new MutationTracker(logContext, ackMutationResponses);
     const spy = vi.spyOn(tracker, 'lmidAdvanced');
     tracker.clientID = clientID;
     const pokeHandler = new PokeHandler(
@@ -1636,7 +1638,7 @@ describe('mutation tracker interactions', () => {
     const replicachePokeStub = vi.fn();
     const clientID = 'c1';
     const logContext = new LogContext('error');
-    const tracker = new MutationTracker(logContext);
+    const tracker = new MutationTracker(logContext, ackMutationResponses);
     const spy = vi.spyOn(tracker, 'processMutationResponses');
     tracker.clientID = clientID;
     const pokeHandler = new PokeHandler(
