@@ -173,6 +173,11 @@ export const pushResponseMessageSchema = v.tuple([
   pushResponseSchema,
 ]);
 
+export const ackMutationResponsesMessageSchema = v.tuple([
+  v.literal('ackMutationResponses'),
+  mutationIDSchema,
+]);
+
 /**
  * The schema for the querystring parameters of the custom push endpoint.
  */
@@ -202,6 +207,9 @@ export type PushError = v.Infer<typeof pushErrorSchema>;
 export type PushOk = v.Infer<typeof pushOkSchema>;
 export type MutationID = v.Infer<typeof mutationIDSchema>;
 export type MutationResult = v.Infer<typeof mutationResultSchema>;
+export type AckMutationMessage = v.Infer<
+  typeof ackMutationResponsesMessageSchema
+>;
 
 export function mapCRUD(
   arg: CRUDMutationArg,
