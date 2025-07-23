@@ -57,7 +57,7 @@ const mutationV1Schema: valita.Type<MutationV1> = valita.readonlyObject({
  * endpoint](/reference/server-push).
  */
 export type PushRequestV1 = {
-  pushVersion: typeof PUSH_VERSION_ZERO;
+  pushVersion: typeof PUSH_VERSION_ZERO | typeof PUSH_VERSION_DD31;
   /**
    * `schemaVersion` can optionally be used to specify to the push endpoint
    * version information about the mutators the app is using (e.g., format of
@@ -71,7 +71,10 @@ export type PushRequestV1 = {
 };
 
 const pushRequestV1Schema = valita.object({
-  pushVersion: valita.literal(PUSH_VERSION_ZERO),
+  pushVersion: valita.union(
+    valita.literal(PUSH_VERSION_ZERO),
+    valita.literal(PUSH_VERSION_DD31),
+  ),
   schemaVersion: valita.string(),
   profileID: valita.string(),
   clientGroupID: clientGroupIDSchema,

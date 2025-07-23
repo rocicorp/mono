@@ -248,7 +248,7 @@ class PushWorker {
       const [pushes, terminate] = combinePushes([task, ...rest]);
       for (const push of pushes) {
         const response = await this.#processPush(push);
-        if (push.push.pushVersion !== PUSH_VERSION_ZERO) {
+        if (push.push.pushVersion < PUSH_VERSION_ZERO) {
           await this.#fanOutResponses(response);
         }
         // else: response will be sent via poke

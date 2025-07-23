@@ -14,6 +14,7 @@ import {
 import {splitMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {createLogContext} from './logging.ts';
 import type {CustomMutatorDefs} from './custom.ts';
+import {PUSH_VERSION_ZERO} from '../../replicache/src/sync/push.ts';
 
 export type Params = v.Infer<typeof pushParamsSchema>;
 
@@ -100,7 +101,8 @@ export class PushProcessor<
     }
     const queryParams = v.parse(queryString, pushParamsSchema, 'passthrough');
 
-    if (req.pushVersion !== 1) {
+    // we support v1 and v2 of the push protocol.
+    if (req.pushVersion !== 1 && req.pushVersion !== PUSH_VERSION_ZERO) {
       this.#lc.error?.(
         `Unsupported push version ${req.pushVersion} for clientGroupID ${req.clientGroupID}`,
       );
@@ -233,16 +235,20 @@ export class PushProcessor<
         // no caught error? Not in error mode.
         if (caughtError === undefined) {
           await this.#dispatchMutation(dbTx, mutators, m);
-          await transactionHooks.writeMutationResult({
-            id: {
-              clientID: m.clientID,
-              id: m.id,
-            },
-            result: {},
-          });
+          if (req.pushVersion >= PUSH_VERSION_ZERO) {
+            await transactionHooks.writeMutationResult({
+              id: {
+                clientID: m.clientID,
+                id: m.id,
+              },
+              result: {},
+            });
+          }
         } else {
           const appError = makeAppErrorResponse(m, caughtError);
-          await transactionHooks.writeMutationResult(appError);
+          if (req.pushVersion >= PUSH_VERSION_ZERO) {
+            await transactionHooks.writeMutationResult(appError);
+          }
         }
 
         return result;
