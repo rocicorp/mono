@@ -136,6 +136,10 @@
     "./zqlite": {
       "types": "./out/zqlite/src/mod.d.ts",
       "default": "./out/zero/src/zqlite.js"
+    },
+    "./expo": {
+      "types": "./out/zero-expo/src/mod.d.ts",
+      "default": "./out/expo.js"
     }
   },
   "bin": {
