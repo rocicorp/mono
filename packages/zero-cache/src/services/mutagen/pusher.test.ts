@@ -9,6 +9,7 @@ import type {
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {resolver} from '@rocicorp/resolver';
 import {ErrorForClient} from '../../types/error-for-client.ts';
+import type {PostgresDB} from '../../types/pg.ts';
 
 const config = {
   app: {
@@ -23,6 +24,7 @@ const config = {
 
 const clientID = 'test-cid';
 const wsID = 'test-wsid';
+const mockDB = (() => {}) as unknown as PostgresDB;
 
 describe('combine pushes', () => {
   test('empty array', () => {
@@ -294,6 +296,7 @@ const lc = createSilentLogContext();
 describe('pusher service', () => {
   test('the service can be stopped', async () => {
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -317,6 +320,7 @@ describe('pusher service', () => {
     });
 
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -350,6 +354,7 @@ describe('pusher service', () => {
     });
 
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -381,6 +386,7 @@ describe('pusher service', () => {
     });
 
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -431,6 +437,7 @@ describe('pusher service', () => {
     });
 
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -457,6 +464,7 @@ describe('pusher service', () => {
     });
 
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -478,11 +486,57 @@ describe('pusher service', () => {
       'my-cookie',
     );
   });
+
+  test('ack mutation responses', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+    });
+
+    const mockDB = vi.fn() as unknown as PostgresDB;
+    const pusher = new PusherService(
+      mockDB,
+      config,
+      {
+        url: ['http://example.com'],
+        apiKey: 'api-key',
+        forwardCookies: true,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+
+    await pusher.ackMutationResponses({
+      clientID: 'test-client',
+      id: 42,
+    });
+
+    await pusher.stop();
+
+    expect(mockDB).toHaveBeenCalledWith(
+      [
+        'DELETE FROM ',
+        '.mutations WHERE "clientGroupID" = ',
+        ' AND "clientID" = ',
+        ' AND "mutationID" <= ',
+        '',
+      ],
+      'zero_0',
+      'cgid',
+      'test-client',
+      {
+        clientID: 'test-client',
+        id: 42,
+      },
+    );
+  });
 });
 
 describe('initConnection', () => {
   test('initConnection returns a stream', () => {
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -500,6 +554,7 @@ describe('initConnection', () => {
 
   test('initConnection throws if it was already called for the same clientID and wsID', () => {
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -518,6 +573,7 @@ describe('initConnection', () => {
 
   test('initConnection destroys prior stream for same client when wsID changes', async () => {
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -545,6 +601,7 @@ describe('initConnection', () => {
     });
 
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -592,6 +649,7 @@ describe('pusher streaming', () => {
 
   test('returns ok for subsequent pushes from same client', () => {
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -629,6 +687,7 @@ describe('pusher streaming', () => {
     };
 
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -713,6 +772,7 @@ describe('pusher streaming', () => {
     });
 
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -773,6 +833,7 @@ describe('pusher streaming', () => {
     fetch.mockRejectedValue(new Error('Network error'));
 
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -807,6 +868,7 @@ describe('pusher streaming', () => {
 
   test('cleanup removes client subscription', () => {
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -832,6 +894,7 @@ describe('pusher streaming', () => {
 
   test('new websocket for same client creates new downstream', async () => {
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -875,6 +938,7 @@ describe('pusher streaming', () => {
     });
 
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -934,6 +998,7 @@ describe('pusher streaming', () => {
     });
 
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
@@ -963,6 +1028,7 @@ describe('pusher streaming', () => {
     });
 
     const pusher = new PusherService(
+      mockDB,
       config,
       {
         url: ['http://example.com'],
