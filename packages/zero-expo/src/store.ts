@@ -1,33 +1,55 @@
-import {openDatabaseAsync, deleteDatabaseAsync} from 'expo-sqlite';
+import * as SQLite from 'expo-sqlite';
 import {
-  getCreateSQLiteStore,
+  createSQLiteStore,
   SQLiteDatabaseManager,
-  type GenericSQLiteDatabaseManager,
-  type SQLDatabase,
+  type SQLiteDatabase,
+  type SQLiteDatabaseManagerOptions,
 } from '../../replicache/src/kv/sqlite-store.ts';
 import type {StoreProvider} from '../../replicache/src/kv/store.ts';
-import {ExpoSQLiteTransaction} from './transaction.ts';
+import {promiseVoid} from '../../shared/src/resolved-promises.ts';
 
-const genericDatabase: GenericSQLiteDatabaseManager = {
-  open: async (name: string) => {
-    const db = await openDatabaseAsync(name);
+const expoDbManagerInstance = new SQLiteDatabaseManager({
+  open: fileName => {
+    const db = SQLite.openDatabaseSync(fileName);
 
-    const genericDb: SQLDatabase = {
-      transaction: () => new ExpoSQLiteTransaction(db),
-      destroy: async () => {
-        await db.closeAsync();
-        await deleteDatabaseAsync(name);
+    const genericDb: SQLiteDatabase = {
+      close: () => db.closeSync(),
+      destroy: () => {
+        db.closeSync();
+        SQLite.deleteDatabaseSync(fileName);
       },
-      close: () => db.closeAsync(),
+      prepare: (sql: string) => {
+        const stmt = db.prepareSync(sql);
+        return {
+          run: (params?: unknown[]): void => {
+            stmt.executeSync(params as SQLite.SQLiteBindParams);
+          },
+          all: <T>(params?: unknown[]): T[] => {
+            const result = stmt.executeSync(params as SQLite.SQLiteBindParams);
+            return result.getAllSync() as unknown as T[];
+          },
+          finalize: () => stmt.finalizeSync(),
+        };
+      },
     };
 
     return genericDb;
   },
-};
+});
 
-const expoDbManagerInstance = new SQLiteDatabaseManager(genericDatabase);
+export const getExpoSQLiteStoreProvider = (
+  opts?: Omit<SQLiteDatabaseManagerOptions, 'journalMode'>,
+): StoreProvider => ({
+  create: (name: string) =>
+    createSQLiteStore(expoDbManagerInstance)(name, {
+      ...opts,
+      // we override the journal mode to undefined because
+      // setting it to WAL causes hanging COMMITs on Expo
+      // journalMode: undefined,
+    }),
+  drop: (name: string) => {
+    expoDbManagerInstance.destroy(name);
 
-export const createExpoSQLiteStore: StoreProvider = {
-  create: getCreateSQLiteStore(expoDbManagerInstance),
-  drop: (name: string) => expoDbManagerInstance.destroy(name),
-};
+    return promiseVoid;
+  },
+});

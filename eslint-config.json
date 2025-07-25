@@ -59,6 +59,7 @@
           {"name": "zero", "message": "Use relative imports instead"},
           {"name": "zero-cache", "message": "Use relative imports instead"},
           {"name": "zero-client", "message": "Use relative imports instead"},
+          {"name": "zero-expo", "message": "Use relative imports instead"},
           {"name": "zero-protocol", "message": "Use relative imports instead"},
           {"name": "zero-react", "message": "Use relative imports instead"},
           {"name": "zero-schema", "message": "Use relative imports instead"},

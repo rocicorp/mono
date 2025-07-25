@@ -1,2 +1,2 @@
-export {createExpoSQLiteStore} from './store.ts';
-export {ExpoSQLiteTransaction} from './transaction.ts';
+export {getExpoSQLiteStoreProvider} from './store.ts';
+export * from '../../replicache/src/kv/sqlite-store.ts';

@@ -1,3 +1,3 @@
-import {defineConfig} from 'vitest/config';
+import sharedConfig from '../shared/src/tool/vitest-config.ts';
 
-export default defineConfig({});
+export default sharedConfig;
