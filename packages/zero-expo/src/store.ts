@@ -37,7 +37,7 @@ const expoDbManagerInstance = new SQLiteDatabaseManager({
   },
 });
 
-export const getExpoSQLiteStoreProvider = (
+export const expoSQLiteStoreProvider = (
   opts?: Omit<SQLiteDatabaseManagerOptions, 'journalMode'>,
 ): StoreProvider => ({
   create: (name: string) =>
