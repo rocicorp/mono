@@ -1223,6 +1223,7 @@ export class Zero<
     this.#connectCookie = valita.parse(
       await this.#rep.cookie,
       nullableVersionSchema,
+      'passthrough',
     );
     if (this.closed) {
       return;
@@ -1745,7 +1746,11 @@ export class Zero<
     assert(socket);
     // Mutation recovery pull.
     lc.debug?.('Pull is for mutation recovery');
-    const cookie = valita.parse(req.cookie, nullableVersionSchema);
+    const cookie = valita.parse(
+      req.cookie,
+      nullableVersionSchema,
+      'passthrough',
+    );
     const pullRequestMessage: PullRequestMessage = [
       'pull',
       {
