@@ -328,7 +328,7 @@ export class SQLiteDatabaseManager {
     try {
       // WITHOUT ROWID increases write throughput by ~3.6x and ~0.1x to read throughput
       db.prepare(
-        'CREATE TABLE IF NOT EXISTS entry (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+        'CREATE TABLE IF NOT EXISTS entry (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID',
       ).run();
 
       db.prepare('COMMIT').run();
