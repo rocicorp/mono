@@ -2653,13 +2653,58 @@ describe('Invalid Downstream message', () => {
     expect(r.online).eq(true);
     expect(r.connectionState).eq(ConnectionState.Connected);
 
-    const found = r.testLogSink.messages.some(m =>
-      m[2].some(
-        v =>
-          v instanceof Error && v.message.includes('Missing property pokeID'),
+    expect(
+      r.testLogSink.messages.some(m =>
+        m[2].some(
+          v =>
+            v instanceof Error && v.message.includes('Missing property pokeID'),
+        ),
       ),
-    );
-    expect(found).true;
+    ).true;
+    expect(
+      r.testLogSink.messages.some(m =>
+        m[2].some(
+          v =>
+            v instanceof Error &&
+            v.message.includes('Invalid message received from server'),
+        ),
+      ),
+    ).true;
+  });
+});
+
+describe('Downstream message with unknown fields', () => {
+  afterEach(() => vi.resetAllMocks());
+
+  test('unknown fields do not result in a parse error', async () => {
+    const r = zeroForTest({
+      logLevel: 'debug',
+    });
+    await r.triggerConnected();
+    expect(r.connectionState).toBe(ConnectionState.Connected);
+
+    await r.triggerPokeStart({
+      pokeID: '1',
+      // @ts-expect-error - invalid field
+      pokeIDXX: '1',
+      baseCookie: null,
+      cookie: '1',
+      timestamp: 123456,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(r.online).eq(true);
+    expect(r.connectionState).eq(ConnectionState.Connected);
+
+    expect(
+      r.testLogSink.messages.some(m =>
+        m[2].some(
+          v =>
+            v instanceof Error &&
+            v.message.includes('Invalid message received from server'),
+        ),
+      ),
+    ).false;
   });
 });
 

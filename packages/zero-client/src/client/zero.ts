@@ -938,7 +938,11 @@ export class Zero<
     let downMessage: Downstream;
     const {data} = e;
     try {
-      downMessage = valita.parse(JSON.parse(data), downstreamSchema);
+      downMessage = valita.parse(
+        JSON.parse(data),
+        downstreamSchema,
+        'passthrough',
+      );
     } catch (e) {
       rejectInvalidMessage(e);
       return;
@@ -1219,6 +1223,7 @@ export class Zero<
     this.#connectCookie = valita.parse(
       await this.#rep.cookie,
       nullableVersionSchema,
+      'passthrough',
     );
     if (this.closed) {
       return;
@@ -1741,7 +1746,11 @@ export class Zero<
     assert(socket);
     // Mutation recovery pull.
     lc.debug?.('Pull is for mutation recovery');
-    const cookie = valita.parse(req.cookie, nullableVersionSchema);
+    const cookie = valita.parse(
+      req.cookie,
+      nullableVersionSchema,
+      'passthrough',
+    );
     const pullRequestMessage: PullRequestMessage = [
       'pull',
       {
