@@ -130,7 +130,7 @@ export class PusherService implements Service, Pusher {
     await sql`DELETE FROM ${upstreamSchema({
       appID: this.#config.app.id,
       shardNum: this.#config.shard.num,
-    })}.mutations WHERE "clientGroupID" = ${this.id} AND "clientID" = ${upToID.clientID} AND "mutationID" <= ${upToID}`;
+    })}.mutations WHERE "clientGroupID" = ${this.id} AND "clientID" = ${upToID.clientID} AND "mutationID" <= ${upToID.id}`;
   }
 
   ref() {
