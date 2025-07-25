@@ -4,13 +4,13 @@ import {
   type LogLevel,
   type LogSink,
 } from '@rocicorp/logger';
+import {otelLogsEnabled} from '../../../otel/src/enabled.ts';
 import {
   createLogContext as createLogContextShared,
   getLogSink,
   type LogConfig,
 } from '../../../shared/src/logging.ts';
 import {OtelLogSink} from './otel-log-sink.ts';
-import {otelLogsEnabled} from './otel-start.ts';
 
 export function createLogContext(
   {log}: {log: LogConfig},
