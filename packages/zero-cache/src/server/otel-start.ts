@@ -1,26 +1,25 @@
-import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-http';
-import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
+import {logs} from '@opentelemetry/api-logs';
+import * as autoInstrumentationsModule from '@opentelemetry/auto-instrumentations-node';
 import {OTLPLogExporter} from '@opentelemetry/exporter-logs-otlp-http';
-import {NodeSDK} from '@opentelemetry/sdk-node';
+import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
+import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-http';
+import type {Instrumentation} from '@opentelemetry/instrumentation';
 import {
+  defaultResource,
   detectResources,
   envDetector,
-  processDetector,
   hostDetector,
+  processDetector,
   resourceFromAttributes,
-  defaultResource,
 } from '@opentelemetry/resources';
-import {ATTR_SERVICE_VERSION} from '@opentelemetry/semantic-conventions';
-import {PeriodicExportingMetricReader} from '@opentelemetry/sdk-metrics';
-import {version} from '../../../otel/src/version.ts';
 import {
   BatchLogRecordProcessor,
   LoggerProvider,
   type LogRecordProcessor,
 } from '@opentelemetry/sdk-logs';
-import {logs} from '@opentelemetry/api-logs';
-import type {Instrumentation} from '@opentelemetry/instrumentation';
-import * as autoInstrumentationsModule from '@opentelemetry/auto-instrumentations-node';
+import {PeriodicExportingMetricReader} from '@opentelemetry/sdk-metrics';
+import {NodeSDK} from '@opentelemetry/sdk-node';
+import {ATTR_SERVICE_VERSION} from '@opentelemetry/semantic-conventions';
 
 class OtelManager {
   static #instance: OtelManager;
@@ -37,7 +36,7 @@ class OtelManager {
   }
 
   startOtelAuto() {
-    if (this.#started || !process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+    if (this.#started || !otelEnabled()) {
       return;
     }
     this.#started = true;
@@ -54,7 +53,7 @@ class OtelManager {
     });
 
     const customResource = resourceFromAttributes({
-      [ATTR_SERVICE_VERSION]: version,
+      [ATTR_SERVICE_VERSION]: process.env.ZERO_SERVER_VERSION ?? 'unknown',
     });
 
     const resource = defaultResource().merge(envResource).merge(customResource);
@@ -62,9 +61,11 @@ class OtelManager {
     // Initialize logger provider if not already set
     if (!logs.getLoggerProvider()) {
       const provider = new LoggerProvider({resource});
-      const processor = new BatchLogRecordProcessor(new OTLPLogExporter());
-      logRecordProcessors.push(processor);
-      provider.addLogRecordProcessor(processor);
+      if (otelLogsEnabled()) {
+        const processor = new BatchLogRecordProcessor(new OTLPLogExporter());
+        logRecordProcessors.push(processor);
+        provider.addLogRecordProcessor(processor);
+      }
       logs.setGlobalLoggerProvider(provider);
     }
 
@@ -82,11 +83,15 @@ class OtelManager {
       instrumentations: this.#autoInstrumentations
         ? [this.#autoInstrumentations]
         : [],
-      traceExporter: new OTLPTraceExporter(),
-      metricReader: new PeriodicExportingMetricReader({
-        exportIntervalMillis: 60000,
-        exporter: new OTLPMetricExporter(),
-      }),
+      ...(otelTracesEnabled() ? {traceExporter: new OTLPTraceExporter()} : {}),
+      ...(otelMetricsEnabled()
+        ? {
+            metricReader: new PeriodicExportingMetricReader({
+              exportIntervalMillis: 60000,
+              exporter: new OTLPMetricExporter(),
+            }),
+          }
+        : {}),
       logRecordProcessors,
     });
 
@@ -97,6 +102,31 @@ class OtelManager {
       body: 'OpenTelemetry SDK started successfully',
     });
   }
+}
+
+export function otelEnabled() {
+  return otelMetricsEnabled() || otelTracesEnabled() || otelLogsEnabled();
+}
+
+export function otelMetricsEnabled() {
+  return (
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
+    process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT
+  );
+}
+
+export function otelLogsEnabled() {
+  return (
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
+    process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT
+  );
+}
+
+export function otelTracesEnabled() {
+  return (
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT ||
+    process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+  );
 }
 
 export const startOtelAuto = () => OtelManager.getInstance().startOtelAuto();
