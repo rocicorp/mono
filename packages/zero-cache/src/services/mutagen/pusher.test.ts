@@ -525,10 +525,7 @@ describe('pusher service', () => {
       'zero_0',
       'cgid',
       'test-client',
-      {
-        clientID: 'test-client',
-        id: 42,
-      },
+      42,
     );
   });
 });
