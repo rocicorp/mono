@@ -205,6 +205,12 @@ export class SyncerWsMessageHandler implements MessageHandler {
         );
         break;
 
+      case 'ackMutationResponses':
+        if (this.#pusher) {
+          await this.#pusher.ackMutationResponses(msg[1]);
+        }
+        break;
+
       default:
         unreachable(msgType);
     }
