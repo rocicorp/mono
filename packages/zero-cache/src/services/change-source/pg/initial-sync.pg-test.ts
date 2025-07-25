@@ -144,6 +144,52 @@ const ZERO_CLIENTS_SPEC: PublishedTableSpec = {
   publications: {[`_${APP_ID}_metadata_${SHARD_NUM}`]: {rowFilter: null}},
 } as const;
 
+const ZERO_MUTATIONS_SPEC: PublishedTableSpec = {
+  columns: {
+    clientGroupID: {
+      pos: 1,
+      characterMaximumLength: null,
+      dataType: 'text',
+      typeOID: 25,
+      notNull: true,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    clientID: {
+      pos: 2,
+      characterMaximumLength: null,
+      dataType: 'text',
+      typeOID: 25,
+      notNull: true,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    mutationID: {
+      pos: 3,
+      characterMaximumLength: null,
+      dataType: 'int8',
+      typeOID: 20,
+      notNull: true,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    result: {
+      pos: 4,
+      characterMaximumLength: null,
+      dataType: 'json',
+      typeOID: 114,
+      notNull: true,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+  },
+  oid: expect.any(Number),
+  name: 'mutations',
+  primaryKey: ['clientGroupID', 'clientID', 'mutationID'],
+  schema: `${APP_ID}_${SHARD_NUM}`,
+  publications: {[`_${APP_ID}_metadata_${SHARD_NUM}`]: {rowFilter: null}},
+} as const;
+
 const REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC: LiteTableSpec = {
   columns: {
     minSupportedVersion: {
@@ -242,6 +288,44 @@ const REPLICATED_ZERO_CLIENTS_SPEC: LiteTableSpec = {
   name: `${APP_ID}_${SHARD_NUM}.clients`,
 } as const;
 
+const REPLICATED_ZERO_MUTATIONS_SPEC: LiteTableSpec = {
+  columns: {
+    clientGroupID: {
+      pos: 1,
+      characterMaximumLength: null,
+      dataType: 'text|NOT_NULL',
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    clientID: {
+      pos: 2,
+      characterMaximumLength: null,
+      dataType: 'text|NOT_NULL',
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    mutationID: {
+      pos: 3,
+      characterMaximumLength: null,
+      dataType: 'int8|NOT_NULL',
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    result: {
+      pos: 4,
+      characterMaximumLength: null,
+      dataType: 'json|NOT_NULL',
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+  },
+  name: `${APP_ID}_${SHARD_NUM}.mutations`,
+} as const;
+
 const WATERMARK_REGEX = /[0-9a-z]{4,}/;
 
 describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
@@ -263,11 +347,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       name: 'empty DB',
       published: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
       },
       replicatedSchema: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: REPLICATED_ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
       },
@@ -296,9 +382,21 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           tableName: 'clients',
           unique: true,
         },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+            mutationID: 'ASC',
+          },
+          name: 'mutations_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'mutations',
+          unique: true,
+        },
       ],
       replicatedData: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: [],
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: [],
         [`${APP_ID}.schemaVersions`]: [
           {
             lock: 1n,
@@ -341,6 +439,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       `,
       published: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.issues']: {
@@ -695,6 +794,17 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         },
         {
           columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+            mutationID: 'ASC',
+          },
+          name: 'mutations_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'mutations',
+          unique: true,
+        },
+        {
+          columns: {
             orgID: 'ASC',
             issueID: 'ASC',
           },
@@ -835,6 +945,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       `,
       published: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.foo']: {
@@ -973,6 +1084,17 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           unique: true,
         },
         {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+            mutationID: 'ASC',
+          },
+          name: 'mutations_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'mutations',
+          unique: true,
+        },
+        {
           columns: {id: 'ASC'},
           name: 'foo_pkey',
           schema: 'public',
@@ -1020,6 +1142,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       requestedPublications: ['zero_custom'],
       published: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.users']: {
@@ -1053,6 +1176,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedSchema: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: REPLICATED_ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
         ['users']: {
@@ -1108,6 +1232,17 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'clients_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+            mutationID: 'ASC',
+          },
+          name: 'mutations_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'mutations',
           unique: true,
         },
         {
@@ -1163,6 +1298,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       requestedPublications: ['zero_custom', 'zero_custom2'],
       published: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.users']: {
@@ -1199,6 +1335,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedSchema: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: REPLICATED_ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
         ['users']: {
@@ -1254,6 +1391,17 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'clients_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+            mutationID: 'ASC',
+          },
+          name: 'mutations_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'mutations',
           unique: true,
         },
         {
@@ -1314,6 +1462,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       `,
       published: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.issues']: {
@@ -1450,6 +1599,17 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         },
         {
           columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+            mutationID: 'ASC',
+          },
+          name: 'mutations_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'mutations',
+          unique: true,
+        },
+        {
+          columns: {
             orgID: 'DESC',
             other: 'ASC',
           },
@@ -1483,6 +1643,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       `,
       published: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.giant']: {
@@ -1506,6 +1667,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedSchema: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: REPLICATED_ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: REPLICATED_ZERO_SCHEMA_VERSIONS_SPEC,
         ['giant']: {
@@ -1555,6 +1717,17 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           unique: true,
         },
         {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+            mutationID: 'ASC',
+          },
+          name: 'mutations_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'mutations',
+          unique: true,
+        },
+        {
           columns: {id: 'ASC'},
           name: 'giant_pkey',
           schema: 'public',
@@ -1597,6 +1770,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       `,
       published: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
         ['public.funk']: {
@@ -1732,6 +1906,17 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           unique: true,
         },
         {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+            mutationID: 'ASC',
+          },
+          name: 'mutations_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'mutations',
+          unique: true,
+        },
+        {
           columns: {name: 'ASC'},
           name: 'funk_name_unique',
           schema: 'public',
@@ -1805,6 +1990,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       ).join('\n'),
       published: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
         [`${APP_ID}.schemaVersions`]: ZERO_SCHEMA_VERSIONS_SPEC,
         ...Object.fromEntries(
@@ -1911,6 +2097,17 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'clients_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'clients',
+          unique: true,
+        },
+        {
+          columns: {
+            clientGroupID: 'ASC',
+            clientID: 'ASC',
+            mutationID: 'ASC',
+          },
+          name: 'mutations_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'mutations',
           unique: true,
         },
         ...Array.from(

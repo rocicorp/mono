@@ -50,25 +50,26 @@ export async function assertIsCreatorOrAdmin(
 
 export async function assertUserCanSeeIssue(
   tx: Transaction<typeof schema, unknown>,
-  authData: AuthData,
+  userID: string,
   issueID: string,
 ) {
   const issue = must(await tx.query.issue.where('id', issueID).one());
+  const user = must(await tx.query.user.where('id', userID).one());
 
   assert(
     issue.visibility === 'public' ||
-      authData.sub === issue.creatorID ||
-      authData.role === 'crew',
+      userID === issue.creatorID ||
+      user.role === 'crew',
     'User does not have permission to view this issue',
   );
 }
 
 export async function assertUserCanSeeComment(
   tx: Transaction<typeof schema, unknown>,
-  authData: AuthData,
+  userID: string,
   commentID: string,
 ) {
   const comment = must(await tx.query.comment.where('id', commentID).one());
 
-  await assertUserCanSeeIssue(tx, authData, comment.issueID);
+  await assertUserCanSeeIssue(tx, userID, comment.issueID);
 }

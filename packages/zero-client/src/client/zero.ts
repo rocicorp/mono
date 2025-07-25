@@ -61,6 +61,7 @@ import type {
   CRUDMutation,
   CRUDMutationArg,
   CustomMutation,
+  MutationID,
   PushMessage,
 } from '../../../zero-protocol/src/push.ts';
 import {CRUD_MUTATION_NAME, mapCRUD} from '../../../zero-protocol/src/push.ts';
@@ -497,7 +498,9 @@ export class Zero<
 
     const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
 
-    this.#mutationTracker = new MutationTracker(lc);
+    this.#mutationTracker = new MutationTracker(lc, (upTo: MutationID) =>
+      this.#send(['ackMutationResponses', upTo]),
+    );
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
         options.mutators,
@@ -710,6 +713,7 @@ export class Zero<
       rep.clientID,
       schema,
       this.#lc,
+      this.#mutationTracker,
     );
 
     this.#visibilityWatcher = getDocumentVisibilityWatcher(
@@ -1376,7 +1380,6 @@ export class Zero<
   #handlePokeEnd(_lc: ZeroLogContext, pokeMessage: PokeEndMessage): void {
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
-    this.#mutationTracker.lmidAdvanced(this.#lastMutationIDReceived);
   }
 
   #onPokeError(): void {

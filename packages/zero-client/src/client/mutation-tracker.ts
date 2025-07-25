@@ -14,6 +14,7 @@ import type {
   PushResponse,
 } from '../../../zero-protocol/src/push.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
+import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 
 type ErrorType =
   | MutationError
@@ -48,11 +49,17 @@ export class MutationTracker {
   readonly #allMutationsAppliedListeners: Set<() => void>;
   readonly #lc: ZeroLogContext;
   readonly #limboMutations: Set<EphemeralID>;
+
+  // This is only used in the new code path that processes
+  // mutation responses that arrive via the `poke` protocol.
+  // The old code path will be removed in the release after
+  // the one containing mutation-responses-via-poke.
+  readonly #ackMutations: (upTo: MutationID) => void;
   #clientID: string | undefined;
   #largestOutstandingMutationID: number;
   #currentMutationID: number;
 
-  constructor(lc: ZeroLogContext) {
+  constructor(lc: ZeroLogContext, ackMutations: (upTo: MutationID) => void) {
     this.#lc = lc.withContext('MutationTracker');
     this.#outstandingMutations = new Map();
     this.#ephemeralIDsByMutationID = new Map();
@@ -60,6 +67,7 @@ export class MutationTracker {
     this.#limboMutations = new Set();
     this.#largestOutstandingMutationID = 0;
     this.#currentMutationID = 0;
+    this.#ackMutations = ackMutations;
   }
 
   set clientID(clientID: string) {
@@ -96,6 +104,31 @@ export class MutationTracker {
     const entry = this.#outstandingMutations.get(id);
     if (entry) {
       this.#settleMutation(id, entry, 'reject', e);
+    }
+  }
+
+  /**
+   * Used when zero-cache pokes down mutation results.
+   */
+  processMutationResponses(patches: MutationPatch[]) {
+    try {
+      for (const patch of patches) {
+        if (patch.mutation.id.clientID !== this.#clientID) {
+          continue; // Mutation for a different client. We will not have its promise.
+        }
+
+        if ('error' in patch.mutation.result) {
+          this.#processMutationError(patch.mutation.id, patch.mutation.result);
+        } else {
+          this.#processMutationOk(patch.mutation.id, patch.mutation.result);
+        }
+      }
+    } finally {
+      const last = patches[patches.length - 1];
+      if (last) {
+        // We only ack the last mutation in the batch.
+        this.#ackMutations(last.mutation.id);
+      }
     }
   }
 
@@ -190,6 +223,7 @@ export class MutationTracker {
     if (lastMutationID === this.#currentMutationID) {
       return;
     }
+
     try {
       this.#currentMutationID = lastMutationID;
       this.#resolveLimboMutations(lastMutationID);
@@ -274,7 +308,7 @@ export class MutationTracker {
       if ('error' in mutation.result) {
         this.#processMutationError(mutation.id, mutation.result);
       } else {
-        this.#processMutationOk(mutation.result, mutation.id);
+        this.#processMutationOk(mutation.id, mutation.result);
       }
     }
   }
@@ -315,7 +349,7 @@ export class MutationTracker {
     this.#settleMutation(ephemeralID, entry, 'reject', error);
   }
 
-  #processMutationOk(result: MutationOk, mid: MutationID): void {
+  #processMutationOk(mid: MutationID, result: MutationOk): void {
     assert(
       mid.clientID === this.#clientID,
       'received mutation for the wrong client',

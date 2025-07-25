@@ -1,12 +1,17 @@
 import {schema, type Schema} from '../shared/schema.ts';
 import {type Transaction, type Row} from '@rocicorp/zero';
 
+// From https://github.com/colinhacks/zod/blob/2c333e268c316deef829c736b8c46ec95ee03e39/packages/zod/src/v4/core/regexes.ts#L33C34-L35C102
+const emailRegex =
+  /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
+
 export async function sendEmail({
   tx,
   email,
   title,
   message,
   link,
+  unsubscribeLink,
   issue,
   attachments = [],
 }: {
@@ -15,6 +20,7 @@ export async function sendEmail({
   title: string;
   message: string;
   link: string;
+  unsubscribeLink: string;
   issue: Row<typeof schema.tables.issue>;
   attachments?: {
     filename: string;
@@ -22,10 +28,6 @@ export async function sendEmail({
     data: string; // base64-encoded string
   }[];
 }) {
-  // Email notifications temporarily disabled
-  // See: https://bugs.rocicorp.dev/issue/3877
-  return;
-
   const apiKey = process.env.LOOPS_EMAIL_API_KEY;
   const transactionalId = process.env.LOOPS_TRANSACTIONAL_ID;
   const idempotencyKey = `${tx.clientID}:${tx.mutationID}:${email}`;
@@ -34,6 +36,11 @@ export async function sendEmail({
     console.log(
       'Missing LOOPS_EMAIL_API_KEY or LOOPS_TRANSACTIONAL_ID Skipping Email',
     );
+    return;
+  }
+
+  if (!emailRegex.test(email)) {
+    console.log('Invalid email provided, skipping email', email);
     return;
   }
 
@@ -58,6 +65,7 @@ export async function sendEmail({
       subject: formattedSubject,
       message: titleMessage,
       link,
+      unsubscribe: unsubscribeLink,
     },
     attachments,
   };

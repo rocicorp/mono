@@ -8,15 +8,16 @@ import {
 import {expectTablesToMatch, initDB, testDBs} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import {ensureShardSchema, updateShardSchema} from './init.ts';
-import {addReplica} from './shard.ts';
+import {addReplica, metadataPublicationName} from './shard.ts';
+import {id} from '../../../../types/sql.ts';
 
 const APP_ID = 'zappz';
 const SHARD_NUM = 23;
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
-  dataVersion: 9,
-  schemaVersion: 9,
+  dataVersion: 10,
+  schemaVersion: 10,
   minSafeVersion: 1,
   lock: 'v',
 } as const;
@@ -145,6 +146,11 @@ describe('change-streamer/pg/schema/init', () => {
             true,
             '{"tables":[],"indexes":[]}'
           );
+        CREATE TABLE ${APP_ID}_${SHARD_NUM}."schemaVersions" 
+            ("lock" BOOL PRIMARY KEY, "minSupportedVersion" INT4, "maxSupportedVersion" INT4);
+
+        CREATE PUBLICATION ${id(metadataPublicationName(APP_ID, SHARD_NUM))}
+            FOR TABLE ${APP_ID}_${SHARD_NUM}."schemaVersions";
   `,
       existingVersionHistory: {
         schemaVersion: 5,
