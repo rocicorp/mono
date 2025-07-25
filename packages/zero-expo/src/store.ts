@@ -1,4 +1,8 @@
-import * as SQLite from 'expo-sqlite';
+import {
+  deleteDatabaseSync,
+  openDatabaseSync,
+  type SQLiteBindParams,
+} from 'expo-sqlite';
 import {
   createSQLiteStore,
   SQLiteDatabaseManager,
@@ -10,22 +14,22 @@ import {promiseVoid} from '../../shared/src/resolved-promises.ts';
 
 const expoDbManagerInstance = new SQLiteDatabaseManager({
   open: fileName => {
-    const db = SQLite.openDatabaseSync(fileName);
+    const db = openDatabaseSync(fileName);
 
     const genericDb: SQLiteDatabase = {
       close: () => db.closeSync(),
       destroy: () => {
         db.closeSync();
-        SQLite.deleteDatabaseSync(fileName);
+        deleteDatabaseSync(fileName);
       },
       prepare: (sql: string) => {
         const stmt = db.prepareSync(sql);
         return {
           run: (params?: unknown[]): void => {
-            stmt.executeSync(params as SQLite.SQLiteBindParams);
+            stmt.executeSync(params as SQLiteBindParams);
           },
           all: <T>(params?: unknown[]): T[] => {
-            const result = stmt.executeSync(params as SQLite.SQLiteBindParams);
+            const result = stmt.executeSync(params as SQLiteBindParams);
             return result.getAllSync() as unknown as T[];
           },
           finalize: () => stmt.finalizeSync(),

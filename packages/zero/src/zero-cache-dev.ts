@@ -110,7 +110,7 @@ async function main() {
       lc.info?.(
         `Running ${zeroCacheScript} at\n\n\thttp://localhost:${config.port}\n`,
       );
-      const env: Record<string, string> = {
+      const env: NodeJS.ProcessEnv = {
         // Set some low defaults so as to use fewer resources and not trip up,
         // e.g. developers sharing a database.
         ['ZERO_NUM_SYNC_WORKERS']: '3',
