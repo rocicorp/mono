@@ -13,7 +13,6 @@ import {version} from '../../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
-import {hasOwn} from '../../../../shared/src/has-own.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
@@ -1735,6 +1734,10 @@ export function pickToken(
   });
 }
 
+/**
+ * A query must be expired for all clients in order to be considered
+ * expired.
+ */
 function expired(
   ttlClock: TTLClock,
   q: InternalQueryRecord | ClientQueryRecord | CustomQueryRecord,
@@ -1743,21 +1746,18 @@ function expired(
     return false;
   }
 
-  const {clientState} = q;
-  for (const clientID in clientState) {
-    if (hasOwn(clientState, clientID)) {
-      const {ttl, inactivatedAt} = clientState[clientID];
-      if (inactivatedAt === undefined) {
-        return false;
-      }
+  for (const clientState of Object.values(q.clientState)) {
+    const {ttl, inactivatedAt} = clientState;
+    if (inactivatedAt === undefined) {
+      return false;
+    }
 
-      const clampedTTL = clampTTL(ttl);
-      if (
-        ttlClockAsNumber(inactivatedAt) + clampedTTL >
-        ttlClockAsNumber(ttlClock)
-      ) {
-        return false;
-      }
+    const clampedTTL = clampTTL(ttl);
+    if (
+      ttlClockAsNumber(inactivatedAt) + clampedTTL >
+      ttlClockAsNumber(ttlClock)
+    ) {
+      return false;
     }
   }
   return true;
