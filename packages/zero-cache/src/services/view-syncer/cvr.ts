@@ -917,6 +917,14 @@ function mergeRefCounts(
   return Object.values(merged).some(v => v > 0) ? merged : null;
 }
 
+/**
+ * The query must be inactive for all clients to be considered inactive.
+ * This is because expiration is defined that way: a query is expired for a client group
+ * only if it is expired for all clients in the group.
+ *
+ * If all clients have inactivated the query, we return
+ * the one with the expiration furthest in the future.
+ */
 export function getInactiveQueries(cvr: CVR): {
   hash: string;
   inactivatedAt: TTLClock;
@@ -936,29 +944,36 @@ export function getInactiveQueries(cvr: CVR): {
       continue;
     }
     for (const clientState of Object.values(query.clientState)) {
+      // 1. Take the longest TTL
+      // 2. If the query is not inactivated (for any client), do not return it
       const {inactivatedAt, ttl} = clientState;
-      if (inactivatedAt !== undefined) {
-        const clampedTTL = clampTTL(ttl);
-        const existing = inactive.get(queryID);
+      const existing = inactive.get(queryID);
+      if (inactivatedAt === undefined) {
         if (existing) {
-          // The stored one might be too large because from a previous version of
-          // zero
-          const existingTTL = clampTTL(existing.ttl);
-          // Use the last eviction time.
-          if (
-            existingTTL + ttlClockAsNumber(existing.inactivatedAt) <
-            ttlClockAsNumber(inactivatedAt) + clampedTTL
-          ) {
-            existing.ttl = clampedTTL;
-            existing.inactivatedAt = inactivatedAt;
-          }
-        } else {
-          inactive.set(queryID, {
-            hash: queryID,
-            inactivatedAt,
-            ttl: clampedTTL,
-          });
+          inactive.delete(queryID);
         }
+        break;
+      }
+
+      const clampedTTL = clampTTL(ttl);
+      if (existing) {
+        // The stored one might be too large because from a previous version of
+        // zero
+        const existingTTL = clampTTL(existing.ttl);
+        // Use the last eviction time.
+        if (
+          existingTTL + ttlClockAsNumber(existing.inactivatedAt) <
+          ttlClockAsNumber(inactivatedAt) + clampedTTL
+        ) {
+          existing.ttl = clampedTTL;
+          existing.inactivatedAt = inactivatedAt;
+        }
+      } else {
+        inactive.set(queryID, {
+          hash: queryID,
+          inactivatedAt,
+          ttl: clampedTTL,
+        });
       }
     }
   }
