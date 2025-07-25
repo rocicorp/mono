@@ -22,7 +22,7 @@
     "expo-sqlite": "^15.2.14"
   },
   "peerDependencies": {
-    "expo-sqlite": ">=14.0.0"
+    "expo-sqlite": "^15.2.14"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"
