@@ -938,7 +938,11 @@ export class Zero<
     let downMessage: Downstream;
     const {data} = e;
     try {
-      downMessage = valita.parse(JSON.parse(data), downstreamSchema);
+      downMessage = valita.parse(
+        JSON.parse(data),
+        downstreamSchema,
+        'passthrough',
+      );
     } catch (e) {
       rejectInvalidMessage(e);
       return;
