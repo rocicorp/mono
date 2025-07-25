@@ -10,9 +10,10 @@ const sqlite3DatabaseManager = getTestSQLiteDatabaseManager();
 
 runAll(
   'SQLiteStore',
-  () => new SQLiteStore(':memory:', sqlite3DatabaseManager, {
-    journalMode: 'WAL',
-  }),
+  () =>
+    new SQLiteStore(':memory:', sqlite3DatabaseManager, {
+      journalMode: 'WAL',
+    }),
 );
 
 beforeEach(() => {

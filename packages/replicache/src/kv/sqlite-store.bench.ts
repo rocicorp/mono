@@ -9,7 +9,10 @@ const walStore = new SQLiteStore('bench-wal', walSQLite3DatabaseManager, {
 });
 
 const defaultSQLite3DatabaseManager = getTestSQLiteDatabaseManager();
-const defaultStore = new SQLiteStore('bench-default', defaultSQLite3DatabaseManager);
+const defaultStore = new SQLiteStore(
+  'bench-default',
+  defaultSQLite3DatabaseManager,
+);
 
 afterAll(() => {
   walSQLite3DatabaseManager.clearAllStoresForTesting();

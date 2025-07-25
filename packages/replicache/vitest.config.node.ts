@@ -10,5 +10,8 @@ export default defineConfig({
     benchmark: {
       include: ['src/kv/sqlite*.bench.ts'],
     },
+    typecheck: {
+      enabled: false,
+    },
   },
 });

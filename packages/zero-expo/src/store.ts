@@ -45,7 +45,7 @@ export const expoSQLiteStoreProvider = (
       ...opts,
       // we override the journal mode to undefined because
       // setting it to WAL causes hanging COMMITs on Expo
-      // journalMode: undefined,
+      journalMode: undefined,
     }),
   drop: (name: string) => {
     expoDbManagerInstance.destroy(name);
