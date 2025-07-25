@@ -61,6 +61,7 @@ import type {
   CRUDMutation,
   CRUDMutationArg,
   CustomMutation,
+  MutationID,
   PushMessage,
 } from '../../../zero-protocol/src/push.ts';
 import {CRUD_MUTATION_NAME, mapCRUD} from '../../../zero-protocol/src/push.ts';
@@ -497,7 +498,9 @@ export class Zero<
 
     const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
 
-    this.#mutationTracker = new MutationTracker(lc);
+    this.#mutationTracker = new MutationTracker(lc, (upTo: MutationID) =>
+      this.#send(['ackMutationResponses', upTo]),
+    );
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
         options.mutators,
@@ -935,7 +938,11 @@ export class Zero<
     let downMessage: Downstream;
     const {data} = e;
     try {
-      downMessage = valita.parse(JSON.parse(data), downstreamSchema);
+      downMessage = valita.parse(
+        JSON.parse(data),
+        downstreamSchema,
+        'passthrough',
+      );
     } catch (e) {
       rejectInvalidMessage(e);
       return;
@@ -1216,6 +1223,7 @@ export class Zero<
     this.#connectCookie = valita.parse(
       await this.#rep.cookie,
       nullableVersionSchema,
+      'passthrough',
     );
     if (this.closed) {
       return;
@@ -1738,7 +1746,11 @@ export class Zero<
     assert(socket);
     // Mutation recovery pull.
     lc.debug?.('Pull is for mutation recovery');
-    const cookie = valita.parse(req.cookie, nullableVersionSchema);
+    const cookie = valita.parse(
+      req.cookie,
+      nullableVersionSchema,
+      'passthrough',
+    );
     const pullRequestMessage: PullRequestMessage = [
       'pull',
       {

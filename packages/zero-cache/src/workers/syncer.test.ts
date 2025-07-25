@@ -25,6 +25,7 @@ vi.mock('../server/anonymous-otel-start.ts', () => ({
   recordConnectionSuccess: vi.fn(),
   recordConnectionAttempted: vi.fn(),
 }));
+const mockDB = (() => {}) as unknown as PostgresDB;
 
 import {Syncer} from './syncer.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
@@ -43,6 +44,7 @@ import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
 import {Database} from '../../../zqlite/src/db.ts';
+import type {PostgresDB} from '../types/pg.ts';
 
 const lc = createSilentLogContext();
 const tempDir = await fs.mkdtemp(
@@ -98,6 +100,7 @@ describe('cleanup', () => {
       },
       id => {
         const ret = new PusherService(
+          mockDB,
           {} as ZeroConfig,
           {
             url: ['http://example.com'],
@@ -243,6 +246,7 @@ describe('connection telemetry', () => {
       },
       id => {
         const ret = new PusherService(
+          mockDB,
           {} as ZeroConfig,
           {
             url: ['http://example.com'],

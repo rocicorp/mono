@@ -6,7 +6,7 @@ import {deleteClientsMessageSchema} from './delete-clients.ts';
 import {inspectUpMessageSchema} from './inspect-up.ts';
 import {pingMessageSchema} from './ping.ts';
 import {pullRequestMessageSchema} from './pull.ts';
-import {pushMessageSchema} from './push.ts';
+import {ackMutationResponsesMessageSchema, pushMessageSchema} from './push.ts';
 
 export const upstreamSchema = v.union(
   initConnectionMessageSchema,
@@ -17,6 +17,7 @@ export const upstreamSchema = v.union(
   pushMessageSchema,
   closeConnectionMessageSchema,
   inspectUpMessageSchema,
+  ackMutationResponsesMessageSchema,
 );
 
 export type Upstream = v.Infer<typeof upstreamSchema>;
