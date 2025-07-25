@@ -10,7 +10,7 @@ import type {Pusher, PusherResult} from '../pusher.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import type {ClientGroupID} from './ids.ts';
 import {
-  PUSH_VERSION_DD31,
+  PUSH_VERSION_ZERO,
   type PushRequest,
   type PushRequestV1,
   push,
@@ -116,7 +116,7 @@ test('try push [DD31]', async () => {
             timestamp: 42,
           },
         ],
-        pushVersion: PUSH_VERSION_DD31,
+        pushVersion: PUSH_VERSION_ZERO,
         schemaVersion: pushSchemaVersion,
       },
       pushResult: 'ok',
@@ -152,7 +152,7 @@ test('try push [DD31]', async () => {
             timestamp: 42,
           },
         ],
-        pushVersion: PUSH_VERSION_DD31,
+        pushVersion: PUSH_VERSION_ZERO,
         schemaVersion: pushSchemaVersion,
       },
       pushResult: 'ok',
@@ -188,7 +188,7 @@ test('try push [DD31]', async () => {
             timestamp: 42,
           },
         ],
-        pushVersion: PUSH_VERSION_DD31,
+        pushVersion: PUSH_VERSION_ZERO,
         schemaVersion: pushSchemaVersion,
       },
       pushResult: {error: 'FetchNotOk(500)'},
@@ -225,7 +225,7 @@ test('try push [DD31]', async () => {
             timestamp: 42,
           },
         ],
-        pushVersion: PUSH_VERSION_DD31,
+        pushVersion: PUSH_VERSION_ZERO,
         schemaVersion: pushSchemaVersion,
       },
       pushResult: {error: 'FetchNotOk(500)'},
@@ -301,7 +301,7 @@ test('try push [DD31]', async () => {
       clientID,
       pusher,
       pushSchemaVersion,
-      PUSH_VERSION_DD31,
+      PUSH_VERSION_ZERO,
     );
 
     expect(pusherResult).to.deep.equal(c.expPusherResult, `name: ${c.name}`);

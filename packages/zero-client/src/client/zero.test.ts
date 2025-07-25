@@ -1246,7 +1246,7 @@ test('pusher sends one mutation per push message', async () => {
       const pushReq: PushRequest = {
         profileID: 'p1',
         clientGroupID: clientGroupID ?? (await r.clientGroupID),
-        pushVersion: 1,
+        pushVersion: 2,
         schemaVersion: '1',
         mutations,
       };
@@ -1490,7 +1490,7 @@ test('pusher maps CRUD mutation names', async () => {
       const pushReq: PushRequest = {
         profileID: 'p1',
         clientGroupID: await r.clientGroupID,
-        pushVersion: 1,
+        pushVersion: 2,
         schemaVersion: '1',
         mutations: [
           {
@@ -1592,7 +1592,7 @@ test('pusher adjusts mutation timestamps to be unix timestamps', async () => {
   const pushReq: PushRequest = {
     profileID: 'p1',
     clientGroupID: await r.clientGroupID,
-    pushVersion: 1,
+    pushVersion: 2,
     schemaVersion: '1',
     mutations,
   };
@@ -2205,7 +2205,7 @@ test('pusher waits for connection', async () => {
     const pushReq: PushRequest = {
       profileID: 'p1',
       clientGroupID: await r.clientGroupID,
-      pushVersion: 1,
+      pushVersion: 2,
       schemaVersion: '1',
       mutations: [],
     };
@@ -3489,7 +3489,7 @@ test('custom mutations get pushed', async () => {
             args: [{foo: 42}],
           },
         ],
-        pushVersion: 1,
+        pushVersion: 2,
       },
     ],
     [
@@ -3507,7 +3507,7 @@ test('custom mutations get pushed', async () => {
             args: [{foo: 43}],
           },
         ],
-        pushVersion: 1,
+        pushVersion: 2,
       },
     ],
     [
@@ -3525,7 +3525,7 @@ test('custom mutations get pushed', async () => {
             args: [{foo: 44}],
           },
         ],
-        pushVersion: 1,
+        pushVersion: 2,
       },
     ],
     ['ping', {}],

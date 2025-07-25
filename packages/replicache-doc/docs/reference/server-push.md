@@ -64,7 +64,7 @@ When pushing we `POST` an HTTP request with a [JSON encoded body](/api#pushreque
 
 ```ts
 type PushRequest = {
-  pushVersion: 1;
+  pushVersion: 2;
   clientGroupID: string;
   mutations: Mutation[];
   profileID: string;

@@ -9,7 +9,7 @@ import {ZQLDatabase} from './zql-database.ts';
 import type postgres from 'postgres';
 describe('PushProcessor', () => {
   const body = {
-    pushVersion: 1,
+    pushVersion: 2,
     requestID: 'test_request_id',
     timestamp: 1234567890,
     schemaVersion: 1,

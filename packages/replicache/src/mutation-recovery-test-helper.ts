@@ -15,7 +15,7 @@ import {IDBDatabasesStore} from './persist/idb-databases-store.ts';
 import {persistDD31} from './persist/persist.ts';
 import {makeIDBNameForTesting} from './replicache.ts';
 import type {ClientGroupID, ClientID} from './sync/ids.ts';
-import {PUSH_VERSION_DD31} from './sync/push.ts';
+import {PUSH_VERSION_ZERO} from './sync/push.ts';
 import {closeablesToClose, dbsToDrop} from './test-util.ts';
 import type {MutatorDefs} from './types.ts';
 
@@ -179,7 +179,7 @@ export function createPushRequestBodyDD31(
       args: localMeta.mutatorArgsJSON,
       timestamp: localMeta.timestamp,
     })),
-    pushVersion: PUSH_VERSION_DD31,
+    pushVersion: PUSH_VERSION_ZERO,
     schemaVersion,
   };
 }

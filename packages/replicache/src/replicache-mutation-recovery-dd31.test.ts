@@ -23,7 +23,7 @@ import type {PushResponse} from './pusher.ts';
 import type {ClientID} from './sync/ids.ts';
 import {PULL_VERSION_DD31, type PullRequestV1} from './sync/pull.ts';
 import {
-  PUSH_VERSION_DD31,
+  PUSH_VERSION_ZERO,
   type PushRequestV1,
   assertPushRequestV1,
 } from './sync/push.ts';
@@ -208,7 +208,7 @@ describe('DD31', () => {
           timestamp: client2PendingLocalMetas[1].timestamp,
         },
       ],
-      pushVersion: PUSH_VERSION_DD31,
+      pushVersion: PUSH_VERSION_ZERO,
       schemaVersion: schemaVersionOfClientWPendingMutations,
     });
 
@@ -477,7 +477,7 @@ describe('DD31', () => {
           timestamp: client1PendingLocalMetas[1].timestamp,
         },
       ],
-      pushVersion: PUSH_VERSION_DD31,
+      pushVersion: PUSH_VERSION_ZERO,
       schemaVersion: schemaVersionOfClientWPendingMutations,
     });
 
@@ -1777,7 +1777,7 @@ describe('DD31', () => {
         },
       ],
       profileID,
-      pushVersion: PUSH_VERSION_DD31,
+      pushVersion: PUSH_VERSION_ZERO,
       schemaVersion: schemaVersion2,
     };
     expect(pushRequestJSONBodies).to.deep.equal([pushRequestBody1]);
@@ -1930,7 +1930,7 @@ describe('DD31', () => {
         },
       ],
       profileID,
-      pushVersion: PUSH_VERSION_DD31,
+      pushVersion: PUSH_VERSION_ZERO,
       schemaVersion: schemaVersion2,
     };
     expect(pushRequestJSONBodies).to.deep.equal([pushRequestBody1]);

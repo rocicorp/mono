@@ -103,7 +103,7 @@ import * as HandlePullResponseResultEnum from './sync/handle-pull-response-resul
 import type {ClientGroupID, ClientID} from './sync/ids.ts';
 import {PullError} from './sync/pull-error.ts';
 import {beginPullV1, handlePullResponseV1, maybeEndPull} from './sync/pull.ts';
-import {push, PUSH_VERSION_DD31} from './sync/push.ts';
+import {push, PUSH_VERSION_ZERO} from './sync/push.ts';
 import {newRequestID} from './sync/request-id.ts';
 import {SYNC_HEAD_NAME} from './sync/sync-head-name.ts';
 import {throwIfClosed} from './transaction-closed-error.ts';
@@ -997,7 +997,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
               clientID,
               this.pusher,
               this.schemaVersion,
-              PUSH_VERSION_DD31,
+              PUSH_VERSION_ZERO,
             );
             return {
               result: pusherResult,

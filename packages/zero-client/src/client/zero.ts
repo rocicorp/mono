@@ -1424,7 +1424,7 @@ export class Zero<
 
   async #pusher(req: PushRequest, requestID: string): Promise<PusherResult> {
     // The deprecation of pushVersion 0 predates zero-client
-    assert(req.pushVersion === 1);
+    assert(req.pushVersion === 2 || req.pushVersion === 1);
     // If we are connecting we wait until we are connected.
     await this.#connectResolver.promise;
     const lc = this.#lc.withContext('requestID', requestID);

@@ -14,6 +14,7 @@ import {
 import {splitMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {createLogContext} from './logging.ts';
 import type {CustomMutatorDefs} from './custom.ts';
+import {PUSH_VERSION_ZERO} from '../../replicache/src/sync/push.ts';
 
 export type Params = v.Infer<typeof pushParamsSchema>;
 
@@ -22,6 +23,7 @@ export type Params = v.Infer<typeof pushParamsSchema>;
 
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
+  writeMutationResult: (result: MutationResponse) => Promise<void>;
 }
 
 export interface TransactionProviderInput {
@@ -99,7 +101,8 @@ export class PushProcessor<
     }
     const queryParams = v.parse(queryString, pushParamsSchema, 'passthrough');
 
-    if (req.pushVersion !== 1) {
+    // we support v1 and v2 of the push protocol.
+    if (req.pushVersion !== 1 && req.pushVersion !== PUSH_VERSION_ZERO) {
       this.#lc.error?.(
         `Unsupported push version ${req.pushVersion} for clientGroupID ${req.clientGroupID}`,
       );
@@ -139,7 +142,7 @@ export class PushProcessor<
           params,
           req,
           m,
-          caughtError !== undefined,
+          caughtError,
         );
 
         // The first time through we caught an error.
@@ -204,7 +207,7 @@ export class PushProcessor<
     params: Params,
     req: PushBody,
     m: Mutation,
-    errorMode: boolean,
+    caughtError: unknown,
   ): Promise<MutationResponse> {
     if (m.type === 'crud') {
       throw new Error(
@@ -221,17 +224,34 @@ export class PushProcessor<
           m.id,
         );
 
-        if (!errorMode) {
-          await this.#dispatchMutation(dbTx, mutators, m);
-        }
-
-        return {
+        const result = {
           id: {
             clientID: m.clientID,
             id: m.id,
           },
           result: {},
         };
+
+        // no caught error? Not in error mode.
+        if (caughtError === undefined) {
+          await this.#dispatchMutation(dbTx, mutators, m);
+          if (req.pushVersion >= PUSH_VERSION_ZERO) {
+            await transactionHooks.writeMutationResult({
+              id: {
+                clientID: m.clientID,
+                id: m.id,
+              },
+              result: {},
+            });
+          }
+        } else {
+          const appError = makeAppErrorResponse(m, caughtError);
+          if (req.pushVersion >= PUSH_VERSION_ZERO) {
+            await transactionHooks.writeMutationResult(appError);
+          }
+        }
+
+        return result;
       },
       {
         upstreamSchema: params.schema,

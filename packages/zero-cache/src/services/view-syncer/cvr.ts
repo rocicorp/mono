@@ -173,6 +173,55 @@ export class CVRUpdater {
   }
 }
 
+export function getMutationResultsQuery(
+  upstreamSchema: string,
+  clientGroupID: string,
+  clientID: string,
+): InternalQueryRecord {
+  return {
+    id: CLIENT_MUTATION_RESULTS_QUERY_ID,
+    type: 'internal',
+    ast: {
+      schema: '',
+      table: `${upstreamSchema}.mutations`,
+      where: {
+        type: 'and',
+        conditions: [
+          {
+            type: 'simple',
+            left: {
+              type: 'column',
+              name: 'clientGroupID',
+            },
+            op: '=',
+            right: {
+              type: 'literal',
+              value: clientGroupID,
+            },
+          },
+          {
+            type: 'simple',
+            left: {
+              type: 'column',
+              name: 'clientID',
+            },
+            op: '=',
+            right: {
+              type: 'literal',
+              value: clientID,
+            },
+          },
+        ],
+      },
+      orderBy: [
+        ['clientGroupID', 'asc'],
+        ['clientID', 'asc'],
+        ['mutationID', 'asc'],
+      ],
+    },
+  };
+}
+
 /**
  * A {@link CVRConfigDrivenUpdater} is used for updating a CVR with config-driven
  * changes. Note that this may result in row deletion (e.g. if queries get dropped),
@@ -226,48 +275,11 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       this._cvr.queries[CLIENT_LMID_QUERY_ID] = lmidsQuery;
       this._cvrStore.putQuery(lmidsQuery);
 
-      const mutationResultsQuery: InternalQueryRecord = {
-        id: CLIENT_MUTATION_RESULTS_QUERY_ID,
-        type: 'internal',
-        ast: {
-          schema: '',
-          table: `${upstreamSchema(this.#shard)}.mutations`,
-          where: {
-            type: 'and',
-            conditions: [
-              {
-                type: 'simple',
-                left: {
-                  type: 'column',
-                  name: 'clientGroupID',
-                },
-                op: '=',
-                right: {
-                  type: 'literal',
-                  value: this._cvr.id,
-                },
-              },
-              {
-                type: 'simple',
-                left: {
-                  type: 'column',
-                  name: 'clientID',
-                },
-                op: '=',
-                right: {
-                  type: 'literal',
-                  value: id,
-                },
-              },
-            ],
-          },
-          orderBy: [
-            ['clientGroupID', 'asc'],
-            ['clientID', 'asc'],
-            ['mutationID', 'asc'],
-          ],
-        },
-      };
+      const mutationResultsQuery = getMutationResultsQuery(
+        upstreamSchema(this.#shard),
+        this._cvr.id,
+        client.id,
+      );
       this._cvr.queries[CLIENT_MUTATION_RESULTS_QUERY_ID] =
         mutationResultsQuery;
       this._cvrStore.putQuery(mutationResultsQuery);
