@@ -40,7 +40,6 @@ export interface SQLiteDatabase {
 }
 
 type SQLitePreparedStatements = {
-  beginDeferred: PreparedStatement;
   beginImmediate: PreparedStatement;
   commit: PreparedStatement;
   rollback: PreparedStatement;
@@ -53,7 +52,6 @@ type SQLitePreparedStatements = {
 const getPreparedStatementsForSQLiteDatabase = (
   db: SQLiteDatabase,
 ): SQLitePreparedStatements => ({
-  beginDeferred: db.prepare('BEGIN DEFERRED'),
   beginImmediate: db.prepare('BEGIN IMMEDIATE'),
   commit: db.prepare('COMMIT'),
   rollback: db.prepare('ROLLBACK'),
@@ -173,20 +171,11 @@ export class SQLiteStoreRead implements Read {
   }
 
   #getSql(key: string): string | undefined {
-    this._preparedStatements.beginDeferred.run();
+    const rows = this._preparedStatements.get.all<{value: string}>([key]);
 
-    try {
-      const rows = this._preparedStatements.get.all<{value: string}>([key]);
+    if (rows.length === 0) return undefined;
 
-      this._preparedStatements.commit.run();
-
-      if (rows.length === 0) return undefined;
-
-      return rows?.[0]?.value;
-    } catch (e) {
-      this._preparedStatements.rollback.run();
-      throw e;
-    }
+    return rows?.[0]?.value;
   }
 }
 
