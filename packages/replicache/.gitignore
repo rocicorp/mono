@@ -8,3 +8,4 @@ perf/index.js.map
 perf/index.js
 tool/bump/bump
 .vscode/launch.json
+src/kv/*.db*
