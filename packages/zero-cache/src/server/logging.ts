@@ -15,13 +15,18 @@ import {OtelLogSink} from './otel-log-sink.ts';
 export function createLogContext(
   {log}: {log: LogConfig},
   context: {worker: string},
+  includeOtel = true,
 ): LogContext {
-  return createLogContextShared({log}, context, createLogSink(log));
+  return createLogContextShared(
+    {log},
+    context,
+    createLogSink(log, includeOtel),
+  );
 }
 
-function createLogSink(config: LogConfig): LogSink {
+function createLogSink(config: LogConfig, includeOtel: boolean): LogSink {
   const sink = getLogSink(config);
-  if (otelLogsEnabled()) {
+  if (includeOtel && otelLogsEnabled()) {
     const otelSink = new OtelLogSink();
     return new CompositeLogSink([otelSink, sink]);
   }
