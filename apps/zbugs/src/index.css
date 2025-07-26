@@ -258,14 +258,35 @@ textarea.autoResize {
 .logged-in-user-container {
   display: flex;
   justify-content: space-between;
+  align-items: center;
 }
 
 .logged-in-user {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
 }
 
 .logged-in-user-name {
   cursor: default;
+}
+
+.offline-status-container {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.offline-status-pill {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 0.25rem 1rem;
+  border-color: var(--color-modal-outline);
+  border-width: 1px;
+  border-radius: 2rem;
+  font-size: var(--typo-label-size);
+  gap: 0.5rem;
 }
 
 .logout-button {
