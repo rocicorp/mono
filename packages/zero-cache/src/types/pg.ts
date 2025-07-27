@@ -10,6 +10,7 @@ import {
   JSON,
   JSONB,
   NUMERIC,
+  TIME,
   TIMESTAMP,
   TIMESTAMPTZ,
 } from './pg-types.ts';
@@ -120,6 +121,13 @@ export const postgresTypeConfig = (
       from: [TIMESTAMP, TIMESTAMPTZ],
       serialize: serializeTimestamp,
       parse: timestampToFpMillis,
+    },
+    // Times are converted as strings
+    time: {
+      to: TIME,
+      from: [TIME],
+      serialize: (x: unknown) => String(x),
+      parse: (x: unknown) => x,
     },
     // The DATE type is stored directly as the PG normalized date string.
     date: {
@@ -257,6 +265,7 @@ export const pgToZqlTypeMap = Object.freeze({
 
   // Date/Time types
   'date': 'number',
+  'time': 'string',
   'timestamp': 'number',
   'timestamptz': 'number',
   'timestamp with time zone': 'number',
