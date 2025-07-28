@@ -19,148 +19,100 @@ afterAll(() => {
   defaultSQLite3DatabaseManager.clearAllStoresForTesting();
 });
 
-describe('zero-sqlite3 WAL', () => {
+describe('sqlite tx', () => {
   bench(
-    `write`,
+    `default journal mode`,
     async () => {
-      await withWrite(walStore, async wt => {
-        await wt.put('foo1', 'bar1');
+      await withWrite(defaultStore, async wt => {
+        expect(await wt.get('bar')).equal(undefined);
+        await wt.put('bar', 'baz');
+        expect(await wt.get('bar')).equal('baz');
+        await wt.del('bar');
+        expect(await wt.get('bar')).equal(undefined);
       });
     },
     {
       throws: true,
-      teardown: async () => {
-        await withWrite(walStore, async wt => {
-          await wt.del('foo1');
-        });
-      },
     },
   );
 
   bench(
-    `read`,
-    async () => {
-      await withRead(walStore, async rt => {
-        expect(await rt.get('foo2')).equal('bar2');
-      });
-    },
-    {
-      throws: true,
-      setup: async () => {
-        await withWrite(walStore, async wt => {
-          await wt.put('foo2', 'bar2');
-        });
-      },
-    },
-  );
-
-  bench(
-    `write and read`,
+    `WAL journal mode`,
     async () => {
       await withWrite(walStore, async wt => {
-        await wt.put('foo3', 'bar3');
-      });
-
-      await withRead(walStore, async rt => {
-        expect(await rt.get('foo3')).equal('bar3');
-      });
-    },
-    {
-      throws: true,
-      teardown: async () => {
-        await withWrite(walStore, async wt => {
-          await wt.del('foo3');
-        });
-      },
-    },
-  );
-
-  bench(
-    `delete`,
-    async () => {
-      await withWrite(walStore, async wt => {
-        await wt.del('foo4');
+        expect(await wt.get('bar')).equal(undefined);
+        await wt.put('bar', 'baz');
+        expect(await wt.get('bar')).equal('baz');
+        await wt.del('bar');
+        expect(await wt.get('bar')).equal(undefined);
       });
     },
     {
       throws: true,
-      setup: async () => {
-        await withWrite(walStore, async wt => {
-          await wt.put('foo4', 'bar4');
-        });
-      },
     },
   );
 });
 
-describe('zero-sqlite3 default journal mode', () => {
+describe('sqlite write contention', () => {
   bench(
-    `write`,
+    `default journal mode`,
     async () => {
       await withWrite(defaultStore, async wt => {
-        await wt.put('foo1', 'bar1');
+        await wt.put('foo', 'bar');
       });
+
+      const readP1 = withRead(defaultStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP2 = withRead(defaultStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP3 = withRead(defaultStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const writeP = withWrite(defaultStore, async wt => {
+        await wt.put('foo', 'bar2');
+      });
+
+      await Promise.all([readP1, readP2, readP3, writeP]);
     },
     {
       throws: true,
       teardown: async () => {
         await withWrite(defaultStore, async wt => {
-          await wt.del('foo1');
+          await wt.del('foo');
         });
       },
     },
   );
 
   bench(
-    `read`,
+    `WAL journal mode`,
     async () => {
-      await withRead(defaultStore, async rt => {
-        expect(await rt.get('foo2')).equal('bar2');
+      await withWrite(walStore, async wt => {
+        await wt.put('foo', 'bar');
       });
+
+      const readP1 = withRead(walStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP2 = withRead(walStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP3 = withRead(walStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const writeP = withWrite(walStore, async wt => {
+        await wt.put('foo', 'bar2');
+      });
+
+      await Promise.all([readP1, readP2, readP3, writeP]);
     },
     {
       throws: true,
       setup: async () => {
-        await withWrite(defaultStore, async wt => {
-          await wt.put('foo2', 'bar2');
-        });
-      },
-    },
-  );
-
-  bench(
-    `write and read`,
-    async () => {
-      await withWrite(defaultStore, async wt => {
-        await wt.put('foo3', 'bar3');
-      });
-
-      await withRead(defaultStore, async rt => {
-        expect(await rt.get('foo3')).equal('bar3');
-      });
-    },
-    {
-      throws: true,
-      teardown: async () => {
-        await withWrite(defaultStore, async wt => {
-          await wt.del('foo3');
-        });
-      },
-    },
-  );
-
-  bench(
-    `delete`,
-    async () => {
-      await withWrite(defaultStore, async wt => {
-        await wt.del('foo4');
-      });
-    },
-    {
-      throws: true,
-      setup: async () => {
-        await withWrite(defaultStore, async wt => {
-          await wt.put('foo4', 'bar4');
+        await withWrite(walStore, async wt => {
+          await wt.del('foo');
         });
       },
     },
