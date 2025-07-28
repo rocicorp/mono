@@ -5,16 +5,21 @@ import type {
 } from '../../../replicache/src/replicache-options.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {emptyObject} from '../../../shared/src/sentinels.ts';
-import type {
-  MutationError,
-  MutationID,
-  MutationOk,
-  PushError,
-  PushOk,
-  PushResponse,
+import {
+  mutationResultSchema,
+  type MutationError,
+  type MutationID,
+  type MutationOk,
+  type PushError,
+  type PushOk,
+  type PushResponse,
 } from '../../../zero-protocol/src/push.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
-import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
+import type {ReplicacheImpl} from '../../../replicache/src/impl.ts';
+import {MUTATIONS_KEY_PREFIX} from './keys.ts';
+import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
+import {must} from '../../../shared/src/must.ts';
+import * as v from '../../../shared/src/valita.ts';
 
 type ErrorType =
   | MutationError
@@ -70,8 +75,21 @@ export class MutationTracker {
     this.#ackMutations = ackMutations;
   }
 
-  set clientID(clientID: string) {
+  setClientIDAndWatch(
+    clientID: string,
+    experimentalWatch: ReplicacheImpl['experimentalWatch'],
+  ) {
+    assert(this.#clientID === undefined, 'clientID already set');
     this.#clientID = clientID;
+    experimentalWatch(
+      diffs => {
+        this.#processMutationResponses(diffs);
+      },
+      {
+        prefix: MUTATIONS_KEY_PREFIX + clientID + '/',
+        initialValuesInFirstDiff: true,
+      },
+    );
   }
 
   trackMutation(): MutationTrackingData {
@@ -110,24 +128,30 @@ export class MutationTracker {
   /**
    * Used when zero-cache pokes down mutation results.
    */
-  processMutationResponses(patches: MutationPatch[]) {
-    try {
-      for (const patch of patches) {
-        if (patch.mutation.id.clientID !== this.#clientID) {
-          continue; // Mutation for a different client. We will not have its promise.
+  #processMutationResponses(diffs: NoIndexDiff): void {
+    const clientID = must(this.#clientID);
+    for (const diff of diffs) {
+      const mutationID = Number(
+        diff.key.slice(MUTATIONS_KEY_PREFIX.length + clientID.length + 1),
+      );
+      assert(
+        !isNaN(mutationID),
+        `MutationTracker received a diff with an invalid mutation ID: ${diff.key}`,
+      );
+      switch (diff.op) {
+        case 'add': {
+          const result = v.parse(diff.newValue, mutationResultSchema);
+          if ('error' in result) {
+            this.#processMutationError(clientID, mutationID, result);
+          } else {
+            this.#processMutationOk(clientID, mutationID, result);
+          }
+          break;
         }
-
-        if ('error' in patch.mutation.result) {
-          this.#processMutationError(patch.mutation.id, patch.mutation.result);
-        } else {
-          this.#processMutationOk(patch.mutation.id, patch.mutation.result);
-        }
-      }
-    } finally {
-      const last = patches[patches.length - 1];
-      if (last) {
-        // We only ack the last mutation in the batch.
-        this.#ackMutations(last.mutation.id);
+        case 'del':
+          break;
+        case 'change':
+          throw new Error('MutationTracker does not expect change operations');
       }
     }
   }
@@ -227,6 +251,10 @@ export class MutationTracker {
     try {
       this.#currentMutationID = lastMutationID;
       this.#resolveLimboMutations(lastMutationID);
+      this.#ackMutations({
+        clientID: must(this.#clientID),
+        id: lastMutationID,
+      });
     } finally {
       if (lastMutationID >= this.#largestOutstandingMutationID) {
         // this is very important otherwise we hang query de-registration
@@ -306,25 +334,33 @@ export class MutationTracker {
   #processPushOk(ok: PushOk): void {
     for (const mutation of ok.mutations) {
       if ('error' in mutation.result) {
-        this.#processMutationError(mutation.id, mutation.result);
+        this.#processMutationError(
+          mutation.id.clientID,
+          mutation.id.id,
+          mutation.result,
+        );
       } else {
-        this.#processMutationOk(mutation.id, mutation.result);
+        this.#processMutationOk(
+          mutation.id.clientID,
+          mutation.id.id,
+          mutation.result,
+        );
       }
     }
   }
 
   #processMutationError(
-    mid: MutationID,
+    clientID: string,
+    mid: number,
     error: MutationError | Omit<PushError, 'mutationIDs'>,
   ): void {
     assert(
-      mid.clientID === this.#clientID,
+      clientID === this.#clientID,
       'received mutation for the wrong client',
     );
+    this.#lc.error?.(`Mutation ${mid} returned an error`, error);
 
-    this.#lc.error?.(`Mutation ${mid.id} returned an error`, error);
-
-    const ephemeralID = this.#ephemeralIDsByMutationID.get(mid.id);
+    const ephemeralID = this.#ephemeralIDsByMutationID.get(mid);
     if (!ephemeralID && error.error === 'alreadyProcessed') {
       return;
     }
@@ -343,25 +379,26 @@ export class MutationTracker {
     );
 
     const entry = this.#outstandingMutations.get(ephemeralID);
-    assert(entry && entry.mutationID === mid.id);
+    assert(entry && entry.mutationID === mid);
     // Resolving the promise with an error was an intentional API decision
     // so the user receives typed errors.
     this.#settleMutation(ephemeralID, entry, 'reject', error);
   }
 
-  #processMutationOk(mid: MutationID, result: MutationOk): void {
+  #processMutationOk(clientID: string, mid: number, result: MutationOk): void {
     assert(
-      mid.clientID === this.#clientID,
+      clientID === this.#clientID,
       'received mutation for the wrong client',
     );
-    const ephemeralID = this.#ephemeralIDsByMutationID.get(mid.id);
+
+    const ephemeralID = this.#ephemeralIDsByMutationID.get(mid);
     assert(
       ephemeralID,
       'ephemeral ID is missing. This can happen if a mutation response is received twice ' +
         'but it should be impossible to receive a success response twice for the same mutation.',
     );
     const entry = this.#outstandingMutations.get(ephemeralID);
-    assert(entry && entry.mutationID === mid.id);
+    assert(entry && entry.mutationID === mid);
     this.#settleMutation(ephemeralID, entry, 'resolve', result);
   }
 

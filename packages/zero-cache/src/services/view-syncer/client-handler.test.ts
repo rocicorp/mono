@@ -586,7 +586,15 @@ describe('view-syncer/client-handler', () => {
           [
             "pokePart",
             {
-              "mutationsPatch": [],
+              "mutationsPatch": [
+                {
+                  "id": {
+                    "clientID": "boo",
+                    "id": 123,
+                  },
+                  "op": "del",
+                },
+              ],
               "pokeID": "123",
             },
           ],
