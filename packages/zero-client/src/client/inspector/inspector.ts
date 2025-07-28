@@ -13,6 +13,7 @@ import type {ReplicacheImpl} from '../../../../replicache/src/replicache-impl.ts
 import {withRead} from '../../../../replicache/src/with-transactions.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
+import type {LogarithmicHistogram} from '../../../../shared/src/logarithmic-histogram.ts';
 import * as valita from '../../../../shared/src/valita.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
@@ -34,6 +35,8 @@ import type {MutatorDefs} from '../replicache-types.ts';
 import type {
   ClientGroup as ClientGroupInterface,
   Client as ClientInterface,
+  HistogramsDelegate,
+  HistogramsMap,
   Inspector as InspectorInterface,
   Query as QueryInterface,
 } from './types.ts';
@@ -44,11 +47,19 @@ type GetWebSocket = () => Promise<WebSocket>;
 
 export async function newInspector(
   rep: Rep,
+  histogramsDelegate: HistogramsDelegate,
   schema: Schema,
   socket: GetWebSocket,
 ): Promise<InspectorInterface> {
   const clientGroupID = await rep.clientGroupID;
-  return new Inspector(rep, schema, rep.clientID, clientGroupID, socket);
+  return new Inspector(
+    rep,
+    histogramsDelegate,
+    schema,
+    rep.clientID,
+    clientGroupID,
+    socket,
+  );
 }
 
 class Inspector implements InspectorInterface {
@@ -57,31 +68,57 @@ class Inspector implements InspectorInterface {
   readonly clientGroup: ClientGroup;
   readonly #schema: Schema;
   readonly socket: GetWebSocket;
+  readonly #histogramsDelegate: HistogramsDelegate;
 
   constructor(
     rep: ReplicacheImpl,
+    histogramsDelegate: HistogramsDelegate,
     schema: Schema,
     clientID: string,
     clientGroupID: string,
     socket: GetWebSocket,
   ) {
     this.#rep = rep;
+    this.#histogramsDelegate = histogramsDelegate;
     this.#schema = schema;
-    this.client = new Client(rep, schema, socket, clientID, clientGroupID);
+    this.client = new Client(
+      rep,
+      histogramsDelegate,
+      schema,
+      socket,
+      clientID,
+      clientGroupID,
+    );
     this.clientGroup = this.client.clientGroup;
     this.socket = socket;
   }
 
   clients(): Promise<ClientInterface[]> {
     return withDagRead(this.#rep, dagRead =>
-      clients(this.#rep, this.socket, this.#schema, dagRead),
+      clients(
+        this.#rep,
+        this.#histogramsDelegate,
+        this.socket,
+        this.#schema,
+        dagRead,
+      ),
     );
   }
 
   clientsWithQueries(): Promise<ClientInterface[]> {
     return withDagRead(this.#rep, dagRead =>
-      clientsWithQueries(this.#rep, this.socket, this.#schema, dagRead),
+      clientsWithQueries(
+        this.#rep,
+        this.#histogramsDelegate,
+        this.socket,
+        this.#schema,
+        dagRead,
+      ),
     );
+  }
+
+  get advanceHistogram(): LogarithmicHistogram {
+    return this.#histogramsDelegate.advanceHistogram;
   }
 }
 
@@ -121,19 +158,28 @@ class Client implements ClientInterface {
   readonly clientGroup: ClientGroup;
   readonly #schema: Schema;
   readonly #socket: GetWebSocket;
+  readonly #histogramsDelegate: HistogramsDelegate;
 
   constructor(
     rep: Rep,
+    histogramsDelegate: HistogramsDelegate,
     schema: Schema,
     socket: GetWebSocket,
     id: string,
     clientGroupID: string,
   ) {
     this.#rep = rep;
+    this.#histogramsDelegate = histogramsDelegate;
     this.#schema = schema;
     this.#socket = socket;
     this.id = id;
-    this.clientGroup = new ClientGroup(rep, socket, schema, clientGroupID);
+    this.clientGroup = new ClientGroup(
+      rep,
+      histogramsDelegate,
+      socket,
+      schema,
+      clientGroupID,
+    );
   }
 
   async queries(): Promise<QueryInterface[]> {
@@ -142,7 +188,9 @@ class Client implements ClientInterface {
       {op: 'queries', clientID: this.id} as InspectQueriesUpBody,
       inspectQueriesDownSchema,
     );
-    return rows.map(row => new Query(row, this.#schema));
+    return rows.map(
+      row => new Query(row, this.#histogramsDelegate, this.#schema),
+    );
   }
 
   map(): Promise<Map<string, ReadonlyJSONValue>> {
@@ -177,9 +225,17 @@ class ClientGroup implements ClientGroupInterface {
   readonly id: string;
   readonly #schema: Schema;
   readonly #socket: GetWebSocket;
+  #histogramsDelegate: HistogramsDelegate;
 
-  constructor(rep: Rep, socket: GetWebSocket, schema: Schema, id: string) {
+  constructor(
+    rep: Rep,
+    histogramsDelegate: HistogramsDelegate,
+    socket: GetWebSocket,
+    schema: Schema,
+    id: string,
+  ) {
     this.#rep = rep;
+    this.#histogramsDelegate = histogramsDelegate;
     this.#socket = socket;
     this.#schema = schema;
     this.id = id;
@@ -189,6 +245,7 @@ class ClientGroup implements ClientGroupInterface {
     return withDagRead(this.#rep, dagRead =>
       clients(
         this.#rep,
+        this.#histogramsDelegate,
         this.#socket,
         this.#schema,
         dagRead,
@@ -201,6 +258,7 @@ class ClientGroup implements ClientGroupInterface {
     return withDagRead(this.#rep, dagRead =>
       clientsWithQueries(
         this.#rep,
+        this.#histogramsDelegate,
         this.#socket,
         this.#schema,
         dagRead,
@@ -215,7 +273,9 @@ class ClientGroup implements ClientGroupInterface {
       {op: 'queries'},
       inspectQueriesDownSchema,
     );
-    return rows.map(row => new Query(row, this.#schema));
+    return rows.map(
+      row => new Query(row, this.#histogramsDelegate, this.#schema),
+    );
   }
 }
 
@@ -248,6 +308,7 @@ type MapEntry<T extends ReadonlyMap<any, any>> =
 
 async function clients(
   rep: Rep,
+  histogramsDelegate: HistogramsDelegate,
   socket: GetWebSocket,
   schema: Schema,
   dagRead: Read,
@@ -258,18 +319,33 @@ async function clients(
     .filter(predicate)
     .map(
       ([clientID, {clientGroupID}]) =>
-        new Client(rep, schema, socket, clientID, clientGroupID),
+        new Client(
+          rep,
+          histogramsDelegate,
+          schema,
+          socket,
+          clientID,
+          clientGroupID,
+        ),
     );
 }
 
 async function clientsWithQueries(
   rep: Rep,
+  histogramsDelegate: HistogramsDelegate,
   socket: GetWebSocket,
   schema: Schema,
   dagRead: Read,
   predicate: (entry: MapEntry<ClientMap>) => boolean = () => true,
 ): Promise<ClientInterface[]> {
-  const allClients = await clients(rep, socket, schema, dagRead, predicate);
+  const allClients = await clients(
+    rep,
+    histogramsDelegate,
+    socket,
+    schema,
+    dagRead,
+    predicate,
+  );
   const clientsWithQueries: ClientInterface[] = [];
   await Promise.all(
     allClients.map(async client => {
@@ -294,8 +370,13 @@ class Query implements QueryInterface {
   readonly id: string;
   readonly zql: string | null;
   readonly clientID: string;
+  readonly histograms: HistogramsMap;
 
-  constructor(row: InspectQueryRow, _schema: Schema) {
+  constructor(
+    row: InspectQueryRow,
+    histograms: HistogramsDelegate,
+    _schema: Schema,
+  ) {
     // Use own properties to make this more useful in dev tools. For example, in
     // Chrome dev tools, if you do console.table(queries) you'll see the
     // properties in the table, if these were getters you would not see them in the table.
@@ -311,5 +392,6 @@ class Query implements QueryInterface {
     this.rowCount = row.rowCount;
     this.deleted = row.deleted;
     this.zql = this.ast ? this.ast.table + astToZQL(this.ast) : null;
+    this.histograms = histograms.queryHistograms(row.queryID);
   }
 }
