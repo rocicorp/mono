@@ -19,6 +19,7 @@ import type {InspectQueryRow} from '../../../../zero-protocol/src/inspect-down.t
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
+import {recordRowsSynced} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
@@ -802,6 +803,7 @@ export class CVRStore {
       cvr.version,
       rowsFlushed,
     );
+    recordRowsSynced(this.#rowCount);
     return stats;
   }
 
@@ -810,12 +812,27 @@ export class CVRStore {
   }
 
   async flush(
+    lc: LogContext,
     expectedCurrentVersion: CVRVersion,
     cvr: CVRSnapshot,
     lastConnectTime: number,
   ): Promise<CVRFlushStats | null> {
+    const start = performance.now();
     try {
-      return await this.#flush(expectedCurrentVersion, cvr, lastConnectTime);
+      const stats = await this.#flush(
+        expectedCurrentVersion,
+        cvr,
+        lastConnectTime,
+      );
+      if (stats) {
+        const elapsed = performance.now() - start;
+        lc.debug?.(
+          `flushed cvr@${versionString(cvr.version)} ` +
+            `${JSON.stringify(stats)} in (${elapsed} ms)`,
+        );
+        this.#rowCache.recordSyncFlushStats(stats, elapsed);
+      }
+      return stats;
     } catch (e) {
       // Clear cached state if an error (e.g. ConcurrentModificationException) is encountered.
       this.#rowCache.clear();

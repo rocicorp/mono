@@ -15,16 +15,16 @@ import {
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
-import * as counters from '../../observability/counters.ts';
+import {fetchFromAPIServer} from '../../custom/fetch.ts';
+import {getOrCreateCounter} from '../../observability/metrics.ts';
+import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import {upstreamSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {RefCountedService, Service} from '../service.ts';
-import {fetchFromAPIServer} from '../../custom/fetch.ts';
-import {recordMutation} from '../../server/anonymous-otel-start.ts';
-import type {PostgresDB} from '../../types/pg.ts';
-import {upstreamSchema} from '../../types/shards.ts';
 
 type Fatal = {
   error: 'forClient';
@@ -191,6 +191,17 @@ class PushWorker {
       downstream: Subscription<Downstream>;
     }
   >;
+
+  readonly #customMutations = getOrCreateCounter(
+    'mutation',
+    'custom',
+    'Number of custom mutations processed',
+  );
+  readonly #pushes = getOrCreateCounter(
+    'mutation',
+    'pushes',
+    'Number of pushes processed by the pusher',
+  );
 
   constructor(
     config: Config,
@@ -368,10 +379,10 @@ class PushWorker {
   }
 
   async #processPush(entry: PusherEntry): Promise<PushResponse | Fatal> {
-    counters.customMutations().add(entry.push.mutations.length, {
+    this.#customMutations.add(entry.push.mutations.length, {
       clientGroupID: entry.push.clientGroupID,
     });
-    counters.pushes().add(1, {
+    this.#pushes.add(1, {
       clientGroupID: entry.push.clientGroupID,
     });
 

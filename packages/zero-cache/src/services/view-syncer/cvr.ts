@@ -23,8 +23,6 @@ import {
   compareTTL,
   DEFAULT_TTL_MS,
 } from '../../../../zql/src/query/ttl.ts';
-import * as counters from '../../observability/counters.ts';
-import * as histograms from '../../observability/histograms.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
@@ -36,7 +34,6 @@ import {
   cmpVersions,
   maxVersion,
   oneAfter,
-  versionString,
   type ClientQueryRecord,
   type ClientRecord,
   type CustomQueryRecord,
@@ -148,27 +145,17 @@ export class CVRUpdater {
     cvr: CVRSnapshot;
     flushed: CVRFlushStats | false;
   }> {
-    const start = performance.now();
-
     this._cvr.ttlClock = ttlClock;
     this._cvr.lastActive = lastActive;
     const flushed = await this._cvrStore.flush(
+      lc,
       this._orig.version,
       this._cvr,
       lastConnectTime,
     );
-
     if (!flushed) {
       return {cvr: this._orig, flushed: false};
     }
-    const elapsed = performance.now() - start;
-    lc.debug?.(
-      `flushed cvr@${versionString(this._cvr.version)} ` +
-        `${JSON.stringify(flushed)} in (${elapsed} ms)`,
-    );
-    counters.cvrRowsFlushed().add(flushed.rows);
-    histograms.cvrFlushTime().record(elapsed);
-
     return {cvr: this._cvr, flushed};
   }
 }

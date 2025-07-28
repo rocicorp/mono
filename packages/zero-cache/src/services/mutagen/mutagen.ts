@@ -26,14 +26,14 @@ import {
 } from '../../auth/write-authorizer.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
 import * as Mode from '../../db/mode-enum.ts';
-import * as counters from '../../observability/counters.ts';
+import {getOrCreateCounter} from '../../observability/metrics.ts';
+import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema-versions.ts';
 import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.ts';
 import type {RefCountedService, Service} from '../service.ts';
-import {recordMutation} from '../../server/anonymous-otel-start.ts';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -62,6 +62,12 @@ export class MutagenService implements Mutagen, Service {
   readonly #limiter: SlidingWindowLimiter | undefined;
   #refCount = 0;
   #isStopped = false;
+
+  readonly #crudMutations = getOrCreateCounter(
+    'mutation',
+    'crud',
+    'Number of CRUD mutations processed',
+  );
 
   constructor(
     lc: LogContext,
@@ -122,7 +128,7 @@ export class MutagenService implements Mutagen, Service {
         'Rate limit exceeded',
       ]);
     }
-    counters.crudMutations().add(1, {
+    this.#crudMutations.add(1, {
       clientGroupID: this.id,
     });
     return processMutation(
