@@ -66,12 +66,6 @@ export async function notify(
 
   const recipientEmails = await gatherRecipients(tx, issueID, modifierUserID);
 
-  // If no recipients, skip notification
-  if (recipientEmails.length === 0) {
-    console.log('No recipients for notification', issueID);
-    return;
-  }
-
   assertNotNull(issue.shortID);
 
   // Only send to Discord for public issues
