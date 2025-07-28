@@ -19,6 +19,7 @@ export const getTestSQLiteDatabaseManager = (logging: boolean = false) =>
             fs.unlinkSync(filename);
           }
         },
+        isInTransaction: () => db.inTransaction,
         prepare: (sql: string) => {
           const stmt = db.prepare(sql);
           if (logging) {

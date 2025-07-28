@@ -6,7 +6,6 @@ import {
 } from '../../../shared/src/resolved-promises.ts';
 import {deepFreeze} from '../frozen-json.ts';
 import type {Read, Store, Write} from './store.ts';
-import {deleteSentinel, WriteImplBase} from './write-impl-base.ts';
 
 /**
  * A SQLite prepared statement.
@@ -16,8 +15,8 @@ import {deleteSentinel, WriteImplBase} from './write-impl-base.ts';
  * `finalize` releases the statement.
  */
 export interface PreparedStatement {
-  run(params?: unknown[]): void;
-  all<T>(params?: unknown[]): T[];
+  run(...params: unknown[]): void;
+  all<T>(...params: unknown[]): T[];
   finalize(): void;
 }
 
@@ -37,12 +36,21 @@ export interface SQLiteDatabase {
    * E.g. `const stmt = db.prepare("SELECT * FROM todos WHERE id=?");`
    */
   prepare(sql: string): PreparedStatement;
+
+  /**
+   * Check if the database is in a transaction.
+   */
+  isInTransaction(): boolean;
 }
 
 type SQLitePreparedStatements = {
+  begin: PreparedStatement;
   beginImmediate: PreparedStatement;
   commit: PreparedStatement;
   rollback: PreparedStatement;
+
+  savepoint: PreparedStatement;
+  release: PreparedStatement;
 
   get: PreparedStatement;
   put: PreparedStatement;
@@ -52,12 +60,16 @@ type SQLitePreparedStatements = {
 const getPreparedStatementsForSQLiteDatabase = (
   db: SQLiteDatabase,
 ): SQLitePreparedStatements => ({
+  begin: db.prepare('BEGIN'),
   beginImmediate: db.prepare('BEGIN IMMEDIATE'),
   commit: db.prepare('COMMIT'),
   rollback: db.prepare('ROLLBACK'),
 
-  get: db.prepare('SELECT value FROM entry WHERE key = ?'),
+  // Similar to https://github.com/WiseLibs/better-sqlite3/blob/674ce6be68a26742d9e24f8672da7888cea0aebb/lib/methods/transaction.js#L35-L39
+  savepoint: db.prepare('SAVEPOINT `\t_rc.\t`'),
+  release: db.prepare('RELEASE `\t_rc.\t`'),
 
+  get: db.prepare('SELECT value FROM entry WHERE key = ?'),
   put: db.prepare('INSERT OR REPLACE INTO entry (key, value) VALUES (?, ?)'),
   del: db.prepare('DELETE FROM entry WHERE key = ?'),
 });
@@ -99,24 +111,16 @@ export class SQLiteStore implements Store {
 
   async read(): Promise<Read> {
     const release = await this.#rwLock.read();
-    try {
-      const read = new SQLiteStoreRead(this.#preparedStatements, release);
-
-      return Promise.resolve(read);
-    } catch (e) {
-      return Promise.reject(e);
-    }
+    return new SQLiteStoreRead(
+      this.#preparedStatements,
+      this.#db.isInTransaction(),
+      release,
+    );
   }
 
   async write(): Promise<Write> {
     const release = await this.#rwLock.write();
-    try {
-      const write = new SQLiteStoreWrite(this.#preparedStatements, release);
-
-      return Promise.resolve(write);
-    } catch (e) {
-      return Promise.reject(e);
-    }
+    return new SQLiteStoreWrite(this.#preparedStatements, release);
   }
 
   close(): Promise<void> {
@@ -135,10 +139,10 @@ export class SQLiteStore implements Store {
   }
 }
 
-export class SQLiteStoreRead implements Read {
-  #closed = false;
-  protected _preparedStatements: SQLitePreparedStatements;
+class SQLiteStoreRWBase {
+  protected readonly _preparedStatements: SQLitePreparedStatements;
   readonly #release: () => void;
+  #closed = false;
 
   constructor(
     preparedStatements: SQLitePreparedStatements,
@@ -161,7 +165,13 @@ export class SQLiteStoreRead implements Read {
     return Promise.resolve(frozenValue);
   }
 
-  release(): void {
+  #getSql(key: string): string | undefined {
+    const rows = this._preparedStatements.get.all<{value: string}>([key]);
+    if (rows.length === 0) return undefined;
+    return rows?.[0]?.value;
+  }
+
+  protected _release(): void {
     this.#closed = true;
     this.#release();
   }
@@ -169,60 +179,78 @@ export class SQLiteStoreRead implements Read {
   get closed(): boolean {
     return this.#closed;
   }
+}
 
-  #getSql(key: string): string | undefined {
-    const rows = this._preparedStatements.get.all<{value: string}>([key]);
+export class SQLiteStoreRead extends SQLiteStoreRWBase implements Read {
+  readonly #isInTransaction: boolean;
 
-    if (rows.length === 0) return undefined;
+  constructor(
+    preparedStatements: SQLitePreparedStatements,
+    isInTransaction: boolean,
+    release: () => void,
+  ) {
+    super(preparedStatements, release);
+    this.#isInTransaction = isInTransaction;
 
-    return rows?.[0]?.value;
+    if (!this.#isInTransaction) {
+      // BEGIN
+      this._preparedStatements.begin.run();
+    } else {
+      // SAVEPOINT rc
+      this._preparedStatements.savepoint.run();
+    }
+  }
+
+  release(): void {
+    if (!this.#isInTransaction) {
+      // COMMIT
+      this._preparedStatements.commit.run();
+    } else {
+      // RELEASE rc
+      this._preparedStatements.release.run();
+    }
+
+    this._release();
   }
 }
 
-export class SQLiteStoreWrite extends WriteImplBase implements Write {
-  readonly #preparedStatements: SQLitePreparedStatements;
+export class SQLiteStoreWrite extends SQLiteStoreRWBase implements Write {
+  #committed = false;
 
   constructor(
     preparedStatements: SQLitePreparedStatements,
     release: () => void,
   ) {
-    super(new SQLiteStoreRead(preparedStatements, release));
-    this.#preparedStatements = preparedStatements;
+    super(preparedStatements, release);
+
+    // BEGIN IMMEDIATE grabs a RESERVED lock
+    this._preparedStatements.beginImmediate.run();
+  }
+
+  put(key: string, value: ReadonlyJSONValue): Promise<void> {
+    this._preparedStatements.put.run([key, JSON.stringify(value)]);
+    return promiseVoid;
+  }
+
+  del(key: string): Promise<void> {
+    this._preparedStatements.del.run([key]);
+    return promiseVoid;
   }
 
   commit(): Promise<void> {
-    if (this._pending.size === 0) return promiseVoid;
+    // COMMIT
+    this._preparedStatements.commit.run();
+    this.#committed = true;
+    return promiseVoid;
+  }
 
-    // we bundle writes together and run the commit in a synchronous block
-    const next = new Promise<void>(resolve => {
-      // BEGIN IMMEDIATE grabs an RESERVED lock
-      this.#preparedStatements.beginImmediate.run();
+  release(): void {
+    if (!this.#committed) {
+      // ROLLBACK if not committed
+      this._preparedStatements.rollback.run();
+    }
 
-      let committed = false;
-
-      try {
-        for (const [key, val] of this._pending) {
-          if (val === deleteSentinel) {
-            this.#preparedStatements.del.run([key]);
-          } else {
-            const serialized = JSON.stringify(val);
-            this.#preparedStatements.put.run([key, serialized]);
-          }
-        }
-
-        this.#preparedStatements.commit.run();
-
-        committed = true;
-      } finally {
-        if (!committed) {
-          this.#preparedStatements.rollback.run();
-        }
-      }
-
-      return resolve();
-    });
-
-    return next;
+    this._release();
   }
 }
 

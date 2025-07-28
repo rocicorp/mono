@@ -78,6 +78,25 @@ test('multiple reads at the same time', async () => {
   expect(readCounter).equal(2);
 });
 
+test('read before write', async () => {
+  const store = new SQLiteStore('test', sqlite3DatabaseManager);
+
+  const {promise, resolve} = resolver();
+
+  const readP = withRead(store, async rt => {
+    await promise;
+    expect(await rt.get('foo')).equal(undefined);
+  });
+
+  const writeP = withWrite(store, async wt => {
+    await wt.put('foo', 'bar');
+  });
+
+  resolve();
+
+  await Promise.all([readP, writeP]);
+});
+
 test('single write at a time', async () => {
   const store = new SQLiteStore('test', sqlite3DatabaseManager);
   await withWrite(store, async wt => {

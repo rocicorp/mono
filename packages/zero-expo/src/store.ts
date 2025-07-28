@@ -22,6 +22,7 @@ const expoDbManagerInstance = new SQLiteDatabaseManager({
         db.closeSync();
         deleteDatabaseSync(fileName);
       },
+      isInTransaction: () => db.isInTransactionSync(),
       prepare: (sql: string) => {
         const stmt = db.prepareSync(sql);
         return {
