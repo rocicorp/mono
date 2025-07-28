@@ -28,9 +28,11 @@ export async function sendEmail({
     data: string; // base64-encoded string
   }[];
 }) {
+  const emailTrimmed = email.trim();
+
   const apiKey = process.env.LOOPS_EMAIL_API_KEY;
   const transactionalId = process.env.LOOPS_TRANSACTIONAL_ID;
-  const idempotencyKey = `${tx.clientID}:${tx.mutationID}:${email}`;
+  const idempotencyKey = `${tx.clientID}:${tx.mutationID}:${emailTrimmed}`;
 
   if (!apiKey || !transactionalId) {
     console.log(
@@ -39,7 +41,7 @@ export async function sendEmail({
     return;
   }
 
-  if (!emailRegex.test(email)) {
+  if (!emailRegex.test(emailTrimmed)) {
     console.log('Invalid email provided, skipping email', email);
     return;
   }
@@ -57,7 +59,7 @@ export async function sendEmail({
   const formattedSubject = `#${issue.shortID} ${issue.title.slice(0, 80)}${issue.title.length > 80 ? '...' : ''}`;
 
   const body = {
-    email,
+    email: emailTrimmed,
     transactionalId,
     addToAudience: true,
     headers,
