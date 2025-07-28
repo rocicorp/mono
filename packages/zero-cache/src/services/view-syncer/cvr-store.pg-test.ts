@@ -187,7 +187,7 @@ describe('view-syncer/cvr-store', () => {
         store.putQuery(row);
       }
 
-      await store.flush(cvr.version, cvr, now);
+      await store.flush(lc, cvr.version, cvr, now);
       const cvr2 = await store.load(lc, CONNECT_TIME);
 
       expect(cvr2.queries[`query-${id}`]).toEqual(row);

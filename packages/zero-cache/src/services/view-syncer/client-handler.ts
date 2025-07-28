@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from '../../../../shared/src/asserts.ts';
+import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {
   assertJSONValue,
   type JSONObject as SafeJSONObject,
@@ -16,10 +17,12 @@ import type {
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
 import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.ts';
+import {mutationResultSchema} from '../../../../zero-protocol/src/push.ts';
 import type {RowPatchOp} from '../../../../zero-protocol/src/row-patch.ts';
-import * as counters from '../../observability/counters.ts';
-import * as histograms from '../../observability/histograms.ts';
-import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateHistogram,
+} from '../../observability/metrics.ts';
 import {getLogLevel} from '../../types/error-for-client.ts';
 import {
   getErrorForClientIfSchemaVersionNotSupported,
@@ -38,7 +41,6 @@ import {
   type PutQueryPatch,
   type RowID,
 } from './schema/types.ts';
-import {mutationResultSchema} from '../../../../zero-protocol/src/push.ts';
 
 export type PutRowPatch = {
   type: 'row';
@@ -81,9 +83,6 @@ export function startPoke(
   tentativeVersion: CVRVersion,
   schemaVersions?: SchemaVersions, // absent for config-only pokes
 ): PokeHandler {
-  const start = performance.now();
-  counters.pokeTransactions().add(1);
-
   const pokers = clients.map(c =>
     c.startPoke(tentativeVersion, schemaVersions),
   );
@@ -93,15 +92,12 @@ export function startPoke(
   // rate (per client group) will be limited by the slowest connection.
   return {
     addPatch: async patch => {
-      counters.rowsPoked().add(1);
       await Promise.allSettled(pokers.map(poker => poker.addPatch(patch)));
     },
     cancel: async () => {
       await Promise.allSettled(pokers.map(poker => poker.cancel()));
     },
     end: async finalVersion => {
-      const elapsed = performance.now() - start;
-      histograms.pokeTime().record(elapsed);
       await Promise.allSettled(pokers.map(poker => poker.end(finalVersion)));
     },
   };
@@ -124,6 +120,24 @@ export class ClientHandler {
   readonly #downstream: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
   readonly #schemaVersion: number | null;
+
+  readonly #pokeTime = getOrCreateHistogram('sync', 'poke.time', {
+    description:
+      'Time elapsed for each poke transaction. Canceled / noop pokes are excluded.',
+    unit: 's',
+  });
+
+  readonly #pokeTransactions = getOrCreateCounter(
+    'sync',
+    'poke.transactions',
+    'Count of poke transactions.',
+  );
+
+  readonly #pokedRows = getOrCreateCounter(
+    'sync',
+    'poke.rows',
+    'Count of poked rows.',
+  );
 
   constructor(
     lc: LogContext,
@@ -196,6 +210,8 @@ export class ClientHandler {
     const baseCookie = versionToNullableCookie(this.#baseVersion);
     const cookie = versionToCookie(tentativeVersion);
     lc.info?.(`starting poke from ${baseCookie} to ${cookie}`);
+
+    const start = performance.now();
 
     const pokeStart: PokeStartBody = {pokeID, baseCookie};
     if (schemaVersions) {
@@ -281,6 +297,9 @@ export class ClientHandler {
       addPatch: async (patchToVersion: PatchToVersion) => {
         try {
           await addPatch(patchToVersion);
+          if (patchToVersion.patch.type === 'row') {
+            this.#pokedRows.add(1);
+          }
         } catch (e) {
           this.#downstream.fail(e instanceof Error ? e : new Error(String(e)));
         }
@@ -310,6 +329,10 @@ export class ClientHandler {
         await flushBody();
         await this.#push(['pokeEnd', {pokeID, cookie}]);
         this.#baseVersion = finalVersion;
+
+        const elapsed = performance.now() - start;
+        this.#pokeTransactions.add(1);
+        this.#pokeTime.record(elapsed / 1000);
       },
     };
   }
