@@ -459,7 +459,7 @@ export class Zero<
     this.#options = options;
 
     this.#logOptions = this.#createLogOptions({
-      consoleLogLevel: options.logLevel ?? 'info',
+      consoleLogLevel: options.logLevel ?? 'warn',
       server: null, //server, // Reenable remote logging
       enableAnalytics: this.#enableAnalytics,
     });
