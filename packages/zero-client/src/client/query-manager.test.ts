@@ -1694,6 +1694,7 @@ describe('query manager & mutator interaction', () => {
   beforeEach(() => {
     send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
     mutationTracker = new MutationTracker(lc, ackMutations);
+    mutationTracker.setClientIDAndWatch('cid', () => () => {});
     queryManager = new QueryManager(
       lc,
       mutationTracker,

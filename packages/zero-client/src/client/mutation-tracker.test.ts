@@ -601,7 +601,7 @@ describe('MutationTracker', () => {
     ]);
   });
 
-  test('advancing lmid does not resolve mutations that are not in limbo', () => {
+  test('advancing lmid does resolve all mutations before that lmid', () => {
     const tracker = new MutationTracker(lc, ackMutations);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
@@ -614,10 +614,6 @@ describe('MutationTracker', () => {
 
     tracker.lmidAdvanced(5);
 
-    expect(tracker.size).toBe(3);
-
-    tracker.lmidAdvanced(8);
-
-    expect(tracker.size).toBe(3);
+    expect(tracker.size).toBe(0);
   });
 });

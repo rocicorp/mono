@@ -493,7 +493,7 @@ describe('pusher service', () => {
       ok: true,
     });
 
-    const mockDB = vi.fn() as unknown as PostgresDB;
+    const mockDB = vi.fn(x => ({ident: x})) as unknown as PostgresDB;
     const pusher = new PusherService(
       mockDB,
       config,
@@ -514,7 +514,9 @@ describe('pusher service', () => {
 
     await pusher.stop();
 
-    expect(mockDB).toHaveBeenCalledWith(
+    expect(mockDB).toHaveBeenNthCalledWith(1, 'zero_0');
+    expect(mockDB).toHaveBeenNthCalledWith(
+      2,
       [
         'DELETE FROM ',
         '.mutations WHERE "clientGroupID" = ',
@@ -522,7 +524,9 @@ describe('pusher service', () => {
         ' AND "mutationID" <= ',
         '',
       ],
-      'zero_0',
+      {
+        ident: 'zero_0',
+      },
       'cgid',
       'test-client',
       42,
