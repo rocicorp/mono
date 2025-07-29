@@ -64,13 +64,15 @@ export async function notify(
   const modifierUser = await tx.query.user.where('id', modifierUserID).one();
   assert(modifierUser);
 
-  const recipientEmails = await gatherRecipients(tx, issueID, modifierUserID);
-
-  // If no recipients, skip notification
-  if (recipientEmails.length === 0) {
-    console.log('No recipients for notification', issueID);
-    return;
-  }
+  // include the actor only for the initial `create-issue` action
+  // exclude them for all other actions
+  const excludeActor = kind !== 'create-issue';
+  const recipientEmails = await gatherRecipients(
+    tx,
+    issueID,
+    modifierUserID,
+    excludeActor,
+  );
 
   assertNotNull(issue.shortID);
 
@@ -224,15 +226,22 @@ function clip(s: string) {
   return s.length > 255 ? s.slice(0, 252) + '...' : s;
 }
 
+// From https://github.com/colinhacks/zod/blob/2c333e268c316deef829c736b8c46ec95ee03e39/packages/zod/src/v4/core/regexes.ts#L33C34-L35C102
+const emailRegex =
+  /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
+
 export async function gatherRecipients(
   tx: ServerTransaction<Schema, TransactionSql>,
   issueID: string,
   actorID: string,
+  excludeActor = true,
 ): Promise<string[]> {
   const sql = tx.dbTransaction.wrappedTransaction;
 
-  // we filter out the actor to not send them notifications on their own actions
-  // and filter by issue visibility - only crew members get notifications for internal issues
+  // conditionally filter out the actor to not send them notifications on their own actions
+  const actorFilter = excludeActor ? sql`AND n."userID" != ${actorID}` : sql``;
+
+  // filter by issue visibility - only crew members get notifications for internal issues
   const recipientRows = await sql`
     SELECT DISTINCT u.email
     FROM "issueNotifications" n
@@ -240,7 +249,7 @@ export async function gatherRecipients(
     JOIN "issue" i ON i.id = n."issueID"
     WHERE n."issueID" = ${issueID} 
       AND n."subscribed" = true
-      AND n."userID" != ${actorID}
+      ${actorFilter}
       AND u.email IS NOT NULL
       AND (
         -- If issue is public, include all candidates
@@ -250,5 +259,7 @@ export async function gatherRecipients(
         u.role = 'crew'
       );`;
 
-  return recipientRows.map(row => row.email);
+  return recipientRows
+    .map(row => row.email?.trim())
+    .filter(email => email && emailRegex.test(email));
 }
