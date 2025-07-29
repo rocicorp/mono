@@ -302,7 +302,9 @@ describe('notify', () => {
       );
 
       // It should only include one occurrence of the shared email
-      const sharedOccurrences = recipients.filter(e => e === 'shared@example.com').length;
+      const sharedOccurrences = recipients.filter(
+        e => e === 'shared@example.com',
+      ).length;
       expect(sharedOccurrences).toBe(1);
       expect(recipients).toHaveLength(4); // 3 existing + 1 shared email
     });
