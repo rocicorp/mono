@@ -6815,13 +6815,7 @@ describe('view-syncer/cvr', () => {
 
     cvrStore.putQuery(query);
 
-    await cvrStore.flush(
-      {
-        stateVersion: '1aa',
-      },
-      cvr,
-      t1,
-    );
+    await cvrStore.flush(lc, {stateVersion: '1aa'}, cvr, t1);
 
     const cvr2 = await cvrStore.load(lc, t1);
     expect(cvr2).toEqual({
@@ -6849,13 +6843,7 @@ describe('view-syncer/cvr', () => {
     vi.setSystemTime(t2);
     cvr.lastActive = t2;
     cvr.ttlClock = ttlClockFromNumber(t2);
-    await cvrStore.flush(
-      {
-        stateVersion: '1aa',
-      },
-      cvr,
-      t2,
-    );
+    await cvrStore.flush(lc, {stateVersion: '1aa'}, cvr, t2);
     const cvr3 = await cvrStore.load(lc, t2);
     expect(cvr3).toEqual(cvr2);
   });

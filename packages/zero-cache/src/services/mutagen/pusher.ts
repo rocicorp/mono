@@ -9,19 +9,22 @@ import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {
   pushResponseSchema,
+  type MutationID,
   type PushBody,
   type PushError,
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
-import * as counters from '../../observability/counters.ts';
+import {fetchFromAPIServer} from '../../custom/fetch.ts';
+import {getOrCreateCounter} from '../../observability/metrics.ts';
+import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import {upstreamSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {RefCountedService, Service} from '../service.ts';
-import {fetchFromAPIServer} from '../../custom/fetch.ts';
-import {recordMutation} from '../../server/anonymous-otel-start.ts';
 
 type Fatal = {
   error: 'forClient';
@@ -32,17 +35,18 @@ type Fatal = {
 export interface Pusher extends RefCountedService {
   readonly pushURL: string | undefined;
 
+  initConnection(
+    clientID: string,
+    wsID: string,
+    userPushParams: UserMutateParams | undefined,
+  ): Source<Downstream>;
   enqueuePush(
     clientID: string,
     push: PushBody,
     jwt: string | undefined,
     httpCookie: string | undefined,
   ): HandlerResult;
-  initConnection(
-    clientID: string,
-    wsID: string,
-    userPushParams: UserMutateParams | undefined,
-  ): Source<Downstream>;
+  ackMutationResponses(upToID: MutationID): Promise<void>;
 }
 
 type Config = Pick<ZeroConfig, 'app' | 'shard'>;
@@ -65,16 +69,21 @@ export class PusherService implements Service, Pusher {
   readonly #pusher: PushWorker;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #pushConfig: ZeroConfig['push'] & {url: string[]};
+  readonly #upstream: PostgresDB;
+  readonly #config: Config;
   #stopped: Promise<void> | undefined;
   #refCount = 0;
   #isStopped = false;
 
   constructor(
+    upstream: PostgresDB,
     appConfig: Config,
     pushConfig: ZeroConfig['push'] & {url: string[]},
     lc: LogContext,
     clientGroupID: string,
   ) {
+    this.#config = appConfig;
+    this.#upstream = upstream;
     this.#queue = new Queue();
     this.#pusher = new PushWorker(
       appConfig,
@@ -113,6 +122,15 @@ export class PusherService implements Service, Pusher {
     return {
       type: 'ok',
     };
+  }
+
+  async ackMutationResponses(upToID: MutationID) {
+    // delete the relevant rows from the `mutations` table
+    const sql = this.#upstream;
+    await sql`DELETE FROM ${upstreamSchema({
+      appID: this.#config.app.id,
+      shardNum: this.#config.shard.num,
+    })}.mutations WHERE "clientGroupID" = ${this.id} AND "clientID" = ${upToID.clientID} AND "mutationID" <= ${upToID.id}`;
   }
 
   ref() {
@@ -173,6 +191,17 @@ class PushWorker {
       downstream: Subscription<Downstream>;
     }
   >;
+
+  readonly #customMutations = getOrCreateCounter(
+    'mutation',
+    'custom',
+    'Number of custom mutations processed',
+  );
+  readonly #pushes = getOrCreateCounter(
+    'mutation',
+    'pushes',
+    'Number of pushes processed by the pusher',
+  );
 
   constructor(
     config: Config,
@@ -350,10 +379,10 @@ class PushWorker {
   }
 
   async #processPush(entry: PusherEntry): Promise<PushResponse | Fatal> {
-    counters.customMutations().add(entry.push.mutations.length, {
+    this.#customMutations.add(entry.push.mutations.length, {
       clientGroupID: entry.push.clientGroupID,
     });
-    counters.pushes().add(1, {
+    this.#pushes.add(1, {
       clientGroupID: entry.push.clientGroupID,
     });
 

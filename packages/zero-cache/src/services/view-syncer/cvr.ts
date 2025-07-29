@@ -23,8 +23,6 @@ import {
   compareTTL,
   DEFAULT_TTL_MS,
 } from '../../../../zql/src/query/ttl.ts';
-import * as counters from '../../observability/counters.ts';
-import * as histograms from '../../observability/histograms.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
@@ -36,7 +34,6 @@ import {
   cmpVersions,
   maxVersion,
   oneAfter,
-  versionString,
   type ClientQueryRecord,
   type ClientRecord,
   type CustomQueryRecord,
@@ -148,27 +145,17 @@ export class CVRUpdater {
     cvr: CVRSnapshot;
     flushed: CVRFlushStats | false;
   }> {
-    const start = performance.now();
-
     this._cvr.ttlClock = ttlClock;
     this._cvr.lastActive = lastActive;
     const flushed = await this._cvrStore.flush(
+      lc,
       this._orig.version,
       this._cvr,
       lastConnectTime,
     );
-
     if (!flushed) {
       return {cvr: this._orig, flushed: false};
     }
-    const elapsed = performance.now() - start;
-    lc.debug?.(
-      `flushed cvr@${versionString(this._cvr.version)} ` +
-        `${JSON.stringify(flushed)} in (${elapsed} ms)`,
-    );
-    counters.cvrRowsFlushed().add(flushed.rows);
-    histograms.cvrFlushTime().record(elapsed);
-
     return {cvr: this._cvr, flushed};
   }
 }
@@ -917,6 +904,14 @@ function mergeRefCounts(
   return Object.values(merged).some(v => v > 0) ? merged : null;
 }
 
+/**
+ * The query must be inactive for all clients to be considered inactive.
+ * This is because expiration is defined that way: a query is expired for a client group
+ * only if it is expired for all clients in the group.
+ *
+ * If all clients have inactivated the query, we return
+ * the one with the expiration furthest in the future.
+ */
 export function getInactiveQueries(cvr: CVR): {
   hash: string;
   inactivatedAt: TTLClock;
@@ -936,29 +931,36 @@ export function getInactiveQueries(cvr: CVR): {
       continue;
     }
     for (const clientState of Object.values(query.clientState)) {
+      // 1. Take the longest TTL
+      // 2. If the query is not inactivated (for any client), do not return it
       const {inactivatedAt, ttl} = clientState;
-      if (inactivatedAt !== undefined) {
-        const clampedTTL = clampTTL(ttl);
-        const existing = inactive.get(queryID);
+      const existing = inactive.get(queryID);
+      if (inactivatedAt === undefined) {
         if (existing) {
-          // The stored one might be too large because from a previous version of
-          // zero
-          const existingTTL = clampTTL(existing.ttl);
-          // Use the last eviction time.
-          if (
-            existingTTL + ttlClockAsNumber(existing.inactivatedAt) <
-            ttlClockAsNumber(inactivatedAt) + clampedTTL
-          ) {
-            existing.ttl = clampedTTL;
-            existing.inactivatedAt = inactivatedAt;
-          }
-        } else {
-          inactive.set(queryID, {
-            hash: queryID,
-            inactivatedAt,
-            ttl: clampedTTL,
-          });
+          inactive.delete(queryID);
         }
+        break;
+      }
+
+      const clampedTTL = clampTTL(ttl);
+      if (existing) {
+        // The stored one might be too large because from a previous version of
+        // zero
+        const existingTTL = clampTTL(existing.ttl);
+        // Use the last eviction time.
+        if (
+          existingTTL + ttlClockAsNumber(existing.inactivatedAt) <
+          ttlClockAsNumber(inactivatedAt) + clampedTTL
+        ) {
+          existing.ttl = clampedTTL;
+          existing.inactivatedAt = inactivatedAt;
+        }
+      } else {
+        inactive.set(queryID, {
+          hash: queryID,
+          inactivatedAt,
+          ttl: clampedTTL,
+        });
       }
     }
   }

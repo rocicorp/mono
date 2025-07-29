@@ -4,20 +4,29 @@ import {
   type LogLevel,
   type LogSink,
 } from '@rocicorp/logger';
-import {createLogContext as createLogContextShared} from '../../../shared/src/logging.ts';
+import {otelLogsEnabled} from '../../../otel/src/enabled.ts';
+import {
+  createLogContext as createLogContextShared,
+  getLogSink,
+  type LogConfig,
+} from '../../../shared/src/logging.ts';
 import {OtelLogSink} from './otel-log-sink.ts';
-import {getLogSink, type LogConfig} from '../../../shared/src/logging.ts';
 
 export function createLogContext(
   {log}: {log: LogConfig},
   context: {worker: string},
+  includeOtel = true,
 ): LogContext {
-  return createLogContextShared({log}, context, createLogSink(log));
+  return createLogContextShared(
+    {log},
+    context,
+    createLogSink(log, includeOtel),
+  );
 }
 
-function createLogSink(config: LogConfig): LogSink {
+function createLogSink(config: LogConfig, includeOtel: boolean): LogSink {
   const sink = getLogSink(config);
-  if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+  if (includeOtel && otelLogsEnabled()) {
     const otelSink = new OtelLogSink();
     return new CompositeLogSink([otelSink, sink]);
   }
