@@ -1,10 +1,6 @@
 import {schema, type Schema} from '../shared/schema.ts';
 import {type Transaction, type Row} from '@rocicorp/zero';
 
-// From https://github.com/colinhacks/zod/blob/2c333e268c316deef829c736b8c46ec95ee03e39/packages/zod/src/v4/core/regexes.ts#L33C34-L35C102
-const emailRegex =
-  /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
-
 export async function sendEmail({
   tx,
   email,
@@ -28,21 +24,14 @@ export async function sendEmail({
     data: string; // base64-encoded string
   }[];
 }) {
-  const emailTrimmed = email.trim();
-
   const apiKey = process.env.LOOPS_EMAIL_API_KEY;
   const transactionalId = process.env.LOOPS_TRANSACTIONAL_ID;
-  const idempotencyKey = `${tx.clientID}:${tx.mutationID}:${emailTrimmed}`;
+  const idempotencyKey = `${tx.clientID}:${tx.mutationID}:${email}`;
 
   if (!apiKey || !transactionalId) {
     console.log(
       'Missing LOOPS_EMAIL_API_KEY or LOOPS_TRANSACTIONAL_ID Skipping Email',
     );
-    return;
-  }
-
-  if (!emailRegex.test(emailTrimmed)) {
-    console.log('Invalid email provided, skipping email', email);
     return;
   }
 
@@ -59,7 +48,7 @@ export async function sendEmail({
   const formattedSubject = `#${issue.shortID} ${issue.title.slice(0, 80)}${issue.title.length > 80 ? '...' : ''}`;
 
   const body = {
-    email: emailTrimmed,
+    email,
     transactionalId,
     addToAudience: true,
     headers,

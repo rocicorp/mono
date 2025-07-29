@@ -226,6 +226,10 @@ function clip(s: string) {
   return s.length > 255 ? s.slice(0, 252) + '...' : s;
 }
 
+// From https://github.com/colinhacks/zod/blob/2c333e268c316deef829c736b8c46ec95ee03e39/packages/zod/src/v4/core/regexes.ts#L33C34-L35C102
+const emailRegex =
+  /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
+
 export async function gatherRecipients(
   tx: ServerTransaction<Schema, TransactionSql>,
   issueID: string,
@@ -255,5 +259,7 @@ export async function gatherRecipients(
         u.role = 'crew'
       );`;
 
-  return recipientRows.map(row => row.email);
+  return recipientRows
+    .map(row => row.email?.trim())
+    .filter(email => email && emailRegex.test(email));
 }
