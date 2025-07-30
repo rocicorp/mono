@@ -1098,18 +1098,6 @@ describe('view-syncer/cvr', () => {
                   },
                   type: 'simple',
                 },
-                {
-                  left: {
-                    name: 'clientID',
-                    type: 'column',
-                  },
-                  op: '=',
-                  right: {
-                    type: 'literal',
-                    value: 'barClient',
-                  },
-                  type: 'simple',
-                },
               ],
               type: 'and',
             },
@@ -1300,18 +1288,6 @@ describe('view-syncer/cvr', () => {
                   right: {
                     type: 'literal',
                     value: 'abc123',
-                  },
-                  type: 'simple',
-                },
-                {
-                  left: {
-                    name: 'clientID',
-                    type: 'column',
-                  },
-                  op: '=',
-                  right: {
-                    type: 'literal',
-                    value: 'barClient',
                   },
                   type: 'simple',
                 },

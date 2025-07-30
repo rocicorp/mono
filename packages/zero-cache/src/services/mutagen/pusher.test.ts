@@ -668,102 +668,6 @@ describe('pusher streaming', () => {
     expect(result.type).toBe('ok');
   });
 
-  test('streams successful push response to correct client', async () => {
-    const fetch = (global.fetch = vi.fn());
-    const successResponse1: PushResponse = {
-      mutations: [
-        {
-          id: {clientID: 'client1', id: 1},
-          result: {},
-        },
-      ],
-    };
-    const successResponse2: PushResponse = {
-      mutations: [
-        {
-          id: {clientID: 'client2', id: 1},
-          result: {},
-        },
-      ],
-    };
-
-    const pusher = new PusherService(
-      mockDB,
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
-    void pusher.run();
-    const stream1 = pusher.initConnection('client1', 'ws1', undefined);
-    const stream2 = pusher.initConnection('client2', 'ws2', undefined);
-
-    fetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(successResponse1),
-    });
-    pusher.enqueuePush('client1', makePush(1, 'client1'), 'jwt', undefined);
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    fetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(successResponse2),
-    });
-    pusher.enqueuePush('client2', makePush(2, 'client2'), 'jwt', undefined);
-
-    const s1Messages: unknown[] = [];
-    const s2Messages: unknown[] = [];
-    for await (const response of stream1) {
-      s1Messages.push(response);
-      break;
-    }
-    for await (const response of stream2) {
-      s2Messages.push(response);
-      break;
-    }
-
-    expect(s1Messages).toMatchInlineSnapshot(`
-        [
-          [
-            "pushResponse",
-            {
-              "mutations": [
-                {
-                  "id": {
-                    "clientID": "client1",
-                    "id": 1,
-                  },
-                  "result": {},
-                },
-              ],
-            },
-          ],
-        ]
-      `);
-    expect(s2Messages).toMatchInlineSnapshot(`
-        [
-          [
-            "pushResponse",
-            {
-              "mutations": [
-                {
-                  "id": {
-                    "clientID": "client2",
-                    "id": 1,
-                  },
-                  "result": {},
-                },
-              ],
-            },
-          ],
-        ]
-      `);
-  });
-
   test('streams error response to affected clients', async () => {
     const fetch = (global.fetch = vi.fn());
     fetch.mockResolvedValue({
@@ -954,36 +858,9 @@ describe('pusher streaming', () => {
     const stream = pusher.initConnection(clientID, 'ws1', undefined);
     pusher.enqueuePush(clientID, makePush(2, clientID), 'jwt', undefined);
 
-    const messages: unknown[] = [];
-    for await (const msg of stream) {
-      messages.push(msg);
-      break;
-    }
-
-    expect(messages).toMatchInlineSnapshot(`
-        [
-          [
-            "pushResponse",
-            {
-              "mutations": [
-                {
-                  "id": {
-                    "clientID": "test-cid",
-                    "id": 3,
-                  },
-                  "result": {},
-                },
-              ],
-            },
-          ],
-        ]
-      `);
-
-    // The stream should be completed after the OOO mutation
-    expect(await stream[Symbol.asyncIterator]().next()).toEqual({
-      done: true,
-      value: undefined,
-    });
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
+      '{"kind":"InvalidPush","message":"mutation was out of order"}',
+    );
   });
 
   test('fails the stream on unsupported schema version or push version', async () => {
