@@ -464,7 +464,7 @@ export class Zero<
     this.#options = options;
 
     this.#logOptions = this.#createLogOptions({
-      consoleLogLevel: options.logLevel ?? 'info',
+      consoleLogLevel: options.logLevel ?? 'warn',
       server: null, //server, // Reenable remote logging
       enableAnalytics: this.#enableAnalytics,
     });
@@ -607,7 +607,10 @@ export class Zero<
     this.#server = server;
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
-    this.#mutationTracker.clientID = rep.clientID;
+    this.#mutationTracker.setClientIDAndWatch(
+      rep.clientID,
+      rep.experimentalWatch.bind(rep),
+    );
 
     this.#activeClientsManager = makeActiveClientsManager(
       rep.clientGroupID,

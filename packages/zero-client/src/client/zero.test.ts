@@ -73,6 +73,7 @@ import {
 
 const startTime = 1678829450000;
 
+let rejectionHandler: (event: PromiseRejectionEvent) => void;
 beforeEach(() => {
   vi.useFakeTimers({now: startTime});
   vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
@@ -80,6 +81,13 @@ beforeEach(() => {
     'fetch',
     vi.fn().mockReturnValue(Promise.resolve(new Response())),
   );
+
+  rejectionHandler = event => {
+    // eslint-disable-next-line no-console
+    console.error('Test rejection:', event.reason);
+  };
+
+  window.addEventListener('unhandledrejection', rejectionHandler);
 });
 
 afterEach(() => {
@@ -2705,6 +2713,74 @@ describe('Downstream message with unknown fields', () => {
         ),
       ),
     ).false;
+  });
+});
+
+describe('Mutation responses poked down', () => {
+  afterEach(() => vi.resetAllMocks());
+
+  test('poke down partial responses, rest resolved by lmid advance', async () => {
+    const schema = createSchema({
+      tables: [
+        table('issues')
+          .columns({id: string(), value: number()})
+          .primaryKey('id'),
+      ],
+    });
+    const r = zeroForTest({
+      logLevel: 'debug',
+      schema,
+      mutators: {
+        issues: {
+          foo: (tx, {foo}: {foo: number}) =>
+            tx.mutate.issues.insert({id: foo.toString(), value: foo}),
+        },
+      } as const satisfies CustomMutatorDefs<typeof schema>,
+    });
+    await r.triggerConnected();
+    expect(r.connectionState).toBe(ConnectionState.Connected);
+
+    const mutation = r.mutate.issues.foo({foo: 1});
+    const mutation2 = r.mutate.issues.foo({foo: 2});
+    await mutation.client;
+    await mutation2.client;
+
+    await r.triggerPoke(null, '1', {
+      lastMutationIDChanges: {
+        [r.clientID]: 5,
+      },
+      mutationsPatch: [
+        {
+          mutation: {
+            id: {
+              clientID: r.clientID,
+              id: 1,
+            },
+            result: {
+              error: 'app',
+              details: '...test ',
+            },
+          },
+          op: 'put',
+        },
+      ],
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    let caught: unknown = undefined;
+    try {
+      await mutation.server;
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toMatchInlineSnapshot(`
+      {
+        "details": "...test ",
+        "error": "app",
+      }
+    `);
+    await r.close();
   });
 });
 

@@ -7,7 +7,6 @@ Before you launch with Replicache in your product, it's a good idea to double-ch
 
 ## JS SDK
 
-- Ensure that you are passing in your own [Replicache license key](/concepts/licensing)
 - If you wish to change the signature of a mutator (eg, the number or type of
   its arguments) you must choose a new name; Replicache does not handle mutator
   versioning.

@@ -5,29 +5,27 @@ import type {
 } from '../../../replicache/src/replicache-options.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {emptyObject} from '../../../shared/src/sentinels.ts';
-import type {
-  MutationError,
-  MutationID,
-  MutationOk,
-  PushError,
-  PushOk,
-  PushResponse,
+import {
+  mutationResultSchema,
+  type MutationError,
+  type MutationID,
+  type MutationOk,
+  type PushError,
+  type PushOk,
+  type PushResponse,
 } from '../../../zero-protocol/src/push.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
-import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
+import type {ReplicacheImpl} from '../../../replicache/src/impl.ts';
+import {MUTATIONS_KEY_PREFIX} from './keys.ts';
+import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
+import {must} from '../../../shared/src/must.ts';
+import * as v from '../../../shared/src/valita.ts';
 
 type ErrorType =
   | MutationError
   | Omit<PushError, 'mutationIDs'>
   | Error
   | unknown;
-
-const completeFailureTypes: PushError['error'][] = [
-  // These should never actually be received as they cause the websocket
-  // connection to be closed.
-  'unsupportedPushVersion',
-  'unsupportedSchemaVersion',
-];
 
 let currentEphemeralID = 0;
 function nextEphemeralID(): EphemeralID {
@@ -48,12 +46,7 @@ export class MutationTracker {
   readonly #ephemeralIDsByMutationID: Map<number, EphemeralID>;
   readonly #allMutationsAppliedListeners: Set<() => void>;
   readonly #lc: ZeroLogContext;
-  readonly #limboMutations: Set<EphemeralID>;
 
-  // This is only used in the new code path that processes
-  // mutation responses that arrive via the `poke` protocol.
-  // The old code path will be removed in the release after
-  // the one containing mutation-responses-via-poke.
   readonly #ackMutations: (upTo: MutationID) => void;
   #clientID: string | undefined;
   #largestOutstandingMutationID: number;
@@ -64,14 +57,26 @@ export class MutationTracker {
     this.#outstandingMutations = new Map();
     this.#ephemeralIDsByMutationID = new Map();
     this.#allMutationsAppliedListeners = new Set();
-    this.#limboMutations = new Set();
     this.#largestOutstandingMutationID = 0;
     this.#currentMutationID = 0;
     this.#ackMutations = ackMutations;
   }
 
-  set clientID(clientID: string) {
+  setClientIDAndWatch(
+    clientID: string,
+    experimentalWatch: ReplicacheImpl['experimentalWatch'],
+  ) {
+    assert(this.#clientID === undefined, 'clientID already set');
     this.#clientID = clientID;
+    experimentalWatch(
+      diffs => {
+        this.#processMutationResponses(diffs);
+      },
+      {
+        prefix: MUTATIONS_KEY_PREFIX + clientID + '/',
+        initialValuesInFirstDiff: true,
+      },
+    );
   }
 
   trackMutation(): MutationTrackingData {
@@ -110,25 +115,40 @@ export class MutationTracker {
   /**
    * Used when zero-cache pokes down mutation results.
    */
-  processMutationResponses(patches: MutationPatch[]) {
-    try {
-      for (const patch of patches) {
-        if (patch.mutation.id.clientID !== this.#clientID) {
-          continue; // Mutation for a different client. We will not have its promise.
+  #processMutationResponses(diffs: NoIndexDiff): void {
+    const clientID = must(this.#clientID);
+    let largestLmid = 0;
+    for (const diff of diffs) {
+      const mutationID = Number(
+        diff.key.slice(MUTATIONS_KEY_PREFIX.length + clientID.length + 1),
+      );
+      assert(
+        !isNaN(mutationID),
+        `MutationTracker received a diff with an invalid mutation ID: ${diff.key}`,
+      );
+      largestLmid = Math.max(largestLmid, mutationID);
+      switch (diff.op) {
+        case 'add': {
+          const result = v.parse(diff.newValue, mutationResultSchema);
+          if ('error' in result) {
+            this.#processMutationError(clientID, mutationID, result);
+          } else {
+            this.#processMutationOk(clientID, mutationID, result);
+          }
+          break;
         }
+        case 'del':
+          break;
+        case 'change':
+          throw new Error('MutationTracker does not expect change operations');
+      }
+    }
 
-        if ('error' in patch.mutation.result) {
-          this.#processMutationError(patch.mutation.id, patch.mutation.result);
-        } else {
-          this.#processMutationOk(patch.mutation.id, patch.mutation.result);
-        }
-      }
-    } finally {
-      const last = patches[patches.length - 1];
-      if (last) {
-        // We only ack the last mutation in the batch.
-        this.#ackMutations(last.mutation.id);
-      }
+    if (largestLmid > 0) {
+      this.#ackMutations({
+        clientID: must(this.#clientID),
+        id: largestLmid,
+      });
     }
   }
 
@@ -138,13 +158,15 @@ export class MutationTracker {
         'Received an error response when pushing mutations',
         response,
       );
-      this.#processPushError(response);
     } else {
       this.#processPushOk(response);
     }
   }
 
   /**
+   * DEPRECATED: to be removed when we switch to fully driving
+   * mutation resolution via poke.
+   *
    * When we reconnect to zero-cache, we resolve all outstanding mutations
    * whose ID is less than or equal to the lastMutationID.
    *
@@ -177,16 +199,6 @@ export class MutationTracker {
       }
     }
 
-    for (const [id, entry] of this.#outstandingMutations) {
-      if (entry.mutationID && entry.mutationID > lastMutationID) {
-        // We don't know the state of these mutations.
-        // They could have been applied by the server
-        // or not since we sent them before the connection was lost.
-        // Adding to `limbo` will cause them to be resolved
-        // when the next lmid bump is received.
-        this.#limboMutations.add(id);
-      }
-    }
     this.lmidAdvanced(lastMutationID);
   }
 
@@ -194,26 +206,8 @@ export class MutationTracker {
    * lmid advance will:
    * 1. notify "allMutationsApplied" listeners if the lastMutationID
    *    is greater than or equal to the largest outstanding mutation ID.
-   * 2. resolve all limbo mutations whose mutation ID is less than or equal to
+   * 2. resolve all mutations whose mutation ID is less than or equal to
    *    the lastMutationID.
-   *
-   * We only resolve "limbo mutations" since we want to give the mutation
-   * responses a chance to be received. `poke` and `pushResponse` are non transactional
-   * so they race.
-   *
-   * E.g., a `push` may call the api server which:
-   * writes to PG, replicates to zero-cache, then pokes the lmid down before the
-   * push response is sent.
-   *
-   * The only fix for this would be to have mutation responses be written to the database
-   * and sent down through the poke protocol.
-   *
-   * The artifact the user sees is that promise resolutions for mutations is not transactional
-   * with the update to synced data.
-   *
-   * It was a mistake to not just write the mutation responses to the database
-   * in the first place as this route ends up being more complicated
-   * and less reliable.
    */
   lmidAdvanced(lastMutationID: number): void {
     assert(
@@ -226,7 +220,7 @@ export class MutationTracker {
 
     try {
       this.#currentMutationID = lastMutationID;
-      this.#resolveLimboMutations(lastMutationID);
+      this.#resolveMutations(lastMutationID);
     } finally {
       if (lastMutationID >= this.#largestOutstandingMutationID) {
         // this is very important otherwise we hang query de-registration
@@ -239,66 +233,14 @@ export class MutationTracker {
     return this.#outstandingMutations.size;
   }
 
-  /**
-   * Push errors fall into two categories:
-   * - Those where we know the mutations were not applied
-   * - Those where we do not know the state of the mutations.
-   *
-   * The first category includes errors like "unsupportedPushVersion"
-   * and "unsupportedSchemaVersion". The mutations were never applied in those cases.
-   *
-   * The second category includes errors like "http" errors. E.g., a 500 on the user's
-   * API server or a network error.
-   *
-   * The mutations may have been applied by the API server but we never
-   * received the response.
-   *
-   * In this latter case, we must mark the mutations as being in limbo.
-   * This allows us to resolve them when we receive the next
-   * lmid bump if their lmids are lesser.
-   */
-  #processPushError(error: PushError): void {
-    if (completeFailureTypes.includes(error.error)) {
-      return;
-    }
-
-    const mids = error.mutationIDs;
-    // TODO: remove this check once the server always sends mutationIDs
-    if (!mids) {
-      return;
-    }
-
-    // If the push request failed then we do not know the state of the mutations that were
-    // included in that request.
-    // Maybe they were applied. Whatever happened, we've lost the response.
-    // Given that, we mark them as "in limbo."
-    for (const mid of mids) {
-      const ephemeralID = this.#ephemeralIDsByMutationID.get(mid.id);
-      if (ephemeralID) {
-        // if the lmid has already moved past the mutations we can settle them.
-        if (mid.id <= this.#currentMutationID) {
-          const entry = this.#outstandingMutations.get(ephemeralID);
-          if (entry) {
-            this.#settleMutation(ephemeralID, entry, 'resolve', emptyObject);
-          }
-          continue;
-        }
-        // otherwise put in limbo and wait for next lmid bump
-        this.#limboMutations.add(ephemeralID);
-      }
-    }
-  }
-
-  #resolveLimboMutations(lastMutationID: number): void {
-    for (const id of this.#limboMutations) {
-      const entry = this.#outstandingMutations.get(id);
-      if (!entry || !entry.mutationID) {
-        this.#limboMutations.delete(id);
-        continue;
-      }
-      if (entry.mutationID <= lastMutationID) {
-        this.#limboMutations.delete(id);
+  #resolveMutations(upTo: number): void {
+    // We resolve all mutations whose mutation ID is less than or equal to
+    // the upTo mutation ID.
+    for (const [id, entry] of this.#outstandingMutations) {
+      if (entry.mutationID && entry.mutationID <= upTo) {
         this.#settleMutation(id, entry, 'resolve', emptyObject);
+      } else {
+        break; // the map is in insertion order which is in mutation ID order
       }
     }
   }
@@ -306,25 +248,33 @@ export class MutationTracker {
   #processPushOk(ok: PushOk): void {
     for (const mutation of ok.mutations) {
       if ('error' in mutation.result) {
-        this.#processMutationError(mutation.id, mutation.result);
+        this.#processMutationError(
+          mutation.id.clientID,
+          mutation.id.id,
+          mutation.result,
+        );
       } else {
-        this.#processMutationOk(mutation.id, mutation.result);
+        this.#processMutationOk(
+          mutation.id.clientID,
+          mutation.id.id,
+          mutation.result,
+        );
       }
     }
   }
 
   #processMutationError(
-    mid: MutationID,
+    clientID: string,
+    mid: number,
     error: MutationError | Omit<PushError, 'mutationIDs'>,
   ): void {
     assert(
-      mid.clientID === this.#clientID,
+      clientID === this.#clientID,
       'received mutation for the wrong client',
     );
+    this.#lc.error?.(`Mutation ${mid} returned an error`, error);
 
-    this.#lc.error?.(`Mutation ${mid.id} returned an error`, error);
-
-    const ephemeralID = this.#ephemeralIDsByMutationID.get(mid.id);
+    const ephemeralID = this.#ephemeralIDsByMutationID.get(mid);
     if (!ephemeralID && error.error === 'alreadyProcessed') {
       return;
     }
@@ -343,25 +293,26 @@ export class MutationTracker {
     );
 
     const entry = this.#outstandingMutations.get(ephemeralID);
-    assert(entry && entry.mutationID === mid.id);
+    assert(entry && entry.mutationID === mid);
     // Resolving the promise with an error was an intentional API decision
     // so the user receives typed errors.
     this.#settleMutation(ephemeralID, entry, 'reject', error);
   }
 
-  #processMutationOk(mid: MutationID, result: MutationOk): void {
+  #processMutationOk(clientID: string, mid: number, result: MutationOk): void {
     assert(
-      mid.clientID === this.#clientID,
+      clientID === this.#clientID,
       'received mutation for the wrong client',
     );
-    const ephemeralID = this.#ephemeralIDsByMutationID.get(mid.id);
+
+    const ephemeralID = this.#ephemeralIDsByMutationID.get(mid);
     assert(
       ephemeralID,
       'ephemeral ID is missing. This can happen if a mutation response is received twice ' +
         'but it should be impossible to receive a success response twice for the same mutation.',
     );
     const entry = this.#outstandingMutations.get(ephemeralID);
-    assert(entry && entry.mutationID === mid.id);
+    assert(entry && entry.mutationID === mid);
     this.#settleMutation(ephemeralID, entry, 'resolve', result);
   }
 
@@ -387,7 +338,6 @@ export class MutationTracker {
     if (entry.mutationID) {
       this.#ephemeralIDsByMutationID.delete(entry.mutationID);
     }
-    this.#limboMutations.delete(ephemeralID);
   }
 
   /**
