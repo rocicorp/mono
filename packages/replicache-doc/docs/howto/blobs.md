@@ -38,7 +38,6 @@ type RepUser = {
 
 const rep = new Replicache({
   name: 'user-id',
-  licenseKey: '...',
   mutators: {
     async setUserData(tx: WriteTransaction, user: RepUser) {
       await tx.set(`user/${user.id}`, user);
@@ -132,7 +131,6 @@ async function computeHash(data: Uint8Array): Promise<string> {
 
 const rep = new Replicache({
   name: 'user-id',
-  licenseKey: '...',
   mutators: {
     async setUserData(tx: WriteTransaction, user: RepUser) {
       const {id, name, picture, pictureHash} = user;
