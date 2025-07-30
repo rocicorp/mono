@@ -602,7 +602,10 @@ export class Zero<
     this.#server = server;
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
-    this.#mutationTracker.clientID = rep.clientID;
+    this.#mutationTracker.setClientIDAndWatch(
+      rep.clientID,
+      rep.experimentalWatch.bind(rep),
+    );
 
     this.#activeClientsManager = makeActiveClientsManager(
       rep.clientGroupID,

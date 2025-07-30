@@ -3,10 +3,12 @@ import * as v from '../../../shared/src/valita.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {primaryKeyValueSchema} from '../../../zero-protocol/src/primary-key.ts';
+import type {MutationID} from '../../../zero-protocol/src/push.ts';
 
 export const DESIRED_QUERIES_KEY_PREFIX = 'd/';
 export const GOT_QUERIES_KEY_PREFIX = 'g/';
 export const ENTITIES_KEY_PREFIX = 'e/';
+export const MUTATIONS_KEY_PREFIX = 'm/';
 
 export function toDesiredQueriesKey(clientID: string, hash: string): string {
   return DESIRED_QUERIES_KEY_PREFIX + clientID + '/' + hash;
@@ -18,6 +20,10 @@ export function desiredQueriesPrefixForClient(clientID: string): string {
 
 export function toGotQueriesKey(hash: string): string {
   return GOT_QUERIES_KEY_PREFIX + hash;
+}
+
+export function toMutationResponseKey(mid: MutationID): string {
+  return MUTATIONS_KEY_PREFIX + mid.clientID + '/' + mid.id;
 }
 
 export function toPrimaryKeyString(

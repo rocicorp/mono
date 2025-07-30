@@ -127,10 +127,12 @@ export class PusherService implements Service, Pusher {
   async ackMutationResponses(upToID: MutationID) {
     // delete the relevant rows from the `mutations` table
     const sql = this.#upstream;
-    await sql`DELETE FROM ${upstreamSchema({
-      appID: this.#config.app.id,
-      shardNum: this.#config.shard.num,
-    })}.mutations WHERE "clientGroupID" = ${this.id} AND "clientID" = ${upToID.clientID} AND "mutationID" <= ${upToID.id}`;
+    await sql`DELETE FROM ${sql(
+      upstreamSchema({
+        appID: this.#config.app.id,
+        shardNum: this.#config.shard.num,
+      }),
+    )}.mutations WHERE "clientGroupID" = ${this.id} AND "clientID" = ${upToID.clientID} AND "mutationID" <= ${upToID.id}`;
   }
 
   ref() {

@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {unreachable} from '../../../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {
   assertJSONValue,
@@ -278,7 +278,16 @@ export class ClientHandler {
                 },
               });
             } else {
-              // no need to deal with `del` as the mutation results are ephemeral on the client.
+              const {clientID, mutationID} = patch.id.rowKey;
+              assert(typeof clientID === 'string');
+              assert(typeof mutationID === 'bigint');
+              patches.push({
+                op: 'del',
+                id: {
+                  clientID,
+                  id: Number(mutationID),
+                },
+              });
             }
           } else {
             (body.rowsPatch ??= []).push(makeRowPatch(patch));

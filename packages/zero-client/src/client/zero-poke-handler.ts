@@ -22,6 +22,7 @@ import {
 import {
   toDesiredQueriesKey,
   toGotQueriesKey,
+  toMutationResponseKey,
   toPrimaryKeyString,
 } from './keys.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
@@ -180,13 +181,6 @@ export class PokeHandler {
         await this.#replicachePoke(merged);
         lc.debug?.('poking replicache took', performance.now() - start);
 
-        this.#mutationTracker.processMutationResponses(
-          merged.mutationResults ?? [],
-        );
-        // Newer versions of zero-cache will send down `mutationResults`
-        // Old versions will not.
-        // The line below is for old versions.
-        // It is also a fail-safe if a mutation response is somehow lost.
         if (!('error' in merged.pullResponse)) {
           const lmid =
             merged.pullResponse.lastMutationIDChanges[this.#clientID];
@@ -286,7 +280,9 @@ export function mergePokes(
         }
       }
       if (pokePart.mutationsPatch) {
-        mutationResults.push(...pokePart.mutationsPatch);
+        for (const op of pokePart.mutationsPatch) {
+          mergedPatch.push(mutationPatchOpToReplicachePatchOp(op));
+        }
       }
     }
   }
@@ -328,6 +324,24 @@ function queryPatchOpToReplicachePatchOp(
       };
     default:
       unreachable(op);
+  }
+}
+
+export function mutationPatchOpToReplicachePatchOp(
+  op: MutationPatch,
+): PatchOperationInternal {
+  switch (op.op) {
+    case 'put':
+      return {
+        op: 'put',
+        key: toMutationResponseKey(op.mutation.id),
+        value: op.mutation.result,
+      };
+    case 'del':
+      return {
+        op: 'del',
+        key: toMutationResponseKey(op.id),
+      };
   }
 }
 

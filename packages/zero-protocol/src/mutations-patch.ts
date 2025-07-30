@@ -1,5 +1,5 @@
 import * as v from '../../shared/src/valita.ts';
-import {mutationResponseSchema} from './push.ts';
+import {mutationIDSchema, mutationResponseSchema} from './push.ts';
 
 /**
  * Mutation results are stored ephemerally in the client
@@ -12,7 +12,11 @@ export const putOpSchema = v.object({
   op: v.literal('put'),
   mutation: mutationResponseSchema,
 });
+export const delOpSchema = v.object({
+  op: v.literal('del'),
+  id: mutationIDSchema,
+});
 
-const patchOpSchema = putOpSchema;
+const patchOpSchema = v.union(putOpSchema, delOpSchema);
 export const mutationsPatchSchema = v.array(patchOpSchema);
 export type MutationPatch = v.Infer<typeof patchOpSchema>;

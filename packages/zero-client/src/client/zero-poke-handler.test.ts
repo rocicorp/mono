@@ -1595,7 +1595,7 @@ describe('mutation tracker interactions', () => {
     const logContext = new LogContext('error');
     const tracker = new MutationTracker(logContext, ackMutationResponses);
     const spy = vi.spyOn(tracker, 'lmidAdvanced');
-    tracker.clientID = clientID;
+    tracker.setClientIDAndWatch(clientID, () => () => {});
     const pokeHandler = new PokeHandler(
       replicachePokeStub,
       onPokeErrorStub,
@@ -1633,14 +1633,14 @@ describe('mutation tracker interactions', () => {
     });
   });
 
-  test('poke handler calls `processMutationResponses`', async () => {
+  test('poke handler pokes replicache with mutation results', async () => {
     const onPokeErrorStub = vi.fn();
     const replicachePokeStub = vi.fn();
     const clientID = 'c1';
     const logContext = new LogContext('error');
     const tracker = new MutationTracker(logContext, ackMutationResponses);
-    const spy = vi.spyOn(tracker, 'processMutationResponses');
-    tracker.clientID = clientID;
+
+    tracker.setClientIDAndWatch(clientID, () => () => {});
     const pokeHandler = new PokeHandler(
       replicachePokeStub,
       onPokeErrorStub,
@@ -1670,10 +1670,8 @@ describe('mutation tracker interactions', () => {
     }
 
     doPoke(undefined, undefined);
-    expect(spy).not.toHaveBeenCalled();
 
     doPoke({c2: 2}, undefined);
-    expect(spy).not.toHaveBeenCalled();
 
     doPoke({c2: 2}, [
       {
@@ -1685,16 +1683,23 @@ describe('mutation tracker interactions', () => {
       },
     ]);
     await vi.waitFor(() => {
-      expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy).toHaveBeenCalledWith([
-        {
-          mutation: {
-            id: {id: 1, clientID: 'c1'},
-            result: {},
+      expect(replicachePokeStub).toHaveBeenCalledTimes(1);
+      expect(replicachePokeStub).toHaveBeenCalledWith({
+        baseCookie: '1',
+        pullResponse: {
+          cookie: '2',
+          lastMutationIDChanges: {
+            c2: 2,
           },
-          op: 'put',
+          patch: [
+            {
+              key: 'm/c1/1',
+              op: 'put',
+              value: {},
+            },
+          ],
         },
-      ]);
+      });
     });
   });
 });
