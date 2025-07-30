@@ -145,6 +145,7 @@ import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
+import {Subscribable} from '../../../shared/src/subscribable.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -328,9 +329,8 @@ export class Zero<
 
   #onPong: () => void = () => undefined;
 
-  #online = false;
+  readonly #onlineManager: OnlineManager;
 
-  readonly #onOnlineChange: ((online: boolean) => void) | undefined;
   readonly #onUpdateNeeded: (
     reason: UpdateNeededReason,
     serverErrorMsg?: string,
@@ -455,7 +455,12 @@ export class Zero<
       );
     }
 
-    this.#onOnlineChange = onOnlineChange;
+    this.#onlineManager = new OnlineManager();
+
+    if (onOnlineChange) {
+      this.#onlineManager.subscribe(onOnlineChange);
+    }
+
     this.#options = options;
 
     this.#logOptions = this.#createLogOptions({
@@ -903,6 +908,8 @@ export class Zero<
     const lc = this.#lc.withContext('close');
 
     lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
+
+    this.#onlineManager.cleanup();
 
     if (this.#connectionState !== ConnectionState.Disconnected) {
       this.#disconnect(
@@ -1802,12 +1809,7 @@ export class Zero<
   }
 
   #setOnline(online: boolean): void {
-    if (this.#online === online) {
-      return;
-    }
-
-    this.#online = online;
-    this.#onOnlineChange?.(online);
+    this.#onlineManager.setOnline(online);
   }
 
   /**
@@ -1815,8 +1817,19 @@ export class Zero<
    * authenticated.
    */
   get online(): boolean {
-    return this.#online;
+    return this.#onlineManager.online;
   }
+
+  /**
+   * Subscribe to online status changes.
+   *
+   * This is useful when you want to update state based on the online status.
+   *
+   * @param listener - The listener to subscribe to.
+   * @returns A function to unsubscribe the listener.
+   */
+  onOnline = (listener: (online: boolean) => void): (() => void) =>
+    this.#onlineManager.subscribe(listener);
 
   /**
    * Starts a ping and waits for a pong.
@@ -1936,6 +1949,22 @@ export class Zero<
         return this.#socket!;
       });
     }
+  }
+}
+
+export class OnlineManager extends Subscribable<boolean> {
+  #online = false;
+
+  setOnline(online: boolean): void {
+    if (this.#online === online) {
+      return;
+    }
+    this.#online = online;
+    this.notify(online);
+  }
+
+  get online(): boolean {
+    return this.#online;
   }
 }
 

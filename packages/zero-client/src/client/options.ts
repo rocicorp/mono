@@ -118,6 +118,12 @@ export interface ZeroOptions<
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
+   *
+   * @deprecated Use `onOnline` on the Zero instance instead. e.g.
+   * ```ts
+   * const zero = new Zero({...});
+   * zero.onOnline((online) => { ... });
+   * ```
    */
   onOnlineChange?: ((online: boolean) => void) | undefined;
 

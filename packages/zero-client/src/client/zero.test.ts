@@ -330,6 +330,71 @@ test('onOnlineChange callback', async () => {
   }
 });
 
+test('onOnline listener', async () => {
+  let online1 = 0;
+  let offline1 = 0;
+  let online2 = 0;
+  let offline2 = 0;
+
+  const z = zeroForTest({
+    logLevel: 'debug',
+  });
+
+  const unsubscribe1 = z.onOnline(online => {
+    if (online) {
+      online1++;
+    } else {
+      offline1++;
+    }
+  });
+
+  const unsubscribe2 = z.onOnline(online => {
+    if (online) {
+      online2++;
+    } else {
+      offline2++;
+    }
+  });
+
+  // Offline by default.
+  await vi.advanceTimersByTimeAsync(1);
+  expect(z.online).false;
+
+  // Connect: both listeners should be notified.
+  await z.waitForConnectionState(ConnectionState.Connecting);
+  await z.triggerConnected();
+  await z.waitForConnectionState(ConnectionState.Connected);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(z.online).true;
+  expect(online1).toBe(1);
+  expect(offline1).toBe(0);
+  expect(online2).toBe(1);
+  expect(offline2).toBe(0);
+
+  // Unsubscribe the first listener and trigger an error to go offline.
+  unsubscribe1();
+  await z.triggerError(ErrorKind.InvalidMessage, 'oops');
+  await z.waitForConnectionState(ConnectionState.Disconnected);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(z.online).false;
+  expect(online1).toBe(1);
+  expect(offline1).toBe(0);
+  expect(online2).toBe(1);
+  expect(offline2).toBe(1);
+
+  // Reconnect: only the second listener should be notified.
+  await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
+  await z.triggerConnected();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(z.online).true;
+  expect(online1).toBe(1);
+  expect(offline1).toBe(0);
+  expect(online2).toBe(2);
+  expect(offline2).toBe(1);
+
+  unsubscribe2();
+});
+
 test('disconnects if ping fails', async () => {
   const watchdogInterval = RUN_LOOP_INTERVAL_MS;
   const pingTimeout = 5000;
