@@ -1,9 +1,8 @@
 import {ZeroProvider} from '@rocicorp/zero/react';
 import {useLogin} from './hooks/use-login.tsx';
-import {createMutators, type Mutators} from '../shared/mutators.ts';
+import {createMutators} from '../shared/mutators.ts';
 import {useMemo, type ReactNode} from 'react';
-import {schema, type Schema} from '../shared/schema.ts';
-import type {ZeroOptions} from '@rocicorp/zero';
+import {schema} from '../shared/schema.ts';
 
 export function ZeroInit({children}: {children: ReactNode}) {
   const login = useLogin();
@@ -22,7 +21,7 @@ export function ZeroInit({children}: {children: ReactNode}) {
         }
         return login.loginState?.encoded;
       },
-    } as const satisfies ZeroOptions<Schema, Mutators>;
+    };
   }, [login]);
 
   return <ZeroProvider {...props}>{children}</ZeroProvider>;
