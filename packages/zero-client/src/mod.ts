@@ -121,8 +121,8 @@ export {
   createBuilder,
   type CustomQueryID,
   type NamedQuery,
-  named,
-  namedWithContext,
+  queries,
+  queriesWithContext,
 } from '../../zql/src/query/named.ts';
 export type {
   HumanReadable,
