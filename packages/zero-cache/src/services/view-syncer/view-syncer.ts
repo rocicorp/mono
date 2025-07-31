@@ -243,7 +243,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     shard: ShardID,
     taskID: string,
     clientGroupID: string,
-    db: PostgresDB,
+    cvrDb: PostgresDB,
+    upstreamDb: PostgresDB,
     pipelineDriver: PipelineDriver,
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
@@ -262,7 +263,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#slowHydrateThreshold = slowHydrateThreshold;
     this.#cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       shard,
       taskID,
       clientGroupID,

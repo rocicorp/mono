@@ -41,6 +41,9 @@ import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
+import {upstreamSchema} from '../../types/shards.ts';
+import {id} from '../../types/sql.ts';
+import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
 
 export const APP_ID = 'this_app';
 export const SHARD_NUM = 2;
@@ -642,7 +645,17 @@ export async function setup(
   INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('2', '1', 'bar', '01');
   `);
 
-  const cvrDB = await testDBs.create(testName);
+  const [cvrDB, upstreamDb] = await Promise.all([
+    testDBs.create(testName),
+    testDBs.create(testName + '-upstream'),
+  ]);
+  const shard = id(upstreamSchema(SHARD));
+  await upstreamDb.begin(tx =>
+    tx.unsafe(`
+          CREATE SCHEMA IF NOT EXISTS ${shard};
+          ${getMutationsTableDefinition(shard)}
+        `),
+  );
   await initViewSyncerSchema(lc, cvrDB, SHARD);
 
   const setTimeoutFn = vi.fn();
@@ -660,6 +673,7 @@ export async function setup(
     TASK_ID,
     serviceID,
     cvrDB,
+    upstreamDb,
     new PipelineDriver(
       lc.withContext('component', 'pipeline-driver'),
       testLogConfig,
@@ -721,6 +735,7 @@ export async function setup(
     replicaDbFile,
     replica,
     cvrDB,
+    upstreamDb,
     stateChanges,
     drainCoordinator,
     operatorStorage,

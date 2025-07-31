@@ -32,6 +32,9 @@ import {
   ttlClockFromNumber,
   type TTLClock,
 } from './ttl-clock.ts';
+import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
+import {id} from '../../types/sql.ts';
+import {upstreamSchema} from '../../types/shards.ts';
 
 const APP_ID = 'roze';
 const SHARD_NUM = 1;
@@ -40,6 +43,7 @@ const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 describe('view-syncer/cvr-store', () => {
   const lc = createSilentLogContext();
   let db: PostgresDB;
+  let upstreamDb: PostgresDB;
   let store: CVRStore;
   // vi.useFakeTimers() does not play well with the postgres client.
   // Inject a manual mock instead.
@@ -53,7 +57,17 @@ describe('view-syncer/cvr-store', () => {
   };
 
   beforeEach(async () => {
-    db = await testDBs.create('view_syncer_cvr_schema');
+    [db, upstreamDb] = await Promise.all([
+      testDBs.create('view_syncer_cvr_schema'),
+      testDBs.create('view_syncer_cvr_upstream'),
+    ]);
+    const shard = id(upstreamSchema(SHARD));
+    await upstreamDb.begin(tx =>
+      tx.unsafe(`
+        CREATE SCHEMA IF NOT EXISTS ${shard};
+        ${getMutationsTableDefinition(shard)}
+      `),
+    );
     await db.begin(tx => setupCVRTables(lc, tx, SHARD));
     await db.unsafe(`
     INSERT INTO "roze_1/cvr".instances ("clientGroupID", version, "lastActive", "ttlClock", "replicaVersion")
@@ -96,6 +110,7 @@ describe('view-syncer/cvr-store', () => {
     store = new CVRStore(
       lc,
       db,
+      upstreamDb,
       SHARD,
       TASK_ID,
       CVR_ID,
