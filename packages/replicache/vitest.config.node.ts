@@ -10,5 +10,8 @@ export default defineConfig({
     typecheck: {
       enabled: false,
     },
+    benchmark: {
+      include: ['src/**/*.{bench,benchmark}.node.?(c|m)[jt]s?(x)'],
+    },
   },
 });
