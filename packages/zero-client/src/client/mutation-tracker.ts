@@ -258,7 +258,6 @@ export class MutationTracker {
       clientID === this.#clientID,
       'received mutation for the wrong client',
     );
-    this.#lc.error?.(`Mutation ${mid} returned an error`, error);
 
     const ephemeralID = this.#ephemeralIDsByMutationID.get(mid);
     if (!ephemeralID && error.error === 'alreadyProcessed') {

@@ -338,7 +338,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           this.#lc.debug?.(`draining view-syncer ${this.id} (elective)`);
           break;
         }
-        assert(state === 'version-ready'); // This is the only state change used.
+        assert(state === 'version-ready', 'state should be version-ready'); // This is the only state change used.
 
         await this.#runInLockWithCVR(async (lc, cvr) => {
           if (!this.#pipelines.initialized()) {
@@ -612,11 +612,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #getTTLClock(now: number): TTLClock {
     // We will update ttlClock with delta from the ttlClockBase to the current time.
     const delta = now - this.#ttlClockBase;
-    assert(this.#ttlClock !== undefined);
+    assert(this.#ttlClock !== undefined, 'ttlClock should be defined');
     const ttlClock = ttlClockFromNumber(
       ttlClockAsNumber(this.#ttlClock) + delta,
     );
-    assert(ttlClockAsNumber(ttlClock) <= now);
+    assert(
+      ttlClockAsNumber(ttlClock) <= now,
+      'ttlClock should be less than or equal to now',
+    );
     this.#ttlClock = ttlClock;
     this.#ttlClockBase = now;
     return ttlClock as TTLClock;
@@ -745,7 +748,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             }
 
             if (newClient) {
-              assert(newClient === client);
+              assert(
+                newClient === client,
+                'newClient must match existing client',
+              );
               checkClientAndCVRVersions(client.version(), cvr.version);
             } else if (!this.#clients.has(clientID)) {
               lc.warn?.(`Processing ${cmd} before initConnection was received`);
@@ -944,7 +950,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * This must be called from within the #lock.
    */
   async #hydrateUnchangedQueries(lc: LogContext, cvr: CVRSnapshot) {
-    assert(this.#pipelines.initialized());
+    assert(this.#pipelines.initialized(), 'pipelines must be initialized');
 
     const dbVersion = this.#pipelines.currentVersion();
     const cvrVersion = cvr.version;
@@ -1081,7 +1087,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    */
   #syncQueryPipelineSet(lc: LogContext, cvr: CVRSnapshot) {
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async () => {
-      assert(this.#pipelines.initialized());
+      assert(
+        this.#pipelines.initialized(),
+        'pipelines must be initialized (syncQueryPipelineSet)',
+      );
 
       const hydratedQueries = this.#pipelines.addedQueries();
 
@@ -1253,6 +1262,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         addQueries.length > 0 ||
           removeQueries.length > 0 ||
           unhydrateQueries.length > 0,
+        'Must have queries to add or remove',
       );
       const start = performance.now();
 
@@ -1568,7 +1578,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     cvr: CVRSnapshot,
   ): Promise<'success' | ResetPipelinesSignal> {
     return startAsyncSpan(tracer, 'vs.#advancePipelines', async () => {
-      assert(this.#pipelines.initialized());
+      assert(
+        this.#pipelines.initialized(),
+        'pipelines must be initialized (advancePipelines',
+      );
       const start = performance.now();
 
       const timer = new Timer();

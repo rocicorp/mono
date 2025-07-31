@@ -1261,7 +1261,7 @@ describe('view-syncer/pipeline-driver', () => {
         clientGroupID: 'cg1',
         clientID: 'c1',
         mutationID: 1,
-        result: 'success',
+        result: {},
       }),
     );
 
@@ -1273,7 +1273,13 @@ describe('view-syncer/pipeline-driver', () => {
       ),
     ];
 
-    // TODO: get row?
+    expect(
+      pipelines.getRow('zeroz.mutations', {
+        clientGroupID: 'cg1',
+        clientID: 'c1',
+        mutationID: 1,
+      }),
+    ).toMatchInlineSnapshot(`undefined`);
   });
 
   test('schemaVersions change and insert', () => {
