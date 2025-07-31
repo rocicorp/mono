@@ -50,8 +50,8 @@ export default function runWorker(
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
   const {cvr, upstream} = config;
-  assert(cvr.maxConnsPerWorker);
-  assert(upstream.maxConnsPerWorker);
+  assert(cvr.maxConnsPerWorker, 'cvr.maxConnsPerWorker must be set');
+  assert(upstream.maxConnsPerWorker, 'upstream.maxConnsPerWorker must be set');
 
   const replicaFile = replicaFileName(config.replica.file, fileMode);
   lc.debug?.(`running view-syncer on ${replicaFile}`);
