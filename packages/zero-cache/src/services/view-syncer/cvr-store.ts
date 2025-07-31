@@ -126,7 +126,7 @@ export class CVRStore {
   readonly #taskID: string;
   readonly #id: string;
   readonly #db: PostgresDB;
-  readonly #upstreamDb: PostgresDB;
+  readonly #upstreamDb: PostgresDB | undefined;
   readonly #writes: Set<{
     stats: Partial<CVRFlushStats>;
     write: (
@@ -150,7 +150,11 @@ export class CVRStore {
   constructor(
     lc: LogContext,
     cvrDb: PostgresDB,
-    upstreamDb: PostgresDB,
+    // Optionally undefined to deal with custom upstreams.
+    // This is temporary until we have a more principled protocol to deal with
+    // custom upstreams and clearing their custom mutator responses.
+    // An implementor could simply clear them after N minutes for the time being.
+    upstreamDb: PostgresDB | undefined,
     shard: ShardID,
     taskID: string,
     cvrID: string,
@@ -823,9 +827,11 @@ export class CVRStore {
     );
     recordRowsSynced(this.#rowCount);
 
-    await this.#upstreamDb.begin(async tx => {
-      await Promise.all(this.#upstreamWrites.map(write => write(tx)));
-    });
+    if (this.#upstreamDb) {
+      await this.#upstreamDb.begin(async tx => {
+        await Promise.all(this.#upstreamWrites.map(write => write(tx)));
+      });
+    }
 
     return stats;
   }
