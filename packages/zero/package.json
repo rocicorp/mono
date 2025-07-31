@@ -115,11 +115,11 @@
     },
     "./server/adapters/postgresjs": {
       "types": "./out/zero-server/src/adapters/postgres.d.ts",
-      "default": "./out/zero-server/src/adapters/postgresjs.js"
+      "default": "./out/zero/src/adapters/postgresjs.js"
     },
     "./server/adapters/drizzle-pg": {
       "types": "./out/zero-server/src/adapters/drizzle-pg.d.ts",
-      "default": "./out/zero-server/src/adapters/drizzle-pg.js"
+      "default": "./out/zero/src/adapters/drizzle-pg.js"
     },
     "./solid": {
       "types": "./out/zero-solid/src/mod.d.ts",
