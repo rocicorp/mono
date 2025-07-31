@@ -42,9 +42,9 @@ export default function runWorker(
 ): Promise<void> {
   const config = getZeroConfig({env, argv: args.slice(1)});
   assertNormalized(config);
-  startOtelAuto();
 
-  const lc = createLogContext(config, {worker: 'syncer'});
+  startOtelAuto(createLogContext(config, {worker: 'syncer'}, false));
+  const lc = createLogContext(config, {worker: 'syncer'}, true);
 
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);

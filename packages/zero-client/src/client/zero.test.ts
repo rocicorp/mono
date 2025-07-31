@@ -73,6 +73,7 @@ import {
 
 const startTime = 1678829450000;
 
+let rejectionHandler: (event: PromiseRejectionEvent) => void;
 beforeEach(() => {
   vi.useFakeTimers({now: startTime});
   vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
@@ -80,6 +81,13 @@ beforeEach(() => {
     'fetch',
     vi.fn().mockReturnValue(Promise.resolve(new Response())),
   );
+
+  rejectionHandler = event => {
+    // eslint-disable-next-line no-console
+    console.error('Test rejection:', event.reason);
+  };
+
+  window.addEventListener('unhandledrejection', rejectionHandler);
 });
 
 afterEach(() => {
@@ -320,6 +328,71 @@ test('onOnlineChange callback', async () => {
     expect(onlineCount).toBe(1);
     expect(offlineCount).toBe(1);
   }
+});
+
+test('onOnline listener', async () => {
+  let online1 = 0;
+  let offline1 = 0;
+  let online2 = 0;
+  let offline2 = 0;
+
+  const z = zeroForTest({
+    logLevel: 'debug',
+  });
+
+  const unsubscribe1 = z.onOnline(online => {
+    if (online) {
+      online1++;
+    } else {
+      offline1++;
+    }
+  });
+
+  const unsubscribe2 = z.onOnline(online => {
+    if (online) {
+      online2++;
+    } else {
+      offline2++;
+    }
+  });
+
+  // Offline by default.
+  await vi.advanceTimersByTimeAsync(1);
+  expect(z.online).false;
+
+  // Connect: both listeners should be notified.
+  await z.waitForConnectionState(ConnectionState.Connecting);
+  await z.triggerConnected();
+  await z.waitForConnectionState(ConnectionState.Connected);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(z.online).true;
+  expect(online1).toBe(1);
+  expect(offline1).toBe(0);
+  expect(online2).toBe(1);
+  expect(offline2).toBe(0);
+
+  // Unsubscribe the first listener and trigger an error to go offline.
+  unsubscribe1();
+  await z.triggerError(ErrorKind.InvalidMessage, 'oops');
+  await z.waitForConnectionState(ConnectionState.Disconnected);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(z.online).false;
+  expect(online1).toBe(1);
+  expect(offline1).toBe(0);
+  expect(online2).toBe(1);
+  expect(offline2).toBe(1);
+
+  // Reconnect: only the second listener should be notified.
+  await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
+  await z.triggerConnected();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(z.online).true;
+  expect(online1).toBe(1);
+  expect(offline1).toBe(0);
+  expect(online2).toBe(2);
+  expect(offline2).toBe(1);
+
+  unsubscribe2();
 });
 
 test('disconnects if ping fails', async () => {
@@ -2705,6 +2778,74 @@ describe('Downstream message with unknown fields', () => {
         ),
       ),
     ).false;
+  });
+});
+
+describe('Mutation responses poked down', () => {
+  afterEach(() => vi.resetAllMocks());
+
+  test('poke down partial responses, rest resolved by lmid advance', async () => {
+    const schema = createSchema({
+      tables: [
+        table('issues')
+          .columns({id: string(), value: number()})
+          .primaryKey('id'),
+      ],
+    });
+    const r = zeroForTest({
+      logLevel: 'debug',
+      schema,
+      mutators: {
+        issues: {
+          foo: (tx, {foo}: {foo: number}) =>
+            tx.mutate.issues.insert({id: foo.toString(), value: foo}),
+        },
+      } as const satisfies CustomMutatorDefs<typeof schema>,
+    });
+    await r.triggerConnected();
+    expect(r.connectionState).toBe(ConnectionState.Connected);
+
+    const mutation = r.mutate.issues.foo({foo: 1});
+    const mutation2 = r.mutate.issues.foo({foo: 2});
+    await mutation.client;
+    await mutation2.client;
+
+    await r.triggerPoke(null, '1', {
+      lastMutationIDChanges: {
+        [r.clientID]: 5,
+      },
+      mutationsPatch: [
+        {
+          mutation: {
+            id: {
+              clientID: r.clientID,
+              id: 1,
+            },
+            result: {
+              error: 'app',
+              details: '...test ',
+            },
+          },
+          op: 'put',
+        },
+      ],
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    let caught: unknown = undefined;
+    try {
+      await mutation.server;
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toMatchInlineSnapshot(`
+      {
+        "details": "...test ",
+        "error": "app",
+      }
+    `);
+    await r.close();
   });
 });
 

@@ -7,17 +7,24 @@ import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
+import type {
+  DiffOperation,
+  NoIndexDiff,
+} from '../../../replicache/src/btree/node.ts';
+import {toMutationResponseKey} from './keys.ts';
+import {unreachable} from '../../../shared/src/asserts.ts';
 
 const lc = createSilentLogContext();
 
 const ackMutations = () => {};
+const watch = () => () => {};
 
 describe('MutationTracker', () => {
   const CLIENT_ID = 'test-client-1';
 
   test('tracks a mutation and resolves on success', async () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const {ephemeralID, serverPromise} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
 
@@ -37,7 +44,7 @@ describe('MutationTracker', () => {
 
   test('tracks a mutation and resolves with error on error', async () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const {serverPromise, ephemeralID} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
 
@@ -62,7 +69,7 @@ describe('MutationTracker', () => {
 
   test('does not resolve mutators for transient errors', async () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const {ephemeralID, serverPromise} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
 
@@ -83,7 +90,7 @@ describe('MutationTracker', () => {
 
   test('rejects mutations from other clients', () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const mutation = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation.ephemeralID, 1);
 
@@ -110,7 +117,7 @@ describe('MutationTracker', () => {
 
   test('handles multiple concurrent mutations', async () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const mutation1 = tracker.trackMutation();
     const mutation2 = tracker.trackMutation();
 
@@ -144,7 +151,7 @@ describe('MutationTracker', () => {
 
   test('mutation tracker size goes down each time a mutation is resolved or rejected', () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const mutation1 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
 
@@ -176,7 +183,7 @@ describe('MutationTracker', () => {
 
   test('mutations are not tracked on rebase', async () => {
     const mt = new MutationTracker(lc, ackMutations);
-    mt.clientID = CLIENT_ID;
+    mt.setClientIDAndWatch(CLIENT_ID, watch);
     const mutator = makeReplicacheMutator(
       createSilentLogContext(),
       async () => {},
@@ -196,10 +203,37 @@ describe('MutationTracker', () => {
     expect(mt.size).toBe(0);
   });
 
+  function mutationPatchToDiffOp(p: MutationPatch): DiffOperation<string> {
+    switch (p.op) {
+      case 'put':
+        return {
+          op: 'add',
+          key: toMutationResponseKey(p.mutation.id),
+          newValue: p.mutation.result,
+        };
+      case 'del':
+        return {
+          op: 'del',
+          key: toMutationResponseKey(p.id),
+          oldValue: null, // fine for tests
+        };
+      default:
+        unreachable();
+    }
+  }
+
   test('mutation responses, received via poke, are processed', async () => {
     const ackMutations = vi.fn();
+
+    let cb: ((diffs: NoIndexDiff) => void) | undefined;
+    const watch = (wcb: (diffs: NoIndexDiff) => void) => {
+      cb = wcb;
+      return () => {
+        cb = undefined;
+      };
+    };
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
@@ -223,19 +257,26 @@ describe('MutationTracker', () => {
       },
     ];
 
-    tracker.processMutationResponses(patches);
-    expect(ackMutations).toHaveBeenCalledOnce();
-    expect(ackMutations).toHaveBeenCalledWith({clientID: CLIENT_ID, id: 2});
+    // process mutations
+    cb!(patches.map(p => mutationPatchToDiffOp(p)));
 
     await expect(mutation1.serverPromise).resolves.toEqual({});
     await expect(mutation2.serverPromise).rejects.toEqual({
       error: 'app',
     });
+
+    tracker.lmidAdvanced(2);
+
+    expect(ackMutations).toHaveBeenCalledOnce();
+    expect(ackMutations).toHaveBeenCalledWith({
+      clientID: CLIENT_ID,
+      id: 2,
+    });
   });
 
   test('tracked mutations are resolved on reconnect', async () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
@@ -265,7 +306,7 @@ describe('MutationTracker', () => {
 
   test('notified whenever the outstanding mutation count goes to 0', () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     let callCount = 0;
     tracker.onAllMutationsApplied(() => {
@@ -361,7 +402,7 @@ describe('MutationTracker', () => {
 
   test('mutations can be rejected before a mutation id is assigned', async () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const {ephemeralID, serverPromise} = tracker.trackMutation();
     tracker.rejectMutation(ephemeralID, new Error('test error'));
@@ -379,7 +420,7 @@ describe('MutationTracker', () => {
 
   test('trying to resolve a mutation with an a unassigned ephemeral id throws', () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     tracker.trackMutation();
     const response: PushResponse = {
@@ -397,7 +438,7 @@ describe('MutationTracker', () => {
 
   test('resolve a mutation a second time with "already processed" error', () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const {ephemeralID} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
@@ -447,7 +488,7 @@ describe('MutationTracker', () => {
 
   test('advancing lmid past outstanding lmid notifies "all mutations applied" listeners', () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const listener = vi.fn();
     tracker.onAllMutationsApplied(listener);
@@ -469,7 +510,7 @@ describe('MutationTracker', () => {
 
   test('advancing lmid clears limbo mutations up to that lmid', async () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
@@ -507,7 +548,7 @@ describe('MutationTracker', () => {
 
   test('failed push causes mutations to resolve that are under the current lmid', async () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
@@ -540,7 +581,7 @@ describe('MutationTracker', () => {
 
   test('reconnecting puts outstanding mutations in limbo', async () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation1.ephemeralID, 3);
@@ -560,9 +601,9 @@ describe('MutationTracker', () => {
     ]);
   });
 
-  test('advancing lmid does not resolve mutations that are not in limbo', () => {
+  test('advancing lmid does resolve all mutations before that lmid', () => {
     const tracker = new MutationTracker(lc, ackMutations);
-    tracker.clientID = CLIENT_ID;
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
@@ -573,10 +614,6 @@ describe('MutationTracker', () => {
 
     tracker.lmidAdvanced(5);
 
-    expect(tracker.size).toBe(3);
-
-    tracker.lmidAdvanced(8);
-
-    expect(tracker.size).toBe(3);
+    expect(tracker.size).toBe(0);
   });
 });

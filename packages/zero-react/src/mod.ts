@@ -16,3 +16,4 @@ export {
   type UseQueryOptions,
 } from './use-query.tsx';
 export {createUseZero, useZero, ZeroProvider} from './zero-provider.tsx';
+export {useZeroOnline} from './use-zero-online.tsx';

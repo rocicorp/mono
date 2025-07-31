@@ -1,10 +1,6 @@
 import {schema, type Schema} from '../shared/schema.ts';
 import {type Transaction, type Row} from '@rocicorp/zero';
 
-// From https://github.com/colinhacks/zod/blob/2c333e268c316deef829c736b8c46ec95ee03e39/packages/zod/src/v4/core/regexes.ts#L33C34-L35C102
-const emailRegex =
-  /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
-
 export async function sendEmail({
   tx,
   email,
@@ -36,11 +32,6 @@ export async function sendEmail({
     console.log(
       'Missing LOOPS_EMAIL_API_KEY or LOOPS_TRANSACTIONAL_ID Skipping Email',
     );
-    return;
-  }
-
-  if (!emailRegex.test(email)) {
-    console.log('Invalid email provided, skipping email', email);
     return;
   }
 

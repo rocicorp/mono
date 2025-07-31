@@ -13,11 +13,10 @@ The two implementations need not match exactly. Replicache replaces the result o
 
 First, let's register a _mutator_ that speculatively creates a message. In `index.tsx`, expand the options passed to the `Replicache` constructor with:
 
-```js {5-16}
+```js {4-15}
 //...
 const r = new Replicache({
   name: 'chat-user-id',
-  licenseKey,
   mutators: {
     async createMessage(
       tx: WriteTransaction,

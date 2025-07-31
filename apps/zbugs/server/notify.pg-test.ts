@@ -214,5 +214,99 @@ describe('notify', () => {
       expect(recipients).not.toContain('user2@example.com'); // unsubscribed
       expect(recipients).toContain('user3@example.com');
     });
+
+    it('should filter out malformed email addresses', async () => {
+      // Add a user with a malformed email
+      await db`
+        INSERT INTO "user" (id, email, role)
+        VALUES ('user6', 'invalid-email@test!!.com', 'user')
+      `;
+
+      await db`
+        INSERT INTO "issueNotifications" ("userID", "issueID", "subscribed")
+        VALUES ('user6', 'issue-123', true)
+      `;
+
+      const recipients = await gatherRecipients(
+        createMockTx(db),
+        'issue-123',
+        'user4', // actor who performed the action
+      );
+
+      expect(recipients).toHaveLength(3); // existing 3 valid emails
+      expect(recipients).not.toContain('invalid-email');
+    });
+
+    it('should filter out empty email addresses', async () => {
+      // Add a user with a malformed email
+      await db`
+        INSERT INTO "user" (id, email, role)
+        VALUES ('user6', '', 'user')
+      `;
+
+      await db`
+        INSERT INTO "issueNotifications" ("userID", "issueID", "subscribed")
+        VALUES ('user6', 'issue-123', true)
+      `;
+
+      const recipients = await gatherRecipients(
+        createMockTx(db),
+        'issue-123',
+        'user4', // actor who performed the action
+      );
+
+      expect(recipients).toHaveLength(3); // existing 3 valid emails
+      expect(recipients).not.toContain('');
+    });
+
+    it('should trim whitespace around email addresses', async () => {
+      // Add a user whose email has leading/trailing whitespace
+      await db`
+        INSERT INTO "user" (id, email, role)
+        VALUES ('user7', '  user7@example.com  ', 'user')
+      `;
+
+      await db`
+        INSERT INTO "issueNotifications" ("userID", "issueID", "subscribed")
+        VALUES ('user7', 'issue-123', true)
+      `;
+
+      const recipients = await gatherRecipients(
+        createMockTx(db),
+        'issue-123',
+        'user4',
+      );
+
+      expect(recipients).toHaveLength(4); // 3 existing + 1 new
+      expect(recipients).toContain('user7@example.com');
+    });
+
+    it('should not include duplicate email addresses across multiple users', async () => {
+      // Add two users sharing the same email address
+      await db.unsafe(`
+        INSERT INTO "user" (id, email, role) VALUES
+          ('user8', 'shared@example.com', 'user'),
+          ('user9', 'shared@example.com', 'user');
+      `);
+
+      await db`
+        INSERT INTO "issueNotifications" ("userID", "issueID", "subscribed") VALUES
+          ('user8', 'issue-123', true),
+          ('user9', 'issue-123', true)
+      `;
+
+      const recipients = await gatherRecipients(
+        createMockTx(db),
+        'issue-123',
+        'user4',
+      );
+
+      // It should only include one occurrence of the shared email
+      const sharedOccurrences = recipients.filter(
+        e => e === 'shared@example.com',
+      ).length;
+      expect(sharedOccurrences).toBe(1);
+      expect(recipients).toHaveLength(4); // 3 existing + 1 shared email
+    });
   });
 });

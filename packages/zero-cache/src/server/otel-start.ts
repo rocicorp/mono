@@ -1,3 +1,4 @@
+import {diag} from '@opentelemetry/api';
 import {logs} from '@opentelemetry/api-logs';
 import * as autoInstrumentationsModule from '@opentelemetry/auto-instrumentations-node';
 import {OTLPLogExporter} from '@opentelemetry/exporter-logs-otlp-http';
@@ -20,6 +21,7 @@ import {
 import {PeriodicExportingMetricReader} from '@opentelemetry/sdk-metrics';
 import {NodeSDK} from '@opentelemetry/sdk-node';
 import {ATTR_SERVICE_VERSION} from '@opentelemetry/semantic-conventions';
+import {LogContext} from '@rocicorp/logger';
 import {
   otelEnabled,
   otelLogsEnabled,
@@ -41,7 +43,17 @@ class OtelManager {
     return OtelManager.#instance;
   }
 
-  startOtelAuto() {
+  startOtelAuto(lc?: LogContext) {
+    if (lc) {
+      const log = lc.withContext('component', 'otel');
+      diag.setLogger({
+        verbose: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
+        debug: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
+        info: (msg: string, ...args: unknown[]) => log.info?.(msg, ...args),
+        warn: (msg: string, ...args: unknown[]) => log.warn?.(msg, ...args),
+        error: (msg: string, ...args: unknown[]) => log.error?.(msg, ...args),
+      });
+    }
     if (this.#started || !otelEnabled()) {
       return;
     }
@@ -110,4 +122,5 @@ class OtelManager {
   }
 }
 
-export const startOtelAuto = () => OtelManager.getInstance().startOtelAuto();
+export const startOtelAuto = (lc?: LogContext) =>
+  OtelManager.getInstance().startOtelAuto(lc);

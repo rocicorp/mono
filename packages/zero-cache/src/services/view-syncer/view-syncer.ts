@@ -35,8 +35,11 @@ import {
 } from '../../auth/read-authorizer.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
 import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
-import * as counters from '../../observability/counters.ts';
-import * as histograms from '../../observability/histograms.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateHistogram,
+  getOrCreateUpDownCounter,
+} from '../../observability/metrics.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
@@ -101,6 +104,8 @@ export type SyncContext = {
 };
 
 const tracer = trace.getTracer('view-syncer', version);
+
+const PROTOCOL_VERSION_ATTR = 'protocol.version';
 
 export interface ViewSyncer {
   initConnection(
@@ -207,6 +212,30 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
   readonly #setTimeout: SetTimeout;
   readonly #customQueryTransformer: CustomQueryTransformer | undefined;
+
+  readonly #activeClients = getOrCreateUpDownCounter(
+    'sync',
+    'active-clients',
+    'Number of active sync clients',
+  );
+  readonly #hydrations = getOrCreateCounter(
+    'sync',
+    'hydration',
+    'Number of query hydrations',
+  );
+  readonly #hydrationTime = getOrCreateHistogram('sync', 'hydration-time', {
+    description: 'Time to hydrate a query.',
+    unit: 's',
+  });
+  readonly #transactionAdvanceTime = getOrCreateHistogram(
+    'sync',
+    'advance-time',
+    {
+      description:
+        'Time to advance all queries for a given client group after applying a new transaction to the replica.',
+      unit: 's',
+    },
+  );
 
   constructor(
     pullConfig: ZeroConfig['query'],
@@ -483,8 +512,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Source<Downstream> {
     this.#lc.debug?.('viewSyncer.initConnection');
     return startSpan(tracer, 'vs.initConnection', () => {
-      const {clientID, wsID, baseCookie, schemaVersion, tokenData, httpCookie} =
-        ctx;
+      const {
+        clientID,
+        wsID,
+        baseCookie,
+        schemaVersion,
+        tokenData,
+        httpCookie,
+        protocolVersion,
+      } = ctx;
       this.#authData = pickToken(this.#lc, this.#authData, tokenData);
       this.#lc.debug?.(
         `Picked auth token: ${JSON.stringify(this.#authData?.decoded)}`,
@@ -502,7 +538,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             ? lc[getLogLevel(err)]?.(`client closed with error`, err)
             : lc.info?.('client closed');
           this.#deleteClientDueToDisconnect(clientID, newClient);
+          this.#activeClients.add(-1, {
+            [PROTOCOL_VERSION_ATTR]: protocolVersion,
+          });
         },
+      });
+      this.#activeClients.add(1, {
+        [PROTOCOL_VERSION_ATTR]: protocolVersion,
       });
 
       if (this.#clients.size === 0) {
@@ -1021,8 +1063,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       const elapsed = timer.totalElapsed();
-      counters.queryHydrations().add(1);
-      histograms.hydrationTime().record(elapsed);
+      this.#hydrations.add(1);
+      this.#hydrationTime.record(elapsed / 1000);
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
     }
   }
@@ -1252,6 +1294,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       let totalProcessTime = 0;
       const timer = new Timer();
       const pipelines = this.#pipelines;
+      const hydrations = this.#hydrations;
+      const hydrationTime = this.#hydrationTime;
+
       function* generateRowChanges(slowHydrateThreshold: number) {
         for (const q of addQueries) {
           lc = lc
@@ -1271,6 +1316,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             transformationHash: q.transformationHash,
           });
         }
+        hydrations.add(1);
+        hydrationTime.record(totalProcessTime / 1000);
       }
       // #processChanges does batched de-duping of rows. Wrap all pipelines in
       // a single generator in order to maximize de-duping.
@@ -1572,7 +1619,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc.info?.(
         `finished processing advancement of ${numChanges} changes (${elapsed} ms)`,
       );
-      histograms.transactionAdvanceTime().record(elapsed);
+      this.#transactionAdvanceTime.record(elapsed / 1000);
       return 'success';
     });
   }

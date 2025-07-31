@@ -29,6 +29,7 @@ import {
   subscribeTo,
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
+import {startOtelAuto} from './otel-start.ts';
 import {WorkerDispatcher} from './worker-dispatcher.ts';
 
 const clientConnectionBifurcated = false;
@@ -40,7 +41,9 @@ export default async function runWorker(
   const startMs = Date.now();
   const config = getZeroConfig({env});
   assertNormalized(config);
-  const lc = createLogContext(config, {worker: 'dispatcher'});
+
+  startOtelAuto(createLogContext(config, {worker: 'dispatcher'}, false));
+  const lc = createLogContext(config, {worker: 'dispatcher'}, true);
 
   const processes = new ProcessManager(lc, parent);
 

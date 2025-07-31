@@ -47,7 +47,6 @@ const sidebars: SidebarsConfig = {
         'concepts/offline',
         'concepts/consistency',
         'concepts/isolation',
-        'concepts/licensing',
       ],
     },
     {
