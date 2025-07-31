@@ -96,7 +96,7 @@ export default function runWorker(
       config.taskID,
       id,
       cvrDB,
-      upstreamDB,
+      config.upstream.type === 'pg' ? upstreamDB : undefined,
       new PipelineDriver(
         logger,
         config.log,
