@@ -33,7 +33,7 @@ export default {
       }
       return undefined;
     },
-    include: ['src/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
+    include: ['src/**/*.{test,spec}{,.node}.?(c|m)[jt]s?(x)'],
     silent: true,
     browser: {
       enabled: true,

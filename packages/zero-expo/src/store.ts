@@ -47,6 +47,9 @@ export const expoSQLiteStoreProvider = (
 ): StoreProvider => ({
   create: (name: string) =>
     createSQLiteStore(expoDbManagerInstance)(name, {
+      busyTimeout: 200,
+      synchronous: 'NORMAL',
+      readUncommitted: false,
       ...opts,
       // we override the journal mode to undefined because
       // setting it to WAL causes hanging COMMITs on Expo

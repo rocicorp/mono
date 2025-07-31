@@ -4,9 +4,9 @@ import config from '../shared/src/tool/vitest-config.ts';
 export default mergeConfig(config, {
   test: {
     name: 'replicache/browser',
-    exclude: ['src/kv/sqlite*.ts'],
+    exclude: ['src/**/*.{test,spec}.node.?(c|m)[jt]s?(x)'],
     benchmark: {
-      exclude: ['src/kv/sqlite*.ts'],
+      exclude: ['src/**/*.{bench,benchmark}.node.?(c|m)[jt]s?(x)'],
     },
   },
 });

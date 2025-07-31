@@ -6,10 +6,7 @@ export default defineConfig({
     browser: {
       enabled: false,
     },
-    include: ['src/kv/sqlite*.test.ts'],
-    benchmark: {
-      include: ['src/kv/sqlite*.bench.ts'],
-    },
+    include: ['src/**/*.{test,spec}.node.?(c|m)[jt]s?(x)'],
     typecheck: {
       enabled: false,
     },

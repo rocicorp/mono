@@ -277,6 +277,8 @@ export function createSQLiteStore(dbm: SQLiteDatabaseManager) {
 export type SQLiteDatabaseManagerOptions = {
   busyTimeout?: number | undefined;
   journalMode?: 'WAL' | 'DELETE' | undefined;
+  synchronous?: 'NORMAL' | 'FULL' | undefined;
+  readUncommitted?: boolean | undefined;
 };
 
 export class SQLiteDatabaseManager {
@@ -300,9 +302,7 @@ export class SQLiteDatabaseManager {
 
   open(
     name: string,
-    opts: SQLiteDatabaseManagerOptions | undefined = {
-      busyTimeout: 200,
-    },
+    opts: SQLiteDatabaseManagerOptions | undefined = {},
   ): SQLiteDatabase {
     const dbInstance = this.#dbInstances.get(name);
 
@@ -317,17 +317,25 @@ export class SQLiteDatabaseManager {
       dbInstance.state = 'open';
     }
 
-    // we set a busy timeout to wait for write locks to be released
-    newDb.prepare(`PRAGMA busy_timeout = ${opts.busyTimeout}`).run();
-    if (opts.journalMode) {
+    if (opts.busyTimeout !== undefined) {
+      // we set a busy timeout to wait for write locks to be released
+      newDb.prepare(`PRAGMA busy_timeout = ${opts.busyTimeout}`).run();
+    }
+    if (opts.journalMode !== undefined) {
       // WAL allows concurrent readers (improves write throughput ~15x and read throughput ~1.5x)
       // but does not work on all platforms (e.g. Expo)
       newDb.prepare(`PRAGMA journal_mode = ${opts.journalMode}`).run();
     }
-    // tradeoff of durability vs performance over FULL
-    newDb.prepare('PRAGMA synchronous = NORMAL').run();
-    // don't read uncommitted data
-    newDb.prepare('PRAGMA read_uncommitted = false').run();
+    if (opts.synchronous !== undefined) {
+      newDb.prepare(`PRAGMA synchronous = ${opts.synchronous}`).run();
+    }
+    if (opts.readUncommitted !== undefined) {
+      newDb
+        .prepare(
+          `PRAGMA read_uncommitted = ${opts.readUncommitted ? 'true' : 'false'}`,
+        )
+        .run();
+    }
 
     this.#dbInstances.set(name, {db: newDb, state: 'open'});
 
@@ -354,7 +362,7 @@ export class SQLiteDatabaseManager {
     db.prepare('BEGIN IMMEDIATE').run();
 
     try {
-      // WITHOUT ROWID increases write throughput by ~3.6x and ~0.1x to read throughput
+      // WITHOUT ROWID increases write throughput
       db.prepare(
         'CREATE TABLE IF NOT EXISTS entry (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID',
       ).run();

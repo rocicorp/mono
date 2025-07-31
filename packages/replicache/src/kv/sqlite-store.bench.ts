@@ -6,12 +6,19 @@ import {SQLiteStore} from './sqlite-store.ts';
 const walSQLite3DatabaseManager = getTestSQLiteDatabaseManager();
 const walStore = new SQLiteStore('bench-wal', walSQLite3DatabaseManager, {
   journalMode: 'WAL',
+  synchronous: 'NORMAL',
+  readUncommitted: false,
+  busyTimeout: 200,
 });
 
 const defaultSQLite3DatabaseManager = getTestSQLiteDatabaseManager();
 const defaultStore = new SQLiteStore(
   'bench-default',
   defaultSQLite3DatabaseManager,
+  {
+    synchronous: 'NORMAL',
+    readUncommitted: false,
+  },
 );
 
 afterAll(() => {

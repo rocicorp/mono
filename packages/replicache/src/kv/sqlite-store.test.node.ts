@@ -13,6 +13,9 @@ runAll(
   () =>
     new SQLiteStore(':memory:', sqlite3DatabaseManager, {
       journalMode: 'WAL',
+      synchronous: 'NORMAL',
+      readUncommitted: false,
+      busyTimeout: 200,
     }),
 );
 
