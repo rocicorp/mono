@@ -96,6 +96,7 @@ export default function runWorker(
       config.taskID,
       id,
       cvrDB,
+      upstreamDB,
       new PipelineDriver(
         logger,
         config.log,

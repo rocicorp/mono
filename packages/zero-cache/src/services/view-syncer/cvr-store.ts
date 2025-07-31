@@ -23,7 +23,7 @@ import {recordRowsSynced} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
-import {cvrSchema, type ShardID} from '../../types/shards.ts';
+import {cvrSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import type {CVR, CVRSnapshot} from './cvr.ts';
 import {RowRecordCache} from './row-record-cache.ts';
@@ -126,6 +126,7 @@ export class CVRStore {
   readonly #taskID: string;
   readonly #id: string;
   readonly #db: PostgresDB;
+  readonly #upstreamDb: PostgresDB;
   readonly #writes: Set<{
     stats: Partial<CVRFlushStats>;
     write: (
@@ -133,6 +134,9 @@ export class CVRStore {
       lastConnectTime: number,
     ) => PendingQuery<MaybeRow[]>;
   }> = new Set();
+  readonly #upstreamWrites: ((
+    tx: PostgresTransaction,
+  ) => PendingQuery<MaybeRow[]>)[] = [];
   readonly #pendingRowRecordUpdates = new CustomKeyMap<RowID, RowRecord | null>(
     rowIDString,
   );
@@ -140,11 +144,13 @@ export class CVRStore {
   readonly #rowCache: RowRecordCache;
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
+  readonly #upstreamSchemaName: string;
   #rowCount: number = 0;
 
   constructor(
     lc: LogContext,
-    db: PostgresDB,
+    cvrDb: PostgresDB,
+    upstreamDb: PostgresDB,
     shard: ShardID,
     taskID: string,
     cvrID: string,
@@ -154,13 +160,14 @@ export class CVRStore {
     deferredRowFlushThreshold = 100, // somewhat arbitrary
     setTimeoutFn = setTimeout,
   ) {
-    this.#db = db;
+    this.#db = cvrDb;
+    this.#upstreamDb = upstreamDb;
     this.#schema = cvrSchema(shard);
     this.#taskID = taskID;
     this.#id = cvrID;
     this.#rowCache = new RowRecordCache(
       lc,
-      db,
+      cvrDb,
       shard,
       cvrID,
       failService,
@@ -169,6 +176,7 @@ export class CVRStore {
     );
     this.#loadAttemptIntervalMs = loadAttemptIntervalMs;
     this.#maxLoadAttempts = maxLoadAttempts;
+    this.#upstreamSchemaName = upstreamSchema(shard);
   }
 
   #cvr(table: string) {
@@ -552,6 +560,10 @@ export class CVRStore {
       write: tx =>
         tx`DELETE FROM ${this.#cvr('clients')} WHERE "clientID" = ${clientID}`,
     });
+    this.#upstreamWrites.push(
+      sql =>
+        sql`DELETE FROM ${sql(this.#upstreamSchemaName)}."mutations" WHERE "clientGroupID" = ${this.#id} AND "clientID" = ${clientID}`,
+    );
   }
 
   deleteClientGroup(clientGroupID: string) {
@@ -570,6 +582,11 @@ export class CVRStore {
             name,
           )} WHERE "clientGroupID" = ${clientGroupID}`,
       });
+      // delete mutation responses
+      this.#upstreamWrites.push(
+        sql =>
+          sql`DELETE FROM ${sql(this.#upstreamSchemaName)}."mutations" WHERE "clientGroupID" = ${clientGroupID}`,
+      );
     }
   }
 
@@ -798,12 +815,18 @@ export class CVRStore {
       stats.rows += this.#pendingRowRecordUpdates.size;
       return true;
     });
+
     this.#rowCount = await this.#rowCache.apply(
       this.#pendingRowRecordUpdates,
       cvr.version,
       rowsFlushed,
     );
     recordRowsSynced(this.#rowCount);
+
+    await this.#upstreamDb.begin(async tx => {
+      await Promise.all(this.#upstreamWrites.map(write => write(tx)));
+    });
+
     return stats;
   }
 
@@ -839,6 +862,7 @@ export class CVRStore {
       throw e;
     } finally {
       this.#writes.clear();
+      this.#upstreamWrites.length = 0;
       this.#pendingRowRecordUpdates.clear();
       this.#forceUpdates.clear();
     }
