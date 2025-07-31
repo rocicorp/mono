@@ -244,7 +244,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     taskID: string,
     clientGroupID: string,
     cvrDb: PostgresDB,
-    upstreamDb: PostgresDB,
+    upstreamDb: PostgresDB | undefined,
     pipelineDriver: PipelineDriver,
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
