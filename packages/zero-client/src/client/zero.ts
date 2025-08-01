@@ -804,7 +804,7 @@ export class Zero<
   preload(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     query: Query<S, keyof S['tables'] & string, any>,
-    options: PreloadOptions,
+    options?: PreloadOptions | undefined,
   ) {
     return query.delegate(this.#zeroContext).preload(options);
   }
