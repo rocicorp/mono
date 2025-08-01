@@ -22,7 +22,6 @@ const expoDbManagerInstance = new SQLiteDatabaseManager({
         db.closeSync();
         deleteDatabaseSync(fileName);
       },
-      isInTransaction: () => db.isInTransactionSync(),
       prepare: (sql: string) => {
         const stmt = db.prepareSync(sql);
         return {
@@ -43,10 +42,12 @@ const expoDbManagerInstance = new SQLiteDatabaseManager({
 });
 
 export const expoSQLiteStoreProvider = (
-  opts?: Omit<SQLiteDatabaseManagerOptions, 'journalMode'>,
+  opts?: Partial<Omit<SQLiteDatabaseManagerOptions, 'journalMode'>>,
 ): StoreProvider => ({
   create: (name: string) =>
     createSQLiteStore(expoDbManagerInstance)(name, {
+      // we default to 3 read connections for mobile devices
+      readPoolSize: 3,
       busyTimeout: 200,
       synchronous: 'NORMAL',
       readUncommitted: false,

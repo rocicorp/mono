@@ -8,18 +8,19 @@ export const getTestSQLiteDatabaseManager = (logging: boolean = false) =>
   new SQLiteDatabaseManager({
     open: name => {
       const filename = path.resolve(__dirname, `${name}.db`);
-      const db = sqlite3(name === ':memory:' ? ':memory:' : filename);
+      // this cannot be :memory: because multiple read connections must access
+      // the same database
+      const db = sqlite3(filename);
       return {
         close: () => {
           db.close();
         },
         destroy: () => {
           db.close();
-          if (name !== ':memory:') {
+          if (fs.existsSync(filename)) {
             fs.unlinkSync(filename);
           }
         },
-        isInTransaction: () => db.inTransaction,
         prepare: (sql: string) => {
           const stmt = db.prepare(sql);
           if (logging) {
