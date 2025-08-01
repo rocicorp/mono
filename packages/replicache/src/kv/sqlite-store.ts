@@ -107,10 +107,7 @@ class SQLiteReadConnectionManager implements SQLiteConnectionManager {
 
     for (let i = 0; i < opts.readPoolSize; i++) {
       // create a new readonly SQLiteDatabase for each connection
-      const db = manager.open(name, {
-        ...opts,
-        readonly: true,
-      });
+      const db = manager.open(name, opts);
       const preparedStatements = getPreparedStatementsForSQLiteDatabase(db);
       this.#pool.push({
         db,
@@ -186,10 +183,7 @@ class SQLiteWriteConnectionManager implements SQLiteConnectionManager {
     rwLock: RWLock,
     opts: SQLiteDatabaseManagerOptions,
   ) {
-    const db = manager.open(name, {
-      ...opts,
-      readonly: false,
-    });
+    const db = manager.open(name, opts);
     this.#preparedStatements = getPreparedStatementsForSQLiteDatabase(db);
     this.#db = db;
     this.#rwLock = rwLock;
@@ -432,9 +426,7 @@ export class SQLiteDatabaseManager {
 
   open(
     name: string,
-    opts: Omit<SQLiteDatabaseManagerOptions, 'poolSize'> & {
-      readonly: boolean;
-    },
+    opts: Omit<SQLiteDatabaseManagerOptions, 'poolSize'>,
   ): SQLiteDatabase {
     const dbInstance = this.#dbInstances.get(name);
 
