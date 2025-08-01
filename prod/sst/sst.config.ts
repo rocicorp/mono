@@ -67,6 +67,7 @@ export default $config({
       ZERO_APP_ID: process.env.ZERO_APP_ID || 'zero',
       PGCONNECT_TIMEOUT: '60', // scale-from-zero dbs need more than 30 seconds
       OTEL_TRACES_EXPORTER: 'otlp',
+      OTEL_LOGS_EXPORTER: 'none',
       OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
       OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
       OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
