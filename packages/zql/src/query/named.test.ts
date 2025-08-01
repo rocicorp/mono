@@ -4,14 +4,16 @@ import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
-import {named, createBuilder, type NamedQuery} from './named.ts';
+import {queries, createBuilder, type NamedQuery} from './named.ts';
 import {ast} from './query-impl.ts';
 import {StaticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
 
 test('defining a named query', () => {
   const queryBuilder = createBuilder(schema);
-  const x = named({myName: (id: string) => queryBuilder.issue.where('id', id)});
+  const x = queries({
+    myName: (id: string) => queryBuilder.issue.where('id', id),
+  });
   const q = x.myName('123');
   expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
     Promise<
@@ -28,7 +30,7 @@ test('defining a named query', () => {
   check(x.myName);
 
   // define many at once
-  const y = named({
+  const y = queries({
     myName: (id: string) => queryBuilder.issue.where('id', id),
     myOtherName: (id: string) => queryBuilder.issue.where('id', id),
     myThirdName: (id: string) => queryBuilder.issue.where('id', id),

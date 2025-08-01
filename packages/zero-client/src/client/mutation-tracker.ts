@@ -185,20 +185,6 @@ export class MutationTracker {
    * to the DB while writing the LMID.
    */
   onConnected(lastMutationID: number) {
-    for (const [id, entry] of this.#outstandingMutations) {
-      if (!entry.mutationID) {
-        continue;
-      }
-
-      if (entry.mutationID <= lastMutationID) {
-        this.#settleMutation(id, entry, 'resolve', emptyObject);
-      } else {
-        // the map is in insertion order which is in mutation ID order
-        // so it is safe to break.
-        break;
-      }
-    }
-
     this.lmidAdvanced(lastMutationID);
   }
 
@@ -272,7 +258,6 @@ export class MutationTracker {
       clientID === this.#clientID,
       'received mutation for the wrong client',
     );
-    this.#lc.error?.(`Mutation ${mid} returned an error`, error);
 
     const ephemeralID = this.#ephemeralIDsByMutationID.get(mid);
     if (!ephemeralID && error.error === 'alreadyProcessed') {

@@ -75,6 +75,7 @@ describe('view-syncer/service', () => {
   let replicaDbFile: DbFile;
   let replica: Database;
   let cvrDB: PostgresDB;
+  let upstreamDb: PostgresDB;
   const lc = createSilentLogContext();
   let stateChanges: Subscription<ReplicaState>;
   let drainCoordinator: DrainCoordinator;
@@ -123,6 +124,7 @@ describe('view-syncer/service', () => {
       replicaDbFile,
       replica,
       cvrDB,
+      upstreamDb,
       stateChanges,
       drainCoordinator,
       operatorStorage,
@@ -160,6 +162,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -219,6 +222,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -2949,6 +2953,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -3061,6 +3066,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -3119,6 +3125,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       'some-other-task-id',
       serviceID,
@@ -3151,6 +3158,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       'some-other-task-id',
       serviceID,
@@ -3184,6 +3192,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,

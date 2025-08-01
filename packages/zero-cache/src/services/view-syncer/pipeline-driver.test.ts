@@ -17,6 +17,7 @@ import {CREATE_STORAGE_TABLE, DatabaseStorage} from './database-storage.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
 import {Timer} from './view-syncer.ts';
+import {getMutationResultsQuery} from './cvr.ts';
 
 describe('view-syncer/pipeline-driver', () => {
   let dbFile: DbFile;
@@ -55,6 +56,14 @@ describe('view-syncer/pipeline-driver', () => {
       );
       INSERT INTO "zeroz.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
         VALUES (1, 1, 1, '123');
+      CREATE TABLE "zeroz.mutations" (
+        "clientGroupID"  TEXT,
+        "clientID"       TEXT,
+        "mutationID"     INTEGER,
+        "result"         TEXT,
+        _0_version       TEXT NOT NULL,
+        PRIMARY KEY ("clientGroupID", "clientID", "mutationID")
+      );
       CREATE TABLE issues (
         id TEXT PRIMARY KEY,
         closed BOOL,
@@ -291,10 +300,11 @@ describe('view-syncer/pipeline-driver', () => {
   };
 
   const messages = new ReplicationMessages({
-    issues: 'id',
-    comments: 'id',
-    issueLabels: ['issueID', 'labelID'],
-    uniques: 'id',
+    'issues': 'id',
+    'comments': 'id',
+    'issueLabels': ['issueID', 'labelID'],
+    'uniques': 'id',
+    'zeroz.mutations': ['clientGroupID', 'clientID', 'mutationID'],
   });
   const zeroMessages = new ReplicationMessages(
     {schemaVersions: 'lock'},
@@ -1239,6 +1249,37 @@ describe('view-syncer/pipeline-driver', () => {
       legacyID: '1-1',
       ['_0_version']: '123',
     });
+  });
+
+  test('get mutation results', () => {
+    pipelines.init(null);
+    const mutationResultsQuery = getMutationResultsQuery('zeroz', 'cg1');
+
+    replicator.processTransaction(
+      '134',
+      messages.insert('zeroz.mutations', {
+        clientGroupID: 'cg1',
+        clientID: 'c1',
+        mutationID: 1,
+        result: {},
+      }),
+    );
+
+    [
+      ...pipelines.addQuery(
+        mutationResultsQuery.id,
+        mutationResultsQuery.ast,
+        startTimer(),
+      ),
+    ];
+
+    expect(
+      pipelines.getRow('zeroz.mutations', {
+        clientGroupID: 'cg1',
+        clientID: 'c1',
+        mutationID: 1,
+      }),
+    ).toMatchInlineSnapshot(`undefined`);
   });
 
   test('schemaVersions change and insert', () => {
