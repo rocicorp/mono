@@ -46,6 +46,7 @@ describe('dataTypeToZqlValueType', () => {
     ['float4', 'number'],
     ['float8', 'number'],
     ['date', 'number'],
+    ['time', 'string'],
     ['timestamp', 'number'],
     ['timestamptz', 'number'],
     ['timestamp with time zone', 'number'],
