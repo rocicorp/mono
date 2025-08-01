@@ -16,14 +16,14 @@ export type TimeUnit = 's' | 'm' | 'h' | 'd' | 'y';
  */
 export type TTL = `${number}${TimeUnit}` | 'forever' | 'none' | number;
 
-export const DEFAULT_TTL: TTL = '1s';
-export const DEFAULT_TTL_MS = 1_000;
+export const DEFAULT_TTL: TTL = '5m';
+export const DEFAULT_TTL_MS = 1_000 * 60 * 5;
 
-export const DEFAULT_PRELOAD_TTL: TTL = '5s';
-export const DEFAULT_PRELOAD_TTL_MS = 5_000;
+export const DEFAULT_PRELOAD_TTL: TTL = 'none';
+export const DEFAULT_PRELOAD_TTL_MS = 0;
 
 export const MAX_TTL: TTL = '10m';
-export const MAX_TTL_MS = 600_000;
+export const MAX_TTL_MS = 1_000 * 60 * 10;
 
 const multiplier = {
   s: 1000,

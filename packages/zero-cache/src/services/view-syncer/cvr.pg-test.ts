@@ -3719,7 +3719,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "fooClient": {
                 "inactivatedAt": undefined,
-                "ttl": 1000,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -3744,7 +3744,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "fooClient": {
                 "inactivatedAt": undefined,
-                "ttl": 1000,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -5418,7 +5418,7 @@ describe('view-syncer/cvr', () => {
               "clientState": {
                 "fooClient": {
                   "inactivatedAt": undefined,
-                  "ttl": 1000,
+                  "ttl": 300000,
                   "version": {
                     "minorVersion": 1,
                     "stateVersion": "1a9",
@@ -5728,7 +5728,7 @@ describe('view-syncer/cvr', () => {
               "clientState": {
                 "fooClient": {
                   "inactivatedAt": undefined,
-                  "ttl": 1000,
+                  "ttl": 300000,
                   "version": {
                     "minorVersion": 1,
                     "stateVersion": "1a9",
@@ -6110,7 +6110,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": 1000,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6118,7 +6118,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-b": {
                 "inactivatedAt": 1709683200000,
-                "ttl": 1000,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1aa",
@@ -6126,7 +6126,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": 1000,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6180,7 +6180,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": "00:00:01",
+            "ttl": "00:05:00",
           },
           {
             "clientGroupID": "abc123",
@@ -6189,7 +6189,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": "00:00:01",
+            "ttl": "00:05:00",
           },
           {
             "clientGroupID": "abc123",
@@ -6198,7 +6198,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": 1709683200000,
             "patchVersion": "1aa:01",
             "queryHash": "oneHash",
-            "ttl": "00:00:01",
+            "ttl": "00:05:00",
           },
         ],
         "instances": Result [
@@ -6431,7 +6431,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": 1000,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6439,7 +6439,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": 1000,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6495,7 +6495,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": "00:00:01",
+            "ttl": "00:05:00",
           },
           {
             "clientGroupID": "def456",
@@ -6504,7 +6504,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": "00:00:01",
+            "ttl": "00:05:00",
           },
           {
             "clientGroupID": "abc123",
@@ -6513,7 +6513,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": "00:00:01",
+            "ttl": "00:05:00",
           },
         ],
         "instances": Result [
@@ -6652,7 +6652,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": 1000,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6660,7 +6660,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": 1000,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6716,7 +6716,7 @@ describe('view-syncer/cvr', () => {
               "inactivatedAt": null,
               "patchVersion": "1a9:01",
               "queryHash": "oneHash",
-              "ttl": "00:00:01",
+              "ttl": "00:05:00",
             },
             {
               "clientGroupID": "abc123",
@@ -6725,7 +6725,7 @@ describe('view-syncer/cvr', () => {
               "inactivatedAt": null,
               "patchVersion": "1a9:01",
               "queryHash": "oneHash",
-              "ttl": "00:00:01",
+              "ttl": "00:05:00",
             },
           ],
           "instances": Result [

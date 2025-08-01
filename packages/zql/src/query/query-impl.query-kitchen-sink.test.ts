@@ -514,7 +514,7 @@ describe('kitchen sink query', () => {
             },
           },
           "name": undefined,
-          "ttl": 1000,
+          "ttl": 300000,
         },
       ]
     `);
