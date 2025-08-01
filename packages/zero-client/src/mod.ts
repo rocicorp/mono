@@ -132,7 +132,7 @@ export type {
   RunOptions,
 } from '../../zql/src/query/query.ts';
 export type {AnyQuery} from '../../zql/src/query/query-impl.ts';
-export {DEFAULT_TTL, type TTL} from '../../zql/src/query/ttl.ts';
+export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export type {BatchMutator, DBMutator, TableMutator} from './client/crud.ts';
 export type {
