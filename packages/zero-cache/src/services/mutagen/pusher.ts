@@ -270,18 +270,15 @@ class PushWorker {
   }
 
   /**
-   * The pusher can end up combining many push requests, from the client group, into a single request
-   * to the API server.
-   *
-   * In that case, many different clients will have their mutations present in the
-   * PushResponse.
-   *
-   * Each client is on a different websocket connection though, so we need to fan out the response
-   * to all the clients that were part of the push.
+   * 1. If the entire `push` fails, we send the error to relevant clients.
+   * 2. If the push succeeds, we look for any mutation failure that should cause the connection to terminate
+   *  and terminate the connection for those clients.
    */
-  async #fanOutResponses(response: PushResponse | Fatal) {
+  #fanOutResponses(response: PushResponse | Fatal) {
     const responses: Promise<Result>[] = [];
     const connectionTerminations: (() => void)[] = [];
+
+    // if the entire push failed, send that to the client.
     if ('error' in response) {
       this.#lc.warn?.(
         'The server behind ZERO_PUSH_URL returned a push error.',
@@ -324,6 +321,7 @@ class PushWorker {
         }
       }
     } else {
+      // Look for mutations results that should cause us to terminate the connection
       const groupedMutations = groupBy(response.mutations, m => m.id.clientID);
       for (const [clientID, mutations] of groupedMutations) {
         const client = this.#clients.get(clientID);
@@ -356,28 +354,13 @@ class PushWorker {
           );
         }
 
-        // We do not resolve the mutation on the client if it
-        // fails for a reason that will cause it to be retried.
-        const successes = failure ? mutations.slice(0, i) : mutations;
-
-        if (successes.length > 0) {
-          responses.push(
-            client.downstream.push(['pushResponse', {mutations: successes}])
-              .result,
-          );
-        }
-
         if (failure) {
           connectionTerminations.push(() => client.downstream.fail(failure));
         }
       }
     }
 
-    try {
-      await Promise.allSettled(responses);
-    } finally {
-      connectionTerminations.forEach(cb => cb());
-    }
+    connectionTerminations.forEach(cb => cb());
   }
 
   async #processPush(entry: PusherEntry): Promise<PushResponse | Fatal> {

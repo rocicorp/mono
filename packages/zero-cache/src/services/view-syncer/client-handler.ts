@@ -279,13 +279,20 @@ export class ClientHandler {
               });
             } else {
               const {clientID, mutationID} = patch.id.rowKey;
-              assert(typeof clientID === 'string');
-              assert(typeof mutationID === 'bigint');
+              assert(
+                typeof clientID === 'string',
+                'client id must be a string',
+              );
+              const id = Number(mutationID);
+              assert(
+                !Number.isNaN(id) && Number.isFinite(id) && id >= 0,
+                'mutation id must be a finite number',
+              );
               patches.push({
                 op: 'del',
                 id: {
                   clientID,
-                  id: Number(mutationID),
+                  id,
                 },
               });
             }

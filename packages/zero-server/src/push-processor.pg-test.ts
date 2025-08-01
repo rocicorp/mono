@@ -1,11 +1,14 @@
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {getClientsTableDefinition} from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
+import {
+  getClientsTableDefinition,
+  getMutationsTableDefinition,
+} from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
 
 import {OutOfOrderMutation, PushProcessor} from './push-processor.ts';
 import {PostgresJSConnection} from './adapters/postgresjs.ts';
-import type {PushBody} from '../../zero-protocol/src/push.ts';
+import type {MutationResult, PushBody} from '../../zero-protocol/src/push.ts';
 import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {ZQLDatabase} from './zql-database.ts';
 import {zip} from '../../shared/src/arrays.ts';
@@ -21,6 +24,7 @@ beforeEach(async () => {
   await pg.unsafe(`
     CREATE SCHEMA IF NOT EXISTS zero_0;
     ${getClientsTableDefinition('zero_0')}
+    ${getMutationsTableDefinition('zero_0')}
   `);
 });
 
@@ -81,6 +85,8 @@ describe('out of order mutation', () => {
     });
 
     await checkClientsTable(pg, undefined);
+    // OOO does not write a result
+    await checkMutationsTable(pg, []);
   });
 
   test('later mutations are out of order', async () => {
@@ -120,6 +126,8 @@ describe('out of order mutation', () => {
     });
 
     await checkClientsTable(pg, 1);
+    // only error responses are written
+    await checkMutationsTable(pg, []);
   });
 });
 
@@ -145,6 +153,8 @@ test('first mutation', async () => {
   });
 
   await checkClientsTable(pg, 1);
+  // only error responses are written
+  await checkMutationsTable(pg, []);
 });
 
 test('previously seen mutation', async () => {
@@ -177,6 +187,7 @@ test('previously seen mutation', async () => {
   });
 
   await checkClientsTable(pg, 3);
+  await checkMutationsTable(pg, []);
 });
 
 test('lmid still moves forward if the mutator implementation throws', async () => {
@@ -210,6 +221,17 @@ test('lmid still moves forward if the mutator implementation throws', async () =
     ],
   });
   await checkClientsTable(pg, 3);
+  await checkMutationsTable(pg, [
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 3n,
+      result: {
+        error: 'app',
+        details: 'application error',
+      },
+    },
+  ]);
 });
 
 test('processes all mutations, even if all mutations throw app errors', async () => {
@@ -239,6 +261,20 @@ test('processes all mutations, even if all mutations throw app errors', async ()
       },
     })),
   });
+
+  await checkClientsTable(pg, 4);
+  await checkMutationsTable(
+    pg,
+    Array.from({length: 4}, (_, i) => ({
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: BigInt(i + 1),
+      result: {
+        error: 'app',
+        details: 'application error',
+      },
+    })),
+  );
 });
 
 test('processes all mutations, even if all mutations have been seen before', async () => {
@@ -293,6 +329,49 @@ test('processes all mutations, even if all mutations have been seen before', asy
 
   // re-send the same mutations that throw app errors
   await resend(4, customMutatorKey('foo', 'baz'));
+
+  expect(
+    await pg`select "clientGroupID", "clientID", "mutationID", "result" from "zero_0"."mutations" order by "mutationID"`,
+  ).toMatchInlineSnapshot(`
+    Result [
+      {
+        "clientGroupID": "cgid",
+        "clientID": "cid",
+        "mutationID": 5n,
+        "result": {
+          "details": "application error",
+          "error": "app",
+        },
+      },
+      {
+        "clientGroupID": "cgid",
+        "clientID": "cid",
+        "mutationID": 6n,
+        "result": {
+          "details": "application error",
+          "error": "app",
+        },
+      },
+      {
+        "clientGroupID": "cgid",
+        "clientID": "cid",
+        "mutationID": 7n,
+        "result": {
+          "details": "application error",
+          "error": "app",
+        },
+      },
+      {
+        "clientGroupID": "cgid",
+        "clientID": "cid",
+        "mutationID": 8n,
+        "result": {
+          "details": "application error",
+          "error": "app",
+        },
+      },
+    ]
+  `);
 });
 
 test('continues processing if all mutations throw in error mode with "MutationAlreadyProcessedError"', async () => {
@@ -334,6 +413,9 @@ test('continues processing if all mutations throw in error mode with "MutationAl
       },
     })),
   });
+
+  await checkClientsTable(pg, undefined);
+  await checkMutationsTable(pg, []);
 });
 
 test('bails processing if all mutations throw in error mode with "OutOfOrderMutation"', async () => {
@@ -377,6 +459,9 @@ test('bails processing if all mutations throw in error mode with "OutOfOrderMuta
       },
     ],
   });
+
+  await checkClientsTable(pg, undefined);
+  await checkMutationsTable(pg, []);
 });
 
 test('bails processing if a mutation throws an unknown error in error mode', async () => {
@@ -407,6 +492,9 @@ test('bails processing if a mutation throws an unknown error in error mode', asy
       ),
     ),
   ).rejects.toThrow('unknown');
+  // These are not written since error mode fails too
+  await checkClientsTable(pg, undefined);
+  await checkMutationsTable(pg, []);
 });
 
 test('stops processing mutations as soon as it hits an out of order mutation', async () => {
@@ -460,6 +548,8 @@ test('stops processing mutations as soon as it hits an out of order mutation', a
       },
     ],
   });
+  await checkClientsTable(pg, 2);
+  await checkMutationsTable(pg, []);
 });
 
 test('a mutation throws an app error then an ooo mutation error', async () => {
@@ -500,6 +590,11 @@ test('a mutation throws an app error then an ooo mutation error', async () => {
       },
     ],
   });
+
+  // These are empty since the error mode fails too
+  // and does not write to the database
+  await checkClientsTable(pg, undefined);
+  await checkMutationsTable(pg, []);
 });
 
 test('mutation throws an app error then an already processed error', async () => {
@@ -541,6 +636,8 @@ test('mutation throws an app error then an already processed error', async () =>
       },
     ],
   });
+  await checkClientsTable(pg, undefined);
+  await checkMutationsTable(pg, []);
 });
 
 test('mutators with and without namespaces', async () => {
@@ -635,6 +732,26 @@ test('mutators with and without namespaces', async () => {
         `);
 
   await checkClientsTable(pg, 4);
+  await checkMutationsTable(pg, [
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 3n,
+      result: {
+        error: 'app',
+        details: 'application error',
+      },
+    },
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 4n,
+      result: {
+        error: 'app',
+        details: 'application error',
+      },
+    },
+  ]);
 });
 
 async function checkClientsTable(
@@ -648,4 +765,19 @@ async function checkClientsTable(
   expect(result).toEqual(
     expectedLmid === undefined ? [] : [{lastMutationID: BigInt(expectedLmid)}],
   );
+}
+
+async function checkMutationsTable(
+  pg: PostgresDB,
+  expected: {
+    clientGroupID: string;
+    clientID: string;
+    mutationID: bigint;
+    result: MutationResult;
+  }[],
+) {
+  const result = await pg.unsafe(
+    `select "clientGroupID", "clientID", "mutationID", "result" from "zero_0"."mutations" order by "mutationID"`,
+  );
+  expect(result).toEqual(expected);
 }

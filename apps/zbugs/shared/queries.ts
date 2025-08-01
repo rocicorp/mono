@@ -2,7 +2,7 @@ import {
   escapeLike,
   type Query,
   type Row,
-  namedWithContext,
+  queriesWithContext,
 } from '@rocicorp/zero';
 import {builder, type Schema} from './schema.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
@@ -18,7 +18,7 @@ function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
   ) as TQuery;
 }
 
-export const queries = namedWithContext({
+export const queries = queriesWithContext({
   allLabels: (_auth: AuthData | undefined) => builder.label,
 
   allUsers: (_auth: AuthData | undefined) => builder.user,

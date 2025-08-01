@@ -77,7 +77,7 @@ function contextualizedNamedQuery<TContext>(
   return ret;
 }
 
-export function named<
+export function queries<
   TQueries extends {
     [K in keyof TQueries]: TQueries[K] extends NamedQuery<
       infer TArgs,
@@ -95,7 +95,7 @@ export function named<
   ]) as TQueries;
 }
 
-export function namedWithContext<
+export function queriesWithContext<
   TContext,
   TQueries extends {
     [K in keyof TQueries]: TQueries[K] extends ContextualizedNamedQuery<
