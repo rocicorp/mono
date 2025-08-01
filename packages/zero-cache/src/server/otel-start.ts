@@ -2,14 +2,7 @@ import {diag} from '@opentelemetry/api';
 import {logs} from '@opentelemetry/api-logs';
 import * as autoInstrumentationsModule from '@opentelemetry/auto-instrumentations-node';
 import type {Instrumentation} from '@opentelemetry/instrumentation';
-import {
-  defaultResource,
-  detectResources,
-  envDetector,
-  hostDetector,
-  processDetector,
-  resourceFromAttributes,
-} from '@opentelemetry/resources';
+import {resourceFromAttributes} from '@opentelemetry/resources';
 import {NodeSDK} from '@opentelemetry/sdk-node';
 import {ATTR_SERVICE_VERSION} from '@opentelemetry/semantic-conventions';
 import {LogContext} from '@rocicorp/logger';
@@ -53,18 +46,12 @@ class OtelManager {
     // Use exponential histograms by default to reduce cardinality from auto-instrumentation
     // This affects HTTP server/client and other auto-instrumented histogram metrics
     // Exponential histograms automatically adjust bucket boundaries and use fewer buckets
-    process.env.OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION =
+    process.env.OTEL_EXPORTER_OTLP_METRICS_DEFAULT_HISTOGRAM_AGGREGATION ??=
       'base2_exponential_bucket_histogram';
 
-    const envResource = detectResources({
-      detectors: [envDetector, processDetector, hostDetector],
-    });
-
-    const customResource = resourceFromAttributes({
+    const resource = resourceFromAttributes({
       [ATTR_SERVICE_VERSION]: process.env.ZERO_SERVER_VERSION ?? 'unknown',
     });
-
-    const resource = defaultResource().merge(envResource).merge(customResource);
 
     // Lazy load the auto-instrumentations module
     // avoid MODULE_NOT_FOUND errors in environments where it's not being used
@@ -83,6 +70,7 @@ class OtelManager {
 
     const sdk = new NodeSDK({
       resource,
+      autoDetectResources: true,
       instrumentations: this.#autoInstrumentations
         ? [this.#autoInstrumentations]
         : [],
