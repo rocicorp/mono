@@ -4,5 +4,5 @@
     "noEmit": false,
     "emitDeclarationOnly": true
   },
-  "include": ["src/zero.ts", "src/react.ts", "src/solid.ts"]
+  "include": ["src/zero.ts", "src/react.ts", "src/solid.ts", "src/expo.ts"]
 }
