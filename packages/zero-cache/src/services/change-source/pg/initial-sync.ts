@@ -68,18 +68,9 @@ export async function initialSync(
       'The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
   }
-  const {tableCopyWorkers: numWorkers, profileCopy} = syncOptions;
+  const {tableCopyWorkers, profileCopy} = syncOptions;
   const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
   const sql = pgClient(lc, upstreamURI);
-  const copyPool = pgClient(
-    lc,
-    upstreamURI,
-    {
-      max: numWorkers,
-      connection: {['application_name']: 'initial-sync-copy-worker'},
-    },
-    'json-as-string',
-  );
   const replicationSession = pgClient(lc, upstreamURI, {
     ['fetch_types']: false, // Necessary for the streaming protocol
     connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
@@ -149,6 +140,26 @@ export async function initialSync(
     // Now that tables have been validated, kick off the copiers.
     const {tables, indexes} = published;
     const numTables = tables.length;
+    if (platform() === 'win32' && tableCopyWorkers < numTables) {
+      lc.warn?.(
+        `Increasing the number of copy workers from ${tableCopyWorkers} to ` +
+          `${numTables} to work around a Node/Postgres connection bug`,
+      );
+    }
+    const numWorkers =
+      platform() === 'win32'
+        ? Math.max(tableCopyWorkers, numTables)
+        : tableCopyWorkers;
+
+    const copyPool = pgClient(
+      lc,
+      upstreamURI,
+      {
+        max: numWorkers,
+        connection: {['application_name']: 'initial-sync-copy-worker'},
+      },
+      'json-as-string',
+    );
     const copiers = startTableCopyWorkers(
       lc,
       copyPool,
@@ -156,37 +167,45 @@ export async function initialSync(
       numWorkers,
       numTables,
     );
-    createLiteTables(tx, tables, initialVersion);
+    try {
+      createLiteTables(tx, tables, initialVersion);
 
-    void copyProfiler?.start();
-    const rowCounts = await Promise.all(
-      tables.map(table =>
-        copiers.processReadTask((db, lc) => copy(lc, table, copyPool, db, tx)),
-      ),
-    );
-    void copyProfiler?.stopAndDispose(lc, 'initial-copy');
-    copiers.setDone();
+      void copyProfiler?.start();
+      const rowCounts = await Promise.all(
+        tables.map(table =>
+          copiers.processReadTask((db, lc) =>
+            copy(lc, table, copyPool, db, tx),
+          ),
+        ),
+      );
+      void copyProfiler?.stopAndDispose(lc, 'initial-copy');
 
-    const total = rowCounts.reduce(
-      (acc, curr) => ({
-        rows: acc.rows + curr.rows,
-        flushTime: acc.flushTime + curr.flushTime,
-      }),
-      {rows: 0, flushTime: 0},
-    );
+      const total = rowCounts.reduce(
+        (acc, curr) => ({
+          rows: acc.rows + curr.rows,
+          flushTime: acc.flushTime + curr.flushTime,
+        }),
+        {rows: 0, flushTime: 0},
+      );
 
-    const indexStart = performance.now();
-    createLiteIndices(tx, indexes);
-    const index = performance.now() - indexStart;
-    lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
+      const indexStart = performance.now();
+      createLiteIndices(tx, indexes);
+      const index = performance.now() - indexStart;
+      lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
-    await addReplica(sql, shard, slotName, initialVersion, published);
+      await addReplica(sql, shard, slotName, initialVersion, published);
 
-    const elapsed = performance.now() - start;
-    lc.info?.(
-      `Synced ${total.rows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} ` +
-        `(flush: ${total.flushTime.toFixed(3)}, index: ${index.toFixed(3)}, total: ${elapsed.toFixed(3)} ms)`,
-    );
+      const elapsed = performance.now() - start;
+      lc.info?.(
+        `Synced ${total.rows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} ` +
+          `(flush: ${total.flushTime.toFixed(3)}, index: ${index.toFixed(3)}, total: ${elapsed.toFixed(3)} ms)`,
+      );
+    } finally {
+      copiers.setDone();
+      // Workaround a Node bug in Windows in which certain COPY streams result
+      // in hanging the connection, which causes this await to never resolve.
+      void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
+    }
   } catch (e) {
     // If initial-sync did not succeed, make a best effort to drop the
     // orphaned replication slot to avoid running out of slots in
@@ -200,9 +219,6 @@ export async function initialSync(
   } finally {
     await replicationSession.end();
     await sql.end();
-    // Workaround a Node bug in Windows in which certain COPY streams result
-    // in hanging the connection, which causes this await to never resolve.
-    void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
   }
 }
 
@@ -261,13 +277,6 @@ function startTableCopyWorkers(
   numWorkers: number,
   numTables: number,
 ): TransactionPool {
-  if (platform() === 'win32' && numWorkers < numTables) {
-    lc.warn?.(
-      `Increasing the number of copy workers from ${numWorkers} to ` +
-        `${numTables} to work around a Node/Postgres connection bug`,
-    );
-    numWorkers = numTables;
-  }
   const {init} = importSnapshot(snapshot);
   const tableCopiers = new TransactionPool(
     lc,
