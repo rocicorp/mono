@@ -3,6 +3,7 @@ import {
   PG_INSUFFICIENT_PRIVILEGE,
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
+import {platform} from 'node:os';
 import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
@@ -137,54 +138,55 @@ export async function initialSync(
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const start = performance.now();
-    const copiers = startTableCopyWorkers(lc, copyPool, snapshot, numWorkers);
-    try {
-      // Retrieve the published schema at the consistent_point.
-      const published = await sql.begin(Mode.READONLY, async tx => {
-        await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
-        return getPublicationInfo(tx, publications);
-      });
-      // Note: If this throws, initial-sync is aborted.
-      validatePublications(lc, published);
+    // Retrieve the published schema at the consistent_point.
+    const published = await sql.begin(Mode.READONLY, async tx => {
+      await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
+      return getPublicationInfo(tx, publications);
+    });
+    // Note: If this throws, initial-sync is aborted.
+    validatePublications(lc, published);
 
-      // Now that tables have been validated, kick off the copiers.
-      const {tables, indexes} = published;
-      const numTables = tables.length;
-      createLiteTables(tx, tables, initialVersion);
+    // Now that tables have been validated, kick off the copiers.
+    const {tables, indexes} = published;
+    const numTables = tables.length;
+    const copiers = startTableCopyWorkers(
+      lc,
+      copyPool,
+      snapshot,
+      numWorkers,
+      numTables,
+    );
+    createLiteTables(tx, tables, initialVersion);
 
-      void copyProfiler?.start();
-      const rowCounts = await Promise.all(
-        tables.map(table =>
-          copiers.processReadTask((db, lc) =>
-            copy(lc, table, copyPool, db, tx),
-          ),
-        ),
-      );
-      void copyProfiler?.stopAndDispose(lc, 'initial-copy');
+    void copyProfiler?.start();
+    const rowCounts = await Promise.all(
+      tables.map(table =>
+        copiers.processReadTask((db, lc) => copy(lc, table, copyPool, db, tx)),
+      ),
+    );
+    void copyProfiler?.stopAndDispose(lc, 'initial-copy');
+    copiers.setDone();
 
-      const total = rowCounts.reduce(
-        (acc, curr) => ({
-          rows: acc.rows + curr.rows,
-          flushTime: acc.flushTime + curr.flushTime,
-        }),
-        {rows: 0, flushTime: 0},
-      );
+    const total = rowCounts.reduce(
+      (acc, curr) => ({
+        rows: acc.rows + curr.rows,
+        flushTime: acc.flushTime + curr.flushTime,
+      }),
+      {rows: 0, flushTime: 0},
+    );
 
-      const indexStart = performance.now();
-      createLiteIndices(tx, indexes);
-      const index = performance.now() - indexStart;
-      lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
+    const indexStart = performance.now();
+    createLiteIndices(tx, indexes);
+    const index = performance.now() - indexStart;
+    lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
-      await addReplica(sql, shard, slotName, initialVersion, published);
+    await addReplica(sql, shard, slotName, initialVersion, published);
 
-      const elapsed = performance.now() - start;
-      lc.info?.(
-        `Synced ${total.rows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} ` +
-          `(flush: ${total.flushTime.toFixed(3)}, index: ${index.toFixed(3)}, total: ${elapsed.toFixed(3)} ms)`,
-      );
-    } finally {
-      copiers.setDone();
-    }
+    const elapsed = performance.now() - start;
+    lc.info?.(
+      `Synced ${total.rows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} ` +
+        `(flush: ${total.flushTime.toFixed(3)}, index: ${index.toFixed(3)}, total: ${elapsed.toFixed(3)} ms)`,
+    );
   } catch (e) {
     // If initial-sync did not succeed, make a best effort to drop the
     // orphaned replication slot to avoid running out of slots in
@@ -198,7 +200,9 @@ export async function initialSync(
   } finally {
     await replicationSession.end();
     await sql.end();
-    await copyPool.end();
+    // Workaround a Node bug in Windows in which certain COPY streams result
+    // in hanging the connection, which causes this await to never resolve.
+    void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
   }
 }
 
@@ -255,7 +259,15 @@ function startTableCopyWorkers(
   db: PostgresDB,
   snapshot: string,
   numWorkers: number,
+  numTables: number,
 ): TransactionPool {
+  if (platform() === 'win32' && numWorkers < numTables) {
+    lc.warn?.(
+      `Increasing the number of copy workers from ${numWorkers} to ` +
+        `${numTables} to work around a Node/Postgres connection bug`,
+    );
+    numWorkers = numTables;
+  }
   const {init} = importSnapshot(snapshot);
   const tableCopiers = new TransactionPool(
     lc,
@@ -266,7 +278,7 @@ function startTableCopyWorkers(
   );
   tableCopiers.run(db);
 
-  lc.info?.(`Started ${numWorkers} workers to copy tables`);
+  lc.info?.(`Started ${numWorkers} workers to copy ${numTables} tables`);
 
   if (parseInt(process.versions.node) < 22) {
     lc.warn?.(
