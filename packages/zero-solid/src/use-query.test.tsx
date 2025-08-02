@@ -833,41 +833,12 @@ test('useQuery when ZeroProvider is used, view is reused if query instance chang
 test('useQuery when ZeroProvider is not-used, view is not-reused if query instance changes even if hash does not change', () => {
   const {tableQuery} = setupTestEnvironment();
   const queries = [tableQuery.where('a', 1), tableQuery.where('a', 1)];
-  const querySpies = queries.map(q => vi.spyOn(q, 'materialize'));
-  const [queryIndex, setQueryIndex] = createSignal(0);
+  const [queryIndex] = createSignal(0);
   const querySignal = () => queries[queryIndex()];
 
-  const {
-    result: [rows],
-    cleanup,
-  } = renderHook(useQuery, {
-    initialProps: [querySignal],
-  });
-
-  expect(rows()).toEqual([
-    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
-  ]);
-
-  expect(querySpies[0]).toHaveBeenCalledTimes(1);
-  expect(querySpies[1]).toHaveBeenCalledTimes(0);
-
-  const view0 = querySpies[0].mock.results[0].value;
-  const destroy0Spy = vi.spyOn(view0, 'destroy');
-
-  expect(destroy0Spy).toHaveBeenCalledTimes(0);
-
-  setQueryIndex(1);
-
-  expect(destroy0Spy).toHaveBeenCalledTimes(1);
-
-  expect(querySpies[0]).toHaveBeenCalledTimes(1);
-  expect(querySpies[1]).toHaveBeenCalledTimes(1);
-
-  const view1 = querySpies[1].mock.results[0].value;
-  const destroy1Spy = vi.spyOn(view1, 'destroy');
-
-  cleanup();
-
-  expect(destroy0Spy).toHaveBeenCalledTimes(1);
-  expect(destroy1Spy).toHaveBeenCalledTimes(1);
+  expect(() => {
+    renderHook(useQuery, {
+      initialProps: [querySignal],
+    });
+  }).toThrow('useZero must be used within a ZeroProvider');
 });

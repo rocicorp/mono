@@ -76,7 +76,7 @@ export function useQuery<
     ]
   >(
     ([prevView, prevClientID, prevQuery, prevQueryHash, prevTtl]) => {
-      const clientID = useZero()()?.clientID;
+      const {clientID} = useZero()();
       const query = querySignal();
       const queryHash = query.hash();
       const ttl = normalize(options)?.ttl ?? DEFAULT_TTL_MS;

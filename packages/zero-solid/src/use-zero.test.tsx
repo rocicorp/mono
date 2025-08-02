@@ -150,3 +150,11 @@ test('if zero options change but are === to prev, instance ZeroProvider does not
   const zero1 = result();
   expect(zero1).not.toBe(zero0);
 });
+
+test('useZero throws if not used within a ZeroProvider', () => {
+  expect(() => {
+    renderHook(useZero, {
+      initialProps: [],
+    });
+  }).toThrow('useZero must be used within a ZeroProvider');
+});
