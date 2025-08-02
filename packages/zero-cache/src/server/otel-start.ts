@@ -1,6 +1,6 @@
 import {diag} from '@opentelemetry/api';
 import {logs} from '@opentelemetry/api-logs';
-import * as autoInstrumentationsModule from '@opentelemetry/auto-instrumentations-node';
+import {getNodeAutoInstrumentations} from '@opentelemetry/auto-instrumentations-node';
 import type {Instrumentation} from '@opentelemetry/instrumentation';
 import {resourceFromAttributes} from '@opentelemetry/resources';
 import {NodeSDK} from '@opentelemetry/sdk-node';
@@ -56,8 +56,7 @@ class OtelManager {
     // Lazy load the auto-instrumentations module
     // avoid MODULE_NOT_FOUND errors in environments where it's not being used
     if (!this.#autoInstrumentations) {
-      this.#autoInstrumentations =
-        autoInstrumentationsModule.getNodeAutoInstrumentations();
+      this.#autoInstrumentations = getNodeAutoInstrumentations();
     }
     // Set defaults to be backwards compatible with the previously
     // hard-coded exporters
