@@ -148,8 +148,8 @@ export async function initialSync(
     }
     const numWorkers =
       platform() === 'win32'
-        ? Math.max(tableCopyWorkers, numTables)
-        : tableCopyWorkers;
+        ? numTables
+        : Math.min(tableCopyWorkers, numTables);
 
     const copyPool = pgClient(
       lc,
