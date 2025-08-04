@@ -11,10 +11,48 @@ import {useLogin} from '../hooks/use-login.tsx';
 import {Button} from './button.tsx';
 import styles from './image-upload-area.module.css';
 
-interface ImageUploadAreaProps {
+type ImageUploadAreaProps = {
   children: ReactNode;
   className?: string;
-}
+};
+
+// Image upload logic (from use-image-upload.ts)
+const validateFile = (file: File): string | null => {
+  const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+  if (!validTypes.includes(file.type)) {
+    return 'Invalid file type. Please select a JPG, PNG, WEBP, or GIF image.';
+  }
+
+  if (file.size > 10 * 1024 * 1024) {
+    return 'File is too large. Maximum size is 10MB.';
+  }
+
+  return null;
+};
+
+const getPresignedUrl = async (
+  contentType: string,
+  jwt: string | undefined,
+): Promise<{url: string; key: string}> => {
+  if (!jwt) {
+    throw new Error('No JWT provided');
+  }
+
+  const response = await fetch('/api/upload/presigned-url', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${jwt}`,
+    },
+    body: JSON.stringify({contentType}),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to get presigned URL: ${response.statusText}`);
+  }
+
+  return response.json();
+};
 
 export function ImageUploadArea({
   children,
@@ -26,39 +64,6 @@ export function ImageUploadArea({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {loginState} = useLogin();
-
-  // Image upload logic (from use-image-upload.ts)
-  const validateFile = (file: File): string | null => {
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!validTypes.includes(file.type)) {
-      return 'Invalid file type. Please select a JPG, PNG, WEBP, or GIF image.';
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      return 'File is too large. Maximum size is 10MB.';
-    }
-
-    return null;
-  };
-
-  const getPresignedUrl = async (
-    contentType: string,
-  ): Promise<{url: string; key: string}> => {
-    const response = await fetch('/api/upload/presigned-url', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${loginState?.encoded}`,
-      },
-      body: JSON.stringify({contentType}),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to get presigned URL: ${response.statusText}`);
-    }
-
-    return response.json();
-  };
 
   // Textarea image insert logic (from use-textarea-image-insert.ts)
   const insertMarkdown = useCallback((markdown: string) => {
@@ -128,7 +133,10 @@ export function ImageUploadArea({
     setIsUploading(true);
     try {
       // 1. Get presigned URL
-      const {url: presignedUrl, key} = await getPresignedUrl(file.type);
+      const {url: presignedUrl, key} = await getPresignedUrl(
+        file.type,
+        loginState?.encoded,
+      );
 
       // 2. Upload to S3
       await fetch(presignedUrl, {
