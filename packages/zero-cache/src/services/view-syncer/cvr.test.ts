@@ -228,10 +228,7 @@ test.each([
         {hash: 'h2', ttl: -1, inactivatedAt: undefined},
       ],
     },
-    expected: [
-      {hash: 'h2', ttl: 2000, inactivatedAt: ttlClockFromNumber(1000)},
-      {hash: 'h1', ttl: minutes(10), inactivatedAt: ttlClockFromNumber(2000)},
-    ],
+    expected: [],
   },
 ])('getInactiveQueries %o', ({clients, expected}) => {
   const cvr = makeCVR(clients);

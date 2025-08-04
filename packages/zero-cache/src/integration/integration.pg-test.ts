@@ -283,6 +283,40 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-table',
       spec: {
+        schema: '123_0',
+        name: 'mutations',
+        primaryKey: ['clientGroupID', 'clientID', 'mutationID'],
+        columns: {
+          clientGroupID: {pos: 0, dataType: 'text', notNull: true},
+          clientID: {pos: 1, dataType: 'text', notNull: true},
+          mutationID: {pos: 2, dataType: 'bigint', notNull: true},
+          mutation: {pos: 3, dataType: 'json'},
+        },
+      },
+    },
+  ],
+  [
+    'data',
+    {
+      tag: 'create-index',
+      spec: {
+        name: '123_mutations_key',
+        schema: '123_0',
+        tableName: 'mutations',
+        columns: {
+          clientGroupID: 'ASC',
+          clientID: 'ASC',
+          mutationID: 'ASC',
+        },
+        unique: true,
+      },
+    },
+  ],
+  [
+    'data',
+    {
+      tag: 'create-table',
+      spec: {
         schema: '123',
         name: 'schemaVersions',
         primaryKey: ['lock'],

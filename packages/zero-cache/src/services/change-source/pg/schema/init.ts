@@ -13,10 +13,13 @@ import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import {decommissionShard} from '../decommission.ts';
 import {publishedSchema} from './published.ts';
 import {
+  getMutationsTableDefinition,
   legacyReplicationSlot,
+  metadataPublicationName,
   setupTablesAndReplication,
   setupTriggers,
 } from './shard.ts';
+import {id} from '../../../../types/sql.ts';
 
 /**
  * Ensures that a shard is set up for initial sync.
@@ -175,6 +178,17 @@ function getIncrementalMigrations(
           SELECT publications FROM ${sql(shardConfigTable)}`;
         await setupTriggers(lc, sql, {...shard, publications});
         lc.info?.(`Upgraded DDL event triggers`);
+      },
+    },
+
+    // Adds the `mutations` table used to track mutation results.
+    10: {
+      migrateSchema: async (lc, sql) => {
+        await sql.unsafe(/*sql*/ `
+          ${getMutationsTableDefinition(upstreamSchema(shard))}
+          ALTER PUBLICATION ${id(metadataPublicationName(shard.appID, shard.shardNum))} ADD TABLE ${id(upstreamSchema(shard))}."mutations";
+        `);
+        lc.info?.('Upgraded schema with new mutations table');
       },
     },
   };

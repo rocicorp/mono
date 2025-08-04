@@ -26,8 +26,9 @@ export interface ZeroOptions<
    * - "https://myapp-myteam.zero.ms/zero"
    * - "https://myapp-myteam.zero.ms/db"
    *
-   * The latter is useful for configuring routing rules (e.g. "zero/**") when
-   * the zero-cache is hosted on the same domain as the application.
+   * The latter is useful for configuring routing rules (e.g. "/zero/\*") when
+   * the zero-cache is hosted on the same domain as the application. **Note that
+   * only a single path segment is allowed (e.g. it cannot be "/proxy/zero/\*")**.
    */
   server?: string | null | undefined;
 
@@ -117,6 +118,12 @@ export interface ZeroOptions<
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
+   *
+   * @deprecated Use `onOnline` on the Zero instance instead. e.g.
+   * ```ts
+   * const zero = new Zero({...});
+   * zero.onOnline((online) => { ... });
+   * ```
    */
   onOnlineChange?: ((online: boolean) => void) | undefined;
 

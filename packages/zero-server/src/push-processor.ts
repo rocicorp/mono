@@ -22,6 +22,7 @@ export type Params = v.Infer<typeof pushParamsSchema>;
 
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
+  writeMutationResult: (result: MutationResponse) => Promise<void>;
 }
 
 export interface TransactionProviderInput {
@@ -139,7 +140,7 @@ export class PushProcessor<
           params,
           req,
           m,
-          caughtError !== undefined,
+          caughtError,
         );
 
         // The first time through we caught an error.
@@ -204,7 +205,7 @@ export class PushProcessor<
     params: Params,
     req: PushBody,
     m: Mutation,
-    errorMode: boolean,
+    caughtError: unknown,
   ): Promise<MutationResponse> {
     if (m.type === 'crud') {
       throw new Error(
@@ -221,17 +222,23 @@ export class PushProcessor<
           m.id,
         );
 
-        if (!errorMode) {
-          await this.#dispatchMutation(dbTx, mutators, m);
-        }
-
-        return {
+        const result = {
           id: {
             clientID: m.clientID,
             id: m.id,
           },
           result: {},
         };
+
+        // no caught error? Not in error mode.
+        if (caughtError === undefined) {
+          await this.#dispatchMutation(dbTx, mutators, m);
+        } else {
+          const appError = makeAppErrorResponse(m, caughtError);
+          await transactionHooks.writeMutationResult(appError);
+        }
+
+        return result;
       },
       {
         upstreamSchema: params.schema,

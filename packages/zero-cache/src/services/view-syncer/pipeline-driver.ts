@@ -24,7 +24,7 @@ import {
 import type {LogConfig} from '../../config/zero-config.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
-import * as histograms from '../../observability/histograms.ts';
+import {getOrCreateHistogram} from '../../observability/metrics.ts';
 import type {RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
 import type {ShardID} from '../../types/shards.ts';
@@ -85,6 +85,12 @@ export class PipelineDriver {
   #streamer: Streamer | null = null;
   #replicaVersion: string | null = null;
   #permissions: LoadedPermissions | null = null;
+
+  readonly #advanceTime = getOrCreateHistogram('sync', 'ivm.advance-time', {
+    description:
+      'Time to advance all queries for a given client group for in response to a single change.',
+    unit: 's',
+  });
 
   constructor(
     lc: LogContext,
@@ -438,7 +444,7 @@ export class PipelineDriver {
       }
 
       const elapsed = performance.now() - start;
-      histograms.changeAdvanceTime().record(elapsed, {
+      this.#advanceTime.record(elapsed / 1000, {
         table,
         type,
       });

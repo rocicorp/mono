@@ -80,6 +80,17 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
 
           return {lastMutationID};
         },
+
+        async writeMutationResult(result) {
+          const formatted = formatPg(
+            sql`INSERT INTO ${sql.ident(transactionInput.upstreamSchema)}.mutations
+                    ("clientGroupID", "clientID", "mutationID", "result")
+                VALUES (${transactionInput.clientGroupID}, ${result.id.clientID}, ${result.id.id}, ${JSON.stringify(
+                  result.result,
+                )}::text::json)`,
+          );
+          await dbTx.query(formatted.text, formatted.values);
+        },
       });
     });
   }

@@ -33,6 +33,8 @@ export type AddCommentArgs = {
   created: number;
 };
 
+export type NotificationType = 'subscribe' | 'unsubscribe';
+
 export function createMutators(authData: AuthData | undefined) {
   return {
     issue: {
@@ -52,14 +54,52 @@ export function createMutators(authData: AuthData | undefined) {
           open: true,
           visibility: 'public',
         });
+
+        // subscribe to notifications if the user creates the issue
+        await updateIssueNotification(tx, {
+          userID: creatorID,
+          issueID: id,
+          subscribed: 'subscribe',
+          created,
+        });
       },
 
       async update(
         tx,
         change: UpdateValue<typeof schema.tables.issue> & {modified: number},
       ) {
+        const oldIssue = await tx.query.issue.where('id', change.id).one();
+        assert(oldIssue);
+
         await assertIsCreatorOrAdmin(authData, tx.query.issue, change.id);
         await tx.mutate.issue.update(change);
+
+        const isAssigneeChange =
+          change.assigneeID !== undefined &&
+          change.assigneeID !== oldIssue.assigneeID;
+        const previousAssigneeID = isAssigneeChange
+          ? oldIssue.assigneeID
+          : undefined;
+
+        // subscribe to notifications if the user is assigned to the issue
+        if (change.assigneeID) {
+          await updateIssueNotification(tx, {
+            userID: change.assigneeID,
+            issueID: change.id,
+            subscribed: 'subscribe',
+            created: change.modified,
+          });
+        }
+
+        // unsubscribe from notifications if the user is no longer assigned to the issue
+        if (previousAssigneeID) {
+          await updateIssueNotification(tx, {
+            userID: previousAssigneeID,
+            issueID: change.id,
+            subscribed: 'unsubscribe',
+            created: change.modified,
+          });
+        }
       },
 
       async delete(tx, id: string) {
@@ -84,6 +124,27 @@ export function createMutators(authData: AuthData | undefined) {
       },
     },
 
+    notification: {
+      async update(
+        tx,
+        {
+          issueID,
+          subscribed,
+          created,
+        }: {issueID: string; subscribed: NotificationType; created: number},
+      ) {
+        assertIsLoggedIn(authData);
+        const userID = authData.sub;
+        await updateIssueNotification(tx, {
+          userID,
+          issueID,
+          subscribed,
+          created,
+          forceUpdate: true,
+        });
+      },
+    },
+
     emoji: {
       async addToIssue(tx, args: AddEmojiArgs) {
         await addEmoji(tx, 'issue', args);
@@ -104,9 +165,16 @@ export function createMutators(authData: AuthData | undefined) {
         assertIsLoggedIn(authData);
         const creatorID = authData.sub;
 
-        await assertUserCanSeeIssue(tx, authData, issueID);
+        await assertUserCanSeeIssue(tx, creatorID, issueID);
 
         await tx.mutate.comment.insert({id, issueID, creatorID, body, created});
+
+        await updateIssueNotification(tx, {
+          userID: creatorID,
+          issueID,
+          subscribed: 'subscribe',
+          created,
+        });
       },
 
       async edit(tx, {id, body}: {id: string; body: string}) {
@@ -166,9 +234,9 @@ export function createMutators(authData: AuthData | undefined) {
     const creatorID = authData.sub;
 
     if (subjectType === 'issue') {
-      assertUserCanSeeIssue(tx, authData, subjectID);
+      assertUserCanSeeIssue(tx, creatorID, subjectID);
     } else {
-      assertUserCanSeeComment(tx, authData, subjectID);
+      assertUserCanSeeComment(tx, creatorID, subjectID);
     }
 
     await tx.mutate.emoji.insert({
@@ -179,6 +247,58 @@ export function createMutators(authData: AuthData | undefined) {
       creatorID,
       created,
     });
+
+    // subscribe to notifications if the user emojis the issue itself
+    if (subjectType === 'issue') {
+      await updateIssueNotification(tx, {
+        userID: creatorID,
+        issueID: subjectID,
+        subscribed: 'subscribe',
+        created,
+      });
+    }
+  }
+
+  async function updateIssueNotification(
+    tx: Transaction<typeof schema, unknown>,
+    {
+      userID,
+      issueID,
+      subscribed,
+      created,
+      forceUpdate = false,
+    }: {
+      userID: string;
+      issueID: string;
+      subscribed: NotificationType;
+      created: number;
+      forceUpdate?: boolean;
+    },
+  ) {
+    await assertUserCanSeeIssue(tx, userID, issueID);
+
+    const existingNotification = await tx.query.issueNotifications
+      .where('userID', userID)
+      .where('issueID', issueID)
+      .one();
+
+    // if the user is subscribing to the issue, and they don't already have a preference
+    // or the forceUpdate flag is set, we upsert the notification.
+    if (subscribed === 'subscribe' && (!existingNotification || forceUpdate)) {
+      await tx.mutate.issueNotifications.upsert({
+        userID,
+        issueID,
+        subscribed: true,
+        created,
+      });
+    } else if (subscribed === 'unsubscribe') {
+      await tx.mutate.issueNotifications.upsert({
+        userID,
+        issueID,
+        subscribed: false,
+        created,
+      });
+    }
   }
 }
 

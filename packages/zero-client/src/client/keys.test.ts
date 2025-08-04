@@ -4,7 +4,10 @@ import type {
   PrimaryKey,
   PrimaryKeyValueRecord,
 } from '../../../zero-protocol/src/primary-key.ts';
-import {toPrimaryKeyString as toPrimaryKeyStringImpl} from './keys.ts';
+import {
+  toPrimaryKeyString as toPrimaryKeyStringImpl,
+  toMutationResponseKey,
+} from './keys.ts';
 
 test('toPrimaryKeyString', () => {
   function toPrimaryKeyString(
@@ -148,4 +151,25 @@ test('no clashes - multiple pk', () => {
       },
     ),
   );
+});
+
+test('toMutationResponseKey', () => {
+  expect(
+    toMutationResponseKey({
+      clientID: 'cid',
+      id: 1,
+    }),
+  ).toBe('m/cid/1');
+  expect(
+    toMutationResponseKey({
+      clientID: 'cid',
+      id: 2,
+    }),
+  ).toBe('m/cid/2');
+  expect(
+    toMutationResponseKey({
+      clientID: 'cid2',
+      id: 1,
+    }),
+  ).toBe('m/cid2/1');
 });

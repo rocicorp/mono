@@ -2,9 +2,10 @@ import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
+import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {testDBs} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
-import {cvrSchema} from '../../types/shards.ts';
+import {cvrSchema, upstreamSchema} from '../../types/shards.ts';
 import type {PatchToVersion} from './client-handler.ts';
 import {
   ConcurrentModificationException,
@@ -33,6 +34,8 @@ import {
 } from './schema/cvr.ts';
 import type {ClientQueryRecord, CVRVersion, RowID} from './schema/types.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
+import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
+import {id} from '../../types/sql.ts';
 
 const APP_ID = 'dapp';
 const SHARD_NUM = 3;
@@ -59,7 +62,7 @@ describe('view-syncer/cvr', () => {
     state: Partial<DBState>,
   ): Promise<void> {
     return db.begin(async tx => {
-      const {instances, rowsVersion} = state;
+      const {instances, rowsVersion, desires} = state;
       if (instances && !rowsVersion) {
         state = {
           ...state,
@@ -69,6 +72,19 @@ describe('view-syncer/cvr', () => {
           })),
         };
       }
+
+      // Fixup ttl for desires to use seconds instead of milliseconds.
+      if (desires) {
+        state = {
+          ...state,
+          desires: desires.map(desire => ({
+            ...desire,
+            ttl:
+              typeof desire.ttl === 'number' ? desire.ttl / 1000 : desire.ttl,
+          })),
+        };
+      }
+
       for (const [table, rows] of Object.entries(state)) {
         for (const row of rows) {
           await tx`INSERT INTO ${tx(`${cvrSchema(SHARD)}.` + table)} ${tx(
@@ -106,6 +122,9 @@ describe('view-syncer/cvr', () => {
             // expiresAt is deprecated. It is still in the db but we do not
             // want it in the js objects.
             delete row.expiresAt;
+
+            // Convert interval to ms.
+            row.ttl = intervalToMilliseconds(row.ttl);
           });
           (res as DesiresRow[]).sort(compareDesiresRows);
           (tableState as DesiresRow[]).sort(compareDesiresRows);
@@ -148,19 +167,32 @@ describe('view-syncer/cvr', () => {
   }
 
   const lc = createSilentLogContext();
-  let db: PostgresDB;
+  let cvrDb: PostgresDB;
+  let upstreamDb: PostgresDB;
 
   const ON_FAILURE = (e: unknown) => {
     throw e;
   };
 
   beforeEach(async () => {
-    db = await testDBs.create('cvr_test_db');
-    await db.begin(tx => setupCVRTables(lc, tx, SHARD));
+    [cvrDb, upstreamDb] = await Promise.all([
+      testDBs.create('cvr_test_db'),
+      testDBs.create('upstream_test_db'),
+    ]);
+    const shard = id(upstreamSchema(SHARD));
+    await Promise.all([
+      cvrDb.begin(tx => setupCVRTables(lc, tx, SHARD)),
+      upstreamDb.begin(tx =>
+        tx.unsafe(`
+        CREATE SCHEMA IF NOT EXISTS ${shard};
+        ${getMutationsTableDefinition(shard)}
+      `),
+      ),
+    ]);
   });
 
   afterEach(async () => {
-    await testDBs.drop(db);
+    await testDBs.drop(cvrDb);
   });
 
   async function catchupRows(
@@ -186,7 +218,8 @@ describe('view-syncer/cvr', () => {
   test('load first time cvr', async () => {
     const pgStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -222,7 +255,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const pgStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -231,7 +265,7 @@ describe('view-syncer/cvr', () => {
     const reloaded = await pgStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(flushed);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       instances: [
         {
           clientGroupID: 'abc123',
@@ -253,7 +287,8 @@ describe('view-syncer/cvr', () => {
   test('set client schema', async () => {
     const pgStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -321,7 +356,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const pgStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -330,7 +366,7 @@ describe('view-syncer/cvr', () => {
     const reloaded = await pgStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       instances: [
         {
           clientGroupID: 'abc123',
@@ -426,16 +462,17 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: false,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [],
     };
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -465,7 +502,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -474,7 +511,7 @@ describe('view-syncer/cvr', () => {
       clientSchema: null,
     } satisfies CVRSnapshot);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       ...initialState,
       instances: [
         {
@@ -526,16 +563,17 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: false,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [],
     };
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -574,7 +612,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -588,7 +626,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const cvrStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -600,7 +639,7 @@ describe('view-syncer/cvr', () => {
     // Let the takeover write that's fired during load to reach PG.
     await sleep(100);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       ...initialState,
       instances: [
         {
@@ -629,11 +668,12 @@ describe('view-syncer/cvr', () => {
       desires: [],
       rows: [],
     };
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -643,7 +683,7 @@ describe('view-syncer/cvr', () => {
     const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     // Simulate an external modification, incrementing the patch version.
-    await db`UPDATE "dapp_3/cvr".instances SET version = '1a9:03' WHERE "clientGroupID" = 'abc123'`;
+    await cvrDb`UPDATE "dapp_3/cvr".instances SET version = '1a9:03' WHERE "clientGroupID" = 'abc123'`;
 
     // force a flush to trigger detection
     updater.ensureClient('client-foo');
@@ -659,7 +699,7 @@ describe('view-syncer/cvr', () => {
 
     // The last active time should not have been modified.
     expect(
-      await db`SELECT "lastActive" FROM "dapp_3/cvr".instances WHERE "clientGroupID" = 'abc123'`,
+      await cvrDb`SELECT "lastActive" FROM "dapp_3/cvr".instances WHERE "clientGroupID" = 'abc123'`,
     ).toEqual([{lastActive: Date.UTC(2024, 3, 23)}]);
   });
 
@@ -682,11 +722,12 @@ describe('view-syncer/cvr', () => {
       desires: [],
       rows: [],
     };
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -696,7 +737,7 @@ describe('view-syncer/cvr', () => {
     const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
 
     // Simulate an ownership change.
-    await db`
+    await cvrDb`
     UPDATE "dapp_3/cvr".instances SET "owner"     = 'other-task', 
                              "grantedAt" = ${LAST_CONNECT + 1}
     WHERE "clientGroupID" = 'abc123'`;
@@ -715,7 +756,7 @@ describe('view-syncer/cvr', () => {
 
     // The last active time should not have been modified.
     expect(
-      await db`SELECT "lastActive" FROM "dapp_3/cvr".instances WHERE "clientGroupID" = 'abc123'`,
+      await cvrDb`SELECT "lastActive" FROM "dapp_3/cvr".instances WHERE "clientGroupID" = 'abc123'`,
     ).toEqual([{lastActive: Date.UTC(2024, 3, 23)}]);
   });
 
@@ -763,7 +804,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a8',
           deleted: false,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -772,16 +813,17 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: false,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [],
     };
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -815,12 +857,12 @@ describe('view-syncer/cvr', () => {
             dooClient: {
               version: {stateVersion: '1a8'},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -978,10 +1020,10 @@ describe('view-syncer/cvr', () => {
         "clients": 2,
         "desires": 8,
         "instances": 1,
-        "queries": 9,
+        "queries": 10,
         "rows": 0,
         "rowsDeferred": 0,
-        "statements": 21,
+        "statements": 22,
       }
     `);
     expect(updated).toEqual({
@@ -1033,12 +1075,42 @@ describe('view-syncer/cvr', () => {
             ],
           },
         },
+        mutationResults: {
+          ast: {
+            orderBy: [
+              ['clientGroupID', 'asc'],
+              ['clientID', 'asc'],
+              ['mutationID', 'asc'],
+            ],
+            schema: '',
+            table: 'dapp_3.mutations',
+            where: {
+              conditions: [
+                {
+                  left: {
+                    name: 'clientGroupID',
+                    type: 'column',
+                  },
+                  op: '=',
+                  right: {
+                    type: 'literal',
+                    value: 'abc123',
+                  },
+                  type: 'simple',
+                },
+              ],
+              type: 'and',
+            },
+          },
+          id: 'mutationResults',
+          type: 'internal',
+        },
         xCustomHash: {
           args: [],
           clientState: {
             barClient: {
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
               version: {
                 minorVersion: 1,
                 stateVersion: '1aa',
@@ -1046,7 +1118,7 @@ describe('view-syncer/cvr', () => {
             },
             fooClient: {
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
               version: {
                 minorVersion: 1,
                 stateVersion: '1aa',
@@ -1067,7 +1139,7 @@ describe('view-syncer/cvr', () => {
             barClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           patchVersion: {stateVersion: '1a9', minorVersion: 2},
@@ -1080,12 +1152,12 @@ describe('view-syncer/cvr', () => {
             barClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
             fooClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
         },
@@ -1097,7 +1169,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1aa', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
         },
@@ -1105,7 +1177,7 @@ describe('view-syncer/cvr', () => {
       clientSchema: null,
     } satisfies CVRSnapshot);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       instances: [
         {
           clientGroupID: 'abc123',
@@ -1198,6 +1270,43 @@ describe('view-syncer/cvr', () => {
         },
         {
           clientAST: {
+            orderBy: [
+              ['clientGroupID', 'asc'],
+              ['clientID', 'asc'],
+              ['mutationID', 'asc'],
+            ],
+            schema: '',
+            table: `${APP_ID}_${SHARD_NUM}.mutations`,
+            where: {
+              conditions: [
+                {
+                  left: {
+                    name: 'clientGroupID',
+                    type: 'column',
+                  },
+                  op: '=',
+                  right: {
+                    type: 'literal',
+                    value: 'abc123',
+                  },
+                  type: 'simple',
+                },
+              ],
+              type: 'and',
+            },
+          },
+          clientGroupID: 'abc123',
+          deleted: false,
+          internal: true,
+          patchVersion: null,
+          queryArgs: null,
+          queryHash: 'mutationResults',
+          queryName: null,
+          transformationHash: null,
+          transformationVersion: null,
+        },
+        {
+          clientAST: {
             table: 'comments',
           },
           clientGroupID: 'abc123',
@@ -1233,7 +1342,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1242,7 +1351,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'fourHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1251,7 +1360,7 @@ describe('view-syncer/cvr', () => {
           inactivatedAt: null,
           patchVersion: '1aa:01',
           queryHash: 'xCustomHash',
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1260,7 +1369,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'threeHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1269,7 +1378,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1278,7 +1387,7 @@ describe('view-syncer/cvr', () => {
           inactivatedAt: null,
           patchVersion: '1aa:01',
           queryHash: 'xCustomHash',
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1287,7 +1396,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'threeHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -1296,7 +1405,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1aa:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
 
@@ -1306,7 +1415,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const cvrStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -1388,16 +1498,17 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: false,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [],
     };
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -1429,7 +1540,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const doCVRStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -1441,7 +1553,7 @@ describe('view-syncer/cvr', () => {
     // Let the takeover write that's fired during load to reach PG.
     await sleep(100);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       ...initialState,
       instances: [
         {
@@ -1535,7 +1647,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -1587,11 +1699,12 @@ describe('view-syncer/cvr', () => {
       ],
     };
 
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -1796,7 +1909,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           transformationHash: 'serverOneHash',
@@ -1811,7 +1924,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const cvrStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -1820,7 +1934,7 @@ describe('view-syncer/cvr', () => {
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       instances: [
         {
           clientGroupID: 'abc123',
@@ -1893,7 +2007,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -2019,7 +2133,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -2073,9 +2187,17 @@ describe('view-syncer/cvr', () => {
         },
       ],
     };
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
-    let cvrStore = new CVRStore(lc, db, SHARD, 'my-task', 'abc123', ON_FAILURE);
+    let cvrStore = new CVRStore(
+      lc,
+      cvrDb,
+      upstreamDb,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
     let cvr = await cvrStore.load(lc, LAST_CONNECT);
     let updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1ba', '123');
 
@@ -2248,7 +2370,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           transformationHash: 'serverTwoHash',
@@ -2261,11 +2383,19 @@ describe('view-syncer/cvr', () => {
     } satisfies CVRSnapshot);
 
     // Verify round tripping.
-    cvrStore = new CVRStore(lc, db, SHARD, 'my-task', 'abc123', ON_FAILURE);
+    cvrStore = new CVRStore(
+      lc,
+      cvrDb,
+      upstreamDb,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
     cvr = await cvrStore.load(lc, LAST_CONNECT);
     expect(cvr).toEqual(updated);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       instances: [
         {
           clientGroupID: 'abc123',
@@ -2333,7 +2463,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -2418,7 +2548,7 @@ describe('view-syncer/cvr', () => {
       }
     `);
 
-    const newState = await getAllState(db);
+    const newState = await getAllState(cvrDb);
     expect({
       instances: newState.instances,
       clients: newState.clients,
@@ -2560,7 +2690,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -2569,7 +2699,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -2624,11 +2754,12 @@ describe('view-syncer/cvr', () => {
       ],
     };
 
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -2851,7 +2982,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           transformationHash: 'updatedServerOneHash',
@@ -2866,7 +2997,7 @@ describe('view-syncer/cvr', () => {
             fooClient: {
               version: {stateVersion: '1a9', minorVersion: 1},
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
             },
           },
           transformationHash: 'updatedServerTwoHash',
@@ -2879,7 +3010,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const doCVRStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -2888,7 +3020,7 @@ describe('view-syncer/cvr', () => {
     const reloaded = await doCVRStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       instances: [
         {
           clientGroupID: 'abc123',
@@ -2970,7 +3102,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -2979,7 +3111,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           queryHash: 'twoHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -3142,11 +3274,12 @@ describe('view-syncer/cvr', () => {
       ],
     };
 
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -3287,7 +3420,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const doCVRStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -3296,7 +3430,7 @@ describe('view-syncer/cvr', () => {
     const reloaded = await doCVRStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       instances: [
         {
           clientGroupID: 'abc123',
@@ -3487,7 +3621,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -3496,7 +3630,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -3551,11 +3685,12 @@ describe('view-syncer/cvr', () => {
       ],
     };
 
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -3584,7 +3719,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "fooClient": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -3609,7 +3744,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "fooClient": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -3825,7 +3960,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const doCVRStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -3887,7 +4023,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -3921,11 +4057,12 @@ describe('view-syncer/cvr', () => {
       ],
     };
 
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4069,7 +4206,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const doCVRStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4078,7 +4216,7 @@ describe('view-syncer/cvr', () => {
     const reloaded = await doCVRStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       instances: [
         {
           clientGroupID: 'abc123',
@@ -4118,7 +4256,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           queryHash: 'oneHash',
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4205,7 +4343,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4230,11 +4368,12 @@ describe('view-syncer/cvr', () => {
       ],
     };
 
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4304,7 +4443,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const cvrStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4313,7 +4453,7 @@ describe('view-syncer/cvr', () => {
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       instances: [
         {
           clientGroupID: 'abc123',
@@ -4354,7 +4494,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4420,7 +4560,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4445,11 +4585,12 @@ describe('view-syncer/cvr', () => {
       ],
     };
 
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4512,7 +4653,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const cvrStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4521,7 +4663,7 @@ describe('view-syncer/cvr', () => {
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       instances: [
         {
           clientGroupID: 'abc123',
@@ -4562,7 +4704,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4628,7 +4770,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4653,11 +4795,12 @@ describe('view-syncer/cvr', () => {
       ],
     };
 
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4781,7 +4924,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const cvrStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -4790,7 +4934,7 @@ describe('view-syncer/cvr', () => {
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(updated);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       instances: [
         {
           clientGroupID: 'abc123',
@@ -4831,7 +4975,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4897,7 +5041,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -4922,11 +5066,12 @@ describe('view-syncer/cvr', () => {
       ],
     };
 
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -5053,7 +5198,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -5078,11 +5223,12 @@ describe('view-syncer/cvr', () => {
       ],
     };
 
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -5148,7 +5294,8 @@ describe('view-syncer/cvr', () => {
     // Verify round tripping.
     const cvrStore2 = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -5157,7 +5304,7 @@ describe('view-syncer/cvr', () => {
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(cvr);
 
-    await expectState(db, {
+    await expectState(cvrDb, {
       ...initialState,
       instances: [
         {
@@ -5213,7 +5360,7 @@ describe('view-syncer/cvr', () => {
             patchVersion: '1a9:01',
             deleted: null,
             inactivatedAt: null,
-            ttl: null,
+            ttl: DEFAULT_TTL_MS,
           },
         ],
         rows: [
@@ -5238,11 +5385,12 @@ describe('view-syncer/cvr', () => {
         ],
       };
 
-      await setInitialState(db, initialState);
+      await setInitialState(cvrDb, initialState);
 
       const cvrStore = new CVRStore(
         lc,
-        db,
+        cvrDb,
+        upstreamDb,
         SHARD,
         'my-task',
         'abc123',
@@ -5270,7 +5418,7 @@ describe('view-syncer/cvr', () => {
               "clientState": {
                 "fooClient": {
                   "inactivatedAt": undefined,
-                  "ttl": -1,
+                  "ttl": 300000,
                   "version": {
                     "minorVersion": 1,
                     "stateVersion": "1a9",
@@ -5320,7 +5468,7 @@ describe('view-syncer/cvr', () => {
             clientState: {
               fooClient: {
                 inactivatedAt: ttlClock,
-                ttl: -1,
+                ttl: DEFAULT_TTL_MS,
                 version: {
                   minorVersion: 1,
                   stateVersion: '1aa',
@@ -5386,7 +5534,7 @@ describe('view-syncer/cvr', () => {
             patchVersion: '1a9:01',
             deleted: null,
             inactivatedAt: null,
-            ttl: ttl / 1000,
+            ttl,
           },
         ],
         rows: [
@@ -5411,11 +5559,12 @@ describe('view-syncer/cvr', () => {
         ],
       };
 
-      await setInitialState(db, initialState);
+      await setInitialState(cvrDb, initialState);
 
       const cvrStore = new CVRStore(
         lc,
-        db,
+        cvrDb,
+        upstreamDb,
         SHARD,
         'my-task',
         'abc123',
@@ -5521,7 +5670,7 @@ describe('view-syncer/cvr', () => {
             patchVersion: '1a9:01',
             deleted: null,
             inactivatedAt: null,
-            ttl: null,
+            ttl: DEFAULT_TTL_MS,
           },
         ],
         rows: [
@@ -5546,11 +5695,12 @@ describe('view-syncer/cvr', () => {
         ],
       };
 
-      await setInitialState(db, initialState);
+      await setInitialState(cvrDb, initialState);
 
       const cvrStore = new CVRStore(
         lc,
-        db,
+        cvrDb,
+        upstreamDb,
         SHARD,
         'my-task',
         'abc123',
@@ -5578,7 +5728,7 @@ describe('view-syncer/cvr', () => {
               "clientState": {
                 "fooClient": {
                   "inactivatedAt": undefined,
-                  "ttl": -1,
+                  "ttl": 300000,
                   "version": {
                     "minorVersion": 1,
                     "stateVersion": "1a9",
@@ -5652,7 +5802,7 @@ describe('view-syncer/cvr', () => {
             clientState: {
               fooClient: {
                 inactivatedAt: ttlClock,
-                ttl: -1,
+                ttl: DEFAULT_TTL_MS,
                 version: {
                   minorVersion: 1,
                   stateVersion: '1aa',
@@ -5721,17 +5871,18 @@ describe('view-syncer/cvr', () => {
             patchVersion: '1a9:01',
             deleted: null,
             inactivatedAt: null,
-            ttl: 10 / 1000,
+            ttl: 10,
           },
         ],
         rows: [],
       };
 
-      await setInitialState(db, initialState);
+      await setInitialState(cvrDb, initialState);
 
       const cvrStore = new CVRStore(
         lc,
-        db,
+        cvrDb,
+        upstreamDb,
         SHARD,
         'my-task',
         'abc123',
@@ -5790,7 +5941,7 @@ describe('view-syncer/cvr', () => {
       ).toMatchInlineSnapshot(`
         {
           "inactivatedAt": undefined,
-          "ttl": -1,
+          "ttl": 600000,
           "version": {
             "minorVersion": 1,
             "stateVersion": "1aa",
@@ -5849,7 +6000,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -5858,7 +6009,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -5867,7 +6018,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -5892,11 +6043,12 @@ describe('view-syncer/cvr', () => {
       ],
     };
 
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -5958,7 +6110,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -5966,7 +6118,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-b": {
                 "inactivatedAt": 1709683200000,
-                "ttl": -1,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1aa",
@@ -5974,7 +6126,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6008,7 +6160,7 @@ describe('view-syncer/cvr', () => {
       }
     `);
 
-    expect(await getAllState(db)).toMatchInlineSnapshot(`
+    expect(await getAllState(cvrDb)).toMatchInlineSnapshot(`
       {
         "clients": Result [
           {
@@ -6028,7 +6180,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": null,
+            "ttl": "00:05:00",
           },
           {
             "clientGroupID": "abc123",
@@ -6037,7 +6189,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": null,
+            "ttl": "00:05:00",
           },
           {
             "clientGroupID": "abc123",
@@ -6046,7 +6198,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": 1709683200000,
             "patchVersion": "1aa:01",
             "queryHash": "oneHash",
-            "ttl": null,
+            "ttl": "00:05:00",
           },
         ],
         "instances": Result [
@@ -6178,7 +6330,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'def456',
@@ -6187,7 +6339,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
         {
           clientGroupID: 'abc123',
@@ -6196,7 +6348,7 @@ describe('view-syncer/cvr', () => {
           patchVersion: '1a9:01',
           deleted: null,
           inactivatedAt: null,
-          ttl: null,
+          ttl: DEFAULT_TTL_MS,
         },
       ],
       rows: [
@@ -6239,11 +6391,12 @@ describe('view-syncer/cvr', () => {
       ],
     };
 
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -6278,7 +6431,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6286,7 +6439,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6322,7 +6475,7 @@ describe('view-syncer/cvr', () => {
       ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
     );
 
-    expect(await getAllState(db)).toMatchInlineSnapshot(`
+    expect(await getAllState(cvrDb)).toMatchInlineSnapshot(`
       {
         "clients": Result [
           {
@@ -6342,7 +6495,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": null,
+            "ttl": "00:05:00",
           },
           {
             "clientGroupID": "def456",
@@ -6351,7 +6504,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": null,
+            "ttl": "00:05:00",
           },
           {
             "clientGroupID": "abc123",
@@ -6360,7 +6513,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": null,
+            "ttl": "00:05:00",
           },
         ],
         "instances": Result [
@@ -6499,7 +6652,7 @@ describe('view-syncer/cvr', () => {
             "clientState": {
               "client-a": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6507,7 +6660,7 @@ describe('view-syncer/cvr', () => {
               },
               "client-c": {
                 "inactivatedAt": undefined,
-                "ttl": -1,
+                "ttl": 300000,
                 "version": {
                   "minorVersion": 1,
                   "stateVersion": "1a9",
@@ -6543,7 +6696,7 @@ describe('view-syncer/cvr', () => {
 
       expect(updated2).toEqual(updated);
 
-      expect(await getAllState(db)).toMatchInlineSnapshot(`
+      expect(await getAllState(cvrDb)).toMatchInlineSnapshot(`
         {
           "clients": Result [
             {
@@ -6563,7 +6716,7 @@ describe('view-syncer/cvr', () => {
               "inactivatedAt": null,
               "patchVersion": "1a9:01",
               "queryHash": "oneHash",
-              "ttl": null,
+              "ttl": "00:05:00",
             },
             {
               "clientGroupID": "abc123",
@@ -6572,7 +6725,7 @@ describe('view-syncer/cvr', () => {
               "inactivatedAt": null,
               "patchVersion": "1a9:01",
               "queryHash": "oneHash",
-              "ttl": null,
+              "ttl": "00:05:00",
             },
           ],
           "instances": Result [
@@ -6663,11 +6816,12 @@ describe('view-syncer/cvr', () => {
       rows: [],
     };
 
-    await setInitialState(db, initialState);
+    await setInitialState(cvrDb, initialState);
 
     const cvrStore = new CVRStore(
       lc,
-      db,
+      cvrDb,
+      upstreamDb,
       SHARD,
       'my-task',
       'abc123',
@@ -6707,13 +6861,7 @@ describe('view-syncer/cvr', () => {
 
     cvrStore.putQuery(query);
 
-    await cvrStore.flush(
-      {
-        stateVersion: '1aa',
-      },
-      cvr,
-      t1,
-    );
+    await cvrStore.flush(lc, {stateVersion: '1aa'}, cvr, t1);
 
     const cvr2 = await cvrStore.load(lc, t1);
     expect(cvr2).toEqual({
@@ -6741,14 +6889,174 @@ describe('view-syncer/cvr', () => {
     vi.setSystemTime(t2);
     cvr.lastActive = t2;
     cvr.ttlClock = ttlClockFromNumber(t2);
-    await cvrStore.flush(
-      {
-        stateVersion: '1aa',
-      },
-      cvr,
-      t2,
-    );
+    await cvrStore.flush(lc, {stateVersion: '1aa'}, cvr, t2);
     const cvr3 = await cvrStore.load(lc, t2);
     expect(cvr3).toEqual(cvr2);
   });
+
+  test('delete a client', async () => {
+    const clientID = 'client-a';
+    const clientGroupID = 'abc123';
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID,
+          version: '1aa',
+          replicaVersion: '120',
+          lastActive: 0,
+          ttlClock: ttlClockFromNumber(0),
+          clientSchema: null,
+        },
+      ],
+      clients: [
+        {
+          clientGroupID,
+          clientID,
+        },
+      ],
+      queries: [],
+      desires: [],
+      rows: [],
+    };
+
+    await setInitialState(cvrDb, initialState);
+
+    await Promise.all([
+      insertMutationResult(upstreamDb, clientGroupID, clientID, 1),
+      insertMutationResult(upstreamDb, clientGroupID, clientID, 2),
+      insertMutationResult(upstreamDb, 'other-client-group', 'other-client', 1),
+      insertMutationResult(
+        upstreamDb,
+        'other-client-group',
+        'other-client-2',
+        1,
+      ),
+    ]);
+
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDb,
+      upstreamDb,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, LAST_CONNECT);
+
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
+
+    updater.deleteClient(clientID, ttlClockFromNumber(Date.now()));
+    await updater.flush(
+      lc,
+      LAST_CONNECT,
+      Date.UTC(2024, 3, 20),
+      ttlClockFromNumber(Date.UTC(2024, 3, 20)),
+    );
+
+    expect(
+      await readMutationResults(upstreamDb, clientGroupID, clientID),
+    ).toEqual([]);
+  });
+
+  test('delete a client group', async () => {
+    const clientGroupID = 'abc123';
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID,
+          version: '1aa',
+          replicaVersion: '120',
+          lastActive: 0,
+          ttlClock: ttlClockFromNumber(0),
+          clientSchema: null,
+        },
+      ],
+      clients: [
+        {
+          clientGroupID,
+          clientID: 'client-a',
+        },
+        {
+          clientGroupID,
+          clientID: 'client-b',
+        },
+      ],
+      queries: [],
+      desires: [],
+      rows: [],
+    };
+
+    await setInitialState(cvrDb, initialState);
+
+    await Promise.all([
+      insertMutationResult(upstreamDb, clientGroupID, 'client-a', 1),
+      insertMutationResult(upstreamDb, clientGroupID, 'client-b', 2),
+      insertMutationResult(upstreamDb, 'other-group', 'client-c', 1),
+    ]);
+
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDb,
+      upstreamDb,
+      SHARD,
+      'my-task',
+      clientGroupID,
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, LAST_CONNECT);
+
+    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
+
+    updater.deleteClientGroup(clientGroupID);
+    await updater.flush(
+      lc,
+      LAST_CONNECT,
+      Date.UTC(2024, 3, 20),
+      ttlClockFromNumber(Date.UTC(2024, 3, 20)),
+    );
+
+    expect(
+      await readMutationResults(upstreamDb, clientGroupID, 'client-a'),
+    ).toEqual([]);
+    expect(
+      await readMutationResults(upstreamDb, clientGroupID, 'client-b'),
+    ).toEqual([]);
+  });
 });
+
+function insertMutationResult(
+  upstreamDb: PostgresDB,
+  clientGroupID: string,
+  clientID: string,
+  mutationID: number,
+) {
+  return upstreamDb`INSERT INTO ${upstreamDb(upstreamSchema(SHARD))}.mutations
+      ("clientGroupID", "clientID", "mutationID", "result")
+      VALUES (${clientGroupID}, ${clientID}, ${mutationID}, ${{}})`;
+}
+
+function readMutationResults(
+  upstreamDb: PostgresDB,
+  clientGroupID: string,
+  clientID: string,
+) {
+  return upstreamDb`SELECT * FROM ${upstreamDb(
+    upstreamSchema(SHARD),
+  )}.mutations WHERE "clientGroupID" = ${clientGroupID} AND "clientID" = ${clientID}`;
+}
+
+function intervalToMilliseconds(ttl: string | null): number | null {
+  if (ttl === null) return null;
+
+  const parts = ttl.split(':');
+  if (parts.length !== 3) {
+    throw new Error(
+      `Interval format not supported in this test runner: ${ttl}`,
+    );
+  }
+  const hours = parseInt(parts[0], 10);
+  const minutes = parseInt(parts[1], 10);
+  const seconds = parseInt(parts[2], 10);
+  return (hours * 3600 + minutes * 60 + seconds) * 1000;
+}

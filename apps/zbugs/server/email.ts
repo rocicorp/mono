@@ -7,6 +7,7 @@ export async function sendEmail({
   title,
   message,
   link,
+  unsubscribeLink,
   issue,
   attachments = [],
 }: {
@@ -15,6 +16,7 @@ export async function sendEmail({
   title: string;
   message: string;
   link: string;
+  unsubscribeLink: string;
   issue: Row<typeof schema.tables.issue>;
   attachments?: {
     filename: string;
@@ -22,10 +24,6 @@ export async function sendEmail({
     data: string; // base64-encoded string
   }[];
 }) {
-  // Email notifications temporarily disabled
-  // See: https://bugs.rocicorp.dev/issue/3877
-  return;
-
   const apiKey = process.env.LOOPS_EMAIL_API_KEY;
   const transactionalId = process.env.LOOPS_TRANSACTIONAL_ID;
   const idempotencyKey = `${tx.clientID}:${tx.mutationID}:${email}`;
@@ -58,6 +56,7 @@ export async function sendEmail({
       subject: formattedSubject,
       message: titleMessage,
       link,
+      unsubscribe: unsubscribeLink,
     },
     attachments,
   };

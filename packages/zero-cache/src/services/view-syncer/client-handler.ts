@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {unreachable} from '../../../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {
   assertJSONValue,
   type JSONObject as SafeJSONObject,
@@ -16,10 +17,12 @@ import type {
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
 import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.ts';
+import {mutationResultSchema} from '../../../../zero-protocol/src/push.ts';
 import type {RowPatchOp} from '../../../../zero-protocol/src/row-patch.ts';
-import * as counters from '../../observability/counters.ts';
-import * as histograms from '../../observability/histograms.ts';
-import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateHistogram,
+} from '../../observability/metrics.ts';
 import {getLogLevel} from '../../types/error-for-client.ts';
 import {
   getErrorForClientIfSchemaVersionNotSupported,
@@ -80,9 +83,6 @@ export function startPoke(
   tentativeVersion: CVRVersion,
   schemaVersions?: SchemaVersions, // absent for config-only pokes
 ): PokeHandler {
-  const start = performance.now();
-  counters.pokeTransactions().add(1);
-
   const pokers = clients.map(c =>
     c.startPoke(tentativeVersion, schemaVersions),
   );
@@ -92,15 +92,12 @@ export function startPoke(
   // rate (per client group) will be limited by the slowest connection.
   return {
     addPatch: async patch => {
-      counters.rowsPoked().add(1);
       await Promise.allSettled(pokers.map(poker => poker.addPatch(patch)));
     },
     cancel: async () => {
       await Promise.allSettled(pokers.map(poker => poker.cancel()));
     },
     end: async finalVersion => {
-      const elapsed = performance.now() - start;
-      histograms.pokeTime().record(elapsed);
       await Promise.allSettled(pokers.map(poker => poker.end(finalVersion)));
     },
   };
@@ -118,10 +115,29 @@ export class ClientHandler {
   readonly clientID: string;
   readonly wsID: string;
   readonly #zeroClientsTable: string;
+  readonly #zeroMutationsTable: string;
   readonly #lc: LogContext;
   readonly #downstream: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
   readonly #schemaVersion: number | null;
+
+  readonly #pokeTime = getOrCreateHistogram('sync', 'poke.time', {
+    description:
+      'Time elapsed for each poke transaction. Canceled / noop pokes are excluded.',
+    unit: 's',
+  });
+
+  readonly #pokeTransactions = getOrCreateCounter(
+    'sync',
+    'poke.transactions',
+    'Count of poke transactions.',
+  );
+
+  readonly #pokedRows = getOrCreateCounter(
+    'sync',
+    'poke.rows',
+    'Count of poked rows.',
+  );
 
   constructor(
     lc: LogContext,
@@ -138,6 +154,7 @@ export class ClientHandler {
     this.clientID = clientID;
     this.wsID = wsID;
     this.#zeroClientsTable = `${upstreamSchema(shard)}.clients`;
+    this.#zeroMutationsTable = `${upstreamSchema(shard)}.mutations`;
     this.#lc = lc;
     this.#downstream = downstream;
     this.#baseVersion = cookieToVersion(baseCookie);
@@ -194,6 +211,8 @@ export class ClientHandler {
     const cookie = versionToCookie(tentativeVersion);
     lc.info?.(`starting poke from ${baseCookie} to ${cookie}`);
 
+    const start = performance.now();
+
     const pokeStart: PokeStartBody = {pokeID, baseCookie};
     if (schemaVersions) {
       pokeStart.schemaVersions = schemaVersions;
@@ -240,6 +259,43 @@ export class ClientHandler {
         case 'row':
           if (patch.id.table === this.#zeroClientsTable) {
             this.#updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
+          } else if (patch.id.table === this.#zeroMutationsTable) {
+            const patches = (body.mutationsPatch ??= []);
+            if (op === 'put') {
+              const row = v.parse(
+                ensureSafeJSON(patch.contents),
+                mutationRowSchema,
+                'passthrough',
+              );
+              patches.push({
+                op: 'put',
+                mutation: {
+                  id: {
+                    clientID: row.clientID,
+                    id: row.mutationID,
+                  },
+                  result: row.result,
+                },
+              });
+            } else {
+              const {clientID, mutationID} = patch.id.rowKey;
+              assert(
+                typeof clientID === 'string',
+                'client id must be a string',
+              );
+              const id = Number(mutationID);
+              assert(
+                !Number.isNaN(id) && Number.isFinite(id) && id >= 0,
+                'mutation id must be a finite number',
+              );
+              patches.push({
+                op: 'del',
+                id: {
+                  clientID,
+                  id,
+                },
+              });
+            }
           } else {
             (body.rowsPatch ??= []).push(makeRowPatch(patch));
           }
@@ -257,6 +313,9 @@ export class ClientHandler {
       addPatch: async (patchToVersion: PatchToVersion) => {
         try {
           await addPatch(patchToVersion);
+          if (patchToVersion.patch.type === 'row') {
+            this.#pokedRows.add(1);
+          }
         } catch (e) {
           this.#downstream.fail(e instanceof Error ? e : new Error(String(e)));
         }
@@ -286,6 +345,10 @@ export class ClientHandler {
         await flushBody();
         await this.#push(['pokeEnd', {pokeID, cookie}]);
         this.#baseVersion = finalVersion;
+
+        const elapsed = performance.now() - start;
+        this.#pokeTransactions.add(1);
+        this.#pokeTime.record(elapsed / 1000);
       },
     };
   }
@@ -339,6 +402,13 @@ const lmidRowSchema = v.object({
   clientGroupID: v.string(),
   clientID: v.string(),
   lastMutationID: v.number(), // Actually returned as a bigint, but converted by ensureSafeJSON().
+});
+
+const mutationRowSchema = v.object({
+  clientGroupID: v.string(),
+  clientID: v.string(),
+  mutationID: v.number(),
+  result: mutationResultSchema,
 });
 
 function makeRowPatch(patch: RowPatch): RowPatchOp {

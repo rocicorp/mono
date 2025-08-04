@@ -27,19 +27,13 @@ Let's use a subscription to implement our chat UI. Replace `index.tsx` with the 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import React, {useEffect, useRef, useState} from 'react';
 import ReactDOM from 'react-dom/client';
-import {Replicache, TEST_LICENSE_KEY, WriteTransaction} from 'replicache';
+import {Replicache, WriteTransaction} from 'replicache';
 import {Message, MessageWithID} from 'shared';
 import {useSubscribe} from 'replicache-react';
 import Pusher from 'pusher-js';
 import {nanoid} from 'nanoid';
 
 async function init() {
-  const licenseKey =
-    import.meta.env.VITE_REPLICACHE_LICENSE_KEY || TEST_LICENSE_KEY;
-  if (!licenseKey) {
-    throw new Error('Missing VITE_REPLICACHE_LICENSE_KEY');
-  }
-
   function Root() {
     const [r, setR] = useState<Replicache<any> | null>(null);
 
@@ -47,7 +41,6 @@ async function init() {
       console.log('updating replicache');
       const r = new Replicache({
         name: 'chat-user-id',
-        licenseKey,
         pushURL: `/api/replicache/push`,
         pullURL: `/api/replicache/pull`,
         logLevel: 'debug',

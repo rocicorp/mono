@@ -326,8 +326,8 @@ async function runTransaction<T>(
     db.prepare('COMMIT').run();
     return result;
   } catch (e) {
-    db.prepare('ROLLBACK').run();
     log.error?.('Aborted transaction due to error', e);
+    db.prepare('ROLLBACK').run();
     throw e;
   }
 }

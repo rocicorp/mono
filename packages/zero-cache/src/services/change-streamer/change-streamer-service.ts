@@ -1,6 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {unreachable} from '../../../../shared/src/asserts.ts';
+import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {
   min,
   type AtLeastOne,
@@ -272,6 +273,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   // load-balancing / routing logic has begun routing requests to this task.
   readonly #serving = resolver();
 
+  readonly #txCounter = getOrCreateCounter(
+    'replication',
+    'transactions',
+    'Count of replicated transactions',
+  );
+
   #stream: ChangeStream | undefined;
 
   constructor(
@@ -346,6 +353,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
                   `commit watermark ${change[2].watermark} does not match 'begin' watermark ${watermark}`,
                 );
               }
+              this.#txCounter.add(1);
               break;
             default:
               if (watermark === null) {

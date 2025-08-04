@@ -1,4 +1,4 @@
-auname: Build and Deploy Gigabugs Zero-Cache AWS SST
+name: Build and Deploy Gigabugs Zero-Cache AWS SST
 
 on:
   push:

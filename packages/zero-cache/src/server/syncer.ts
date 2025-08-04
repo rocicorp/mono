@@ -42,16 +42,16 @@ export default function runWorker(
 ): Promise<void> {
   const config = getZeroConfig({env, argv: args.slice(1)});
   assertNormalized(config);
-  startOtelAuto();
 
-  const lc = createLogContext(config, {worker: 'syncer'});
+  startOtelAuto(createLogContext(config, {worker: 'syncer'}, false));
+  const lc = createLogContext(config, {worker: 'syncer'}, true);
 
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
   const {cvr, upstream} = config;
-  assert(cvr.maxConnsPerWorker);
-  assert(upstream.maxConnsPerWorker);
+  assert(cvr.maxConnsPerWorker, 'cvr.maxConnsPerWorker must be set');
+  assert(upstream.maxConnsPerWorker, 'upstream.maxConnsPerWorker must be set');
 
   const replicaFile = replicaFileName(config.replica.file, fileMode);
   lc.debug?.(`running view-syncer on ${replicaFile}`);
@@ -96,6 +96,7 @@ export default function runWorker(
       config.taskID,
       id,
       cvrDB,
+      config.upstream.type === 'pg' ? upstreamDB : undefined,
       new PipelineDriver(
         logger,
         config.log,
@@ -124,6 +125,7 @@ export default function runWorker(
       ? undefined
       : (id: string) =>
           new PusherService(
+            upstreamDB,
             config,
             {
               ...config.push,

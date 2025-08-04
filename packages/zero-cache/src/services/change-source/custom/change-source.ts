@@ -1,12 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {WebSocket} from 'ws';
 import {assert, unreachable} from '../../../../../shared/src/asserts.ts';
+import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import type {SchemaValue} from '../../../../../zero-schema/src/table-schema.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {computeZqlSpecs} from '../../../db/lite-tables.ts';
 import {StatementRunner} from '../../../db/statements.ts';
-import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import type {ShardConfig, ShardID} from '../../../types/shards.ts';
 import {stream} from '../../../types/streams.ts';
 import type {
@@ -220,6 +220,12 @@ function getRequiredTables({
       clientID: {type: 'string'},
       lastMutationID: {type: 'number'},
       userID: {type: 'string'},
+    },
+    [`${appID}_${shardNum}.mutations`]: {
+      clientGroupID: {type: 'string'},
+      clientID: {type: 'string'},
+      mutationID: {type: 'number'},
+      mutation: {type: 'json'},
     },
     [`${appID}.permissions`]: {
       permissions: {type: 'json'},

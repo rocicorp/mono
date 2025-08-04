@@ -137,6 +137,40 @@ describe('change-source/custom', () => {
         {
           tag: 'create-table',
           spec: {
+            schema: 'bongo_0',
+            name: 'mutations',
+            primaryKey: ['clientGroupID', 'clientID', 'mutationID'],
+            columns: {
+              clientGroupID: {pos: 0, dataType: 'text', notNull: true},
+              clientID: {pos: 1, dataType: 'text', notNull: true},
+              mutationID: {pos: 2, dataType: 'bigint', notNull: true},
+              mutation: {pos: 3, dataType: 'json'},
+            },
+          },
+        },
+      ],
+      [
+        'data',
+        {
+          tag: 'create-index',
+          spec: {
+            name: 'bongo_mutations_key',
+            schema: 'bongo_0',
+            tableName: 'mutations',
+            columns: {
+              clientGroupID: 'ASC',
+              clientID: 'ASC',
+              mutationID: 'ASC',
+            },
+            unique: true,
+          },
+        },
+      ],
+      [
+        'data',
+        {
+          tag: 'create-table',
+          spec: {
             schema: 'bongo',
             name: 'schemaVersions',
             primaryKey: ['lock'],

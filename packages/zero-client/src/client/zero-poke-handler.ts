@@ -22,10 +22,13 @@ import {
 import {
   toDesiredQueriesKey,
   toGotQueriesKey,
+  toMutationResponseKey,
   toPrimaryKeyString,
 } from './keys.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 import {unreachable} from '../../../shared/src/asserts.ts';
+import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
+import type {MutationTracker} from './mutation-tracker.ts';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
@@ -56,6 +59,7 @@ export class PokeHandler {
   readonly #pokeLock = new Lock();
   readonly #schema: Schema;
   readonly #serverToClient: NameMapper;
+  readonly #mutationTracker: MutationTracker;
 
   readonly #raf =
     getBrowserGlobalMethod('requestAnimationFrame') ?? rafFallback;
@@ -66,6 +70,7 @@ export class PokeHandler {
     clientID: ClientID,
     schema: Schema,
     lc: ZeroLogContext,
+    mutationTracker: MutationTracker,
   ) {
     this.#replicachePoke = replicachePoke;
     this.#onPokeError = onPokeError;
@@ -73,6 +78,7 @@ export class PokeHandler {
     this.#schema = schema;
     this.#serverToClient = serverToClient(schema.tables);
     this.#lc = lc.withContext('PokeHandler');
+    this.#mutationTracker = mutationTracker;
   }
 
   handlePokeStart(pokeStart: PokeStartBody) {
@@ -174,6 +180,14 @@ export class PokeHandler {
         lc.debug?.('poking replicache');
         await this.#replicachePoke(merged);
         lc.debug?.('poking replicache took', performance.now() - start);
+
+        if (!('error' in merged.pullResponse)) {
+          const lmid =
+            merged.pullResponse.lastMutationIDChanges[this.#clientID];
+          if (lmid !== undefined) {
+            this.#mutationTracker.lmidAdvanced(lmid);
+          }
+        }
       } catch (e) {
         this.#handlePokeError(e);
       }
@@ -203,7 +217,9 @@ export function mergePokes(
   pokeBuffer: PokeAccumulator[],
   schema: Schema,
   serverToClient: NameMapper,
-): PokeInternal | undefined {
+):
+  | (PokeInternal & {mutationResults?: MutationPatch[] | undefined})
+  | undefined {
   if (pokeBuffer.length === 0) {
     return undefined;
   }
@@ -212,6 +228,7 @@ export function mergePokes(
   const {cookie} = lastPoke.pokeEnd;
   const mergedPatch: PatchOperationInternal[] = [];
   const mergedLastMutationIDChanges: Record<string, number> = {};
+  const mutationResults: MutationPatch[] = [];
 
   let prevPokeEnd = undefined;
   for (const pokeAccumulator of pokeBuffer) {
@@ -262,9 +279,14 @@ export function mergePokes(
           );
         }
       }
+      if (pokePart.mutationsPatch) {
+        for (const op of pokePart.mutationsPatch) {
+          mergedPatch.push(mutationPatchOpToReplicachePatchOp(op));
+        }
+      }
     }
   }
-  return {
+  const ret: PokeInternal & {mutationResults?: MutationPatch[] | undefined} = {
     baseCookie,
     pullResponse: {
       lastMutationIDChanges: mergedLastMutationIDChanges,
@@ -272,6 +294,14 @@ export function mergePokes(
       cookie,
     },
   };
+
+  // For backwards compatibility. Because we're strict on our validation,
+  // zero-client must be able to parse pokes with this field before we introduce it.
+  // So users can update their clients and then start using custom mutators that write responses to the db.
+  if (mutationResults.length > 0) {
+    ret.mutationResults = mutationResults;
+  }
+  return ret;
 }
 
 function queryPatchOpToReplicachePatchOp(
@@ -294,6 +324,24 @@ function queryPatchOpToReplicachePatchOp(
       };
     default:
       unreachable(op);
+  }
+}
+
+export function mutationPatchOpToReplicachePatchOp(
+  op: MutationPatch,
+): PatchOperationInternal {
+  switch (op.op) {
+    case 'put':
+      return {
+        op: 'put',
+        key: toMutationResponseKey(op.mutation.id),
+        value: op.mutation.result,
+      };
+    case 'del':
+      return {
+        op: 'del',
+        key: toMutationResponseKey(op.id),
+      };
   }
 }
 

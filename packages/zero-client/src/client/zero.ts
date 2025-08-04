@@ -61,6 +61,7 @@ import type {
   CRUDMutation,
   CRUDMutationArg,
   CustomMutation,
+  MutationID,
   PushMessage,
 } from '../../../zero-protocol/src/push.ts';
 import {CRUD_MUTATION_NAME, mapCRUD} from '../../../zero-protocol/src/push.ts';
@@ -144,6 +145,7 @@ import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
+import {Subscribable} from '../../../shared/src/subscribable.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -327,9 +329,8 @@ export class Zero<
 
   #onPong: () => void = () => undefined;
 
-  #online = false;
+  readonly #onlineManager: OnlineManager;
 
-  readonly #onOnlineChange: ((online: boolean) => void) | undefined;
   readonly #onUpdateNeeded: (
     reason: UpdateNeededReason,
     serverErrorMsg?: string,
@@ -454,11 +455,16 @@ export class Zero<
       );
     }
 
-    this.#onOnlineChange = onOnlineChange;
+    this.#onlineManager = new OnlineManager();
+
+    if (onOnlineChange) {
+      this.#onlineManager.subscribe(onOnlineChange);
+    }
+
     this.#options = options;
 
     this.#logOptions = this.#createLogOptions({
-      consoleLogLevel: options.logLevel ?? 'error',
+      consoleLogLevel: options.logLevel ?? 'warn',
       server: null, //server, // Reenable remote logging
       enableAnalytics: this.#enableAnalytics,
     });
@@ -497,7 +503,9 @@ export class Zero<
 
     const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
 
-    this.#mutationTracker = new MutationTracker(lc);
+    this.#mutationTracker = new MutationTracker(lc, (upTo: MutationID) =>
+      this.#send(['ackMutationResponses', upTo]),
+    );
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
         options.mutators,
@@ -599,7 +607,10 @@ export class Zero<
     this.#server = server;
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
-    this.#mutationTracker.clientID = rep.clientID;
+    this.#mutationTracker.setClientIDAndWatch(
+      rep.clientID,
+      rep.experimentalWatch.bind(rep),
+    );
 
     this.#activeClientsManager = makeActiveClientsManager(
       rep.clientGroupID,
@@ -710,6 +721,7 @@ export class Zero<
       rep.clientID,
       schema,
       this.#lc,
+      this.#mutationTracker,
     );
 
     this.#visibilityWatcher = getDocumentVisibilityWatcher(
@@ -792,7 +804,7 @@ export class Zero<
   preload(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     query: Query<S, keyof S['tables'] & string, any>,
-    options: PreloadOptions,
+    options?: PreloadOptions | undefined,
   ) {
     return query.delegate(this.#zeroContext).preload(options);
   }
@@ -897,6 +909,8 @@ export class Zero<
 
     lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
 
+    this.#onlineManager.cleanup();
+
     if (this.#connectionState !== ConnectionState.Disconnected) {
       this.#disconnect(
         lc,
@@ -934,7 +948,11 @@ export class Zero<
     let downMessage: Downstream;
     const {data} = e;
     try {
-      downMessage = valita.parse(JSON.parse(data), downstreamSchema);
+      downMessage = valita.parse(
+        JSON.parse(data),
+        downstreamSchema,
+        'passthrough',
+      );
     } catch (e) {
       rejectInvalidMessage(e);
       return;
@@ -1215,6 +1233,7 @@ export class Zero<
     this.#connectCookie = valita.parse(
       await this.#rep.cookie,
       nullableVersionSchema,
+      'passthrough',
     );
     if (this.closed) {
       return;
@@ -1376,7 +1395,6 @@ export class Zero<
   #handlePokeEnd(_lc: ZeroLogContext, pokeMessage: PokeEndMessage): void {
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
-    this.#mutationTracker.lmidAdvanced(this.#lastMutationIDReceived);
   }
 
   #onPokeError(): void {
@@ -1738,7 +1756,11 @@ export class Zero<
     assert(socket);
     // Mutation recovery pull.
     lc.debug?.('Pull is for mutation recovery');
-    const cookie = valita.parse(req.cookie, nullableVersionSchema);
+    const cookie = valita.parse(
+      req.cookie,
+      nullableVersionSchema,
+      'passthrough',
+    );
     const pullRequestMessage: PullRequestMessage = [
       'pull',
       {
@@ -1787,12 +1809,7 @@ export class Zero<
   }
 
   #setOnline(online: boolean): void {
-    if (this.#online === online) {
-      return;
-    }
-
-    this.#online = online;
-    this.#onOnlineChange?.(online);
+    this.#onlineManager.setOnline(online);
   }
 
   /**
@@ -1800,8 +1817,19 @@ export class Zero<
    * authenticated.
    */
   get online(): boolean {
-    return this.#online;
+    return this.#onlineManager.online;
   }
+
+  /**
+   * Subscribe to online status changes.
+   *
+   * This is useful when you want to update state based on the online status.
+   *
+   * @param listener - The listener to subscribe to.
+   * @returns A function to unsubscribe the listener.
+   */
+  onOnline = (listener: (online: boolean) => void): (() => void) =>
+    this.#onlineManager.subscribe(listener);
 
   /**
    * Starts a ping and waits for a pong.
@@ -1921,6 +1949,22 @@ export class Zero<
         return this.#socket!;
       });
     }
+  }
+}
+
+export class OnlineManager extends Subscribable<boolean> {
+  #online = false;
+
+  setOnline(online: boolean): void {
+    if (this.#online === online) {
+      return;
+    }
+    this.#online = online;
+    this.notify(online);
+  }
+
+  get online(): boolean {
+    return this.#online;
   }
 }
 

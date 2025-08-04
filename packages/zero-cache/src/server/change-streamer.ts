@@ -22,6 +22,7 @@ import {
 } from '../types/processes.ts';
 import {getShardConfig} from '../types/shards.ts';
 import {createLogContext} from './logging.ts';
+import {startOtelAuto} from './otel-start.ts';
 
 export default async function runWorker(
   parent: Worker,
@@ -42,7 +43,9 @@ export default async function runWorker(
     initialSync,
     litestream,
   } = config;
-  const lc = createLogContext(config, {worker: 'change-streamer'});
+
+  startOtelAuto(createLogContext(config, {worker: 'change-streamer'}, false));
+  const lc = createLogContext(config, {worker: 'change-streamer'}, true);
 
   // Kick off DB connection warmup in the background.
   const changeDB = pgClient(lc, change.db, {

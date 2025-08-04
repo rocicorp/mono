@@ -1,13 +1,16 @@
 import {describe, expect, test} from 'vitest';
 import type {LiteTableSpec} from '../db/specs.ts';
 import {
+  dataTypeToZqlValueType,
   JSON_PARSED,
   JSON_STRINGIFIED,
   liteRow,
   liteValue,
   type JSONFormat,
+  type LiteTypeString,
 } from './lite.ts';
 import type {RowValue} from './row-key.ts';
+import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
 
 describe('types/lite', () => {
   test.each([
@@ -209,7 +212,7 @@ describe('types/lite', () => {
       '[12313214123432,12313214123432]',
     ],
     ['float[]', [123.456, 987.654], '[123.456,987.654]'],
-    ['bool[]', [true, false], '[1,0]'],
+    ['bool[]', [true, false], '[true,false]'],
     [
       'json',
       [{custom: {json: 'object'}}, {another: {json: 'object'}}],
@@ -228,4 +231,30 @@ describe('types/lite', () => {
   ])('liteValue: %s', (dataType, input, output) => {
     expect(liteValue(input, dataType, JSON_PARSED)).toEqual(output);
   });
+});
+
+describe('dataTypeToZqlValueType', () => {
+  test.each([
+    ['int', 'number'],
+    ['text', 'string'],
+    ['float', 'number'],
+    ['bool', 'boolean'],
+    ['boolean', 'boolean'],
+    ['json', 'json'],
+    ['int[]|NOT_NULL', 'json'],
+    ['float[]', 'json'],
+    ['bool[]', 'json'],
+    ['json[]', 'json'],
+    ['f[]|TEXT_ENUM', 'json'],
+    ['b[]', 'json'],
+    ['int|TEXT_ARRAY', 'json'],
+    ['float|TEXT_ARRAY', 'json'],
+    ['bool|TEXT_ARRAY', 'json'],
+    ['json|TEXT_ARRAY', 'json'],
+  ] satisfies [LiteTypeString, ValueType][])(
+    'dataTypeToZqlValueType: %s => %s',
+    (pgType, zqlType) => {
+      expect(dataTypeToZqlValueType(pgType)).toBe(zqlType);
+    },
+  );
 });

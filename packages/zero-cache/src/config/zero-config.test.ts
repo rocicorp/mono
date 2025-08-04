@@ -385,12 +385,12 @@ test('zero-cache --help', () => {
        ZERO_SERVER_VERSION env                                                                                                                                     
                                                                  The version string outputted to logs when the server starts up.                                   
                                                                                                                                                                    
-     --enable-usage-analytics boolean                            default: true                                                                                     
-       ZERO_ENABLE_USAGE_ANALYTICS env                                                                                                                             
+     --enable-telemetry boolean                                  default: true                                                                                     
+       ZERO_ENABLE_TELEMETRY env                                                                                                                                   
                                                                  Set to false to opt out of telemetry collection.                                                  
-                                                                 This helps us improve Zero Cache by collecting                                                    
-                                                                 anonymous usage statistics. Setting the DO_NOT_TRACK environment variable                         
-                                                                 will also disable telemetry collection.                                                           
+                                                                                                                                                                   
+                                                                 This helps us improve Zero by collecting anonymous usage data.                                    
+                                                                 Setting the DO_NOT_TRACK environment variable also disables telemetry.                            
                                                                                                                                                                    
     "
   `);

@@ -41,6 +41,9 @@ import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
+import {upstreamSchema} from '../../types/shards.ts';
+import {id} from '../../types/sql.ts';
+import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
 
 export const APP_ID = 'this_app';
 export const SHARD_NUM = 2;
@@ -442,6 +445,104 @@ export async function expectNoPokes(client: Queue<Downstream>) {
   expect(await client.dequeue(timedOut, 10)).toBe(timedOut);
 }
 
+// Higher-level helper functions for TTL tests
+export function addQuery(
+  vs: ViewSyncerService,
+  ctx: SyncContext,
+  hash: string,
+  ast: AST,
+  ttl?: number,
+): Promise<void> {
+  return changeDesiredQueries(vs, ctx, [{op: 'put', hash, ast, ttl}]);
+}
+
+export function removeQuery(
+  vs: ViewSyncerService,
+  ctx: SyncContext,
+  hash: string,
+): Promise<void> {
+  return changeDesiredQueries(vs, ctx, [{op: 'del', hash}]);
+}
+
+function changeDesiredQueries(
+  vs: ViewSyncerService,
+  ctx: SyncContext,
+  desiredQueriesPatch: UpQueriesPatch,
+): Promise<void> {
+  return vs.changeDesiredQueries(ctx, [
+    'changeDesiredQueries',
+    {
+      desiredQueriesPatch,
+    },
+  ]);
+}
+
+export function inactivateQuery(
+  vs: ViewSyncerService,
+  ctx: SyncContext,
+  hash: string,
+) {
+  return removeQuery(vs, ctx, hash);
+}
+
+export function expectGotPut(
+  client: Queue<Downstream>,
+  ...queryHash: string[]
+) {
+  return expectGot(client, 'put', queryHash);
+}
+
+export function expectGotDel(
+  client: Queue<Downstream>,
+  ...queryHash: string[]
+) {
+  return expectGot(client, 'del', queryHash);
+}
+
+async function expectGot(
+  client: Queue<Downstream>,
+  op: 'put' | 'del',
+  queryHashes: string[],
+) {
+  const pokeParts = await nextPokeParts(client);
+  const expectedPatches = queryHashes.map(hash => ({hash, op}));
+  expect(pokeParts[0].gotQueriesPatch).toEqual(
+    expect.arrayContaining(expectedPatches),
+  );
+  // Also verify we got exactly the expected number of patches
+  expect(pokeParts[0].gotQueriesPatch).toHaveLength(queryHashes.length);
+  return pokeParts;
+}
+
+export function expectDesiredPut(
+  client: Queue<Downstream>,
+  clientID: string,
+  ...queryHash: string[]
+) {
+  return expectDesired(client, 'put', clientID, queryHash);
+}
+
+export function expectDesiredDel(
+  client: Queue<Downstream>,
+  clientID: string,
+  ...queryHash: string[]
+) {
+  return expectDesired(client, 'del', clientID, queryHash);
+}
+
+async function expectDesired(
+  client: Queue<Downstream>,
+  op: 'put' | 'del',
+  clientID: string,
+  queryHash: string[],
+) {
+  const pokeParts = await nextPokeParts(client);
+  expect(pokeParts[0].desiredQueriesPatches?.[clientID]).toEqual(
+    expect.arrayContaining(queryHash.map(hash => ({hash, op}))),
+  );
+  return pokeParts;
+}
+
 export async function setup(
   testName: string,
   permissions: PermissionsConfig | undefined,
@@ -465,6 +566,14 @@ export async function setup(
     "userID"         TEXT,
     _0_version       TEXT NOT NULL,
     PRIMARY KEY ("clientGroupID", "clientID")
+  );
+  CREATE TABLE "this_app_2.mutations" (
+    "clientGroupID"  TEXT,
+    "clientID"       TEXT,
+    "mutationID"     INTEGER,
+    "result"         TEXT,
+    _0_version       TEXT NOT NULL,
+    PRIMARY KEY ("clientGroupID", "clientID", "mutationID")
   );
   CREATE TABLE "this_app.schemaVersions" (
     "lock"                INT PRIMARY KEY,
@@ -536,7 +645,17 @@ export async function setup(
   INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('2', '1', 'bar', '01');
   `);
 
-  const cvrDB = await testDBs.create(testName);
+  const [cvrDB, upstreamDb] = await Promise.all([
+    testDBs.create(testName),
+    testDBs.create(testName + '-upstream'),
+  ]);
+  const shard = id(upstreamSchema(SHARD));
+  await upstreamDb.begin(tx =>
+    tx.unsafe(`
+          CREATE SCHEMA IF NOT EXISTS ${shard};
+          ${getMutationsTableDefinition(shard)}
+        `),
+  );
   await initViewSyncerSchema(lc, cvrDB, SHARD);
 
   const setTimeoutFn = vi.fn();
@@ -554,6 +673,7 @@ export async function setup(
     TASK_ID,
     serviceID,
     cvrDB,
+    upstreamDb,
     new PipelineDriver(
       lc.withContext('component', 'pipeline-driver'),
       testLogConfig,
@@ -615,6 +735,7 @@ export async function setup(
     replicaDbFile,
     replica,
     cvrDB,
+    upstreamDb,
     stateChanges,
     drainCoordinator,
     operatorStorage,

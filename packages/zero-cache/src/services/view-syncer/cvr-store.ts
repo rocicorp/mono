@@ -16,12 +16,14 @@ import {astSchema} from '../../../../zero-protocol/src/ast.ts';
 import {clientSchemaSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import type {InspectQueryRow} from '../../../../zero-protocol/src/inspect-down.ts';
+import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
+import {recordRowsSynced} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
-import {cvrSchema, type ShardID} from '../../types/shards.ts';
+import {cvrSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import type {CVR, CVRSnapshot} from './cvr.ts';
 import {RowRecordCache} from './row-record-cache.ts';
@@ -49,7 +51,11 @@ import {
   versionFromString,
   versionString,
 } from './schema/types.ts';
-import {type TTLClock, ttlClockFromNumber} from './ttl-clock.ts';
+import {
+  type TTLClock,
+  ttlClockAsNumber,
+  ttlClockFromNumber,
+} from './ttl-clock.ts';
 
 export type CVRFlushStats = {
   instances: number;
@@ -120,6 +126,7 @@ export class CVRStore {
   readonly #taskID: string;
   readonly #id: string;
   readonly #db: PostgresDB;
+  readonly #upstreamDb: PostgresDB | undefined;
   readonly #writes: Set<{
     stats: Partial<CVRFlushStats>;
     write: (
@@ -127,6 +134,9 @@ export class CVRStore {
       lastConnectTime: number,
     ) => PendingQuery<MaybeRow[]>;
   }> = new Set();
+  readonly #upstreamWrites: ((
+    tx: PostgresTransaction,
+  ) => PendingQuery<MaybeRow[]>)[] = [];
   readonly #pendingRowRecordUpdates = new CustomKeyMap<RowID, RowRecord | null>(
     rowIDString,
   );
@@ -134,11 +144,17 @@ export class CVRStore {
   readonly #rowCache: RowRecordCache;
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
+  readonly #upstreamSchemaName: string;
   #rowCount: number = 0;
 
   constructor(
     lc: LogContext,
-    db: PostgresDB,
+    cvrDb: PostgresDB,
+    // Optionally undefined to deal with custom upstreams.
+    // This is temporary until we have a more principled protocol to deal with
+    // custom upstreams and clearing their custom mutator responses.
+    // An implementor could simply clear them after N minutes for the time being.
+    upstreamDb: PostgresDB | undefined,
     shard: ShardID,
     taskID: string,
     cvrID: string,
@@ -148,13 +164,14 @@ export class CVRStore {
     deferredRowFlushThreshold = 100, // somewhat arbitrary
     setTimeoutFn = setTimeout,
   ) {
-    this.#db = db;
+    this.#db = cvrDb;
+    this.#upstreamDb = upstreamDb;
     this.#schema = cvrSchema(shard);
     this.#taskID = taskID;
     this.#id = cvrID;
     this.#rowCache = new RowRecordCache(
       lc,
-      db,
+      cvrDb,
       shard,
       cvrID,
       failService,
@@ -163,6 +180,7 @@ export class CVRStore {
     );
     this.#loadAttemptIntervalMs = loadAttemptIntervalMs;
     this.#maxLoadAttempts = maxLoadAttempts;
+    this.#upstreamSchemaName = upstreamSchema(shard);
   }
 
   #cvr(table: string) {
@@ -203,7 +221,7 @@ export class CVRStore {
       id,
       version: EMPTY_CVR_VERSION,
       lastActive: 0,
-      ttlClock: ttlClockFromNumber(0),
+      ttlClock: ttlClockFromNumber(0), // TTL clock starts at 0, not Date.now()
       replicaVersion: null,
       clients: {},
       queries: {},
@@ -249,7 +267,7 @@ export class CVRStore {
       this.putInstance({
         version: cvr.version,
         lastActive: 0,
-        ttlClock: ttlClockFromNumber(0),
+        ttlClock: ttlClockFromNumber(0), // TTL clock starts at 0 for new instances
         replicaVersion: null,
         clientSchema: null,
       });
@@ -337,7 +355,7 @@ export class CVRStore {
       ) {
         query.clientState[row.clientID] = {
           inactivatedAt: row.inactivatedAt ?? undefined,
-          ttl: row.ttl ?? -1,
+          ttl: row.ttl ?? DEFAULT_TTL_MS,
           version: versionFromString(row.patchVersion),
         };
       }
@@ -385,7 +403,9 @@ export class CVRStore {
   }
 
   /**
-   * Updates the `ttlClock` of the CVR instance.
+   * Updates the `ttlClock` of the CVR instance. The ttlClock starts at 0 when
+   * the CVR instance is first created and increments based on elapsed time
+   * since the base time established by the ViewSyncerService.
    */
   async updateTTLClock(ttlClock: TTLClock, lastActive: number): Promise<void> {
     await this.#db`UPDATE ${this.#cvr('instances')}
@@ -395,9 +415,9 @@ export class CVRStore {
   }
 
   /**
-   *
-   * @returns This returns the current `ttlClock` of the CVR instance. If the
-   *          CVR has never been initialized for this client group, it returns
+   * @returns This returns the current `ttlClock` of the CVR instance. The ttlClock
+   *          represents elapsed time since the instance was created (starting from 0).
+   *          If the CVR has never been initialized for this client group, it returns
    *          `undefined`.
    */
   async getTTLClock(): Promise<TTLClock | undefined> {
@@ -544,6 +564,10 @@ export class CVRStore {
       write: tx =>
         tx`DELETE FROM ${this.#cvr('clients')} WHERE "clientID" = ${clientID}`,
     });
+    this.#upstreamWrites.push(
+      sql =>
+        sql`DELETE FROM ${sql(this.#upstreamSchemaName)}."mutations" WHERE "clientGroupID" = ${this.#id} AND "clientID" = ${clientID}`,
+    );
   }
 
   deleteClientGroup(clientGroupID: string) {
@@ -562,6 +586,11 @@ export class CVRStore {
             name,
           )} WHERE "clientGroupID" = ${clientGroupID}`,
       });
+      // delete mutation responses
+      this.#upstreamWrites.push(
+        sql =>
+          sql`DELETE FROM ${sql(this.#upstreamSchemaName)}."mutations" WHERE "clientGroupID" = ${clientGroupID}`,
+      );
     }
   }
 
@@ -790,11 +819,20 @@ export class CVRStore {
       stats.rows += this.#pendingRowRecordUpdates.size;
       return true;
     });
+
     this.#rowCount = await this.#rowCache.apply(
       this.#pendingRowRecordUpdates,
       cvr.version,
       rowsFlushed,
     );
+    recordRowsSynced(this.#rowCount);
+
+    if (this.#upstreamDb) {
+      await this.#upstreamDb.begin(async tx => {
+        await Promise.all(this.#upstreamWrites.map(write => write(tx)));
+      });
+    }
+
     return stats;
   }
 
@@ -803,18 +841,34 @@ export class CVRStore {
   }
 
   async flush(
+    lc: LogContext,
     expectedCurrentVersion: CVRVersion,
     cvr: CVRSnapshot,
     lastConnectTime: number,
   ): Promise<CVRFlushStats | null> {
+    const start = performance.now();
     try {
-      return await this.#flush(expectedCurrentVersion, cvr, lastConnectTime);
+      const stats = await this.#flush(
+        expectedCurrentVersion,
+        cvr,
+        lastConnectTime,
+      );
+      if (stats) {
+        const elapsed = performance.now() - start;
+        lc.debug?.(
+          `flushed cvr@${versionString(cvr.version)} ` +
+            `${JSON.stringify(stats)} in (${elapsed} ms)`,
+        );
+        this.#rowCache.recordSyncFlushStats(stats, elapsed);
+      }
+      return stats;
     } catch (e) {
       // Clear cached state if an error (e.g. ConcurrentModificationException) is encountered.
       this.#rowCache.clear();
       throw e;
     } finally {
       this.#writes.clear();
+      this.#upstreamWrites.length = 0;
       this.#pendingRowRecordUpdates.clear();
       this.#forceUpdates.clear();
     }
@@ -831,6 +885,7 @@ export class CVRStore {
 
   async inspectQueries(
     lc: LogContext,
+    ttlClock: TTLClock,
     clientID?: string,
   ): Promise<InspectQueryRow[]> {
     const db = this.#db;
@@ -843,7 +898,7 @@ export class CVRStore {
   SELECT DISTINCT ON (d."clientID", d."queryHash")
     d."clientID",
     d."queryHash" AS "queryID",
-    COALESCE((EXTRACT(EPOCH FROM d."ttl") * 1000)::double precision, -1) AS "ttl",
+    COALESCE((EXTRACT(EPOCH FROM d."ttl") * 1000)::double precision, ${DEFAULT_TTL_MS}) AS "ttl",
     (EXTRACT(EPOCH FROM d."inactivatedAt") * 1000)::double precision AS "inactivatedAt",
     (SELECT COUNT(*)::INT FROM ${this.#cvr('rows')} r 
      WHERE r."clientGroupID" = d."clientGroupID" 
@@ -859,10 +914,7 @@ export class CVRStore {
    AND q."queryHash" = d."queryHash"
   WHERE d."clientGroupID" = ${clientGroupID}
     ${clientID ? tx`AND d."clientID" = ${clientID}` : tx``}
-    AND NOT (
-      d."deleted" IS NOT DISTINCT FROM true AND
-      (d."inactivatedAt" IS NOT NULL AND d."ttl" IS NOT NULL AND d."inactivatedAt" + d."ttl" <= now())
-    )
+    AND NOT (d."inactivatedAt" IS NOT NULL AND d."ttl" IS NOT NULL AND d."inactivatedAt" + d."ttl" <= to_timestamp(${ttlClockAsNumber(ttlClock) / 1000}))
   ORDER BY d."clientID", d."queryHash"`,
       );
     } finally {

@@ -2,6 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import UrlPattern from 'url-pattern';
 import {assert} from '../../../shared/src/asserts.ts';
 import {h32} from '../../../shared/src/hash.ts';
+import {getOrCreateGauge} from '../observability/metrics.ts';
 import {RunningState} from '../services/running-state.ts';
 import type {Service} from '../services/service.ts';
 import type {IncomingMessageSubset} from '../types/http.ts';
@@ -48,13 +49,25 @@ export class WorkerDispatcher implements Service {
         mutator !== undefined,
         'Received a push for a custom mutation but no `push.url` was configured.',
       );
-      return {payload: connectParams(req), receiver: mutator};
+      return {payload: connectParams(req), sender: mutator};
     };
+
+    let maxProtocolVersion = 0;
+    getOrCreateGauge(
+      'sync',
+      'max-protocol-version',
+      'Latest sync protocol version from a connecting client',
+    ).addCallback(result => {
+      if (maxProtocolVersion) {
+        result.observe(maxProtocolVersion);
+      }
+    });
 
     const handleSync = (req: IncomingMessageSubset) => {
       assert(syncers.length, 'Received a sync request with no sync workers.');
       const params = connectParams(req);
-      const {clientGroupID} = params;
+      const {clientGroupID, protocolVersion} = params;
+      maxProtocolVersion = Math.max(maxProtocolVersion, protocolVersion);
 
       // Include the TaskID when hash-bucketting the client group to the sync
       // worker. This diversifies the distribution of client groups (across
@@ -64,7 +77,7 @@ export class WorkerDispatcher implements Service {
       const syncer = h32(taskID + '/' + clientGroupID) % syncers.length;
 
       lc.debug?.(`connecting ${clientGroupID} to syncer ${syncer}`);
-      return {payload: params, receiver: syncers[syncer]};
+      return {payload: params, sender: syncers[syncer]};
     };
 
     const handleChangeStream = (req: IncomingMessageSubset) => {
@@ -90,7 +103,7 @@ export class WorkerDispatcher implements Service {
 
       return {
         payload: path.action,
-        receiver: changeStreamer,
+        sender: changeStreamer,
       };
     };
 
@@ -120,6 +133,12 @@ export class WorkerDispatcher implements Service {
   }
 
   run() {
+    const readyStart = Date.now();
+    getOrCreateGauge('server', 'uptime', {
+      description: 'Cumulative uptime, starting from when requests are served',
+      unit: 's',
+    }).addCallback(result => result.observe((Date.now() - readyStart) / 1000));
+
     return this.#state.stopped();
   }
 
