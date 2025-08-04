@@ -358,6 +358,33 @@ describe('rebasing custom mutators', () => {
     }
   });
 
+  test('the writes of a mutation are immediately available after awaiting the client promise', async () => {
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issue: {
+          create: async (tx, args: InsertValue<typeof schema.tables.issue>) => {
+            await tx.mutate.issue.insert(args);
+          },
+        },
+      } as const satisfies CustomMutatorDefs<Schema>,
+    });
+
+    for (let i = 0; i < 10; i++) {
+      await z.mutate.issue.create({
+        id: String(i),
+        title: 'foo ' + i,
+        description: '',
+        closed: false,
+        createdAt: 1743018138477,
+      }).client;
+
+      const result = await z.query.issue.where('id', String(i)).one();
+      expect(result?.title).toEqual('foo ' + i);
+      expect(result?.id).toEqual(String(i));
+    }
+  });
+
   test('mutations on main do not change main until they are committed', async () => {
     let mutationRun = false;
     const z = zeroForTest({
