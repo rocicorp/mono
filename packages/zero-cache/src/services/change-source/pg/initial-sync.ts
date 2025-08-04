@@ -3,6 +3,7 @@ import {
   PG_INSUFFICIENT_PRIVILEGE,
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
+import {platform} from 'node:os';
 import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
@@ -67,18 +68,9 @@ export async function initialSync(
       'The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
   }
-  const {tableCopyWorkers: numWorkers, profileCopy} = syncOptions;
+  const {tableCopyWorkers, profileCopy} = syncOptions;
   const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
   const sql = pgClient(lc, upstreamURI);
-  const copyPool = pgClient(
-    lc,
-    upstreamURI,
-    {
-      max: numWorkers,
-      connection: {['application_name']: 'initial-sync-copy-worker'},
-    },
-    'json-as-string',
-  );
   const replicationSession = pgClient(lc, upstreamURI, {
     ['fetch_types']: false, // Necessary for the streaming protocol
     connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
@@ -137,19 +129,45 @@ export async function initialSync(
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const start = performance.now();
-    const copiers = startTableCopyWorkers(lc, copyPool, snapshot, numWorkers);
-    try {
-      // Retrieve the published schema at the consistent_point.
-      const published = await sql.begin(Mode.READONLY, async tx => {
-        await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
-        return getPublicationInfo(tx, publications);
-      });
-      // Note: If this throws, initial-sync is aborted.
-      validatePublications(lc, published);
+    // Retrieve the published schema at the consistent_point.
+    const published = await sql.begin(Mode.READONLY, async tx => {
+      await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
+      return getPublicationInfo(tx, publications);
+    });
+    // Note: If this throws, initial-sync is aborted.
+    validatePublications(lc, published);
 
-      // Now that tables have been validated, kick off the copiers.
-      const {tables, indexes} = published;
-      const numTables = tables.length;
+    // Now that tables have been validated, kick off the copiers.
+    const {tables, indexes} = published;
+    const numTables = tables.length;
+    if (platform() === 'win32' && tableCopyWorkers < numTables) {
+      lc.warn?.(
+        `Increasing the number of copy workers from ${tableCopyWorkers} to ` +
+          `${numTables} to work around a Node/Postgres connection bug`,
+      );
+    }
+    const numWorkers =
+      platform() === 'win32'
+        ? numTables
+        : Math.min(tableCopyWorkers, numTables);
+
+    const copyPool = pgClient(
+      lc,
+      upstreamURI,
+      {
+        max: numWorkers,
+        connection: {['application_name']: 'initial-sync-copy-worker'},
+      },
+      'json-as-string',
+    );
+    const copiers = startTableCopyWorkers(
+      lc,
+      copyPool,
+      snapshot,
+      numWorkers,
+      numTables,
+    );
+    try {
       createLiteTables(tx, tables, initialVersion);
 
       void copyProfiler?.start();
@@ -184,6 +202,9 @@ export async function initialSync(
       );
     } finally {
       copiers.setDone();
+      // Workaround a Node bug in Windows in which certain COPY streams result
+      // in hanging the connection, which causes this await to never resolve.
+      void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
     }
   } catch (e) {
     // If initial-sync did not succeed, make a best effort to drop the
@@ -198,7 +219,6 @@ export async function initialSync(
   } finally {
     await replicationSession.end();
     await sql.end();
-    await copyPool.end();
   }
 }
 
@@ -255,6 +275,7 @@ function startTableCopyWorkers(
   db: PostgresDB,
   snapshot: string,
   numWorkers: number,
+  numTables: number,
 ): TransactionPool {
   const {init} = importSnapshot(snapshot);
   const tableCopiers = new TransactionPool(
@@ -266,7 +287,7 @@ function startTableCopyWorkers(
   );
   tableCopiers.run(db);
 
-  lc.info?.(`Started ${numWorkers} workers to copy tables`);
+  lc.info?.(`Started ${numWorkers} workers to copy ${numTables} tables`);
 
   if (parseInt(process.versions.node) < 22) {
     lc.warn?.(

@@ -119,12 +119,6 @@ async function main() {
         // But let the developer override any of these dev defaults.
         ...process.env,
       };
-      if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) {
-        lc.info?.('Starting OpenTelemetry auto instrumentation.');
-        env['NODE_OPTIONS'] =
-          (env['NODE_OPTIONS'] || '') +
-          ' --require @opentelemetry/auto-instrumentations-node/register';
-      }
       zeroCacheProcess = spawn(zeroCacheScript, zeroCacheArgs || [], {
         env,
         stdio: 'inherit',
