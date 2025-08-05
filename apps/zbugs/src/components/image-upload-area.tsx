@@ -1,12 +1,6 @@
-import {
-  useRef,
-  useState,
-  useEffect,
-  useCallback,
-  type ChangeEvent,
-} from 'react';
-import type {ReactNode} from 'react';
 import classNames from 'classnames';
+import type {ReactNode} from 'react';
+import {useCallback, useRef, useState, type ChangeEvent} from 'react';
 import {useLogin} from '../hooks/use-login.tsx';
 import {Button} from './button.tsx';
 import styles from './image-upload-area.module.css';
