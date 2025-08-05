@@ -1,7 +1,10 @@
 import {nanoid} from 'nanoid';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.tsx';
-import {ImageUploadArea} from '../../components/image-upload-area.tsx';
+import {
+  ImageUploadArea,
+  type TextAreaPatch,
+} from '../../components/image-upload-area.tsx';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {
@@ -84,6 +87,10 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
     }
   };
 
+  const onInsert = (patch: TextAreaPatch) => {
+    setDescription(prev => patch.apply(prev));
+  };
+
   return (
     <Modal
       title="New Issue"
@@ -109,7 +116,7 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
           />
         </div>
         <div className="w-full px-4">
-          <ImageUploadArea>
+          <ImageUploadArea textAreaRef={textareaRef} onInsert={onInsert}>
             <textarea
               className="new-issue-description autoResize"
               value={description || ''}

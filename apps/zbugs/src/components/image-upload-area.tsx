@@ -11,9 +11,24 @@ import {useLogin} from '../hooks/use-login.tsx';
 import {Button} from './button.tsx';
 import styles from './image-upload-area.module.css';
 
+export type TextAreaSelection = {start: number; end: number};
+
+export type TextAreaPatch = {
+  /** Where the original selection was when the action happened */
+  selection: TextAreaSelection;
+  /** The text being inserted/replacement text */
+  text: string;
+  /** Suggested caret/selection to set after your state update */
+  nextSelection: TextAreaSelection;
+  /** Pure function to produce the next value */
+  apply: (prev: string) => string;
+};
+
 type ImageUploadAreaProps = {
   children: ReactNode;
   className?: string;
+  textAreaRef: React.RefObject<HTMLTextAreaElement>;
+  onInsert: (patch: TextAreaPatch) => void;
 };
 
 // Image upload logic (from use-image-upload.ts)
@@ -57,66 +72,59 @@ const getPresignedUrl = async (
 export function ImageUploadArea({
   children,
   className = '',
+  textAreaRef,
+  onInsert,
 }: ImageUploadAreaProps) {
   const [isDragOver, setIsDragOver] = useState(false);
-  const [textareaRect, setTextareaRect] = useState<DOMRect | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {loginState} = useLogin();
 
-  // Textarea image insert logic (from use-textarea-image-insert.ts)
-  const insertMarkdown = useCallback((markdown: string) => {
-    if (wrapperRef.current) {
-      const textarea = wrapperRef.current.querySelector('textarea');
-      if (textarea) {
-        const start = textarea.selectionStart;
-        const end = textarea.selectionEnd;
-        const text = textarea.value;
-        const newText =
-          text.substring(0, start) + markdown + text.substring(end);
+  const getSelection = useCallback((): TextAreaSelection | null => {
+    const ta = textAreaRef.current;
+    if (!ta) return null;
+    const start = ta.selectionStart ?? 0;
+    const end = ta.selectionEnd ?? start;
+    return {start, end};
+  }, [textAreaRef]);
 
-        // Need to simulate user input here
+  const focusAndSetSelection = useCallback(
+    (sel: TextAreaSelection) => {
+      const ta = textAreaRef.current;
+      if (!ta) return;
 
-        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-          window.HTMLTextAreaElement.prototype,
-          'value',
-        )?.set;
+      ta.focus();
+      ta.setSelectionRange(sel.start, sel.end);
+    },
+    [textAreaRef],
+  );
 
-        if (nativeInputValueSetter) {
-          nativeInputValueSetter.call(textarea, newText);
-        } else {
-          textarea.value = newText;
-        }
+  const insert = useCallback(
+    (markdown: string) => {
+      const sel = getSelection();
+      const ta = textAreaRef.current;
+      if (!sel || !ta) return;
 
-        // Create a synthetic event that React will recognize as a real user input
-        const event = new Event('input', {bubbles: true});
+      const {start, end} = sel;
 
-        // Make the event look like it came from user interaction
-        Object.defineProperty(event, 'target', {
-          writable: false,
-          value: textarea,
-        });
+      const patch: TextAreaPatch = {
+        selection: sel,
+        text: markdown,
+        nextSelection: {
+          start: start + markdown.length,
+          end: start + markdown.length,
+        },
+        apply: (prev: string) =>
+          prev.slice(0, start) + markdown + prev.slice(end),
+      };
 
-        Object.defineProperty(event, 'currentTarget', {
-          writable: false,
-          value: textarea,
-        });
+      onInsert(patch);
 
-        // Dispatch the event, trigger React's onChange handler
-        textarea.dispatchEvent(event);
-
-        // Set cursor position after the inserted markdown
-        setTimeout(() => {
-          textarea.focus();
-          textarea.setSelectionRange(
-            start + markdown.length,
-            start + markdown.length,
-          );
-        }, 0);
-      }
-    }
-  }, []);
+      requestAnimationFrame(() => focusAndSetSelection(patch.nextSelection));
+    },
+    [getSelection, onInsert, textAreaRef, focusAndSetSelection],
+  );
 
   const uploadFile = async (file: File): Promise<void> => {
     const validationError = validateFile(file);
@@ -152,7 +160,7 @@ export function ImageUploadArea({
       const markdown = `![${file.name}](${imageUrl})`;
 
       // 4. Insert markdown into textarea
-      insertMarkdown(markdown);
+      insert(markdown);
     } catch (error) {
       console.error('Error uploading image:', error);
       alert('An error occurred while uploading the image. Please try again.');
@@ -181,27 +189,6 @@ export function ImageUploadArea({
   const handleButtonClick = () => {
     fileInputRef.current?.click();
   };
-
-  // Update textarea rect when drag starts or component mounts
-  useEffect(() => {
-    const updateRect = () => {
-      if (wrapperRef.current) {
-        // Find textarea within the wrapper
-        const textarea = wrapperRef.current.querySelector('textarea');
-        if (textarea) {
-          // Get the textarea's position relative to the wrapper using offsetTop/offsetLeft
-          setTextareaRect({
-            top: textarea.offsetTop,
-            left: textarea.offsetLeft,
-            width: textarea.offsetWidth,
-            height: textarea.offsetHeight,
-          } as DOMRect);
-        }
-      }
-    };
-
-    updateRect();
-  }, [isDragOver]);
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
@@ -271,6 +258,13 @@ export function ImageUploadArea({
     'uploading': isUploading,
   });
 
+  const textAreaRect = {
+    top: textAreaRef.current?.offsetTop ?? 0,
+    left: textAreaRef.current?.offsetLeft ?? 0,
+    width: textAreaRef.current?.offsetWidth ?? 0,
+    height: textAreaRef.current?.offsetHeight ?? 0,
+  };
+
   return (
     <div
       ref={wrapperRef}
@@ -282,32 +276,32 @@ export function ImageUploadArea({
       onPaste={handlePaste}
     >
       {children}
-      {isDragOver && textareaRect && (
+      {isDragOver && textAreaRect && (
         <div
           className={styles.dragOverlay}
           style={{
-            top: textareaRect.top,
-            left: textareaRect.left,
-            width: textareaRect.width,
-            height: textareaRect.height,
+            top: textAreaRect.top,
+            left: textAreaRect.left,
+            width: textAreaRect.width,
+            height: textAreaRect.height,
           }}
         >
           Drop images here to upload
         </div>
       )}
-      {isUploading && textareaRect && (
+      {isUploading && textAreaRect && (
         <div
           className={styles.uploadingOverlay}
           style={{
-            top: textareaRect.top + textareaRect.height / 2,
-            left: textareaRect.left + textareaRect.width / 2,
+            top: textAreaRect.top + textAreaRect.height / 2,
+            left: textAreaRect.left + textAreaRect.width / 2,
           }}
         >
           Uploading image...
         </div>
       )}
       {/* Image upload button positioned inside textarea */}
-      {textareaRect && (
+      {textAreaRect && (
         <Button
           className={classNames(
             'add-image-button secondary-button icon-button',
@@ -317,8 +311,8 @@ export function ImageUploadArea({
           onAction={handleButtonClick}
           disabled={isUploading}
           style={{
-            top: textareaRect.top + 16,
-            left: textareaRect.left + 16,
+            top: textAreaRect.top + 16,
+            left: textAreaRect.left + 16,
           }}
         >
           Add image

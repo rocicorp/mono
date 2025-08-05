@@ -1,7 +1,10 @@
 import {useEffect, useRef, useState} from 'react';
 import {nanoid} from 'nanoid';
 import {Button} from '../../components/button.tsx';
-import {ImageUploadArea} from '../../components/image-upload-area.tsx';
+import {
+  ImageUploadArea,
+  type TextAreaPatch,
+} from '../../components/image-upload-area.tsx';
 import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
@@ -75,13 +78,17 @@ export function CommentComposer({
     }
   };
 
+  const onInsert = (patch: TextAreaPatch) => {
+    setCurrentBody(prev => patch.apply(prev));
+  };
+
   if (!login.loginState) {
     return null;
   }
 
   return (
     <>
-      <ImageUploadArea>
+      <ImageUploadArea textAreaRef={textareaRef} onInsert={onInsert}>
         <textarea
           value={currentBody}
           onChange={handleChange}

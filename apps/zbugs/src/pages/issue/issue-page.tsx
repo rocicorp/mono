@@ -36,7 +36,10 @@ import {CanEdit} from '../../components/can-edit.tsx';
 import {Combobox} from '../../components/combobox.tsx';
 import {Confirm} from '../../components/confirm.tsx';
 import {EmojiPanel} from '../../components/emoji-panel.tsx';
-import {ImageUploadArea} from '../../components/image-upload-area.tsx';
+import {
+  ImageUploadArea,
+  type TextAreaPatch,
+} from '../../components/image-upload-area.tsx';
 import {LabelPicker} from '../../components/label-picker.tsx';
 import {Link} from '../../components/link.tsx';
 import {Markdown} from '../../components/markdown.tsx';
@@ -354,6 +357,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     setRecentEmojis(recentEmojis => recentEmojis.filter(e => e.id !== id));
   }, []);
 
+  const onInsert = (patch: TextAreaPatch) => {
+    setEdits(prev => ({
+      ...prev,
+      description: patch.apply(prev?.description ?? ''),
+    }));
+  };
+
   useEmojiChangeListener(displayed, handleEmojiChange);
   useEmojiDataSourcePreload();
   useShowToastForNewComment(comments, virtualizer, highlightComment);
@@ -489,7 +499,10 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           ) : (
             <div className="edit-description-container">
               <p className="issue-detail-label">Edit description</p>
-              <ImageUploadArea>
+              <ImageUploadArea
+                textAreaRef={editDescriptionRef}
+                onInsert={onInsert}
+              >
                 <TextareaAutosize
                   className="edit-description"
                   value={rendering.description}
