@@ -16,11 +16,11 @@ import {useZero} from './use-zero.ts';
 export function useZeroOnline(): Accessor<boolean> {
   const zero = useZero()();
 
-  const [online, setOnline] = createSignal<boolean>(zero?.online ?? false);
+  const [online, setOnline] = createSignal<boolean>(zero.online);
 
-  const unsubscribe = zero?.onOnline(setOnline);
+  const unsubscribe = zero.onOnline(setOnline);
 
-  onCleanup(unsubscribe ?? (() => {}));
+  onCleanup(unsubscribe);
 
   return online;
 }
