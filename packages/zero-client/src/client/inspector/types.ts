@@ -1,4 +1,5 @@
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
+import type {LogarithmicHistogram} from '../../../../shared/src/logarithmic-histogram.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {TTL} from '../../../../zql/src/query/ttl.ts';
@@ -12,6 +13,7 @@ export interface Inspector {
   readonly clientGroup: ClientGroup;
   clients(): Promise<Client[]>;
   clientsWithQueries(): Promise<Client[]>;
+  readonly advanceHistogram: LogarithmicHistogram;
 }
 
 export interface Client {
@@ -29,6 +31,13 @@ export interface ClientGroup {
   queries(): Promise<Query[]>;
 }
 
+export interface HistogramsDelegate {
+  readonly advanceHistogram: LogarithmicHistogram;
+  queryHistograms(hash: string): HistogramsMap;
+}
+
+export type HistogramsMap = ReadonlyMap<string, LogarithmicHistogram>;
+
 export interface Query {
   readonly ast: AST | null;
   readonly name: string | null;
@@ -41,4 +50,5 @@ export interface Query {
   readonly rowCount: number;
   readonly ttl: TTL;
   readonly zql: string | null;
+  readonly histograms: HistogramsMap;
 }
