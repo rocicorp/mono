@@ -66,6 +66,9 @@ export type RowChange = RowAdd | RowRemove | RowEdit;
 type Pipeline = {
   readonly input: Input;
   readonly hydrationTimeMs: number;
+  readonly originalHash: string;
+  readonly transformedAst: AST; // Optional, only set after hydration
+  readonly transformationHash: string; // The hash of the transformed AST
 };
 
 /**
@@ -73,6 +76,9 @@ type Pipeline = {
  */
 export class PipelineDriver {
   readonly #tables = new Map<string, TableSource>();
+  // We probs need the original query hash
+  // so we can decide not to re-transform a custom query
+  // that is already hydrated.
   readonly #pipelines = new Map<string, Pipeline>();
 
   readonly #lc: LogContext;
@@ -231,8 +237,32 @@ export class PipelineDriver {
   }
 
   /** @return The Set of query hashes for all added queries. */
-  addedQueries(): Set<string> {
-    return new Set(this.#pipelines.keys());
+  addedQueries(): [
+    transformationHashes: Set<string>,
+    byOriginalHash: Map<
+      string,
+      {
+        transformationHash: string;
+        transformedAst: AST;
+      }[]
+    >,
+  ] {
+    const byOriginalHash = new Map<
+      string,
+      {transformationHash: string; transformedAst: AST}[]
+    >();
+    for (const pipeline of this.#pipelines.values()) {
+      const {originalHash, transformedAst, transformationHash} = pipeline;
+
+      if (!byOriginalHash.has(originalHash)) {
+        byOriginalHash.set(originalHash, []);
+      }
+      byOriginalHash.get(originalHash)!.push({
+        transformationHash,
+        transformedAst,
+      });
+    }
+    return [new Set(this.#pipelines.keys()), byOriginalHash];
   }
 
   totalHydrationTimeMs(): number {
@@ -259,13 +289,14 @@ export class PipelineDriver {
    * @return The rows from the initial hydration of the query.
    */
   *addQuery(
-    hash: string,
+    transformationHash: string,
     query: AST,
+    originalHash: string,
     timer: {totalElapsed: () => number},
   ): Iterable<RowChange> {
     assert(this.initialized());
-    if (this.#pipelines.has(hash)) {
-      this.#lc.info?.(`query ${hash} already added`, query);
+    if (this.#pipelines.has(transformationHash)) {
+      this.#lc.info?.(`query ${transformationHash} already added`, query);
       return;
     }
     const input = buildPipeline(query, {
@@ -279,20 +310,20 @@ export class PipelineDriver {
       push: change => {
         const streamer = this.#streamer;
         assert(streamer, 'must #startAccumulating() before pushing changes');
-        streamer.accumulate(hash, schema, [change]);
+        streamer.accumulate(transformationHash, schema, [change]);
       },
     });
 
     runtimeDebugStats.resetRowsVended(this.#clientGroupID);
 
-    yield* hydrate(input, hash, this.#tableSpecs);
+    yield* hydrate(input, transformationHash, this.#tableSpecs);
 
     const hydrationTimeMs = timer.totalElapsed();
     if (runtimeDebugFlags.trackRowCountsVended) {
       if (hydrationTimeMs > this.#logConfig.slowHydrateThreshold) {
         let totalRowsConsidered = 0;
         const lc = this.#lc
-          .withContext('hash', hash)
+          .withContext('hash', transformationHash)
           .withContext('hydrationTimeMs', hydrationTimeMs);
         for (const tableName of this.#tables.keys()) {
           const entries = [
@@ -316,7 +347,13 @@ export class PipelineDriver {
     // Note: This hydrationTime is a wall-clock overestimate, as it does
     // not take time slicing into account. The view-syncer resets this
     // to a more precise processing-time measurement with setHydrationTime().
-    this.#pipelines.set(hash, {input, hydrationTimeMs});
+    this.#pipelines.set(transformationHash, {
+      input,
+      hydrationTimeMs,
+      originalHash,
+      transformedAst: query,
+      transformationHash,
+    });
   }
 
   /**

@@ -219,7 +219,7 @@ export class QueryManager {
   }
 
   #add(
-    queryId: string,
+    astHash: string,
     normalized: AST | undefined,
     name: string | undefined,
     args: readonly ReadonlyJSONValue[] | undefined,
@@ -231,6 +231,7 @@ export class QueryManager {
         (normalized !== undefined && name === undefined && args === undefined),
       'Either normalized or name and args must be defined, but not both.',
     );
+    const queryId = this.#clientID + '_' + astHash;
     ttl = clampTTL(ttl, this.#lc);
     let entry = this.#queries.get(queryId);
     this.#recentQueries.delete(queryId);
@@ -289,16 +290,16 @@ export class QueryManager {
   }
 
   updateCustom(name: string, args: readonly ReadonlyJSONValue[], ttl: TTL) {
-    const hash = hashOfNameAndArgs(name, args);
-    const entry = must(this.#queries.get(hash));
-    this.#updateEntry(entry, hash, ttl);
+    const queryId = this.#clientID + '_' + hashOfNameAndArgs(name, args);
+    const entry = must(this.#queries.get(queryId));
+    this.#updateEntry(entry, queryId, ttl);
   }
 
   updateLegacy(ast: AST, ttl: TTL) {
     const normalized = normalizeAST(ast);
-    const astHash = hashOfAST(normalized);
-    const entry = must(this.#queries.get(astHash));
-    this.#updateEntry(entry, astHash, ttl);
+    const queryId = this.#clientID + '_' + hashOfAST(normalized);
+    const entry = must(this.#queries.get(queryId));
+    this.#updateEntry(entry, queryId, ttl);
   }
 
   #updateEntry(entry: Entry, hash: string, ttl: TTL): void {
