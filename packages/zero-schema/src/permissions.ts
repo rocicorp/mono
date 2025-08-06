@@ -19,6 +19,10 @@ import {clientToServer, NameMapper} from './name-mapper.ts';
 export const ANYONE_CAN = [
   (_: unknown, eb: ExpressionBuilder<Schema, never>) => eb.and(),
 ];
+
+/**
+ * @deprecated Use ANYONE_CAN instead.
+ */
 export const ANYONE_CAN_DO_ANYTHING = {
   row: {
     select: ANYONE_CAN,
@@ -30,6 +34,7 @@ export const ANYONE_CAN_DO_ANYTHING = {
     delete: ANYONE_CAN,
   },
 };
+
 export const NOBODY_CAN = [];
 
 export type Anchor = 'authData' | 'preMutationRow';
@@ -54,13 +59,22 @@ export type AssetPermissions<
 > = {
   // Why an array of rules?: https://github.com/rocicorp/mono/pull/3184/files#r1869680716
   select?: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined;
+  /**
+   * @deprecated Use Mutators instead.
+   */
   insert?: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined;
+  /**
+   * @deprecated Use Mutators instead.
+   */
   update?:
     | {
         preMutation?: PermissionRule<TAuthDataShape, TSchema, TTable>[];
         postMutation?: PermissionRule<TAuthDataShape, TSchema, TTable>[];
       }
     | undefined;
+  /**
+   * @deprecated Use Mutators instead.
+   */
   delete?: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined;
 };
 
