@@ -1,1 +1,7 @@
-export {default} from '../shared/src/tool/vitest-config.ts';
+import {defineConfig} from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    projects: ['./vitest.config.*.ts'],
+  },
+});

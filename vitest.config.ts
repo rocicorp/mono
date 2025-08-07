@@ -3,6 +3,7 @@ import {defineConfig} from 'vitest/config';
 
 const special = [
   'shared',
+  'replicache',
   'zero-cache',
   'z2s',
   'zero-pg',
