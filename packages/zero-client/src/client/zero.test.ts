@@ -43,6 +43,7 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
+import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {nanoid} from '../util/nanoid.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import type {CustomMutatorDefs} from './custom.ts';
@@ -920,7 +921,7 @@ describe('initConnection', () => {
 
   async function zeroForTestWithDeletedClients<
     const S extends Schema,
-    MD extends CustomMutatorDefs<S> = CustomMutatorDefs<S>,
+    MD extends CustomMutatorDefs = CustomMutatorDefs,
   >(
     options: Partial<ZeroOptions<S, MD>> & {
       deletedClients?: ClientID[] | undefined;
@@ -2797,10 +2798,10 @@ describe('Mutation responses poked down', () => {
       schema,
       mutators: {
         issues: {
-          foo: (tx, {foo}: {foo: number}) =>
+          foo: (tx: Transaction<typeof schema>, {foo}: {foo: number}) =>
             tx.mutate.issues.insert({id: foo.toString(), value: foo}),
         },
-      } as const satisfies CustomMutatorDefs<typeof schema>,
+      } as const,
     });
     await r.triggerConnected();
     expect(r.connectionState).toBe(ConnectionState.Connected);
@@ -3590,10 +3591,10 @@ test('custom mutations get pushed', async () => {
     schema,
     mutators: {
       issues: {
-        foo: (tx, {foo}: {foo: number}) =>
+        foo: (tx: Transaction<typeof schema>, {foo}: {foo: number}) =>
           tx.mutate.issues.insert({id: foo.toString(), value: foo}),
       },
-    } as const satisfies CustomMutatorDefs<typeof schema>,
+    } as const,
   });
   await z.triggerConnected();
   const mockSocket = await z.socket;

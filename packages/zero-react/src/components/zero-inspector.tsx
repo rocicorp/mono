@@ -9,7 +9,7 @@ const Inspector = lazy(() => import('./inspector.tsx'));
 
 export function ZeroInspector<
   S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
 >({zero}: {zero: Zero<S, MD>}): JSX.Element {
   const [show, setShow] = useState(false);
   return show ? (

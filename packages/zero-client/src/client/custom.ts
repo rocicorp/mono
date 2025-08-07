@@ -32,15 +32,14 @@ import type {ZeroLogContext} from './zero-log-context.ts';
 /**
  * The shape which a user's custom mutator definitions must conform to.
  */
-export type CustomMutatorDefs<
-  S extends Schema,
-  TWrappedTransaction = unknown,
-> = {
+export type CustomMutatorDefs = {
   [namespaceOrKey: string]:
     | {
-        [key: string]: CustomMutatorImpl<S, TWrappedTransaction>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        [key: string]: CustomMutatorImpl<any>;
       }
-    | CustomMutatorImpl<S, TWrappedTransaction>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    | CustomMutatorImpl<any>;
 };
 
 export type MutatorResult = {
@@ -69,8 +68,7 @@ export type CustomMutatorImpl<
  */
 export type MakeCustomMutatorInterfaces<
   S extends Schema,
-  MD extends CustomMutatorDefs<S, TWrappedTransaction>,
-  TWrappedTransaction = unknown,
+  MD extends CustomMutatorDefs,
 > = {
   readonly [NamespaceOrName in keyof MD]: MD[NamespaceOrName] extends (
     tx: Transaction<S>,
