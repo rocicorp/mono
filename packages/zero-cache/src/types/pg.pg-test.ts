@@ -111,10 +111,10 @@ describe('types/pg', () => {
   });
 
   test.for([
-    ['00:00', '00:00:00'],
-    ['09:15:32', '09:15:32'],
-    ['14:15:10.1234564', '14:15:10.123456'], // default precision of postgres is 6 fractional digits -> rounded down
-    ['24:00', '24:00:00'],
+    ['00:00', 0],
+    ['09:15:32', 33332000],
+    ['14:15:10.1234564', 51310123], // default precision of postgres is 6 fractional digits -> rounded down
+    ['24:00', 86400000],
   ])('time: %s', async ([input, expected]) => {
     await db`INSERT INTO times ${db({
       time: input,

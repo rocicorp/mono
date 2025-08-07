@@ -910,7 +910,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             json: null,
             jsonb: null,
             date: BigInt(Date.UTC(2003, 3, 23)),
-            time: '09:10:11.123457', // PG rounds to microseconds
+            time: 33011123n, // Convert 09:10:11.123456789 to milliseconds since midnight
             serial: 3n,
             shortID: 3n,
             shortID2: 1003n,

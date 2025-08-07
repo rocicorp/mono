@@ -146,10 +146,10 @@ describe('lite/tables', () => {
               pos: 10,
               dataType: 'TIME[]',
               characterMaximumLength: null,
-              elemPgTypeClass: null,
+              elemPgTypeClass: 'b',
               notNull: false,
               dflt: null,
-            }
+            },
           },
           primaryKey: ['user_id'],
         },
