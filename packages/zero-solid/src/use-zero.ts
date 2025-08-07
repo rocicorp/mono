@@ -20,7 +20,7 @@ const ZeroContext = createContext<Accessor<Zero<any, any>> | undefined>(
   undefined,
 );
 
-export function createZero<S extends Schema, MD extends CustomMutatorDefs<S>>(
+export function createZero<S extends Schema, MD extends CustomMutatorDefs>(
   options: ZeroOptions<S, MD>,
 ): Zero<S, MD> {
   const opts = {
@@ -32,7 +32,7 @@ export function createZero<S extends Schema, MD extends CustomMutatorDefs<S>>(
 
 export function useZero<
   S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
 >(): () => Zero<S, MD> {
   const zero = useContext(ZeroContext);
 
@@ -44,14 +44,14 @@ export function useZero<
 
 export function createUseZero<
   S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
 >() {
   return () => useZero<S, MD>();
 }
 
 export function ZeroProvider<
   S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
 >(
   props: {children: JSX.Element} & (
     | {
