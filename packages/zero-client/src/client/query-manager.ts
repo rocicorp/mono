@@ -378,12 +378,15 @@ export class QueryManager implements InspectorMetricsDelegate {
     }
   }
 
-  get metrics() {
+  /**
+   * Gets the aggregated metrics for all queries managed by this QueryManager.
+   */
+  get metrics(): Metric {
     return this.#metrics;
   }
 
   addMetric(metric: keyof MetricMap, value: number, queryID: string): void {
-    // We track of all materializations of queries as well as per
+    // We track all materializations of queries as well as per
     // query materializations.
     if (metric === 'query-materialization-client') {
       this.#metrics[metric].add(value);
