@@ -264,7 +264,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
           timea: 1050134706000,
           timeb: 1547253035381.101,
           date: Date.UTC(2003, 3, 12),
-          time: '04:05:06.123457', // PG rounds to microseconds
+          time: 14706123,
           dates: [Date.UTC(2001, 1, 3), Date.UTC(2002, 2, 4)],
           times: [1547253035654.321, 1547253035123.456],
           num: 123456789012,

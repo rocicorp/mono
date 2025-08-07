@@ -37,6 +37,10 @@ describe('types/pg', () => {
       d date,
       ds date[]
     );
+    CREATE TABLE times(
+      time time,
+      times time[]
+    );
     `);
   });
 
@@ -103,6 +107,22 @@ describe('types/pg', () => {
     expect((await db`SELECT * FROM dates`)[0]).toEqual({
       d: expected,
       ds: [expected, expected],
+    });
+  });
+
+  test.for([
+    ['00:00', 0],
+    ['09:15:32', 33332000],
+    ['14:15:10.1234564', 51310123], // default precision of postgres is 6 fractional digits -> rounded down
+    ['24:00', 86400000],
+  ])('time: %s', async ([input, expected]) => {
+    await db`INSERT INTO times ${db({
+      time: input,
+      times: [input, input],
+    })}`;
+    expect((await db`SELECT * FROM times`)[0]).toEqual({
+      time: expected,
+      times: [expected, expected],
     });
   });
 });
