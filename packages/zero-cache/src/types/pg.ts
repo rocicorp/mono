@@ -10,6 +10,7 @@ import {
   JSON,
   JSONB,
   NUMERIC,
+  TIME,
   TIMESTAMP,
   TIMESTAMPTZ,
 } from './pg-types.ts';
@@ -79,6 +80,94 @@ function serializeTimestamp(val: unknown): string {
   throw new Error(`Unsupported type "${typeof val}" for timestamp: ${val}`);
 }
 
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+export function millisecondsToPostgresTime(milliseconds: number): string {
+  if (milliseconds < 0) {
+    throw new Error('Milliseconds cannot be negative');
+  }
+
+  if (milliseconds >= MILLISECONDS_PER_DAY) {
+    throw new Error(
+      `Milliseconds cannot exceed 24 hours (${MILLISECONDS_PER_DAY}ms)`,
+    );
+  }
+
+  milliseconds = Math.floor(milliseconds); // Ensure it's an integer
+
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const ms = milliseconds % 1000;
+
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${ms.toString().padStart(3, '0')}`;
+}
+
+export function postgresTimeToMilliseconds(timeString: string): number {
+  // Validate basic format
+  if (!timeString || typeof timeString !== 'string') {
+    throw new Error('Invalid time string: must be a non-empty string');
+  }
+
+  // Regular expression to match HH:MM:SS or HH:MM:SS.mmm format
+  const timeRegex = /^(\d{1,2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?$/;
+  const match = timeString.match(timeRegex);
+
+  if (!match) {
+    throw new Error(
+      `Invalid time format: "${timeString}". Expected HH:MM:SS or HH:MM:SS.mmm`,
+    );
+  }
+
+  // Extract components
+  const hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const seconds = parseInt(match[3], 10);
+  // Handle optional milliseconds, pad right with zeros if needed
+  let milliseconds = 0;
+  if (match[4]) {
+    // Pad microseconds to 6 digits
+    const msString = match[4].padEnd(6, '0');
+    // slice milliseconds out of the microseconds
+    // e.g. 123456 -> 123, 1234 -> 123,
+    milliseconds = parseInt(msString.slice(0, 3), 10);
+  }
+
+  // Validate ranges
+  if (hours < 0 || hours > 24) {
+    throw new Error(
+      `Invalid hours: ${hours}. Must be between 0 and 24 (24 means end of day)`,
+    );
+  }
+
+  if (minutes < 0 || minutes >= 60) {
+    throw new Error(`Invalid minutes: ${minutes}. Must be between 0 and 59`);
+  }
+
+  if (seconds < 0 || seconds >= 60) {
+    throw new Error(`Invalid seconds: ${seconds}. Must be between 0 and 59`);
+  }
+
+  if (milliseconds < 0 || milliseconds >= 1000) {
+    throw new Error(
+      `Invalid milliseconds: ${milliseconds}. Must be between 0 and 999`,
+    );
+  }
+
+  // Special case: PostgreSQL allows 24:00:00 to represent end of day
+  if (hours === 24 && (minutes !== 0 || seconds !== 0 || milliseconds !== 0)) {
+    throw new Error(
+      'Invalid time: when hours is 24, minutes, seconds, and milliseconds must be 0',
+    );
+  }
+
+  // Calculate total milliseconds
+  const totalMs =
+    hours * 3600000 + minutes * 60000 + seconds * 1000 + milliseconds;
+
+  return totalMs;
+}
+
 function dateToUTCMidnight(date: string): number {
   const d = new Date(date);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
@@ -120,6 +209,22 @@ export const postgresTypeConfig = (
       from: [TIMESTAMP, TIMESTAMPTZ],
       serialize: serializeTimestamp,
       parse: timestampToFpMillis,
+    },
+    // Times are converted as strings
+    time: {
+      to: TIME,
+      from: [TIME],
+      serialize: (x: unknown) => {
+        switch (typeof x) {
+          case 'string':
+            return x; // Let Postgres parse it
+          case 'number':
+            return millisecondsToPostgresTime(x);
+        }
+
+        throw new Error(`Unsupported type "${typeof x}" for time: ${x}`);
+      },
+      parse: postgresTimeToMilliseconds,
     },
     // The DATE type is stored directly as the PG normalized date string.
     date: {
@@ -257,6 +362,7 @@ export const pgToZqlTypeMap = Object.freeze({
 
   // Date/Time types
   'date': 'number',
+  'time': 'string',
   'timestamp': 'number',
   'timestamptz': 'number',
   'timestamp with time zone': 'number',
