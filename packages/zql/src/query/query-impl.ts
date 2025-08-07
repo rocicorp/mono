@@ -766,12 +766,12 @@ export class QueryImpl<
     const onDestroy = () => {
       input.destroy();
       removeCommitObserver?.();
-      removeServerQuery();
+      removeAddedQuery();
     };
 
     const t0 = performance.now();
 
-    const removeServerQuery = this.customQueryID
+    const removeAddedQuery = this.customQueryID
       ? delegate.addCustomQuery(this.customQueryID, ttl, gotCallback)
       : delegate.addServerQuery(ast, ttl, gotCallback);
 
