@@ -13,19 +13,10 @@ export type SchemaValue<T = unknown> =
       serverName?: string | undefined;
       optional?: boolean | undefined;
     }
-  | EnumSchemaValue<T>
   | SchemaValueWithCustomType<T>;
 
 export type SchemaValueWithCustomType<T> = {
   type: ValueType;
-  serverName?: string | undefined;
-  optional?: boolean;
-  customType: T;
-};
-
-export type EnumSchemaValue<T> = {
-  kind: 'enum';
-  type: 'string';
   serverName?: string | undefined;
   optional?: boolean;
   customType: T;
