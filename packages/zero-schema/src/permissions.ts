@@ -21,7 +21,7 @@ export const ANYONE_CAN = [
 ];
 
 /**
- * @deprecated Use ANYONE_CAN instead.
+ * @deprecated Use {@link ANYONE_CAN} instead.
  */
 export const ANYONE_CAN_DO_ANYTHING = {
   row: {
@@ -61,10 +61,12 @@ export type AssetPermissions<
   select?: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined;
   /**
    * @deprecated Use Mutators instead.
+   * @see {@link https://zero.rocicorp.dev/docs/writing-data}
    */
   insert?: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined;
   /**
    * @deprecated Use Mutators instead.
+   * @see {@link https://zero.rocicorp.dev/docs/writing-data}
    */
   update?:
     | {
@@ -74,6 +76,7 @@ export type AssetPermissions<
     | undefined;
   /**
    * @deprecated Use Mutators instead.
+   * @see {@link https://zero.rocicorp.dev/docs/writing-data}
    */
   delete?: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined;
 };
