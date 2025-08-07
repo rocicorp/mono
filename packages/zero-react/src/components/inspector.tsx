@@ -5,7 +5,7 @@ import {MarkIcon} from './mark-icon.tsx';
 
 export default function Inspector<
   S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
 >({zero, onClose}: {zero: Zero<S, MD>; onClose: () => void}) {
   return (
     <dialog
