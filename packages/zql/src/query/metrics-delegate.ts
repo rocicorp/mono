@@ -1,5 +1,8 @@
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+
 export type MetricMap = {
   'query-materialization-client': [queryID: string];
+  'query-materialization-end-to-end': [queryID: string, ast: AST];
 };
 
 export interface MetricsDelegate {

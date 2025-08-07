@@ -30,6 +30,7 @@ import type {Enum} from '../../../shared/src/enum.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
+import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
@@ -146,7 +147,6 @@ import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
-import {Subscribable} from '../../../shared/src/subscribable.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -1953,14 +1953,14 @@ export class Zero<
     }
   }
 
-  #addMetric: (
-    metric: keyof MetricMap,
+  #addMetric: <K extends keyof MetricMap>(
+    metric: K,
     value: number,
-    ...args: MetricMap[typeof metric]
+    ...args: MetricMap[K]
   ) => void = (metric, value, ...args) => {
-    function isQueryMetric(metric: string): metric is `query-${string}` {
-      return metric.startsWith('query-');
-    }
+    const isQueryMetric = (metric: string): metric is `query-${string}` =>
+      metric.startsWith('query-');
+
     if (isQueryMetric(metric)) {
       this.#queryManager.addMetric(metric, value, args[0]);
     } else {

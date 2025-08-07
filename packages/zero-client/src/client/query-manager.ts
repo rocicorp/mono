@@ -68,6 +68,7 @@ export class QueryManager implements InspectorMetricsDelegate {
   readonly #lc: ZeroLogContext;
   readonly #metrics: Metric = {
     'query-materialization-client': new TDigest(),
+    'query-materialization-end-to-end': new TDigest(),
   };
   readonly #queryMetrics: Map<string, Metric> = new Map();
 
@@ -388,15 +389,17 @@ export class QueryManager implements InspectorMetricsDelegate {
   addMetric(metric: keyof MetricMap, value: number, queryID: string): void {
     // We track all materializations of queries as well as per
     // query materializations.
-    if (metric === 'query-materialization-client') {
-      this.#metrics[metric].add(value);
-    }
+    metric satisfies
+      | 'query-materialization-client'
+      | 'query-materialization-end-to-end';
+    this.#metrics[metric].add(value);
 
     // The query manager manages metrics that are per query.
     let existing = this.#queryMetrics.get(queryID);
     if (!existing) {
       existing = {
         'query-materialization-client': new TDigest(),
+        'query-materialization-end-to-end': new TDigest(),
       };
       this.#queryMetrics.set(queryID, existing);
     }

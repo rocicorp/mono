@@ -1911,11 +1911,11 @@ describe('update clamps TTL correctly', () => {
 
   test('updateCustom', () => {
     // Add a custom query with a specific TTL
-    queryManager.addCustom('customQuery', [1], '1m');
+    queryManager.addCustom({name: 'customQuery', args: [1]}, '1m');
     queryManager.flushBatch();
 
     // Update the query with a larger TTL
-    queryManager.updateCustom('customQuery', [1], '2m');
+    queryManager.updateCustom({name: 'customQuery', args: [1]}, '2m');
     queryManager.flushBatch();
 
     expect(send).toBeCalledTimes(2);
@@ -1972,11 +1972,14 @@ describe('update clamps TTL correctly', () => {
 
   test('updateCustom does not send when TTL is already at max', () => {
     // Add a custom query with max TTL
-    queryManager.addCustom('customQuery', [1], 'forever');
+    queryManager.addCustom({name: 'customQuery', args: [1]}, 'forever');
     queryManager.flushBatch();
 
     // Update the query with a larger TTL (should be no-op since already at max)
-    queryManager.updateCustom('customQuery', [1], MAX_TTL_MS + 1000);
+    queryManager.updateCustom(
+      {name: 'customQuery', args: [1]},
+      MAX_TTL_MS + 1000,
+    );
     queryManager.flushBatch();
 
     // Only one send should happen (the initial add)

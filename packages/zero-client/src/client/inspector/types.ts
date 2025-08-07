@@ -10,6 +10,7 @@ export interface GetInspector {
 
 export type Metrics = {
   'query-materialization-client': ReadonlyTDigest;
+  'query-materialization-end-to-end': ReadonlyTDigest;
 };
 
 export interface Inspector {

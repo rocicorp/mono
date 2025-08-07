@@ -45,6 +45,7 @@ type GetWebSocket = () => Promise<WebSocket>;
 
 type Metrics = {
   readonly 'query-materialization-client': ReadonlyTDigest;
+  readonly 'query-materialization-end-to-end': ReadonlyTDigest;
 };
 
 export interface InspectorMetricsDelegate {

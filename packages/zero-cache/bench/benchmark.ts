@@ -73,7 +73,6 @@ export function bench(opts: Options) {
     },
     updateServerQuery() {},
     updateCustomQuery() {},
-    onQueryMaterialized() {},
     onTransactionCommit() {
       return () => {};
     },

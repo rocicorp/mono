@@ -44,7 +44,6 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
    * the updates are wrapped in a batch to avoid multiple re-renders.
    */
   batchViewUpdates<T>(applyViewUpdates: () => T): T;
-  onQueryMaterialized(hash: string, ast: AST, duration: number): void;
 
   /**
    * Asserts that the `RunOptions` provided to the `run` method are supported in

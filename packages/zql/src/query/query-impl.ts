@@ -756,7 +756,12 @@ export class QueryImpl<
 
     const gotCallback: GotCallback = got => {
       if (got) {
-        delegate.onQueryMaterialized(this.hash(), ast, performance.now() - t0);
+        delegate.addMetric(
+          'query-materialization-end-to-end',
+          performance.now() - t0,
+          queryID,
+          ast,
+        );
         queryComplete = true;
         queryCompleteResolver.resolve(true);
       }
