@@ -515,7 +515,6 @@ export class Zero<
             lc,
             mutatorOrMutators,
             schema,
-            slowMaterializeThreshold,
             // Replicache expects mutators to only be able to return JSON
             // but Zero wraps the return with: `{server?: Promise<MutationResult>, client?: T}`
           ) as () => MutatorReturn;
@@ -532,7 +531,6 @@ export class Zero<
               lc,
               mutator as CustomMutatorImpl<S>,
               schema,
-              slowMaterializeThreshold,
             ) as () => MutatorReturn;
           }
           continue;
@@ -579,7 +577,6 @@ export class Zero<
       () => this.#queryManager.flushBatch(),
       batchViewUpdates,
       this.#addMetric,
-      slowMaterializeThreshold,
       assertValidRunOptions,
     );
     this.queryDelegate = this.#zeroContext;
@@ -691,6 +688,7 @@ export class Zero<
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
       options.queryChangeThrottleMs ?? DEFAULT_QUERY_CHANGE_THROTTLE_MS,
+      slowMaterializeThreshold,
     );
     this.#clientToServer = clientToServer(schema.tables);
 
@@ -1962,7 +1960,7 @@ export class Zero<
       metric.startsWith('query-');
 
     if (isQueryMetric(metric)) {
-      this.#queryManager.addMetric(metric, value, args[0]);
+      this.#queryManager.addMetric(metric, value, ...args);
     } else {
       unreachable(metric);
     }

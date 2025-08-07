@@ -7,10 +7,7 @@ import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Input, Storage} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
-import type {
-  MetricMap,
-  MetricsDelegate,
-} from '../../../zql/src/query/metrics-delegate.ts';
+import type {MetricsDelegate} from '../../../zql/src/query/metrics-delegate.ts';
 import type {
   CommitListener,
   QueryDelegate,
@@ -46,7 +43,6 @@ export class ZeroContext implements QueryDelegate {
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
-  readonly #slowMaterializeThreshold: number;
   readonly #lc: ZeroLogContext;
   readonly assertValidRunOptions: (options?: RunOptions) => void;
 
@@ -56,7 +52,7 @@ export class ZeroContext implements QueryDelegate {
    */
   readonly defaultQueryComplete = false;
 
-  readonly #addMetric: MetricsDelegate['addMetric'];
+  readonly addMetric: MetricsDelegate['addMetric'];
 
   constructor(
     lc: ZeroLogContext,
@@ -68,7 +64,6 @@ export class ZeroContext implements QueryDelegate {
     flushQueryChanges: () => void,
     batchViewUpdates: (applyViewUpdates: () => void) => void,
     addMetric: MetricsDelegate['addMetric'],
-    slowMaterializeThreshold: number,
     assertValidRunOptions: (options?: RunOptions) => void,
   ) {
     this.#mainSources = mainSources;
@@ -77,45 +72,14 @@ export class ZeroContext implements QueryDelegate {
     this.updateCustomQuery = updateCustomQuery;
     this.#batchViewUpdates = batchViewUpdates;
     this.#lc = lc;
-    this.#slowMaterializeThreshold = slowMaterializeThreshold;
     this.assertValidRunOptions = assertValidRunOptions;
     this.addCustomQuery = addCustomQuery;
     this.flushQueryChanges = flushQueryChanges;
-    this.#addMetric = addMetric;
+    this.addMetric = addMetric;
   }
 
   getSource(name: string): Source | undefined {
     return this.#mainSources.getSource(name);
-  }
-
-  addMetric<K extends keyof MetricMap>(
-    metric: K,
-    value: number,
-    ...args: MetricMap[K]
-  ): void {
-    this.#addMetric(metric, value, ...args);
-    if (metric === 'query-materialization-end-to-end') {
-      const [queryID, ast] = args as [string, AST];
-
-      if (
-        this.#slowMaterializeThreshold !== undefined &&
-        value > this.#slowMaterializeThreshold
-      ) {
-        this.#lc.warn?.(
-          'Slow query materialization (including server/network)',
-          queryID,
-          ast,
-          value,
-        );
-      } else {
-        this.#lc.debug?.(
-          'Materialized query (including server/network)',
-          queryID,
-          ast,
-          value,
-        );
-      }
-    }
   }
 
   mapAst(ast: AST): AST {

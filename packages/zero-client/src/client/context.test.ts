@@ -53,7 +53,6 @@ test('getSource', () => {
     null as unknown as FlushQueryChanges,
     testBatchViewUpdates,
     () => {},
-    5_000,
     assertValidRunOptions,
   );
 
@@ -131,7 +130,6 @@ test('processChanges', () => {
     null as unknown as FlushQueryChanges,
     testBatchViewUpdates,
     () => {},
-    5_000,
     assertValidRunOptions,
   );
   const out = new Catch(
@@ -202,7 +200,6 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
     null as unknown as FlushQueryChanges,
     batchViewUpdates,
     () => {},
-    5_000,
     assertValidRunOptions,
   );
   const out = new Catch(
@@ -262,7 +259,6 @@ test('transactions', () => {
     null as unknown as FlushQueryChanges,
     testBatchViewUpdates,
     () => {},
-    5_000,
     assertValidRunOptions,
   );
   const servers = context.getSource('server')!;
@@ -343,7 +339,6 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
     null as unknown as FlushQueryChanges,
     batchViewUpdates,
     () => {},
-    5_000,
     assertValidRunOptions,
   );
 
@@ -368,7 +363,6 @@ test('batchViewUpdates returns value', () => {
     null as unknown as FlushQueryChanges,
     batchViewUpdates,
     () => {},
-    5_000,
     assertValidRunOptions,
   );
 

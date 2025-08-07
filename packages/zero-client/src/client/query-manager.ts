@@ -71,6 +71,7 @@ export class QueryManager implements InspectorMetricsDelegate {
     'query-materialization-end-to-end': new TDigest(),
   };
   readonly #queryMetrics: Map<string, Metric> = new Map();
+  readonly #slowMaterializeThreshold: number;
 
   constructor(
     lc: ZeroLogContext,
@@ -81,6 +82,7 @@ export class QueryManager implements InspectorMetricsDelegate {
     experimentalWatch: ReplicacheImpl['experimentalWatch'],
     recentQueriesMaxSize: number,
     queryChangeThrottleMs: number,
+    slowMaterializeThreshold: number,
   ) {
     this.#lc = lc.withContext('QueryManager');
     this.#clientID = clientID;
@@ -89,6 +91,7 @@ export class QueryManager implements InspectorMetricsDelegate {
     this.#send = send;
     this.#mutationTracker = mutationTracker;
     this.#queryChangeThrottleMs = queryChangeThrottleMs;
+    this.#slowMaterializeThreshold = slowMaterializeThreshold;
 
     this.#mutationTracker.onAllMutationsApplied(() => {
       if (this.#pendingRemovals.length === 0) {
@@ -386,13 +389,43 @@ export class QueryManager implements InspectorMetricsDelegate {
     return this.#metrics;
   }
 
-  addMetric(metric: keyof MetricMap, value: number, queryID: string): void {
+  addMetric<K extends keyof MetricMap>(
+    metric: K,
+    value: number,
+    ...args: MetricMap[K]
+  ): void {
     // We track all materializations of queries as well as per
     // query materializations.
     metric satisfies
       | 'query-materialization-client'
       | 'query-materialization-end-to-end';
     this.#metrics[metric].add(value);
+
+    const queryID = args[0];
+
+    // Handle slow query logging for end-to-end materialization
+    if (metric === 'query-materialization-end-to-end') {
+      const ast = args[1];
+
+      if (
+        this.#slowMaterializeThreshold !== undefined &&
+        value > this.#slowMaterializeThreshold
+      ) {
+        this.#lc.warn?.(
+          'Slow query materialization (including server/network)',
+          queryID,
+          ast,
+          value,
+        );
+      } else {
+        this.#lc.debug?.(
+          'Materialized query (including server/network)',
+          queryID,
+          ast,
+          value,
+        );
+      }
+    }
 
     // The query manager manages metrics that are per query.
     let existing = this.#queryMetrics.get(queryID);
