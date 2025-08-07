@@ -14,7 +14,7 @@ import type {
   Database,
   TransactionProviderHooks,
   TransactionProviderInput,
-} from './push-processor.ts';
+} from './process-mutations.ts';
 
 /**
  * Implements a Database for use with PushProcessor that is backed by Postgres.
