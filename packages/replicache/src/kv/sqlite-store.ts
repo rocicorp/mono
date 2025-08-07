@@ -38,29 +38,38 @@ export interface SQLiteDatabase {
   prepare(sql: string): PreparedStatement;
 }
 
-type SQLitePreparedStatements = {
+type SQLiteTransactionPreparedStatements = {
   begin: PreparedStatement;
   beginImmediate: PreparedStatement;
   commit: PreparedStatement;
   rollback: PreparedStatement;
+};
 
+const getPreparedStatementsForSQLiteTransaction = (
+  db: SQLiteDatabase,
+): SQLiteTransactionPreparedStatements => ({
+  begin: db.prepare('BEGIN'),
+  beginImmediate: db.prepare('BEGIN IMMEDIATE'),
+  commit: db.prepare('COMMIT'),
+  rollback: db.prepare('ROLLBACK'),
+});
+
+type SQLitePreparedStatementsRW = {
   get: PreparedStatement;
   put: PreparedStatement;
   del: PreparedStatement;
 };
 
-const getPreparedStatementsForSQLiteDatabase = (
+const getPreparedStatementsForSQLiteRW = (
   db: SQLiteDatabase,
-): SQLitePreparedStatements => ({
-  begin: db.prepare('BEGIN'),
-  beginImmediate: db.prepare('BEGIN IMMEDIATE'),
-  commit: db.prepare('COMMIT'),
-  rollback: db.prepare('ROLLBACK'),
-
+): SQLitePreparedStatementsRW => ({
   get: db.prepare('SELECT value FROM entry WHERE key = ?'),
   put: db.prepare('INSERT OR REPLACE INTO entry (key, value) VALUES (?, ?)'),
   del: db.prepare('DELETE FROM entry WHERE key = ?'),
 });
+
+type SQLitePreparedStatements = SQLiteTransactionPreparedStatements &
+  SQLitePreparedStatementsRW;
 
 interface SQLiteConnectionManager {
   acquire(): Promise<{
@@ -106,9 +115,8 @@ class SQLiteReadConnectionManager implements SQLiteConnectionManager {
     this.#rwLock = rwLock;
 
     for (let i = 0; i < opts.readPoolSize; i++) {
-      // create a new readonly SQLiteDatabase for each connection
-      const db = manager.open(name, opts);
-      const preparedStatements = getPreparedStatementsForSQLiteDatabase(db);
+      // create a new readonly SQLiteDatabase for each instance in the pool
+      const {db, preparedStatements} = manager.open(name, opts);
       this.#pool.push({
         db,
         lock: new Lock(),
@@ -136,21 +144,15 @@ class SQLiteReadConnectionManager implements SQLiteConnectionManager {
     // we have two levels of locking
     // 1. the RWLock to prevent concurrent read operations while a write is in progress
     // 2. the Lock to prevent concurrent read operations on the same connection
-    const lock = async () => {
-      const releaseRWLock = await this.#rwLock.read();
-      const releaseLock = await entry.lock.lock();
-
-      return () => {
-        releaseRWLock();
-        releaseLock();
-      };
-    };
-
-    const release = await lock();
+    const releaseRWLock = await this.#rwLock.read();
+    const releaseLock = await entry.lock.lock();
 
     return {
       preparedStatements: entry.preparedStatements,
-      release,
+      release: () => {
+        releaseRWLock();
+        releaseLock();
+      },
     };
   }
 
@@ -183,8 +185,8 @@ class SQLiteWriteConnectionManager implements SQLiteConnectionManager {
     rwLock: RWLock,
     opts: SQLiteDatabaseManagerOptions,
   ) {
-    const db = manager.open(name, opts);
-    this.#preparedStatements = getPreparedStatementsForSQLiteDatabase(db);
+    const {db, preparedStatements} = manager.open(name, opts);
+    this.#preparedStatements = preparedStatements;
     this.#db = db;
     this.#rwLock = rwLock;
   }
@@ -213,7 +215,6 @@ class SQLiteWriteConnectionManager implements SQLiteConnectionManager {
  * interface using a single 'entry' table with key-value pairs.
  *
  * The store uses a single RWLock to prevent concurrent read and write operations.
- * The RWLock is used to prevent concurrent read operations while a write is in progress.
  *
  * The store also uses a pool of read connections to allow concurrent reads with separate transactions.
  */
@@ -222,7 +223,7 @@ export class SQLiteStore implements Store {
   readonly #dbm: SQLiteDatabaseManager;
   readonly #writeConnectionManager: SQLiteConnectionManager;
   readonly #readConnectionManager: SQLiteConnectionManager;
-  readonly #rwLock: RWLock;
+  readonly #rwLock = new RWLock();
 
   #closed = false;
 
@@ -234,7 +235,6 @@ export class SQLiteStore implements Store {
     this.#name = name;
     this.#dbm = dbm;
 
-    this.#rwLock = new RWLock();
     this.#writeConnectionManager = new SQLiteWriteConnectionManager(
       name,
       dbm,
@@ -302,9 +302,9 @@ class SQLiteStoreRWBase {
   }
 
   #getSql(key: string): string | undefined {
-    const rows = this._preparedStatements.get.all<{value: string}>([key]);
+    const rows = this._preparedStatements.get.all<{value: string}>(key);
     if (rows.length === 0) return undefined;
-    return rows?.[0]?.value;
+    return rows[0].value;
   }
 
   protected _release(): void {
@@ -350,12 +350,12 @@ export class SQLiteStoreWrite extends SQLiteStoreRWBase implements Write {
   }
 
   put(key: string, value: ReadonlyJSONValue): Promise<void> {
-    this._preparedStatements.put.run([key, JSON.stringify(value)]);
+    this._preparedStatements.put.run(key, JSON.stringify(value));
     return promiseVoid;
   }
 
   del(key: string): Promise<void> {
-    this._preparedStatements.del.run([key]);
+    this._preparedStatements.del.run(key);
     return promiseVoid;
   }
 
@@ -412,7 +412,15 @@ export type SQLiteDatabaseManagerOptions = {
 
 export class SQLiteDatabaseManager {
   readonly #dbm: GenericSQLiteDatabaseManager;
-  readonly #dbInstances = new Map<string, {dbs: SQLiteDatabase[]}>();
+  readonly #dbInstances = new Map<
+    string,
+    {
+      instances: {
+        db: SQLiteDatabase;
+        preparedStatements: SQLitePreparedStatements;
+      }[];
+    }
+  >();
 
   constructor(dbm: GenericSQLiteDatabaseManager) {
     this.#dbm = dbm;
@@ -427,63 +435,75 @@ export class SQLiteDatabaseManager {
   open(
     name: string,
     opts: Omit<SQLiteDatabaseManagerOptions, 'poolSize'>,
-  ): SQLiteDatabase {
+  ): {db: SQLiteDatabase; preparedStatements: SQLitePreparedStatements} {
     const dbInstance = this.#dbInstances.get(name);
 
     const fileName = safeFilename(name);
     const newDb = this.#dbm.open(fileName);
 
+    const txPreparedStatements =
+      getPreparedStatementsForSQLiteTransaction(newDb);
+
+    const exec = (sql: string) => {
+      const statement = newDb.prepare(sql);
+      statement.run();
+      statement.finalize();
+    };
+
     if (!dbInstance) {
       // we only ensure the schema for the first open
       // the schema is the same for all connections
-      this.#ensureSchema(newDb);
+      this.#ensureSchema(exec, txPreparedStatements);
     }
 
     if (opts.busyTimeout !== undefined) {
       // we set a busy timeout to wait for write locks to be released
-      const busyTimeout = newDb.prepare(
-        `PRAGMA busy_timeout = ${opts.busyTimeout}`,
-      );
-      busyTimeout.run();
-      busyTimeout.finalize();
+      exec(`PRAGMA busy_timeout = ${opts.busyTimeout}`);
     }
     if (opts.journalMode !== undefined) {
       // WAL allows concurrent readers (improves write throughput ~15x and read throughput ~1.5x)
       // but does not work on all platforms (e.g. Expo)
-      const journalMode = newDb.prepare(
-        `PRAGMA journal_mode = ${opts.journalMode}`,
-      );
-      journalMode.run();
-      journalMode.finalize();
+      exec(`PRAGMA journal_mode = ${opts.journalMode}`);
     }
     if (opts.synchronous !== undefined) {
-      const synchronous = newDb.prepare(
-        `PRAGMA synchronous = ${opts.synchronous}`,
-      );
-      synchronous.run();
-      synchronous.finalize();
+      exec(`PRAGMA synchronous = ${opts.synchronous}`);
     }
     if (opts.readUncommitted !== undefined) {
-      const readUncommitted = newDb.prepare(
+      exec(
         `PRAGMA read_uncommitted = ${opts.readUncommitted ? 'true' : 'false'}`,
       );
-      readUncommitted.run();
-      readUncommitted.finalize();
     }
 
+    // we prepare these after the schema is created
+    const rwPreparedStatements = getPreparedStatementsForSQLiteRW(newDb);
+
+    const preparedStatements = {
+      ...txPreparedStatements,
+      ...rwPreparedStatements,
+    };
+
     this.#dbInstances.set(name, {
-      dbs: [...(dbInstance?.dbs ?? []), newDb],
+      instances: [
+        ...(dbInstance?.instances ?? []),
+        {db: newDb, preparedStatements},
+      ],
     });
 
-    return newDb;
+    return {
+      db: newDb,
+      preparedStatements,
+    };
   }
 
   close(name: string) {
     const dbInstance = this.#dbInstances.get(name);
     if (!dbInstance) return;
 
-    for (const db of dbInstance.dbs) {
-      db.close();
+    for (const instance of dbInstance.instances) {
+      for (const stmt of Object.values(instance.preparedStatements)) {
+        stmt.finalize();
+      }
+      instance.db.close();
     }
   }
 
@@ -492,37 +512,33 @@ export class SQLiteDatabaseManager {
     if (!dbInstance) return;
 
     // we close all databases first before destroying
-    for (const db of dbInstance.dbs) {
-      db.close();
+    for (const instance of dbInstance.instances) {
+      for (const stmt of Object.values(instance.preparedStatements)) {
+        stmt.finalize();
+      }
+      instance.db.close();
     }
-    for (const db of dbInstance.dbs) {
-      db.destroy();
+    for (const instance of dbInstance.instances) {
+      instance.db.destroy();
     }
     this.#dbInstances.delete(name);
   }
 
-  #ensureSchema(db: SQLiteDatabase): void {
-    const begin = db.prepare('BEGIN IMMEDIATE');
-    // WITHOUT ROWID increases write throughput
-    const createTable = db.prepare(
-      'CREATE TABLE IF NOT EXISTS entry (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID',
-    );
-    const commit = db.prepare('COMMIT');
-    const rollback = db.prepare('ROLLBACK');
-
-    begin.run();
+  #ensureSchema(
+    exec: (sql: string) => void,
+    preparedStatements: SQLiteTransactionPreparedStatements,
+  ): void {
+    preparedStatements.begin.run();
 
     try {
-      createTable.run();
-      commit.run();
+      // WITHOUT ROWID increases write throughput
+      exec(
+        'CREATE TABLE IF NOT EXISTS entry (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID',
+      );
+      preparedStatements.commit.run();
     } catch (e) {
-      rollback.run();
+      preparedStatements.rollback.run();
       throw e;
-    } finally {
-      begin.finalize();
-      createTable.finalize();
-      commit.finalize();
-      rollback.finalize();
     }
   }
 }

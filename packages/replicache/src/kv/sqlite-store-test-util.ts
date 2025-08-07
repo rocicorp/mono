@@ -27,18 +27,18 @@ export const getTestSQLiteDatabaseManager = (logging: boolean = false) =>
             console.log('prepare', sql);
           }
           return {
-            all: <T>(params?: unknown[]): T[] => {
-              const result = params?.length ? stmt.all(...params) : stmt.all();
+            all: <T>(...params: unknown[]): T[] => {
+              const result = params.length ? stmt.all(...params) : stmt.all();
               if (logging) {
                 console.log('all', sql, params, result);
               }
               return result as T[];
             },
-            run: (params?: unknown[]): void => {
+            run: (...params: unknown[]): void => {
               if (logging) {
                 console.log('run', sql, params);
               }
-              if (params?.length) {
+              if (params.length) {
                 stmt.run(...params);
               } else {
                 stmt.run();

@@ -25,10 +25,10 @@ const expoDbManagerInstance = new SQLiteDatabaseManager({
       prepare: (sql: string) => {
         const stmt = db.prepareSync(sql);
         return {
-          run: (params?: unknown[]): void => {
+          run: (...params: unknown[]): void => {
             stmt.executeSync(params as SQLiteBindParams);
           },
-          all: <T>(params?: unknown[]): T[] => {
+          all: <T>(...params: unknown[]): T[] => {
             const result = stmt.executeSync(params as SQLiteBindParams);
             return result.getAllSync() as unknown as T[];
           },

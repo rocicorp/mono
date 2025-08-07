@@ -76,11 +76,17 @@ describe('sqlite write contention', () => {
       const readP3 = withRead(defaultStore, async rt => {
         expect(await rt.get('foo')).equal('bar');
       });
+      const readP4 = withRead(defaultStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP5 = withRead(defaultStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
       const writeP = withWrite(defaultStore, async wt => {
         await wt.put('foo', 'bar2');
       });
 
-      await Promise.all([readP1, readP2, readP3, writeP]);
+      await Promise.all([readP1, readP2, readP3, readP4, readP5, writeP]);
     },
     {
       throws: true,
@@ -108,17 +114,87 @@ describe('sqlite write contention', () => {
       const readP3 = withRead(walStore, async rt => {
         expect(await rt.get('foo')).equal('bar');
       });
+      const readP4 = withRead(walStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP5 = withRead(walStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
       const writeP = withWrite(walStore, async wt => {
         await wt.put('foo', 'bar2');
       });
 
-      await Promise.all([readP1, readP2, readP3, writeP]);
+      await Promise.all([readP1, readP2, readP3, readP4, readP5, writeP]);
     },
     {
       throws: true,
       setup: async () => {
         await withWrite(walStore, async wt => {
           await wt.del('foo');
+        });
+      },
+    },
+  );
+});
+
+describe('plain read', () => {
+  bench(
+    `default journal mode`,
+    async () => {
+      const readP1 = withRead(defaultStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP2 = withRead(defaultStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP3 = withRead(defaultStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP4 = withRead(defaultStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP5 = withRead(defaultStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+
+      await Promise.all([readP1, readP2, readP3, readP4, readP5]);
+    },
+    {
+      throws: true,
+      setup: async () => {
+        await withWrite(defaultStore, async wt => {
+          await wt.put('foo', 'bar');
+        });
+      },
+    },
+  );
+
+  bench(
+    `WAL journal mode`,
+    async () => {
+      const readP1 = withRead(walStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP2 = withRead(walStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP3 = withRead(walStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP4 = withRead(walStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+      const readP5 = withRead(walStore, async rt => {
+        expect(await rt.get('foo')).equal('bar');
+      });
+
+      await Promise.all([readP1, readP2, readP3, readP4, readP5]);
+    },
+    {
+      throws: true,
+      setup: async () => {
+        await withWrite(walStore, async wt => {
+          await wt.put('foo', 'bar');
         });
       },
     },
