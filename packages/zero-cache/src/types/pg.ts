@@ -214,8 +214,17 @@ export const postgresTypeConfig = (
     time: {
       to: TIME,
       from: [TIME],
-      serialize: (x: unknown) => String(x),
-      parse: (x: unknown) => x,
+      serialize: (x: unknown) => {
+        switch (typeof x) {
+          case 'string':
+            return x; // Let Postgres parse it
+          case 'number':
+            return millisecondsToPostgresTime(x);
+        }
+
+        throw new Error(`Unsupported type "${typeof x}" for time: ${x}`);
+      },
+      parse: postgresTimeToMilliseconds,
     },
     // The DATE type is stored directly as the PG normalized date string.
     date: {
