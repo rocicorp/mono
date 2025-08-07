@@ -45,7 +45,7 @@ type SQLiteTransactionPreparedStatements = {
   rollback: PreparedStatement;
 };
 
-const getPreparedStatementsForSQLiteTransaction = (
+const getTransactionPreparedStatements = (
   db: SQLiteDatabase,
 ): SQLiteTransactionPreparedStatements => ({
   begin: db.prepare('BEGIN'),
@@ -54,22 +54,22 @@ const getPreparedStatementsForSQLiteTransaction = (
   rollback: db.prepare('ROLLBACK'),
 });
 
-type SQLitePreparedStatementsRW = {
+type SQLiteRWPreparedStatements = {
   get: PreparedStatement;
   put: PreparedStatement;
   del: PreparedStatement;
 };
 
-const getPreparedStatementsForSQLiteRW = (
+const getRWPreparedStatements = (
   db: SQLiteDatabase,
-): SQLitePreparedStatementsRW => ({
+): SQLiteRWPreparedStatements => ({
   get: db.prepare('SELECT value FROM entry WHERE key = ?'),
   put: db.prepare('INSERT OR REPLACE INTO entry (key, value) VALUES (?, ?)'),
   del: db.prepare('DELETE FROM entry WHERE key = ?'),
 });
 
 type SQLitePreparedStatements = SQLiteTransactionPreparedStatements &
-  SQLitePreparedStatementsRW;
+  SQLiteRWPreparedStatements;
 
 interface SQLiteConnectionManager {
   acquire(): Promise<{
@@ -441,8 +441,7 @@ export class SQLiteDatabaseManager {
     const fileName = safeFilename(name);
     const newDb = this.#dbm.open(fileName);
 
-    const txPreparedStatements =
-      getPreparedStatementsForSQLiteTransaction(newDb);
+    const txPreparedStatements = getTransactionPreparedStatements(newDb);
 
     const exec = (sql: string) => {
       const statement = newDb.prepare(sql);
@@ -475,7 +474,7 @@ export class SQLiteDatabaseManager {
     }
 
     // we prepare these after the schema is created
-    const rwPreparedStatements = getPreparedStatementsForSQLiteRW(newDb);
+    const rwPreparedStatements = getRWPreparedStatements(newDb);
 
     const preparedStatements = {
       ...txPreparedStatements,
