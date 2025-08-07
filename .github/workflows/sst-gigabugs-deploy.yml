@@ -88,7 +88,7 @@ jobs:
           npx sst deploy --stage gigabugs-ebs
       - name: Deploy SST app non ebs
         env:
-          ZERO_APP_ID: '1'
+          ZERO_APP_ID: 'gigabugs-1'
           ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
           ZERO_PUSH_URL: ${{ vars.GIGABUGS_ZERO_PUSH_URL }}
           ZERO_QUERY_URL: ${{ vars.GIGABUGS_ZERO_PULL_URL }}
