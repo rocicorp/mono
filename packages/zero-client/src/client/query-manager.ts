@@ -66,11 +66,7 @@ export class QueryManager implements InspectorMetricsDelegate {
   #pendingRemovals: Array<() => void> = [];
   #batchTimer: ReturnType<typeof setTimeout> | undefined;
   readonly #lc: ZeroLogContext;
-  readonly #metrics: Metric = {
-    'query-materialization-client': new TDigest(),
-    'query-materialization-end-to-end': new TDigest(),
-    'query-update-client': new TDigest(),
-  };
+  readonly #metrics: Metric = newMetrics();
   readonly #queryMetrics: Map<string, Metric> = new Map();
   readonly #slowMaterializeThreshold: number;
 
@@ -432,11 +428,7 @@ export class QueryManager implements InspectorMetricsDelegate {
     // The query manager manages metrics that are per query.
     let existing = this.#queryMetrics.get(queryID);
     if (!existing) {
-      existing = {
-        'query-materialization-client': new TDigest(),
-        'query-materialization-end-to-end': new TDigest(),
-        'query-update-client': new TDigest(),
-      };
+      existing = newMetrics();
       this.#queryMetrics.set(queryID, existing);
     }
     existing[metric].add(value);
@@ -445,4 +437,12 @@ export class QueryManager implements InspectorMetricsDelegate {
   getQueryMetrics(queryID: string): Metric | undefined {
     return this.#queryMetrics.get(queryID);
   }
+}
+
+function newMetrics(): Metric {
+  return {
+    'query-materialization-client': new TDigest(),
+    'query-materialization-end-to-end': new TDigest(),
+    'query-update-client': new TDigest(),
+  };
 }
