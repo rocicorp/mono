@@ -34,6 +34,8 @@ import {toGotQueriesKey} from './keys.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import {QueryManager} from './query-manager.ts';
 
+const slowMaterializeThreshold = Infinity; // Disable slow materialization logs for tests.
+
 function createExperimentalWatchMock() {
   return vi.fn();
 }
@@ -55,6 +57,7 @@ test('add', () => {
     () => () => {},
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    slowMaterializeThreshold,
   );
   const ast: AST = {
     table: 'issue',
@@ -99,6 +102,7 @@ test('add and remove a custom query', () => {
     () => () => {},
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    slowMaterializeThreshold,
   );
   const rm1 = queryManager.addCustom({name: 'customQuery', args: [1]}, '1m');
   queryManager.flushBatch();
@@ -177,6 +181,7 @@ test('add renamed fields', () => {
     () => () => {},
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    slowMaterializeThreshold,
   );
   const ast: AST = {
     table: 'issue',
@@ -353,6 +358,7 @@ test('remove, recent queries max size 0', () => {
     () => () => {},
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    slowMaterializeThreshold,
   );
   const ast: AST = {
     table: 'issue',
@@ -420,6 +426,7 @@ test('remove, max recent queries size 2', () => {
     () => () => {},
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    slowMaterializeThreshold,
   );
   const ast1: AST = {
     table: 'issue',
@@ -584,6 +591,7 @@ test('test add/remove/add/remove changes lru order max recent queries size 2', (
     () => () => {},
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    slowMaterializeThreshold,
   );
   const ast1: AST = {
     table: 'issue',
@@ -801,6 +809,7 @@ describe('getQueriesPatch', () => {
       () => () => {},
       maxRecentQueriesSize,
       queryChangeThrottleMs,
+      slowMaterializeThreshold,
     );
     // hash: 12hwg3ihkijhm
     const ast1: AST = {
@@ -863,6 +872,7 @@ describe('getQueriesPatch', () => {
         () => () => {},
         maxRecentQueriesSize,
         queryChangeThrottleMs,
+        slowMaterializeThreshold,
       );
     });
 
@@ -1064,6 +1074,7 @@ describe('getQueriesPatch', () => {
       () => () => {},
       maxRecentQueriesSize,
       queryChangeThrottleMs,
+      slowMaterializeThreshold,
     );
     const ast1: AST = {
       table: 'issue',
@@ -1183,6 +1194,7 @@ test('gotCallback, query already got', () => {
     experimentalWatch,
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    slowMaterializeThreshold,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1253,6 +1265,7 @@ test('gotCallback, query got after add', () => {
     experimentalWatch,
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    slowMaterializeThreshold,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1318,6 +1331,7 @@ test('gotCallback, query got after add then removed', () => {
     experimentalWatch,
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    slowMaterializeThreshold,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1393,6 +1407,7 @@ test('gotCallback, query got after subscription removed', () => {
     experimentalWatch,
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    slowMaterializeThreshold,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1472,6 +1487,7 @@ describe('queriesPatch with lastPatch', () => {
       () => () => {},
       maxRecentQueriesSize,
       queryChangeThrottleMs,
+      slowMaterializeThreshold,
     );
 
     queryManager.addLegacy(
@@ -1511,6 +1527,7 @@ describe('queriesPatch with lastPatch', () => {
       () => () => {},
       0,
       queryChangeThrottleMs,
+      slowMaterializeThreshold,
     );
 
     const clean = queryManager.addLegacy(
@@ -1584,6 +1601,7 @@ test('gotCallback, add same got callback twice', () => {
     experimentalWatch,
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    slowMaterializeThreshold,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1654,6 +1672,7 @@ test('batching multiple operations in same microtask', () => {
     () => () => {},
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    slowMaterializeThreshold,
   );
 
   // Add multiple queries synchronously - should be batched
@@ -1704,6 +1723,7 @@ describe('query manager & mutator interaction', () => {
       () => () => {},
       0,
       queryChangeThrottleMs,
+      slowMaterializeThreshold,
     );
   });
 
@@ -1781,6 +1801,7 @@ describe('Adding a query with TTL too large should warn', () => {
     () => () => {},
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    slowMaterializeThreshold,
   );
 
   afterEach(() => {
@@ -1869,6 +1890,7 @@ describe('update clamps TTL correctly', () => {
     () => () => {},
     maxRecentQueriesSize,
     queryChangeThrottleMs,
+    Infinity,
   );
 
   afterEach(() => {
