@@ -255,7 +255,6 @@ const host: QueryDelegate = {
   },
   updateServerQuery() {},
   updateCustomQuery() {},
-  onQueryMaterialized() {},
   onTransactionCommit() {
     return () => {};
   },
@@ -265,6 +264,7 @@ const host: QueryDelegate = {
   flushQueryChanges() {},
   assertValidRunOptions() {},
   defaultQueryComplete: true,
+  addMetric() {},
 };
 
 let start: number;

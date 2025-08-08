@@ -1,16 +1,16 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {Database} from './db.ts';
-import type {Source} from '../../zql/src/ivm/source.ts';
-import {TableSource} from './table-source.ts';
 import type {LogConfig} from '../../otel/src/log-options.ts';
-import type {Input} from '../../zql/src/ivm/operator.ts';
-import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
+import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
+import type {Input} from '../../zql/src/ivm/operator.ts';
+import type {Source} from '../../zql/src/ivm/source.ts';
 import type {
   CommitListener,
   QueryDelegate,
 } from '../../zql/src/query/query-delegate.ts';
+import type {Database} from './db.ts';
+import {TableSource} from './table-source.ts';
 
 export class QueryDelegateImpl implements QueryDelegate {
   readonly #lc: LogContext;
@@ -80,7 +80,6 @@ export class QueryDelegateImpl implements QueryDelegate {
   updateServerQuery() {}
   updateCustomQuery() {}
   flushQueryChanges() {}
-  onQueryMaterialized() {}
   onTransactionCommit(cb: CommitListener) {
     this.#commitObservers.add(cb);
     return () => {
@@ -95,4 +94,5 @@ export class QueryDelegateImpl implements QueryDelegate {
     return ret;
   }
   assertValidRunOptions() {}
+  addMetric() {}
 }

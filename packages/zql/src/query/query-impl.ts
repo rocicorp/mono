@@ -15,7 +15,10 @@ import type {
   System,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
-import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
+import {
+  hashOfAST,
+  hashOfNameAndArgs,
+} from '../../../zero-protocol/src/query-hash.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   isOneHop,
@@ -733,7 +736,6 @@ export class QueryImpl<
       this._delegate,
       'materialize requires a query delegate to be set',
     );
-    const t0 = Date.now();
     let factory: ViewFactory<TSchema, TTable, TReturn, T> | undefined;
     if (typeof factoryOrTTL === 'function') {
       factory = factoryOrTTL;
@@ -741,34 +743,44 @@ export class QueryImpl<
       ttl = factoryOrTTL ?? DEFAULT_TTL_MS;
     }
     const ast = this._completeAst();
+    const queryID = this.customQueryID
+      ? hashOfNameAndArgs(this.customQueryID.name, this.customQueryID.args)
+      : this.hash();
     const queryCompleteResolver = resolver<true>();
     let queryComplete = delegate.defaultQueryComplete;
-    const gotCallback: GotCallback = got => {
-      if (got) {
-        const t1 = Date.now();
-        delegate.onQueryMaterialized(this.hash(), ast, t1 - t0);
-        queryComplete = true;
-        queryCompleteResolver.resolve(true);
-      }
-    };
-    const removeServerQuery = this.customQueryID
-      ? delegate.addCustomQuery(this.customQueryID, ttl, gotCallback)
-      : delegate.addServerQuery(ast, ttl, gotCallback);
-
     const updateTTL = (newTTL: TTL) => {
       this.customQueryID
         ? delegate.updateCustomQuery(this.customQueryID, newTTL)
         : delegate.updateServerQuery(ast, newTTL);
     };
 
-    const input = buildPipeline(ast, delegate);
-    let removeCommitObserver: (() => void) | undefined;
+    const gotCallback: GotCallback = got => {
+      if (got) {
+        delegate.addMetric(
+          'query-materialization-end-to-end',
+          performance.now() - t0,
+          queryID,
+          ast,
+        );
+        queryComplete = true;
+        queryCompleteResolver.resolve(true);
+      }
+    };
 
+    let removeCommitObserver: (() => void) | undefined;
     const onDestroy = () => {
       input.destroy();
       removeCommitObserver?.();
-      removeServerQuery();
+      removeAddedQuery();
     };
+
+    const t0 = performance.now();
+
+    const removeAddedQuery = this.customQueryID
+      ? delegate.addCustomQuery(this.customQueryID, ttl, gotCallback)
+      : delegate.addServerQuery(ast, ttl, gotCallback);
+
+    const input = buildPipeline(ast, delegate);
 
     const view = delegate.batchViewUpdates(() =>
       (factory ?? arrayViewFactory)(
@@ -782,6 +794,12 @@ export class QueryImpl<
         queryComplete || queryCompleteResolver.promise,
         updateTTL,
       ),
+    );
+
+    delegate.addMetric(
+      'query-materialization-client',
+      performance.now() - t0,
+      queryID,
     );
 
     return view as T;

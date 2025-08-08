@@ -28,13 +28,6 @@ export class Centroid {
 /** CentroidList is sorted by the mean of the centroid, ascending. */
 export type CentroidList = Centroid[];
 
-/** newCentroidList creates a priority queue for the centroids */
-export function newCentroidList(centroids: CentroidList): CentroidList {
-  const l: CentroidList = centroids.slice();
-  sortCentroidList(l);
-  return l;
-}
-
 export function sortCentroidList(centroids: CentroidList): void {
   centroids.sort((a, b) => a.mean - b.mean);
 }

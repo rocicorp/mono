@@ -1,4 +1,5 @@
-import {beforeEach, expect, test, vi} from 'vitest';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
+import type {ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {
   InspectDownMessage,
@@ -137,6 +138,7 @@ test('client queries', async () => {
         rowCount: 10,
         ttl: '1m',
         zql: 'issue',
+        metrics: null,
       },
     ],
   );
@@ -169,6 +171,7 @@ test('client queries', async () => {
         rowCount: 10,
         ttl: '1m',
         zql: 'issue',
+        metrics: null,
       },
     ],
   );
@@ -249,6 +252,161 @@ test('clientGroup queries', async () => {
       rowCount: 10,
       ttl: '1m',
       zql: "issue.where(({cmp, or}) => or(cmp('id', '1'), cmp('id', '!=', '2')))",
+      metrics: null,
     },
   ]);
+});
+
+describe('query metrics', () => {
+  test('real query metrics integration', async () => {
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+
+    const issueQuery = z.query.issue;
+    await issueQuery.run();
+
+    const inspector = await z.inspect();
+    expect(inspector.metrics['query-materialization-client'].count()).toBe(1);
+    expect(
+      inspector.metrics['query-materialization-client'].quantile(0.5),
+    ).toBeGreaterThanOrEqual(0);
+    await z.close();
+  });
+
+  test('Attaching the metrics to the query', async () => {
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+
+    const issueQuery = z.query.issue.orderBy('id', 'desc');
+    const view = issueQuery.materialize();
+
+    await z.triggerGotQueriesPatch(issueQuery);
+
+    vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+    const inspector = await z.inspect();
+    const p = inspector.client.queries();
+    await Promise.resolve();
+
+    // Simulate the server response with query data
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'queries',
+        id: '000000000000000000000',
+        value: [
+          {
+            clientID: z.clientID,
+            queryID: issueQuery.hash(),
+            ast: {
+              table: 'issue',
+              orderBy: [['id', 'desc']],
+            },
+            name: null,
+            args: null,
+            deleted: false,
+            got: true,
+            inactivatedAt: null,
+            rowCount: 1,
+            ttl: 60_000,
+          },
+        ],
+      },
+    ] satisfies InspectDownMessage);
+
+    const queries = await p;
+    expect(queries).toHaveLength(1);
+    expect(issueQuery.hash()).toBe(queries[0].id);
+    const {metrics} = queries[0];
+
+    expect(metrics?.['query-materialization-client'].count()).toBe(1);
+    expect(
+      metrics?.['query-materialization-client'].quantile(0.5),
+    ).toBeGreaterThanOrEqual(0);
+    await vi.waitFor(() => {
+      expect(metrics?.['query-materialization-end-to-end'].count()).toBe(1);
+    });
+    expect(
+      metrics?.['query-materialization-end-to-end'].quantile(0.5),
+    ).toBeGreaterThanOrEqual(0);
+
+    view.destroy();
+    await z.close();
+  });
+
+  test('metrics collection during query materialization', async () => {
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+
+    // Execute multiple queries to generate real metrics
+    const query1 = z.query.issue;
+    const query2 = z.query.issue.where('id', '1');
+
+    await query1.run();
+    await query2.run();
+
+    // Check that metrics were actually collected
+    const inspector = await z.inspect();
+
+    expect(inspector.metrics['query-materialization-client'].count()).toBe(2);
+
+    const digest = inspector.metrics['query-materialization-client'];
+    expect(digest.count()).toBe(2);
+
+    expect(digest.quantile(0.5)).toBeGreaterThanOrEqual(0);
+
+    await z.close();
+  });
+
+  test('query-specific metrics integration test', async () => {
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+
+    // Execute queries with different characteristics to test metrics collection
+    await z.query.issue.run(); // Simple table query
+    await z.query.issue.where('id', '1').run(); // Filtered query
+    await z.query.issue.where('id', '2').run(); // Another filtered query
+
+    // Test that the inspector can access the real metrics
+    const inspector = await z.inspect();
+
+    // Verify global metrics were collected
+    const globalMetricsQueryMaterializationClient =
+      inspector.metrics['query-materialization-client'];
+    expect(globalMetricsQueryMaterializationClient.count()).toBe(3);
+
+    const ensureRealData = (digest: ReadonlyTDigest) => {
+      // Test that percentiles work with real data
+      const p50 = digest.quantile(0.5);
+      const p90 = digest.quantile(0.9);
+
+      expect(Number.isFinite(p50)).toBe(true);
+      expect(Number.isFinite(p90)).toBe(true);
+      expect(p50).toBeGreaterThanOrEqual(0);
+      expect(p90).toBeGreaterThanOrEqual(p50);
+
+      // Test CDF functionality
+      const cdf0 = digest.cdf(0);
+      const cdfMax = digest.cdf(Number.MAX_VALUE);
+      expect(cdf0).toBeGreaterThanOrEqual(0);
+      expect(cdfMax).toBe(1);
+    };
+
+    ensureRealData(globalMetricsQueryMaterializationClient);
+
+    const q = z.query.issue;
+    const view = q.materialize();
+    await z.triggerGotQueriesPatch(q);
+
+    const globalMetricsQueryMaterializationEndToEnd =
+      inspector.metrics['query-materialization-end-to-end'];
+    await vi.waitFor(() => {
+      expect(globalMetricsQueryMaterializationEndToEnd.count()).toBe(1);
+    });
+
+    ensureRealData(globalMetricsQueryMaterializationEndToEnd);
+
+    view.destroy();
+
+    await z.close();
+  });
 });

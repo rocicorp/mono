@@ -10,7 +10,9 @@ import {
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
+import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
+import type {Row} from '../../../zql/src/query/query.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import {
@@ -23,8 +25,6 @@ import type {WriteTransaction} from './replicache-types.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
-import type {Row} from '../../../zql/src/query/query.ts';
-import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 
 type Schema = typeof schema;
 type MutatorTx = Transaction<Schema>;
@@ -275,7 +275,6 @@ describe('rebasing custom mutators', () => {
         },
       } as unknown as WriteTransaction,
       schema,
-      10,
     ) as unknown as Transaction<Schema>;
 
     await tx1.mutate.issue.insert({

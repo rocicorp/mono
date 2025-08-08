@@ -75,8 +75,6 @@ export class QueryDelegateImpl implements QueryDelegate {
     return ast;
   }
 
-  onQueryMaterialized() {}
-
   commit() {
     for (const listener of this.#commitListeners) {
       listener();
@@ -158,6 +156,8 @@ export class QueryDelegateImpl implements QueryDelegate {
     }
     this.gotCallbacks.length = 0;
   }
+
+  addMetric() {}
 }
 
 function makeSources() {
