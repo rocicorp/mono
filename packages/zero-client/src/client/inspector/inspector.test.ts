@@ -322,7 +322,9 @@ describe('query metrics', () => {
     expect(
       metrics?.['query-materialization-client'].quantile(0.5),
     ).toBeGreaterThanOrEqual(0);
-    expect(metrics?.['query-materialization-end-to-end'].count()).toBe(1);
+    await vi.waitFor(() => {
+      expect(metrics?.['query-materialization-end-to-end'].count()).toBe(1);
+    });
     expect(
       metrics?.['query-materialization-end-to-end'].quantile(0.5),
     ).toBeGreaterThanOrEqual(0);
