@@ -1,4 +1,5 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest';
+import type {ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {
   InspectDownMessage,
@@ -279,6 +280,8 @@ describe('query metrics', () => {
     const issueQuery = z.query.issue.orderBy('id', 'desc');
     const view = issueQuery.materialize();
 
+    await z.triggerGotQueriesPatch(issueQuery);
+
     vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
     const inspector = await z.inspect();
     const p = inspector.client.queries();
@@ -318,6 +321,10 @@ describe('query metrics', () => {
     expect(metrics?.['query-materialization-client'].count()).toBe(1);
     expect(
       metrics?.['query-materialization-client'].quantile(0.5),
+    ).toBeGreaterThanOrEqual(0);
+    expect(metrics?.['query-materialization-end-to-end'].count()).toBe(1);
+    expect(
+      metrics?.['query-materialization-end-to-end'].quantile(0.5),
     ).toBeGreaterThanOrEqual(0);
 
     view.destroy();
@@ -361,23 +368,42 @@ describe('query metrics', () => {
     const inspector = await z.inspect();
 
     // Verify global metrics were collected
-    const globalMetrics = inspector.metrics['query-materialization-client'];
-    expect(globalMetrics.count()).toBe(3);
+    const globalMetricsQueryMaterializationClient =
+      inspector.metrics['query-materialization-client'];
+    expect(globalMetricsQueryMaterializationClient.count()).toBe(3);
 
-    // Test that percentiles work with real data
-    const p50 = globalMetrics.quantile(0.5);
-    const p90 = globalMetrics.quantile(0.9);
+    const ensureRealData = (digest: ReadonlyTDigest) => {
+      // Test that percentiles work with real data
+      const p50 = digest.quantile(0.5);
+      const p90 = digest.quantile(0.9);
 
-    expect(Number.isFinite(p50)).toBe(true);
-    expect(Number.isFinite(p90)).toBe(true);
-    expect(p50).toBeGreaterThanOrEqual(0);
-    expect(p90).toBeGreaterThanOrEqual(p50);
+      expect(Number.isFinite(p50)).toBe(true);
+      expect(Number.isFinite(p90)).toBe(true);
+      expect(p50).toBeGreaterThanOrEqual(0);
+      expect(p90).toBeGreaterThanOrEqual(p50);
 
-    // Test CDF functionality
-    const cdf0 = globalMetrics.cdf(0);
-    const cdfMax = globalMetrics.cdf(Number.MAX_VALUE);
-    expect(cdf0).toBeGreaterThanOrEqual(0);
-    expect(cdfMax).toBe(1);
+      // Test CDF functionality
+      const cdf0 = digest.cdf(0);
+      const cdfMax = digest.cdf(Number.MAX_VALUE);
+      expect(cdf0).toBeGreaterThanOrEqual(0);
+      expect(cdfMax).toBe(1);
+    };
+
+    ensureRealData(globalMetricsQueryMaterializationClient);
+
+    const q = z.query.issue;
+    const view = q.materialize();
+    await z.triggerGotQueriesPatch(q);
+
+    const globalMetricsQueryMaterializationEndToEnd =
+      inspector.metrics['query-materialization-end-to-end'];
+    await vi.waitFor(() => {
+      expect(globalMetricsQueryMaterializationEndToEnd.count()).toBe(1);
+    });
+
+    ensureRealData(globalMetricsQueryMaterializationEndToEnd);
+
+    view.destroy();
 
     await z.close();
   });
