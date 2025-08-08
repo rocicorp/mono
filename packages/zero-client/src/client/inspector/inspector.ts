@@ -13,6 +13,7 @@ import type {ReplicacheImpl} from '../../../../replicache/src/replicache-impl.ts
 import {withRead} from '../../../../replicache/src/with-transactions.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
+import {type ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
 import * as valita from '../../../../shared/src/valita.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
@@ -27,6 +28,7 @@ import type {
   InspectUpMessage,
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import type {MetricMap} from '../../../../zql/src/query/metrics-delegate.ts';
 import {normalizeTTL, type TTL} from '../../../../zql/src/query/ttl.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import {ENTITIES_KEY_PREFIX} from '../keys.ts';
@@ -42,13 +44,30 @@ type Rep = ReplicacheImpl<MutatorDefs>;
 
 type GetWebSocket = () => Promise<WebSocket>;
 
+type Metrics = {
+  readonly [K in keyof MetricMap]: ReadonlyTDigest;
+};
+
+export interface InspectorMetricsDelegate {
+  getQueryMetrics(hash: string): Metrics | undefined;
+  readonly metrics: Metrics;
+}
+
 export async function newInspector(
   rep: Rep,
+  metricsDelegate: InspectorMetricsDelegate,
   schema: Schema,
   socket: GetWebSocket,
 ): Promise<InspectorInterface> {
   const clientGroupID = await rep.clientGroupID;
-  return new Inspector(rep, schema, rep.clientID, clientGroupID, socket);
+  return new Inspector(
+    rep,
+    metricsDelegate,
+    schema,
+    rep.clientID,
+    clientGroupID,
+    socket,
+  );
 }
 
 class Inspector implements InspectorInterface {
@@ -57,9 +76,11 @@ class Inspector implements InspectorInterface {
   readonly clientGroup: ClientGroup;
   readonly #schema: Schema;
   readonly socket: GetWebSocket;
+  readonly #metricsDelegate: InspectorMetricsDelegate;
 
   constructor(
     rep: ReplicacheImpl,
+    metricsDelegate: InspectorMetricsDelegate,
     schema: Schema,
     clientID: string,
     clientGroupID: string,
@@ -67,20 +88,44 @@ class Inspector implements InspectorInterface {
   ) {
     this.#rep = rep;
     this.#schema = schema;
-    this.client = new Client(rep, schema, socket, clientID, clientGroupID);
+    this.client = new Client(
+      rep,
+      metricsDelegate,
+      schema,
+      socket,
+      clientID,
+      clientGroupID,
+    );
     this.clientGroup = this.client.clientGroup;
     this.socket = socket;
+    this.#metricsDelegate = metricsDelegate;
+  }
+
+  get metrics(): Metrics {
+    return this.#metricsDelegate.metrics;
   }
 
   clients(): Promise<ClientInterface[]> {
     return withDagRead(this.#rep, dagRead =>
-      clients(this.#rep, this.socket, this.#schema, dagRead),
+      clients(
+        this.#rep,
+        this.#metricsDelegate,
+        this.socket,
+        this.#schema,
+        dagRead,
+      ),
     );
   }
 
   clientsWithQueries(): Promise<ClientInterface[]> {
     return withDagRead(this.#rep, dagRead =>
-      clientsWithQueries(this.#rep, this.socket, this.#schema, dagRead),
+      clientsWithQueries(
+        this.#rep,
+        this.#metricsDelegate,
+        this.socket,
+        this.#schema,
+        dagRead,
+      ),
     );
   }
 }
@@ -119,21 +164,28 @@ class Client implements ClientInterface {
   readonly #rep: Rep;
   readonly id: string;
   readonly clientGroup: ClientGroup;
-  readonly #schema: Schema;
   readonly #socket: GetWebSocket;
+  readonly #metricsDelegate: InspectorMetricsDelegate;
 
   constructor(
     rep: Rep,
+    metricsDelegate: InspectorMetricsDelegate,
     schema: Schema,
     socket: GetWebSocket,
     id: string,
     clientGroupID: string,
   ) {
     this.#rep = rep;
-    this.#schema = schema;
     this.#socket = socket;
     this.id = id;
-    this.clientGroup = new ClientGroup(rep, socket, schema, clientGroupID);
+    this.clientGroup = new ClientGroup(
+      rep,
+      metricsDelegate,
+      socket,
+      schema,
+      clientGroupID,
+    );
+    this.#metricsDelegate = metricsDelegate;
   }
 
   async queries(): Promise<QueryInterface[]> {
@@ -142,7 +194,7 @@ class Client implements ClientInterface {
       {op: 'queries', clientID: this.id} as InspectQueriesUpBody,
       inspectQueriesDownSchema,
     );
-    return rows.map(row => new Query(row, this.#schema));
+    return rows.map(row => new Query(row, this.#metricsDelegate));
   }
 
   map(): Promise<Map<string, ReadonlyJSONValue>> {
@@ -177,9 +229,17 @@ class ClientGroup implements ClientGroupInterface {
   readonly id: string;
   readonly #schema: Schema;
   readonly #socket: GetWebSocket;
+  readonly #metricsDelegate: InspectorMetricsDelegate;
 
-  constructor(rep: Rep, socket: GetWebSocket, schema: Schema, id: string) {
+  constructor(
+    rep: Rep,
+    metricsDelegate: InspectorMetricsDelegate,
+    socket: GetWebSocket,
+    schema: Schema,
+    id: string,
+  ) {
     this.#rep = rep;
+    this.#metricsDelegate = metricsDelegate;
     this.#socket = socket;
     this.#schema = schema;
     this.id = id;
@@ -189,6 +249,7 @@ class ClientGroup implements ClientGroupInterface {
     return withDagRead(this.#rep, dagRead =>
       clients(
         this.#rep,
+        this.#metricsDelegate,
         this.#socket,
         this.#schema,
         dagRead,
@@ -201,6 +262,7 @@ class ClientGroup implements ClientGroupInterface {
     return withDagRead(this.#rep, dagRead =>
       clientsWithQueries(
         this.#rep,
+        this.#metricsDelegate,
         this.#socket,
         this.#schema,
         dagRead,
@@ -215,7 +277,7 @@ class ClientGroup implements ClientGroupInterface {
       {op: 'queries'},
       inspectQueriesDownSchema,
     );
-    return rows.map(row => new Query(row, this.#schema));
+    return rows.map(row => new Query(row, this.#metricsDelegate));
   }
 }
 
@@ -248,6 +310,7 @@ type MapEntry<T extends ReadonlyMap<any, any>> =
 
 async function clients(
   rep: Rep,
+  metricsDelegate: InspectorMetricsDelegate,
   socket: GetWebSocket,
   schema: Schema,
   dagRead: Read,
@@ -258,18 +321,33 @@ async function clients(
     .filter(predicate)
     .map(
       ([clientID, {clientGroupID}]) =>
-        new Client(rep, schema, socket, clientID, clientGroupID),
+        new Client(
+          rep,
+          metricsDelegate,
+          schema,
+          socket,
+          clientID,
+          clientGroupID,
+        ),
     );
 }
 
 async function clientsWithQueries(
   rep: Rep,
+  metricsDelegate: InspectorMetricsDelegate,
   socket: GetWebSocket,
   schema: Schema,
   dagRead: Read,
   predicate: (entry: MapEntry<ClientMap>) => boolean = () => true,
 ): Promise<ClientInterface[]> {
-  const allClients = await clients(rep, socket, schema, dagRead, predicate);
+  const allClients = await clients(
+    rep,
+    metricsDelegate,
+    socket,
+    schema,
+    dagRead,
+    predicate,
+  );
   const clientsWithQueries: ClientInterface[] = [];
   await Promise.all(
     allClients.map(async client => {
@@ -294,22 +372,25 @@ class Query implements QueryInterface {
   readonly id: string;
   readonly zql: string | null;
   readonly clientID: string;
+  readonly metrics: Metrics | null;
 
-  constructor(row: InspectQueryRow, _schema: Schema) {
+  constructor(row: InspectQueryRow, metricsDelegate: InspectorMetricsDelegate) {
+    const {ast, queryID, inactivatedAt} = row;
     // Use own properties to make this more useful in dev tools. For example, in
     // Chrome dev tools, if you do console.table(queries) you'll see the
     // properties in the table, if these were getters you would not see them in the table.
     this.clientID = row.clientID;
-    this.id = row.queryID;
+    this.id = queryID;
     this.inactivatedAt =
-      row.inactivatedAt === null ? null : new Date(row.inactivatedAt);
+      inactivatedAt === null ? null : new Date(inactivatedAt);
     this.ttl = normalizeTTL(row.ttl);
-    this.ast = row.ast;
+    this.ast = ast;
     this.name = row.name;
     this.args = row.args;
     this.got = row.got;
     this.rowCount = row.rowCount;
     this.deleted = row.deleted;
-    this.zql = this.ast ? this.ast.table + astToZQL(this.ast) : null;
+    this.zql = ast ? ast.table + astToZQL(ast) : null;
+    this.metrics = metricsDelegate.getQueryMetrics(queryID) ?? null;
   }
 }

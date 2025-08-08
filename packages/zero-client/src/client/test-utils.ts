@@ -82,9 +82,8 @@ export class MockSocket extends EventTarget {
 
 export class TestZero<
   const S extends Schema,
-  MD extends CustomMutatorDefs<S, TWrappedTransaction> | undefined = undefined,
-  TWrappedTransaction = unknown,
-> extends Zero<S, MD, TWrappedTransaction> {
+  MD extends CustomMutatorDefs | undefined = undefined,
+> extends Zero<S, MD> {
   pokeIDCounter = 0;
 
   #connectionStateResolvers: Set<{
@@ -92,7 +91,7 @@ export class TestZero<
     resolve: (state: ConnectionState) => void;
   }> = new Set();
 
-  constructor(options: ZeroOptions<S, MD, TWrappedTransaction>) {
+  constructor(options: ZeroOptions<S, MD>) {
     super(options);
   }
 
@@ -234,6 +233,20 @@ export class TestZero<
     socket.dispatchEvent(new CloseEvent('close'));
   }
 
+  async triggerGotQueriesPatch(
+    q: Query<S, keyof S['tables'] & string>,
+  ): Promise<void> {
+    q.hash();
+    await this.triggerPoke(null, '1', {
+      gotQueriesPatch: [
+        {
+          op: 'put',
+          hash: q.hash(),
+        },
+      ],
+    });
+  }
+
   declare [exposedToTestingSymbol]: TestingContext;
 
   get pusher() {
@@ -279,12 +292,11 @@ let testZeroCounter = 0;
 
 export function zeroForTest<
   const S extends Schema,
-  MD extends CustomMutatorDefs<S, TWrappedTransaction> | undefined = undefined,
-  TWrappedTransaction = unknown,
+  MD extends CustomMutatorDefs | undefined = undefined,
 >(
-  options: Partial<ZeroOptions<S, MD, TWrappedTransaction>> = {},
+  options: Partial<ZeroOptions<S, MD>> = {},
   errorOnUpdateNeeded = true,
-): TestZero<S, MD, TWrappedTransaction> {
+): TestZero<S, MD> {
   // Special case kvStore. If not present we default to 'mem'. This allows
   // passing `undefined` to get the default behavior.
   const newOptions = {...options};
@@ -306,7 +318,7 @@ export function zeroForTest<
         }
       : undefined,
     ...newOptions,
-  } satisfies ZeroOptions<S, MD, TWrappedTransaction>);
+  } satisfies ZeroOptions<S, MD>);
 }
 
 export async function waitForUpstreamMessage(

@@ -1,18 +1,18 @@
-import {describe, test, expect, vi} from 'vitest';
-import {MutationTracker} from './mutation-tracker.ts';
-import type {PushResponse} from '../../../zero-protocol/src/push.ts';
-import {makeReplicacheMutator} from './custom.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import type {WriteTransaction} from './replicache-types.ts';
-import {zeroData} from '../../../replicache/src/transactions.ts';
-import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
+import {describe, expect, test, vi} from 'vitest';
 import type {
   DiffOperation,
   NoIndexDiff,
 } from '../../../replicache/src/btree/node.ts';
-import {toMutationResponseKey} from './keys.ts';
+import {zeroData} from '../../../replicache/src/transactions.ts';
 import {unreachable} from '../../../shared/src/asserts.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
+import type {PushResponse} from '../../../zero-protocol/src/push.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {makeReplicacheMutator} from './custom.ts';
+import {toMutationResponseKey} from './keys.ts';
+import {MutationTracker} from './mutation-tracker.ts';
+import type {WriteTransaction} from './replicache-types.ts';
 
 const lc = createSilentLogContext();
 
@@ -191,7 +191,6 @@ describe('MutationTracker', () => {
         tables: [],
         relationships: [],
       }),
-      0,
     );
 
     const tx = {

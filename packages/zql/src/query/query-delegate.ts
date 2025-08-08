@@ -2,6 +2,7 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {BuilderDelegate} from '../builder/builder.ts';
 import type {Format} from '../ivm/view.ts';
+import type {MetricsDelegate} from './metrics-delegate.ts';
 import type {CustomQueryID} from './named.ts';
 import type {Query, RunOptions} from './query.ts';
 import type {TTL} from './ttl.ts';
@@ -22,7 +23,7 @@ export interface NewQueryDelegate {
   ): Query<TSchema, TTable, TReturn>;
 }
 
-export interface QueryDelegate extends BuilderDelegate {
+export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
   addServerQuery(
     ast: AST,
     ttl: TTL,
@@ -37,8 +38,12 @@ export interface QueryDelegate extends BuilderDelegate {
   updateCustomQuery(customQueryID: CustomQueryID, ttl: TTL): void;
   flushQueryChanges(): void;
   onTransactionCommit(cb: CommitListener): () => void;
+  /**
+   * batchViewUpdates is used to allow the view to batch multiple view updates together.
+   * Normally, `applyViewUpdates` is called directly but for some cases, SolidJS for example,
+   * the updates are wrapped in a batch to avoid multiple re-renders.
+   */
   batchViewUpdates<T>(applyViewUpdates: () => T): T;
-  onQueryMaterialized(hash: string, ast: AST, duration: number): void;
 
   /**
    * Asserts that the `RunOptions` provided to the `run` method are supported in

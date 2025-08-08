@@ -13,15 +13,15 @@ import {
   serverToClient,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../../zql/src/ivm/operator.ts';
-import type {Source} from '../../../zql/src/ivm/source.ts';
+import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
 import type {SourceFactory} from '../../../zql/src/ivm/test/source-factory.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
 import {TableSource, toSQLiteTypeName} from '../table-source.ts';
-import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
-import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 
 export const createSource: SourceFactory = (
   lc: LogContext,
@@ -165,6 +165,9 @@ export function newQueryDelegate(
     createStorage() {
       return new MemoryStorage();
     },
+    decorateSourceInput(input: SourceInput): Input {
+      return input;
+    },
     decorateInput(input: Input): Input {
       return input;
     },
@@ -179,7 +182,6 @@ export function newQueryDelegate(
     },
     updateServerQuery() {},
     updateCustomQuery() {},
-    onQueryMaterialized() {},
     onTransactionCommit() {
       return () => {};
     },
@@ -189,5 +191,6 @@ export function newQueryDelegate(
     assertValidRunOptions() {},
     flushQueryChanges() {},
     defaultQueryComplete: true,
+    addMetric() {},
   };
 }

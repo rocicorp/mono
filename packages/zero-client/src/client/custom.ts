@@ -32,15 +32,14 @@ import type {ZeroLogContext} from './zero-log-context.ts';
 /**
  * The shape which a user's custom mutator definitions must conform to.
  */
-export type CustomMutatorDefs<
-  S extends Schema,
-  TWrappedTransaction = unknown,
-> = {
+export type CustomMutatorDefs = {
   [namespaceOrKey: string]:
     | {
-        [key: string]: CustomMutatorImpl<S, TWrappedTransaction>;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        [key: string]: CustomMutatorImpl<any>;
       }
-    | CustomMutatorImpl<S, TWrappedTransaction>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    | CustomMutatorImpl<any>;
 };
 
 export type MutatorResult = {
@@ -69,8 +68,7 @@ export type CustomMutatorImpl<
  */
 export type MakeCustomMutatorInterfaces<
   S extends Schema,
-  MD extends CustomMutatorDefs<S, TWrappedTransaction>,
-  TWrappedTransaction = unknown,
+  MD extends CustomMutatorDefs,
 > = {
   readonly [NamespaceOrName in keyof MD]: MD[NamespaceOrName] extends (
     tx: Transaction<S>,
@@ -94,12 +92,7 @@ export type MakeCustomMutatorInterface<
   : never;
 
 export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
-  constructor(
-    lc: ZeroLogContext,
-    repTx: WriteTransaction,
-    schema: S,
-    slowMaterializeThreshold: number,
-  ) {
+  constructor(lc: ZeroLogContext, repTx: WriteTransaction, schema: S) {
     const castedRepTx = repTx as WriteTransactionImpl;
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
     this.clientID = repTx.clientID;
@@ -118,7 +111,6 @@ export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
       lc,
       schema,
       txData.ivmSources as IVMSourceBranch,
-      slowMaterializeThreshold,
     );
     this.token = txData.token;
   }
@@ -136,13 +128,12 @@ export function makeReplicacheMutator<S extends Schema, TWrappedTransaction>(
   lc: ZeroLogContext,
   mutator: CustomMutatorImpl<S, TWrappedTransaction>,
   schema: S,
-  slowMaterializeThreshold: number,
 ) {
   return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,
   ): Promise<void> => {
-    const tx = new TransactionImpl(lc, repTx, schema, slowMaterializeThreshold);
+    const tx = new TransactionImpl(lc, repTx, schema);
     await mutator(tx, args);
   };
 }
@@ -181,7 +172,6 @@ function makeSchemaQuery<S extends Schema>(
   lc: ZeroLogContext,
   schema: S,
   ivmBranch: IVMSourceBranch,
-  slowMaterializeThreshold: number,
 ) {
   const context = new ZeroContext(
     lc,
@@ -192,7 +182,7 @@ function makeSchemaQuery<S extends Schema>(
     emptyFunction,
     emptyFunction,
     applyViewUpdates => applyViewUpdates(),
-    slowMaterializeThreshold,
+    emptyFunction,
     assertValidRunOptions,
   );
 
