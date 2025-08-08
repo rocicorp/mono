@@ -1890,7 +1890,7 @@ describe('update clamps TTL correctly', () => {
     () => () => {},
     maxRecentQueriesSize,
     queryChangeThrottleMs,
-    Infinity,
+    slowMaterializeThreshold,
   );
 
   afterEach(() => {
