@@ -51,12 +51,12 @@ function createTestQuery(context: ZeroContext) {
   const ast = {
     table: 'users',
     orderBy: [['id', 'asc'] as [string, 'asc' | 'desc']],
-  };
+  } as const;
 
   return new QueryImpl(
     context,
     schema,
-    ast.table as 'users',
+    ast.table,
     ast,
     {singular: false, relationships: {}},
     'test' as System,
@@ -318,7 +318,7 @@ describe('query materialization metrics', () => {
           expect.any(String),
           expect.objectContaining({
             table: 'users',
-            orderBy: expect.arrayContaining([['id', 'asc']]),
+            orderBy: [['id', 'asc']],
           }),
         );
 
@@ -408,7 +408,7 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: expect.arrayContaining([['id', 'asc']]),
+          orderBy: [['id', 'asc']],
         }),
       ]);
 
@@ -418,7 +418,7 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: expect.arrayContaining([['id', 'asc']]),
+          orderBy: [['id', 'asc']],
         }),
       ]);
 
@@ -464,7 +464,7 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: expect.arrayContaining([['id', 'asc']]),
+          orderBy: [['id', 'asc']],
         }),
       );
 
@@ -493,7 +493,7 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: expect.arrayContaining([['id', 'asc']]),
+          orderBy: [['id', 'asc']],
         }),
       );
 
@@ -537,7 +537,7 @@ describe('query materialization metrics', () => {
         expect.any(String),
         expect.objectContaining({
           table: 'users',
-          orderBy: expect.arrayContaining([['id', 'asc']]),
+          orderBy: [['id', 'asc']],
         }),
       );
 
@@ -617,24 +617,6 @@ describe('query materialization metrics', () => {
 
       view.destroy();
       performanceNowSpy.mockRestore();
-    });
-
-    test('metric with query structure', () => {
-      // Mock performance.now() for query
-      mockClientTiming(100, 150);
-
-      const query = createTestQuery(context);
-
-      const view = query.materialize() as MockView;
-
-      // Metrics should be recorded
-      expect(addMetricSpy).toHaveBeenCalledWith(
-        'query-materialization-client',
-        50, // 150ms - 100ms = 50ms
-        expect.any(String),
-      );
-
-      view.destroy();
     });
   });
 });
