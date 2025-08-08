@@ -11,11 +11,13 @@ import {MockSocket, zeroForTest} from '../test-utils.ts';
 import type {Query} from './types.ts';
 
 beforeEach(() => {
+  vi.useFakeTimers();
   vi.spyOn(globalThis, 'WebSocket').mockImplementation(
     () => new MockSocket('ws://localhost:1234') as unknown as WebSocket,
   );
   return () => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
   };
 });
 
@@ -407,6 +409,147 @@ describe('query metrics', () => {
 
     view.destroy();
 
+    await z.close();
+  });
+
+  test('query-update metrics collection', async () => {
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+
+    // Create a query and materialize a view to set up the query pipeline
+    const issueQuery = z.query.issue;
+    const view = issueQuery.materialize();
+    await z.triggerGotQueriesPatch(issueQuery);
+
+    // Get initial inspector to verify no query-update metrics initially
+    const initialInspector = await z.inspect();
+    expect(initialInspector.metrics['query-update-client'].count()).toBe(0);
+
+    // Trigger row updates to generate query-update metrics
+    await z.triggerPoke(null, '2', {
+      rowsPatch: [
+        {
+          op: 'put',
+          tableName: 'issues',
+          value: {
+            id: 'issue1',
+            title: 'Test Issue 1',
+            description: 'Test description 1',
+            closed: false,
+            createdAt: Date.now(),
+          },
+        },
+        {
+          op: 'put',
+          tableName: 'issues',
+          value: {
+            id: 'issue2',
+            title: 'Test Issue 2',
+            description: 'Test description 2',
+            closed: false,
+            createdAt: Date.now(),
+          },
+        },
+      ],
+    });
+
+    const inspector = await z.inspect();
+
+    // Wait for the updates to process and check metrics
+    await vi.waitFor(() => {
+      const updateMetrics = inspector.metrics['query-update-client'];
+      expect(updateMetrics.count()).toBeGreaterThan(0);
+    });
+
+    // Final verification of the query-update-client metrics
+    const queryUpdateMetrics = inspector.metrics['query-update-client'];
+
+    expect(queryUpdateMetrics.count()).toBeGreaterThan(0);
+    expect(queryUpdateMetrics.quantile(0.5)).toBeGreaterThanOrEqual(0);
+
+    view.destroy();
+    await z.close();
+  });
+
+  test('query-update metrics in query-specific metrics', async () => {
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+
+    const issueQuery = z.query.issue.orderBy('id', 'desc');
+    const view = issueQuery.materialize();
+    await z.triggerGotQueriesPatch(issueQuery);
+
+    // Trigger row updates to generate query-update metrics for this specific query
+    await z.triggerPoke(null, '2', {
+      rowsPatch: [
+        {
+          op: 'put',
+          tableName: 'issues',
+          value: {
+            id: 'issue1',
+            title: 'Updated Issue 1',
+            description: 'Updated description',
+            closed: false,
+            createdAt: Date.now(),
+          },
+        },
+      ],
+    });
+
+    const inspector = await z.inspect();
+
+    // Wait for the update to be processed
+    await vi.waitFor(() => {
+      const updateMetrics = inspector.metrics['query-update-client'];
+      expect(updateMetrics.count()).toBeGreaterThan(0);
+    });
+
+    // Get query-specific metrics through the inspector
+    vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+    const p = inspector.client.queries();
+    await Promise.resolve();
+
+    // Simulate the server response with query data
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'queries',
+        id: '000000000000000000000',
+        value: [
+          {
+            clientID: z.clientID,
+            queryID: issueQuery.hash(),
+            ast: {
+              table: 'issue',
+              orderBy: [['id', 'desc']],
+            },
+            name: null,
+            args: null,
+            deleted: false,
+            got: true,
+            inactivatedAt: null,
+            rowCount: 1,
+            ttl: 60_000,
+          },
+        ],
+      },
+    ] satisfies InspectDownMessage);
+
+    const queries = await p;
+    expect(queries).toHaveLength(1);
+    expect(issueQuery.hash()).toBe(queries[0].id);
+
+    const {metrics} = queries[0];
+    expect(metrics).not.toBeNull();
+
+    // Verify that query-update-client metrics are included in query-specific metrics
+    expect(metrics?.['query-update-client']).toBeDefined();
+    expect(metrics?.['query-update-client'].count()).toBeGreaterThan(0);
+    expect(
+      metrics?.['query-update-client'].quantile(0.5),
+    ).toBeGreaterThanOrEqual(0);
+
+    view.destroy();
     await z.close();
   });
 });

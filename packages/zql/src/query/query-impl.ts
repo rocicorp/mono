@@ -780,7 +780,7 @@ export class QueryImpl<
       ? delegate.addCustomQuery(this.customQueryID, ttl, gotCallback)
       : delegate.addServerQuery(ast, ttl, gotCallback);
 
-    const input = buildPipeline(ast, delegate);
+    const input = buildPipeline(ast, delegate, queryID);
 
     const view = delegate.batchViewUpdates(() =>
       (factory ?? arrayViewFactory)(

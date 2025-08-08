@@ -9,7 +9,7 @@ import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {FilterInput} from '../../ivm/filter-operators.ts';
 import {MemoryStorage} from '../../ivm/memory-storage.ts';
 import type {Input} from '../../ivm/operator.ts';
-import type {Source} from '../../ivm/source.ts';
+import type {Source, SourceInput} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
 import type {CustomQueryID} from '../named.ts';
 import type {
@@ -140,6 +140,10 @@ export class QueryDelegateImpl implements QueryDelegate {
 
   createStorage() {
     return new MemoryStorage();
+  }
+
+  decorateSourceInput(input: SourceInput): Input {
+    return input;
   }
 
   decorateInput(input: Input, _description: string): Input {

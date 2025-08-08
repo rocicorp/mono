@@ -28,6 +28,7 @@ import type {
   InspectUpMessage,
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import type {MetricMap} from '../../../../zql/src/query/metrics-delegate.ts';
 import {normalizeTTL, type TTL} from '../../../../zql/src/query/ttl.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import {ENTITIES_KEY_PREFIX} from '../keys.ts';
@@ -44,8 +45,7 @@ type Rep = ReplicacheImpl<MutatorDefs>;
 type GetWebSocket = () => Promise<WebSocket>;
 
 type Metrics = {
-  readonly 'query-materialization-client': ReadonlyTDigest;
-  readonly 'query-materialization-end-to-end': ReadonlyTDigest;
+  readonly [K in keyof MetricMap]: ReadonlyTDigest;
 };
 
 export interface InspectorMetricsDelegate {

@@ -39,9 +39,7 @@ import {
   serverToClient,
 } from '../../zero-schema/src/name-mapper.ts';
 import {buildPipeline} from '../../zql/src/builder/builder.ts';
-import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
-import type {Input} from '../../zql/src/ivm/operator.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
 import {type PullRow, type Query} from '../../zql/src/query/query.ts';
@@ -241,12 +239,9 @@ const host: QueryDelegate = {
     // TODO: table storage!!
     return new MemoryStorage();
   },
-  decorateInput(input: Input): Input {
-    return input;
-  },
-  decorateFilterInput(input: FilterInput): FilterInput {
-    return input;
-  },
+  decorateInput: input => input,
+  decorateSourceInput: input => input,
+  decorateFilterInput: input => input,
   addServerQuery() {
     return () => {};
   },
@@ -310,7 +305,7 @@ async function runAst(
   }
 
   const tableSpecs = computeZqlSpecs(lc, db);
-  const pipeline = buildPipeline(ast, host);
+  const pipeline = buildPipeline(ast, host, 'query-id');
 
   const start = performance.now();
 

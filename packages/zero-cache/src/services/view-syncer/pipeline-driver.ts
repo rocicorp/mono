@@ -268,12 +268,17 @@ export class PipelineDriver {
       this.#lc.info?.(`query ${hash} already added`, query);
       return;
     }
-    const input = buildPipeline(query, {
-      getSource: name => this.#getSource(name),
-      createStorage: () => this.#createStorage(),
-      decorateInput: input => input,
-      decorateFilterInput: input => input,
-    });
+    const input = buildPipeline(
+      query,
+      {
+        getSource: name => this.#getSource(name),
+        createStorage: () => this.#createStorage(),
+        decorateSourceInput: input => input,
+        decorateInput: input => input,
+        decorateFilterInput: input => input,
+      },
+      hash,
+    );
     const schema = input.getSchema();
     input.setOutput({
       push: change => {

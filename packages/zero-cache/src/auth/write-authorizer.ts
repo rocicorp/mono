@@ -1,4 +1,5 @@
 import type {SQLQuery} from '@databases/sql';
+import type {MaybePromise} from '@opentelemetry/resources';
 import {LogContext} from '@rocicorp/logger';
 import type {JWTPayload} from 'jose';
 import {tmpdir} from 'node:os';
@@ -28,6 +29,7 @@ import {
   bindStaticParameters,
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
+import {simplifyCondition} from '../../../zql/src/query/expression.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {StaticQuery, staticQuery} from '../../../zql/src/query/static-query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -47,8 +49,6 @@ import {
   reloadPermissionsIfChanged,
   type LoadedPermissions,
 } from './load-permissions.ts';
-import {simplifyCondition} from '../../../zql/src/query/expression.ts';
-import type {MaybePromise} from '@opentelemetry/resources';
 
 type Phase = 'preMutation' | 'postMutation';
 
@@ -101,6 +101,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     this.#builderDelegate = {
       getSource: name => this.#getSource(name),
       createStorage: () => cgStorage.createStorage(),
+      decorateSourceInput: input => input,
       decorateInput: input => input,
       decorateFilterInput: input => input,
     };
@@ -488,7 +489,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     // run the sql against upstream.
     // remove the collecting into json? just need to know if a row comes back.
 
-    const input = buildPipeline(rowQueryAst, this.#builderDelegate);
+    const input = buildPipeline(rowQueryAst, this.#builderDelegate, 'query-id');
     try {
       const res = input.fetch({});
       for (const _ of res) {
