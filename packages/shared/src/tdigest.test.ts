@@ -360,4 +360,75 @@ describe('TDigest', () => {
       expect(got).toEqual(want);
     });
   });
+
+  describe('JSON serialization', () => {
+    test('toJSON and fromJSON preserve digest properties', () => {
+      const original = new TDigest(500);
+
+      // Add some test data
+      for (let i = 1; i <= 100; i++) {
+        original.add(i, 1);
+      }
+
+      // Serialize to JSON
+      const jsonData = original.toJSON();
+
+      // Verify JSON structure
+      expect(jsonData).toHaveProperty('compression', 500);
+      expect(jsonData).toHaveProperty('centroids');
+      expect(Array.isArray(jsonData.centroids)).toBe(true);
+      expect(jsonData.centroids.length % 2).toBe(0); // Should be pairs of [mean, weight]
+
+      // Deserialize from JSON
+      const restored = TDigest.fromJSON(jsonData);
+
+      // Verify properties are preserved
+      expect(restored.compression).toBe(original.compression);
+      expect(restored.count()).toBe(original.count());
+
+      // Verify quantiles are approximately equal
+      const quantiles = [0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99];
+      for (const q of quantiles) {
+        const originalQ = original.quantile(q);
+        const restoredQ = restored.quantile(q);
+        expect(Math.abs(originalQ - restoredQ)).toBeLessThan(0.001);
+      }
+    });
+
+    test('toJSON with empty digest', () => {
+      const empty = new TDigest(1000);
+      const jsonData = empty.toJSON();
+
+      expect(jsonData.compression).toBe(1000);
+      expect(jsonData.centroids).toEqual([]);
+
+      const restored = TDigest.fromJSON(jsonData);
+      expect(restored.count()).toBe(0);
+      expect(restored.compression).toBe(1000);
+    });
+
+    test('toJSON with single value', () => {
+      const single = new TDigest(100);
+      single.add(42.0, 5.0);
+
+      const jsonData = single.toJSON();
+      expect(jsonData.compression).toBe(100);
+      expect(jsonData.centroids).toEqual([42.0, 5.0]);
+
+      const restored = TDigest.fromJSON(jsonData);
+      expect(restored.count()).toBe(5);
+      expect(restored.quantile(0.5)).toBe(42.0);
+    });
+
+    test('fromJSON handles invalid centroid data gracefully', () => {
+      const jsonData = {
+        compression: 1000,
+        centroids: [1.0, 2.0, 3.0], // Odd length - missing weight for last mean
+      };
+
+      const restored = TDigest.fromJSON(jsonData);
+      expect(restored.count()).toBe(2); // First pair: 1.0 with weight 2.0, last value 3.0 ignored due to undefined weight
+      expect(restored.compression).toBe(1000);
+    });
+  });
 });

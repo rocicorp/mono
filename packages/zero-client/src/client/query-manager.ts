@@ -20,11 +20,11 @@ import {
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
+import type {ClientMetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {CustomQueryID} from '../../../zql/src/query/named.ts';
 import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
 import {clampTTL, compareTTL, type TTL} from '../../../zql/src/query/ttl.ts';
-import type {InspectorMetricsDelegate} from './inspector/inspector.ts';
+import type {InspectorClientMetricsDelegate} from './inspector/inspector.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
@@ -43,8 +43,8 @@ type Entry = {
   ttl: TTL;
 };
 
-type Metric = {
-  [K in keyof MetricMap]: TDigest;
+type ClientMetric = {
+  [K in keyof ClientMetricMap]: TDigest;
 };
 
 /**
@@ -52,7 +52,7 @@ type Metric = {
  * Sends `changeDesiredQueries` message to server when this changes.
  * Deduplicates requests so that we only listen to a given unique query once.
  */
-export class QueryManager implements InspectorMetricsDelegate {
+export class QueryManager implements InspectorClientMetricsDelegate {
   readonly #clientID: ClientID;
   readonly #clientToServer: NameMapper;
   readonly #send: (change: ChangeDesiredQueriesMessage) => void;
@@ -66,8 +66,8 @@ export class QueryManager implements InspectorMetricsDelegate {
   #pendingRemovals: Array<() => void> = [];
   #batchTimer: ReturnType<typeof setTimeout> | undefined;
   readonly #lc: ZeroLogContext;
-  readonly #metrics: Metric = newMetrics();
-  readonly #queryMetrics: Map<string, Metric> = new Map();
+  readonly #metrics: ClientMetric = newMetrics();
+  readonly #queryMetrics: Map<string, ClientMetric> = new Map();
   readonly #slowMaterializeThreshold: number;
 
   constructor(
@@ -382,14 +382,14 @@ export class QueryManager implements InspectorMetricsDelegate {
   /**
    * Gets the aggregated metrics for all queries managed by this QueryManager.
    */
-  get metrics(): Metric {
+  get metrics(): ClientMetric {
     return this.#metrics;
   }
 
-  addMetric<K extends keyof MetricMap>(
+  addMetric<K extends keyof ClientMetricMap>(
     metric: K,
     value: number,
-    ...args: MetricMap[K]
+    ...args: ClientMetricMap[K]
   ): void {
     // Only query metrics are tracked at this point.
     // If this check fails then we need to add a runtime check.
@@ -434,12 +434,12 @@ export class QueryManager implements InspectorMetricsDelegate {
     existing[metric].add(value);
   }
 
-  getQueryMetrics(queryID: string): Metric | undefined {
+  getQueryMetrics(queryID: string): ClientMetric | undefined {
     return this.#queryMetrics.get(queryID);
   }
 }
 
-function newMetrics(): Metric {
+function newMetrics(): ClientMetric {
   return {
     'query-materialization-client': new TDigest(),
     'query-materialization-end-to-end': new TDigest(),

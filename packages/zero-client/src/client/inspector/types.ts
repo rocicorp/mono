@@ -12,6 +12,7 @@ export type Metrics = {
   'query-materialization-client': ReadonlyTDigest;
   'query-materialization-end-to-end': ReadonlyTDigest;
   'query-update-client': ReadonlyTDigest;
+  'query-materialization-server': ReadonlyTDigest;
 };
 
 export interface Inspector {
@@ -19,7 +20,7 @@ export interface Inspector {
   readonly clientGroup: ClientGroup;
   clients(): Promise<Client[]>;
   clientsWithQueries(): Promise<Client[]>;
-  readonly metrics: Metrics;
+  metrics(): Promise<Metrics>;
 }
 
 export interface Client {
