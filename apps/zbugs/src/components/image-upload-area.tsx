@@ -1,6 +1,7 @@
 import classNames from 'classnames';
 import type {ReactNode} from 'react';
-import {useCallback, useRef, useState, type ChangeEvent} from 'react';
+import {useCallback, useState} from 'react';
+import {useDropzone, type FileRejection} from 'react-dropzone';
 import {useLogin} from '../hooks/use-login.tsx';
 import {Button} from './button.tsx';
 import styles from './image-upload-area.module.css';
@@ -69,10 +70,7 @@ export function ImageUploadArea({
   textAreaRef,
   onInsert,
 }: ImageUploadAreaProps) {
-  const [isDragOver, setIsDragOver] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const {loginState} = useLogin();
 
   const getSelection = useCallback((): TextAreaSelection | null => {
@@ -120,7 +118,7 @@ export function ImageUploadArea({
     [getSelection, onInsert, textAreaRef, focusAndSetSelection],
   );
 
-  const uploadFile = async (file: File): Promise<void> => {
+  const uploadFile = useCallback(async (file: File): Promise<void> => {
     const validationError = validateFile(file);
     if (validationError) {
       alert(validationError);
@@ -161,70 +159,45 @@ export function ImageUploadArea({
     } finally {
       setIsUploading(false);
     }
-  };
+  }, [insert, loginState]);
 
-  const uploadFiles = async (files: File[]): Promise<void> => {
-    for (const file of files) {
-      await uploadFile(file);
-    }
-  };
+  const uploadFiles = useCallback(
+    async (files: File[]): Promise<void> => {
+      for (const file of files) {
+        await uploadFile(file);
+      }
+    },
+    [uploadFile],
+  );
 
-  const handleFileSelect = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = [...(e.target.files ?? [])];
-    if (files.length > 0) {
-      await uploadFiles(files);
-    }
-    // Reset the input so the same file can be selected again
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
+  const onDrop = useCallback(
+    async (acceptedFiles: File[], fileRejections: FileRejection[]) => {
+      if (fileRejections && fileRejections.length > 0) {
+        // Build an error message from the first rejection
+        const first = fileRejections[0];
+        const msg = first.errors?.map(e => e.message).join('\n');
+        alert(msg || 'One or more files were rejected.');
+      }
+      if (acceptedFiles && acceptedFiles.length > 0) {
+        await uploadFiles(acceptedFiles);
+      }
+    },
+    [uploadFiles],
+  );
 
-  const handleButtonClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
-      setIsDragOver(true);
-    }
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    // Only clear drag state if we're leaving the wrapper entirely
-    // Check if the relatedTarget (where we're going) is outside our wrapper
-    const wrapper = e.currentTarget as HTMLElement;
-    const relatedTarget = e.relatedTarget as HTMLElement;
-
-    if (!relatedTarget || !wrapper.contains(relatedTarget)) {
-      setIsDragOver(false);
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-
-    const files = [...e.dataTransfer.files].filter(file =>
-      file.type.startsWith('image/'),
-    );
-
-    if (files.length > 0) {
-      await uploadFiles(files);
-    }
-  };
+  const {getRootProps, getInputProps, isDragActive, open} = useDropzone({
+    accept: {
+      'image/jpeg': [],
+      'image/png': [],
+      'image/webp': [],
+      'image/gif': [],
+    },
+    multiple: true,
+    maxSize: 10 * 1024 * 1024,
+    noClick: true,
+    noKeyboard: true,
+    onDrop,
+  });
 
   const handlePaste = async (e: React.ClipboardEvent) => {
     const items = [...e.clipboardData.items];
@@ -248,7 +221,7 @@ export function ImageUploadArea({
   };
 
   const dropZoneClasses = classNames(className, {
-    'drag-over': isDragOver,
+    'drag-over': isDragActive,
     'uploading': isUploading,
   });
 
@@ -261,16 +234,11 @@ export function ImageUploadArea({
 
   return (
     <div
-      ref={wrapperRef}
+      {...getRootProps({onPaste: handlePaste})}
       className={classNames(dropZoneClasses, styles.wrapper)}
-      onDragEnter={handleDragEnter}
-      onDragLeave={handleDragLeave}
-      onDragOver={handleDragOver}
-      onDrop={handleDrop}
-      onPaste={handlePaste}
     >
       {children}
-      {isDragOver && textAreaRect && (
+      {isDragActive && textAreaRect && (
         <div
           className={styles.dragOverlay}
           style={{
@@ -302,7 +270,7 @@ export function ImageUploadArea({
             styles.uploadButton,
           )}
           eventName="Upload image"
-          onAction={handleButtonClick}
+          onAction={open}
           disabled={isUploading}
           style={{
             top: textAreaRect.top + 16,
@@ -312,15 +280,8 @@ export function ImageUploadArea({
           Add image
         </Button>
       )}
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,image/gif"
-        multiple
-        onChange={handleFileSelect}
-        className={styles.hiddenInput}
-      />
+      {/* Hidden file input (managed by react-dropzone) */}
+      <input {...getInputProps()} className={styles.hiddenInput} />
     </div>
   );
 }
