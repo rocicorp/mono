@@ -34,9 +34,7 @@ import {
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
 import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
-import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
-import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
@@ -517,12 +515,8 @@ beforeEach(() => {
     createStorage() {
       return new MemoryStorage();
     },
-    decorateInput(input: Input): Input {
-      return input;
-    },
-    decorateFilterInput(input: FilterInput): FilterInput {
-      return input;
-    },
+    decorateInput: input => input,
+    decorateFilterInput: input => input,
     addServerQuery() {
       return () => {};
     },
@@ -531,7 +525,6 @@ beforeEach(() => {
     },
     updateServerQuery() {},
     updateCustomQuery() {},
-    onQueryMaterialized() {},
     onTransactionCommit() {
       return () => {};
     },
