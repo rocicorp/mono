@@ -396,9 +396,6 @@ export class QueryManager implements InspectorMetricsDelegate {
   ): void {
     // We track all materializations of queries as well as per
     // query materializations.
-    metric satisfies
-      | 'query-materialization-client'
-      | 'query-materialization-end-to-end';
     this.#metrics[metric].add(value);
 
     const queryID = args[0];
