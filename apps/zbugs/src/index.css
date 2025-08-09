@@ -271,22 +271,33 @@ textarea.autoResize {
   cursor: default;
 }
 
-.offline-status-container {
+.offline-status-mobile-container {
   display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-.offline-status-pill {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  padding: 0.25rem 1rem;
-  border-color: var(--color-modal-outline);
-  border-width: 1px;
-  border-radius: 2rem;
+  width: 100%;
+  flex-direction: column;
   font-size: var(--typo-label-size);
   gap: 0.5rem;
+}
+
+.offline-status-container {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  padding: 1rem 1rem;
+  border: 1px solid var(--color-text-dimmed-label);
+  border-radius: 0.5rem;
+  font-size: var(--typo-label-size);
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.offline-status-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--color-text-primary-active);
+  font-weight: 800;
+  min-width: 200px;
 }
 
 .logout-button {
