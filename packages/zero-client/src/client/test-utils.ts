@@ -233,6 +233,20 @@ export class TestZero<
     socket.dispatchEvent(new CloseEvent('close'));
   }
 
+  async triggerGotQueriesPatch(
+    q: Query<S, keyof S['tables'] & string>,
+  ): Promise<void> {
+    q.hash();
+    await this.triggerPoke(null, '1', {
+      gotQueriesPatch: [
+        {
+          op: 'put',
+          hash: q.hash(),
+        },
+      ],
+    });
+  }
+
   declare [exposedToTestingSymbol]: TestingContext;
 
   get pusher() {

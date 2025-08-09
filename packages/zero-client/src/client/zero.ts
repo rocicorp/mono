@@ -30,6 +30,7 @@ import type {Enum} from '../../../shared/src/enum.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
+import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
@@ -78,6 +79,7 @@ import {
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
+import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {
@@ -145,7 +147,6 @@ import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
-import {Subscribable} from '../../../shared/src/subscribable.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -514,7 +515,6 @@ export class Zero<
             lc,
             mutatorOrMutators,
             schema,
-            slowMaterializeThreshold,
             // Replicache expects mutators to only be able to return JSON
             // but Zero wraps the return with: `{server?: Promise<MutationResult>, client?: T}`
           ) as () => MutatorReturn;
@@ -531,7 +531,6 @@ export class Zero<
               lc,
               mutator as CustomMutatorImpl<S>,
               schema,
-              slowMaterializeThreshold,
             ) as () => MutatorReturn;
           }
           continue;
@@ -570,13 +569,14 @@ export class Zero<
       this.#ivmMain,
       (ast, ttl, gotCallback) =>
         this.#queryManager.addLegacy(ast, ttl, gotCallback),
-      (queryName, queryArgs, ttl, gotCallback) =>
-        this.#queryManager.addCustom(queryName, queryArgs, ttl, gotCallback),
+      (customQueryID, ttl, gotCallback) =>
+        this.#queryManager.addCustom(customQueryID, ttl, gotCallback),
       (ast, ttl) => this.#queryManager.updateLegacy(ast, ttl),
-      (name, args, ttl) => this.#queryManager.updateCustom(name, args, ttl),
+      (customQueryID, ttl) =>
+        this.#queryManager.updateCustom(customQueryID, ttl),
       () => this.#queryManager.flushBatch(),
       batchViewUpdates,
-      slowMaterializeThreshold,
+      this.#addMetric,
       assertValidRunOptions,
     );
     this.queryDelegate = this.#zeroContext;
@@ -688,6 +688,7 @@ export class Zero<
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
       options.queryChangeThrottleMs ?? DEFAULT_QUERY_CHANGE_THROTTLE_MS,
+      slowMaterializeThreshold,
     );
     this.#clientToServer = clientToServer(schema.tables);
 
@@ -1938,12 +1939,32 @@ export class Zero<
     BUNDLE_SIZE: {
       const m = await import('./inspector/inspector.ts');
       // Wait for the web socket to be available
-      return m.newInspector(this.#rep, this.#schema, async () => {
-        await this.#connectResolver.promise;
-        return this.#socket!;
-      });
+      return m.newInspector(
+        this.#rep,
+        this.#queryManager,
+        this.#schema,
+        async () => {
+          await this.#connectResolver.promise;
+          return this.#socket!;
+        },
+      );
     }
   }
+
+  #addMetric: <K extends keyof MetricMap>(
+    metric: K,
+    value: number,
+    ...args: MetricMap[K]
+  ) => void = (metric, value, ...args) => {
+    const isQueryMetric = (metric: string): metric is `query-${string}` =>
+      metric.startsWith('query-');
+
+    if (isQueryMetric(metric)) {
+      this.#queryManager.addMetric(metric, value, ...args);
+    } else {
+      unreachable(metric);
+    }
+  };
 }
 
 export class OnlineManager extends Subscribable<boolean> {

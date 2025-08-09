@@ -16,6 +16,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench": "vitest bench --run",
+    "bench:watch": "vitest bench --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "check-types": "tsc && tsc --project tool/tsconfig.json",

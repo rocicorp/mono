@@ -1,4 +1,5 @@
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
+import type {ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {TTL} from '../../../../zql/src/query/ttl.ts';
@@ -7,11 +8,18 @@ export interface GetInspector {
   inspect(): Promise<Inspector>;
 }
 
+export type Metrics = {
+  'query-materialization-client': ReadonlyTDigest;
+  'query-materialization-end-to-end': ReadonlyTDigest;
+  'query-update-client': ReadonlyTDigest;
+};
+
 export interface Inspector {
   readonly client: Client;
   readonly clientGroup: ClientGroup;
   clients(): Promise<Client[]>;
   clientsWithQueries(): Promise<Client[]>;
+  readonly metrics: Metrics;
 }
 
 export interface Client {
@@ -41,4 +49,5 @@ export interface Query {
   readonly rowCount: number;
   readonly ttl: TTL;
   readonly zql: string | null;
+  readonly metrics: Metrics | null;
 }

@@ -1,4 +1,6 @@
 import {expect, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {AST, Disjunction} from '../../../zero-protocol/src/ast.ts';
 import {Catch} from '../ivm/catch.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
@@ -7,8 +9,6 @@ import {
   buildPipeline,
   groupSubqueryConditions,
 } from './builder.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {TestBuilderDelegate} from './test-builder-delegate.ts';
 
 const lc = createSilentLogContext();
@@ -78,6 +78,7 @@ test('source-only', () => {
         ],
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -180,6 +181,7 @@ test('filter', () => {
         },
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -277,6 +279,7 @@ test('self-join', () => {
         ],
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -576,6 +579,7 @@ test('self-join edit', () => {
         limit: 3,
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -790,6 +794,7 @@ test('multi-join', () => {
         ],
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -955,6 +960,7 @@ test('join with limit', () => {
         ],
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -1075,6 +1081,7 @@ test('skip', () => {
         start: {row: {id: 3}, exclusive: true},
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -1174,6 +1181,7 @@ test('exists junction', () => {
         },
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -1384,6 +1392,7 @@ test('duplicative exists junction', () => {
         },
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -1583,6 +1592,7 @@ test('exists junction with limit, remove row after limit, and last row', () => {
         },
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -1701,6 +1711,7 @@ test('exists self join', () => {
         limit: 2,
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -1878,6 +1889,7 @@ test('not exists self join', () => {
         },
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -2043,6 +2055,7 @@ test('empty or - nothing goes through', () => {
         },
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -2065,6 +2078,7 @@ test('empty and - everything goes through', () => {
         },
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -2108,6 +2122,7 @@ test('always false literal comparison - nothing goes through', () => {
         },
       },
       delegate,
+      'query-id',
     ),
   );
 
@@ -2138,6 +2153,7 @@ test('always true literal comparison - everything goes through', () => {
         },
       },
       delegate,
+      'query-id',
     ),
   );
 
