@@ -101,10 +101,19 @@ textarea.autoResize {
   border: 1px solid var(--color-text-dimmed-label);
   border-radius: var(--ui-button-radius);
   padding: 0.25rem 0.5rem;
+
+  &.icon-button {
+    border: none;
+    padding-left: 1.25rem !important;
+  }
 }
 
 .secondary-button:enabled:hover {
   opacity: 1;
+}
+
+.add-image-button {
+  background: transparent url(assets/icons/add-image.svg) no-repeat center left;
 }
 
 /* Nav */
@@ -794,6 +803,7 @@ textarea.autoResize {
 }
 
 .edit-description {
+  padding-top: 3rem;
   margin-bottom: 4rem;
 }
 
@@ -1035,7 +1045,7 @@ textarea.autoResize {
 }
 
 .new-issue-description {
-  padding: 0.8rem;
+  padding: 3rem 0.8rem 0.8rem;
 }
 
 /* Comment Composer */
@@ -1045,7 +1055,7 @@ textarea.autoResize {
   background-color: var(--color-background);
   border: 1px solid var(--color-text-dimmed-label);
   border-radius: 0.5rem;
-  padding: 1rem;
+  padding: 3rem 1rem 1rem;
   display: block;
   width: 100%;
 }
