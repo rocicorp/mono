@@ -8,42 +8,42 @@ import {
   test,
   vi,
 } from 'vitest';
-import { createSilentLogContext } from '../../../../shared/src/logging-test-utils.ts';
-import { Queue } from '../../../../shared/src/queue.ts';
-import { sleep } from '../../../../shared/src/sleep.ts';
-import { type ClientSchema } from '../../../../zero-protocol/src/client-schema.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../../shared/src/queue.ts';
+import {sleep} from '../../../../shared/src/sleep.ts';
+import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {
   TransformResponseBody,
   TransformResponseMessage,
 } from '../../../../zero-protocol/src/custom-queries.ts';
-import type { Downstream } from '../../../../zero-protocol/src/down.ts';
-import { ErrorKind } from '../../../../zero-protocol/src/error-kind.ts';
-import type { ErrorBody } from '../../../../zero-protocol/src/error.ts';
+import type {Downstream} from '../../../../zero-protocol/src/down.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
+import type {ErrorBody} from '../../../../zero-protocol/src/error.ts';
 import type {
   PokeEndBody,
   PokePartBody,
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
-import { PROTOCOL_VERSION } from '../../../../zero-protocol/src/protocol-version.ts';
-import type { UpQueriesPatch } from '../../../../zero-protocol/src/queries-patch.ts';
-import { DEFAULT_TTL_MS } from '../../../../zql/src/query/ttl.ts';
-import { Database } from '../../../../zqlite/src/db.ts';
-import { StatementRunner } from '../../db/statements.ts';
-import { testDBs } from '../../test/db.ts';
-import { DbFile } from '../../test/lite.ts';
-import { ErrorForClient } from '../../types/error-for-client.ts';
-import type { PostgresDB } from '../../types/pg.ts';
-import { cvrSchema } from '../../types/shards.ts';
-import type { Source } from '../../types/streams.ts';
-import { Subscription } from '../../types/subscription.ts';
-import type { ReplicaState } from '../replicator/replicator.ts';
-import { updateReplicationWatermark } from '../replicator/schema/replication-state.ts';
-import { type FakeReplicator } from '../replicator/test-utils.ts';
-import { CVRStore } from './cvr-store.ts';
-import { CVRQueryDrivenUpdater } from './cvr.ts';
-import { type ClientGroupStorage } from './database-storage.ts';
-import { DrainCoordinator } from './drain-coordinator.ts';
-import { ttlClockFromNumber } from './ttl-clock.ts';
+import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
+import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
+import {StatementRunner} from '../../db/statements.ts';
+import {testDBs} from '../../test/db.ts';
+import {DbFile} from '../../test/lite.ts';
+import {ErrorForClient} from '../../types/error-for-client.ts';
+import type {PostgresDB} from '../../types/pg.ts';
+import {cvrSchema} from '../../types/shards.ts';
+import type {Source} from '../../types/streams.ts';
+import {Subscription} from '../../types/subscription.ts';
+import type {ReplicaState} from '../replicator/replicator.ts';
+import {updateReplicationWatermark} from '../replicator/schema/replication-state.ts';
+import {type FakeReplicator} from '../replicator/test-utils.ts';
+import {CVRStore} from './cvr-store.ts';
+import {CVRQueryDrivenUpdater} from './cvr.ts';
+import {type ClientGroupStorage} from './database-storage.ts';
+import {DrainCoordinator} from './drain-coordinator.ts';
+import {ttlClockFromNumber} from './ttl-clock.ts';
 import {
   app2Messages,
   appMessages,
@@ -68,7 +68,7 @@ import {
   TASK_ID,
   USERS_QUERY,
 } from './view-syncer-test-util.ts';
-import { type SyncContext, ViewSyncerService } from './view-syncer.ts';
+import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
   let storageDB: Database;

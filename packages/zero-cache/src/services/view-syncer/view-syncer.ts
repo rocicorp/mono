@@ -1315,9 +1315,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // updater handles the updates and pokes.
       for (const q of removeQueries) {
         this.#pipelines.removeQuery(q.transformationHash);
+        // Remove per-query server metrics when query is deleted
+        this.#perQueryServerMetrics.delete(q.id);
       }
       for (const hash of unhydrateQueries) {
         this.#pipelines.removeQuery(hash);
+        // Remove per-query server metrics for unhydrated queries
+        const ids = hashToIDs.get(hash);
+        if (ids) {
+          for (const id of ids) {
+            this.#perQueryServerMetrics.delete(id);
+          }
+        }
       }
 
       let totalProcessTime = 0;
@@ -1340,14 +1349,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           totalProcessTime += elapsed;
 
           // Store per-query server-side materialization time
-          const queryId = q.id;
-          if (!perQueryServerMetrics.has(queryId)) {
-            perQueryServerMetrics.set(queryId, {
+          const {id} = q;
+          let perQueryMetrics = perQueryServerMetrics.get(id);
+          if (!perQueryMetrics) {
+            perQueryMetrics = {
               'query-materialization-server': new TDigest(),
-            });
+            };
+            perQueryServerMetrics.set(id, perQueryMetrics);
           }
-
-          const perQueryMetrics = perQueryServerMetrics.get(queryId)!;
           perQueryMetrics['query-materialization-server'].add(elapsed);
           serverMetrics['query-materialization-server'].add(elapsed);
 
