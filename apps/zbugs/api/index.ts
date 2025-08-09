@@ -11,11 +11,16 @@ import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
 import {must} from '../../../packages/shared/src/must.ts';
-import {handlePush} from '../server/push-handler.ts';
 import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {getQuery} from '../server/get-query.ts';
-import {getQueries} from '@rocicorp/zero/server';
+import {
+  mapQueryRequest,
+  mapMutationRequest,
+  dispatchMutation,
+} from '@rocicorp/zero/server';
+import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
 import {schema} from '../shared/schema.ts';
+import {createServerMutators} from '../server/server-mutators.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -30,6 +35,8 @@ let privateJwk: JWK | undefined;
 export const fastify = Fastify({
   logger: true,
 });
+
+const dbProvider = zeroPostgresJS(schema, sql);
 
 fastify.register(cookie);
 
@@ -135,7 +142,21 @@ fastify.post<{
     throw e;
   }
 
-  const response = await handlePush(jwtData, request.query, request.body);
+  const postCommitTasks: (() => Promise<void>)[] = [];
+  const mutators = createServerMutators(jwtData, postCommitTasks);
+
+  const response = await mapMutationRequest(
+    transact =>
+      transact(dbProvider, (tx, name, args) =>
+        dispatchMutation(mutators, tx, name, args),
+      ),
+    request.query,
+    request.body,
+    'info',
+  );
+
+  await Promise.all(postCommitTasks.map(task => task()));
+
   reply.send(response);
 });
 
@@ -155,7 +176,7 @@ fastify.post<{
   }
 
   reply.send(
-    await getQueries(
+    await mapQueryRequest(
       async (name, args) => ({query: getQuery(authData, name, args)}),
       schema,
       request.body,
