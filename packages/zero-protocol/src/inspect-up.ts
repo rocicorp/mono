@@ -8,7 +8,17 @@ const inspectQueriesUpBodySchema = v.object({
 
 export type InspectQueriesUpBody = v.Infer<typeof inspectQueriesUpBodySchema>;
 
-const inspectUpBodySchema = v.union(inspectQueriesUpBodySchema);
+const inspectMetricsUpSchema = v.object({
+  op: v.literal('metrics'),
+  id: v.string(),
+});
+
+export type InspectMetricsUpBody = v.Infer<typeof inspectMetricsUpSchema>;
+
+const inspectUpBodySchema = v.union(
+  inspectQueriesUpBodySchema,
+  inspectMetricsUpSchema,
+);
 
 export const inspectUpMessageSchema = v.tuple([
   v.literal('inspect'),

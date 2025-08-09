@@ -531,9 +531,9 @@ describe('server results and keeping read queries', () => {
 
     const mockSocket = await z.socket;
     const messages: string[] = [];
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       messages.push(msg);
-    };
+    });
 
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
@@ -667,9 +667,9 @@ describe('server results and keeping read queries', () => {
 
     const mockSocket = await z.socket;
     const messages: string[] = [];
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       messages.push(msg);
-    };
+    });
 
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
