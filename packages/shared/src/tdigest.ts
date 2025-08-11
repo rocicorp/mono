@@ -37,10 +37,13 @@ export class TDigest {
    * fromJSON creates a TDigest from a JSON-serializable representation.
    * The data should be an object with compression and centroids array.
    */
-  static fromJSON(data: TDigestJSON): TDigest {
-    const digest = new TDigest(data.compression);
-    for (let i = 0; i < data.centroids.length; i += 2) {
-      digest.add(data.centroids[i], data.centroids[i + 1]);
+  static fromJSON(data: Readonly<TDigestJSON>): TDigest {
+    const digest = new TDigest(data[0]);
+    if (data.length % 2 !== 1) {
+      throw new Error('Invalid centroids array');
+    }
+    for (let i = 1; i < data.length; i += 2) {
+      digest.add(data[i], data[i + 1]);
     }
     return digest;
   }
@@ -166,11 +169,11 @@ export class TDigest {
    */
   toJSON(): TDigestJSON {
     this.#process();
-    const centroids: number[] = [];
+    const data: TDigestJSON = [this.compression];
     for (const centroid of this.#processed) {
-      centroids.push(centroid.mean, centroid.weight);
+      data.push(centroid.mean, centroid.weight);
     }
-    return {compression: this.compression, centroids};
+    return data;
   }
 
   #updateCumulative() {

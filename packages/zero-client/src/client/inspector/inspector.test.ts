@@ -47,10 +47,7 @@ async function getMetrics<
       op: 'metrics',
       id,
       value: metricsResponseValue ?? {
-        'query-materialization-server': {
-          compression: 1000,
-          centroids: [],
-        },
+        'query-materialization-server': [1000],
       },
     },
   ]);
@@ -375,25 +372,20 @@ describe('query metrics', () => {
     // We should have metrics for all.. even if empty
     expect(queries[0].metrics).toMatchInlineSnapshot(`
       {
-        "query-materialization-client": {
-          "centroids": [
-            0,
-            1,
-          ],
-          "compression": 1000,
-        },
-        "query-materialization-end-to-end": {
-          "centroids": [],
-          "compression": 1000,
-        },
-        "query-materialization-server": {
-          "centroids": [],
-          "compression": 1000,
-        },
-        "query-update-client": {
-          "centroids": [],
-          "compression": 1000,
-        },
+        "query-materialization-client": [
+          1000,
+          0,
+          1,
+        ],
+        "query-materialization-end-to-end": [
+          1000,
+        ],
+        "query-materialization-server": [
+          1000,
+        ],
+        "query-update-client": [
+          1000,
+        ],
       }
     `);
 
@@ -605,10 +597,7 @@ describe('query metrics', () => {
             rowCount: 1,
             ttl: 60_000,
             metrics: {
-              'query-materialization-server': {
-                compression: 1000,
-                centroids: [1, 2],
-              },
+              'query-materialization-server': [1000, 1, 2],
             },
           },
         ],
@@ -621,37 +610,29 @@ describe('query metrics', () => {
 
     const {metrics} = queries[0];
     expect(metrics).toMatchInlineSnapshot(`
-      {
-        "query-materialization-client": {
-          "centroids": [
-            0,
-            1,
-          ],
-          "compression": 1000,
-        },
-        "query-materialization-end-to-end": {
-          "centroids": [
-            50,
-            1,
-          ],
-          "compression": 1000,
-        },
-        "query-materialization-server": {
-          "centroids": [
-            1,
-            2,
-          ],
-          "compression": 1000,
-        },
-        "query-update-client": {
-          "centroids": [
-            0,
-            1,
-          ],
-          "compression": 1000,
-        },
-      }
-    `);
+          {
+            "query-materialization-client": [
+              1000,
+              0,
+              1,
+            ],
+            "query-materialization-end-to-end": [
+              1000,
+              50,
+              1,
+            ],
+            "query-materialization-server": [
+              1000,
+              1,
+              2,
+            ],
+            "query-update-client": [
+              1000,
+              0,
+              1,
+            ],
+          }
+        `);
 
     view.destroy();
     await z.close();

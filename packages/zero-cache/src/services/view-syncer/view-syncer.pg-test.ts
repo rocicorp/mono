@@ -3540,10 +3540,9 @@ describe('view-syncer/service', () => {
         id: 'test-metrics-inspect',
         op: 'metrics',
         value: {
-          'query-materialization-server': {
-            centroids: expect.arrayContaining([expect.any(Number)]),
-            compression: expect.any(Number),
-          },
+          'query-materialization-server': expect.arrayContaining([
+            expect.any(Number),
+          ]),
         },
       },
     ]);

@@ -1,4 +1,4 @@
-// Apache License 2.0
+// Apache License 2
 // https://github.com/influxdata/tdigest
 
 import {generateMersenne53Randomizer} from '@faker-js/faker';
@@ -15,7 +15,7 @@ function createNormalDist(mu: number, sigma: number, rand: () => number) {
         u1 = rand();
       } while (u1 === 0); // Avoids Math.log(0) which is -Infinity
       const u2 = rand();
-      const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+      const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
       return z0 * sigma + mu;
     },
   };
@@ -343,10 +343,10 @@ describe('TDigest', () => {
         name: 'increasing',
         data: [1, 2, 3, 4, 5],
         want: [
-          new Centroid(1.0, 1.0),
-          new Centroid(2.5, 2.0),
-          new Centroid(4.0, 1.0),
-          new Centroid(5.0, 1.0),
+          new Centroid(1, 1),
+          new Centroid(2.5, 2),
+          new Centroid(4, 1),
+          new Centroid(5, 1),
         ],
       },
     ];
@@ -373,11 +373,9 @@ describe('TDigest', () => {
       // Serialize to JSON
       const jsonData = original.toJSON();
 
-      // Verify JSON structure
-      expect(jsonData).toHaveProperty('compression', 500);
-      expect(jsonData).toHaveProperty('centroids');
-      expect(Array.isArray(jsonData.centroids)).toBe(true);
-      expect(jsonData.centroids.length % 2).toBe(0); // Should be pairs of [mean, weight]
+      expect(Array.isArray(jsonData)).toBe(true);
+      expect(jsonData.length % 2).toBe(1);
+      expect(jsonData.every(n => typeof n === 'number')).toBe(true);
 
       // Deserialize from JSON
       const restored = TDigest.fromJSON(jsonData);
@@ -399,8 +397,7 @@ describe('TDigest', () => {
       const empty = new TDigest(1000);
       const jsonData = empty.toJSON();
 
-      expect(jsonData.compression).toBe(1000);
-      expect(jsonData.centroids).toEqual([]);
+      expect(jsonData).toEqual([1000]);
 
       const restored = TDigest.fromJSON(jsonData);
       expect(restored.count()).toBe(0);
@@ -409,26 +406,22 @@ describe('TDigest', () => {
 
     test('toJSON with single value', () => {
       const single = new TDigest(100);
-      single.add(42.0, 5.0);
+      single.add(42, 5);
 
       const jsonData = single.toJSON();
-      expect(jsonData.compression).toBe(100);
-      expect(jsonData.centroids).toEqual([42.0, 5.0]);
+      expect(jsonData).toEqual([100, 42, 5]);
 
       const restored = TDigest.fromJSON(jsonData);
       expect(restored.count()).toBe(5);
-      expect(restored.quantile(0.5)).toBe(42.0);
+      expect(restored.quantile(0.5)).toBe(42);
     });
 
     test('fromJSON handles invalid centroid data gracefully', () => {
-      const jsonData = {
-        compression: 1000,
-        centroids: [1.0, 2.0, 3.0], // Odd length - missing weight for last mean
-      };
+      const jsonData = [1000, 1, 2, 3] as const; // Wrong length - missing weight for last mean
 
-      const restored = TDigest.fromJSON(jsonData);
-      expect(restored.count()).toBe(2); // First pair: 1.0 with weight 2.0, last value 3.0 ignored due to undefined weight
-      expect(restored.compression).toBe(1000);
+      expect(() =>
+        TDigest.fromJSON(jsonData),
+      ).toThrowErrorMatchingInlineSnapshot(`[Error: Invalid centroids array]`);
     });
   });
 });
