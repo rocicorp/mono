@@ -40,11 +40,7 @@ export class TDigest {
   static fromJSON(data: TDigestJSON): TDigest {
     const digest = new TDigest(data.compression);
     for (let i = 0; i < data.centroids.length; i += 2) {
-      const mean = data.centroids[i];
-      const weight = data.centroids[i + 1];
-      if (mean !== undefined && weight !== undefined) {
-        digest.add(mean, weight);
-      }
+      digest.add(data.centroids[i], data.centroids[i + 1]);
     }
     return digest;
   }
