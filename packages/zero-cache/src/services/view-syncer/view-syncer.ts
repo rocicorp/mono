@@ -1090,8 +1090,23 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const elapsed = timer.totalElapsed();
       this.#hydrations.add(1);
       this.#hydrationTime.record(elapsed / 1000);
+      this.#addQueryMaterializationServerMetric(hash, elapsed);
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
     }
+  }
+
+  #addQueryMaterializationServerMetric(queryID: string, elapsed: number) {
+    let perQueryMetrics = this.#perQueryServerMetrics.get(queryID);
+    if (!perQueryMetrics) {
+      this.#perQueryServerMetrics.set(
+        queryID,
+        (perQueryMetrics = {
+          'query-materialization-server': new TDigest(),
+        }),
+      );
+    }
+    perQueryMetrics['query-materialization-server'].add(elapsed);
+    this.#serverMetrics['query-materialization-server'].add(elapsed);
   }
 
   /**
@@ -1334,8 +1349,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const pipelines = this.#pipelines;
       const hydrations = this.#hydrations;
       const hydrationTime = this.#hydrationTime;
-      const perQueryServerMetrics = this.#perQueryServerMetrics;
-      const serverMetrics = this.#serverMetrics;
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
+      const self = this;
 
       function* generateRowChanges(slowHydrateThreshold: number) {
         for (const q of addQueries) {
@@ -1349,16 +1364,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           totalProcessTime += elapsed;
 
           // Store per-query server-side materialization time
-          const {id} = q;
-          let perQueryMetrics = perQueryServerMetrics.get(id);
-          if (!perQueryMetrics) {
-            perQueryMetrics = {
-              'query-materialization-server': new TDigest(),
-            };
-            perQueryServerMetrics.set(id, perQueryMetrics);
-          }
-          perQueryMetrics['query-materialization-server'].add(elapsed);
-          serverMetrics['query-materialization-server'].add(elapsed);
+          self.#addQueryMaterializationServerMetric(q.id, elapsed);
 
           if (elapsed > slowHydrateThreshold) {
             lc.warn?.('Slow query materialization', elapsed, q.ast);
