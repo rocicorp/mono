@@ -89,7 +89,6 @@ export type {
 } from '../../zero-schema/src/permissions.ts';
 export {type TableSchema} from '../../zero-schema/src/table-schema.ts';
 export type {
-  EnumSchemaValue,
   SchemaValue,
   SchemaValueWithCustomType,
   ValueType,
