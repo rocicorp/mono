@@ -1363,7 +1363,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           const elapsed = timer.stop();
           totalProcessTime += elapsed;
 
-          // Store per-query server-side materialization time
           self.#addQueryMaterializationServerMetric(q.id, elapsed);
 
           if (elapsed > slowHydrateThreshold) {
@@ -1757,9 +1756,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #cleanup(err?: unknown) {
     this.#stopTTLClockInterval();
     this.#stopExpireTimer();
-
-    // Clear server metrics when shutting down
-    this.#perQueryServerMetrics.clear();
 
     this.#pipelines.destroy();
     for (const client of this.#clients.values()) {
