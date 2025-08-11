@@ -1,4 +1,4 @@
-// Apache License 2
+// Apache License 2.0
 // https://github.com/influxdata/tdigest
 
 import {generateMersenne53Randomizer} from '@faker-js/faker';
