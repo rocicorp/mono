@@ -205,6 +205,9 @@ export async function initialSync(
       // Workaround a Node bug in Windows in which certain COPY streams result
       // in hanging the connection, which causes this await to never resolve.
       void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
+      // Wait for all copier workers to finish before closing the replication session
+      // to ensure the snapshot remains valid
+      await copiers.done();
     }
   } catch (e) {
     // If initial-sync did not succeed, make a best effort to drop the
