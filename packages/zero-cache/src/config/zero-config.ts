@@ -75,8 +75,8 @@ export const appOptions = {
       '',
       'Format: ["table1", "schema.table2", "table3"]',
       '',
-      'Simple names (e.g., "users") match tables in any schema.',
-      'Qualified names (e.g., "myschema.users") match specific schema.table.',
+      '"users" - matches any table named "users" in any schema',
+      '"public.users" - matches only the users table in public schema',
     ],
   },
 };

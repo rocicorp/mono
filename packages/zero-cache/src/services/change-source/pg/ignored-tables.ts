@@ -3,16 +3,12 @@
  */
 
 /**
- * Builds a Set of table names to ignore, expanding simple names to include public schema
+ * Builds a Set of table names to ignore - direct matches only
  * @param tables - Array of table names from configuration
- * @returns Set containing both simple and qualified names for efficient lookup
+ * @returns Set for efficient lookup
  */
 export function buildIgnoredTablesSet(tables: string[]): Set<string> {
-  return new Set(
-    tables.flatMap(table =>
-      table.includes('.') ? [table] : [table, `public.${table}`]
-    )
-  );
+  return new Set(tables);
 }
 
 /**
@@ -25,6 +21,7 @@ export function isTableIgnored(
   relation: {schema: string; name: string}, 
   ignoredTables: Set<string>
 ): boolean {
+  // Direct match on table name or schema.table
   return ignoredTables.has(relation.name) || 
          ignoredTables.has(`${relation.schema}.${relation.name}`);
 }
