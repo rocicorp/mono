@@ -67,7 +67,7 @@ export function runPushTest(t: PushTest) {
     );
 
     const builderDelegate = new TestBuilderDelegate(sources, true);
-    const pipeline = buildPipeline(t.ast, builderDelegate);
+    const pipeline = buildPipeline(t.ast, builderDelegate, 'query-id');
 
     const finalOutput = makeFinalOutput(pipeline);
 

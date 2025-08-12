@@ -517,6 +517,7 @@ beforeEach(() => {
     },
     decorateInput: input => input,
     decorateFilterInput: input => input,
+    decorateSourceInput: input => input,
     addServerQuery() {
       return () => {};
     },
@@ -928,7 +929,7 @@ function runReadQueryWithPermissions(
       preMutationRow: undefined,
     },
   );
-  const pipeline = buildPipeline(updatedAst, queryDelegate);
+  const pipeline = buildPipeline(updatedAst, queryDelegate, 'query-id');
   const out = new Catch(pipeline);
   return out.fetch({});
 }

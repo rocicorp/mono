@@ -1,9 +1,8 @@
 import {PG_OBJECT_IN_USE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {PostgresError} from 'postgres';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
-import {deepEqual} from '../../../../../shared/src/json.ts';
 import {TestLogSink} from '../../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
 import {sleep} from '../../../../../shared/src/sleep.ts';
@@ -908,23 +907,20 @@ describe('change-source/pg', {timeout: 30000}, () => {
     `);
     expect(replicas2).toEqual(replicas1.slice(1));
 
-    // Verify that the two latter slots remain. (Add a sleep to reduce
+    // Verify that the two latter slots remain. (Use waitFor to reduce
     // flakiness because the drop is non-transactional.)
-    const maxAttempts = 5;
-    for (let i = 1; i <= maxAttempts; i++) {
-      await sleep(100);
-      const slots3 = await upstream<{slot: string}[]>`
+    await vi.waitFor(
+      async () => {
+        const slots3 = await upstream<{slot: string}[]>`
       SELECT slot_name as slot FROM pg_replication_slots
         WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
     `.values();
-      if (i === maxAttempts) {
         expect(slots3).toEqual(slots2.slice(1));
-        break;
-      }
-      if (deepEqual(slots3, slots2.slice(1))) {
-        break;
-      }
-    }
+      },
+      {
+        interval: 100,
+      },
+    );
 
     replicaFile2.delete();
     replicaFile3.delete();

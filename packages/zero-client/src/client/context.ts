@@ -6,7 +6,7 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Input, Storage} from '../../../zql/src/ivm/operator.ts';
-import type {Source} from '../../../zql/src/ivm/source.ts';
+import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
 import type {MetricsDelegate} from '../../../zql/src/query/metrics-delegate.ts';
 import type {
   CommitListener,
@@ -14,6 +14,7 @@ import type {
 } from '../../../zql/src/query/query-delegate.ts';
 import type {RunOptions} from '../../../zql/src/query/query.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
+import {MeasurePushOperator} from './measure-push-operator.ts';
 import type {QueryManager} from './query-manager.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 
@@ -96,6 +97,10 @@ export class ZeroContext implements QueryDelegate {
 
   decorateFilterInput(input: FilterInput): FilterInput {
     return input;
+  }
+
+  decorateSourceInput(input: SourceInput, queryID: string): Input {
+    return new MeasurePushOperator(input, queryID, this);
   }
 
   onTransactionCommit(cb: CommitListener): () => void {
