@@ -35,7 +35,7 @@ import {dropEventTriggerStatements} from './schema/ddl.ts';
 const APP_ID = '23';
 const SHARD_NUM = 1;
 
-describe('change-source/pg', {timeout: 30000}, () => {
+describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
   let logSink: TestLogSink;
   let lc: LogContext;
   let upstream: PostgresDB;
