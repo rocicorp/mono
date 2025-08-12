@@ -57,6 +57,18 @@ export type InitialSyncOptions = {
   profileCopy?: boolean | undefined;
 };
 
+function buildIgnoredTablesSet(tables: string[]): Set<string> {
+  return new Set(
+    tables.flatMap(table =>
+      table.includes('.') ? [table] : [table, `public.${table}`]
+    )
+  );
+}
+
+function isTableIgnored(table: {schema: string; name: string}, ignoredTables: Set<string>): boolean {
+  return ignoredTables.has(table.name) || ignoredTables.has(`${table.schema}.${table.name}`);
+}
+
 export async function initialSync(
   lc: LogContext,
   shard: ShardConfig,
@@ -171,22 +183,15 @@ export async function initialSync(
     try {
       createLiteTables(tx, tables, initialVersion);
 
-      // Get ignored tables configuration
+      // Build set of ignored tables for efficient lookup
       const config = getZeroConfig();
-      const ignoredTables = new Set(
-        (config.app.ignoredPublicationTables || []).flatMap(table =>
-          table.includes('.') ? [table] : [table, `public.${table}`]
-        )
-      );
+      const ignoredTables = buildIgnoredTablesSet(config.app.ignoredPublicationTables || []);
 
       void copyProfiler?.start();
       const rowCounts = await Promise.all(
         tables.map(table => {
-          const tableName = `${table.schema}.${table.name}`;
-          const isIgnored = ignoredTables.has(table.name) || ignoredTables.has(tableName);
-          
-          if (isIgnored) {
-            lc.info?.(`Skipping initial sync for ignored table: ${tableName}`);
+          if (isTableIgnored(table, ignoredTables)) {
+            lc.info?.(`Skipping initial sync for ignored table: ${table.schema}.${table.name}`);
             return Promise.resolve({rows: 0, flushTime: 0});
           }
           

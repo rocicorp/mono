@@ -464,6 +464,11 @@ class ChangeMaker {
     );
   }
 
+  #isTableIgnored(relation: {schema: string; name: string}): boolean {
+    const qualifiedName = `${relation.schema}.${relation.name}`;
+    return this.#ignoredTables.has(relation.name) || this.#ignoredTables.has(qualifiedName);
+  }
+
   async makeChanges(lsn: bigint, msg: Message): Promise<ChangeStreamMessage[]> {
     if (this.#error) {
       this.#logError(this.#error);
@@ -514,9 +519,7 @@ class ChangeMaker {
         ];
 
       case 'delete': {
-        // Check if table is ignored
-        const tableName = `${msg.relation.schema}.${msg.relation.name}`;
-        if (this.#ignoredTables.has(msg.relation.name) || this.#ignoredTables.has(tableName)) {
+        if (this.#isTableIgnored(msg.relation)) {
           return [];
         }
         
@@ -539,9 +542,7 @@ class ChangeMaker {
       }
 
       case 'update': {
-        // Check if table is ignored
-        const tableName = `${msg.relation.schema}.${msg.relation.name}`;
-        if (this.#ignoredTables.has(msg.relation.name) || this.#ignoredTables.has(tableName)) {
+        if (this.#isTableIgnored(msg.relation)) {
           return [];
         }
         
@@ -559,19 +560,13 @@ class ChangeMaker {
       }
 
       case 'insert':
-        // Check if table is ignored
-        const tableName = `${msg.relation.schema}.${msg.relation.name}`;
-        if (this.#ignoredTables.has(msg.relation.name) || this.#ignoredTables.has(tableName)) {
+        if (this.#isTableIgnored(msg.relation)) {
           return [];
         }
         
         return [['data', {...msg, relation: withoutColumns(msg.relation)}]];
       case 'truncate':
-        // Filter out ignored tables
-        const filteredRelations = msg.relations.filter(rel => {
-          const tableName = `${rel.schema}.${rel.name}`;
-          return !this.#ignoredTables.has(rel.name) && !this.#ignoredTables.has(tableName);
-        });
+        const filteredRelations = msg.relations.filter(rel => !this.#isTableIgnored(rel));
         
         if (filteredRelations.length === 0) {
           return [];
