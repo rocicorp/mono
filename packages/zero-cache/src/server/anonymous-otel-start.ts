@@ -134,6 +134,12 @@ class AnonymousTelemetryManager {
         description: 'Total number of custom mutations processed',
       },
     );
+    const totalMutationsCounter = this.#meter.createObservableCounter(
+      'zero.mutations_processed',
+      {
+        description: 'Total number of mutations processed',
+      },
+    );
     const rowsSyncedCounter = this.#meter.createObservableCounter(
       'zero.rows_synced',
       {
@@ -179,6 +185,12 @@ class AnonymousTelemetryManager {
       this.#lc?.debug?.(
         `telemetry: custom_mutations=${this.#totalCustomMutations}`,
       );
+    });
+    totalMutationsCounter.addCallback((result: ObservableResult) => {
+      const totalMutations =
+        this.#totalCrudMutations + this.#totalCustomMutations;
+      result.observe(totalMutations, attrs);
+      this.#lc?.debug?.(`telemetry: total_mutations=${totalMutations}`);
     });
     rowsSyncedCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalRowsSynced, attrs);

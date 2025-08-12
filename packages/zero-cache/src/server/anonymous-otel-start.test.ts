@@ -243,6 +243,13 @@ describe('Anonymous Telemetry Integration Tests', () => {
       );
 
       expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.mutations_processed',
+        {
+          description: 'Total number of mutations processed',
+        },
+      );
+
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
         'zero.rows_synced',
         {
           description: 'Total number of rows synced',
@@ -269,7 +276,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
     test('should register callbacks for observable metrics', () => {
       // Each observable should have a callback registered
       expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(1); // 1 gauge (uptime)
-      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(6); // 6 counters (uptime_counter, crud_mutations, custom_mutations, rows_synced, connections_success, connections_attempted)
+      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(7); // 7 counters (uptime_counter, crud_mutations, custom_mutations, total_mutations, rows_synced, connections_success, connections_attempted)
     });
   });
 
