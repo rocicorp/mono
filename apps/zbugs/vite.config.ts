@@ -21,10 +21,10 @@ export default defineConfig(({mode}) => {
     plugins: [
       tsconfigPaths(),
       svgr(),
-    react(),
-    {
-      name: 'api-server',
-      configureServer,
+      react(),
+      {
+        name: 'api-server',
+        configureServer,
       },
     ],
     define: {
