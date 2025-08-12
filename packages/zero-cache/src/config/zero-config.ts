@@ -64,6 +64,21 @@ export const appOptions = {
       `should be created.`,
     ],
   },
+
+  ignoredPublicationTables: {
+    type: v.array(v.string()).optional(() => []),
+    desc: [
+      'List of table names to ignore during publication sync.',
+      '',
+      'These tables will be created in the SQLite replica but remain empty.',
+      'All changes to these tables will be dropped during replication.',
+      '',
+      'Format: ["table1", "schema.table2", "table3"]',
+      '',
+      'Simple names (e.g., "users") match tables in any schema.',
+      'Qualified names (e.g., "myschema.users") match specific schema.table.',
+    ],
+  },
 };
 
 export const shardOptions = {

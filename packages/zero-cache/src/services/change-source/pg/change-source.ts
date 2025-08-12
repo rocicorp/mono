@@ -8,6 +8,7 @@ import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
+import {getZeroConfig} from '../../../config/zero-config.ts';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {
   equals,
@@ -432,6 +433,7 @@ class ChangeMaker {
   readonly #shardConfig: InternalShardConfig;
   readonly #initialSchema: PublishedSchema;
   readonly #upstreamDB: PostgresDB;
+  readonly #ignoredTables: Set<string>;
 
   #replicaIdentityTimer: NodeJS.Timeout | undefined;
   #error: ReplicationError | undefined;
@@ -452,6 +454,14 @@ class ChangeMaker {
       ['idle_timeout']: 10, // only used occasionally
       connection: {['application_name']: 'zero-schema-change-detector'},
     });
+    
+    // Load ignored tables from config
+    const config = getZeroConfig();
+    this.#ignoredTables = new Set(
+      (config.app.ignoredPublicationTables || []).flatMap(table =>
+        table.includes('.') ? [table] : [table, `public.${table}`]
+      )
+    );
   }
 
   async makeChanges(lsn: bigint, msg: Message): Promise<ChangeStreamMessage[]> {
@@ -504,6 +514,12 @@ class ChangeMaker {
         ];
 
       case 'delete': {
+        // Check if table is ignored
+        const tableName = `${msg.relation.schema}.${msg.relation.name}`;
+        if (this.#ignoredTables.has(msg.relation.name) || this.#ignoredTables.has(tableName)) {
+          return [];
+        }
+        
         if (!(msg.key ?? msg.old)) {
           throw new Error(
             `Invalid DELETE msg (missing key): ${stringify(msg)}`,
@@ -523,6 +539,12 @@ class ChangeMaker {
       }
 
       case 'update': {
+        // Check if table is ignored
+        const tableName = `${msg.relation.schema}.${msg.relation.name}`;
+        if (this.#ignoredTables.has(msg.relation.name) || this.#ignoredTables.has(tableName)) {
+          return [];
+        }
+        
         return [
           [
             'data',
@@ -537,10 +559,26 @@ class ChangeMaker {
       }
 
       case 'insert':
+        // Check if table is ignored
+        const tableName = `${msg.relation.schema}.${msg.relation.name}`;
+        if (this.#ignoredTables.has(msg.relation.name) || this.#ignoredTables.has(tableName)) {
+          return [];
+        }
+        
         return [['data', {...msg, relation: withoutColumns(msg.relation)}]];
       case 'truncate':
+        // Filter out ignored tables
+        const filteredRelations = msg.relations.filter(rel => {
+          const tableName = `${rel.schema}.${rel.name}`;
+          return !this.#ignoredTables.has(rel.name) && !this.#ignoredTables.has(tableName);
+        });
+        
+        if (filteredRelations.length === 0) {
+          return [];
+        }
+        
         return [
-          ['data', {...msg, relations: msg.relations.map(withoutColumns)}],
+          ['data', {...msg, relations: filteredRelations.map(withoutColumns)}],
         ];
 
       case 'message':

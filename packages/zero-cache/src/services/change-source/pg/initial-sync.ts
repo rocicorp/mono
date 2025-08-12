@@ -7,6 +7,7 @@ import {platform} from 'node:os';
 import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
+import {getZeroConfig} from '../../../config/zero-config.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createIndexStatement,
@@ -170,13 +171,29 @@ export async function initialSync(
     try {
       createLiteTables(tx, tables, initialVersion);
 
+      // Get ignored tables configuration
+      const config = getZeroConfig();
+      const ignoredTables = new Set(
+        (config.app.ignoredPublicationTables || []).flatMap(table =>
+          table.includes('.') ? [table] : [table, `public.${table}`]
+        )
+      );
+
       void copyProfiler?.start();
       const rowCounts = await Promise.all(
-        tables.map(table =>
-          copiers.processReadTask((db, lc) =>
+        tables.map(table => {
+          const tableName = `${table.schema}.${table.name}`;
+          const isIgnored = ignoredTables.has(table.name) || ignoredTables.has(tableName);
+          
+          if (isIgnored) {
+            lc.info?.(`Skipping initial sync for ignored table: ${tableName}`);
+            return Promise.resolve({rows: 0, flushTime: 0});
+          }
+          
+          return copiers.processReadTask((db, lc) =>
             copy(lc, table, copyPool, db, tx),
-          ),
-        ),
+          );
+        }),
       );
       void copyProfiler?.stopAndDispose(lc, 'initial-copy');
 
