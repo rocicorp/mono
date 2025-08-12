@@ -1,5 +1,6 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.tsx';
+import {ImageUploadButton} from '../../components/image-upload-button.tsx';
 import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
@@ -20,6 +21,7 @@ export function CommentComposer({
   const z = useZero();
   const login = useLogin();
   const [currentBody, setCurrentBody] = useState(body ?? '');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const save = () => {
     setCurrentBody(body ?? '');
     if (!id) {
@@ -85,15 +87,31 @@ export function CommentComposer({
         className="comment-input autoResize"
         /* The launch post has a speical maxLength because trolls */
         maxLength={maxCommentLength(issueID)}
+        ref={textareaRef}
       />
-      <Button
-        className="secondary-button"
-        eventName={id ? 'Save comment edits' : 'Add new comment'}
-        onAction={save}
-        disabled={currentBody.trim().length === 0}
-      >
-        {id ? 'Save' : 'Add comment'}
-      </Button>{' '}
+      <div style={{display: 'flex', gap: '0.5rem', alignItems: 'center'}}>
+        <Button
+          className="secondary-button"
+          eventName={id ? 'Save comment edits' : 'Add new comment'}
+          onAction={save}
+          disabled={currentBody.trim().length === 0}
+        >
+          {id ? 'Save' : 'Add comment'}
+        </Button>
+        <ImageUploadButton
+          onUpload={markdown => {
+            const textarea = textareaRef.current;
+            if (textarea) {
+              const start = textarea.selectionStart;
+              const end = textarea.selectionEnd;
+              const text = textarea.value;
+              const newText =
+                text.substring(0, start) + markdown + text.substring(end);
+              setCurrentBody(newText);
+            }
+          }}
+        />
+      </div>
       {id ? (
         <Button
           className="edit-comment-cancel"
