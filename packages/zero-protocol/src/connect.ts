@@ -71,7 +71,7 @@ export type InitConnectionMessage = v.Infer<typeof initConnectionMessageSchema>;
 export function encodeSecProtocols(
   initConnectionMessage: InitConnectionMessage | undefined,
   authToken: string | undefined,
-) {
+): string {
   const protocols = {
     initConnectionMessage,
     authToken,
@@ -81,7 +81,12 @@ export function encodeSecProtocols(
   // arbitrary unicode strings, so we need to encode the JSON as UTF-8 first.
   // Phew!
   const bytes = new TextEncoder().encode(JSON.stringify(protocols));
-  return encodeURIComponent(btoa(String.fromCharCode(...bytes)));
+
+  // Convert bytes to string without spreading all bytes as arguments
+  // to avoid "Maximum call stack size exceeded" error with large data
+  const s = Array.from(bytes, byte => String.fromCharCode(byte)).join('');
+
+  return encodeURIComponent(btoa(s));
 }
 
 export function decodeSecProtocols(secProtocol: string): {
