@@ -9,7 +9,7 @@ import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {getZeroConfig} from '../../../config/zero-config.ts';
-import {buildIgnoredTablesSet} from './ignored-tables.ts';
+import {buildIgnoredTablesSet, isTableIgnored} from './ignored-tables.ts';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {
   equals,
@@ -461,10 +461,6 @@ class ChangeMaker {
     this.#ignoredTables = buildIgnoredTablesSet(config.app.ignoredPublicationTables || []);
   }
 
-  #isTableIgnored(relation: {schema: string; name: string}): boolean {
-    return this.#ignoredTables.has(`${relation.schema}.${relation.name}`);
-  }
-
   async makeChanges(lsn: bigint, msg: Message): Promise<ChangeStreamMessage[]> {
     if (this.#error) {
       this.#logError(this.#error);
@@ -515,7 +511,7 @@ class ChangeMaker {
         ];
 
       case 'delete': {
-        if (this.#isTableIgnored(msg.relation)) {
+        if (isTableIgnored(msg.relation, this.#ignoredTables)) {
           return [];
         }
         
@@ -538,7 +534,7 @@ class ChangeMaker {
       }
 
       case 'update': {
-        if (this.#isTableIgnored(msg.relation)) {
+        if (isTableIgnored(msg.relation, this.#ignoredTables)) {
           return [];
         }
         
@@ -556,13 +552,13 @@ class ChangeMaker {
       }
 
       case 'insert':
-        if (this.#isTableIgnored(msg.relation)) {
+        if (isTableIgnored(msg.relation, this.#ignoredTables)) {
           return [];
         }
         
         return [['data', {...msg, relation: withoutColumns(msg.relation)}]];
       case 'truncate':
-        const filteredRelations = msg.relations.filter(rel => !this.#isTableIgnored(rel));
+        const filteredRelations = msg.relations.filter(rel => !isTableIgnored(rel, this.#ignoredTables));
         
         if (filteredRelations.length === 0) {
           return [];
