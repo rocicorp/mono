@@ -558,12 +558,6 @@ export const zeroOptions = {
     },
   },
 
-  tenantID: {
-    type: v.string().optional(),
-    desc: ['Passed by runner/main.ts to tag the LogContext of zero-caches'],
-    hidden: true,
-  },
-
   targetClientRowCount: {
     type: v.number().default(20_000),
     deprecated: [
