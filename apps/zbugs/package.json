@@ -16,7 +16,7 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "preview": "vite preview",
     "zero": "tsx ../../packages/zero-cache/src/server/runner/main.ts",
-    "zero-cache-dev": "tsx --require ../../packages/shared/src/dotenv-cjs.cjs ../../packages/zero/src/zero-cache-dev.ts --schema-path=./shared/schema.ts",
+    "zero-cache-dev": "tsx ../../packages/zero/src/zero-cache-dev.ts --schema-path=./shared/schema.ts",
     "zero-brk": "tsx --inspect-brk ../../packages/zero-cache/src/server/debug/single.ts",
     "transform-query": "tsx ../../packages/zero-cache/src/scripts/transform-query.ts",
     "run-query": "tsx ../../packages/zero-cache/src/scripts/run-query.ts",
@@ -29,8 +29,6 @@
     "test:pg:watch": "vitest --config vitest.config.ts --project zbugs/pg-16"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.844.0",
-    "@aws-sdk/s3-request-presigner": "^3.844.0",
     "@dotenvx/dotenvx": "^1.39.0",
     "@fastify/cookie": "^10.0.0",
     "@fastify/oauth2": "^8.0.0",
