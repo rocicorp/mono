@@ -3,8 +3,8 @@
  */
 
 /**
- * Builds a Set of table names to ignore - direct matches only
- * @param tables - Array of table names from configuration
+ * Builds a Set of fully qualified table names to ignore
+ * @param tables - Array of fully qualified table names (schema.table)
  * @returns Set for efficient lookup
  */
 export function buildIgnoredTablesSet(tables: string[]): Set<string> {
@@ -14,14 +14,13 @@ export function buildIgnoredTablesSet(tables: string[]): Set<string> {
 /**
  * Checks if a table should be ignored during replication
  * @param relation - Table with schema and name
- * @param ignoredTables - Set of ignored table names
+ * @param ignoredTables - Set of fully qualified table names
  * @returns true if the table should be ignored
  */
 export function isTableIgnored(
   relation: {schema: string; name: string}, 
   ignoredTables: Set<string>
 ): boolean {
-  // Direct match on table name or schema.table
-  return ignoredTables.has(relation.name) || 
-         ignoredTables.has(`${relation.schema}.${relation.name}`);
+  // Only check for exact schema.table match
+  return ignoredTables.has(`${relation.schema}.${relation.name}`);
 }

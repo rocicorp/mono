@@ -462,8 +462,7 @@ class ChangeMaker {
   }
 
   #isTableIgnored(relation: {schema: string; name: string}): boolean {
-    const qualifiedName = `${relation.schema}.${relation.name}`;
-    return this.#ignoredTables.has(relation.name) || this.#ignoredTables.has(qualifiedName);
+    return this.#ignoredTables.has(`${relation.schema}.${relation.name}`);
   }
 
   async makeChanges(lsn: bigint, msg: Message): Promise<ChangeStreamMessage[]> {

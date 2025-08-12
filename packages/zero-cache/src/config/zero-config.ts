@@ -66,17 +66,22 @@ export const appOptions = {
   },
 
   ignoredPublicationTables: {
-    type: v.array(v.string()).optional(() => []),
+    type: v.array(
+      v.string().assert(
+        name => name.includes('.'),
+        'Table names must be fully qualified (e.g., "public.users", not "users")'
+      )
+    ).optional(() => []),
     desc: [
-      'List of table names to ignore during publication sync.',
+      'List of fully qualified table names to ignore during publication sync.',
       '',
       'These tables will be created in the SQLite replica but remain empty.',
       'All changes to these tables will be dropped during replication.',
       '',
-      'Format: ["table1", "schema.table2", "table3"]',
+      'Format: ["schema.table1", "schema.table2"]',
+      'Example: ["public.audit_logs", "staging.temp_data", "analytics.raw_events"]',
       '',
-      '"users" - matches any table named "users" in any schema',
-      '"public.users" - matches only the users table in public schema',
+      'Note: Table names MUST be fully qualified with schema prefix.',
     ],
   },
 };
