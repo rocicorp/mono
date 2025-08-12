@@ -44,9 +44,9 @@ jobs:
       - name: Upload benchmarks results to bencher.dev
         working-directory: packages/zero
         run: |
-          FLAGS="--start-point main"
-          if [ "${{ inputs.reset_baseline }}" = "true" ]; then
-            FLAGS="$FLAGS --start-point-reset --start-point-clone-thresholds"
+          FLAGS=( --start-point main )
+          if [[ "${{ inputs.reset_baseline }}" == "true" ]]; then
+            FLAGS+=( --start-point-reset --start-point-clone-thresholds )
           fi
 
           bencher run \
@@ -54,7 +54,7 @@ jobs:
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-          $FLAGS \
+          "${FLAGS[@]}" \
           --threshold-measure file-size \
           --threshold-test percentage \
           --threshold-upper-boundary 0.02 \
@@ -89,9 +89,9 @@ jobs:
       - name: Upload benchmarks results to bencher.dev
         working-directory: packages/zero-client
         run: |
-          FLAGS="--start-point main"
-          if [ "${{ inputs.reset_baseline }}" = "true" ]; then
-            FLAGS="$FLAGS --start-point-reset --start-point-clone-thresholds"
+          FLAGS=( --start-point main )
+          if [[ "${{ inputs.reset_baseline }}" == "true" ]]; then
+            FLAGS+=( --start-point-reset --start-point-clone-thresholds )
           fi
 
           cat output.json |\
@@ -101,7 +101,7 @@ jobs:
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-          $FLAGS \
+          "${FLAGS[@]}" \
           --threshold-measure throughput \
           --threshold-test t_test \
           --threshold-lower-boundary 0.90 \
