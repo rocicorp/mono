@@ -372,7 +372,7 @@ class PushWorker {
     });
 
     // Record custom mutations for telemetry
-    recordMutation(entry.push.mutations.length);
+    recordMutation('custom', entry.push.mutations.length);
 
     try {
       const response = await fetchFromAPIServer(

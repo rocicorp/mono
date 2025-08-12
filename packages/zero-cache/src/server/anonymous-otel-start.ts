@@ -21,7 +21,8 @@ class AnonymousTelemetryManager {
   #stopped = false;
   #meter!: Meter;
   #meterProvider!: MeterProvider;
-  #totalMutations = 0;
+  #totalCrudMutations = 0;
+  #totalCustomMutations = 0;
   #totalRowsSynced = 0;
   #totalConnectionsSuccess = 0;
   #totalConnectionsAttempted = 0;
@@ -121,7 +122,19 @@ class AnonymousTelemetryManager {
         unit: 'seconds',
       },
     );
-    const mutationsCounter = this.#meter.createObservableCounter(
+    const crudMutationsCounter = this.#meter.createObservableCounter(
+      'zero.crud_mutations_processed',
+      {
+        description: 'Total number of CRUD mutations processed',
+      },
+    );
+    const customMutationsCounter = this.#meter.createObservableCounter(
+      'zero.custom_mutations_processed',
+      {
+        description: 'Total number of custom mutations processed',
+      },
+    );
+    const totalMutationsCounter = this.#meter.createObservableCounter(
       'zero.mutations_processed',
       {
         description: 'Total number of mutations processed',
@@ -161,9 +174,23 @@ class AnonymousTelemetryManager {
       result.observe(uptimeSeconds, attrs);
       this.#lc?.debug?.(`telemetry: uptime_counter=${uptimeSeconds}s`);
     });
-    mutationsCounter.addCallback((result: ObservableResult) => {
-      result.observe(this.#totalMutations, attrs);
-      this.#lc?.debug?.(`telemetry: mutations=${this.#totalMutations}`);
+    crudMutationsCounter.addCallback((result: ObservableResult) => {
+      result.observe(this.#totalCrudMutations, attrs);
+      this.#lc?.debug?.(
+        `telemetry: crud_mutations=${this.#totalCrudMutations}`,
+      );
+    });
+    customMutationsCounter.addCallback((result: ObservableResult) => {
+      result.observe(this.#totalCustomMutations, attrs);
+      this.#lc?.debug?.(
+        `telemetry: custom_mutations=${this.#totalCustomMutations}`,
+      );
+    });
+    totalMutationsCounter.addCallback((result: ObservableResult) => {
+      const totalMutations =
+        this.#totalCrudMutations + this.#totalCustomMutations;
+      result.observe(totalMutations, attrs);
+      this.#lc?.debug?.(`telemetry: total_mutations=${totalMutations}`);
     });
     rowsSyncedCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalRowsSynced, attrs);
@@ -183,8 +210,12 @@ class AnonymousTelemetryManager {
     });
   }
 
-  recordMutation(count = 1) {
-    this.#totalMutations += count;
+  recordMutation(type: 'crud' | 'custom', count = 1) {
+    if (type === 'crud') {
+      this.#totalCrudMutations += count;
+    } else {
+      this.#totalCustomMutations += count;
+    }
   }
 
   recordRowsSynced(count: number) {
@@ -246,7 +277,8 @@ class AnonymousTelemetryManager {
       return 'gcp';
     if (process.env.COOLIFY_URL || process.env.COOLIFY_CONTAINER_NAME)
       return 'coolify';
-
+    if (process.env.CONTAINER_APP_REVISION) return 'azure';
+    if (process.env.FLIGHTCONTROL || process.env.FC_URL) return 'flightcontrol';
     return 'unknown';
   }
 
@@ -363,7 +395,8 @@ const manager = () => AnonymousTelemetryManager.getInstance();
 
 export const startAnonymousTelemetry = (lc?: LogContext, config?: ZeroConfig) =>
   manager().start(lc, config);
-export const recordMutation = (count = 1) => manager().recordMutation(count);
+export const recordMutation = (type: 'crud' | 'custom', count = 1) =>
+  manager().recordMutation(type, count);
 export const recordRowsSynced = (count: number) =>
   manager().recordRowsSynced(count);
 export const recordConnectionSuccess = () =>
