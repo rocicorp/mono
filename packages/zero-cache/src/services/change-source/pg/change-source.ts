@@ -9,6 +9,7 @@ import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {getZeroConfig} from '../../../config/zero-config.ts';
+import {buildIgnoredTablesSet} from './ignored-tables.ts';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {
   equals,
@@ -457,11 +458,7 @@ class ChangeMaker {
     
     // Load ignored tables from config
     const config = getZeroConfig();
-    this.#ignoredTables = new Set(
-      (config.app.ignoredPublicationTables || []).flatMap(table =>
-        table.includes('.') ? [table] : [table, `public.${table}`]
-      )
-    );
+    this.#ignoredTables = buildIgnoredTablesSet(config.app.ignoredPublicationTables || []);
   }
 
   #isTableIgnored(relation: {schema: string; name: string}): boolean {

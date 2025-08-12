@@ -9,6 +9,7 @@ import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
 import {getZeroConfig} from '../../../config/zero-config.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
+import {buildIgnoredTablesSet, isTableIgnored} from './ignored-tables.ts';
 import {
   createIndexStatement,
   createTableStatement,
@@ -56,18 +57,6 @@ export type InitialSyncOptions = {
   tableCopyWorkers: number;
   profileCopy?: boolean | undefined;
 };
-
-function buildIgnoredTablesSet(tables: string[]): Set<string> {
-  return new Set(
-    tables.flatMap(table =>
-      table.includes('.') ? [table] : [table, `public.${table}`]
-    )
-  );
-}
-
-function isTableIgnored(table: {schema: string; name: string}, ignoredTables: Set<string>): boolean {
-  return ignoredTables.has(table.name) || ignoredTables.has(`${table.schema}.${table.name}`);
-}
 
 export async function initialSync(
   lc: LogContext,
