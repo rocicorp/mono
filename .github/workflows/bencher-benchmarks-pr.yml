@@ -3,6 +3,20 @@ name: Bencher PR
 on:
   pull_request:
     types: [opened, reopened, edited, synchronize]
+  workflow_dispatch:
+    inputs:
+      head_branch:
+        description: 'PR head branch (manual runs only)'
+        type: string
+        default: ''
+      base_branch:
+        description: 'Baseline branch (--start-point)'
+        type: string
+        default: 'main'
+      reset_baseline:
+        description: 'Pass --start-point-reset (manual runs only)'
+        type: boolean
+        default: false
 
 jobs:
   file_sizes:
@@ -56,13 +70,28 @@ jobs:
       - name: Upload PR benchmarks results to bencher.dev
         working-directory: packages/zero
         run: |
+          # Determine branches for PR vs manual runs
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          BASE="${{ github.event.pull_request.base.ref || inputs.base_branch }}"
+          if [ -n "${{ inputs.head_branch }}" ]; then BRANCH="${{ inputs.head_branch }}"; fi
+
+          FLAGS="--start-point $BASE"
+          # Only include start-point-hash when it exists (PR context)
+          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+            FLAGS="$FLAGS --start-point-hash '${{ github.event.pull_request.base.sha }}'"
+          fi
+          FLAGS="$FLAGS --start-point-clone-thresholds"
+          if [ "${{ inputs.reset_baseline }}" = "true" ]; then
+            FLAGS="$FLAGS --start-point-reset"
+          fi
+
           bencher run \
           --project zero \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --ci-id size \
-          --branch "$GITHUB_HEAD_REF" \
+          --branch "$BRANCH" \
           --start-point "$GITHUB_BASE_REF" \
           --start-point-hash '${{ github.event.pull_request.base.sha }}' \
           --start-point-clone-thresholds \
@@ -107,6 +136,19 @@ jobs:
       - name: Upload PR benchmarks results to bencher.dev
         working-directory: packages/zero-client
         run: |
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
+          BASE="${{ github.event.pull_request.base.ref || inputs.base_branch }}"
+          if [ -n "${{ inputs.head_branch }}" ]; then BRANCH="${{ inputs.head_branch }}"; fi
+
+          FLAGS="--start-point $BASE"
+          if [ -n "${{ github.event.pull_request.base.sha }}" ]; then
+            FLAGS="$FLAGS --start-point-hash '${{ github.event.pull_request.base.sha }}'"
+          fi
+          FLAGS="$FLAGS --start-point-clone-thresholds"
+          if [ "${{ inputs.reset_baseline }}" = "true" ]; then
+            FLAGS="$FLAGS --start-point-reset"
+          fi
+
           cat output.json |\
           npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
           bencher run \
@@ -115,7 +157,7 @@ jobs:
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --ci-id perf \
-          --branch "$GITHUB_HEAD_REF" \
+          --branch "$BRANCH" \
           --start-point "$GITHUB_BASE_REF" \
           --start-point-hash '${{ github.event.pull_request.base.sha }}' \
           --start-point-clone-thresholds \
