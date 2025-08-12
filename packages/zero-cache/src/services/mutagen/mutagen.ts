@@ -153,6 +153,7 @@ export class MutagenService implements Mutagen, Service {
     if (this.#isStopped) {
       return this.#stopped.promise;
     }
+    this.#writeAuthorizer.destroy();
     this.#isStopped = true;
     this.#stopped.resolve();
     return this.#stopped.promise;

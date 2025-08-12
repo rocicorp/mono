@@ -1,6 +1,10 @@
 import fc from 'fast-check';
 import {expect, test} from 'vitest';
-import {decodeSecProtocols, encodeSecProtocols} from './connect.ts';
+import {
+  decodeSecProtocols,
+  encodeSecProtocols,
+  type InitConnectionMessage,
+} from './connect.ts';
 
 test('encode/decodeSecProtocols round-trip', () => {
   fc.assert(
@@ -66,4 +70,16 @@ test('encode/decodeSecProtocols round-trip', () => {
       },
     ),
   );
+});
+
+test('encodeSecProtocol with too much data', () => {
+  // Creates a string that is too large for String.fromCharCode. This is different in different browsers.
+  const largeString = Array.from({length: 2 ** 20}, () => '\u{0}').join('');
+  const initConnectionMessage: InitConnectionMessage = [
+    'initConnection',
+    {desiredQueriesPatch: [{op: 'del', hash: largeString}]},
+  ];
+  expect(() =>
+    encodeSecProtocols(initConnectionMessage, 'authToken'),
+  ).not.toThrow();
 });
