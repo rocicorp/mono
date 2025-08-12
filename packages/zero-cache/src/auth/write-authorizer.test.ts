@@ -412,4 +412,16 @@ describe('pre & post mutation', () => {
     // subject does match the updated value of `a`
     expect(await authorizer.canPostMutation({sub: 'b'}, [op])).toBe(true);
   });
+
+  test('destroy', () => {
+    const authorizer = new WriteAuthorizerImpl(
+      lc,
+      zeroConfig,
+      replica,
+      'the_app',
+      'cg',
+    );
+
+    expect(() => authorizer.destroy()).not.toThrow();
+  });
 });
