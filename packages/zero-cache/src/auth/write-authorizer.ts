@@ -42,7 +42,10 @@ import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
 import {computeZqlSpecs} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {StatementRunner} from '../db/statements.ts';
-import {DatabaseStorage} from '../services/view-syncer/database-storage.ts';
+import {
+  DatabaseStorage,
+  type ClientGroupStorage,
+} from '../services/view-syncer/database-storage.ts';
 import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.ts';
 import {
   getSchema,
@@ -76,6 +79,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #appID: string;
   readonly #clientGroupID: string;
   readonly #logConfig: LogConfig;
+  readonly #cgStorage: ClientGroupStorage;
 
   #loadedPermissions: LoadedPermissions | null = null;
 
@@ -97,10 +101,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       lc,
       path.join(tmpDir, `mutagen-${pid}-${randInt(1000000, 9999999)}`),
     );
-    const cgStorage = writeAuthzStorage.createClientGroupStorage(cgID);
+    this.#cgStorage = writeAuthzStorage.createClientGroupStorage(cgID);
     this.#builderDelegate = {
       getSource: name => this.#getSource(name),
-      createStorage: () => cgStorage.createStorage(),
+      createStorage: () => this.#cgStorage.createStorage(),
       decorateSourceInput: input => input,
       decorateInput: input => input,
       decorateFilterInput: input => input,
@@ -117,6 +121,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       this.#appID,
       this.#loadedPermissions,
     ).permissions;
+  }
+
+  destroy() {
+    this.#cgStorage.destroy();
   }
 
   async canPreMutation(
