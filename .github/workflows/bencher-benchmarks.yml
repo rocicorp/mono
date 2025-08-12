@@ -55,7 +55,6 @@ jobs:
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           $FLAGS \
-          --start-point main \
           --threshold-measure file-size \
           --threshold-test percentage \
           --threshold-upper-boundary 0.02 \
@@ -103,7 +102,6 @@ jobs:
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           $FLAGS \
-          --start-point main \
           --threshold-measure throughput \
           --threshold-test t_test \
           --threshold-lower-boundary 0.90 \

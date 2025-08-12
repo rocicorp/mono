@@ -155,6 +155,7 @@ jobs:
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --ci-id perf \
           --branch "$BRANCH" \
+          $FLAGS \
           --threshold-measure throughput \
           --threshold-test t_test \
           --threshold-lower-boundary 0.90 \
