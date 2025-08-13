@@ -171,11 +171,9 @@ export async function initialSync(
     try {
       createLiteTables(tx, tables, initialVersion);
 
-      // Get the full shard config including ignored tables Set
       const fullShardConfig = await getInternalShardConfig(sql, shard);
       const ignoredTables = fullShardConfig.ignoredTables;
 
-      // Filter out ignored tables and log them
       const tablesToSync = tables.filter(table => {
         if (isTableIgnored(table, ignoredTables)) {
           lc.info?.(`Skipping initial sync for ignored table: ${table.schema}.${table.name}`);

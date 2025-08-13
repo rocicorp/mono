@@ -467,7 +467,6 @@ class ChangeMaker {
       connection: {['application_name']: 'zero-schema-change-detector'},
     });
     
-    // Use ignored tables Set directly from shard config
     this.#ignoredTables = shardConfig.ignoredTables;
   }
 
