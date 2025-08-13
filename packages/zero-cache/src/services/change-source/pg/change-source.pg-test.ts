@@ -49,8 +49,12 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     streams = [];
     logSink = new TestLogSink();
     lc = new LogContext('error', {}, logSink);
-    upstream = await testDBs.create('change_source_pg_test_upstream');
-    replicaDbFile = new DbFile('change_source_pg_test_replica');
+    upstream = await testDBs.create(
+      'change_source_pg_test_upstream_' + Math.random().toString(36).slice(2),
+    );
+    replicaDbFile = new DbFile(
+      'change_source_pg_test_replica_' + Math.random().toString(36).slice(2),
+    );
 
     upstreamURI = getConnectionURI(upstream);
     await upstream.unsafe(`
@@ -191,7 +195,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     throw err;
   }
 
-  test.skip.each([
+  test.each([
     [withTriggers],
     [withoutTriggers],
     [replicaIdentityFullWithTriggers],
@@ -364,7 +368,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     ]);
   });
 
-  test.skip.each([
+  test.each([
     [withTriggers],
     [withoutTriggers],
     [replicaIdentityFullWithTriggers],
@@ -637,7 +641,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     }
   });
 
-  test.skip.each([
+  test.each([
     ['ALTER TABLE foo ADD COLUMN bar int4', null],
     ['ALTER TABLE foo RENAME times TO timez', null],
     ['ALTER TABLE foo DROP COLUMN date', null],
@@ -806,7 +810,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     changes2.cancel();
   });
 
-  test.skip('non-disruptive resync', async () => {
+  test('non-disruptive resync', async () => {
     await startReplication();
     const {changes: changes1} = await startStream('00');
 
