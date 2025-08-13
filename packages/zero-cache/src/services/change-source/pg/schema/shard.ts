@@ -174,7 +174,7 @@ export function shardSetup(
     ) VALUES (
       ARRAY[${literal(pubs)}], 
       false,  -- set in SAVEPOINT with triggerSetup() statements
-      ARRAY[${literal(shardConfig.ignoredTables)}]
+      ${shardConfig.ignoredTables?.length ? `ARRAY[${literal(shardConfig.ignoredTables)}]` : 'ARRAY[]::TEXT[]'}
     );
 
   CREATE TABLE ${shard}.replicas (

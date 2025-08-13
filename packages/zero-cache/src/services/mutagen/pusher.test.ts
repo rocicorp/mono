@@ -15,6 +15,7 @@ const config = {
   app: {
     id: 'zero',
     publications: [],
+    ignoredPublicationTables: [],
   },
   shard: {
     id: 'zero',

@@ -21,7 +21,6 @@ import {
   setupTablesAndReplication,
   setupTriggers,
 } from './shard.ts';
-import {id} from '../../../../types/sql.ts';
 
 /**
  * Ensures that a shard is set up for initial sync.
@@ -201,7 +200,7 @@ function getIncrementalMigrations(
         `);
         
         // Update with current ignored tables from config if not already set
-        if (shard.ignoredTables.length > 0) {
+        if (shard.ignoredTables?.length) {
           await sql.unsafe(/*sql*/ `
             UPDATE ${shardConfigTable}
             SET "ignoredTables" = ARRAY[${literal(shard.ignoredTables)}]

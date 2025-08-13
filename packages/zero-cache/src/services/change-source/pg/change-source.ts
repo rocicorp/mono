@@ -163,7 +163,7 @@ async function checkAndUpdateUpstream(
   }
 
   // Verify that ignored tables match what was initially synced.
-  const requestedIgnored = new Set(shard.ignoredTables);
+  const requestedIgnored = new Set(shard.ignoredTables || []);
   const replicatedIgnored = upstreamReplica.ignoredTables;
   if (!equals(requestedIgnored, replicatedIgnored)) {
     lc.warn?.(`Dropping shard to change ignored tables to: [${[...requestedIgnored]}]`);
@@ -467,7 +467,7 @@ class ChangeMaker {
       connection: {['application_name']: 'zero-schema-change-detector'},
     });
     
-    this.#ignoredTables = shardConfig.ignoredTables;
+    this.#ignoredTables = shardConfig.ignoredTables || new Set();
   }
 
   async makeChanges(lsn: bigint, msg: Message): Promise<ChangeStreamMessage[]> {

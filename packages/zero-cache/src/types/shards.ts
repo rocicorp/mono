@@ -10,7 +10,7 @@ export type ShardID = AppID & {
 
 export type ShardConfig = ShardID & {
   readonly publications: readonly string[];
-  readonly ignoredTables: readonly string[];
+  readonly ignoredTables?: readonly string[];
 };
 
 // Gets a ShardID from a ZeroConfig.
