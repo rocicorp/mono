@@ -75,13 +75,16 @@ export const appOptions = {
     desc: [
       'List of fully qualified table names to ignore during publication sync.',
       '',
+      'Environment variable: ZERO_APP_IGNORED_PUBLICATION_TABLES',
+      '',
       'These tables will be created in the SQLite replica but remain empty.',
       'All changes to these tables will be dropped during replication.',
       '',
-      'Format: ["schema.table1", "schema.table2"]',
+      'Format: JSON array ["schema.table1", "schema.table2"]',
       'Example: ["public.audit_logs", "staging.temp_data", "analytics.raw_events"]',
       '',
       'Note: Table names MUST be fully qualified with schema prefix.',
+      'Note: Changing this list triggers a full resync, similar to changing publications.',
     ],
   },
 };
