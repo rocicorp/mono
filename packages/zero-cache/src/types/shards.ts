@@ -39,7 +39,7 @@ export function getShardConfig({
     appID: app.id,
     shardNum: shard.num,
     publications: app.publications,
-    ignoredTables: app.ignoredPublicationTables || [],
+    ...(app.ignoredPublicationTables && {ignoredTables: app.ignoredPublicationTables}),
   };
 }
 
