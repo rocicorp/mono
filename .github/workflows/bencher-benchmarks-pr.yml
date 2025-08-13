@@ -3,20 +3,6 @@ name: Bencher PR
 on:
   pull_request:
     types: [opened, reopened, edited, synchronize]
-  workflow_dispatch:
-    inputs:
-      head_branch:
-        description: 'PR head branch (manual runs only)'
-        type: string
-        default: ''
-      base_branch:
-        description: 'Baseline branch (--start-point)'
-        type: string
-        default: 'main'
-      reset_baseline:
-        description: 'Pass --start-point-reset (manual runs only)'
-        type: boolean
-        default: false
 
 jobs:
   file_sizes:
@@ -70,24 +56,17 @@ jobs:
       - name: Upload PR benchmarks results to bencher.dev
         working-directory: packages/zero
         run: |
-          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          if [[ -n "${{ inputs.head_branch }}" ]]; then BRANCH="${{ inputs.head_branch }}"; fi
-
-          BASE="${{ github.event.pull_request.base.ref || inputs.base_branch }}"
-          FLAGS=( --start-point "$BASE" --start-point-clone-thresholds )
-
-          SHA="${{ github.event.pull_request.base.sha }}"
-          if [[ -n "$SHA" ]]; then FLAGS+=( --start-point-hash "$SHA" ); fi
-          if [[ "${{ inputs.reset_baseline }}" == "true" ]]; then FLAGS+=( --start-point-reset ); fi
-
           bencher run \
           --project zero \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --ci-id size \
-          --branch "$BRANCH" \
-          "${FLAGS[@]}" \
+          --branch "$GITHUB_HEAD_REF" \
+          --start-point "$GITHUB_BASE_REF" \
+          --start-point-hash '${{ github.event.pull_request.base.sha }}' \
+          --start-point-clone-thresholds \
+          --start-point-reset \
           --threshold-measure file-size \
           --threshold-test percentage \
           --threshold-upper-boundary 0.02 \
@@ -99,6 +78,7 @@ jobs:
 
   perf:
     name: Perf PR
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
 
     permissions:
@@ -127,16 +107,6 @@ jobs:
       - name: Upload PR benchmarks results to bencher.dev
         working-directory: packages/zero-client
         run: |
-          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
-          if [[ -n "${{ inputs.head_branch }}" ]]; then BRANCH="${{ inputs.head_branch }}"; fi
-
-          BASE="${{ github.event.pull_request.base.ref || inputs.base_branch }}"
-          FLAGS=( --start-point "$BASE" --start-point-clone-thresholds )
-
-          SHA="${{ github.event.pull_request.base.sha }}"
-          if [[ -n "$SHA" ]]; then FLAGS+=( --start-point-hash "$SHA" ); fi
-          if [[ "${{ inputs.reset_baseline }}" == "true" ]]; then FLAGS+=( --start-point-reset ); fi
-
           cat output.json |\
           npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
           bencher run \
@@ -145,8 +115,11 @@ jobs:
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --ci-id perf \
-          --branch "$BRANCH" \
-          "${FLAGS[@]}" \
+          --branch "$GITHUB_HEAD_REF" \
+          --start-point "$GITHUB_BASE_REF" \
+          --start-point-hash '${{ github.event.pull_request.base.sha }}' \
+          --start-point-clone-thresholds \
+          --start-point-reset \
           --threshold-measure throughput \
           --threshold-test t_test \
           --threshold-lower-boundary 0.90 \

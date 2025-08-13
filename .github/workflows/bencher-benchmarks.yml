@@ -3,12 +3,6 @@ name: Bencher
 on:
   push:
     branches: main
-  workflow_dispatch:
-    inputs:
-      reset_baseline:
-        description: 'Pass --start-point-reset for a one-off baseline update'
-        type: boolean
-        default: false
 
 jobs:
   file_sizes:
@@ -44,17 +38,12 @@ jobs:
       - name: Upload benchmarks results to bencher.dev
         working-directory: packages/zero
         run: |
-          FLAGS=( --start-point main )
-          if [[ "${{ inputs.reset_baseline }}" == "true" ]]; then
-            FLAGS+=( --start-point-reset --start-point-clone-thresholds )
-          fi
-
           bencher run \
           --project zero \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-          "${FLAGS[@]}" \
+          --start-point main \
           --threshold-measure file-size \
           --threshold-test percentage \
           --threshold-upper-boundary 0.02 \
@@ -89,11 +78,6 @@ jobs:
       - name: Upload benchmarks results to bencher.dev
         working-directory: packages/zero-client
         run: |
-          FLAGS=( --start-point main )
-          if [[ "${{ inputs.reset_baseline }}" == "true" ]]; then
-            FLAGS+=( --start-point-reset --start-point-clone-thresholds )
-          fi
-
           cat output.json |\
           npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
           bencher run \
@@ -101,7 +85,7 @@ jobs:
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-          "${FLAGS[@]}" \
+          --start-point main \
           --threshold-measure throughput \
           --threshold-test t_test \
           --threshold-lower-boundary 0.90 \

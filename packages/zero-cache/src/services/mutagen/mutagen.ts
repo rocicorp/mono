@@ -183,7 +183,7 @@ export async function processMutation(
   lc.debug?.('Process mutation start', mutation);
 
   // Record mutation processing attempt for telemetry (regardless of success/failure)
-  recordMutation();
+  recordMutation('crud');
 
   let result: MutationError | undefined;
 
