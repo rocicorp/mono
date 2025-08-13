@@ -229,6 +229,20 @@ describe('Anonymous Telemetry Integration Tests', () => {
       );
 
       expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.crud_mutations_processed',
+        {
+          description: 'Total number of CRUD mutations processed',
+        },
+      );
+
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.custom_mutations_processed',
+        {
+          description: 'Total number of custom mutations processed',
+        },
+      );
+
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
         'zero.mutations_processed',
         {
           description: 'Total number of mutations processed',
@@ -262,14 +276,15 @@ describe('Anonymous Telemetry Integration Tests', () => {
     test('should register callbacks for observable metrics', () => {
       // Each observable should have a callback registered
       expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(1); // 1 gauge (uptime)
-      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(5); // 5 counters (uptime_counter, mutations, rows_synced, connections_success, connections_attempted)
+      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(7); // 7 counters (uptime_counter, crud_mutations, custom_mutations, total_mutations, rows_synced, connections_success, connections_attempted)
     });
   });
 
   describe('Metric Recording', () => {
     test('should record metrics correctly', () => {
       // Test basic metric recording without histogram functions
-      expect(() => recordMutation()).not.toThrow();
+      expect(() => recordMutation('crud')).not.toThrow();
+      expect(() => recordMutation('custom')).not.toThrow();
       expect(() => recordRowsSynced(42)).not.toThrow();
       expect(() => recordConnectionSuccess()).not.toThrow();
       expect(() => recordConnectionAttempted()).not.toThrow();
@@ -277,13 +292,13 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
     test('should accumulate mutation counts', () => {
       // Record multiple mutations
-      recordMutation();
-      recordMutation();
-      recordMutation();
+      recordMutation('crud');
+      recordMutation('custom');
+      recordMutation('crud');
 
       // Mutations should be accumulated internally
       // The actual value will be observed when the callback is triggered
-      expect(() => recordMutation()).not.toThrow();
+      expect(() => recordMutation('custom')).not.toThrow();
     });
 
     test('should accumulate rows synced counts', () => {
@@ -322,7 +337,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
     test('should include platform information in telemetry', () => {
       // Test that platform detection works without throwing
       expect(() => {
-        recordMutation();
+        recordMutation('crud');
         recordRowsSynced(10);
       }).not.toThrow();
     });
@@ -332,7 +347,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
     test('should handle telemetry operations correctly', () => {
       // Test that telemetry operations work properly
       expect(() => {
-        recordMutation();
+        recordMutation('crud');
         recordRowsSynced(50);
       }).not.toThrow();
     });
@@ -342,7 +357,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // We'll verify this by checking the existing mock calls
 
       // Add some test data to trigger callbacks
-      recordMutation();
+      recordMutation('crud');
 
       // Get the callbacks that were registered
       type CallbackFunction = (result: {
@@ -395,7 +410,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
       startAnonymousTelemetry(lc, configWithoutTaskID);
 
       // Add some test data to trigger callbacks
-      recordMutation();
+      recordMutation('crud');
 
       // Get the callbacks that were registered
       type CallbackFunction = (result: {
@@ -443,8 +458,8 @@ describe('Anonymous Telemetry Integration Tests', () => {
   describe('Observable Metric Callbacks', () => {
     test('should execute callbacks without throwing', () => {
       // Add some test data
-      recordMutation();
-      recordMutation();
+      recordMutation('crud');
+      recordMutation('crud');
       recordRowsSynced(100);
 
       // Get the callbacks that were registered
@@ -547,8 +562,8 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
     test('should accumulate counter values across observations', () => {
       // Record some mutations and rows
-      recordMutation();
-      recordMutation();
+      recordMutation('crud');
+      recordMutation('crud');
       recordRowsSynced(50);
       recordRowsSynced(25);
 
@@ -590,7 +605,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
         expect(firstRowsValue).toBeGreaterThanOrEqual(75);
 
         // Record additional activity
-        recordMutation();
+        recordMutation('crud');
         recordRowsSynced(10);
 
         // Reset mocks for second observation

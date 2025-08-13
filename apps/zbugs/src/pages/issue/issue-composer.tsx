@@ -1,7 +1,10 @@
 import {nanoid} from 'nanoid';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.tsx';
-import {ImageUploadButton} from '../../components/image-upload-button.tsx';
+import {
+  ImageUploadArea,
+  type TextAreaPatch,
+} from '../../components/image-upload-area.tsx';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {
@@ -84,6 +87,10 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
     }
   };
 
+  const onInsert = (patch: TextAreaPatch) => {
+    setDescription(prev => patch.apply(prev));
+  };
+
   return (
     <Modal
       title="New Issue"
@@ -109,28 +116,17 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
           />
         </div>
         <div className="w-full px-4">
-          <textarea
-            className="new-issue-description autoResize"
-            value={description || ''}
-            onChange={e => setDescription(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Add description..."
-            maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
-            ref={textareaRef}
-          ></textarea>
-          <ImageUploadButton
-            onUpload={markdown => {
-              const textarea = textareaRef.current;
-              if (textarea) {
-                const start = textarea.selectionStart;
-                const end = textarea.selectionEnd;
-                const text = textarea.value;
-                const newText =
-                  text.substring(0, start) + markdown + text.substring(end);
-                setDescription(newText);
-              }
-            }}
-          />
+          <ImageUploadArea textAreaRef={textareaRef} onInsert={onInsert}>
+            <textarea
+              className="new-issue-description autoResize"
+              value={description || ''}
+              onChange={e => setDescription(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Add description..."
+              maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
+              ref={textareaRef}
+            ></textarea>
+          </ImageUploadArea>
         </div>
       </ModalBody>
       <ModalActions>
