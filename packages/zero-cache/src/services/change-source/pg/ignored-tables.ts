@@ -12,6 +12,5 @@ export function isTableIgnored(
   relation: {schema: string; name: string}, 
   ignoredTables: Set<string>
 ): boolean {
-  // Only check for exact schema.table match
   return ignoredTables.has(`${relation.schema}.${relation.name}`);
 }
