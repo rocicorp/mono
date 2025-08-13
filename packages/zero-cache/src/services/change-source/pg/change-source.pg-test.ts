@@ -971,23 +971,24 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
   });
 
   test('ignored tables excluded from initial sync', async () => {
-    // Start replication with my.boo ignored
-    await startReplication(['my.boo']);
-    
-    // Insert data into both ignored and non-ignored tables
+    // Insert data into both ignored and non-ignored tables BEFORE initial sync
     await upstream.begin(async tx => {
       await tx`INSERT INTO foo(id) VALUES('test1')`;
       await tx`INSERT INTO my.boo(a, b) VALUES('ignored1', 'data1')`;
     });
+    
+    // Start replication with my.boo ignored - this triggers initial sync
+    await startReplication(['my.boo']);
 
-    // Verify foo table has data in replica
+    // Verify foo table has data in replica (synced during initial sync)
     const replica = replicaDbFile.connect(lc);
     const fooRows = replica.prepare('SELECT * FROM foo').all();
     expect(fooRows).toHaveLength(1);
     expect(fooRows[0]).toMatchObject({id: 'test1'});
 
-    // Verify my.boo table exists but is empty (ignored)
-    const booRows = replica.prepare('SELECT * FROM "my"."boo"').all();
+    // Verify my.boo table exists but is empty (ignored during initial sync)
+    // SQLite stores schema.table as "schema.table" in a flat namespace
+    const booRows = replica.prepare('SELECT * FROM "my.boo"').all();
     expect(booRows).toHaveLength(0);
     replica.close();
   });
@@ -1004,8 +1005,12 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       await tx`INSERT INTO my.boo(a, b) VALUES('ignored2', 'data2')`;
     });
 
-    const begin = await downstream.dequeue();
-    expect(begin).toMatchObject(['begin', {tag: 'begin'}]);
+    const begin = (await downstream.dequeue()) as Begin;
+    expect(begin).toMatchObject([
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
     
     // Should only see the foo insert, not the my.boo insert
     const data = await downstream.dequeue();
@@ -1017,8 +1022,12 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       },
     ]);
     
-    const commit = await downstream.dequeue();
-    expect(commit).toMatchObject(['commit', {tag: 'commit'}]);
+    const commit = (await downstream.dequeue()) as Commit;
+    expect(commit).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: begin[2]?.commitWatermark},
+    ]);
     
     acks.push(['status', {}, commit[2]]);
   });
@@ -1045,6 +1054,6 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       err = e;
     }
     expect(err).toBeInstanceOf(AutoResetSignal);
-    expect((err as Error).message).toContain('Dropping shard to change ignored tables');
+    expect((err as Error).message).toContain('Requested ignored tables');
   });
 });
