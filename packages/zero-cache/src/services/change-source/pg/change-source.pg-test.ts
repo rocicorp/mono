@@ -124,7 +124,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     );
   }
 
-  async function startReplication() {
+  async function startReplication(ignoredTables: readonly string[] = []) {
     ({changeSource: source} = await initializePostgresChangeSource(
       lc,
       upstreamURI,
@@ -132,6 +132,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
         appID: APP_ID,
         publications: ['zero_foo', 'zero_zero'],
         shardNum: SHARD_NUM,
+        ignoredTables,
       },
       replicaDbFile.path,
       {tableCopyWorkers: 5},
@@ -819,6 +820,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
         appID: APP_ID,
         publications: ['zero_foo', 'zero_zero'],
         shardNum: SHARD_NUM,
+        ignoredTables: [],
       },
       replicaFile2.path,
       {tableCopyWorkers: 5},
@@ -863,6 +865,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
         appID: APP_ID,
         publications: ['zero_foo', 'zero_zero'],
         shardNum: SHARD_NUM,
+        ignoredTables: [],
       },
       replicaFile3.path,
       {tableCopyWorkers: 5},
@@ -937,6 +940,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
           appID: APP_ID,
           shardNum: SHARD_NUM,
           publications: ['zero_different_publication'],
+          ignoredTables: [],
         },
         replicaDbFile.path,
         {tableCopyWorkers: 5},
@@ -964,5 +968,83 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     expect(err).toMatchInlineSnapshot(
       `[AutoResetSignal: Upstream publications [zero_zero,_23_metadata_1] do not contain all subscribed publications [_23_metadata_1,zero_foo,zero_zero]]`,
     );
+  });
+
+  test('ignored tables excluded from initial sync', async () => {
+    // Start replication with my.boo ignored
+    await startReplication(['my.boo']);
+    
+    // Insert data into both ignored and non-ignored tables
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO foo(id) VALUES('test1')`;
+      await tx`INSERT INTO my.boo(a, b) VALUES('ignored1', 'data1')`;
+    });
+
+    // Verify foo table has data in replica
+    const replica = replicaDbFile.connect(lc);
+    const fooRows = replica.prepare('SELECT * FROM foo').all();
+    expect(fooRows).toHaveLength(1);
+    expect(fooRows[0]).toMatchObject({id: 'test1'});
+
+    // Verify my.boo table exists but is empty (ignored)
+    const booRows = replica.prepare('SELECT * FROM "my"."boo"').all();
+    expect(booRows).toHaveLength(0);
+    replica.close();
+  });
+
+  test('changes to ignored tables are dropped', async () => {
+    await startReplication(['my.boo']);
+    
+    const {changes, acks} = await startStream('00');
+    const downstream = drainToQueue(changes);
+
+    // Insert into both ignored and non-ignored tables
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO foo(id) VALUES('test2')`;
+      await tx`INSERT INTO my.boo(a, b) VALUES('ignored2', 'data2')`;
+    });
+
+    const begin = await downstream.dequeue();
+    expect(begin).toMatchObject(['begin', {tag: 'begin'}]);
+    
+    // Should only see the foo insert, not the my.boo insert
+    const data = await downstream.dequeue();
+    expect(data).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        new: {id: 'test2'},
+      },
+    ]);
+    
+    const commit = await downstream.dequeue();
+    expect(commit).toMatchObject(['commit', {tag: 'commit'}]);
+    
+    acks.push(['status', {}, commit[2]]);
+  });
+
+  test('AutoReset on changed ignored tables', async () => {
+    await startReplication(['my.boo']);
+    
+    let err;
+    try {
+      // Try to reinitialize with different ignored tables
+      await initializePostgresChangeSource(
+        lc,
+        upstreamURI,
+        {
+          appID: APP_ID,
+          shardNum: SHARD_NUM,
+          publications: ['zero_foo', 'zero_zero'],
+          ignoredTables: ['public.foo'],  // Different ignored tables
+        },
+        replicaDbFile.path,
+        {tableCopyWorkers: 5},
+      );
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(AutoResetSignal);
+    expect((err as Error).message).toContain('Dropping shard to change ignored tables');
   });
 });
