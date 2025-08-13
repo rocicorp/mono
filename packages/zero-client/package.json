@@ -21,6 +21,7 @@
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
+    "@codspeed/vitest-plugin": "^4.0.1",
     "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@vitest/ui": "^3.2.4",
@@ -30,6 +31,7 @@
     "replicache": "15.2.1",
     "shared": "0.0.0",
     "typescript": "~5.8.2",
+    "vitest": "3.2.4",
     "zero-protocol": "0.0.0"
   },
   "eslintConfig": {

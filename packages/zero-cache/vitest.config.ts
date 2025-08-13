@@ -1,3 +1,4 @@
+import codspeedPlugin from '@codspeed/vitest-plugin';
 import {defineConfig, mergeConfig} from 'vitest/config';
 import config from '../shared/src/tool/vitest-config.ts';
 
@@ -73,6 +74,7 @@ export function configForCustomPg(url: string) {
 }
 
 export default defineConfig({
+  plugins: [codspeedPlugin()],
   test: {
     projects: ['vitest.config.*.ts', ...configForCustomPg(import.meta.url)],
   },
