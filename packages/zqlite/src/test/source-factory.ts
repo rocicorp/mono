@@ -168,6 +168,7 @@ export function newQueryDelegate(
     decorateSourceInput(input: SourceInput): Input {
       return input;
     },
+    addEdge() {},
     decorateInput(input: Input): Input {
       return input;
     },
