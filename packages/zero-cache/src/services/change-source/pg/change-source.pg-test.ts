@@ -1060,4 +1060,136 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     expect(err).toBeInstanceOf(AutoResetSignal);
     expect((err as Error).message).toContain('Requested ignored tables');
   });
+
+  test('ignored table with row filter in publication', async () => {
+    // Create a table with a row filter that will be part of existing publication
+    await upstream`
+      CREATE TABLE filtered_table(id INT4 PRIMARY KEY, status TEXT);
+      ALTER PUBLICATION zero_foo ADD TABLE filtered_table WHERE (status = 'active');
+    `.simple();
+    
+    // Insert data that matches and doesn't match the filter
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO filtered_table(id, status) VALUES(1, 'active')`;
+      await tx`INSERT INTO filtered_table(id, status) VALUES(2, 'inactive')`;
+    });
+
+    // Start replication with the table in both publication AND ignored list
+    await startReplication({
+      ignoredTables: ['public.filtered_table']
+    });
+
+    // Table should be created but no data should sync (ignored takes precedence)
+    const replica = replicaDbFile.connect(lc);
+    const tables = replica.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{name: string}>;
+    expect(tables.map(t => t.name)).toContain('filtered_table');
+    
+    const rows = replica.prepare('SELECT * FROM filtered_table').all();
+    expect(rows).toEqual([]);
+
+    // Even changes that match the row filter should be dropped
+    await upstream`INSERT INTO filtered_table(id, status) VALUES(3, 'active')`.simple();
+    await sleep(200);
+    
+    const rowsAfter = replica.prepare('SELECT * FROM filtered_table').all();
+    expect(rowsAfter).toEqual([]);
+    replica.close();
+  });
+
+  test('ignored table in multiple publications', async () => {
+    // Create a table that will be added to both existing publications
+    await upstream`
+      CREATE TABLE shared_table(id INT4 PRIMARY KEY, category TEXT);
+      ALTER PUBLICATION zero_foo ADD TABLE shared_table WHERE (category = 'A');
+      ALTER PUBLICATION zero_zero ADD TABLE shared_table WHERE (category = 'B');
+    `.simple();
+    
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO shared_table(id, category) VALUES(1, 'A')`;
+      await tx`INSERT INTO shared_table(id, category) VALUES(2, 'B')`;
+      await tx`INSERT INTO shared_table(id, category) VALUES(3, 'C')`;
+    });
+
+    // Start replication with the table ignored
+    await startReplication({
+      ignoredTables: ['public.shared_table']
+    });
+
+    // Table should be created but empty despite being in multiple publications
+    const replica = replicaDbFile.connect(lc);
+    const tables = replica.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{name: string}>;
+    expect(tables.map(t => t.name)).toContain('shared_table');
+    
+    const rows = replica.prepare('SELECT * FROM shared_table').all();
+    expect(rows).toEqual([]);
+    replica.close();
+  });
+
+  test('exact table name matching for ignored tables', async () => {
+    // Create tables with similar names and add them to existing publication
+    await upstream`
+      CREATE TABLE test_table(id INT4 PRIMARY KEY);
+      CREATE TABLE test_table_2(id INT4 PRIMARY KEY);
+      CREATE TABLE other_test_table(id INT4 PRIMARY KEY);
+      ALTER PUBLICATION zero_foo ADD TABLE test_table, test_table_2, other_test_table;
+    `.simple();
+    
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO test_table(id) VALUES(1)`;
+      await tx`INSERT INTO test_table_2(id) VALUES(2)`;
+      await tx`INSERT INTO other_test_table(id) VALUES(3)`;
+    });
+
+    // Only ignore the exact table name
+    await startReplication({
+      ignoredTables: ['public.test_table']
+    });
+
+    // Only test_table should be empty
+    const replica = replicaDbFile.connect(lc);
+    const testTableRows = replica.prepare('SELECT * FROM test_table').all();
+    expect(testTableRows).toEqual([]);
+    
+    // Similar named tables should have their data
+    const testTable2Rows = replica.prepare('SELECT * FROM test_table_2').all();
+    expect(testTable2Rows).toHaveLength(1);
+    expect(testTable2Rows[0]).toMatchObject({id: 2});
+    
+    const otherTestTableRows = replica.prepare('SELECT * FROM other_test_table').all();
+    expect(otherTestTableRows).toHaveLength(1);
+    expect(otherTestTableRows[0]).toMatchObject({id: 3});
+    replica.close();
+  });
+
+  test('ignored table with schema qualification', async () => {
+    // Create tables in different schemas with same name and add to existing publications
+    await upstream`
+      CREATE SCHEMA other_schema;
+      CREATE TABLE foo2(id INT4 PRIMARY KEY);
+      CREATE TABLE other_schema.foo2(id INT4 PRIMARY KEY);
+      ALTER PUBLICATION zero_foo ADD TABLE foo2;
+      ALTER PUBLICATION zero_zero ADD TABLE other_schema.foo2;
+    `.simple();
+    
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO foo2(id) VALUES(1)`;
+      await tx`INSERT INTO other_schema.foo2(id) VALUES(2)`;
+    });
+
+    // Only ignore the one in other_schema
+    await startReplication({
+      ignoredTables: ['other_schema.foo2']
+    });
+
+    // public.foo2 should have data
+    const replica = replicaDbFile.connect(lc);
+    const publicRows = replica.prepare('SELECT * FROM foo2').all();
+    expect(publicRows).toHaveLength(1);
+    expect(publicRows[0]).toMatchObject({id: 1});
+    
+    // other_schema.foo2 should be empty (SQLite uses flat namespace)
+    const otherRows = replica.prepare('SELECT * FROM "other_schema.foo2"').all();
+    expect(otherRows).toEqual([]);
+    replica.close();
+  });
 });
