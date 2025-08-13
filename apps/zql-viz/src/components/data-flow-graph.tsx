@@ -111,9 +111,7 @@ const CustomNode: FC<{data: Graph['nodes'][number]}> = ({data}) => {
         }}
       />
       <div style={style}>
-        <div style={{fontWeight: 'bold', marginBottom: '4px'}}>
-          {data.type.toUpperCase()}
-        </div>
+        <div style={{fontWeight: 'bold', marginBottom: '4px'}}>{data.type}</div>
         <div style={{fontSize: '11px', opacity: 0.9}}>{data.name}</div>
       </div>
       <Handle
