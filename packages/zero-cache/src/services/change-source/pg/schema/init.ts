@@ -201,7 +201,7 @@ function getIncrementalMigrations(
         `);
         
         // Update with current ignored tables from config if not already set
-        if (shard.ignoredTables?.length) {
+        if (shard.ignoredTables.length > 0) {
           await sql.unsafe(/*sql*/ `
             UPDATE ${shardConfigTable}
             SET "ignoredTables" = ARRAY[${literal(shard.ignoredTables)}]
