@@ -3,15 +3,6 @@
  */
 
 /**
- * Builds a Set of fully qualified table names to ignore
- * @param tables - Array of fully qualified table names (schema.table)
- * @returns Set for efficient lookup
- */
-export function buildIgnoredTablesSet(tables: string[]): Set<string> {
-  return new Set(tables);
-}
-
-/**
  * Checks if a table should be ignored during replication
  * @param relation - Table with schema and name
  * @param ignoredTables - Set of fully qualified table names

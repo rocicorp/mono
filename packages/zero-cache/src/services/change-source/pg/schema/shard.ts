@@ -202,7 +202,7 @@ export function dropShard(appID: string, shardID: string | number): string {
 const internalShardConfigSchema = v.object({
   publications: v.array(v.string()),
   ddlDetection: v.boolean(),
-  ignoredTables: v.array(v.string()).optional(() => []),
+  ignoredTables: v.array(v.string()).optional(() => []).map(tables => new Set(tables)),
 });
 
 export type InternalShardConfig = v.Infer<typeof internalShardConfigSchema>;

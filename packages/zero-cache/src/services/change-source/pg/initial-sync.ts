@@ -8,7 +8,7 @@ import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
 import {Database} from '../../../../../zqlite/src/db.ts';
-import {buildIgnoredTablesSet, isTableIgnored} from './ignored-tables.ts';
+import {isTableIgnored} from './ignored-tables.ts';
 import {
   createIndexStatement,
   createTableStatement,
@@ -171,9 +171,9 @@ export async function initialSync(
     try {
       createLiteTables(tx, tables, initialVersion);
 
-      // Get the full shard config including ignored tables
+      // Get the full shard config including ignored tables Set
       const fullShardConfig = await getInternalShardConfig(sql, shard);
-      const ignoredTables = buildIgnoredTablesSet(fullShardConfig.ignoredTables || []);
+      const ignoredTables = fullShardConfig.ignoredTables;
 
       void copyProfiler?.start();
       const rowCounts = await Promise.all(
