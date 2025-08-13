@@ -175,18 +175,22 @@ export async function initialSync(
       const fullShardConfig = await getInternalShardConfig(sql, shard);
       const ignoredTables = fullShardConfig.ignoredTables;
 
+      // Filter out ignored tables and log them
+      const tablesToSync = tables.filter(table => {
+        if (isTableIgnored(table, ignoredTables)) {
+          lc.info?.(`Skipping initial sync for ignored table: ${table.schema}.${table.name}`);
+          return false;
+        }
+        return true;
+      });
+
       void copyProfiler?.start();
       const rowCounts = await Promise.all(
-        tables.map(table => {
-          if (isTableIgnored(table, ignoredTables)) {
-            lc.info?.(`Skipping initial sync for ignored table: ${table.schema}.${table.name}`);
-            return Promise.resolve({rows: 0, flushTime: 0});
-          }
-          
-          return copiers.processReadTask((db, lc) =>
+        tablesToSync.map(table =>
+          copiers.processReadTask((db, lc) =>
             copy(lc, table, copyPool, db, tx),
-          );
-        }),
+          ),
+        ),
       );
       void copyProfiler?.stopAndDispose(lc, 'initial-copy');
 
