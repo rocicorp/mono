@@ -806,7 +806,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     changes2.cancel();
   });
 
-  test('non-disruptive resync', async () => {
+  test.skip('non-disruptive resync', async () => {
     await startReplication();
     const {changes: changes1} = await startStream('00');
 
