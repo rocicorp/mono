@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {literal} from 'pg-format';
 import {assert} from '../../../../../../shared/src/asserts.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {
@@ -9,6 +10,7 @@ import {
 } from '../../../../db/migration.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
+import {id} from '../../../../types/sql.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import {decommissionShard} from '../decommission.ts';
 import {publishedSchema} from './published.ts';
@@ -189,6 +191,25 @@ function getIncrementalMigrations(
           ALTER PUBLICATION ${id(metadataPublicationName(shard.appID, shard.shardNum))} ADD TABLE ${id(upstreamSchema(shard))}."mutations";
         `);
         lc.info?.('Upgraded schema with new mutations table');
+      },
+    },
+    11: {
+      migrateSchema: async (lc, sql) => {
+        await sql.unsafe(/*sql*/ `
+          ALTER TABLE ${shardConfigTable}
+            ADD COLUMN IF NOT EXISTS "ignoredTables" TEXT[] DEFAULT '{}';
+        `);
+        
+        // Update with current ignored tables from config if not already set
+        if (shard.ignoredTables?.length) {
+          await sql.unsafe(/*sql*/ `
+            UPDATE ${shardConfigTable}
+            SET "ignoredTables" = ARRAY[${literal(shard.ignoredTables)}]
+            WHERE "ignoredTables" = '{}';
+          `);
+        }
+        
+        lc.info?.('Added ignoredTables column to shardConfig');
       },
     },
   };

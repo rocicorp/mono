@@ -8,7 +8,6 @@ import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
-import {getZeroConfig} from '../../../config/zero-config.ts';
 import {buildIgnoredTablesSet, isTableIgnored} from './ignored-tables.ts';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {
@@ -456,9 +455,8 @@ class ChangeMaker {
       connection: {['application_name']: 'zero-schema-change-detector'},
     });
     
-    // Load ignored tables from config
-    const config = getZeroConfig();
-    this.#ignoredTables = buildIgnoredTablesSet(config.app.ignoredPublicationTables || []);
+    // Load ignored tables from shard config
+    this.#ignoredTables = buildIgnoredTablesSet(shardConfig.ignoredTables || []);
   }
 
   async makeChanges(lsn: bigint, msg: Message): Promise<ChangeStreamMessage[]> {

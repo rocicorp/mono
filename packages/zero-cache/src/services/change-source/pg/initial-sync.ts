@@ -7,7 +7,6 @@ import {platform} from 'node:os';
 import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
-import {getZeroConfig} from '../../../config/zero-config.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {buildIgnoredTablesSet, isTableIgnored} from './ignored-tables.ts';
 import {
@@ -172,9 +171,9 @@ export async function initialSync(
     try {
       createLiteTables(tx, tables, initialVersion);
 
-      // Build set of ignored tables for efficient lookup
-      const config = getZeroConfig();
-      const ignoredTables = buildIgnoredTablesSet(config.app.ignoredPublicationTables || []);
+      // Get the full shard config including ignored tables
+      const fullShardConfig = await getInternalShardConfig(sql, shard);
+      const ignoredTables = buildIgnoredTablesSet(fullShardConfig.ignoredTables || []);
 
       void copyProfiler?.start();
       const rowCounts = await Promise.all(
@@ -263,7 +262,8 @@ async function ensurePublishedTables(
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
 
   await ensureShardSchema(lc, sql, shard);
-  const {publications} = await getInternalShardConfig(sql, shard);
+  const shardConfig = await getInternalShardConfig(sql, shard);
+  const {publications} = shardConfig;
 
   if (validate) {
     const exists = await sql`
