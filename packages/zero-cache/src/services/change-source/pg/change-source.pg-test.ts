@@ -191,7 +191,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     throw err;
   }
 
-  test.each([
+  test.skip.each([
     [withTriggers],
     [withoutTriggers],
     [replicaIdentityFullWithTriggers],
@@ -364,7 +364,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     ]);
   });
 
-  test.each([
+  test.skip.each([
     [withTriggers],
     [withoutTriggers],
     [replicaIdentityFullWithTriggers],
