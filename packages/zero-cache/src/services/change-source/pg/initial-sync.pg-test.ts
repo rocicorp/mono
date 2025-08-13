@@ -2164,6 +2164,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             appID: APP_ID,
             shardNum: SHARD_NUM,
             publications: c.requestedPublications ?? [],
+            ignoredTables: [],
           },
           replica,
           getConnectionURI(upstream),
@@ -2254,7 +2255,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
   test('resume initial sync with invalid table', async () => {
     const lc = createSilentLogContext();
     const replica = new Database(lc, ':memory:');
-    const shardConfig = {appID: APP_ID, shardNum: SHARD_NUM, publications: []};
+    const shardConfig = {appID: APP_ID, shardNum: SHARD_NUM, publications: [], ignoredTables: []};
 
     await ensureShardSchema(lc, upstream, shardConfig);
 
@@ -2294,6 +2295,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       appID: APP_ID,
       shardNum: SHARD_NUM,
       publications: [],
+      ignoredTables: [],
     };
 
     await ensureShardSchema(lc, upstream, shardConfig);
@@ -2322,7 +2324,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     try {
       await initialSync(
         lc,
-        {appID, shardNum: 0, publications: []},
+        {appID, shardNum: 0, publications: [], ignoredTables: []},
         replica,
         getConnectionURI(upstream),
         {tableCopyWorkers: 5},
@@ -2334,5 +2336,89 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     expect(String(result)).toEqual(
       'Error: The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
+  });
+
+  test('ignored tables are created but not synced', async () => {
+    const lc = createSilentLogContext();
+    
+    const replica = new Database(lc, ':memory:');
+    const shardConfig = {
+      appID: APP_ID,
+      shardNum: SHARD_NUM,
+      publications: [],
+      ignoredTables: ['public.ignored_table'],
+    };
+
+    // Ensure shard schema is created first
+    await ensureShardSchema(lc, upstream, shardConfig);
+    
+    // Setup upstream with data in both regular and ignored tables
+    await upstream`CREATE TABLE regular_table(id int4 PRIMARY KEY, data text)`;
+    await upstream`CREATE TABLE ignored_table(id int4 PRIMARY KEY, data text)`;
+    await upstream`INSERT INTO regular_table(id, data) VALUES (1, 'synced'), (2, 'also synced')`;
+    await upstream`INSERT INTO ignored_table(id, data) VALUES (1, 'not synced'), (2, 'also not synced')`;
+    
+    await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
+      tableCopyWorkers: 5,
+    });
+
+    // Verify regular table has data
+    const regularRows = replica.prepare('SELECT * FROM regular_table').all();
+    expect(regularRows).toHaveLength(2);
+    expect(regularRows).toMatchObject([
+      {id: 1, data: 'synced'},
+      {id: 2, data: 'also synced'},
+    ]);
+
+    // Verify ignored table exists but is empty
+    const ignoredRows = replica.prepare('SELECT * FROM ignored_table').all();
+    expect(ignoredRows).toHaveLength(0);
+
+    // Verify the ignored tables were stored in the shard config
+    const config = await upstream.unsafe(
+      `SELECT "ignoredTables" FROM "${APP_ID}_${SHARD_NUM}"."shardConfig"`
+    );
+    expect(config[0].ignoredTables).toEqual(['public.ignored_table']);
+  });
+
+  test('multiple ignored tables', async () => {
+    const lc = createSilentLogContext();
+    
+    const replica = new Database(lc, ':memory:');
+    const shardConfig = {
+      appID: APP_ID,
+      shardNum: SHARD_NUM,
+      publications: [],
+      ignoredTables: ['public.table2', 'public.table3'],
+    };
+
+    // Ensure shard schema is created first
+    await ensureShardSchema(lc, upstream, shardConfig);
+    
+    // Setup upstream with multiple tables in public schema
+    await upstream`CREATE TABLE public.table1(id int4 PRIMARY KEY, value text)`;
+    await upstream`CREATE TABLE public.table2(id int4 PRIMARY KEY, value text)`;
+    await upstream`CREATE TABLE public.table3(id int4 PRIMARY KEY, value text)`;
+    
+    await upstream`INSERT INTO public.table1(id, value) VALUES (1, 'data1')`;
+    await upstream`INSERT INTO public.table2(id, value) VALUES (2, 'data2')`;
+    await upstream`INSERT INTO public.table3(id, value) VALUES (3, 'data3')`;
+    
+    await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
+      tableCopyWorkers: 5,
+    });
+
+    // Verify only table1 has data
+    const table1Rows = replica.prepare('SELECT * FROM table1').all();
+    expect(table1Rows).toHaveLength(1);
+    expect(table1Rows[0]).toMatchObject({id: 1, value: 'data1'});
+
+    // Verify table2 exists but is empty
+    const table2Rows = replica.prepare('SELECT * FROM table2').all();
+    expect(table2Rows).toHaveLength(0);
+
+    // Verify table3 exists but is empty
+    const table3Rows = replica.prepare('SELECT * FROM table3').all();
+    expect(table3Rows).toHaveLength(0);
   });
 });

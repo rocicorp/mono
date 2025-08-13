@@ -124,7 +124,11 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     );
   }
 
-  async function startReplication(ignoredTables: readonly string[] = []) {
+  async function startReplication(options?: {
+    ignoredTables?: readonly string[];
+  }) {
+    const { ignoredTables = [] } = options ?? {};
+    
     ({changeSource: source} = await initializePostgresChangeSource(
       lc,
       upstreamURI,
@@ -978,7 +982,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     });
     
     // Start replication with my.boo ignored - this triggers initial sync
-    await startReplication(['my.boo']);
+    await startReplication({ ignoredTables: ['my.boo'] });
 
     // Verify foo table has data in replica (synced during initial sync)
     const replica = replicaDbFile.connect(lc);
@@ -994,7 +998,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
   });
 
   test('changes to ignored tables are dropped', async () => {
-    await startReplication(['my.boo']);
+    await startReplication({ ignoredTables: ['my.boo'] });
     
     const {changes, acks} = await startStream('00');
     const downstream = drainToQueue(changes);
@@ -1033,7 +1037,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
   });
 
   test('AutoReset on changed ignored tables', async () => {
-    await startReplication(['my.boo']);
+    await startReplication({ ignoredTables: ['my.boo'] });
     
     let err;
     try {
