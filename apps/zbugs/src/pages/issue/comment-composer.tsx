@@ -108,16 +108,16 @@ export function CommentComposer({
         >
           {id ? 'Save' : 'Add comment'}
         </Button>
+        {id ? (
+          <Button
+            className="edit-comment-cancel"
+            eventName="Cancel comment edits"
+            onAction={onDone}
+          >
+            Cancel
+          </Button>
+        ) : null}
       </div>
-      {id ? (
-        <Button
-          className="edit-comment-cancel"
-          eventName="Cancel comment edits"
-          onAction={onDone}
-        >
-          Cancel
-        </Button>
-      ) : null}
     </>
   );
 }

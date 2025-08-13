@@ -17,6 +17,7 @@ export interface ButtonProps {
   style?: CSSProperties | undefined;
   title?: string | undefined;
   autoFocus?: boolean | undefined;
+  tabIndex?: number | undefined;
 }
 
 export const Button = memo(
