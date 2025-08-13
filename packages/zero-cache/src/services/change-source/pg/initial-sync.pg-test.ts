@@ -2164,7 +2164,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             appID: APP_ID,
             shardNum: SHARD_NUM,
             publications: c.requestedPublications ?? [],
-            ignoredTables: [],
+            ignoredTables: [] as string[],
           },
           replica,
           getConnectionURI(upstream),
@@ -2255,7 +2255,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
   test('resume initial sync with invalid table', async () => {
     const lc = createSilentLogContext();
     const replica = new Database(lc, ':memory:');
-    const shardConfig = {appID: APP_ID, shardNum: SHARD_NUM, publications: [], ignoredTables: []};
+    const shardConfig = {appID: APP_ID, shardNum: SHARD_NUM, publications: [] as string[], ignoredTables: [] as string[]};
 
     await ensureShardSchema(lc, upstream, shardConfig);
 
@@ -2295,7 +2295,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       appID: APP_ID,
       shardNum: SHARD_NUM,
       publications: [],
-      ignoredTables: [],
+      ignoredTables: [] as string[],
     };
 
     await ensureShardSchema(lc, upstream, shardConfig);
@@ -2324,7 +2324,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     try {
       await initialSync(
         lc,
-        {appID, shardNum: 0, publications: [], ignoredTables: []},
+        {appID, shardNum: 0, publications: [] as string[], ignoredTables: [] as string[]},
         replica,
         getConnectionURI(upstream),
         {tableCopyWorkers: 5},
