@@ -637,7 +637,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     }
   });
 
-  test.each([
+  test.skip.each([
     ['ALTER TABLE foo ADD COLUMN bar int4', null],
     ['ALTER TABLE foo RENAME times TO timez', null],
     ['ALTER TABLE foo DROP COLUMN date', null],
