@@ -3,7 +3,6 @@ import type {FastifyReply, FastifyRequest} from 'fastify';
 import fs from 'fs';
 import os from 'os';
 import type {Writable} from 'stream';
-import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
 import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
@@ -207,31 +206,6 @@ async function cvrStats(lc: LogContext, config: ZeroConfig, out: Writable) {
     ][],
     out,
   );
-
-  out.write('ZQL (without permissions) for each query:');
-  const queryAsts =
-    await sql`SELECT "queryHash", "clientAST" FROM ${sql(schema)}."queries"`;
-
-  const seenQueries = new Set<string>();
-  const parseFailures: string[] = [];
-  for (const row of queryAsts) {
-    const {queryHash, clientAST} = row;
-    if (seenQueries.has(queryHash)) {
-      continue;
-    }
-    seenQueries.add(queryHash);
-
-    try {
-      const zql = clientAST.table + astToZQL(clientAST);
-      out.write('HASH:' + queryHash);
-      out.write('ZQL:' + zql + '\n');
-    } catch (e) {
-      parseFailures.push(queryHash);
-    }
-  }
-  if (parseFailures.length > 0) {
-    out.write('Failed to parse the following hashes: ' + parseFailures);
-  }
 
   await sql.end();
 }
