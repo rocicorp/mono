@@ -162,6 +162,19 @@ async function checkAndUpdateUpstream(
     );
   }
 
+  // Verify that ignored tables match what was initially synced.
+  // Compare as sorted arrays since one is an array and one is a Set
+  const requestedIgnored = [...(shard.ignoredTables || [])].sort();
+  const replicatedIgnored = [...(upstreamReplica.ignoredTables || new Set())].sort();
+  if (!deepEqual(requestedIgnored, replicatedIgnored)) {
+    lc.warn?.(`Dropping shard to change ignored tables to: [${requestedIgnored}]`);
+    await sql.unsafe(dropShard(shard.appID, shard.shardNum));
+    throw new AutoResetSignal(
+      `Requested ignored tables [${requestedIgnored}] do not match ` +
+        `initially synced ignored tables: [${replicatedIgnored}]`,
+    );
+  }
+
   // Sanity check: The subscription state on the replica should have the
   // same publications. This should be guaranteed by the equivalence of the
   // replicaVersion, but it doesn't hurt to verify.
