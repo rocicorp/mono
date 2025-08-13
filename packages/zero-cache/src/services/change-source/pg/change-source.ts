@@ -163,15 +163,14 @@ async function checkAndUpdateUpstream(
   }
 
   // Verify that ignored tables match what was initially synced.
-  // Compare as sorted arrays since one is an array and one is a Set
-  const requestedIgnored = [...(shard.ignoredTables || [])].sort();
-  const replicatedIgnored = [...(upstreamReplica.ignoredTables || new Set())].sort();
-  if (!deepEqual(requestedIgnored, replicatedIgnored)) {
-    lc.warn?.(`Dropping shard to change ignored tables to: [${requestedIgnored}]`);
+  const requestedIgnored = new Set(shard.ignoredTables || []);
+  const replicatedIgnored = upstreamReplica.ignoredTables || new Set<string>();
+  if (!equals(requestedIgnored, replicatedIgnored)) {
+    lc.warn?.(`Dropping shard to change ignored tables to: [${[...requestedIgnored]}]`);
     await sql.unsafe(dropShard(shard.appID, shard.shardNum));
     throw new AutoResetSignal(
-      `Requested ignored tables [${requestedIgnored}] do not match ` +
-        `initially synced ignored tables: [${replicatedIgnored}]`,
+      `Requested ignored tables [${[...requestedIgnored]}] do not match ` +
+        `initially synced ignored tables: [${[...replicatedIgnored]}]`,
     );
   }
 
