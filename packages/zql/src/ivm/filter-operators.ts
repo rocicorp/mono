@@ -146,5 +146,9 @@ export function buildFilterPipeline(
 ): Input {
   const filterStart = new FilterStart(input);
   delegate.addEdge(input, filterStart);
-  return new FilterEnd(filterStart, pipeline(filterStart));
+  const middle = pipeline(filterStart);
+  delegate.addEdge(filterStart, middle);
+  const filterEnd = new FilterEnd(filterStart, middle);
+  delegate.addEdge(middle, filterEnd);
+  return filterEnd;
 }

@@ -1,12 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {useState, useCallback, useEffect} from 'react';
 import {Panel, PanelGroup, PanelResizeHandle} from 'react-resizable-panels';
-import {QueryEditor} from './components/QueryEditor';
-import {ResultsViewer} from './components/ResultsViewer';
-import {QueryHistory} from './components/QueryHistory';
-import {type QueryHistoryItem} from './types';
+import {QueryEditor} from './components/query-editor.tsx';
+import {ResultsViewer} from './components/results-viewer.tsx';
+import {QueryHistory} from './components/query-history.tsx';
+import {type QueryHistoryItem, type Result} from './types.ts';
 import './App.css';
+import * as zero from '@rocicorp/zero';
+import {VizDelegate} from './query-delegate.ts';
+import * as ts from 'typescript';
 
+type AnyQuery = zero.Query<any, any, any>;
 const DEFAULT_QUERY = `const {
   createBuilder,
   createSchema,
@@ -57,8 +61,8 @@ function App() {
     }
     return DEFAULT_QUERY;
   });
-  const [result, setResult] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<Result | undefined>(undefined);
+  const [error, setError] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const [history, setHistory] = useState<QueryHistoryItem[]>(() => {
     const savedHistory = localStorage.getItem('zql-history');
@@ -83,8 +87,8 @@ function App() {
 
   const executeQuery = useCallback(async () => {
     setIsLoading(true);
-    setError(null);
-    setResult(null);
+    setError(undefined);
+    setResult(undefined);
 
     // Extract text after //:  comment for history preview
     const extractHistoryPreview = (code: string): string => {
@@ -110,52 +114,112 @@ function App() {
       return previewLines;
     };
 
-    const zero = await import('@rocicorp/zero');
-    let capturedQuery: any = null;
+    let capturedQuery: AnyQuery | undefined;
+    let capturedSchema: zero.Schema | undefined;
     const historyPreviewText = extractHistoryPreview(queryCode);
 
     const customGlobals = {
-      zero,
-      run: (query: any) => {
+      zero: {
+        ...zero,
+        createSchema(args: Parameters<typeof zero.createSchema>[0]) {
+          capturedSchema = zero.createSchema(args);
+          return capturedSchema;
+        },
+      },
+      run: (query: AnyQuery) => {
         capturedQuery = query;
-        console.log('RUNNING QUERY!', query);
         return query; // Return the query for potential chaining
       },
     };
 
     function executeCode(code: string) {
-      const func = new Function(...Object.keys(customGlobals), code);
+      // Transpile TypeScript to JavaScript
+      const result = ts.transpileModule(code, {
+        compilerOptions: {
+          target: ts.ScriptTarget.ESNext,
+          module: ts.ModuleKind.ESNext,
+          strict: false,
+          esModuleInterop: true,
+          skipLibCheck: true,
+          allowSyntheticDefaultImports: true,
+        },
+      });
+
+      const func = new Function(
+        ...Object.keys(customGlobals),
+        result.outputText,
+      );
       return func(...Object.values(customGlobals));
     }
 
     try {
       executeCode(queryCode);
+      const vizDelegate = new VizDelegate(capturedSchema!);
+      capturedQuery = capturedQuery?.delegate(vizDelegate);
+      // TODO: run against a zero instance? run against local sqlite? run against server? so many options.
+      // custom queries is an interesting wrench too. Anyway, I just care about data flow viz at the moment.
+      const rows = (await capturedQuery?.run()) as any;
+      const graph = vizDelegate.getGraph();
 
-      setResult(capturedQuery);
+      setResult({
+        ast: capturedQuery?.ast,
+        graph,
+        plan: undefined,
+        rows,
+      });
 
-      const historyItem: QueryHistoryItem = {
-        id: Date.now().toString(),
-        query: historyPreviewText || queryCode, // Use the preview text or fallback to full code
-        fullCode: queryCode, // Store the full code for re-execution
-        timestamp: new Date(),
-        result: capturedQuery,
-      };
-
-      setHistory(prev => [historyItem, ...prev].slice(0, 150));
+      // Check if the current query code is the same as the previous entry
+      setHistory(prev => {
+        if (prev.length > 0 && prev[0].fullCode === queryCode) {
+          // Update the timestamp of the most recent entry
+          const updatedHistory = [...prev];
+          updatedHistory[0] = {
+            ...updatedHistory[0],
+            timestamp: new Date(),
+            result: capturedQuery, // Update result too
+          };
+          return updatedHistory;
+        } else {
+          // Add new history entry
+          const historyItem: QueryHistoryItem = {
+            id: Date.now().toString(),
+            query: historyPreviewText || queryCode,
+            fullCode: queryCode,
+            timestamp: new Date(),
+            result: capturedQuery,
+          };
+          return [historyItem, ...prev].slice(0, 150);
+        }
+      });
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : 'Unknown error occurred';
       setError(errorMessage);
 
-      const historyItem: QueryHistoryItem = {
-        id: Date.now().toString(),
-        query: historyPreviewText || queryCode, // Use the preview text or fallback to full code
-        fullCode: queryCode, // Store the full code for re-execution
-        timestamp: new Date(),
-        error: errorMessage,
-      };
-
-      setHistory(prev => [historyItem, ...prev].slice(0, 150));
+      // Check if the current query code is the same as the previous entry
+      setHistory(prev => {
+        if (prev.length > 0 && prev[0].fullCode === queryCode) {
+          // Update the timestamp and error of the most recent entry
+          const updatedHistory = [...prev];
+          updatedHistory[0] = {
+            ...updatedHistory[0],
+            timestamp: new Date(),
+            error: errorMessage,
+            result: undefined, // Clear result since there's an error
+          };
+          return updatedHistory;
+        } else {
+          // Add new history entry
+          const historyItem: QueryHistoryItem = {
+            id: Date.now().toString(),
+            query: historyPreviewText || queryCode,
+            fullCode: queryCode,
+            timestamp: new Date(),
+            error: errorMessage,
+          };
+          return [historyItem, ...prev].slice(0, 150);
+        }
+      });
     } finally {
       setIsLoading(false);
     }
@@ -186,11 +250,6 @@ function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <h1>ZQL Viz</h1>
-        <span className="subtitle">Interactive ZQL Query Explorer</span>
-      </header>
-
       <div className="app-body">
         <PanelGroup direction="horizontal">
           <Panel defaultSize={20} minSize={15}>

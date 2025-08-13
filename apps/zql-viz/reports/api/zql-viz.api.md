@@ -11,7 +11,7 @@ import * as v_2 from '@badrap/valita';
 // @public (undocumented)
 export const ANYONE_CAN: ((_: unknown, eb: ExpressionBuilder<Schema, never>) => Condition)[];
 
-// @public (undocumented)
+// @public @deprecated (undocumented)
 export const ANYONE_CAN_DO_ANYTHING: {
     row: {
         select: ((_: unknown, eb: ExpressionBuilder<Schema, never>) => Condition)[];
@@ -254,15 +254,6 @@ export function enumeration<T extends string>(): ColumnBuilder<{
 }>;
 
 // @public (undocumented)
-export type EnumSchemaValue<T> = {
-    kind: 'enum';
-    type: 'string';
-    serverName?: string | undefined;
-    optional?: boolean;
-    customType: T;
-};
-
-// @public (undocumented)
 export type EqualityOps = '=' | '!=' | 'IS' | 'IS NOT';
 
 declare namespace ErrorKind {
@@ -397,6 +388,10 @@ export interface Inspector {
     clients(): Promise<InspectorClient[]>;
     // (undocumented)
     clientsWithQueries(): Promise<InspectorClient[]>;
+    // Warning: (ae-forgotten-export) The symbol "Metrics" needs to be exported by the entry point mod.d.ts
+    //
+    // (undocumented)
+    readonly metrics: Metrics;
 }
 
 // @public (undocumented)
@@ -441,6 +436,8 @@ export interface InspectorQuery {
     readonly id: string;
     // (undocumented)
     readonly inactivatedAt: Date | null;
+    // (undocumented)
+    readonly metrics: Metrics | null;
     // (undocumented)
     readonly name: string | null;
     // (undocumented)
@@ -800,7 +797,7 @@ export type SchemaValue<T = unknown> = {
     type: ValueType;
     serverName?: string | undefined;
     optional?: boolean | undefined;
-} | EnumSchemaValue<T> | SchemaValueWithCustomType<T>;
+} | SchemaValueWithCustomType<T>;
 
 // @public (undocumented)
 export type SchemaValueWithCustomType<T> = {

@@ -43,6 +43,7 @@ export type StaticQueryParameters = {
  * pipeline to delegate environment to provide sources and storage.
  */
 export interface BuilderDelegate {
+  readonly applyFiltersAnyway?: boolean | undefined;
   /**
    * Called once for each source needed by the AST.
    * Might be called multiple times with same tableName. It is OK to return
@@ -236,7 +237,7 @@ function buildPipelineInternal(
     end = applyCorrelatedSubQuery(csq, delegate, queryID, end, name, true);
   }
 
-  if (ast.where && !fullyAppliedFilters) {
+  if (ast.where && (!fullyAppliedFilters || delegate.applyFiltersAnyway)) {
     end = applyWhere(end, ast.where, delegate, name);
   }
 
@@ -380,8 +381,23 @@ function applySimpleCondition(
   condition: SimpleCondition,
 ): FilterInput {
   const filter = new Filter(input, createPredicate(condition));
+  delegate.decorateFilterInput(
+    filter,
+    `${valuePosName(condition.left)}:${condition.op}:${valuePosName(condition.right)}`,
+  );
   delegate.addEdge(input, filter);
   return filter;
+}
+
+function valuePosName(left: ValuePosition) {
+  switch (left.type) {
+    case 'static':
+      return left.field;
+    case 'literal':
+      return left.value;
+    case 'column':
+      return left.name;
+  }
 }
 
 function applyCorrelatedSubQuery(

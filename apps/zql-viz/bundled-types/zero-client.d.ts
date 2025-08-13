@@ -25,6 +25,9 @@ declare function and(...conditions: (Condition | undefined)[]): Condition;
 
 export declare const ANYONE_CAN: ((_: unknown, eb: ExpressionBuilder<Schema, never>) => Condition)[];
 
+/**
+ * @deprecated Use {@link ANYONE_CAN} instead.
+ */
 export declare const ANYONE_CAN_DO_ANYTHING: {
     row: {
         select: ((_: unknown, eb: ExpressionBuilder<Schema, never>) => Condition)[];
@@ -49,11 +52,23 @@ declare function assert<T>(value: unknown, schema: v_2.Type<T>, mode?: ParseOpti
 
 export declare type AssetPermissions<TAuthDataShape, TSchema extends Schema, TTable extends keyof TSchema['tables'] & string> = {
     select?: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined;
+    /**
+     * @deprecated Use Mutators instead.
+     * @see {@link https://zero.rocicorp.dev/docs/writing-data}
+     */
     insert?: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined;
+    /**
+     * @deprecated Use Mutators instead.
+     * @see {@link https://zero.rocicorp.dev/docs/writing-data}
+     */
     update?: {
         preMutation?: PermissionRule<TAuthDataShape, TSchema, TTable>[];
         postMutation?: PermissionRule<TAuthDataShape, TSchema, TTable>[];
     } | undefined;
+    /**
+     * @deprecated Use Mutators instead.
+     * @see {@link https://zero.rocicorp.dev/docs/writing-data}
+     */
     delete?: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined;
 };
 
@@ -102,6 +117,7 @@ export declare type Bound = {
  * pipeline to delegate environment to provide sources and storage.
  */
 declare interface BuilderDelegate {
+    readonly applyFiltersAnyway?: boolean | undefined;
     /**
      * Called once for each source needed by the AST.
      * Might be called multiple times with same tableName. It is OK to return
@@ -114,7 +130,9 @@ declare interface BuilderDelegate {
      */
     createStorage(name: string): Storage_2;
     decorateInput(input: Input, name: string): Input;
+    addEdge(source: InputBase, dest: InputBase): void;
     decorateFilterInput(input: FilterInput, name: string): FilterInput;
+    decorateSourceInput(input: SourceInput, queryID: string): Input;
     /**
      * The AST is mapped on-the-wire between client and server names.
      *
@@ -495,14 +513,6 @@ export declare function enumeration<T extends string>(): ColumnBuilder<{
     customType: T;
 }>;
 
-export declare type EnumSchemaValue<T> = {
-    kind: 'enum';
-    type: 'string';
-    serverName?: string | undefined;
-    optional?: boolean;
-    customType: T;
-};
-
 export declare type EqualityOps = '=' | '!=' | 'IS' | 'IS NOT';
 
 declare namespace ErrorKind {
@@ -708,6 +718,7 @@ export declare interface Inspector {
     readonly clientGroup: InspectorClientGroup;
     clients(): Promise<InspectorClient[]>;
     clientsWithQueries(): Promise<InspectorClient[]>;
+    readonly metrics: Metrics;
 }
 
 export declare interface InspectorClient {
@@ -737,6 +748,7 @@ export declare interface InspectorQuery {
     readonly rowCount: number;
     readonly ttl: TTL;
     readonly zql: string | null;
+    readonly metrics: Metrics | null;
 }
 
 declare function instanceOfAbstractType<T = unknown>(obj: unknown): obj is v_2.Type<T> | v_2.Optional<T>;
@@ -906,6 +918,22 @@ declare type ManyConnection<TSourceField, TDestField, TDest extends TableSchema>
 };
 
 export declare type MaybePromise<T> = T | Promise<T>;
+
+declare type MetricMap = {
+    'query-materialization-client': [queryID: string];
+    'query-materialization-end-to-end': [queryID: string, ast: AST];
+    'query-update-client': [queryID: string];
+};
+
+declare type Metrics = {
+    'query-materialization-client': ReadonlyTDigest;
+    'query-materialization-end-to-end': ReadonlyTDigest;
+    'query-update-client': ReadonlyTDigest;
+};
+
+declare interface MetricsDelegate {
+    addMetric<K extends keyof MetricMap>(metric: K, value: number, ...args: MetricMap[K]): void;
+}
 
 declare const MutationFailed = "MutationFailed";
 
@@ -1453,15 +1481,19 @@ declare interface Queryable {
     query: (query: string, args: unknown[]) => Promise<Iterable<Row_3>>;
 }
 
-declare interface QueryDelegate extends BuilderDelegate {
+declare interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback | undefined): () => void;
     addCustomQuery(customQueryID: CustomQueryID, ttl: TTL, gotCallback?: GotCallback | undefined): () => void;
     updateServerQuery(ast: AST, ttl: TTL): void;
     updateCustomQuery(customQueryID: CustomQueryID, ttl: TTL): void;
     flushQueryChanges(): void;
     onTransactionCommit(cb: CommitListener): () => void;
+    /**
+     * batchViewUpdates is used to allow the view to batch multiple view updates together.
+     * Normally, `applyViewUpdates` is called directly but for some cases, SolidJS for example,
+     * the updates are wrapped in a batch to avoid multiple re-renders.
+     */
     batchViewUpdates<T>(applyViewUpdates: () => T): T;
-    onQueryMaterialized(hash: string, ast: AST, duration: number): void;
     /**
      * Asserts that the `RunOptions` provided to the `run` method are supported in
      * this context. For example, in a custom mutator, the `{type: 'complete'}`
@@ -1496,6 +1528,12 @@ export declare type ReadonlyJSONValue = null | string | boolean | number | Reado
 declare function readonlyObject<T extends Record<string, v_2.Type | v_2.Optional>>(t: T): v_2.ObjectType<Readonly<T>, undefined>;
 
 declare function readonlyRecord<T extends v_2.Type>(t: T): v_2.Type<Readonly<Record<string, v_2.Infer<T>>>>;
+
+declare interface ReadonlyTDigest {
+    readonly count: () => number;
+    readonly quantile: (q: number) => number;
+    readonly cdf: (x: number) => number;
+}
 
 declare const Rebalance = "Rebalance";
 
@@ -1648,7 +1686,7 @@ export declare type SchemaValue<T = unknown> = {
     type: ValueType;
     serverName?: string | undefined;
     optional?: boolean | undefined;
-} | EnumSchemaValue<T> | SchemaValueWithCustomType<T>;
+} | SchemaValueWithCustomType<T>;
 
 /**
  * Given a schema value, return the TypeScript type.
