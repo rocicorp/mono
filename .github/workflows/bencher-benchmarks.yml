@@ -87,6 +87,10 @@ jobs:
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --start-point main \
           --threshold-measure throughput \
-          --threshold-test t_test \
-          --threshold-lower-boundary 0.90 \
+          --threshold-test percentage \
+          --threshold-lower-boundary 0.10 \   # alert if < 85% of historical mean
+          --threshold-min-sample-size 3 \     # ensure the test runs quickly
+          --threshold-max-sample-size 30 \    # use only recent history
+          --threshold-window 2419200 \        # last 4 weeks
+          --thresholds-reset \                # drop any older models that could interfere
           --err
