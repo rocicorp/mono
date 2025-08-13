@@ -25,5 +25,5 @@ jobs:
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
-          run: npm exec vitest bench
+          run: npm exec vitest bench -- --run --browser.name=chromium --project=zero-client
           token: ${{ secrets.CODSPEED_TOKEN }}
