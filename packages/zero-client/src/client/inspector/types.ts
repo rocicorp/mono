@@ -21,6 +21,7 @@ export interface Inspector {
   clients(): Promise<Client[]>;
   clientsWithQueries(): Promise<Client[]>;
   metrics(): Promise<Metrics>;
+  serverVersion(): Promise<string>;
 }
 
 export interface Client {

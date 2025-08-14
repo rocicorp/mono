@@ -28,25 +28,33 @@ const inspectQueryRowSchema = v.object({
 
 export type InspectQueryRow = v.Infer<typeof inspectQueryRowSchema>;
 
-export const inspectQueriesDownSchema = v.object({
-  op: v.literal('queries'),
+const inspectBaseDownSchema = v.object({
   id: v.string(),
+});
+
+export const inspectQueriesDownSchema = inspectBaseDownSchema.extend({
+  op: v.literal('queries'),
   value: v.array(inspectQueryRowSchema),
 });
 
 export type InspectQueriesDown = v.Infer<typeof inspectQueriesDownSchema>;
 
-export const inspectMetricsDownSchema = v.object({
+export const inspectMetricsDownSchema = inspectBaseDownSchema.extend({
   op: v.literal('metrics'),
-  id: v.string(),
   value: serverMetricsSchema,
 });
 
 export type InspectMetricsDown = v.Infer<typeof inspectMetricsDownSchema>;
 
+export const inspectVersionDownSchema = inspectBaseDownSchema.extend({
+  op: v.literal('version'),
+  value: v.string(),
+});
+
 export const inspectDownBodySchema = v.union(
   inspectQueriesDownSchema,
   inspectMetricsDownSchema,
+  inspectVersionDownSchema,
 );
 
 export const inspectDownMessageSchema = v.tuple([

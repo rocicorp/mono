@@ -21,6 +21,7 @@ import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {
   inspectMetricsDownSchema,
   inspectQueriesDownSchema,
+  inspectVersionDownSchema,
   type InspectDownBody,
   type InspectQueryRow,
   type ServerMetrics as ServerMetricsJSON,
@@ -149,6 +150,10 @@ class Inspector implements InspectorInterface {
       ),
     );
   }
+
+  async serverVersion(): Promise<string> {
+    return rpc(await this.socket(), {op: 'version'}, inspectVersionDownSchema);
+  }
 }
 
 function rpc<T extends InspectDownBody>(
@@ -159,6 +164,7 @@ function rpc<T extends InspectDownBody>(
   return new Promise((resolve, reject) => {
     const id = nanoid();
     const f = (ev: MessageEvent) => {
+      debugger;
       const msg = JSON.parse(ev.data);
       if (msg[0] === 'inspect') {
         const body = msg[1];
