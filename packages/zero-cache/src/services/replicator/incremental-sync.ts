@@ -27,6 +27,7 @@ export class IncrementalSyncer {
   readonly #changeStreamer: ChangeStreamer;
   readonly #replica: StatementRunner;
   readonly #mode: ReplicatorMode;
+  readonly #publishReplicationStatus: boolean;
   readonly #txMode: TransactionMode;
   readonly #notifier: Notifier;
 
@@ -44,12 +45,14 @@ export class IncrementalSyncer {
     changeStreamer: ChangeStreamer,
     replica: Database,
     mode: ReplicatorMode,
+    publishReplicationStatus: boolean,
   ) {
     this.#taskID = taskID;
     this.#id = id;
     this.#changeStreamer = changeStreamer;
     this.#replica = new StatementRunner(replica);
     this.#mode = mode;
+    this.#publishReplicationStatus = publishReplicationStatus;
     this.#txMode = mode === 'serving' ? 'CONCURRENT' : 'IMMEDIATE';
     this.#notifier = new Notifier();
   }
@@ -62,10 +65,9 @@ export class IncrementalSyncer {
     this.#notifier.notifySubscribers();
 
     // Only the backup replicator publishes replication status events.
-    const statusPublisher =
-      this.#mode === 'backup'
-        ? new ReplicationStatusPublisher(this.#replica.db)
-        : undefined;
+    const statusPublisher = this.#publishReplicationStatus
+      ? new ReplicationStatusPublisher(this.#replica.db)
+      : undefined;
 
     while (this.#state.shouldRun()) {
       const {replicaVersion, watermark} = getSubscriptionState(this.#replica);

@@ -54,7 +54,8 @@ describe('replicator/incremental-sync', () => {
       REPLICA_ID,
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       replica,
-      'backup',
+      'serving',
+      true,
     );
   });
 
@@ -96,7 +97,7 @@ describe('replicator/incremental-sync', () => {
       protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'incremental_sync_test_id',
-      mode: 'backup',
+      mode: 'serving',
       replicaVersion: '02',
       watermark: '02',
       initial: true,
@@ -516,6 +517,7 @@ describe('replicator/incremental-sync', () => {
       },
       replica,
       'serving',
+      true,
     );
 
     void syncer.run(lc);
@@ -543,6 +545,7 @@ describe('replicator/incremental-sync', () => {
       },
       replica,
       'serving',
+      true,
     );
 
     void syncer.run(lc);

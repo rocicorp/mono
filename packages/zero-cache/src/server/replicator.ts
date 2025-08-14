@@ -39,14 +39,15 @@ export default async function runWorker(
 
   const replica = await setupReplica(lc, fileMode, config.replica);
 
+  const runningLocalChangeStreamer =
+    config.changeStreamer.mode === 'dedicated' && !config.changeStreamer.uri;
   const shard = getShardConfig(config);
   const {
     taskID,
     change,
     changeStreamer: {
       port,
-      mode: m,
-      uri: changeStreamerURI = m === 'dedicated'
+      uri: changeStreamerURI = runningLocalChangeStreamer
         ? `http://localhost:${port}/`
         : undefined,
     },
@@ -65,6 +66,7 @@ export default async function runWorker(
     mode,
     changeStreamer,
     replica,
+    runningLocalChangeStreamer, // publish ReplicationStatusEvents
   );
 
   setUpMessageHandlers(lc, replicator, parent);
