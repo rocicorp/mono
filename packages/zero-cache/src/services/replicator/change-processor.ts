@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {
   columnDef,
@@ -20,7 +21,6 @@ import {
 } from '../../db/pg-to-lite.ts';
 import type {LiteTableSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
-import {stringify} from '../../../../shared/src/bigint-json.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {
   JSON_PARSED,
@@ -65,6 +65,11 @@ import {
 // 'INITIAL-SYNC' means the caller is handling the Transaction, and no change
 // log entries need be written.
 export type TransactionMode = 'IMMEDIATE' | 'CONCURRENT' | 'INITIAL-SYNC';
+
+export type CommitResult = {
+  watermark: string;
+  schemaUpdated: boolean;
+};
 
 /**
  * The ChangeProcessor partitions the stream of messages into transactions
@@ -120,11 +125,14 @@ export class ChangeProcessor {
   }
 
   /** @return If a transaction was committed. */
-  processMessage(lc: LogContext, downstream: ChangeStreamData): boolean {
+  processMessage(
+    lc: LogContext,
+    downstream: ChangeStreamData,
+  ): CommitResult | null {
     const [type, message] = downstream;
     if (this.#failure) {
       lc.debug?.(`Dropping ${message.tag}`);
-      return false;
+      return null;
     }
     try {
       const watermark =
@@ -137,7 +145,7 @@ export class ChangeProcessor {
     } catch (e) {
       this.#fail(lc, e);
     }
-    return false;
+    return null;
   }
 
   #beginTransaction(
@@ -184,7 +192,7 @@ export class ChangeProcessor {
     lc: LogContext,
     msg: Change,
     watermark: string | undefined,
-  ): boolean {
+  ): CommitResult | null {
     if (msg.tag === 'begin') {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
@@ -194,7 +202,7 @@ export class ChangeProcessor {
         must(watermark),
         msg.json ?? JSON_PARSED,
       );
-      return false;
+      return null;
     }
 
     // For non-begin messages, there should be a #currentTx set.
@@ -210,14 +218,14 @@ export class ChangeProcessor {
       this.#currentTx = null;
 
       assert(watermark);
-      tx.processCommit(msg, watermark);
-      return true;
+      const schemaUpdated = tx.processCommit(msg, watermark);
+      return {watermark, schemaUpdated};
     }
 
     if (msg.tag === 'rollback') {
       this.#currentTx?.abort(lc);
       this.#currentTx = null;
-      return false;
+      return null;
     }
 
     switch (msg.tag) {
@@ -261,7 +269,7 @@ export class ChangeProcessor {
         unreachable(msg);
     }
 
-    return false;
+    return null;
   }
 }
 
@@ -663,7 +671,8 @@ class TransactionProcessor {
     this.#reloadTableSpecs();
   }
 
-  processCommit(commit: MessageCommit, watermark: string) {
+  /** @returns `true` if the schema was updated. */
+  processCommit(commit: MessageCommit, watermark: string): boolean {
     if (watermark !== this.#version) {
       throw new Error(
         `'commit' version ${watermark} does not match 'begin' version ${
@@ -687,6 +696,8 @@ class TransactionProcessor {
 
     const elapsedMs = Date.now() - this.#startMs;
     this.#lc.debug?.(`Committed tx@${this.#version} (${elapsedMs} ms)`);
+
+    return this.#schemaChanged;
   }
 
   abort(lc: LogContext) {

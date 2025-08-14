@@ -7,6 +7,7 @@ import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {warmupConnections} from '../db/warmup.ts';
+import {initEventSink} from '../observability/events.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
@@ -43,6 +44,7 @@ export default function runWorker(
 
   startOtelAuto(createLogContext(config, {worker: 'syncer'}, false));
   const lc = createLogContext(config, {worker: 'syncer'}, true);
+  initEventSink(lc, config);
 
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
