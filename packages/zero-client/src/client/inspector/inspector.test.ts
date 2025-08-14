@@ -640,7 +640,6 @@ describe('query metrics', () => {
 });
 
 test('server version', async () => {
-  debugger;
   const z = zeroForTest({schema});
   await z.triggerConnected();
   await Promise.resolve();

@@ -164,7 +164,6 @@ function rpc<T extends InspectDownBody>(
   return new Promise((resolve, reject) => {
     const id = nanoid();
     const f = (ev: MessageEvent) => {
-      debugger;
       const msg = JSON.parse(ev.data);
       if (msg[0] === 'inspect') {
         const body = msg[1];
