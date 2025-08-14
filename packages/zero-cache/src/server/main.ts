@@ -2,6 +2,7 @@ import {resolver} from '@rocicorp/resolver';
 import path from 'node:path';
 import {must} from '../../../shared/src/must.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {initEventSink} from '../observability/events.ts';
 import {
   exitAfter,
   ProcessManager,
@@ -42,6 +43,7 @@ export default async function runWorker(
 
   startOtelAuto(createLogContext(config, {worker: 'dispatcher'}, false));
   const lc = createLogContext(config, {worker: 'dispatcher'}, true);
+  initEventSink(lc, config);
 
   const processes = new ProcessManager(lc, parent);
 

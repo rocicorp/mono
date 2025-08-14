@@ -64,6 +64,7 @@ export class ReplicatorService implements Replicator, Service {
     mode: ReplicatorMode,
     changeStreamer: ChangeStreamer,
     replica: Database,
+    publishReplicationStatus: boolean,
   ) {
     this.id = id;
     this.#lc = lc
@@ -76,6 +77,7 @@ export class ReplicatorService implements Replicator, Service {
       changeStreamer,
       replica,
       mode,
+      publishReplicationStatus,
     );
   }
 
