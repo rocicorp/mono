@@ -392,6 +392,25 @@ test('zero-cache --help', () => {
                                                                  This helps us improve Zero by collecting anonymous usage data.                                    
                                                                  Setting the DO_NOT_TRACK environment variable also disables telemetry.                            
                                                                                                                                                                    
+     --cloud-event-sink-env string                               optional                                                                                          
+       ZERO_CLOUD_EVENT_SINK_ENV env                                                                                                                               
+                                                                 ENV variable containing a URI to a CloudEvents sink. When set, ZeroEvents                         
+                                                                 will be published to the sink as the data field of CloudEvents.                                   
+                                                                 The source field of the CloudEvents will be set to the ZERO_TASK_ID,                              
+                                                                 along with any extension attributes specified by the ZERO_CLOUD_EVENT_EXTENSION_OVERRIDES_ENV.    
+                                                                                                                                                                   
+                                                                 This configuration is modeled to easily integrate with a knative K_SINK binding,                  
+                                                                 (i.e. https://github.com/knative/eventing/blob/main/docs/spec/sources.md#sinkbinding).            
+                                                                 However, any CloudEvents sink can be used.                                                        
+                                                                                                                                                                   
+     --cloud-event-extension-overrides-env string                optional                                                                                          
+       ZERO_CLOUD_EVENT_EXTENSION_OVERRIDES_ENV env                                                                                                                
+                                                                 ENV variable containing a JSON stringified object with an extensions field                        
+                                                                 containing attributes that should be added or overridden on outbound CloudEvents.                 
+                                                                                                                                                                   
+                                                                 This configuration is modeled to easily integrate with a knative K_CE_OVERRIDES binding,          
+                                                                 (i.e. https://github.com/knative/eventing/blob/main/docs/spec/sources.md#sinkbinding).            
+                                                                                                                                                                   
     "
   `);
 });

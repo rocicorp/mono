@@ -718,7 +718,7 @@ describe('initConnection', () => {
       }),
     });
     const mockSocket = await r.socket;
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
           [
@@ -743,7 +743,7 @@ describe('initConnection', () => {
           ]
         `);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
-    };
+    });
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
@@ -767,7 +767,7 @@ describe('initConnection', () => {
     });
 
     const mockSocket = await r.socket;
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
           [
@@ -797,7 +797,7 @@ describe('initConnection', () => {
           ]
         `);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
-    };
+    });
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
@@ -821,7 +821,7 @@ describe('initConnection', () => {
     });
 
     const mockSocket = await r.socket;
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
           [
@@ -851,7 +851,7 @@ describe('initConnection', () => {
           ]
         `);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
-    };
+    });
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
@@ -1030,7 +1030,7 @@ describe('initConnection', () => {
     });
     const mockSocket = await r.socket;
 
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
           [
@@ -1071,7 +1071,7 @@ describe('initConnection', () => {
         `);
 
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
-    };
+    });
 
     expect(mockSocket.messages.length).toEqual(0);
     const view = r.query.e.materialize();
@@ -1099,7 +1099,7 @@ describe('initConnection', () => {
     });
     const mockSocket = await r.socket;
 
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
           [
@@ -1145,7 +1145,7 @@ describe('initConnection', () => {
         `);
 
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
-    };
+    });
 
     expect(mockSocket.messages.length).toEqual(0);
     const view = r.query.e.materialize();
@@ -1169,7 +1169,7 @@ describe('initConnection', () => {
     });
 
     const mockSocket = await r.socket;
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(
         valita.parse(JSON.parse(msg), changeDesiredQueriesMessageSchema),
       ).toEqual([
@@ -1189,7 +1189,7 @@ describe('initConnection', () => {
         },
       ]);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
-    };
+    });
 
     expect(
       valita.parse(
@@ -1268,7 +1268,7 @@ describe('initConnection', () => {
     const removeListener = view1.addListener(() => {});
 
     const mockSocket = await r.socket;
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(
         valita.parse(JSON.parse(msg), changeDesiredQueriesMessageSchema),
       ).toEqual([
@@ -1282,7 +1282,7 @@ describe('initConnection', () => {
           ],
         },
       ]);
-    };
+    });
     expect(mockSocket.messages.length).toEqual(0);
 
     removeListener();

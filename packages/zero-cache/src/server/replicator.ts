@@ -2,8 +2,8 @@ import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {assertNormalized} from '../config/normalize.ts';
-import {getZeroConfig} from '../config/zero-config.ts';
+import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {initEventSink} from '../observability/events.ts';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {
@@ -31,22 +31,23 @@ export default async function runWorker(
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
-  const config = getZeroConfig({env, argv: args.slice(1)});
-  assertNormalized(config);
+  const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;
   const lc = createLogContext(config, {worker: workerName});
+  initEventSink(lc, config);
 
   const replica = await setupReplica(lc, fileMode, config.replica);
 
+  const runningLocalChangeStreamer =
+    config.changeStreamer.mode === 'dedicated' && !config.changeStreamer.uri;
   const shard = getShardConfig(config);
   const {
     taskID,
     change,
     changeStreamer: {
       port,
-      mode: m,
-      uri: changeStreamerURI = m === 'dedicated'
+      uri: changeStreamerURI = runningLocalChangeStreamer
         ? `http://localhost:${port}/`
         : undefined,
     },
@@ -65,6 +66,7 @@ export default async function runWorker(
     mode,
     changeStreamer,
     replica,
+    runningLocalChangeStreamer, // publish ReplicationStatusEvents
   );
 
   setUpMessageHandlers(lc, replicator, parent);

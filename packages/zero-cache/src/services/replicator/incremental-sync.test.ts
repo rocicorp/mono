@@ -9,10 +9,12 @@ import {
   vi,
   type MockedFunction,
 } from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
-import {expectTables, initDB} from '../../test/lite.ts';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import type {ZeroEvent} from '../../../../zero-events/src/index.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
+import {initEventSinkForTesting} from '../../observability/events.ts';
+import {expectTables, initDB} from '../../test/lite.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {
   PROTOCOL_VERSION,
@@ -32,6 +34,7 @@ describe('replicator/incremental-sync', () => {
   let replica: Database;
   let syncer: IncrementalSyncer;
   let downstream: Subscription<Downstream>;
+  let eventSink: ZeroEvent[];
   let subscribeFn: MockedFunction<
     (ctx: SubscriberContext) => Promise<Subscription<Downstream>>
   >;
@@ -40,6 +43,11 @@ describe('replicator/incremental-sync', () => {
     lc = createSilentLogContext();
     replica = new Database(lc, ':memory:');
     downstream = Subscription.create();
+    eventSink = [];
+    initEventSinkForTesting(
+      eventSink,
+      new Date(Date.UTC(2025, 7, 14, 1, 2, 3)),
+    );
     subscribeFn = vi.fn();
     syncer = new IncrementalSyncer(
       TASK_ID,
@@ -47,6 +55,7 @@ describe('replicator/incremental-sync', () => {
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       replica,
       'serving',
+      true,
     );
   });
 
@@ -233,6 +242,261 @@ describe('replicator/incremental-sync', () => {
       },
       'bigint',
     );
+
+    expect(eventSink).toMatchInlineSnapshot(`
+      [
+        {
+          "component": "replication",
+          "description": "Replicating from 02",
+          "indexes": [
+            {
+              "columns": [
+                {
+                  "column": "bool",
+                  "dir": "ASC",
+                },
+                {
+                  "column": "issueID",
+                  "dir": "ASC",
+                },
+              ],
+              "table": "issues",
+              "unique": true,
+            },
+          ],
+          "replicaSize": 40960,
+          "stage": "Replicating",
+          "status": "OK",
+          "tables": [
+            {
+              "columns": [
+                {
+                  "clientType": "string",
+                  "column": "_0_version",
+                  "upstreamType": "TEXT",
+                },
+                {
+                  "clientType": "number",
+                  "column": "big",
+                  "upstreamType": "INTEGER",
+                },
+                {
+                  "clientType": "boolean",
+                  "column": "bool",
+                  "upstreamType": "BOOL",
+                },
+                {
+                  "clientType": null,
+                  "column": "bytes",
+                  "upstreamType": "bytesa",
+                },
+                {
+                  "clientType": "string",
+                  "column": "description",
+                  "upstreamType": "TEXT",
+                },
+                {
+                  "clientType": "number",
+                  "column": "flt",
+                  "upstreamType": "REAL",
+                },
+                {
+                  "clientType": "json",
+                  "column": "intArray",
+                  "upstreamType": "int4[]",
+                },
+                {
+                  "clientType": "number",
+                  "column": "issueID",
+                  "upstreamType": "INTEGER",
+                },
+                {
+                  "clientType": "json",
+                  "column": "json",
+                  "upstreamType": "JSON",
+                },
+                {
+                  "clientType": "json",
+                  "column": "json2",
+                  "upstreamType": "JSONB",
+                },
+                {
+                  "clientType": "number",
+                  "column": "time",
+                  "upstreamType": "TIMESTAMPTZ",
+                },
+              ],
+              "table": "issues",
+            },
+          ],
+          "time": "2025-08-14T01:02:03.000Z",
+          "type": "zero/events/status/replication/v1",
+        },
+      ]
+    `);
+  });
+
+  test('replicates schema changes', async () => {
+    const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+
+    initReplicationState(replica, ['zero_data'], '09');
+    initChangeLog(replica);
+
+    initDB(
+      replica,
+      `
+    CREATE TABLE issues(
+      issueID INTEGER,
+      bool BOOL,
+      big INTEGER,
+      _0_version TEXT,
+      PRIMARY KEY(issueID, bool)
+    );
+      `,
+    );
+
+    const syncing = syncer.run(lc);
+    const notifications = syncer.subscribe();
+    const versionReady = notifications[Symbol.asyncIterator]();
+    await versionReady.next(); // Get the initial nextStateVersion.
+    expect(subscribeFn.mock.calls[0][0]).toEqual({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
+      id: 'incremental_sync_test_id',
+      mode: 'serving',
+      replicaVersion: '09',
+      watermark: '09',
+      initial: true,
+    });
+
+    for (const change of [
+      ['status', {tag: 'status'}],
+      ['begin', issues.begin(), {commitWatermark: '110'}],
+      [
+        'data',
+        issues.addColumn('issues', 'new_column', {pos: 4, dataType: 'int8'}),
+      ],
+      ['commit', issues.commit(), {watermark: '110'}],
+    ] satisfies Downstream[]) {
+      downstream.push(change);
+      if (change[0] === 'commit') {
+        await Promise.race([versionReady.next(), syncing]);
+      }
+    }
+
+    expect(eventSink).toMatchInlineSnapshot(`
+      [
+        {
+          "component": "replication",
+          "description": "Replicating from 09",
+          "indexes": [
+            {
+              "columns": [
+                {
+                  "column": "bool",
+                  "dir": "ASC",
+                },
+                {
+                  "column": "issueID",
+                  "dir": "ASC",
+                },
+              ],
+              "table": "issues",
+              "unique": true,
+            },
+          ],
+          "replicaSize": 40960,
+          "stage": "Replicating",
+          "status": "OK",
+          "tables": [
+            {
+              "columns": [
+                {
+                  "clientType": "string",
+                  "column": "_0_version",
+                  "upstreamType": "TEXT",
+                },
+                {
+                  "clientType": "number",
+                  "column": "big",
+                  "upstreamType": "INTEGER",
+                },
+                {
+                  "clientType": "boolean",
+                  "column": "bool",
+                  "upstreamType": "BOOL",
+                },
+                {
+                  "clientType": "number",
+                  "column": "issueID",
+                  "upstreamType": "INTEGER",
+                },
+              ],
+              "table": "issues",
+            },
+          ],
+          "time": "2025-08-14T01:02:03.000Z",
+          "type": "zero/events/status/replication/v1",
+        },
+        {
+          "component": "replication",
+          "description": "Schema updated",
+          "indexes": [
+            {
+              "columns": [
+                {
+                  "column": "bool",
+                  "dir": "ASC",
+                },
+                {
+                  "column": "issueID",
+                  "dir": "ASC",
+                },
+              ],
+              "table": "issues",
+              "unique": true,
+            },
+          ],
+          "replicaSize": 49152,
+          "stage": "Replicating",
+          "status": "OK",
+          "tables": [
+            {
+              "columns": [
+                {
+                  "clientType": "string",
+                  "column": "_0_version",
+                  "upstreamType": "TEXT",
+                },
+                {
+                  "clientType": "number",
+                  "column": "big",
+                  "upstreamType": "INTEGER",
+                },
+                {
+                  "clientType": "boolean",
+                  "column": "bool",
+                  "upstreamType": "BOOL",
+                },
+                {
+                  "clientType": "number",
+                  "column": "issueID",
+                  "upstreamType": "INTEGER",
+                },
+                {
+                  "clientType": "number",
+                  "column": "new_column",
+                  "upstreamType": "int8",
+                },
+              ],
+              "table": "issues",
+            },
+          ],
+          "time": "2025-08-14T01:02:03.000Z",
+          "type": "zero/events/status/replication/v1",
+        },
+      ]
+    `);
   });
 
   test('retry on initial change-streamer connection failure', async () => {
@@ -253,6 +517,7 @@ describe('replicator/incremental-sync', () => {
       },
       replica,
       'serving',
+      true,
     );
 
     void syncer.run(lc);
@@ -280,6 +545,7 @@ describe('replicator/incremental-sync', () => {
       },
       replica,
       'serving',
+      true,
     );
 
     void syncer.run(lc);

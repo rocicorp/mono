@@ -1,5 +1,6 @@
 import {must} from '../../../shared/src/must.ts';
-import {getZeroConfig} from '../config/zero-config.ts';
+import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {initEventSink} from '../observability/events.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {
   parentWorker,
@@ -14,8 +15,9 @@ function runWorker(
   env: NodeJS.ProcessEnv,
   ...args: string[]
 ): Promise<void> {
-  const config = getZeroConfig({env, argv: args.slice(1)});
+  const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const lc = createLogContext(config, {worker: 'mutator'});
+  initEventSink(lc, config);
 
   // TODO: create `PusherFactory`
   return runUntilKilled(lc, parent, new Mutator());

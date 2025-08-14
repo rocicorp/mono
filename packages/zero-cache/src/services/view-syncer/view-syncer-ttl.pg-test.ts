@@ -760,4 +760,92 @@ describe('ttl', () => {
 
     await expectNoPokes(client);
   });
+
+  test('inspect query does not include expired queries', async () => {
+    const ttl = 100;
+    vi.setSystemTime(Date.now());
+
+    // Test with one query to keep it simple, similar to existing TTL tests
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
+    ]);
+
+    stateChanges.push({state: 'version-ready'});
+    await expectDesiredPut(client, 'foo', 'query-hash1');
+
+    await expectGotPut(client, 'query-hash1');
+
+    // Force query materialization by processing a transaction that affects the query
+    // This ensures that server-side metrics are actually created in #perQueryServerMetrics
+    replicator.processTransaction(
+      'test-txn',
+      messages.insert('issues', {
+        id: 'test-issue',
+        title: 'Test Issue',
+        owner: '100',
+        big: 1000,
+        json: null,
+        parent: null,
+      }),
+    );
+    stateChanges.push({state: 'version-ready'});
+    await expectNoPokes(client);
+
+    // Verify the query has metrics via inspect queries operation
+    // This indirectly tests that #perQueryServerMetrics contains an entry for this query
+    const inspectId1 = 'test-metrics-before-ttl';
+    await vs.inspect(SYNC_CONTEXT, [
+      'inspect',
+      {op: 'queries', id: inspectId1, clientID: SYNC_CONTEXT.clientID},
+    ]);
+
+    const queriesBeforeExpiry = await client.dequeue();
+    expect(queriesBeforeExpiry).toMatchObject([
+      'inspect',
+      expect.objectContaining({
+        id: inspectId1,
+        op: 'queries',
+        value: expect.arrayContaining([
+          expect.objectContaining({
+            queryID: 'query-hash1',
+            metrics: expect.objectContaining({
+              'query-materialization-server': expect.arrayContaining([
+                expect.any(Number),
+              ]),
+            }),
+          }),
+        ]),
+      }),
+    ]);
+
+    // Inactivate the query to trigger TTL timer
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
+    await expectDesiredDel(client, SYNC_CONTEXT.clientID, 'query-hash1');
+
+    await expectNoPokes(client);
+
+    // Advance time to trigger TTL expiration for query-hash1
+    callNextSetTimeout(ttl);
+    await expectGotDel(client, 'query-hash1');
+
+    // Verify that the query no longer appears in inspect results
+    // This confirms that both the query AND its metrics in #perQueryServerMetrics were cleaned up
+    const inspectId2 = 'test-metrics-after-ttl';
+    await vs.inspect(SYNC_CONTEXT, [
+      'inspect',
+      {op: 'queries', id: inspectId2, clientID: SYNC_CONTEXT.clientID},
+    ]);
+
+    const queriesAfterExpiry = await client.dequeue();
+    expect(queriesAfterExpiry).toMatchObject([
+      'inspect',
+      expect.objectContaining({
+        id: inspectId2,
+        op: 'queries',
+        value: [], // Should be empty since the query was removed
+      }),
+    ]);
+
+    await expectNoPokes(client);
+  });
 });

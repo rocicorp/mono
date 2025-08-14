@@ -1,10 +1,10 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {DatabaseInitError} from '../../../zqlite/src/db.ts';
-import {assertNormalized} from '../config/normalize.ts';
-import {getZeroConfig} from '../config/zero-config.ts';
+import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {warmupConnections} from '../db/warmup.ts';
+import {initEventSink} from '../observability/events.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
 import {BackupMonitor} from '../services/change-streamer/backup-monitor.ts';
@@ -32,8 +32,7 @@ export default async function runWorker(
   assert(args.length > 0, `parent startMs not specified`);
   const parentStartMs = parseInt(args[0]);
 
-  const config = getZeroConfig({env, argv: args.slice(1)});
-  assertNormalized(config);
+  const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const {
     taskID,
     changeStreamer: {port, address, protocol},
@@ -46,6 +45,7 @@ export default async function runWorker(
 
   startOtelAuto(createLogContext(config, {worker: 'change-streamer'}, false));
   const lc = createLogContext(config, {worker: 'change-streamer'}, true);
+  initEventSink(lc, config);
 
   // Kick off DB connection warmup in the background.
   const changeDB = pgClient(lc, change.db, {

@@ -1,11 +1,14 @@
 import {useEffect, useRef, useState} from 'react';
+import {nanoid} from 'nanoid';
 import {Button} from '../../components/button.tsx';
-import {ImageUploadButton} from '../../components/image-upload-button.tsx';
+import {
+  ImageUploadArea,
+  type TextAreaPatch,
+} from '../../components/image-upload-area.tsx';
 import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {nanoid} from 'nanoid';
 
 export function CommentComposer({
   id,
@@ -22,6 +25,7 @@ export function CommentComposer({
   const login = useLogin();
   const [currentBody, setCurrentBody] = useState(body ?? '');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const save = () => {
     setCurrentBody(body ?? '');
     if (!id) {
@@ -74,21 +78,27 @@ export function CommentComposer({
     }
   };
 
+  const onInsert = (patch: TextAreaPatch) => {
+    setCurrentBody(prev => patch.apply(prev));
+  };
+
   if (!login.loginState) {
     return null;
   }
 
   return (
     <>
-      <textarea
-        value={currentBody}
-        onChange={handleChange}
-        onKeyDown={handleKeyDown}
-        className="comment-input autoResize"
-        /* The launch post has a speical maxLength because trolls */
-        maxLength={maxCommentLength(issueID)}
-        ref={textareaRef}
-      />
+      <ImageUploadArea textAreaRef={textareaRef} onInsert={onInsert}>
+        <textarea
+          value={currentBody}
+          onChange={handleChange}
+          onKeyDown={handleKeyDown}
+          className="comment-input autoResize"
+          /* The launch post has a speical maxLength because trolls */
+          maxLength={maxCommentLength(issueID)}
+          ref={textareaRef}
+        />
+      </ImageUploadArea>
       <div style={{display: 'flex', gap: '0.5rem', alignItems: 'center'}}>
         <Button
           className="secondary-button"
@@ -98,29 +108,16 @@ export function CommentComposer({
         >
           {id ? 'Save' : 'Add comment'}
         </Button>
-        <ImageUploadButton
-          onUpload={markdown => {
-            const textarea = textareaRef.current;
-            if (textarea) {
-              const start = textarea.selectionStart;
-              const end = textarea.selectionEnd;
-              const text = textarea.value;
-              const newText =
-                text.substring(0, start) + markdown + text.substring(end);
-              setCurrentBody(newText);
-            }
-          }}
-        />
+        {id ? (
+          <Button
+            className="edit-comment-cancel"
+            eventName="Cancel comment edits"
+            onAction={onDone}
+          >
+            Cancel
+          </Button>
+        ) : null}
       </div>
-      {id ? (
-        <Button
-          className="edit-comment-cancel"
-          eventName="Cancel comment edits"
-          onAction={onDone}
-        >
-          Cancel
-        </Button>
-      ) : null}
     </>
   );
 }
