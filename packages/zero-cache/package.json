@@ -41,6 +41,7 @@
     "@types/basic-auth": "^1.1.8",
     "basic-auth": "^2.0.1",
     "chalk": "^5.3.0",
+    "cloudevents": "^10.0.0",
     "compare-utf8": "^0.1.1",
     "defu": "^6.1.4",
     "eventemitter3": "^5.0.1",
@@ -73,6 +74,7 @@
     "shared": "0.0.0",
     "typescript": "~5.8.2",
     "vitest": "3.2.4",
+    "zero-events": "0.0.0",
     "zero-protocol": "0.0.0",
     "zero-schema": "0.0.0",
     "zql": "0.0.0"

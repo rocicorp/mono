@@ -3,6 +3,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {initEventSink} from '../observability/events.ts';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {
@@ -34,6 +35,7 @@ export default async function runWorker(
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;
   const lc = createLogContext(config, {worker: workerName});
+  initEventSink(lc, config);
 
   const replica = await setupReplica(lc, fileMode, config.replica);
 
