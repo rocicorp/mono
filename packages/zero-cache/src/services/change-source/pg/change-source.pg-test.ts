@@ -16,6 +16,7 @@ import {
 import {DbFile} from '../../../test/lite.ts';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
 import {type PostgresDB} from '../../../types/pg.ts';
+import type {ShardConfig} from '../../../types/shards.ts';
 import type {Source} from '../../../types/streams.ts';
 import type {
   ChangeSource,
@@ -828,7 +829,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
         appID: APP_ID,
         publications: ['zero_foo', 'zero_zero'],
         shardNum: SHARD_NUM,
-        ignoredTables: [] as string[],
+        ignoredTables: [],
       },
       replicaFile2.path,
       {tableCopyWorkers: 5},
@@ -873,7 +874,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
         appID: APP_ID,
         publications: ['zero_foo', 'zero_zero'],
         shardNum: SHARD_NUM,
-        ignoredTables: [] as string[],
+        ignoredTables: [],
       },
       replicaFile3.path,
       {tableCopyWorkers: 5},
@@ -948,7 +949,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
           appID: APP_ID,
           shardNum: SHARD_NUM,
           publications: ['zero_different_publication'],
-          ignoredTables: [] as string[],
+          ignoredTables: [],
         },
         replicaDbFile.path,
         {tableCopyWorkers: 5},

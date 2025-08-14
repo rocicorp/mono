@@ -16,6 +16,7 @@ import {
   initDB as initLiteDB,
 } from '../../../test/lite.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
+import type {ShardConfig} from '../../../types/shards.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../replicator/schema/replication-state.ts';
 import {initialSync, INSERT_BATCH_SIZE} from './initial-sync.ts';
 import {fromLexiVersion} from './lsn.ts';
@@ -2164,7 +2165,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             appID: APP_ID,
             shardNum: SHARD_NUM,
             publications: c.requestedPublications ?? [],
-            ignoredTables: [] as string[],
+            ignoredTables: [],
           },
           replica,
           getConnectionURI(upstream),
@@ -2255,7 +2256,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
   test('resume initial sync with invalid table', async () => {
     const lc = createSilentLogContext();
     const replica = new Database(lc, ':memory:');
-    const shardConfig = {appID: APP_ID, shardNum: SHARD_NUM, publications: [] as string[], ignoredTables: [] as string[]};
+    const shardConfig: ShardConfig = {appID: APP_ID, shardNum: SHARD_NUM, publications: [], ignoredTables: []};
 
     await ensureShardSchema(lc, upstream, shardConfig);
 
@@ -2291,11 +2292,11 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     await sql`INSERT INTO foo(id) VALUES (1);`;
 
     const replica = new Database(lc, ':memory:');
-    const shardConfig = {
+    const shardConfig: ShardConfig = {
       appID: APP_ID,
       shardNum: SHARD_NUM,
       publications: [],
-      ignoredTables: [] as string[],
+      ignoredTables: [],
     };
 
     await ensureShardSchema(lc, upstream, shardConfig);
@@ -2324,7 +2325,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     try {
       await initialSync(
         lc,
-        {appID, shardNum: 0, publications: [] as string[], ignoredTables: [] as string[]},
+        {appID, shardNum: 0, publications: [], ignoredTables: []},
         replica,
         getConnectionURI(upstream),
         {tableCopyWorkers: 5},
