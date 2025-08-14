@@ -363,7 +363,7 @@ describe('replicator/incremental-sync', () => {
       protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'incremental_sync_test_id',
-      mode: 'backup',
+      mode: 'serving',
       replicaVersion: '09',
       watermark: '09',
       initial: true,
