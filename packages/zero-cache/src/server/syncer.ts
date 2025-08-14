@@ -5,8 +5,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {assertNormalized} from '../config/normalize.ts';
-import {getZeroConfig} from '../config/zero-config.ts';
+import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
@@ -40,8 +39,7 @@ export default function runWorker(
   env: NodeJS.ProcessEnv,
   ...args: string[]
 ): Promise<void> {
-  const config = getZeroConfig({env, argv: args.slice(1)});
-  assertNormalized(config);
+  const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
 
   startOtelAuto(createLogContext(config, {worker: 'syncer'}, false));
   const lc = createLogContext(config, {worker: 'syncer'}, true);
