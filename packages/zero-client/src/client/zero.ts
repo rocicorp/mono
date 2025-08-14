@@ -1956,13 +1956,17 @@ export class Zero<
     value: number,
     ...args: MetricMap[K]
   ) => void = (metric, value, ...args) => {
-    const isQueryMetric = (metric: string): metric is `query-${string}` =>
-      metric.startsWith('query-');
-
-    if (isQueryMetric(metric)) {
-      this.#queryManager.addMetric(metric, value, ...args);
-    } else {
-      unreachable(metric);
+    switch (metric) {
+      case 'query-materialization-client':
+      case 'query-materialization-end-to-end':
+      case 'query-update-client':
+        this.#queryManager.addMetric(metric, value, ...args);
+        break;
+      case 'query-materialization-server':
+        unreachable();
+      // eslint-disable-next-line no-fallthrough
+      default:
+        unreachable(metric);
     }
   };
 }

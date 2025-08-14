@@ -1,8 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import path from 'node:path';
 import {must} from '../../../shared/src/must.ts';
-import {assertNormalized} from '../config/normalize.ts';
-import {getZeroConfig} from '../config/zero-config.ts';
+import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {
   exitAfter,
   ProcessManager,
@@ -39,8 +38,7 @@ export default async function runWorker(
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
   const startMs = Date.now();
-  const config = getZeroConfig({env});
-  assertNormalized(config);
+  const config = getNormalizedZeroConfig({env});
 
   startOtelAuto(createLogContext(config, {worker: 'dispatcher'}, false));
   const lc = createLogContext(config, {worker: 'dispatcher'}, true);

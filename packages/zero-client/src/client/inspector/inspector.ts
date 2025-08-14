@@ -13,14 +13,17 @@ import type {ReplicacheImpl} from '../../../../replicache/src/replicache-impl.ts
 import {withRead} from '../../../../replicache/src/with-transactions.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
-import {type ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
+import {mapValues} from '../../../../shared/src/objects.ts';
+import {TDigest, type ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
 import * as valita from '../../../../shared/src/valita.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {
+  inspectMetricsDownSchema,
   inspectQueriesDownSchema,
   type InspectDownBody,
   type InspectQueryRow,
+  type ServerMetrics as ServerMetricsJSON,
 } from '../../../../zero-protocol/src/inspect-down.ts';
 import type {
   InspectQueriesUpBody,
@@ -28,7 +31,11 @@ import type {
   InspectUpMessage,
 } from '../../../../zero-protocol/src/inspect-up.ts';
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
-import type {MetricMap} from '../../../../zql/src/query/metrics-delegate.ts';
+import type {
+  ClientMetricMap,
+  MetricMap,
+  ServerMetricMap,
+} from '../../../../zql/src/query/metrics-delegate.ts';
 import {normalizeTTL, type TTL} from '../../../../zql/src/query/ttl.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import {ENTITIES_KEY_PREFIX} from '../keys.ts';
@@ -48,21 +55,29 @@ type Metrics = {
   readonly [K in keyof MetricMap]: ReadonlyTDigest;
 };
 
-export interface InspectorMetricsDelegate {
-  getQueryMetrics(hash: string): Metrics | undefined;
-  readonly metrics: Metrics;
+type ClientMetrics = {
+  readonly [K in keyof ClientMetricMap]: ReadonlyTDigest;
+};
+
+type ServerMetrics = {
+  readonly [K in keyof ServerMetricMap]: ReadonlyTDigest;
+};
+
+export interface InspectorClientMetricsDelegate {
+  getQueryMetrics(hash: string): ClientMetrics | undefined;
+  readonly metrics: ClientMetrics;
 }
 
 export async function newInspector(
   rep: Rep,
-  metricsDelegate: InspectorMetricsDelegate,
+  clientMetricsDelegate: InspectorClientMetricsDelegate,
   schema: Schema,
   socket: GetWebSocket,
 ): Promise<InspectorInterface> {
   const clientGroupID = await rep.clientGroupID;
   return new Inspector(
     rep,
-    metricsDelegate,
+    clientMetricsDelegate,
     schema,
     rep.clientID,
     clientGroupID,
@@ -76,11 +91,11 @@ class Inspector implements InspectorInterface {
   readonly clientGroup: ClientGroup;
   readonly #schema: Schema;
   readonly socket: GetWebSocket;
-  readonly #metricsDelegate: InspectorMetricsDelegate;
+  readonly #metricsDelegate: InspectorClientMetricsDelegate;
 
   constructor(
     rep: ReplicacheImpl,
-    metricsDelegate: InspectorMetricsDelegate,
+    clientMetricsDelegate: InspectorClientMetricsDelegate,
     schema: Schema,
     clientID: string,
     clientGroupID: string,
@@ -90,7 +105,7 @@ class Inspector implements InspectorInterface {
     this.#schema = schema;
     this.client = new Client(
       rep,
-      metricsDelegate,
+      clientMetricsDelegate,
       schema,
       socket,
       clientID,
@@ -98,11 +113,17 @@ class Inspector implements InspectorInterface {
     );
     this.clientGroup = this.client.clientGroup;
     this.socket = socket;
-    this.#metricsDelegate = metricsDelegate;
+    this.#metricsDelegate = clientMetricsDelegate;
   }
 
-  get metrics(): Metrics {
-    return this.#metricsDelegate.metrics;
+  async metrics(): Promise<Metrics> {
+    const clientMetrics = this.#metricsDelegate.metrics;
+    const serverMetricsJSON = await rpc(
+      await this.socket(),
+      {op: 'metrics'},
+      inspectMetricsDownSchema,
+    );
+    return mergeMetrics(clientMetrics, serverMetricsJSON);
   }
 
   clients(): Promise<ClientInterface[]> {
@@ -165,11 +186,11 @@ class Client implements ClientInterface {
   readonly id: string;
   readonly clientGroup: ClientGroup;
   readonly #socket: GetWebSocket;
-  readonly #metricsDelegate: InspectorMetricsDelegate;
+  readonly #clientMetricsDelegate: InspectorClientMetricsDelegate;
 
   constructor(
     rep: Rep,
-    metricsDelegate: InspectorMetricsDelegate,
+    clientMetricsDelegate: InspectorClientMetricsDelegate,
     schema: Schema,
     socket: GetWebSocket,
     id: string,
@@ -180,12 +201,12 @@ class Client implements ClientInterface {
     this.id = id;
     this.clientGroup = new ClientGroup(
       rep,
-      metricsDelegate,
+      clientMetricsDelegate,
       socket,
       schema,
       clientGroupID,
     );
-    this.#metricsDelegate = metricsDelegate;
+    this.#clientMetricsDelegate = clientMetricsDelegate;
   }
 
   async queries(): Promise<QueryInterface[]> {
@@ -194,7 +215,7 @@ class Client implements ClientInterface {
       {op: 'queries', clientID: this.id} as InspectQueriesUpBody,
       inspectQueriesDownSchema,
     );
-    return rows.map(row => new Query(row, this.#metricsDelegate));
+    return rows.map(row => new Query(row, this.#clientMetricsDelegate));
   }
 
   map(): Promise<Map<string, ReadonlyJSONValue>> {
@@ -229,11 +250,11 @@ class ClientGroup implements ClientGroupInterface {
   readonly id: string;
   readonly #schema: Schema;
   readonly #socket: GetWebSocket;
-  readonly #metricsDelegate: InspectorMetricsDelegate;
+  readonly #metricsDelegate: InspectorClientMetricsDelegate;
 
   constructor(
     rep: Rep,
-    metricsDelegate: InspectorMetricsDelegate,
+    metricsDelegate: InspectorClientMetricsDelegate,
     socket: GetWebSocket,
     schema: Schema,
     id: string,
@@ -310,7 +331,7 @@ type MapEntry<T extends ReadonlyMap<any, any>> =
 
 async function clients(
   rep: Rep,
-  metricsDelegate: InspectorMetricsDelegate,
+  metricsDelegate: InspectorClientMetricsDelegate,
   socket: GetWebSocket,
   schema: Schema,
   dagRead: Read,
@@ -334,7 +355,7 @@ async function clients(
 
 async function clientsWithQueries(
   rep: Rep,
-  metricsDelegate: InspectorMetricsDelegate,
+  metricsDelegate: InspectorClientMetricsDelegate,
   socket: GetWebSocket,
   schema: Schema,
   dagRead: Read,
@@ -374,7 +395,10 @@ class Query implements QueryInterface {
   readonly clientID: string;
   readonly metrics: Metrics | null;
 
-  constructor(row: InspectQueryRow, metricsDelegate: InspectorMetricsDelegate) {
+  constructor(
+    row: InspectQueryRow,
+    metricsDelegate: InspectorClientMetricsDelegate,
+  ) {
     const {ast, queryID, inactivatedAt} = row;
     // Use own properties to make this more useful in dev tools. For example, in
     // Chrome dev tools, if you do console.table(queries) you'll see the
@@ -391,6 +415,41 @@ class Query implements QueryInterface {
     this.rowCount = row.rowCount;
     this.deleted = row.deleted;
     this.zql = ast ? ast.table + astToZQL(ast) : null;
-    this.metrics = metricsDelegate.getQueryMetrics(queryID) ?? null;
+
+    // Merge client and server metrics
+    const clientMetrics = metricsDelegate.getQueryMetrics(queryID);
+    const serverMetrics = row.metrics;
+
+    this.metrics = mergeMetrics(clientMetrics, serverMetrics);
   }
+}
+
+function mergeMetrics(
+  clientMetrics: ClientMetrics | undefined,
+  serverMetrics: ServerMetricsJSON | null | undefined,
+): Metrics {
+  return {
+    ...(clientMetrics ?? newClientMetrics()),
+    ...(serverMetrics
+      ? convertServerMetrics(serverMetrics)
+      : newServerMetrics()),
+  };
+}
+
+function newClientMetrics(): ClientMetrics {
+  return {
+    'query-materialization-client': new TDigest(),
+    'query-materialization-end-to-end': new TDigest(),
+    'query-update-client': new TDigest(),
+  };
+}
+
+function newServerMetrics(): ServerMetrics {
+  return {
+    'query-materialization-server': new TDigest(),
+  };
+}
+
+function convertServerMetrics(metrics: ServerMetricsJSON): ServerMetrics {
+  return mapValues(metrics, v => TDigest.fromJSON(v));
 }

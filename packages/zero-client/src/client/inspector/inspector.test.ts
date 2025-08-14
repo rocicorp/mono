@@ -1,14 +1,59 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import type {ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
+import {TDigest, type ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
-import type {
-  InspectDownMessage,
-  InspectQueriesDown,
+import {
+  type InspectDownMessage,
+  type InspectMetricsDown,
+  type InspectQueriesDown,
 } from '../../../../zero-protocol/src/inspect-down.ts';
+import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
-import {MockSocket, zeroForTest} from '../test-utils.ts';
-import type {Query} from './types.ts';
+import type {CustomMutatorDefs} from '../custom.ts';
+import {MockSocket, TestZero, zeroForTest} from '../test-utils.ts';
+import type {Inspector, Metrics, Query} from './types.ts';
+
+const emptyMetrics = {
+  'query-materialization-client': new TDigest(),
+  'query-materialization-end-to-end': new TDigest(),
+  'query-materialization-server': new TDigest(),
+  'query-update-client': new TDigest(),
+};
+
+async function getMetrics<
+  S extends Schema,
+  MD extends CustomMutatorDefs | undefined,
+>(
+  inspector: Inspector,
+  z: TestZero<S, MD>,
+  metricsResponseValue?: InspectMetricsDown['value'],
+): Promise<Metrics> {
+  const socket = await z.socket;
+  const idPromise = new Promise<string>(resolve => {
+    const cleanup = socket.onUpstream(message => {
+      const data = JSON.parse(message);
+      if (data[0] === 'inspect' && data[1].op === 'metrics') {
+        cleanup();
+        resolve(data[1].id);
+      }
+    });
+  });
+  const p = inspector.metrics();
+  const id = await idPromise;
+
+  await z.triggerMessage([
+    'inspect',
+    {
+      op: 'metrics',
+      id,
+      value: metricsResponseValue ?? {
+        'query-materialization-server': [1000],
+      },
+    },
+  ]);
+
+  return p;
+}
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -125,6 +170,7 @@ test('client queries', async () => {
         inactivatedAt: null,
         rowCount: 10,
         ttl: 60_000,
+        metrics: null,
       },
     ],
     [
@@ -140,7 +186,7 @@ test('client queries', async () => {
         rowCount: 10,
         ttl: '1m',
         zql: 'issue',
-        metrics: null,
+        metrics: emptyMetrics,
       },
     ],
   );
@@ -158,6 +204,7 @@ test('client queries', async () => {
         inactivatedAt: d,
         rowCount: 10,
         ttl: 60_000,
+        metrics: null,
       },
     ],
     [
@@ -173,7 +220,7 @@ test('client queries', async () => {
         rowCount: 10,
         ttl: '1m',
         zql: 'issue',
-        metrics: null,
+        metrics: emptyMetrics,
       },
     ],
   );
@@ -237,6 +284,7 @@ test('clientGroup queries', async () => {
           inactivatedAt: null,
           rowCount: 10,
           ttl: 60_000,
+          metrics: null,
         },
       ],
     },
@@ -254,7 +302,7 @@ test('clientGroup queries', async () => {
       rowCount: 10,
       ttl: '1m',
       zql: "issue.where(({cmp, or}) => or(cmp('id', '1'), cmp('id', '!=', '2')))",
-      metrics: null,
+      metrics: emptyMetrics,
     },
   ]);
 });
@@ -268,9 +316,10 @@ describe('query metrics', () => {
     await issueQuery.run();
 
     const inspector = await z.inspect();
-    expect(inspector.metrics['query-materialization-client'].count()).toBe(1);
+    const metrics = await getMetrics(inspector, z);
+    expect(metrics['query-materialization-client'].count()).toBe(1);
     expect(
-      inspector.metrics['query-materialization-client'].quantile(0.5),
+      metrics['query-materialization-client'].quantile(0.5),
     ).toBeGreaterThanOrEqual(0);
     await z.close();
   });
@@ -310,6 +359,7 @@ describe('query metrics', () => {
             inactivatedAt: null,
             rowCount: 1,
             ttl: 60_000,
+            metrics: null,
           },
         ],
       },
@@ -318,18 +368,26 @@ describe('query metrics', () => {
     const queries = await p;
     expect(queries).toHaveLength(1);
     expect(issueQuery.hash()).toBe(queries[0].id);
-    const {metrics} = queries[0];
 
-    expect(metrics?.['query-materialization-client'].count()).toBe(1);
-    expect(
-      metrics?.['query-materialization-client'].quantile(0.5),
-    ).toBeGreaterThanOrEqual(0);
-    await vi.waitFor(() => {
-      expect(metrics?.['query-materialization-end-to-end'].count()).toBe(1);
-    });
-    expect(
-      metrics?.['query-materialization-end-to-end'].quantile(0.5),
-    ).toBeGreaterThanOrEqual(0);
+    // We should have metrics for all.. even if empty
+    expect(queries[0].metrics).toMatchInlineSnapshot(`
+      {
+        "query-materialization-client": [
+          1000,
+          0,
+          1,
+        ],
+        "query-materialization-end-to-end": [
+          1000,
+        ],
+        "query-materialization-server": [
+          1000,
+        ],
+        "query-update-client": [
+          1000,
+        ],
+      }
+    `);
 
     view.destroy();
     await z.close();
@@ -349,9 +407,10 @@ describe('query metrics', () => {
     // Check that metrics were actually collected
     const inspector = await z.inspect();
 
-    expect(inspector.metrics['query-materialization-client'].count()).toBe(2);
+    const metrics = await getMetrics(inspector, z);
+    expect(metrics['query-materialization-client'].count()).toBe(2);
 
-    const digest = inspector.metrics['query-materialization-client'];
+    const digest = metrics['query-materialization-client'];
     expect(digest.count()).toBe(2);
 
     expect(digest.quantile(0.5)).toBeGreaterThanOrEqual(0);
@@ -372,8 +431,9 @@ describe('query metrics', () => {
     const inspector = await z.inspect();
 
     // Verify global metrics were collected
+    const metrics = await getMetrics(inspector, z);
     const globalMetricsQueryMaterializationClient =
-      inspector.metrics['query-materialization-client'];
+      metrics['query-materialization-client'];
     expect(globalMetricsQueryMaterializationClient.count()).toBe(3);
 
     const ensureRealData = (digest: ReadonlyTDigest) => {
@@ -399,14 +459,17 @@ describe('query metrics', () => {
     const view = q.materialize();
     await z.triggerGotQueriesPatch(q);
 
-    const globalMetricsQueryMaterializationEndToEnd =
-      inspector.metrics['query-materialization-end-to-end'];
-    await vi.waitFor(() => {
-      expect(globalMetricsQueryMaterializationEndToEnd.count()).toBe(1);
-    });
+    {
+      const metrics = await getMetrics(inspector, z);
+      const globalMetricsQueryMaterializationEndToEnd =
+        metrics['query-materialization-end-to-end'];
 
-    ensureRealData(globalMetricsQueryMaterializationEndToEnd);
+      await vi.waitFor(() => {
+        expect(globalMetricsQueryMaterializationEndToEnd.count()).toBe(1);
+      });
 
+      ensureRealData(globalMetricsQueryMaterializationEndToEnd);
+    }
     view.destroy();
 
     await z.close();
@@ -423,7 +486,8 @@ describe('query metrics', () => {
 
     // Get initial inspector to verify no query-update metrics initially
     const initialInspector = await z.inspect();
-    expect(initialInspector.metrics['query-update-client'].count()).toBe(0);
+    const initialMetrics = await getMetrics(initialInspector, z);
+    expect(initialMetrics['query-update-client'].count()).toBe(0);
 
     // Trigger row updates to generate query-update metrics
     await z.triggerPoke(null, '2', {
@@ -454,15 +518,16 @@ describe('query metrics', () => {
     });
 
     const inspector = await z.inspect();
+    const metrics = await getMetrics(inspector, z);
 
     // Wait for the updates to process and check metrics
     await vi.waitFor(() => {
-      const updateMetrics = inspector.metrics['query-update-client'];
+      const updateMetrics = metrics['query-update-client'];
       expect(updateMetrics.count()).toBeGreaterThan(0);
     });
 
     // Final verification of the query-update-client metrics
-    const queryUpdateMetrics = inspector.metrics['query-update-client'];
+    const queryUpdateMetrics = metrics['query-update-client'];
 
     expect(queryUpdateMetrics.count()).toBeGreaterThan(0);
     expect(queryUpdateMetrics.quantile(0.5)).toBeGreaterThanOrEqual(0);
@@ -497,10 +562,11 @@ describe('query metrics', () => {
     });
 
     const inspector = await z.inspect();
+    const metrics1 = await getMetrics(inspector, z);
 
     // Wait for the update to be processed
     await vi.waitFor(() => {
-      const updateMetrics = inspector.metrics['query-update-client'];
+      const updateMetrics = metrics1['query-update-client'];
       expect(updateMetrics.count()).toBeGreaterThan(0);
     });
 
@@ -530,6 +596,9 @@ describe('query metrics', () => {
             inactivatedAt: null,
             rowCount: 1,
             ttl: 60_000,
+            metrics: {
+              'query-materialization-server': [1000, 1, 2],
+            },
           },
         ],
       },
@@ -540,14 +609,30 @@ describe('query metrics', () => {
     expect(issueQuery.hash()).toBe(queries[0].id);
 
     const {metrics} = queries[0];
-    expect(metrics).not.toBeNull();
-
-    // Verify that query-update-client metrics are included in query-specific metrics
-    expect(metrics?.['query-update-client']).toBeDefined();
-    expect(metrics?.['query-update-client'].count()).toBeGreaterThan(0);
-    expect(
-      metrics?.['query-update-client'].quantile(0.5),
-    ).toBeGreaterThanOrEqual(0);
+    expect(metrics).toMatchInlineSnapshot(`
+          {
+            "query-materialization-client": [
+              1000,
+              0,
+              1,
+            ],
+            "query-materialization-end-to-end": [
+              1000,
+              50,
+              1,
+            ],
+            "query-materialization-server": [
+              1000,
+              1,
+              2,
+            ],
+            "query-update-client": [
+              1000,
+              0,
+              1,
+            ],
+          }
+        `);
 
     view.destroy();
     await z.close();

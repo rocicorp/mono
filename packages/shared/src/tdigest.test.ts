@@ -15,7 +15,7 @@ function createNormalDist(mu: number, sigma: number, rand: () => number) {
         u1 = rand();
       } while (u1 === 0); // Avoids Math.log(0) which is -Infinity
       const u2 = rand();
-      const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+      const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
       return z0 * sigma + mu;
     },
   };
@@ -343,10 +343,10 @@ describe('TDigest', () => {
         name: 'increasing',
         data: [1, 2, 3, 4, 5],
         want: [
-          new Centroid(1.0, 1.0),
-          new Centroid(2.5, 2.0),
-          new Centroid(4.0, 1.0),
-          new Centroid(5.0, 1.0),
+          new Centroid(1, 1),
+          new Centroid(2.5, 2),
+          new Centroid(4, 1),
+          new Centroid(5, 1),
         ],
       },
     ];
@@ -358,6 +358,70 @@ describe('TDigest', () => {
       }
       const got = td.centroids();
       expect(got).toEqual(want);
+    });
+  });
+
+  describe('JSON serialization', () => {
+    test('toJSON and fromJSON preserve digest properties', () => {
+      const original = new TDigest(500);
+
+      // Add some test data
+      for (let i = 1; i <= 100; i++) {
+        original.add(i, 1);
+      }
+
+      // Serialize to JSON
+      const jsonData = original.toJSON();
+
+      expect(Array.isArray(jsonData)).toBe(true);
+      expect(jsonData.length % 2).toBe(1);
+      expect(jsonData.every(n => typeof n === 'number')).toBe(true);
+
+      // Deserialize from JSON
+      const restored = TDigest.fromJSON(jsonData);
+
+      // Verify properties are preserved
+      expect(restored.compression).toBe(original.compression);
+      expect(restored.count()).toBe(original.count());
+
+      // Verify quantiles are approximately equal
+      const quantiles = [0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99];
+      for (const q of quantiles) {
+        const originalQ = original.quantile(q);
+        const restoredQ = restored.quantile(q);
+        expect(Math.abs(originalQ - restoredQ)).toBeLessThan(0.001);
+      }
+    });
+
+    test('toJSON with empty digest', () => {
+      const empty = new TDigest(1000);
+      const jsonData = empty.toJSON();
+
+      expect(jsonData).toEqual([1000]);
+
+      const restored = TDigest.fromJSON(jsonData);
+      expect(restored.count()).toBe(0);
+      expect(restored.compression).toBe(1000);
+    });
+
+    test('toJSON with single value', () => {
+      const single = new TDigest(100);
+      single.add(42, 5);
+
+      const jsonData = single.toJSON();
+      expect(jsonData).toEqual([100, 42, 5]);
+
+      const restored = TDigest.fromJSON(jsonData);
+      expect(restored.count()).toBe(5);
+      expect(restored.quantile(0.5)).toBe(42);
+    });
+
+    test('fromJSON handles invalid centroid data gracefully', () => {
+      const jsonData = [1000, 1, 2, 3] as const; // Wrong length - missing weight for last mean
+
+      expect(() =>
+        TDigest.fromJSON(jsonData),
+      ).toThrowErrorMatchingInlineSnapshot(`[Error: Invalid centroids array]`);
     });
   });
 });

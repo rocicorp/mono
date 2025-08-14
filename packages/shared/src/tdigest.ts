@@ -3,6 +3,7 @@
 
 import {binarySearch} from './binary-search.ts';
 import {Centroid, sortCentroidList, type CentroidList} from './centroid.ts';
+import type {TDigestJSON} from './tdigest-schema.ts';
 
 export interface ReadonlyTDigest {
   readonly count: () => number;
@@ -30,6 +31,21 @@ export class TDigest {
     this.#maxProcessed = processedSize(0, this.compression);
     this.#maxUnprocessed = unprocessedSize(0, this.compression);
     this.reset();
+  }
+
+  /**
+   * fromJSON creates a TDigest from a JSON-serializable representation.
+   * The data should be an object with compression and centroids array.
+   */
+  static fromJSON(data: Readonly<TDigestJSON>): TDigest {
+    const digest = new TDigest(data[0]);
+    if (data.length % 2 !== 1) {
+      throw new Error('Invalid centroids array');
+    }
+    for (let i = 1; i < data.length; i += 2) {
+      digest.add(data[i], data[i + 1]);
+    }
+    return digest;
   }
 
   reset(): void {
@@ -145,6 +161,19 @@ export class TDigest {
     // this.process always updates this.processedWeight to the total count of all
     // centroids, so we don't need to re-count here.
     return this.#processedWeight;
+  }
+
+  /**
+   * toJSON returns a JSON-serializable representation of the digest.
+   * This processes the digest and returns an object with compression and centroid data.
+   */
+  toJSON(): TDigestJSON {
+    this.#process();
+    const data: TDigestJSON = [this.compression];
+    for (const centroid of this.#processed) {
+      data.push(centroid.mean, centroid.weight);
+    }
+    return data;
   }
 
   #updateCumulative() {

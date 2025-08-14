@@ -1,8 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {DatabaseInitError} from '../../../zqlite/src/db.ts';
-import {assertNormalized} from '../config/normalize.ts';
-import {getZeroConfig} from '../config/zero-config.ts';
+import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
@@ -32,8 +31,7 @@ export default async function runWorker(
   assert(args.length > 0, `parent startMs not specified`);
   const parentStartMs = parseInt(args[0]);
 
-  const config = getZeroConfig({env, argv: args.slice(1)});
-  assertNormalized(config);
+  const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const {
     taskID,
     changeStreamer: {port, address, protocol},
