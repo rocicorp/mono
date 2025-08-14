@@ -1,16 +1,18 @@
-import {beforeAll, afterAll, describe, expect, test, vi} from 'vitest';
 import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
-import {PeriodicExportingMetricReader} from '@opentelemetry/sdk-metrics';
-import {MeterProvider} from '@opentelemetry/sdk-metrics';
+import {
+  MeterProvider,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
+import {afterAll, beforeAll, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {getZeroConfig, type ZeroConfig} from '../config/zero-config.js';
 import {
-  startAnonymousTelemetry,
+  recordConnectionAttempted,
+  recordConnectionSuccess,
   recordMutation,
   recordRowsSynced,
-  recordConnectionSuccess,
-  recordConnectionAttempted,
   shutdownAnonymousTelemetry,
+  startAnonymousTelemetry,
 } from './anonymous-otel-start.js';
 
 // Mock the OTLP exporter and related OpenTelemetry components
@@ -20,6 +22,7 @@ vi.mock('@opentelemetry/sdk-metrics');
 // Mock the config
 vi.mock('../config/zero-config.js', () => ({
   getZeroConfig: vi.fn(),
+  getServerVersion: vi.fn(),
 }));
 
 // Mock setTimeout to execute immediately in tests
