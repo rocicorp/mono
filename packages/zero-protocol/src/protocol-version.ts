@@ -31,7 +31,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- Version 23 add `mutationResults` to poke (0.22)
 // -- Version 24 adds `ackMutationResults` to upstream (0.22).
 // -- version 25 modifies `mutationsResults` to include `del` patches (0.22)
-export const PROTOCOL_VERSION = 25;
+// -- version 26 adds inspect/metrics and adds metrics to inspect/query (0.23)
+export const PROTOCOL_VERSION = 26;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

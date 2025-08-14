@@ -61,7 +61,7 @@ export class MockSocket extends EventTarget {
   protocol: string;
   messages: string[] = [];
   closed = false;
-  onUpstream?: (message: string) => void;
+  #listeners = new Set<(message: string) => void>();
 
   constructor(url: string | URL, protocol = '') {
     super();
@@ -71,7 +71,16 @@ export class MockSocket extends EventTarget {
 
   send(message: string) {
     this.messages.push(message);
-    this.onUpstream?.(message);
+    for (const listener of this.#listeners) {
+      listener(message);
+    }
+  }
+
+  onUpstream(callback: (message: string) => void): () => void {
+    this.#listeners.add(callback);
+    return () => {
+      this.#listeners.delete(callback);
+    };
   }
 
   close() {
@@ -327,16 +336,18 @@ export async function waitForUpstreamMessage(
   vi: VitestUtils,
 ) {
   let gotMessage = false;
-  (await r.socket).onUpstream = message => {
+  const socket = await r.socket;
+  const cleanup = socket.onUpstream(message => {
     const v = JSON.parse(message);
     const [kind] = upstreamSchema.parse(v);
     if (kind === name) {
       gotMessage = true;
     }
-  };
+  });
   for (;;) {
     await vi.advanceTimersByTimeAsync(100);
     if (gotMessage) {
+      cleanup();
       break;
     }
   }

@@ -1,8 +1,10 @@
-export function mapValues<T, U>(
-  input: Record<string, T>,
-  mapper: (value: T) => U,
-): Record<string, U> {
-  return mapEntries(input, (k, v) => [k, mapper(v)]);
+export function mapValues<T extends Record<string, unknown>, U>(
+  input: T,
+  mapper: (value: T[keyof T]) => U,
+): {[K in keyof T]: U} {
+  return mapEntries(input, (k, v) => [k, mapper(v as T[keyof T])]) as {
+    [K in keyof T]: U;
+  };
 }
 
 export function mapEntries<T, U>(

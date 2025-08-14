@@ -15,7 +15,7 @@ function createNormalDist(mu: number, sigma: number, rand: () => number) {
         u1 = rand();
       } while (u1 === 0); // Avoids Math.log(0) which is -Infinity
       const u2 = rand();
-      const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+      const z0 = Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
       return z0 * sigma + mu;
     },
   };
