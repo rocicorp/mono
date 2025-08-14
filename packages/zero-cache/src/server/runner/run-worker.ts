@@ -8,6 +8,7 @@ import {childWorker, type Worker} from '../../types/processes.ts';
 import {createLogContext} from '../logging.ts';
 import {getTaskID} from './runtime.ts';
 import {ZeroDispatcher} from './zero-dispatcher.ts';
+import packageJson from '../../../../zero/package.json' with {type: 'json'};
 
 /**
  * Top-level `runner` entry point to the zero-cache. This layer is responsible for:
@@ -29,7 +30,8 @@ export async function runWorker(
   const config = normalizeZeroConfig(lc, cfg, env, defaultTaskID);
   const processes = new ProcessManager(lc, parent ?? process);
 
-  const {serverVersion, port, lazyStartup} = config;
+  const {port, lazyStartup} = config;
+  const serverVersion = config.serverVersion ?? packageJson.version;
   lc.info?.(
     `starting server${!serverVersion ? '' : `@${serverVersion}`} ` +
       `protocolVersion=${PROTOCOL_VERSION}`,
