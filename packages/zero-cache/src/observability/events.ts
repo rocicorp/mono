@@ -49,10 +49,8 @@ export function initEventSink(
   let overrides: PartialEvent = {};
 
   if (cloudEvent.extensionOverridesEnv) {
-    const {extensions} = v.parse(
-      process.env[cloudEvent.extensionOverridesEnv],
-      extensionsObjectSchema,
-    );
+    const strVal = must(process.env[cloudEvent.extensionOverridesEnv]);
+    const {extensions} = v.parse(JSON.parse(strVal), extensionsObjectSchema);
     overrides = extensions;
   }
 
