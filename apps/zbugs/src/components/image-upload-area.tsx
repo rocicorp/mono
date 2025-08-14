@@ -279,6 +279,7 @@ export function ImageUploadArea({
             top: textAreaRect.top + 16,
             left: textAreaRect.left + 16,
           }}
+          tabIndex={-1}
         >
           Add image
         </Button>
