@@ -194,10 +194,10 @@ function getIncrementalMigrations(
     },
     11: {
       migrateSchema: async (lc, sql) => {
-        await sql.unsafe(/*sql*/ `
-          ALTER TABLE ${shardConfigTable}
-            ADD COLUMN IF NOT EXISTS "ignoredTables" TEXT[] DEFAULT '{}';
-        `);
+        await sql`
+          ALTER TABLE ${sql(shardConfigTable)}
+            ADD COLUMN IF NOT EXISTS "ignoredTables" TEXT[] DEFAULT '{}'
+        `;
         
         // You might be wondering: why don't we populate ignoredTables here with 
         // the current config values from shard.ignoredTables?
