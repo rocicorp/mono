@@ -171,15 +171,16 @@ export async function initialSync(
     try {
       createLiteTables(tx, tables, initialVersion);
 
-      const fullShardConfig = await getInternalShardConfig(sql, shard);
-      const ignoredTables = fullShardConfig.ignoredTables;
+      const {ignoredTables} = await getInternalShardConfig(sql, shard);
 
       const tablesToSync = tables.filter(table => {
-        if (isTableIgnored(table, ignoredTables)) {
+        const ignored = isTableIgnored(table, ignoredTables);
+        
+        if (ignored) {
           lc.info?.(`Skipping initial sync for ignored table: ${table.schema}.${table.name}`);
-          return false;
         }
-        return true;
+
+        return !ignored;
       });
 
       void copyProfiler?.start();
@@ -264,8 +265,7 @@ async function ensurePublishedTables(
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
 
   await ensureShardSchema(lc, sql, shard);
-  const shardConfig = await getInternalShardConfig(sql, shard);
-  const {publications} = shardConfig;
+  const {publications} = await getInternalShardConfig(sql, shard);
 
   if (validate) {
     const exists = await sql`
