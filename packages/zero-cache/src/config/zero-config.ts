@@ -9,6 +9,7 @@ import {
   type ParseOptions,
 } from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
+import packageJson from '../../../zero/package.json' with {type: 'json'};
 import {runtimeDebugFlags} from '../../../zqlite/src/runtime-debug.ts';
 import {singleProcessMode} from '../types/processes.ts';
 import {
@@ -657,4 +658,14 @@ export function getNormalizedZeroConfig(
   const config = getZeroConfig(opts);
   assertNormalized(config);
   return config;
+}
+
+/**
+ * Gets the server version from the config if provided. Otherwise it gets it
+ * from the Zero package.json.
+ */
+export function getServerVersion(
+  config: Pick<ZeroConfig, 'serverVersion'> | undefined,
+): string {
+  return config?.serverVersion ?? packageJson.version;
 }

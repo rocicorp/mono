@@ -1,23 +1,33 @@
 import * as v from '../../shared/src/valita.ts';
 
-const inspectQueriesUpBodySchema = v.object({
-  op: v.literal('queries'),
+const inspectUpBase = v.object({
   id: v.string(),
+});
+
+const inspectQueriesUpBodySchema = inspectUpBase.extend({
+  op: v.literal('queries'),
   clientID: v.string().optional(),
 });
 
 export type InspectQueriesUpBody = v.Infer<typeof inspectQueriesUpBodySchema>;
 
-const inspectMetricsUpSchema = v.object({
-  op: v.literal('metrics'),
-  id: v.string(),
+const inspectBasicUpSchema = inspectUpBase.extend({
+  op: v.literalUnion('metrics', 'version'),
 });
 
-export type InspectMetricsUpBody = v.Infer<typeof inspectMetricsUpSchema>;
+export type InspectMetricsUpBody = {
+  op: 'metrics';
+  id: string;
+};
+
+export type InspectVersionUpBody = {
+  op: 'version';
+  id: string;
+};
 
 const inspectUpBodySchema = v.union(
   inspectQueriesUpBodySchema,
-  inspectMetricsUpSchema,
+  inspectBasicUpSchema,
 );
 
 export const inspectUpMessageSchema = v.tuple([

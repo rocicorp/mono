@@ -29,8 +29,11 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 import {testDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
+import {upstreamSchema} from '../../types/shards.ts';
+import {id} from '../../types/sql.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
+import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {initChangeLog} from '../replicator/schema/change-log.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
@@ -41,9 +44,6 @@ import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
 import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
-import {upstreamSchema} from '../../types/shards.ts';
-import {id} from '../../types/sql.ts';
-import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
 
 export const APP_ID = 'this_app';
 export const SHARD_NUM = 2;
@@ -667,7 +667,7 @@ export async function setup(
     storageDB,
   ).createClientGroupStorage(serviceID);
   const vs = new ViewSyncerService(
-    queryConfig,
+    {query: queryConfig},
     lc,
     SHARD,
     TASK_ID,

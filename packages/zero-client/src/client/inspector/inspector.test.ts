@@ -638,3 +638,30 @@ describe('query metrics', () => {
     await z.close();
   });
 });
+
+test('server version', async () => {
+  const z = zeroForTest({schema});
+  await z.triggerConnected();
+  await Promise.resolve();
+  const inspector = await z.inspect();
+  vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+  await z.socket;
+  const p = inspector.serverVersion();
+  await Promise.resolve();
+  expect((await z.socket).messages).toEqual([
+    JSON.stringify(['inspect', {op: 'version', id: '000000000000000000000'}]),
+  ]);
+
+  await z.triggerMessage([
+    'inspect',
+    {
+      op: 'version',
+      id: '000000000000000000000',
+      value: '1.2.34',
+    },
+  ] satisfies InspectDownMessage);
+
+  expect(await p).toBe('1.2.34');
+
+  await z.close();
+});

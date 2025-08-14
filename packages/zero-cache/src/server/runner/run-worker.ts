@@ -2,13 +2,12 @@ import {resolver, type Resolver} from '@rocicorp/resolver';
 import '../../../../shared/src/dotenv.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import {normalizeZeroConfig} from '../../config/normalize.ts';
-import {getZeroConfig} from '../../config/zero-config.ts';
+import {getServerVersion, getZeroConfig} from '../../config/zero-config.ts';
 import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';
 import {childWorker, type Worker} from '../../types/processes.ts';
 import {createLogContext} from '../logging.ts';
 import {getTaskID} from './runtime.ts';
 import {ZeroDispatcher} from './zero-dispatcher.ts';
-import packageJson from '../../../../zero/package.json' with {type: 'json'};
 
 /**
  * Top-level `runner` entry point to the zero-cache. This layer is responsible for:
@@ -31,7 +30,7 @@ export async function runWorker(
   const processes = new ProcessManager(lc, parent ?? process);
 
   const {port, lazyStartup} = config;
-  const serverVersion = config.serverVersion ?? packageJson.version;
+  const serverVersion = getServerVersion(config);
   lc.info?.(
     `starting server${!serverVersion ? '' : `@${serverVersion}`} ` +
       `protocolVersion=${PROTOCOL_VERSION}`,

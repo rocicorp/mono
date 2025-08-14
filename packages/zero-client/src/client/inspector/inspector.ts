@@ -21,6 +21,7 @@ import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {
   inspectMetricsDownSchema,
   inspectQueriesDownSchema,
+  inspectVersionDownSchema,
   type InspectDownBody,
   type InspectQueryRow,
   type ServerMetrics as ServerMetricsJSON,
@@ -148,6 +149,10 @@ class Inspector implements InspectorInterface {
         dagRead,
       ),
     );
+  }
+
+  async serverVersion(): Promise<string> {
+    return rpc(await this.socket(), {op: 'version'}, inspectVersionDownSchema);
   }
 }
 

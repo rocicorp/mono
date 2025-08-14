@@ -35,7 +35,7 @@ import {
   transformAndHashQuery,
   type TransformedAndHashed,
 } from '../../auth/read-authorizer.ts';
-import {type ZeroConfig} from '../../config/zero-config.ts';
+import {getServerVersion, type ZeroConfig} from '../../config/zero-config.ts';
 import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import {
   getOrCreateCounter,
@@ -158,6 +158,8 @@ export const TTL_CLOCK_INTERVAL = 60_000;
  */
 export const TTL_TIMER_HYSTERESIS = 50; // ms
 
+type PartialZeroConfig = Pick<ZeroConfig, 'query' | 'serverVersion'>;
+
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
   readonly #shard: ShardID;
@@ -254,8 +256,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     'query-materialization-server': new TDigest(),
   };
 
+  readonly #config: Pick<ZeroConfig, 'serverVersion'>;
+
   constructor(
-    pullConfig: ZeroConfig['query'],
+    config: PartialZeroConfig,
     lc: LogContext,
     shard: ShardID,
     taskID: string,
@@ -269,6 +273,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
+    const {query: pullConfig} = config;
+    this.#config = config;
     this.id = clientGroupID;
     this.#shard = shard;
     this.#queryConfig = pullConfig;
@@ -1741,6 +1747,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         });
         break;
       }
+
+      case 'version':
+        client.sendInspectResponse(lc, {
+          op: 'version',
+          id: body.id,
+          value: getServerVersion(this.#config),
+        });
+        break;
 
       default:
         unreachable(body);
