@@ -153,6 +153,7 @@ export class MutagenService implements Mutagen, Service {
     if (this.#isStopped) {
       return this.#stopped.promise;
     }
+    this.#writeAuthorizer.destroy();
     this.#isStopped = true;
     this.#stopped.resolve();
     return this.#stopped.promise;
@@ -182,7 +183,7 @@ export async function processMutation(
   lc.debug?.('Process mutation start', mutation);
 
   // Record mutation processing attempt for telemetry (regardless of success/failure)
-  recordMutation();
+  recordMutation('crud');
 
   let result: MutationError | undefined;
 
