@@ -199,14 +199,34 @@ function getIncrementalMigrations(
             ADD COLUMN IF NOT EXISTS "ignoredTables" TEXT[] DEFAULT '{}';
         `);
         
-        // Update with current ignored tables from config if not already set
-        if (shard.ignoredTables?.length) {
-          await sql.unsafe(/*sql*/ `
-            UPDATE ${shardConfigTable}
-            SET "ignoredTables" = ARRAY[${literal(shard.ignoredTables)}]
-            WHERE "ignoredTables" = '{}';
-          `);
-        }
+        // You might be wondering: why don't we populate ignoredTables here with 
+        // the current config values from shard.ignoredTables?
+        //
+        // The answer is that we INTENTIONALLY leave it empty to trigger a resync!
+        //
+        // Here's what happens:
+        // 1. After this migration, the DB has ignoredTables = [] (empty)
+        // 2. On next startup, change-source.ts compares:
+        //    - Config says: ignoredTables = ["public.audit_logs", ...] 
+        //    - Database says: ignoredTables = []
+        // 3. They don't match! This triggers an AutoResetSignal
+        // 4. The AutoResetSignal causes a full resync, which:
+        //    - Drops the entire shard schema
+        //    - DELETES the SQLite replica database completely
+        //    - Runs initial-sync from scratch
+        //    - Creates a NEW SQLite with only non-ignored tables
+        //
+        // This resync is NECESSARY because if we just updated the config without
+        // rebuilding SQLite:
+        // - SQLite would still contain all the old data from now-ignored tables
+        // - This stale data would remain forever (we filter out updates during
+        //   replication, so it would never get deleted)
+        // - The ignored tables would still exist in SQLite's schema, taking up space
+        // - Clients would still see and query this stale, never-updating data
+        //
+        // By triggering a resync, we ensure SQLite only contains tables that are
+        // actively being synced. The temporary downtime during resync is worth it
+        // to avoid clients working with stale data from ignored tables!
         
         lc.info?.('Added ignoredTables column to shardConfig');
       },
