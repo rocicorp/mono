@@ -15,6 +15,7 @@ import {
   ALLOWED_APP_ID_CHARACTERS,
   INVALID_APP_ID_MESSAGE,
 } from '../types/shards.ts';
+import {assertNormalized, type NormalizedZeroConfig} from './normalize.ts';
 export type {LogConfig} from '../../../otel/src/log-options.ts';
 
 export const appOptions = {
@@ -602,7 +603,9 @@ export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
 
 let loadedConfig: Config<typeof zeroOptions> | undefined;
 
-export function getZeroConfig(opts: Omit<ParseOptions, 'envNamePrefix'> = {}) {
+export function getZeroConfig(
+  opts: Omit<ParseOptions, 'envNamePrefix'> = {},
+): ZeroConfig {
   if (!loadedConfig || singleProcessMode()) {
     loadedConfig = parseOptions(zeroOptions, {
       envNamePrefix: ZERO_ENV_VAR_PREFIX,
@@ -615,4 +618,16 @@ export function getZeroConfig(opts: Omit<ParseOptions, 'envNamePrefix'> = {}) {
     }
   }
   return loadedConfig;
+}
+
+/**
+ * Same as {@link getZeroConfig}, with an additional check that the
+ * config has already been normalized (i.e. by the top level server/runner).
+ */
+export function getNormalizedZeroConfig(
+  opts: Omit<ParseOptions, 'envNamePrefix'> = {},
+): NormalizedZeroConfig {
+  const config = getZeroConfig(opts);
+  assertNormalized(config);
+  return config;
 }
