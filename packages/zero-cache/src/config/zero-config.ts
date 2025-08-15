@@ -266,6 +266,15 @@ export const zeroOptions = {
       type: v.number().optional(),
       hidden: true, // Passed from main thread to sync workers
     },
+
+    garbageCollectionInactivityThresholdHours: {
+      type: v.number().default(48),
+      desc: [
+        `The duration after which an inactive CVR is eligible for garbage collection.`,
+        `Note that garbage collection is an incremental, periodic process which does not`,
+        `necessarily purge all eligible CVRs immediately.`,
+      ],
+    },
   },
 
   queryHydrationStats: {
