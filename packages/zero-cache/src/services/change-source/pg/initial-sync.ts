@@ -8,6 +8,7 @@ import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
 import {Database} from '../../../../../zqlite/src/db.ts';
+import {isTableIgnored} from './ignored-tables.ts';
 import {
   createIndexStatement,
   createTableStatement,
@@ -181,9 +182,21 @@ export async function initialSync(
         5000,
       );
 
+      const {ignoredTables} = await getInternalShardConfig(sql, shard);
+
+      const tablesToSync = tables.filter(table => {
+        const ignored = isTableIgnored(table, ignoredTables);
+        
+        if (ignored) {
+          lc.info?.(`Skipping initial sync for ignored table: ${table.schema}.${table.name}`);
+        }
+
+        return !ignored;
+      });
+
       void copyProfiler?.start();
       const rowCounts = await Promise.all(
-        tables.map(table =>
+        tablesToSync.map(table =>
           copiers.processReadTask((db, lc) =>
             copy(lc, table, copyPool, db, tx),
           ),
