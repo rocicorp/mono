@@ -89,6 +89,7 @@ import {
   ttlClockFromNumber,
   type TTLClock,
 } from './ttl-clock.ts';
+import {wrapIterable} from '../../../../shared/src/iterables.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -1080,6 +1081,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           for (const _ of this.#pipelines.addQuery(
             transformationHash,
             transformedAst,
+            hash,
             timer.start(),
           )) {
             if (++count % TIME_SLICE_CHECK_SIZE === 0) {
@@ -1130,7 +1132,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'pipelines must be initialized (syncQueryPipelineSet)',
       );
 
-      const hydratedQueries = this.#pipelines.addedQueries();
+      const [hydratedQueries, byOriginalHash] = this.#pipelines.addedQueries();
 
       // Convert queries to their transformed ast's and hashes
       const hashToIDs = new Map<string, string[]>();
@@ -1160,7 +1162,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }[] = [];
       for (const [id, query] of cvrQueryEntires) {
         if (query.type === 'custom') {
-          // This should always match, no?
           assert(id === query.id, 'custom query id mismatch');
           customQueries.set(id, query);
         } else {
@@ -1169,23 +1170,40 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       for (const {id, query: origQuery} of otherQueries) {
-        // This should always match, no?
         assert(id === origQuery.id, 'query id mismatch');
-        const transformed = transformAndHashQuery(
-          lc,
-          origQuery.id,
-          origQuery.ast,
-          must(this.#pipelines.currentPermissions()).permissions ?? {
-            tables: {},
-          },
-          this.#authData?.decoded,
-          origQuery.type === 'internal',
-        );
-        transformedQueries.push({
-          id,
-          origQuery,
-          transformed,
-        });
+
+        const existing = byOriginalHash.get(origQuery.id);
+
+        // We do not re-transform queries that are already hydrated.
+        if (existing) {
+          for (const transformed of existing) {
+            transformedQueries.push({
+              id,
+              origQuery,
+              transformed: {
+                id,
+                transformationHash: transformed.transformationHash,
+                transformedAst: transformed.transformedAst,
+              },
+            });
+          }
+        } else {
+          const transformed = transformAndHashQuery(
+            lc,
+            origQuery.id,
+            origQuery.ast,
+            must(this.#pipelines.currentPermissions()).permissions ?? {
+              tables: {},
+            },
+            this.#authData?.decoded,
+            origQuery.type === 'internal',
+          );
+          transformedQueries.push({
+            id,
+            origQuery,
+            transformed,
+          });
+        }
       }
 
       if (customQueries.size > 0 && !this.#customQueryTransformer) {
@@ -1195,6 +1213,34 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       if (this.#customQueryTransformer && customQueries.size > 0) {
+        // Removes queries from `customQueries` that are already
+        // transformed and in the pipelines. We do not want to re-transform
+        // a query that has already been transformed. The reason is that
+        // we do not want divergent error responses for different clients
+        // within the same client group. All clients within the same
+        // group are expected to receive the same transformations.
+        const filteredCustomQueries = wrapIterable(
+          customQueries.values(),
+        ).filter(origQuery => {
+          const existing = byOriginalHash.get(origQuery.id);
+          if (existing) {
+            for (const transformed of existing) {
+              transformedQueries.push({
+                id: origQuery.id,
+                origQuery,
+                transformed: {
+                  id: origQuery.id,
+                  transformationHash: transformed.transformationHash,
+                  transformedAst: transformed.transformedAst,
+                },
+              });
+            }
+            return false;
+          }
+
+          return true;
+        });
+
         const transformedCustomQueries =
           await this.#customQueryTransformer.transform(
             {
@@ -1202,7 +1248,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               token: this.#authData?.raw,
               cookie: this.#httpCookie,
             },
-            customQueries.values(),
+            filteredCustomQueries,
           );
 
         // TODO: collected errors need to make it downstream to the client.
@@ -1365,7 +1411,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('transformationHash', q.transformationHash);
           lc.debug?.(`adding pipeline for query`, q.ast);
 
-          yield* pipelines.addQuery(q.transformationHash, q.ast, timer.start());
+          yield* pipelines.addQuery(
+            q.transformationHash,
+            q.ast,
+            q.id,
+            timer.start(),
+          );
           const elapsed = timer.stop();
           totalProcessTime += elapsed;
 
