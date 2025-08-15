@@ -326,7 +326,15 @@ async function runHash(hash: string) {
   });
 }
 
+if (config.outputSyncedRows) {
+  colorConsole.log(chalk.blue.bold('=== Synced Rows: ===\n'));
+  for (const [table, rows] of Object.entries(result.syncedRows)) {
+    colorConsole.log(chalk.bold(table + ':'), rows);
+  }
+}
+
 colorConsole.log(chalk.blue.bold('=== Query Stats: ===\n'));
+colorConsole.log(chalk.bold('total synced rows:'), result.syncedRowCount);
 showStats();
 if (config.outputVendedRows) {
   colorConsole.log(chalk.blue.bold('=== Vended Rows: ===\n'));
