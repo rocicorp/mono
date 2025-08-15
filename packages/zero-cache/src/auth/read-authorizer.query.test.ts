@@ -501,7 +501,6 @@ beforeEach(() => {
       source = new TableSource(
         lc,
         testLogConfig,
-        'read-auth-test',
         replica,
         name,
         tableSchema.columns,

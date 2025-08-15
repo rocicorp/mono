@@ -44,11 +44,9 @@ import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
 import {type PullRow, type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
-import {
-  runtimeDebugFlags,
-  runtimeDebugStats,
-} from '../../zqlite/src/runtime-debug.ts';
+import {runtimeDebugFlags} from '../../zql/src/builder/debug-delegate.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
+import {Debug} from '../../zql/src/builder/debug-delegate.ts';
 
 const options = {
   schema: deployPermissionsOptions.schema,
@@ -205,7 +203,9 @@ const {schema, permissions} = await loadSchemaAndPermissions(
 const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const serverToClientMapper = serverToClient(schema.tables);
+const debug = new Debug();
 const host: QueryDelegate = {
+  debug,
   getSource: (serverTableName: string) => {
     const clientTableName = serverToClientMapper.tableName(serverTableName);
     let source = sources.get(serverTableName);
@@ -215,7 +215,6 @@ const host: QueryDelegate = {
     source = new TableSource(
       lc,
       testLogConfig,
-      clientGroupID,
       db,
       serverTableName,
       Object.fromEntries(
@@ -379,7 +378,7 @@ if (config.outputVendedRows) {
   colorConsole.log(chalk.blue.bold('=== Vended Rows: ===\n'));
   for (const source of sources.values()) {
     const entries = [
-      ...(runtimeDebugStats
+      ...(debug
         .getVendedRows()
         .get(clientGroupID)
         ?.get(source.table)
@@ -398,11 +397,7 @@ function showStats() {
   let totalRowsConsidered = 0;
   for (const source of sources.values()) {
     const entries = [
-      ...(runtimeDebugStats
-        .getVendedRowCounts()
-        .get(clientGroupID)
-        ?.get(source.table)
-        ?.entries() ?? []),
+      ...(debug.getVendedRowCounts()?.get(source.table)?.entries() ?? []),
     ];
     totalRowsConsidered += entries.reduce((acc, entry) => acc + entry[1], 0);
     colorConsole.log(
@@ -420,12 +415,7 @@ function showStats() {
 
 function explainQueries() {
   for (const source of sources.values()) {
-    const queries =
-      runtimeDebugStats
-        .getVendedRowCounts()
-        .get(clientGroupID)
-        ?.get(source.table)
-        ?.keys() ?? [];
+    const queries = debug.getVendedRowCounts()?.get(source.table)?.keys() ?? [];
     for (const query of queries) {
       colorConsole.log(chalk.bold('query'), query);
       colorConsole.log(

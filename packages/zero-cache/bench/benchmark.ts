@@ -37,7 +37,6 @@ export function bench(opts: Options) {
       source = new TableSource(
         lc,
         testLogConfig,
-        'benchmark',
         db,
         name,
         Object.fromEntries(

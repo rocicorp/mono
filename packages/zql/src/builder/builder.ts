@@ -31,23 +31,13 @@ import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
 import {Take} from '../ivm/take.ts';
+import type {DebugDelegate} from './debug-delegate.ts';
 import {createPredicate, type NoSubqueryCondition} from './filter.ts';
 
 export type StaticQueryParameters = {
   authData: Record<string, JSONValue>;
   preMutationRow?: Row | undefined;
 };
-
-type SourceName = string;
-type SQL = string;
-type RowCountsBySource = Map<SourceName, RowCountsByQuery>;
-type RowCountsByQuery = Map<SQL, number>;
-
-export interface DebugDelegate {
-  initQuery(table: SourceName, query: SQL): void;
-  rowVended(table: SourceName, query: SQL): void;
-  getVendedRowCounts(table: SourceName): RowCountsBySource;
-}
 
 /**
  * Interface required of caller to buildPipeline. Connects to constructed
@@ -234,7 +224,12 @@ function buildPipelineInternal(
       }
     }
   }
-  const conn = source.connect(must(ast.orderBy), ast.where, splitEditKeys);
+  const conn = source.connect(
+    must(ast.orderBy),
+    ast.where,
+    splitEditKeys,
+    delegate.debug,
+  );
 
   let end: Input = delegate.decorateSourceInput(conn, queryID);
   end = delegate.decorateInput(end, `${name}:source(${ast.table})`);
