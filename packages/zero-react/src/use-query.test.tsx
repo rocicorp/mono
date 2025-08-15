@@ -1,8 +1,15 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest';
+import {Suspense} from 'react';
+import {createRoot} from 'react-dom/client';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {type AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
-import {getAllViewsSizeForTesting, ViewStore} from './use-query.tsx';
+import {
+  getAllViewsSizeForTesting,
+  ViewStore,
+  useSuspenseQuery,
+} from './use-query.tsx';
+import {ZeroProvider} from './zero-provider.tsx';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
 import {delegateSymbol} from '../../zql/src/query/query.ts';
 
@@ -358,3 +365,38 @@ describe('ViewStore', () => {
     });
   });
 });
+
+describe('useSuspenseQuery', () => {
+  test('suspends until data is complete', async () => {
+    vi.useRealTimers();
+    const q = newMockQuery('query1');
+    const zero = newMockZero('client1');
+
+    function Comp() {
+      const [data] = useSuspenseQuery(q);
+      return <div>{JSON.stringify(data)}</div>;
+    }
+
+    const element = document.createElement('div');
+    document.body.appendChild(element);
+    createRoot(element).render(
+      <ZeroProvider zero={zero}>
+        <Suspense fallback={<>loading</>}>
+          <Comp />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await new Promise(r => setTimeout(r, 0));
+    expect(element.textContent).toBe('loading');
+
+    const view = (q.materialize as any).mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    view.listeners.forEach(cb => cb([{a: 1}], 'complete'));
+    await new Promise(r => setTimeout(r, 0));
+    expect(element.textContent).toBe('[{"a":1}]');
+  });
+});
+
