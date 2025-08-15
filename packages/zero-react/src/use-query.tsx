@@ -1,4 +1,5 @@
-import {useSyncExternalStore} from 'react';
+import React, {useSyncExternalStore} from 'react';
+import {resolver, type Resolver} from '@rocicorp/resolver';
 import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
@@ -34,13 +35,14 @@ export type UseQueryOptions = {
   ttl?: TTL | undefined;
 };
 
-export function useQuery<
+function useQueryInternal<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
   query: Query<TSchema, TTable, TReturn>,
   options?: UseQueryOptions | boolean,
+  suspense: boolean = false,
 ): QueryResult<TReturn> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
@@ -57,11 +59,48 @@ export function useQuery<
     ttl,
   );
   // https://react.dev/reference/react/useSyncExternalStore
-  return useSyncExternalStore(
+  const snapshot = useSyncExternalStore(
     view.subscribeReactInternals,
     view.getSnapshot,
     view.getSnapshot,
   );
+
+  if (suspense && snapshot[1].type === 'unknown') {
+    const promise = view.waitForComplete();
+    // React 19 exposes use(), otherwise we throw the promise to suspend
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    const useHook = (React as unknown as {use?: (p: Promise<void>) => void})
+      .use;
+    if (useHook) {
+      useHook(promise);
+    } else {
+      throw promise;
+    }
+  }
+
+  return snapshot;
+}
+
+export function useQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+>(
+  query: Query<TSchema, TTable, TReturn>,
+  options?: UseQueryOptions | boolean,
+): QueryResult<TReturn> {
+  return useQueryInternal(query, options);
+}
+
+export function useSuspenseQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+>(
+  query: Query<TSchema, TTable, TReturn>,
+  options?: UseQueryOptions | boolean,
+): QueryResult<TReturn> {
+  return useQueryInternal(query, options, true);
 }
 
 const emptyArray: unknown[] = [];
@@ -194,6 +233,7 @@ export class ViewStore {
     getSnapshot: () => QueryResult<TReturn>;
     subscribeReactInternals: (internals: () => void) => () => void;
     updateTTL: (ttl: TTL) => void;
+    waitForComplete: () => Promise<void>;
   } {
     const {format} = query;
     if (!enabled) {
@@ -201,6 +241,7 @@ export class ViewStore {
         getSnapshot: () => getDefaultSnapshot(format.singular),
         subscribeReactInternals: disabledSubscriber,
         updateTTL: () => {},
+        waitForComplete: () => Promise.resolve(),
       };
     }
 
@@ -274,6 +315,8 @@ class ViewWrapper<
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
   #ttl: TTL;
+  #completeResolver: Resolver<void> | undefined;
+  #complete: Promise<void> | undefined;
 
   constructor(
     query: Query<TSchema, TTable, TReturn>,
@@ -301,6 +344,9 @@ class ViewWrapper<
         ? snap
         : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
     this.#snapshot = getSnapshot(this.#format.singular, data, resultType);
+    if (resultType === 'complete') {
+      this.#completeResolver?.resolve();
+    }
     for (const internals of this.#reactInternals) {
       internals();
     }
@@ -311,6 +357,7 @@ class ViewWrapper<
       return;
     }
 
+    this.#resetComplete();
     this.#view = this.#query.materialize(this.#ttl);
     this.#view.addListener(this.#onData);
 
@@ -349,5 +396,17 @@ class ViewWrapper<
   updateTTL(ttl: TTL): void {
     this.#ttl = ttl;
     this.#view?.updateTTL(ttl);
+  }
+
+  waitForComplete(): Promise<void> {
+    if (!this.#complete) {
+      this.#resetComplete();
+    }
+    return this.#complete!;
+  }
+
+  #resetComplete() {
+    this.#completeResolver = resolver<void>();
+    this.#complete = this.#completeResolver.promise;
   }
 }
