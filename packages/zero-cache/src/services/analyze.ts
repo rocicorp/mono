@@ -12,6 +12,14 @@ import {TableSource} from '../../../zqlite/src/table-source.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 
+export function setCors(res: FastifyReply) {
+  return res
+    .header('Access-Control-Allow-Origin', '*')
+    .header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    .header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+    .header('Access-Control-Allow-Credentials', 'true');
+}
+
 export async function handleAnalyzeQueryRequest(
   lc: LogContext,
   config: NormalizedZeroConfig,
@@ -21,10 +29,11 @@ export async function handleAnalyzeQueryRequest(
   const credentials = auth(req);
   const expectedPassword = config.adminPassword;
   if (!expectedPassword || credentials?.pass !== expectedPassword) {
-    void res
+    await setCors(res)
       .code(401)
       .header('WWW-Authenticate', 'Basic realm="analyze query Protected Area"')
-      .send('Unauthorized');
+      .send({unauthorized: true});
+    return;
   }
 
   const body = req.body as {
@@ -87,5 +96,5 @@ export async function handleAnalyzeQueryRequest(
 
   console.log('XCX sending result', result);
 
-  await res.send(result);
+  await setCors(res).send(result);
 }

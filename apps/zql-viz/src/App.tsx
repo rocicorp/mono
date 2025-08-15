@@ -78,6 +78,9 @@ function App() {
   const [result, setResult] = useState<Result | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
+  const [auth, setAuth] = useState<
+    {username: string; password: string} | undefined
+  >();
   const [history, setHistory] = useState<QueryHistoryItem[]>(() => {
     const savedHistory = localStorage.getItem('zql-history');
     if (savedHistory) {
@@ -170,27 +173,35 @@ function App() {
       executeCode(queryCode);
       const vizDelegate = new VizDelegate(capturedSchema!);
       capturedQuery = capturedQuery?.delegate(vizDelegate);
+      (await capturedQuery?.run()) as any;
       const graph = vizDelegate.getGraph();
-      console.log(graph);
 
-      // try {
-      //   const response = await fetch(
-      //     `${import.meta.env.VITE_PUBLIC_SERVER}/analyze-queryz`,
-      //     {
-      //       method: 'POST',
-      //       headers: {
-      //         'Content-Type': 'application/json',
-      //       },
-      //       body: JSON.stringify({
-      //         ast: capturedQuery?.ast,
-      //       }),
-      //     },
-      //   );
+      try {
+        if (auth) {
+          const credentials = btoa(`${auth?.username}:${auth?.password}`);
+          const response = await fetch(
+            `${import.meta.env.VITE_PUBLIC_SERVER}/analyze-queryz`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Basic ${credentials}`,
+              },
+              body: JSON.stringify({
+                ast: capturedQuery?.ast,
+              }),
+            },
+          );
 
-      //   console.log('received', await response.json());
-      // } catch (e) {
-      //   console.error(e);
-      // }
+          console.log('received', await response.json());
+        } else {
+          console.warn(
+            'No auth credentials set, will not run the query server side or analyze it server side',
+          );
+        }
+      } catch (e) {
+        console.error(e);
+      }
 
       setResult({
         ast: capturedQuery?.ast,
