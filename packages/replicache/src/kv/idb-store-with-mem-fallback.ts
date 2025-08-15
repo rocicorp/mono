@@ -77,7 +77,7 @@ function isFirefoxPrivateBrowsingError(e: unknown): e is DOMException {
 }
 
 function isFirefox(): boolean {
-  return navigator?.userAgent.includes('Firefox') ?? false;
+  return navigator?.userAgent?.includes('Firefox') ?? false;
 }
 
 export function newIDBStoreWithMemFallback(
