@@ -103,6 +103,8 @@ export class ZeroContext implements QueryDelegate {
     return new MeasurePushOperator(input, queryID, this);
   }
 
+  addEdge() {}
+
   onTransactionCommit(cb: CommitListener): () => void {
     this.#commitListeners.add(cb);
     return () => {

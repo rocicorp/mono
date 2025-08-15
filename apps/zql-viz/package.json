@@ -1,0 +1,36 @@
+{
+  "name": "zql-viz",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npx api-extractor run --local && vite",
+    "build": "npx api-extractor run --local && tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "@rocicorp/zero": "0.23.2025081401",
+    "@xyflow/react": "^12.8.2",
+    "lucide-react": "^0.539.0",
+    "monaco-editor": "^0.52.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-resizable-panels": "^3.0.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.33.0",
+    "@tantaman/api-extractor": "^7.52.11",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^8.15.0",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.6",
+    "globals": "^16.3.0",
+    "typescript": "~5.8.2",
+    "typescript-eslint": "^8.39.1",
+    "vite": "6.2.1"
+  }
+}

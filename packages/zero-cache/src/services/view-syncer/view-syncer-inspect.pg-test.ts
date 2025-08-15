@@ -58,7 +58,7 @@ describe('view-syncer/service', () => {
       viewSyncerDone,
       replicator,
       connectWithQueueAndSource,
-    } = await setup('view_syncer_service_test', permissionsAll));
+    } = await setup('view_syncer_inspect_test', permissionsAll));
   });
 
   afterEach(async () => {

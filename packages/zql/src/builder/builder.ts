@@ -27,7 +27,7 @@ import {
 } from '../ivm/filter-operators.ts';
 import {Filter} from '../ivm/filter.ts';
 import {Join} from '../ivm/join.ts';
-import type {Input, Storage} from '../ivm/operator.ts';
+import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
 import {Take} from '../ivm/take.ts';
@@ -43,6 +43,7 @@ export type StaticQueryParameters = {
  * pipeline to delegate environment to provide sources and storage.
  */
 export interface BuilderDelegate {
+  readonly applyFiltersAnyway?: boolean | undefined;
   /**
    * Called once for each source needed by the AST.
    * Might be called multiple times with same tableName. It is OK to return
@@ -57,6 +58,8 @@ export interface BuilderDelegate {
   createStorage(name: string): Storage;
 
   decorateInput(input: Input, name: string): Input;
+
+  addEdge(source: InputBase, dest: InputBase): void;
 
   decorateFilterInput(input: FilterInput, name: string): FilterInput;
 
@@ -225,23 +228,29 @@ function buildPipelineInternal(
   const {fullyAppliedFilters} = conn;
 
   if (ast.start) {
-    end = delegate.decorateInput(new Skip(end, ast.start), `${name}:skip)`);
+    const skip = new Skip(end, ast.start);
+    delegate.addEdge(end, skip);
+    end = delegate.decorateInput(skip, `${name}:skip)`);
   }
 
   for (const csq of csqsFromCondition) {
     end = applyCorrelatedSubQuery(csq, delegate, queryID, end, name, true);
   }
 
-  if (ast.where && !fullyAppliedFilters) {
+  if (ast.where && (!fullyAppliedFilters || delegate.applyFiltersAnyway)) {
     end = applyWhere(end, ast.where, delegate, name);
   }
 
   if (ast.limit !== undefined) {
     const takeName = `${name}:take`;
-    end = delegate.decorateInput(
-      new Take(end, delegate.createStorage(takeName), ast.limit, partitionKey),
-      takeName,
+    const take = new Take(
+      end,
+      delegate.createStorage(takeName),
+      ast.limit,
+      partitionKey,
     );
+    delegate.addEdge(end, take);
+    end = delegate.decorateInput(take, takeName);
   }
 
   if (ast.related) {
@@ -259,7 +268,7 @@ function applyWhere(
   delegate: BuilderDelegate,
   name: string,
 ): Input {
-  return buildFilterPipeline(input, filterInput =>
+  return buildFilterPipeline(input, delegate, filterInput =>
     applyFilter(filterInput, condition, delegate, name),
   );
 }
@@ -278,7 +287,7 @@ function applyFilter(
     case 'correlatedSubquery':
       return applyCorrelatedSubqueryCondition(input, condition, delegate, name);
     case 'simple':
-      return applySimpleCondition(input, condition);
+      return applySimpleCondition(input, delegate, condition);
   }
 }
 
@@ -304,31 +313,37 @@ export function applyOr(
     groupSubqueryConditions(condition);
   // if there are no subquery conditions, no fan-in / fan-out is needed
   if (subqueryConditions.length === 0) {
-    return new Filter(
+    const filter = new Filter(
       input,
       createPredicate({
         type: 'or',
         conditions: otherConditions,
       }),
     );
+    delegate.addEdge(input, filter);
+    return filter;
   }
 
   const fanOut = new FanOut(input);
+  delegate.addEdge(input, fanOut);
   const branches = subqueryConditions.map(subCondition =>
     applyFilter(fanOut, subCondition, delegate, name),
   );
   if (otherConditions.length > 0) {
-    branches.push(
-      new Filter(
-        fanOut,
-        createPredicate({
-          type: 'or',
-          conditions: otherConditions,
-        }),
-      ),
+    const filter = new Filter(
+      fanOut,
+      createPredicate({
+        type: 'or',
+        conditions: otherConditions,
+      }),
     );
+    delegate.addEdge(fanOut, filter);
+    branches.push(filter);
   }
   const ret = new FanIn(fanOut, branches);
+  for (const branch of branches) {
+    delegate.addEdge(branch, ret);
+  }
   fanOut.setFanIn(ret);
   return ret;
 }
@@ -362,9 +377,27 @@ export function isNotAndDoesNotContainSubquery(
 
 function applySimpleCondition(
   input: FilterInput,
+  delegate: BuilderDelegate,
   condition: SimpleCondition,
 ): FilterInput {
-  return new Filter(input, createPredicate(condition));
+  const filter = new Filter(input, createPredicate(condition));
+  delegate.decorateFilterInput(
+    filter,
+    `${valuePosName(condition.left)}:${condition.op}:${valuePosName(condition.right)}`,
+  );
+  delegate.addEdge(input, filter);
+  return filter;
+}
+
+function valuePosName(left: ValuePosition) {
+  switch (left.type) {
+    case 'static':
+      return left.field;
+    case 'literal':
+      return left.value;
+    case 'column':
+      return left.name;
+  }
 }
 
 function applyCorrelatedSubQuery(
@@ -390,7 +423,7 @@ function applyCorrelatedSubQuery(
     sq.correlation.childField,
   );
   const joinName = `${name}:join(${sq.subquery.alias})`;
-  end = new Join({
+  const join = new Join({
     parent: end,
     child,
     storage: delegate.createStorage(joinName),
@@ -400,7 +433,9 @@ function applyCorrelatedSubQuery(
     hidden: sq.hidden ?? false,
     system: sq.system ?? 'client',
   });
-  return delegate.decorateInput(end, joinName);
+  delegate.addEdge(end, join);
+  delegate.addEdge(child, join);
+  return delegate.decorateInput(join, joinName);
 }
 
 function applyCorrelatedSubqueryCondition(
@@ -412,21 +447,24 @@ function applyCorrelatedSubqueryCondition(
   assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
   if (condition.related.subquery.limit === 0) {
     if (condition.op === 'EXISTS') {
-      return new Filter(input, () => false);
+      const filter = new Filter(input, () => false);
+      delegate.addEdge(input, filter);
+      return filter;
     }
-    return new Filter(input, () => true);
+    const filter = new Filter(input, () => true);
+    delegate.addEdge(input, filter);
+    return filter;
   }
   const existsName = `${name}:exists(${condition.related.subquery.alias})`;
-  return delegate.decorateFilterInput(
-    new Exists(
-      input,
-      delegate.createStorage(existsName),
-      must(condition.related.subquery.alias),
-      condition.related.correlation.parentField,
-      condition.op,
-    ),
-    existsName,
+  const exists = new Exists(
+    input,
+    delegate.createStorage(existsName),
+    must(condition.related.subquery.alias),
+    condition.related.correlation.parentField,
+    condition.op,
   );
+  delegate.addEdge(input, exists);
+  return delegate.decorateFilterInput(exists, existsName);
 }
 
 function gatherCorrelatedSubqueryQueriesFromCondition(

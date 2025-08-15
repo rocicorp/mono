@@ -516,6 +516,7 @@ beforeEach(() => {
       return new MemoryStorage();
     },
     decorateInput: input => input,
+    addEdge() {},
     decorateFilterInput: input => input,
     decorateSourceInput: input => input,
     addServerQuery() {

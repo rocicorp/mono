@@ -82,6 +82,8 @@ export class QueryDelegateImpl implements QueryDelegate {
     return () => {};
   }
 
+  addEdge() {}
+
   addCustomQuery() {
     return () => {};
   }
