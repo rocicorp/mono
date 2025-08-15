@@ -1,5 +1,8 @@
 import type {AST} from '../../zero-protocol/src/ast.ts';
-import {buildPipeline} from '../../zql/src/builder/builder.ts';
+import {
+  buildPipeline,
+  type BuilderDelegate,
+} from '../../zql/src/builder/builder.ts';
 import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
 import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
 import {assert} from '../../shared/src/asserts.ts';
@@ -13,7 +16,6 @@ import type {PermissionsConfig} from '../../zero-schema/src/compiled-permissions
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import type {Database} from '../../zqlite/src/db.ts';
-import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {must} from '../../shared/src/must.ts';
 import type {
   RowCountsBySource,
@@ -37,12 +39,12 @@ export async function runAst(
   isTransformed: boolean,
   options: {
     applyPermissions: boolean;
-    authData: string | undefined;
-    clientToServerMapper: NameMapper | undefined;
-    permissions: PermissionsConfig;
+    authData?: string | undefined;
+    clientToServerMapper?: NameMapper | undefined;
+    permissions?: PermissionsConfig | undefined;
     outputSyncedRows: boolean;
     db: Database;
-    host: QueryDelegate;
+    host: BuilderDelegate;
   },
 ): Promise<RunResult> {
   const {clientToServerMapper, permissions, host, db} = options;
@@ -72,7 +74,7 @@ export async function runAst(
       lc,
       'clientGroupIDForAnalyze',
       ast,
-      permissions,
+      must(permissions),
       authData,
       false,
     ).transformedAst;

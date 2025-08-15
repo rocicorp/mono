@@ -10,6 +10,18 @@ import * as zero from '@rocicorp/zero';
 import {VizDelegate} from './query-delegate.ts';
 import * as ts from 'typescript';
 
+// type RunResult = {
+//   warnings: string[];
+//   syncedRows: Record<string, unknown[]>;
+//   syncedRowCount: number;
+//   start: number;
+//   end: number;
+//   afterPermissions: string | undefined;
+//   vendedRowCounts: Record<string, Record<string, number>> | undefined;
+//   vendedRows: Record<string, Record<string, number>> | undefined;
+//   queryPlans: Record<string, string[]> | undefined;
+// };
+
 type AnyQuery = zero.Query<any, any, any>;
 const DEFAULT_QUERY = `const {
   createBuilder,
@@ -25,14 +37,16 @@ const user = table('user')
   .columns({
     id: string(),
     name: string(),
-  });
+  })
+    .primaryKey('id');
 
 const session = table('session')
   .columns({
     id: string(),
     userId: string(),
     createdAt: number(),
-  });
+  })
+    .primaryKey('id');
 
 const userToSession = relationships(user, ({many}) => ({
   sessions: many({
@@ -156,16 +170,33 @@ function App() {
       executeCode(queryCode);
       const vizDelegate = new VizDelegate(capturedSchema!);
       capturedQuery = capturedQuery?.delegate(vizDelegate);
-      // TODO: run against a zero instance? run against local sqlite? run against server? so many options.
-      // custom queries is an interesting wrench too. Anyway, I just care about data flow viz at the moment.
-      const rows = (await capturedQuery?.run()) as any;
       const graph = vizDelegate.getGraph();
+      console.log(graph);
+
+      // try {
+      //   const response = await fetch(
+      //     `${import.meta.env.VITE_PUBLIC_SERVER}/analyze-queryz`,
+      //     {
+      //       method: 'POST',
+      //       headers: {
+      //         'Content-Type': 'application/json',
+      //       },
+      //       body: JSON.stringify({
+      //         ast: capturedQuery?.ast,
+      //       }),
+      //     },
+      //   );
+
+      //   console.log('received', await response.json());
+      // } catch (e) {
+      //   console.error(e);
+      // }
 
       setResult({
         ast: capturedQuery?.ast,
         graph,
         plan: undefined,
-        rows,
+        rows: [],
       });
 
       // Check if the current query code is the same as the previous entry
