@@ -43,7 +43,7 @@ import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
-import {runtimeDebugStats} from './runtime-debug.ts';
+import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
 
 type Statements = {
   readonly cache: StatementCache;
@@ -78,7 +78,6 @@ export class TableSource implements Source {
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
   readonly #uniqueIndexes: Map<string, Set<string>>;
   readonly #primaryKey: PrimaryKey;
-  readonly #clientGroupID: string;
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
   #stmts: Statements;
@@ -88,7 +87,6 @@ export class TableSource implements Source {
   constructor(
     logContext: LogContext,
     logConfig: LogConfig,
-    clientGroupID: string,
     db: Database,
     tableName: string,
     columns: Record<string, SchemaValue>,
@@ -96,7 +94,6 @@ export class TableSource implements Source {
   ) {
     this.#lc = logContext;
     this.#logConfig = logConfig;
-    this.#clientGroupID = clientGroupID;
     this.#table = tableName;
     this.#columns = columns;
     this.#uniqueIndexes = getUniqueIndexes(db, tableName);
@@ -211,6 +208,7 @@ export class TableSource implements Source {
     sort: Ordering,
     filters?: Condition | undefined,
     splitEditKeys?: Set<string> | undefined,
+    debug?: DebugDelegate | undefined,
   ) {
     const transformedFilters = transformFilters(filters);
     const input: SourceInput = {
@@ -230,6 +228,7 @@ export class TableSource implements Source {
 
     const connection: Connection = {
       input,
+      debug,
       output: undefined,
       sort,
       splitEditKeys,
@@ -261,7 +260,7 @@ export class TableSource implements Source {
   }
 
   *#fetch(req: FetchRequest, connection: Connection): Stream<Node> {
-    const {sort} = connection;
+    const {sort, debug} = connection;
 
     const query = this.#requestToSQL(req, connection.filters?.condition, sort);
     const sqlAndBindings = format(query);
@@ -278,11 +277,7 @@ export class TableSource implements Source {
 
       const comparator = makeComparator(sort, req.reverse);
 
-      runtimeDebugStats.initQuery(
-        this.#clientGroupID,
-        this.#table,
-        sqlAndBindings.text,
-      );
+      debug?.initQuery(this.#table, sqlAndBindings.text);
 
       yield* generateWithStart(
         generateWithOverlay(
@@ -291,6 +286,7 @@ export class TableSource implements Source {
             this.#columns,
             rowIterator,
             sqlAndBindings.text,
+            debug,
           ),
           req.constraint,
           this.#overlay,
@@ -311,6 +307,7 @@ export class TableSource implements Source {
     valueTypes: Record<string, SchemaValue>,
     rowIterator: IterableIterator<Row>,
     query: string,
+    debug: DebugDelegate | undefined,
   ): IterableIterator<Row> {
     let result;
     try {
@@ -328,12 +325,7 @@ export class TableSource implements Source {
           break;
         }
         const row = fromSQLiteTypes(valueTypes, result.value);
-        runtimeDebugStats.rowVended(
-          this.#clientGroupID,
-          this.#table,
-          query,
-          row,
-        );
+        debug?.rowVended(this.#table, query, row);
         yield row;
       } while (!result.done);
     } finally {

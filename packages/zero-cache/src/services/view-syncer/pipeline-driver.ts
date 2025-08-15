@@ -12,10 +12,7 @@ import type {Node} from '../../../../zql/src/ivm/data.ts';
 import type {Input, Storage} from '../../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
 import type {Source, SourceChange} from '../../../../zql/src/ivm/source.ts';
-import {
-  runtimeDebugFlags,
-  runtimeDebugStats,
-} from '../../../../zqlite/src/runtime-debug.ts';
+import {runtimeDebugFlags} from '../../../../zql/src/builder/debug-delegate.ts';
 import {TableSource} from '../../../../zqlite/src/table-source.ts';
 import {
   reloadPermissionsIfChanged,
@@ -36,6 +33,7 @@ import {
   Snapshotter,
   type SnapshotDiff,
 } from './snapshotter.ts';
+import {Debug} from '../../../../zql/src/builder/debug-delegate.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -79,7 +77,6 @@ export class PipelineDriver {
   readonly #snapshotter: Snapshotter;
   readonly #storage: ClientGroupStorage;
   readonly #shardID: ShardID;
-  readonly #clientGroupID: string;
   readonly #logConfig: LogConfig;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   #streamer: Streamer | null = null;
@@ -104,7 +101,6 @@ export class PipelineDriver {
     this.#snapshotter = snapshotter;
     this.#storage = storage;
     this.#shardID = shardID;
-    this.#clientGroupID = clientGroupID;
     this.#logConfig = logConfig;
   }
 
@@ -268,9 +264,13 @@ export class PipelineDriver {
       this.#lc.info?.(`query ${hash} already added`, query);
       return;
     }
+    const debugDelegate = runtimeDebugFlags.trackRowsVended
+      ? new Debug()
+      : undefined;
     const input = buildPipeline(
       query,
       {
+        debug: debugDelegate,
         getSource: name => this.#getSource(name),
         createStorage: () => this.#createStorage(),
         decorateSourceInput: input => input,
@@ -289,8 +289,6 @@ export class PipelineDriver {
       },
     });
 
-    runtimeDebugStats.resetRowsVended(this.#clientGroupID);
-
     yield* hydrate(input, hash, this.#tableSpecs);
 
     const hydrationTimeMs = timer.totalElapsed();
@@ -302,9 +300,8 @@ export class PipelineDriver {
           .withContext('hydrationTimeMs', hydrationTimeMs);
         for (const tableName of this.#tables.keys()) {
           const entries = [
-            ...(runtimeDebugStats
-              .getVendedRowCounts()
-              .get(this.#clientGroupID)
+            ...(debugDelegate
+              ?.getVendedRowCounts()
               ?.get(tableName)
               ?.entries() ?? []),
           ];
@@ -317,7 +314,7 @@ export class PipelineDriver {
         lc.info?.(`Total rows considered: ${totalRowsConsidered}`);
       }
     }
-    runtimeDebugStats.resetRowsVended(this.#clientGroupID);
+    debugDelegate?.reset();
 
     // Note: This hydrationTime is a wall-clock overestimate, as it does
     // not take time slicing into account. The view-syncer resets this
@@ -487,7 +484,6 @@ export class PipelineDriver {
     source = new TableSource(
       this.#lc,
       this.#logConfig,
-      this.#clientGroupID,
       db.db,
       tableName,
       tableSpec.zqlSpec,

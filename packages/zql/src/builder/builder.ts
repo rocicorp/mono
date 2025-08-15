@@ -31,6 +31,7 @@ import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
 import {Take} from '../ivm/take.ts';
+import type {DebugDelegate} from './debug-delegate.ts';
 import {createPredicate, type NoSubqueryCondition} from './filter.ts';
 
 export type StaticQueryParameters = {
@@ -44,6 +45,8 @@ export type StaticQueryParameters = {
  */
 export interface BuilderDelegate {
   readonly applyFiltersAnyway?: boolean | undefined;
+  readonly debug?: DebugDelegate | undefined;
+
   /**
    * Called once for each source needed by the AST.
    * Might be called multiple times with same tableName. It is OK to return
@@ -221,7 +224,12 @@ function buildPipelineInternal(
       }
     }
   }
-  const conn = source.connect(must(ast.orderBy), ast.where, splitEditKeys);
+  const conn = source.connect(
+    must(ast.orderBy),
+    ast.where,
+    splitEditKeys,
+    delegate.debug,
+  );
 
   let end: Input = delegate.decorateSourceInput(conn, queryID);
   end = delegate.decorateInput(end, `${name}:source(${ast.table})`);

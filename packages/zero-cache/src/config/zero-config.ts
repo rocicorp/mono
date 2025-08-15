@@ -10,7 +10,7 @@ import {
 } from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
 import packageJson from '../../../zero/package.json' with {type: 'json'};
-import {runtimeDebugFlags} from '../../../zqlite/src/runtime-debug.ts';
+import {runtimeDebugFlags} from '../../../zql/src/builder/debug-delegate.ts';
 import {singleProcessMode} from '../types/processes.ts';
 import {
   ALLOWED_APP_ID_CHARACTERS,

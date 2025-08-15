@@ -77,7 +77,6 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #statementRunner: StatementRunner;
   readonly #lc: LogContext;
   readonly #appID: string;
-  readonly #clientGroupID: string;
   readonly #logConfig: LogConfig;
   readonly #cgStorage: ClientGroupStorage;
 
@@ -91,7 +90,6 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     cgID: string,
   ) {
     this.#appID = appID;
-    this.#clientGroupID = cgID;
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#logConfig = config.log;
     this.#schema = getSchema(this.#lc, replica);
@@ -264,7 +262,6 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     source = new TableSource(
       this.#lc,
       this.#logConfig,
-      this.#clientGroupID,
       this.#replica,
       tableName,
       Object.fromEntries(

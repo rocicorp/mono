@@ -42,15 +42,7 @@ export const createSource: SourceFactory = (
     )}));`,
   );
   db.exec(query);
-  return new TableSource(
-    lc,
-    logConfig,
-    'zqlite-test',
-    db,
-    tableName,
-    columns,
-    primaryKey,
-  );
+  return new TableSource(lc, logConfig, db, tableName, columns, primaryKey);
 };
 
 export function mapResultToClientNames<T, S extends Schema>(
@@ -140,7 +132,6 @@ export function newQueryDelegate(
       source = new TableSource(
         lc,
         logConfig,
-        'query.test.ts',
         db,
         serverTableName,
         Object.fromEntries(

@@ -1,5 +1,6 @@
 import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {DebugDelegate} from '../builder/debug-delegate.ts';
 import type {Input} from './operator.ts';
 
 export type SourceChangeAdd = {
@@ -65,6 +66,7 @@ export interface Source {
     sort: Ordering,
     filters?: Condition | undefined,
     splitEditKeys?: Set<string> | undefined,
+    debug?: DebugDelegate | undefined,
   ): SourceInput;
 
   /**

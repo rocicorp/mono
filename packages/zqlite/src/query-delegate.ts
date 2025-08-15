@@ -51,7 +51,6 @@ export class QueryDelegateImpl implements QueryDelegate {
     source = new TableSource(
       this.#lc,
       this.#logConfig,
-      'query.test.ts',
       this.#db,
       tableName,
       tableSchema.columns,
