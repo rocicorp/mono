@@ -133,6 +133,31 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migratedV13ToV14: Migration = {
+    migrateSchema: async (_, sql) => {
+      await sql`
+        CREATE INDEX instances_last_active ON ${sql(schema)}.instances ("lastActive");
+      `;
+
+      // Update / add foreign key constraints to cascade deletes.
+      for (const [table, reference] of [
+        ['clients', 'instances'],
+        ['queries', 'instances'],
+        ['rows', 'rowsVersion'],
+      ] as [string, string][]) {
+        const constraint = sql(`fk_${table}_client_group`);
+        await sql`
+          ALTER TABLE ${sql(schema)}.${sql(table)} DROP CONSTRAINT IF EXISTS ${constraint}`;
+        await sql`
+          ALTER TABLE ${sql(schema)}.${sql(table)} ADD CONSTRAINT ${constraint}
+            FOREIGN KEY("clientGroupID")
+            REFERENCES ${sql(schema)}.${sql(reference)} ("clientGroupID")
+            ON DELETE CASCADE;
+        `;
+      }
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -154,6 +179,10 @@ export async function initViewSyncerSchema(
     12: migratedV11ToV12,
     // V13 adds instances."ttlClock"
     13: migratedV12ToV13,
+    // V14 adds an index on instances."lastActive" and a FK constraint
+    // from rows."clientGroupID" to rowsVersion."clientGroupID" for
+    // garbage collection
+    14: migratedV13ToV14,
   };
 
   await runSchemaMigrations(
