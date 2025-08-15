@@ -55,8 +55,53 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
     switch (activeTab) {
       case 'results':
         return result?.remoteRunResult?.syncedRows ? (
-          <div className="success">
-            {/* syncedRows is a map from tableName to Rows for that table.*/}
+          <div className="results-content">
+            <div className="tables-container">
+              {Object.entries(result.remoteRunResult.syncedRows).map(([tableName, rows]) => (
+                <div key={tableName} className="table-section">
+                  <h3 className="table-title">{tableName}</h3>
+                  <div className="table-info">
+                    <span className="row-count">{rows.length} rows</span>
+                  </div>
+                  {rows.length > 0 ? (
+                    <div className="table-wrapper">
+                      <table className="data-table">
+                        <thead>
+                          <tr>
+                            {Object.keys(rows[0]).map((column) => (
+                              <th key={column}>{column}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((row, index) => (
+                            <tr key={index}>
+                              {Object.values(row).map((value, colIndex) => {
+                                const displayValue = value === null || value === undefined 
+                                  ? 'null'
+                                  : typeof value === 'object' 
+                                  ? JSON.stringify(value)
+                                  : String(value);
+                                return (
+                                  <td key={colIndex} title={displayValue}>
+                                    {value === null || value === undefined 
+                                      ? <span className="null-value">null</span>
+                                      : displayValue
+                                    }
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="empty-table">No rows found</div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="tab-content">

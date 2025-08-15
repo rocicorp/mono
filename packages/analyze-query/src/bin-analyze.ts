@@ -176,7 +176,6 @@ const config = {
 runtimeDebugFlags.trackRowCountsVended = true;
 runtimeDebugFlags.trackRowsVended = config.outputVendedRows;
 
-const clientGroupID = 'clientGroupIDForAnalyze';
 const lc = createLogContext({
   log: config.log,
 });
@@ -339,16 +338,9 @@ showStats();
 if (config.outputVendedRows) {
   colorConsole.log(chalk.blue.bold('=== Vended Rows: ===\n'));
   for (const source of sources.values()) {
-    const entries = [
-      ...(debug
-        .getVendedRows()
-        .get(clientGroupID)
-        ?.get(source.table)
-        ?.entries() ?? []),
-    ];
     colorConsole.log(
       chalk.bold(`${source.table}:`),
-      Object.fromEntries(entries),
+      debug.getVendedRows()?.[source.table] ?? {},
     );
   }
 }
@@ -358,13 +350,13 @@ explainQueries();
 function showStats() {
   let totalRowsConsidered = 0;
   for (const source of sources.values()) {
-    const entries = [
-      ...(debug.getVendedRowCounts()?.get(source.table)?.entries() ?? []),
-    ];
+    const entries = Object.entries(
+      debug.getVendedRowCounts()?.[source.table] ?? {},
+    );
     totalRowsConsidered += entries.reduce((acc, entry) => acc + entry[1], 0);
     colorConsole.log(
       chalk.bold(source.table + ' vended:'),
-      Object.fromEntries(entries),
+      debug.getVendedRowCounts()?.[source.table] ?? {},
     );
   }
 
@@ -381,7 +373,9 @@ function showStats() {
 
 function explainQueries() {
   for (const source of sources.values()) {
-    const queries = debug.getVendedRowCounts()?.get(source.table)?.keys() ?? [];
+    const queries = Object.keys(
+      debug.getVendedRowCounts()?.[source.table] ?? {},
+    );
     for (const query of queries) {
       colorConsole.log(chalk.bold('query'), query);
       colorConsole.log(
