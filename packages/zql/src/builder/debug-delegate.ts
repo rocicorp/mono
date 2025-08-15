@@ -7,8 +7,8 @@ export const runtimeDebugFlags = {
 
 type SourceName = string;
 type SQL = string;
-type RowCountsBySource = Map<SourceName, RowCountsByQuery>;
-type RowsBySource = Map<SourceName, RowsByQuery>;
+export type RowCountsBySource = Map<SourceName, RowCountsByQuery>;
+export type RowsBySource = Map<SourceName, RowsByQuery>;
 type RowCountsByQuery = Map<SQL, number>;
 type RowsByQuery = Map<SQL, Row[]>;
 
