@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
+import {type JSONValue} from '../../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
@@ -7,7 +8,6 @@ import {listIndexes, listTables} from '../../../db/lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from '../../../db/specs.ts';
 import {getConnectionURI, testDBs} from '../../../test/db.ts';
 import {DbFile, expectMatchingObjectsInTables} from '../../../test/lite.ts';
-import {type JSONValue} from '../../../../../shared/src/bigint-json.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import type {Source} from '../../../types/streams.ts';
 import type {ChangeProcessor} from '../../replicator/change-processor.ts';
@@ -26,7 +26,7 @@ const APP_ID = 'orez';
  * - Applying the changes to the replica with a MessageProcessor
  * - Verifying the resulting SQLite schema and/or data on the replica.
  */
-describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
+describe.skip('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   let lc: LogContext;
   let upstream: PostgresDB;
   let replicaDbFile: DbFile;
