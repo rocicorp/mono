@@ -51,6 +51,10 @@ CREATE TABLE ${schema(shard)}.instances (
   "grantedAt"      TIMESTAMPTZ,               -- The time at which the current owner was last granted ownership (most recent connection time).
   "clientSchema"   JSONB                      -- ClientSchema of the client group
 );
+
+-- For garbage collection.
+CREATE INDEX instances_last_active
+  ON ${schema(shard)}.instances ("lastActive");
 `;
 }
 
@@ -74,6 +78,7 @@ CREATE TABLE ${schema(shard)}.clients (
   CONSTRAINT fk_clients_client_group
     FOREIGN KEY("clientGroupID")
     REFERENCES ${schema(shard)}.instances("clientGroupID")
+    ON DELETE CASCADE
 );
 
 `;
@@ -119,6 +124,7 @@ CREATE TABLE ${schema(shard)}.queries (
   CONSTRAINT fk_queries_client_group
     FOREIGN KEY("clientGroupID")
     REFERENCES ${schema(shard)}.instances("clientGroupID")
+    ON DELETE CASCADE
 );
 
 -- For catchup patches.
@@ -247,37 +253,6 @@ export function compareRowsRows(a: RowsRow, b: RowsRow) {
 }
 
 /**
- * Note: Although `clientGroupID` logically references the same column in
- * `cvr.instances`, a FOREIGN KEY constraint must not be declared as the
- * `cvr.rows` TABLE needs to be updated without affecting the
- * `SELECT ... FOR UPDATE` lock when `cvr.instances` is updated.
- */
-function createRowsTable(shard: ShardID) {
-  return `
-CREATE TABLE ${schema(shard)}.rows (
-  "clientGroupID"    TEXT,
-  "schema"           TEXT,
-  "table"            TEXT,
-  "rowKey"           JSONB,
-  "rowVersion"       TEXT NOT NULL,
-  "patchVersion"     TEXT NOT NULL,
-  "refCounts"        JSONB,  -- {[queryHash: string]: number}, NULL for tombstone
-
-  PRIMARY KEY ("clientGroupID", "schema", "table", "rowKey")
-);
-
--- For catchup patches.
-CREATE INDEX row_patch_version 
-  ON ${schema(shard)}.rows ("patchVersion");
-
--- For listing rows returned by one or more query hashes. e.g.
--- SELECT * FROM cvr_shard.rows WHERE "refCounts" ?| array[...queryHashes...];
-CREATE INDEX row_ref_counts ON ${schema(shard)}.rows 
-  USING GIN ("refCounts");
-`;
-}
-
-/**
  * The version of the data in the `cvr.rows` table. This may lag
  * `version` in `cvr.instances` but eventually catches up, modulo
  * exceptional circumstances like a server crash.
@@ -301,6 +276,41 @@ CREATE TABLE ${schema(shard)}."rowsVersion" (
 `;
 }
 
+/**
+ * CVR `rows` are updated asynchronously from the CVR metadata
+ * (i.e. `instances`). The `rowsVersion` table is updated atomically with
+ * updates to the `rows` data.
+ */
+function createRowsTable(shard: ShardID) {
+  return `
+CREATE TABLE ${schema(shard)}.rows (
+  "clientGroupID"    TEXT,
+  "schema"           TEXT,
+  "table"            TEXT,
+  "rowKey"           JSONB,
+  "rowVersion"       TEXT NOT NULL,
+  "patchVersion"     TEXT NOT NULL,
+  "refCounts"        JSONB,  -- {[queryHash: string]: number}, NULL for tombstone
+
+  PRIMARY KEY ("clientGroupID", "schema", "table", "rowKey"),
+
+  CONSTRAINT fk_rows_client_group
+    FOREIGN KEY("clientGroupID")
+    REFERENCES ${schema(shard)}."rowsVersion" ("clientGroupID")
+    ON DELETE CASCADE
+);
+
+-- For catchup patches.
+CREATE INDEX row_patch_version 
+  ON ${schema(shard)}.rows ("patchVersion");
+
+-- For listing rows returned by one or more query hashes. e.g.
+-- SELECT * FROM cvr_shard.rows WHERE "refCounts" ?| array[...queryHashes...];
+CREATE INDEX row_ref_counts ON ${schema(shard)}.rows 
+  USING GIN ("refCounts");
+`;
+}
+
 export type RowsVersionRow = {
   clientGroupID: string;
   version: string;
@@ -313,8 +323,8 @@ function createTables(shard: ShardID) {
     createClientsTable(shard) +
     createQueriesTable(shard) +
     createDesiresTable(shard) +
-    createRowsTable(shard) +
-    createRowsVersionTable(shard)
+    createRowsVersionTable(shard) +
+    createRowsTable(shard)
   );
 }
 
