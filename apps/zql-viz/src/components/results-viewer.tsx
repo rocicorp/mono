@@ -2,7 +2,6 @@ import type {FC} from 'react';
 import {useState} from 'react';
 import {
   AlertCircle,
-  CheckCircle,
   BarChart3,
   GitBranch,
   List,
@@ -55,12 +54,9 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
 
     switch (activeTab) {
       case 'results':
-        return result?.rows ? (
+        return result?.remoteRunResult?.syncedRows ? (
           <div className="success">
-            <div className="success-header">
-              <CheckCircle size={20} />
-              <span>Queries are not yet run in this tool.</span>
-            </div>
+            {/* syncedRows is a map from tableName to Rows for that table.*/}
           </div>
         ) : (
           <div className="tab-content">

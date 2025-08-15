@@ -28,8 +28,9 @@ export async function handleAnalyzeQueryRequest(
 ) {
   const credentials = auth(req);
   const expectedPassword = config.adminPassword;
+  void setCors(res);
   if (!expectedPassword || credentials?.pass !== expectedPassword) {
-    await setCors(res)
+    await res
       .code(401)
       .header('WWW-Authenticate', 'Basic realm="analyze query Protected Area"')
       .send({unauthorized: true});
@@ -39,8 +40,6 @@ export async function handleAnalyzeQueryRequest(
   const body = req.body as {
     ast: AST;
   };
-
-  console.log('XCX got request', body);
 
   const db = new Database(lc, config.replica.file);
   const fullTables = new Map<string, LiteTableSpec>();
@@ -94,7 +93,5 @@ export async function handleAnalyzeQueryRequest(
     },
   });
 
-  console.log('XCX sending result', result);
-
-  await setCors(res).send(result);
+  await res.send(result);
 }
