@@ -242,6 +242,7 @@ const host: QueryDelegate = {
   decorateInput: input => input,
   decorateSourceInput: input => input,
   decorateFilterInput: input => input,
+  addEdge() {},
   addServerQuery() {
     return () => {};
   },

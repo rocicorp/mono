@@ -3,6 +3,7 @@ import {drainStreams, type Node} from './data.ts';
 import type {Change} from './change.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
+import type {BuilderDelegate} from '../builder/builder.ts';
 
 /**
  * The `where` clause of a ZQL query is implemented using a sub-graph of
@@ -140,8 +141,14 @@ export class FilterEnd implements Input, FilterOutput {
 
 export function buildFilterPipeline(
   input: Input,
+  delegate: BuilderDelegate,
   pipeline: (filterInput: FilterInput) => FilterInput,
 ): Input {
   const filterStart = new FilterStart(input);
-  return new FilterEnd(filterStart, pipeline(filterStart));
+  delegate.addEdge(input, filterStart);
+  const middle = pipeline(filterStart);
+  delegate.addEdge(filterStart, middle);
+  const filterEnd = new FilterEnd(filterStart, middle);
+  delegate.addEdge(middle, filterEnd);
+  return filterEnd;
 }

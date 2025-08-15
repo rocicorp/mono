@@ -59,6 +59,8 @@ export class TestBuilderDelegate implements BuilderDelegate {
     return input;
   }
 
+  addEdge() {}
+
   clearLog() {
     if (this.#log) {
       this.#log.length = 0;

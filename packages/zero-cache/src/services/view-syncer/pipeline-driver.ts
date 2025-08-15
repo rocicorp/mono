@@ -275,6 +275,7 @@ export class PipelineDriver {
         createStorage: () => this.#createStorage(),
         decorateSourceInput: input => input,
         decorateInput: input => input,
+        addEdge() {},
         decorateFilterInput: input => input,
       },
       hash,
