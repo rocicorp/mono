@@ -38,12 +38,25 @@ export type StaticQueryParameters = {
   preMutationRow?: Row | undefined;
 };
 
+type SourceName = string;
+type SQL = string;
+type RowCountsBySource = Map<SourceName, RowCountsByQuery>;
+type RowCountsByQuery = Map<SQL, number>;
+
+export interface DebugDelegate {
+  initQuery(table: SourceName, query: SQL): void;
+  rowVended(table: SourceName, query: SQL): void;
+  getVendedRowCounts(table: SourceName): RowCountsBySource;
+}
+
 /**
  * Interface required of caller to buildPipeline. Connects to constructed
  * pipeline to delegate environment to provide sources and storage.
  */
 export interface BuilderDelegate {
   readonly applyFiltersAnyway?: boolean | undefined;
+  readonly debug?: DebugDelegate | undefined;
+
   /**
    * Called once for each source needed by the AST.
    * Might be called multiple times with same tableName. It is OK to return
