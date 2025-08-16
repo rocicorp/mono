@@ -5,7 +5,7 @@ interface ServerStatusModalProps {
   isOpen: boolean;
   onClose: () => void;
   hasCredentials: boolean;
-  serverUrl?: string;
+  serverUrl?: string | undefined;
 }
 
 export const ServerStatusModal: FC<ServerStatusModalProps> = ({
@@ -32,7 +32,7 @@ export const ServerStatusModal: FC<ServerStatusModalProps> = ({
               <span className="status-label">Server URL:</span>
               <span className="status-value">{serverUrl}</span>
             </div>
-            
+
             <div className="status-item">
               {hasCredentials ? (
                 <>
@@ -48,20 +48,21 @@ export const ServerStatusModal: FC<ServerStatusModalProps> = ({
                 </>
               )}
             </div>
-            
+
             <div className="status-item">
               <Activity size={16} />
               <span className="status-label">Environment:</span>
-              <span className="status-value">{import.meta.env.MODE || 'development'}</span>
+              <span className="status-value">
+                {import.meta.env.MODE || 'development'}
+              </span>
             </div>
           </div>
-          
+
           <div className="status-info">
             <p>
-              {hasCredentials 
+              {hasCredentials
                 ? 'Server queries and analysis are enabled.'
-                : 'Set credentials to enable server-side query execution and analysis.'
-              }
+                : 'Set credentials to enable server-side query execution and analysis.'}
             </p>
           </div>
         </div>
