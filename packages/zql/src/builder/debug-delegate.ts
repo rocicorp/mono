@@ -65,19 +65,15 @@ export class Debug implements DebugDelegate {
   #getRowStats(source: SourceName) {
     let counts: RowCountsByQuery | undefined;
     let rows: RowsByQuery | undefined;
-    if (runtimeDebugFlags.trackRowCountsVended) {
-      counts = this.#rowCountsBySource[source];
-      if (!counts) {
-        counts = {};
-        this.#rowCountsBySource[source] = counts;
-      }
+    counts = this.#rowCountsBySource[source];
+    if (!counts) {
+      counts = {};
+      this.#rowCountsBySource[source] = counts;
     }
-    if (runtimeDebugFlags.trackRowsVended) {
-      rows = this.#rowsBySource[source];
-      if (!rows) {
-        rows = {};
-        this.#rowsBySource[source] = rows;
-      }
+    rows = this.#rowsBySource[source];
+    if (!rows) {
+      rows = {};
+      this.#rowsBySource[source] = rows;
     }
     return {counts, rows};
   }

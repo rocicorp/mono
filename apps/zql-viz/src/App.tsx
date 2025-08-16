@@ -209,6 +209,7 @@ function App() {
           );
 
           remoteRunResult = await response.json();
+          console.log('REMOTE RESULT', remoteRunResult);
         } else {
           console.warn(
             'No auth credentials set, will not run the query server side or analyze it server side',

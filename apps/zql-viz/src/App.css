@@ -581,9 +581,14 @@ body {
 }
 
 .table-wrapper {
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: visible;
   max-height: 400px;
   width: 100%;
+}
+
+.table-wrapper.full-scroll {
+  overflow: auto;
 }
 
 .data-table {
@@ -614,9 +619,19 @@ body {
   color: #e0e0e0;
   vertical-align: top;
   white-space: nowrap;
+  min-width: 80px;
+  max-width: 400px;
+}
+
+.data-table td.scrollable {
+  overflow-x: auto;
+  white-space: nowrap;
+  max-width: 300px;
+}
+
+.data-table td.truncate {
   overflow: hidden;
   text-overflow: ellipsis;
-  min-width: 80px;
   max-width: 400px;
 }
 
@@ -642,4 +657,49 @@ body {
   text-align: center;
   color: #666;
   font-style: italic;
+}
+
+/* Query Stats Summary */
+.stats-summary {
+  background: #252525;
+  border: 1px solid #383838;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 1rem;
+}
+
+.stats-summary h3 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.stat-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  background: #2a2a2a;
+  border-radius: 6px;
+  border: 1px solid #383838;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: #888;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 0.875rem;
+  color: #e0e0e0;
+  font-weight: 600;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
 }
