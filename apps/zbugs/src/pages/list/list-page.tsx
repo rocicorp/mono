@@ -28,6 +28,7 @@ import {mark} from '../../perf-log.ts';
 import {preload} from '../../zero-preload.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {queries, type ListContext} from '../../../shared/queries.ts';
+import {unreachable} from '../../../../../packages//shared/src/asserts.ts';
 
 let firstRowRendered = false;
 const itemSize = 56;
@@ -60,17 +61,36 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const pageSize = 20;
   const [limit, setLimit] = useState(pageSize);
-  const q = queries.issueList(
+  const params: ListContext['params'] = {
+    sortDirection,
+    sortField,
+    assignee,
+    creator,
+    labels,
+    open,
+    textFilter,
+  };
+  const issueListForAssigneeQ = queries.issueListForAssignee(
     login.loginState?.decoded,
-    {
-      sortDirection,
-      sortField,
-      assignee,
-      creator,
-      labels,
-      open,
-      textFilter,
-    },
+    params,
+    z.userID,
+    limit,
+  );
+  const issueListForCreatorQ = queries.issueListForCreator(
+    login.loginState?.decoded,
+    params,
+    z.userID,
+    limit,
+  );
+  const issueListForLabelsQ = queries.issueListForLabel(
+    login.loginState?.decoded,
+    params,
+    z.userID,
+    limit,
+  );
+  const issueListQ = queries.issueList(
+    login.loginState?.decoded,
+    params,
     z.userID,
     limit,
   );
@@ -79,14 +99,88 @@ export function ListPage({onReady}: {onReady: () => void}) {
     setLimit(pageSize);
     virtualizer.scrollToIndex(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q.limit(0).hash()]); // limit set to 0 since we only scroll on query change, not limit change.
+  }, [
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    issueListForAssigneeQ.limit(0).hash(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    issueListForCreatorQ.limit(0).hash(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    issueListForLabelsQ.limit(0).hash(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    issueListQ.limit(0).hash(),
+  ]); // limit set to 0 since we only scroll on query change, not limit change.
 
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
-  const [issues, issuesResult] = useQuery(
-    q,
-    textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
+  let issueListType: 'default' | 'assignee' | 'creator' | 'label' = 'default';
+  if (assignee !== null) {
+    issueListType = 'assignee';
+  } else if (creator !== null) {
+    issueListType = 'creator';
+  } else if (labels.length > 0) {
+    issueListType = 'label';
+  }
+
+  const [issueListForAssignee, issueListForAssigneeResult] = useQuery(
+    issueListForAssigneeQ,
+    {
+      enabled: issueListType === 'assignee',
+      ...(textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE),
+    },
   );
+  const [issueListForCreator, issueListForCreatorResult] = useQuery(
+    issueListForCreatorQ,
+    {
+      enabled: issueListType === 'creator',
+      ...(textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE),
+    },
+  );
+  const [issueListForLabel, issueListForLabelResult] = useQuery(
+    issueListForLabelsQ,
+    {
+      enabled: issueListType === 'label',
+      ...(textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE),
+    },
+  );
+  const [issueListIssues, issueListResult] = useQuery(issueListQ, {
+    enabled: issueListType === 'default',
+    ...(textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE),
+  });
+
+  let issues, issuesResult;
+  switch (issueListType) {
+    case 'default': {
+      issues = issueListIssues;
+      issuesResult = issueListResult;
+      break;
+    }
+    case 'assignee': {
+      issues =
+        issueListForAssignee.length === 0
+          ? []
+          : issueListForAssignee[0].assignedIssues;
+      issuesResult = issueListForAssigneeResult;
+      break;
+    }
+    case 'creator': {
+      issues =
+        issueListForCreator.length === 0
+          ? []
+          : issueListForCreator[0].createdIssues;
+      issuesResult = issueListForCreatorResult;
+      break;
+    }
+    case 'label': {
+      issues = issueListForLabel[0].issueLabels.map(
+        issueLabel => issueLabel.issues[0],
+      );
+      issuesResult = issueListForLabelResult;
+      break;
+    }
+    default:
+      unreachable(issueListType);
+  }
+
   const isSearchComplete = issues.length < limit;
 
   useEffect(() => {
