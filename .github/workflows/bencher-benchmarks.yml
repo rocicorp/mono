@@ -87,6 +87,10 @@ jobs:
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --start-point main \
           --threshold-measure throughput \
-          --threshold-test t_test \
-          --threshold-lower-boundary 0.90 \
+          --threshold-test percentage \
+          --threshold-lower-boundary 0.10 \
+          --threshold-min-sample-size 3 \
+          --threshold-max-sample-size 30 \
+          --threshold-window 2419200 \
+          --thresholds-reset \
           --err
