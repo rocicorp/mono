@@ -5,6 +5,8 @@ import {QueryEditor} from './components/query-editor.tsx';
 import {ResultsViewer} from './components/results-viewer.tsx';
 import {QueryHistory} from './components/query-history.tsx';
 import {CredentialsModal} from './components/credentials-modal.tsx';
+import {VerticalNav} from './components/vertical-nav.tsx';
+import {ServerStatusModal} from './components/server-status-modal.tsx';
 import {
   type QueryHistoryItem,
   type RemoteRunResult,
@@ -80,6 +82,8 @@ function App() {
     return savedAuth ? JSON.parse(savedAuth) : undefined;
   });
   const [isCredentialsModalOpen, setIsCredentialsModalOpen] = useState(false);
+  const [isHistoryVisible, setIsHistoryVisible] = useState(true);
+  const [isServerStatusModalOpen, setIsServerStatusModalOpen] = useState(false);
   const [history, setHistory] = useState<QueryHistoryItem[]>(() => {
     const savedHistory = localStorage.getItem('zql-history');
     if (savedHistory) {
@@ -309,6 +313,18 @@ function App() {
     setIsCredentialsModalOpen(false);
   }, []);
 
+  const handleToggleHistory = useCallback(() => {
+    setIsHistoryVisible(prev => !prev);
+  }, []);
+
+  const handleShowServerStatus = useCallback(() => {
+    setIsServerStatusModalOpen(true);
+  }, []);
+
+  const handleCloseServerStatus = useCallback(() => {
+    setIsServerStatusModalOpen(false);
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
@@ -323,41 +339,53 @@ function App() {
   return (
     <div className="app">
       <div className="app-body">
-        <PanelGroup direction="horizontal">
-          <Panel defaultSize={20} minSize={15}>
-            <PanelGroup direction="vertical">
-              <Panel defaultSize={100} minSize={30}>
-                <QueryHistory
-                  history={history}
-                  onSelectQuery={handleSelectHistoryQuery}
-                  onClearHistory={handleClearHistory}
-                />
-              </Panel>
-            </PanelGroup>
-          </Panel>
+        <VerticalNav
+          onShowHistory={handleToggleHistory}
+          onOpenCredentials={handleOpenCredentials}
+          onShowServerStatus={handleShowServerStatus}
+          hasCredentials={!!auth}
+          isHistoryVisible={isHistoryVisible}
+        />
+        <div className="main-content">
+          <PanelGroup direction="horizontal">
+            {isHistoryVisible && (
+              <>
+                <Panel defaultSize={20} minSize={15}>
+                  <PanelGroup direction="vertical">
+                    <Panel defaultSize={100} minSize={30}>
+                      <QueryHistory
+                        history={history}
+                        onSelectQuery={handleSelectHistoryQuery}
+                        onClearHistory={handleClearHistory}
+                      />
+                    </Panel>
+                  </PanelGroup>
+                </Panel>
+                <PanelResizeHandle className="resize-handle-vertical" />
+              </>
+            )}
 
-          <PanelResizeHandle className="resize-handle-vertical" />
+            <Panel defaultSize={isHistoryVisible ? 40 : 50} minSize={30}>
+              <QueryEditor
+                value={queryCode}
+                onChange={setQueryCode}
+                onExecute={executeQuery}
+                onOpenCredentials={handleOpenCredentials}
+                hasCredentials={!!auth}
+              />
+            </Panel>
 
-          <Panel defaultSize={40} minSize={30}>
-            <QueryEditor
-              value={queryCode}
-              onChange={setQueryCode}
-              onExecute={executeQuery}
-              onOpenCredentials={handleOpenCredentials}
-              hasCredentials={!!auth}
-            />
-          </Panel>
+            <PanelResizeHandle className="resize-handle-vertical" />
 
-          <PanelResizeHandle className="resize-handle-vertical" />
-
-          <Panel defaultSize={40} minSize={30}>
-            <ResultsViewer
-              result={result}
-              error={error}
-              isLoading={isLoading}
-            />
-          </Panel>
-        </PanelGroup>
+            <Panel defaultSize={isHistoryVisible ? 40 : 50} minSize={30}>
+              <ResultsViewer
+                result={result}
+                error={error}
+                isLoading={isLoading}
+              />
+            </Panel>
+          </PanelGroup>
+        </div>
       </div>
       <CredentialsModal
         isOpen={isCredentialsModalOpen}
@@ -365,6 +393,11 @@ function App() {
         onSave={handleSaveCredentials}
         initialUsername={auth?.username || ''}
         initialPassword={auth?.password || ''}
+      />
+      <ServerStatusModal
+        isOpen={isServerStatusModalOpen}
+        onClose={handleCloseServerStatus}
+        hasCredentials={!!auth}
       />
     </div>
   );

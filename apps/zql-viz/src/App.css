@@ -45,6 +45,12 @@ body {
   flex: 1;
   overflow: hidden;
   background: #1e1e1e;
+  display: flex;
+}
+
+.main-content {
+  flex: 1;
+  overflow: hidden;
 }
 
 .editor-header {
@@ -763,4 +769,125 @@ body {
   background: rgba(81, 207, 102, 0.1);
   padding: 2px 4px;
   border-radius: 3px;
+}
+
+/* Vertical Navigation */
+.vertical-nav {
+  width: 60px;
+  background: #2a2a2a;
+  border-right: 1px solid #383838;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem 0;
+  z-index: 100;
+}
+
+.nav-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  align-items: center;
+}
+
+.nav-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.nav-button:hover {
+  background: #383838;
+  color: #e0e0e0;
+  border-color: #555;
+}
+
+.nav-button.active {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-color: #667eea;
+}
+
+.nav-button.has-credentials {
+  color: #51cf66;
+  border-color: #51cf66;
+}
+
+.nav-button.has-credentials:hover {
+  background: rgba(81, 207, 102, 0.1);
+  color: #51cf66;
+}
+
+/* Server Status Modal */
+.server-status-content {
+  padding: 1.5rem;
+}
+
+.status-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: #2a2a2a;
+  border-radius: 6px;
+  border: 1px solid #383838;
+}
+
+.status-label {
+  font-weight: 500;
+  color: #888;
+  min-width: 120px;
+}
+
+.status-value {
+  color: #e0e0e0;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+}
+
+.status-value.success {
+  color: #51cf66;
+}
+
+.status-value.warning {
+  color: #ffd43b;
+}
+
+.status-icon-success {
+  color: #51cf66;
+}
+
+.status-icon-warning {
+  color: #ffd43b;
+}
+
+.status-info {
+  padding: 1rem;
+  background: #1e1e1e;
+  border-radius: 6px;
+  border: 1px solid #383838;
+}
+
+.status-info p {
+  color: #888;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  margin: 0;
 }
