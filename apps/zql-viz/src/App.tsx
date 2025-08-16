@@ -76,7 +76,7 @@ function App() {
   const [error, setError] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const [auth, setAuth] = useState<
-    {serverUrl: string; username: string; password: string} | undefined
+    {serverUrl: string; password: string} | undefined
   >(() => {
     const savedAuth = localStorage.getItem('zql-auth');
     return savedAuth ? JSON.parse(savedAuth) : undefined;
@@ -198,7 +198,7 @@ function App() {
       try {
         if (auth && auth.serverUrl) {
           console.log('Using server URL:', auth.serverUrl);
-          const credentials = btoa(`${auth.username}:${auth.password}`);
+          const credentials = btoa(`:${auth.password}`);
           const response = await fetch(
             `${auth.serverUrl}/analyze-queryz`,
             {
@@ -305,8 +305,8 @@ function App() {
   }, []);
 
   const handleSaveCredentials = useCallback(
-    (serverUrl: string, username: string, password: string) => {
-      setAuth({serverUrl, username, password});
+    (serverUrl: string, password: string) => {
+      setAuth({serverUrl, password});
     },
     [],
   );
@@ -392,7 +392,6 @@ function App() {
         onClose={handleCloseCredentials}
         onSave={handleSaveCredentials}
         initialServerUrl={auth?.serverUrl || ''}
-        initialUsername={auth?.username || ''}
         initialPassword={auth?.password || ''}
       />
       <ServerStatusModal

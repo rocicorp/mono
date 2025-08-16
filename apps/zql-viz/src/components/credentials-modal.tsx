@@ -1,13 +1,12 @@
 import type {FC} from 'react';
 import {useState} from 'react';
-import {X, User, Lock, Globe} from 'lucide-react';
+import {X, Lock, Globe} from 'lucide-react';
 
 interface CredentialsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (serverUrl: string, username: string, password: string) => void;
+  onSave: (serverUrl: string, password: string) => void;
   initialServerUrl?: string;
-  initialUsername?: string;
   initialPassword?: string;
 }
 
@@ -16,22 +15,19 @@ export const CredentialsModal: FC<CredentialsModalProps> = ({
   onClose,
   onSave,
   initialServerUrl = '',
-  initialUsername = '',
   initialPassword = '',
 }) => {
   const [serverUrl, setServerUrl] = useState(initialServerUrl);
-  const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState(initialPassword);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(serverUrl, username, password);
+    onSave(serverUrl, password);
     onClose();
   };
 
   const handleClose = () => {
     setServerUrl(initialServerUrl);
-    setUsername(initialUsername);
     setPassword(initialPassword);
     onClose();
   };
@@ -61,20 +57,6 @@ export const CredentialsModal: FC<CredentialsModalProps> = ({
               placeholder="https://server.example.com"
               required
               autoFocus
-            />
-          </div>
-          <div className="form-group">
-            <label htmlFor="username">
-              <User size={16} />
-              Username
-            </label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={e => setUsername(e.target.value)}
-              placeholder="Enter username"
-              required
             />
           </div>
           <div className="form-group">
