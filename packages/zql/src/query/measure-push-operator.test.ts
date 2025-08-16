@@ -24,6 +24,7 @@ describe('MeasurePushOperator', () => {
       mockInput,
       'test-query-id',
       mockMetricsDelegate,
+      'query-update-client',
     );
     const req = {} as FetchRequest;
 
@@ -49,6 +50,7 @@ describe('MeasurePushOperator', () => {
       mockInput,
       'test-query-id',
       mockMetricsDelegate,
+      'query-update-client',
     );
     const req = {} as FetchRequest;
 
@@ -75,6 +77,7 @@ describe('MeasurePushOperator', () => {
       mockInput,
       'test-query-id',
       mockMetricsDelegate,
+      'query-update-client',
     );
 
     const result = measurePushOperator.getSchema();
@@ -100,6 +103,7 @@ describe('MeasurePushOperator', () => {
       mockInput,
       'test-query-id',
       mockMetricsDelegate,
+      'query-update-client',
     );
 
     measurePushOperator.destroy();
@@ -128,6 +132,7 @@ describe('MeasurePushOperator', () => {
       mockInput,
       'test-query-id',
       mockMetricsDelegate,
+      'query-update-client',
     );
     measurePushOperator.setOutput(mockOutput);
 
@@ -169,6 +174,7 @@ describe('MeasurePushOperator', () => {
       mockInput,
       'test-query-id',
       mockMetricsDelegate,
+      'query-update-client',
     );
     measurePushOperator.setOutput(mockOutput);
 
