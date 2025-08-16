@@ -1,11 +1,12 @@
 import type {FC} from 'react';
 import {useState} from 'react';
-import {X, User, Lock} from 'lucide-react';
+import {X, User, Lock, Globe} from 'lucide-react';
 
 interface CredentialsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (username: string, password: string) => void;
+  onSave: (serverUrl: string, username: string, password: string) => void;
+  initialServerUrl?: string;
   initialUsername?: string;
   initialPassword?: string;
 }
@@ -14,19 +15,22 @@ export const CredentialsModal: FC<CredentialsModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  initialServerUrl = '',
   initialUsername = '',
   initialPassword = '',
 }) => {
+  const [serverUrl, setServerUrl] = useState(initialServerUrl);
   const [username, setUsername] = useState(initialUsername);
   const [password, setPassword] = useState(initialPassword);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(username, password);
+    onSave(serverUrl, username, password);
     onClose();
   };
 
   const handleClose = () => {
+    setServerUrl(initialServerUrl);
     setUsername(initialUsername);
     setPassword(initialPassword);
     onClose();
@@ -38,12 +42,27 @@ export const CredentialsModal: FC<CredentialsModalProps> = ({
     <div className="modal-overlay">
       <div className="modal-content">
         <div className="modal-header">
-          <h3>Enter Credentials</h3>
+          <h3>Server Configuration</h3>
           <button onClick={handleClose} className="modal-close-button">
             <X size={16} />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="credentials-form">
+          <div className="form-group">
+            <label htmlFor="serverUrl">
+              <Globe size={16} />
+              Server URL
+            </label>
+            <input
+              id="serverUrl"
+              type="url"
+              value={serverUrl}
+              onChange={e => setServerUrl(e.target.value)}
+              placeholder="https://server.example.com"
+              required
+              autoFocus
+            />
+          </div>
           <div className="form-group">
             <label htmlFor="username">
               <User size={16} />
@@ -55,7 +74,7 @@ export const CredentialsModal: FC<CredentialsModalProps> = ({
               value={username}
               onChange={e => setUsername(e.target.value)}
               placeholder="Enter username"
-              autoFocus
+              required
             />
           </div>
           <div className="form-group">

@@ -12,7 +12,7 @@ export const ServerStatusModal: FC<ServerStatusModalProps> = ({
   isOpen,
   onClose,
   hasCredentials,
-  serverUrl = import.meta.env.VITE_PUBLIC_SERVER || 'Not configured',
+  serverUrl = 'Not configured',
 }) => {
   if (!isOpen) return null;
 

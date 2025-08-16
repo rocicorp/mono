@@ -76,7 +76,7 @@ function App() {
   const [error, setError] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
   const [auth, setAuth] = useState<
-    {username: string; password: string} | undefined
+    {serverUrl: string; username: string; password: string} | undefined
   >(() => {
     const savedAuth = localStorage.getItem('zql-auth');
     return savedAuth ? JSON.parse(savedAuth) : undefined;
@@ -196,10 +196,11 @@ function App() {
 
       let remoteRunResult: RemoteRunResult | undefined;
       try {
-        if (auth) {
-          const credentials = btoa(`${auth?.username}:${auth?.password}`);
+        if (auth && auth.serverUrl) {
+          console.log('Using server URL:', auth.serverUrl);
+          const credentials = btoa(`${auth.username}:${auth.password}`);
           const response = await fetch(
-            `${import.meta.env.VITE_PUBLIC_SERVER}/analyze-queryz`,
+            `${auth.serverUrl}/analyze-queryz`,
             {
               method: 'POST',
               headers: {
@@ -216,11 +217,12 @@ function App() {
           console.log('REMOTE RESULT', remoteRunResult);
         } else {
           console.warn(
-            'No auth credentials set, will not run the query server side or analyze it server side',
+            'No auth credentials set or server URL missing, will not run the query server side or analyze it server side',
+            auth
           );
         }
       } catch (e) {
-        console.error(e);
+        console.error('Error calling server:', e);
       }
 
       setResult({
@@ -284,7 +286,7 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [queryCode]);
+  }, [queryCode, auth]);
 
   const handleSelectHistoryQuery = useCallback(
     (historyItem: QueryHistoryItem) => {
@@ -303,8 +305,8 @@ function App() {
   }, []);
 
   const handleSaveCredentials = useCallback(
-    (username: string, password: string) => {
-      setAuth({username, password});
+    (serverUrl: string, username: string, password: string) => {
+      setAuth({serverUrl, username, password});
     },
     [],
   );
@@ -389,6 +391,7 @@ function App() {
         isOpen={isCredentialsModalOpen}
         onClose={handleCloseCredentials}
         onSave={handleSaveCredentials}
+        initialServerUrl={auth?.serverUrl || ''}
         initialUsername={auth?.username || ''}
         initialPassword={auth?.password || ''}
       />
@@ -396,6 +399,7 @@ function App() {
         isOpen={isServerStatusModalOpen}
         onClose={handleCloseServerStatus}
         hasCredentials={!!auth}
+        serverUrl={auth?.serverUrl}
       />
     </div>
   );
