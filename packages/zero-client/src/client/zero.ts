@@ -79,7 +79,11 @@ import {
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
-import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
+import {
+  type ClientMetricMap,
+  type MetricMap,
+  isClientMetric,
+} from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {
@@ -1956,18 +1960,12 @@ export class Zero<
     value: number,
     ...args: MetricMap[K]
   ) => void = (metric, value, ...args) => {
-    switch (metric) {
-      case 'query-materialization-client':
-      case 'query-materialization-end-to-end':
-      case 'query-update-client':
-        this.#queryManager.addMetric(metric, value, ...args);
-        break;
-      case 'query-materialization-server':
-        unreachable();
-      // eslint-disable-next-line no-fallthrough
-      default:
-        unreachable(metric);
-    }
+    assert(isClientMetric(metric), `Invalid metric: ${metric}`);
+    this.#queryManager.addMetric(
+      metric as keyof ClientMetricMap,
+      value,
+      ...(args as ClientMetricMap[keyof ClientMetricMap]),
+    );
   };
 }
 

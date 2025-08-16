@@ -27,6 +27,7 @@ import {
 import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
+import {InspectMetricsDelegate} from '../../server/inspect-metrics-delegate.ts';
 import {testDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {upstreamSchema} from '../../types/shards.ts';
@@ -666,6 +667,7 @@ export async function setup(
   const operatorStorage = new DatabaseStorage(
     storageDB,
   ).createClientGroupStorage(serviceID);
+  const inspectMetricsDelegate = new InspectMetricsDelegate();
   const vs = new ViewSyncerService(
     {query: queryConfig},
     lc,
@@ -681,10 +683,12 @@ export async function setup(
       SHARD,
       operatorStorage,
       'view-syncer.pg-test.ts',
+      inspectMetricsDelegate,
     ),
     stateChanges,
     drainCoordinator,
     100,
+    inspectMetricsDelegate,
     undefined,
     setTimeoutFn,
   );

@@ -33,7 +33,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 25 modifies `mutationsResults` to include `del` patches (0.22)
 // -- version 26 adds inspect/metrics and adds metrics to inspect/query (0.23)
 // -- version 27 adds inspect/version (0.23)
-export const PROTOCOL_VERSION = 27;
+// -- version 28 adds more inspect/metrics (0.23)
+export const PROTOCOL_VERSION = 28;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

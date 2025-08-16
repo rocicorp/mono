@@ -5,6 +5,7 @@ import {astSchema} from './ast.ts';
 
 const serverMetricsSchema = v.object({
   'query-materialization-server': tdigestSchema,
+  'query-update-server': tdigestSchema,
 });
 
 export type ServerMetrics = v.Infer<typeof serverMetricsSchema>;
