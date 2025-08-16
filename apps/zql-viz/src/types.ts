@@ -44,5 +44,5 @@ export type RemoteRunResult = {
   // record of { [tableName: string]: { [queryName: string]: number } }
   vendedRowCounts: Record<string, Record<string, number>> | undefined;
   vendedRows: Record<string, Record<string, number>> | undefined;
-  queryPlans: Record<string, string[]> | undefined;
+  plans: Record<string, string[]> | undefined;
 };

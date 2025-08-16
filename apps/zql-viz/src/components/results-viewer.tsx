@@ -85,7 +85,11 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                                         ? JSON.stringify(value)
                                         : String(value);
                                   return (
-                                    <td key={colIndex} className="truncate" title={displayValue}>
+                                    <td
+                                      key={colIndex}
+                                      className="truncate"
+                                      title={displayValue}
+                                    >
                                       {value === null || value === undefined ? (
                                         <span className="null-value">null</span>
                                       ) : (
@@ -148,7 +152,46 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
         );
 
       case 'queryplan':
-        return (
+        return result?.remoteRunResult?.plans ? (
+          <div className="results-content">
+            <div className="tables-container">
+              {Object.entries(result.remoteRunResult.plans).map(([queryName, planSteps]) => (
+                <div key={queryName} className="table-section">
+                  <h3 className="table-title">Query Plan</h3>
+                  <div className="table-info">
+                    <span className="row-count scrollable" title={queryName}>
+                      {queryName}
+                    </span>
+                  </div>
+                  <div className="query-plan-content">
+                    {planSteps.map((step, index) => {
+                      const renderStep = (text: string) => {
+                        // Split by words and apply color coding
+                        return text.split(/(\b(?:SCAN|SEARCH)\b)/g).map((part, partIndex) => {
+                          if (part === 'SCAN') {
+                            return <span key={partIndex} className="plan-scan">{part}</span>;
+                          } else if (part === 'SEARCH') {
+                            return <span key={partIndex} className="plan-search">{part}</span>;
+                          }
+                          return part;
+                        });
+                      };
+
+                      return (
+                        <div key={index} className="plan-step">
+                          <div className="plan-step-number">{index + 1}</div>
+                          <div className="plan-step-text">
+                            {renderStep(step)}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
           <div className="tab-content">
             <div className="placeholder-content">
               <List size={48} />
@@ -180,12 +223,16 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                           </tr>
                         </thead>
                         <tbody>
-                          {Object.entries(queries).map(([queryName, rowCount]) => (
-                            <tr key={queryName}>
-                              <td className="scrollable" title={queryName}>{queryName}</td>
-                              <td>{rowCount.toLocaleString()}</td>
-                            </tr>
-                          ))}
+                          {Object.entries(queries).map(
+                            ([queryName, rowCount]) => (
+                              <tr key={queryName}>
+                                <td className="scrollable" title={queryName}>
+                                  {queryName}
+                                </td>
+                                <td>{rowCount.toLocaleString()}</td>
+                              </tr>
+                            ),
+                          )}
                         </tbody>
                       </table>
                     </div>
@@ -202,15 +249,17 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                         {result.remoteRunResult.syncedRowCount.toLocaleString()}
                       </span>
                     </div>
-                    {result.remoteRunResult?.start !== undefined && 
-                     result.remoteRunResult?.end !== undefined && (
-                      <div className="stat-item">
-                        <span className="stat-label">Query Time:</span>
-                        <span className="stat-value">
-                          {result.remoteRunResult.end - result.remoteRunResult.start}ms
-                        </span>
-                      </div>
-                    )}
+                    {result.remoteRunResult?.start !== undefined &&
+                      result.remoteRunResult?.end !== undefined && (
+                        <div className="stat-item">
+                          <span className="stat-label">Query Time:</span>
+                          <span className="stat-value">
+                            {result.remoteRunResult.end -
+                              result.remoteRunResult.start}
+                            ms
+                          </span>
+                        </div>
+                      )}
                   </div>
                 </div>
               )}

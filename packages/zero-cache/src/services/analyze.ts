@@ -11,6 +11,7 @@ import {computeZqlSpecs} from '../db/lite-tables.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
+import {explainQueries} from '../../../analyze-query/src/explain-queries.ts';
 
 export function setCors(res: FastifyReply) {
   return res
@@ -92,6 +93,8 @@ export async function handleAnalyzeQueryRequest(
       decorateFilterInput: input => input,
     },
   });
+
+  result.plans = explainQueries(result.vendedRowCounts ?? {}, db);
 
   await res.send(result);
 }

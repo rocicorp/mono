@@ -703,3 +703,64 @@ body {
   font-weight: 600;
   font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
 }
+
+/* Query Plan Styles */
+.query-plan-content {
+  padding: 1rem;
+  background: #1e1e1e;
+}
+
+.plan-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  background: #252525;
+  border: 1px solid #383838;
+  border-radius: 6px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.plan-step:hover {
+  background: #2a2a2a;
+  border-color: #667eea;
+}
+
+.plan-step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  background: #383838;
+  color: #e0e0e0;
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.plan-step-text {
+  color: #e0e0e0;
+  flex: 1;
+  word-break: break-word;
+}
+
+.plan-scan {
+  color: #ffd43b;
+  font-weight: 600;
+  background: rgba(255, 212, 59, 0.1);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.plan-search {
+  color: #51cf66;
+  font-weight: 600;
+  background: rgba(81, 207, 102, 0.1);
+  padding: 2px 4px;
+  border-radius: 3px;
+}

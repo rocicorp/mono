@@ -38,6 +38,7 @@ import {runtimeDebugFlags} from '../../zql/src/builder/debug-delegate.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {Debug} from '../../zql/src/builder/debug-delegate.ts';
 import {runAst, type RunResult} from './run-ast.ts';
+import {explainQueries} from './explain-queries.ts';
 
 const options = {
   schema: deployPermissionsOptions.schema,
@@ -345,7 +346,12 @@ if (config.outputVendedRows) {
   }
 }
 colorConsole.log(chalk.blue.bold('\n\n=== Query Plans: ===\n'));
-explainQueries();
+const plans = explainQueries(debug.getVendedRowCounts() ?? {}, db);
+for (const [query, plan] of Object.entries(plans)) {
+  colorConsole.log(chalk.bold('query'), query);
+  colorConsole.log(plan.map((row, i) => colorPlanRow(row, i)).join('\n'));
+  colorConsole.log('\n');
+}
 
 function showStats() {
   let totalRowsConsidered = 0;
@@ -369,28 +375,6 @@ function showStats() {
     colorTime(result.end - result.start),
     'ms',
   );
-}
-
-function explainQueries() {
-  for (const source of sources.values()) {
-    const queries = Object.keys(
-      debug.getVendedRowCounts()?.[source.table] ?? {},
-    );
-    for (const query of queries) {
-      colorConsole.log(chalk.bold('query'), query);
-      colorConsole.log(
-        db
-          // we should be more intelligent about value replacement.
-          // Different values result in different plans. E.g., picking a value at the start
-          // of an index will result in `scan` vs `search`. The scan is fine in that case.
-          .prepare(`EXPLAIN QUERY PLAN ${query.replaceAll('?', "'sdfse'")}`)
-          .all<{detail: string}>()
-          .map((row, i) => colorPlanRow(row.detail, i))
-          .join('\n'),
-      );
-      colorConsole.log('\n');
-    }
-  }
 }
 
 function colorTime(duration: number) {

@@ -31,6 +31,7 @@ export type RunResult = {
   afterPermissions: string | undefined;
   vendedRowCounts: RowCountsBySource | undefined;
   vendedRows: RowsBySource | undefined;
+  plans?: Record<string, string[]> | undefined;
 };
 
 export async function runAst(
