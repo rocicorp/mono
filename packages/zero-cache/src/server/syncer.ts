@@ -28,6 +28,7 @@ import {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
 import {startAnonymousTelemetry} from './anonymous-otel-start.ts';
+import {InspectMetricsDelegate} from './inspect-metrics-delegate.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
 
@@ -89,6 +90,7 @@ export default function runWorker(
       .withContext('clientGroupID', id)
       .withContext('instance', randomID());
     lc.debug?.(`creating view syncer`);
+    const inspectMetricsDelegate = new InspectMetricsDelegate();
     return new ViewSyncerService(
       config,
       logger,
@@ -104,10 +106,12 @@ export default function runWorker(
         shard,
         operatorStorage.createClientGroupStorage(id),
         id,
+        inspectMetricsDelegate,
       ),
       sub,
       drainCoordinator,
       config.log.slowHydrateThreshold,
+      inspectMetricsDelegate,
     );
   };
 

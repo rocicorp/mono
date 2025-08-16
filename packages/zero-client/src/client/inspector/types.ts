@@ -13,6 +13,7 @@ export type Metrics = {
   'query-materialization-end-to-end': ReadonlyTDigest;
   'query-update-client': ReadonlyTDigest;
   'query-materialization-server': ReadonlyTDigest;
+  'query-update-server': ReadonlyTDigest;
 };
 
 export interface Inspector {

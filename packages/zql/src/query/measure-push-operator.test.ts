@@ -1,14 +1,10 @@
 import {describe, expect, test, vi} from 'vitest';
-import type {Change} from '../../../zql/src/ivm/change.ts';
-import type {Node} from '../../../zql/src/ivm/data.ts';
-import type {
-  FetchRequest,
-  Input,
-  Output,
-} from '../../../zql/src/ivm/operator.ts';
-import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
-import type {MetricsDelegate} from '../../../zql/src/query/metrics-delegate.ts';
+import type {Change} from '../ivm/change.ts';
+import type {Node} from '../ivm/data.ts';
+import type {FetchRequest, Input, Output} from '../ivm/operator.ts';
+import type {SourceSchema} from '../ivm/schema.ts';
 import {MeasurePushOperator} from './measure-push-operator.ts';
+import type {MetricsDelegate} from './metrics-delegate.ts';
 
 describe('MeasurePushOperator', () => {
   test('should pass through fetch calls', () => {
@@ -28,6 +24,7 @@ describe('MeasurePushOperator', () => {
       mockInput,
       'test-query-id',
       mockMetricsDelegate,
+      'query-update-client',
     );
     const req = {} as FetchRequest;
 
@@ -53,6 +50,7 @@ describe('MeasurePushOperator', () => {
       mockInput,
       'test-query-id',
       mockMetricsDelegate,
+      'query-update-client',
     );
     const req = {} as FetchRequest;
 
@@ -79,6 +77,7 @@ describe('MeasurePushOperator', () => {
       mockInput,
       'test-query-id',
       mockMetricsDelegate,
+      'query-update-client',
     );
 
     const result = measurePushOperator.getSchema();
@@ -104,6 +103,7 @@ describe('MeasurePushOperator', () => {
       mockInput,
       'test-query-id',
       mockMetricsDelegate,
+      'query-update-client',
     );
 
     measurePushOperator.destroy();
@@ -132,6 +132,7 @@ describe('MeasurePushOperator', () => {
       mockInput,
       'test-query-id',
       mockMetricsDelegate,
+      'query-update-client',
     );
     measurePushOperator.setOutput(mockOutput);
 
@@ -173,6 +174,7 @@ describe('MeasurePushOperator', () => {
       mockInput,
       'test-query-id',
       mockMetricsDelegate,
+      'query-update-client',
     );
     measurePushOperator.setOutput(mockOutput);
 

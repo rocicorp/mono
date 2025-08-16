@@ -6,13 +6,14 @@ import {
   getMutationsTableDefinition,
 } from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
 
-import {OutOfOrderMutation, PushProcessor} from './push-processor.ts';
+import {PushProcessor} from './push-processor.ts';
 import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import type {MutationResult, PushBody} from '../../zero-protocol/src/push.ts';
 import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {ZQLDatabase} from './zql-database.ts';
 import {zip} from '../../shared/src/arrays.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
+import {OutOfOrderMutation} from './process-mutations.ts';
 
 let pg: PostgresDB;
 const params = {
