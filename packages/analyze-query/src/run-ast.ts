@@ -89,11 +89,17 @@ export async function runAst(
 
   let syncedRowCount = 0;
   const rowsByTable: Record<string, Row[]> = {};
+  const seenByTable: Set<string> = new Set();
   for (const rowChange of hydrate(pipeline, hashOfAST(ast), tableSpecs)) {
     assert(rowChange.type === 'add');
     syncedRowCount++;
     if (options.outputSyncedRows) {
       let rows: Row[] = rowsByTable[rowChange.table];
+      const s = rowChange.table + '.' + JSON.stringify(rowChange.row);
+      if (seenByTable.has(s)) {
+        continue; // skip duplicates
+      }
+      seenByTable.add(s);
       if (!rows) {
         rows = [];
         rowsByTable[rowChange.table] = rows;
