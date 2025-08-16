@@ -792,6 +792,7 @@ body {
 }
 
 .nav-button {
+  padding: 0px;
   display: flex;
   align-items: center;
   justify-content: center;

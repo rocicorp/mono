@@ -370,8 +370,6 @@ function App() {
                 value={queryCode}
                 onChange={setQueryCode}
                 onExecute={executeQuery}
-                onOpenCredentials={handleOpenCredentials}
-                hasCredentials={!!auth}
               />
             </Panel>
 

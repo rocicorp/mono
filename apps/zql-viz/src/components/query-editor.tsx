@@ -2,7 +2,7 @@
 import type {FC} from 'react';
 import {useRef} from 'react';
 import Editor, {type Monaco} from '@monaco-editor/react';
-import {Play, Key} from 'lucide-react';
+import {Play} from 'lucide-react';
 import type {editor} from 'monaco-editor';
 import zeroClientTypes from '../../bundled-types/zero-client.d.ts?raw';
 
@@ -10,16 +10,12 @@ interface QueryEditorProps {
   value: string;
   onChange: (value: string) => void;
   onExecute: () => void;
-  onOpenCredentials: () => void;
-  hasCredentials: boolean;
 }
 
 export const QueryEditor: FC<QueryEditorProps> = ({
   value,
   onChange,
   onExecute,
-  onOpenCredentials,
-  hasCredentials,
 }) => {
   const monacoRef = useRef<any>(null);
   const editorRef = useRef<any>(null);
@@ -65,24 +61,13 @@ export const QueryEditor: FC<QueryEditorProps> = ({
     <div className="query-editor">
       <div className="editor-header">
         <h3>Query Editor</h3>
-        <div className="editor-buttons">
-          <button
-            onClick={onOpenCredentials}
-            className={`credentials-button ${hasCredentials ? 'has-credentials' : ''}`}
-            title="Set credentials for server authentication"
-          >
-            <Key size={16} />
-            {hasCredentials ? 'Credentials Set' : 'Set Credentials'}
-          </button>
-          <button
-            onClick={onExecute}
-            className="execute-button"
-            title="Execute Query (Ctrl+Enter)"
-          >
-            <Play size={16} />
-            Execute
-          </button>
-        </div>
+        <button
+          onClick={onExecute}
+          className="execute-button"
+          title="Execute Query (Ctrl+Enter)"
+        >
+          <Play size={16} />
+        </button>
       </div>
       <Editor
         height="100%"
