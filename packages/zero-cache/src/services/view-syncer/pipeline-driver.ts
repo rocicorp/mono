@@ -317,12 +317,9 @@ export class PipelineDriver {
           .withContext('hash', transformationHash)
           .withContext('hydrationTimeMs', hydrationTimeMs);
         for (const tableName of this.#tables.keys()) {
-          const entries = [
-            ...(debugDelegate
-              ?.getVendedRowCounts()
-              ?.get(tableName)
-              ?.entries() ?? []),
-          ];
+          const entries = Object.entries(
+            debugDelegate?.getVendedRowCounts()[tableName] ?? {},
+          );
           totalRowsConsidered += entries.reduce(
             (acc, entry) => acc + entry[1],
             0,

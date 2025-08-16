@@ -38,6 +38,7 @@ import {runtimeDebugFlags} from '../../zql/src/builder/debug-delegate.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {Debug} from '../../zql/src/builder/debug-delegate.ts';
 import {runAst, type RunResult} from './run-ast.ts';
+import {explainQueries} from './explain-queries.ts';
 
 const options = {
   schema: deployPermissionsOptions.schema,
@@ -176,7 +177,6 @@ const config = {
 runtimeDebugFlags.trackRowCountsVended = true;
 runtimeDebugFlags.trackRowsVended = config.outputVendedRows;
 
-const clientGroupID = 'clientGroupIDForAnalyze';
 const lc = createLogContext({
   log: config.log,
 });
@@ -339,32 +339,30 @@ showStats();
 if (config.outputVendedRows) {
   colorConsole.log(chalk.blue.bold('=== Vended Rows: ===\n'));
   for (const source of sources.values()) {
-    const entries = [
-      ...(debug
-        .getVendedRows()
-        .get(clientGroupID)
-        ?.get(source.table)
-        ?.entries() ?? []),
-    ];
     colorConsole.log(
       chalk.bold(`${source.table}:`),
-      Object.fromEntries(entries),
+      debug.getVendedRows()?.[source.table] ?? {},
     );
   }
 }
 colorConsole.log(chalk.blue.bold('\n\n=== Query Plans: ===\n'));
-explainQueries();
+const plans = explainQueries(debug.getVendedRowCounts() ?? {}, db);
+for (const [query, plan] of Object.entries(plans)) {
+  colorConsole.log(chalk.bold('query'), query);
+  colorConsole.log(plan.map((row, i) => colorPlanRow(row, i)).join('\n'));
+  colorConsole.log('\n');
+}
 
 function showStats() {
   let totalRowsConsidered = 0;
   for (const source of sources.values()) {
-    const entries = [
-      ...(debug.getVendedRowCounts()?.get(source.table)?.entries() ?? []),
-    ];
+    const entries = Object.entries(
+      debug.getVendedRowCounts()?.[source.table] ?? {},
+    );
     totalRowsConsidered += entries.reduce((acc, entry) => acc + entry[1], 0);
     colorConsole.log(
       chalk.bold(source.table + ' vended:'),
-      Object.fromEntries(entries),
+      debug.getVendedRowCounts()?.[source.table] ?? {},
     );
   }
 
@@ -377,26 +375,6 @@ function showStats() {
     colorTime(result.end - result.start),
     'ms',
   );
-}
-
-function explainQueries() {
-  for (const source of sources.values()) {
-    const queries = debug.getVendedRowCounts()?.get(source.table)?.keys() ?? [];
-    for (const query of queries) {
-      colorConsole.log(chalk.bold('query'), query);
-      colorConsole.log(
-        db
-          // we should be more intelligent about value replacement.
-          // Different values result in different plans. E.g., picking a value at the start
-          // of an index will result in `scan` vs `search`. The scan is fine in that case.
-          .prepare(`EXPLAIN QUERY PLAN ${query.replaceAll('?', "'sdfse'")}`)
-          .all<{detail: string}>()
-          .map((row, i) => colorPlanRow(row.detail, i))
-          .join('\n'),
-      );
-      colorConsole.log('\n');
-    }
-  }
 }
 
 function colorTime(duration: number) {
