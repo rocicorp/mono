@@ -31,7 +31,6 @@ import {
   type LiteValueType,
 } from '../../types/lite.ts';
 import {liteTableName} from '../../types/names.ts';
-import {normalizedKeyOrder} from '../../types/row-key.ts';
 import {id} from '../../types/sql.ts';
 import type {
   Change,
@@ -51,6 +50,7 @@ import type {
   TableRename,
 } from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {ReplicatorMode} from './replicator.ts';
 import {
   logDeleteOp,
   logResetOp,
@@ -62,9 +62,7 @@ import {
   updateReplicationWatermark,
 } from './schema/replication-state.ts';
 
-// 'INITIAL-SYNC' means the caller is handling the Transaction, and no change
-// log entries need be written.
-export type TransactionMode = 'IMMEDIATE' | 'CONCURRENT' | 'INITIAL-SYNC';
+export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
 
 export type CommitResult = {
   watermark: string;
@@ -84,7 +82,7 @@ export type CommitResult = {
  */
 export class ChangeProcessor {
   readonly #db: StatementRunner;
-  readonly #txMode: TransactionMode;
+  readonly #mode: ChangeProcessorMode;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
   // The TransactionProcessor lazily loads table specs into this Map,
@@ -98,11 +96,11 @@ export class ChangeProcessor {
 
   constructor(
     db: StatementRunner,
-    txMode: TransactionMode,
+    mode: ChangeProcessorMode,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
     this.#db = db;
-    this.#txMode = txMode;
+    this.#mode = mode;
     this.#failService = failService;
   }
 
@@ -167,7 +165,7 @@ export class ChangeProcessor {
         return new TransactionProcessor(
           lc,
           this.#db,
-          this.#txMode,
+          this.#mode,
           this.#tableSpecs,
           commitVersion,
           jsonFormat,
@@ -298,7 +296,7 @@ class TransactionProcessor {
   readonly #lc: LogContext;
   readonly #startMs: number;
   readonly #db: StatementRunner;
-  readonly #txMode: TransactionMode;
+  readonly #mode: ChangeProcessorMode;
   readonly #version: LexiVersion;
   readonly #tableSpecs: Map<string, LiteTableSpec>;
   readonly #jsonFormat: JSONFormat;
@@ -308,30 +306,39 @@ class TransactionProcessor {
   constructor(
     lc: LogContext,
     db: StatementRunner,
-    txMode: TransactionMode,
+    mode: ChangeProcessorMode,
     tableSpecs: Map<string, LiteTableSpec>,
     commitVersion: LexiVersion,
     jsonFormat: JSONFormat,
   ) {
     this.#startMs = Date.now();
-    this.#txMode = txMode;
+    this.#mode = mode;
     this.#jsonFormat = jsonFormat;
 
-    if (txMode === 'CONCURRENT') {
-      // Although the Replicator / Incremental Syncer is the only writer of the replica,
-      // a `BEGIN CONCURRENT` transaction is used to allow View Syncers to simulate
-      // (i.e. and `ROLLBACK`) changes on historic snapshots of the database for the
-      // purpose of IVM).
-      //
-      // This TransactionProcessor is the only logic that will actually
-      // `COMMIT` any transactions to the replica.
-      db.beginConcurrent();
-    } else if (txMode === 'IMMEDIATE') {
-      // For the backup-replicator (i.e. replication-manager), there are no View Syncers
-      // and thus BEGIN CONCURRENT is not necessary. In fact, BEGIN CONCURRENT can cause
-      // deadlocks with forced wal-checkpoints (which `litestream replicate` performs),
-      // so it is important to use vanilla transactions in this configuration.
-      db.beginImmediate();
+    switch (mode) {
+      case 'serving':
+        // Although the Replicator / Incremental Syncer is the only writer of the replica,
+        // a `BEGIN CONCURRENT` transaction is used to allow View Syncers to simulate
+        // (i.e. and `ROLLBACK`) changes on historic snapshots of the database for the
+        // purpose of IVM).
+        //
+        // This TransactionProcessor is the only logic that will actually
+        // `COMMIT` any transactions to the replica.
+        db.beginConcurrent();
+        break;
+      case 'backup':
+        // For the backup-replicator (i.e. replication-manager), there are no View Syncers
+        // and thus BEGIN CONCURRENT is not necessary. In fact, BEGIN CONCURRENT can cause
+        // deadlocks with forced wal-checkpoints (which `litestream replicate` performs),
+        // so it is important to use vanilla transactions in this configuration.
+        db.beginImmediate();
+        break;
+      case 'initial-sync':
+        // When the ChangeProcessor is used for initial-sync, the calling code
+        // handles the transaction boundaries.
+        break;
+      default:
+        unreachable();
     }
     this.#db = db;
     this.#version = commitVersion;
@@ -494,7 +501,7 @@ class TransactionProcessor {
 
     this.#delete(table, rowKey);
 
-    if (this.#txMode !== 'INITIAL-SYNC') {
+    if (this.#mode === 'serving') {
       this.#logDeleteOp(table, rowKey);
     }
   }
@@ -643,29 +650,27 @@ class TransactionProcessor {
     this.#logResetOp(table);
   }
 
-  #logSetOp(table: string, key: LiteRowKey): string {
-    if (this.#txMode !== 'INITIAL-SYNC') {
-      return logSetOp(this.#db, this.#version, table, key);
+  #logSetOp(table: string, key: LiteRowKey) {
+    if (this.#mode === 'serving') {
+      logSetOp(this.#db, this.#version, table, key);
     }
-    return stringify(normalizedKeyOrder(key));
   }
 
-  #logDeleteOp(table: string, key: LiteRowKey): string {
-    if (this.#txMode !== 'INITIAL-SYNC') {
-      return logDeleteOp(this.#db, this.#version, table, key);
+  #logDeleteOp(table: string, key: LiteRowKey) {
+    if (this.#mode === 'serving') {
+      logDeleteOp(this.#db, this.#version, table, key);
     }
-    return stringify(normalizedKeyOrder(key));
   }
 
   #logTruncateOp(table: string) {
-    if (this.#txMode !== 'INITIAL-SYNC') {
+    if (this.#mode === 'serving') {
       logTruncateOp(this.#db, this.#version, table);
     }
   }
 
   #logResetOp(table: string) {
     this.#schemaChanged = true;
-    if (this.#txMode !== 'INITIAL-SYNC') {
+    if (this.#mode === 'serving') {
       logResetOp(this.#db, this.#version, table);
     }
     this.#reloadTableSpecs();
@@ -690,7 +695,7 @@ class TransactionProcessor {
       );
     }
 
-    if (this.#txMode !== 'INITIAL-SYNC') {
+    if (this.#mode !== 'initial-sync') {
       this.#db.commit();
     }
 
