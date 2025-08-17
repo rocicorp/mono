@@ -9,7 +9,7 @@ import {
   type Downstream,
 } from '../change-streamer/change-streamer.ts';
 import {RunningState} from '../running-state.ts';
-import {ChangeProcessor, type TransactionMode} from './change-processor.ts';
+import {ChangeProcessor} from './change-processor.ts';
 import {Notifier} from './notifier.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
@@ -28,7 +28,6 @@ export class IncrementalSyncer {
   readonly #replica: StatementRunner;
   readonly #mode: ReplicatorMode;
   readonly #publishReplicationStatus: boolean;
-  readonly #txMode: TransactionMode;
   readonly #notifier: Notifier;
 
   readonly #state = new RunningState('IncrementalSyncer');
@@ -53,7 +52,6 @@ export class IncrementalSyncer {
     this.#replica = new StatementRunner(replica);
     this.#mode = mode;
     this.#publishReplicationStatus = publishReplicationStatus;
-    this.#txMode = mode === 'serving' ? 'CONCURRENT' : 'IMMEDIATE';
     this.#notifier = new Notifier();
   }
 
@@ -73,7 +71,7 @@ export class IncrementalSyncer {
       const {replicaVersion, watermark} = getSubscriptionState(this.#replica);
       const processor = new ChangeProcessor(
         this.#replica,
-        this.#txMode,
+        this.#mode,
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
 
