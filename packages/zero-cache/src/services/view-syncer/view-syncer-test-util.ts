@@ -28,7 +28,7 @@ import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 import {InspectMetricsDelegate} from '../../server/inspect-metrics-delegate.ts';
-import {testDBs} from '../../test/db.ts';
+import {TestDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
@@ -545,6 +545,7 @@ async function expectDesired(
 }
 
 export async function setup(
+  testDBs: TestDBs,
   testName: string,
   permissions: PermissionsConfig | undefined,
 ) {
