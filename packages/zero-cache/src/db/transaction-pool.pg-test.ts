@@ -1,12 +1,12 @@
 import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
-import {expectTables, testDBs} from '../test/db.ts';
+import {expectTables, test, type PgTest} from '../test/db.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import * as Mode from './mode-enum.ts';
 import {
@@ -25,7 +25,7 @@ describe('db/transaction-pool', () => {
   let lc: LogContext;
   let pools: TransactionPool[];
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     pools = [];
     lc = createSilentLogContext();
     db = await testDBs.create('transaction_pool_test');
@@ -38,11 +38,11 @@ describe('db/transaction-pool', () => {
     CREATE TABLE keepalive (id SERIAL);
     CREATE TABLE cleaned (id SERIAL);
     `.simple();
-  });
 
-  afterEach(async () => {
-    pools.forEach(pool => pool.abort());
-    await testDBs.drop(db);
+    return async () => {
+      pools.forEach(pool => pool.abort());
+      await testDBs.drop(db);
+    };
   });
 
   function newTransactionPool(

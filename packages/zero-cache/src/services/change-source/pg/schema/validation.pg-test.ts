@@ -1,6 +1,6 @@
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.ts';
-import {initDB, testDBs} from '../../../../test/db.ts';
+import {initDB, type PgTest, test} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import {getPublicationInfo} from './published.ts';
 import {UnsupportedTableSchemaError, validate} from './validation.ts';
@@ -9,12 +9,10 @@ describe('change-source/pg', () => {
   const lc = createSilentLogContext();
   let db: PostgresDB;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     db = await testDBs.create('zero_schema_validation_test');
-  });
 
-  afterEach(async () => {
-    await testDBs.drop(db);
+    return () => testDBs.drop(db);
   });
 
   type InvalidTableCase = {

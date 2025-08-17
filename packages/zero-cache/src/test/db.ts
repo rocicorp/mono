@@ -1,22 +1,34 @@
 /* eslint-disable no-console */
+import {PostgreSqlContainer} from '@testcontainers/postgresql';
 import postgres from 'postgres';
-import {afterAll, expect, inject} from 'vitest';
-import {assert} from '../../../shared/src/asserts.ts';
+import {
+  afterAll,
+  test as baseTest,
+  expect,
+  inject,
+  type ProvidedContext,
+} from 'vitest';
+import {must} from '../../../shared/src/must.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import {type PostgresDB, postgresTypeConfig} from '../types/pg.ts';
 
 declare module 'vitest' {
   export interface ProvidedContext {
     pgConnectionString: string;
+    pgImage: string;
+    pgTimezone: string;
   }
 }
 
+function mustInject<K extends keyof ProvidedContext>(key: K) {
+  return must(
+    inject(key),
+    'test file must have suffix ".pg-test.ts" to setup postgres container',
+  );
+}
+
 // Set by ./test/pg-container-setup.ts
-const CONNECTION_URI = inject('pgConnectionString');
-assert(
-  CONNECTION_URI,
-  'test file must have suffix ".pg-test.ts" to setup postgres container',
-);
+const CONNECTION_URI = mustInject('pgConnectionString');
 
 export type OnNoticeFn = (n: postgres.Notice) => void;
 
@@ -24,12 +36,16 @@ const defaultOnNotice: OnNoticeFn = n => {
   n.severity !== 'NOTICE' && console.log(n);
 };
 
-class TestDBs {
-  readonly sql = postgres(CONNECTION_URI, {
-    onnotice: n => n.severity !== 'NOTICE' && console.log(n),
-    ...postgresTypeConfig(),
-  });
+export class TestDBs {
+  readonly sql: PostgresDB;
   readonly #dbs: Record<string, postgres.Sql> = {};
+
+  constructor(connectionURI = CONNECTION_URI) {
+    this.sql = postgres(connectionURI, {
+      onnotice: n => n.severity !== 'NOTICE' && console.log(n),
+      ...postgresTypeConfig(),
+    });
+  }
 
   async create(
     database: string,
@@ -96,6 +112,11 @@ class TestDBs {
    * it manually.
    */
   async end() {
+    const undropped = Object.keys(this.#dbs);
+    if (undropped.length) {
+      console.warn('undropped databases', undropped);
+      await this.drop(...Object.values(this.#dbs));
+    }
     await this.sql.end();
   }
 }
@@ -185,3 +206,42 @@ async function dropReplicationSlotsFor(db: postgres.Sql, database: string) {
     }
   }
 }
+
+export const pgContainerTest = baseTest.extend<{pgConnectionString: string}>({
+  pgConnectionString: [
+    // vitest requires that the first argument inside a fixture use
+    // object destructuring.
+    // eslint-disable-next-line no-empty-pattern
+    async ({}, use) => {
+      const container = await new PostgreSqlContainer(mustInject('pgImage'))
+        .withCommand([
+          'postgres',
+          '-c',
+          'wal_level=logical',
+          '-c',
+          `timezone=${mustInject('pgTimezone')}`,
+        ])
+        .start();
+      const pgConnectionString = container.getConnectionUri();
+      await use(pgConnectionString);
+      await container.stop();
+    },
+    {scope: 'worker'},
+  ],
+});
+
+export type PgTest = {testDBs: TestDBs};
+
+export const test = pgContainerTest.extend<PgTest>({
+  testDBs: [
+    async ({pgConnectionString}, use) => {
+      const testDBs = new TestDBs(pgConnectionString);
+      try {
+        await use(testDBs);
+      } finally {
+        await testDBs.end();
+      }
+    },
+    {scope: 'worker'},
+  ],
+});

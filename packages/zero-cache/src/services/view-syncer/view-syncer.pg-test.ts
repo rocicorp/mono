@@ -5,7 +5,6 @@ import {
   expect,
   type Mock,
   type MockedFunction,
-  test,
   vi,
 } from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
@@ -29,7 +28,7 @@ import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.t
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {testDBs} from '../../test/db.ts';
+import {type PgTest, test} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -118,7 +117,7 @@ describe('view-syncer/service', () => {
     httpCookie: undefined,
   };
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     ({
       storageDB,
       replicaDbFile,
@@ -134,15 +133,15 @@ describe('view-syncer/service', () => {
       connect,
       connectWithQueueAndSource,
       setTimeoutFn,
-    } = await setup('view_syncer_service_test', permissionsAll));
-  });
+    } = await setup(testDBs, 'view_syncer_service_test', permissionsAll));
 
-  afterEach(async () => {
-    vi.useRealTimers();
-    await vs.stop();
-    await viewSyncerDone;
-    await testDBs.drop(cvrDB);
-    replicaDbFile.delete();
+    return async () => {
+      vi.useRealTimers();
+      await vs.stop();
+      await viewSyncerDone;
+      await testDBs.drop(cvrDB, upstreamDb);
+      replicaDbFile.delete();
+    };
   });
 
   async function getCVROwner() {

@@ -1,5 +1,5 @@
 import {nanoid} from 'nanoid/non-secure';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import type {ZeroEvent} from '../../../../../zero-events/src/index.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
@@ -11,7 +11,7 @@ import type {
   PublishedTableSpec,
 } from '../../../db/specs.ts';
 import {initEventSinkForTesting} from '../../../observability/events.ts';
-import {getConnectionURI, initDB, testDBs} from '../../../test/db.ts';
+import {getConnectionURI, initDB, type PgTest, test} from '../../../test/db.ts';
 import {
   expectMatchingObjectsInTables,
   expectTables,
@@ -2142,11 +2142,10 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
   let upstream: PostgresDB;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     upstream = await testDBs.create('initial_sync_upstream');
-    return async () => {
-      await testDBs.drop(upstream);
-    };
+
+    return () => testDBs.drop(upstream);
   });
 
   for (const c of cases) {

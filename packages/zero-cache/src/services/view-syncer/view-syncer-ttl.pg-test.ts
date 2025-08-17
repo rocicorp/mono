@@ -1,19 +1,11 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  type Mock,
-  test,
-  vi,
-} from 'vitest';
+import {beforeEach, describe, expect, type Mock, vi} from 'vitest';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
-import {testDBs} from '../../test/db.ts';
+import {type PgTest, test} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
@@ -46,6 +38,7 @@ import {
 
 let replicaDbFile: DbFile;
 let cvrDB: PostgresDB;
+let upstreamDb: PostgresDB;
 let stateChanges: Subscription<ReplicaState>;
 
 let vs: ViewSyncerService;
@@ -91,10 +84,11 @@ const SYNC_CONTEXT: SyncContext = {
   httpCookie: undefined,
 };
 
-beforeEach(async () => {
+beforeEach<PgTest>(async ({testDBs}) => {
   ({
     replicaDbFile,
     cvrDB,
+    upstreamDb,
     stateChanges,
     vs,
     viewSyncerDone,
@@ -102,15 +96,15 @@ beforeEach(async () => {
     connect,
     connectWithQueueAndSource,
     setTimeoutFn,
-  } = await setup('view_syncer_ttl_test', permissionsAll));
-});
+  } = await setup(testDBs, 'view_syncer_ttl_test', permissionsAll));
 
-afterEach(async () => {
-  vi.useRealTimers();
-  await vs.stop();
-  await viewSyncerDone;
-  await testDBs.drop(cvrDB);
-  replicaDbFile.delete();
+  return async () => {
+    vi.useRealTimers();
+    await vs.stop();
+    await viewSyncerDone;
+    await testDBs.drop(cvrDB, upstreamDb);
+    replicaDbFile.delete();
+  };
 });
 
 describe('ttl', () => {

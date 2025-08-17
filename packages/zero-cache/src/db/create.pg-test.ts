@@ -1,9 +1,9 @@
 import type postgres from 'postgres';
-import {afterAll, afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {getPublicationInfo} from '../services/change-source/pg/schema/published.ts';
-import {testDBs} from '../test/db.ts';
+import {type PgTest, test} from '../test/db.ts';
 import {createTableStatement} from './create.ts';
 import {listTables} from './lite-tables.ts';
 import {mapPostgresToLite} from './pg-to-lite.ts';
@@ -513,20 +513,14 @@ describe('tables/create', () => {
 
   describe('pg', () => {
     let db: postgres.Sql;
-    beforeEach(async () => {
+    beforeEach<PgTest>(async ({testDBs}) => {
       db = await testDBs.create('create_tables_test');
       await db`
       CREATE PUBLICATION zero_all FOR ALL TABLES;
       CREATE TYPE my_type AS ENUM ('foo', 'bar', 'baz');
       `.simple();
-    });
 
-    afterEach(async () => {
-      await testDBs.drop(db);
-    });
-
-    afterAll(async () => {
-      await testDBs.end();
+      return () => testDBs.drop(db);
     });
 
     test.each(cases)('$name', async c => {
