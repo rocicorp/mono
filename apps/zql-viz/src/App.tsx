@@ -26,6 +26,8 @@ const DEFAULT_QUERY = `const {
   table,
   number,
   string,
+  boolean,
+  enumeration,
   relationships,
 } = zero;
 
@@ -33,35 +35,48 @@ const DEFAULT_QUERY = `const {
 const user = table('user')
   .columns({
     id: string(),
-    name: string(),
+    login: string(),
+    name: string().optional(),
   })
     .primaryKey('id');
 
-const session = table('session')
+const issue = table('issue')
   .columns({
     id: string(),
-    userId: string(),
-    createdAt: number(),
+    shortID: number().optional(),
+    title: string(),
+    open: boolean(),
+    modified: number(),
+    created: number(),
+    creatorID: string(),
+    assigneeID: string().optional(),
+    description: string(),
+    visibility: enumeration<'internal' | 'public'>(),
   })
-    .primaryKey('id');
+  .primaryKey('id');
 
-const userToSession = relationships(user, ({many}) => ({
-  sessions: many({
+const userRelationships = relationships(user, ({many}) => ({
+  createdIssues: many({
     sourceField: ['id'],
-    destField: ['userId'],
-    destSchema: session,
+    destField: ['creatorID'],
+    destSchema: issue,
+  }),
+  assignedIssues: many({
+    sourceField: ['id'],
+    destField: ['assigneeID'],
+    destSchema: issue,
   }),
 }));
 
 const builder = createBuilder(createSchema({
-  tables: [user, session],
-  relationships: [userToSession]
+  tables: [user, issue],
+  relationships: [userRelationships]
 }));
 
-//: Get user with recent sessions
+//: Get user and their assigned issues
 run(
-  builder.user.where('id', '=', 'some-user-id')
-    .related('sessions', q => q.orderBy('createdAt', 'desc').one())
+  builder.user
+    .related('assignedIssues', q => q.orderBy('modified', 'desc'))
 )`;
 
 function App() {
@@ -199,26 +214,22 @@ function App() {
         if (auth && auth.serverUrl) {
           console.log('Using server URL:', auth.serverUrl);
           const credentials = btoa(`:${auth.password}`);
-          const response = await fetch(
-            `${auth.serverUrl}/analyze-queryz`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Basic ${credentials}`,
-              },
-              body: JSON.stringify({
-                ast: mapAST(capturedQuery.ast, mapper),
-              }),
+          const response = await fetch(`${auth.serverUrl}/analyze-queryz`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Basic ${credentials}`,
             },
-          );
+            body: JSON.stringify({
+              ast: mapAST(capturedQuery.ast, mapper),
+            }),
+          });
 
           remoteRunResult = await response.json();
-          console.log('REMOTE RESULT', remoteRunResult);
         } else {
           console.warn(
             'No auth credentials set or server URL missing, will not run the query server side or analyze it server side',
-            auth
+            auth,
           );
         }
       } catch (e) {
