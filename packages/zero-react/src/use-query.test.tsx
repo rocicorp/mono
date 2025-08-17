@@ -367,8 +367,11 @@ describe('ViewStore', () => {
 });
 
 describe('useSuspenseQuery', () => {
-  test('suspends until data is complete', async () => {
+  beforeEach(() => {
     vi.useRealTimers();
+    document.body.innerHTML = '';
+  });
+  test('suspends until data is complete', async () => {
     const q = newMockQuery('query1');
     const zero = newMockZero('client1');
 
@@ -387,16 +390,100 @@ describe('useSuspenseQuery', () => {
       </ZeroProvider>,
     );
 
-    await new Promise(r => setTimeout(r, 0));
-    expect(element.textContent).toBe('loading');
+    await expect.poll(() => element.textContent).toBe('loading');
 
     const view = (q.materialize as any).mock.results[0].value as {
       listeners: Set<(snap: unknown, resultType: ResultType) => void>;
     };
 
     view.listeners.forEach(cb => cb([{a: 1}], 'complete'));
-    await new Promise(r => setTimeout(r, 0));
-    expect(element.textContent).toBe('[{"a":1}]');
+    await expect.poll(() => element.textContent).toBe('[{"a":1}]');
+  });
+
+  test('suspends until data is non-empty', async () => {
+    const q = newMockQuery('query2');
+    const zero = newMockZero('client2');
+
+    function Comp() {
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'non-empty'});
+      return <div>{JSON.stringify(data)}</div>;
+    }
+
+    const element = document.createElement('div');
+    document.body.appendChild(element);
+    createRoot(element).render(
+      <ZeroProvider zero={zero}>
+        <Suspense fallback={<>loading</>}>
+          <Comp />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('loading');
+
+    const view = (q.materialize as any).mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    view.listeners.forEach(cb => cb([{a: 1}], 'unknown'));
+    await expect.poll(() => element.textContent).toBe('[{"a":1}]');
+  });
+
+  test('suspends until data is non-empty singular', async () => {
+    const q = newMockQuery('query3', true);
+    const zero = newMockZero('client3');
+
+    function Comp() {
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'non-empty'});
+      return <div>{JSON.stringify(data)}</div>;
+    }
+
+    const element = document.createElement('div');
+    document.body.appendChild(element);
+    createRoot(element).render(
+      <ZeroProvider zero={zero}>
+        <Suspense fallback={<>loading</>}>
+          <Comp />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('loading');
+
+    const view = (q.materialize as any).mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    view.listeners.forEach(cb => cb({a: 1}, 'unknown'));
+    await expect.poll(() => element.textContent).toBe('{"a":1}');
+  });
+
+  test('suspends until data is non-empty complete', async () => {
+    const q = newMockQuery('query4');
+    const zero = newMockZero('client4');
+
+    function Comp() {
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'non-empty'});
+      return <div>{JSON.stringify(data)}</div>;
+    }
+
+    const element = document.createElement('div');
+    document.body.appendChild(element);
+    createRoot(element).render(
+      <ZeroProvider zero={zero}>
+        <Suspense fallback={<>loading</>}>
+          <Comp />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('loading');
+
+    const view = (q.materialize as any).mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    view.listeners.forEach(cb => cb([{a: 1}], 'complete'));
+    await expect.poll(() => element.textContent).toBe('[{"a":1}]');
   });
 });
-
