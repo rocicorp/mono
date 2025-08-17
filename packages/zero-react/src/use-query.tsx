@@ -31,14 +31,28 @@ export type UseQueryOptions = {
   ttl?: TTL | undefined;
 };
 
-function useQueryInternal<
+export type UseSuspenseQueryOptions = {
+  enabled?: boolean | undefined;
+  /**
+   * Time to live (TTL) in seconds. Controls how long query results are cached
+   * after the query is removed. During this time, Zero continues to sync the query.
+   * Default is 'never'.
+   */
+  ttl?: TTL | undefined;
+  /**
+   * Whether to suspend until the query is complete or until the query has non-empty data.
+   * Default is 'complete'.
+   */
+  suspendUntil?: 'complete' | 'non-empty';
+};
+
+export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
   query: Query<TSchema, TTable, TReturn>,
   options?: UseQueryOptions | boolean,
-  suspense: boolean = false,
 ): QueryResult<TReturn> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
@@ -55,37 +69,11 @@ function useQueryInternal<
     ttl,
   );
   // https://react.dev/reference/react/useSyncExternalStore
-  const snapshot = useSyncExternalStore(
+  return useSyncExternalStore(
     view.subscribeReactInternals,
     view.getSnapshot,
     view.getSnapshot,
   );
-
-  if (suspense && snapshot[1].type === 'unknown') {
-    const promise = view.waitForComplete();
-    // React 19 exposes use(), otherwise we throw the promise to suspend
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-    const useHook = (React as unknown as {use?: (p: Promise<void>) => void})
-      .use;
-    if (useHook) {
-      useHook(promise);
-    } else {
-      throw promise;
-    }
-  }
-
-  return snapshot;
-}
-
-export function useQuery<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
->(
-  query: Query<TSchema, TTable, TReturn>,
-  options?: UseQueryOptions | boolean,
-): QueryResult<TReturn> {
-  return useQueryInternal(query, options);
 }
 
 export function useSuspenseQuery<
@@ -94,9 +82,62 @@ export function useSuspenseQuery<
   TReturn,
 >(
   query: Query<TSchema, TTable, TReturn>,
-  options?: UseQueryOptions | boolean,
+  options?: UseSuspenseQueryOptions | boolean,
 ): QueryResult<TReturn> {
-  return useQueryInternal(query, options, true);
+  let enabled = true;
+  let ttl: TTL = DEFAULT_TTL_MS;
+  let suspendUntil: 'complete' | 'non-empty' = 'complete';
+  if (typeof options === 'boolean') {
+    enabled = options;
+  } else if (options) {
+    ({
+      enabled = true,
+      ttl = DEFAULT_TTL_MS,
+      suspendUntil = 'complete',
+    } = options);
+  }
+
+  const view = viewStore.getView(
+    useZero(),
+    query as AbstractQuery<TSchema, TTable, TReturn>,
+    enabled,
+    ttl,
+  );
+  // https://react.dev/reference/react/useSyncExternalStore
+  const snapshot = useSyncExternalStore(
+    view.subscribeReactInternals,
+    view.getSnapshot,
+    view.getSnapshot,
+  );
+
+  // React 19 exposes use(), otherwise we throw the promise to suspend
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+  const useHook = (React as unknown as {use?: (p: Promise<void>) => void}).use;
+
+  if (suspendUntil === 'complete' && snapshot[1].type !== 'complete') {
+    const promise = view.waitForComplete();
+    if (useHook) {
+      useHook(promise);
+    } else {
+      throw promise;
+    }
+  }
+
+  if (
+    suspendUntil === 'non-empty' &&
+    (query.format.singular
+      ? snapshot[0] === undefined
+      : (snapshot[0] as unknown[]).length === 0)
+  ) {
+    const promise = view.waitForNonEmpty();
+    if (useHook) {
+      useHook(promise);
+    } else {
+      throw promise;
+    }
+  }
+
+  return snapshot;
 }
 
 const emptyArray: unknown[] = [];
@@ -230,6 +271,7 @@ export class ViewStore {
     subscribeReactInternals: (internals: () => void) => () => void;
     updateTTL: (ttl: TTL) => void;
     waitForComplete: () => Promise<void>;
+    waitForNonEmpty: () => Promise<void>;
   } {
     const {format} = query;
     if (!enabled) {
@@ -238,6 +280,7 @@ export class ViewStore {
         subscribeReactInternals: disabledSubscriber,
         updateTTL: () => {},
         waitForComplete: () => Promise.resolve(),
+        waitForNonEmpty: () => Promise.resolve(),
       };
     }
 
@@ -313,6 +356,8 @@ class ViewWrapper<
   #ttl: TTL;
   #completeResolver: Resolver<void> | undefined;
   #complete: Promise<void> | undefined;
+  #nonEmptyResolver: Resolver<void> | undefined;
+  #nonEmpty: Promise<void> | undefined;
 
   constructor(
     query: Query<TSchema, TTable, TReturn>,
@@ -340,9 +385,20 @@ class ViewWrapper<
         ? snap
         : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
     this.#snapshot = getSnapshot(this.#format.singular, data, resultType);
+
     if (resultType === 'complete') {
       this.#completeResolver?.resolve();
+      this.#nonEmptyResolver?.resolve();
     }
+
+    if (
+      this.#format.singular
+        ? this.#snapshot[0] !== undefined
+        : (this.#snapshot[0] as unknown[]).length !== 0
+    ) {
+      this.#nonEmptyResolver?.resolve();
+    }
+
     for (const internals of this.#reactInternals) {
       internals();
     }
@@ -354,6 +410,7 @@ class ViewWrapper<
     }
 
     this.#resetComplete();
+    this.#resetNonEmpty();
     this.#view = this.#query.materialize(this.#ttl);
     this.#view.addListener(this.#onData);
 
@@ -401,8 +458,20 @@ class ViewWrapper<
     return this.#complete!;
   }
 
+  waitForNonEmpty(): Promise<void> {
+    if (!this.#nonEmpty) {
+      this.#resetNonEmpty();
+    }
+    return this.#nonEmpty!;
+  }
+
   #resetComplete() {
     this.#completeResolver = resolver<void>();
     this.#complete = this.#completeResolver.promise;
+  }
+
+  #resetNonEmpty() {
+    this.#nonEmptyResolver = resolver<void>();
+    this.#nonEmpty = this.#nonEmptyResolver.promise;
   }
 }
