@@ -13,7 +13,7 @@ import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import {TimedCache} from '../../../shared/src/cache.ts';
 import {must} from '../../../shared/src/must.ts';
 
-type HttpError = {
+export type HttpError = {
   error: 'http';
   status: number;
   details: string;

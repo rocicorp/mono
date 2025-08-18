@@ -34,7 +34,10 @@ import {
   type TransformedAndHashed,
 } from '../../auth/read-authorizer.ts';
 import {getServerVersion, type ZeroConfig} from '../../config/zero-config.ts';
-import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
+import {
+  CustomQueryTransformer,
+  type HttpError,
+} from '../../custom-queries/transform-query.ts';
 import {
   getOrCreateCounter,
   getOrCreateHistogram,
@@ -89,6 +92,7 @@ import {
   type TTLClock,
 } from './ttl-clock.ts';
 import {wrapIterable} from '../../../../shared/src/iterables.ts';
+import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -978,7 +982,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       ([_, state]) => state.transformationHash !== undefined,
     );
 
-    const customQueries: CustomQueryRecord[] = [];
+    const customQueries: Map<string, CustomQueryRecord> = new Map();
     const otherQueries: (ClientQueryRecord | InternalQueryRecord)[] = [];
 
     for (const [, query] of gotQueries) {
@@ -992,22 +996,22 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       if (query.type === 'custom') {
-        customQueries.push(query);
+        customQueries.set(query.id, query);
       } else {
         otherQueries.push(query);
       }
     }
 
     const transformedQueries: TransformedAndHashed[] = [];
-    if (customQueries.length > 0 && !this.#customQueryTransformer) {
+    if (customQueries.size > 0 && !this.#customQueryTransformer) {
       lc.error?.(
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
     const [_, byOriginalHash] = this.#pipelines.addedQueries();
-    if (this.#customQueryTransformer && customQueries.length > 0) {
+    if (this.#customQueryTransformer && customQueries.size > 0) {
       const filteredCustomQueries = this.#filterCustomQueries(
-        customQueries,
+        customQueries.values(),
         byOriginalHash,
         undefined,
       );
@@ -1023,22 +1027,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           filteredCustomQueries,
         );
 
-      // TODO: collected errors need to make it downstream to the client.
-      if (Array.isArray(transformedCustomQueries)) {
-        for (const q of transformedCustomQueries) {
-          if ('error' in q) {
-            lc.error?.(`Error transforming custom query ${q.name}: ${q.error}`);
-            continue;
-          }
-          transformedQueries.push(q);
-        }
-      } else {
-        // If the result is not an array, it is an error.
-        lc.error?.(
-          'Error calling API server to transform custom queries',
-          transformedCustomQueries,
-        );
-      }
+      this.#processTransformedCustomQueries(
+        lc,
+        filteredCustomQueries,
+        transformedCustomQueries,
+        (q: TransformedAndHashed) => transformedQueries.push(q),
+        customQueries,
+      );
     }
 
     for (const q of otherQueries) {
@@ -1094,6 +1089,73 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#hydrationTime.record(elapsed / 1000);
       this.#addQueryMaterializationServerMetric(transformationHash, elapsed);
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
+    }
+  }
+
+  #processTransformedCustomQueries(
+    lc: LogContext,
+    originalQueries: Iterable<CustomQueryRecord>,
+    transformedCustomQueries:
+      | (TransformedAndHashed | ErroredQuery)[]
+      | HttpError,
+    cb: (q: TransformedAndHashed) => void,
+    customQueryMap: Map<string, CustomQueryRecord>,
+  ) {
+    const errors: ErroredQuery[] = [];
+    if (Array.isArray(transformedCustomQueries)) {
+      for (const q of transformedCustomQueries) {
+        if ('error' in q) {
+          lc.error?.(`Error transforming custom query ${q.name}: ${q.error}`);
+          errors.push(q);
+          continue;
+        }
+        cb(q);
+      }
+    } else {
+      lc.error?.(
+        'Error calling API server to transform custom queries',
+        transformedCustomQueries,
+      );
+      // All queries failed to transform because we did not get a response
+      for (const q of originalQueries) {
+        errors.push({
+          id: q.id,
+          name: q.name,
+          status: transformedCustomQueries.status,
+          details: transformedCustomQueries.details,
+          error: 'http',
+        });
+      }
+    }
+
+    // todo: fan errors out to connected clients
+    // based on the client data from queries
+    for (const err of errors) {
+      const q = customQueryMap.get(err.id);
+      assert(q, 'got an error that does not map back to a custom query');
+      const clientIds = Object.keys(q.clientState);
+
+      // idk, is this always true?
+      // can a query be resurrected that has many client ids and is not currently running?
+      // It seems like that would be the case with ttls...
+      // Queries resurrected by TTL we technically cannot tell a client about
+      // because that client may no longer exist.
+      // assert(
+      //   clientIds.length === 1,
+      //   'expected exactly one client to be connected during the transformation of a custom query. Future clients should not re-transform the query.',
+      // );
+
+      // Fan out the error to the connected client
+      this.#sendQueryTransformErrorToClients(clientIds, err);
+    }
+  }
+
+  #sendQueryTransformErrorToClients(clientIds: string[], err: ErroredQuery) {
+    for (const clientId of clientIds) {
+      const client = this.#clients.get(clientId);
+      if (client) {
+        client.sendQueryTransformError(err);
+      }
     }
   }
 
@@ -1216,28 +1278,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             filteredCustomQueries,
           );
 
-        // TODO: collected errors need to make it downstream to the client.
-        if (Array.isArray(transformedCustomQueries)) {
-          for (const q of transformedCustomQueries) {
-            if ('error' in q) {
-              lc.error?.(
-                `Error transforming custom query ${q.name}: ${q.error}`,
-              );
-              continue;
-            }
+        this.#processTransformedCustomQueries(
+          lc,
+          filteredCustomQueries,
+          transformedCustomQueries,
+          (q: TransformedAndHashed) =>
             transformedQueries.push({
               id: q.id,
               origQuery: must(customQueries.get(q.id)),
               transformed: q,
-            });
-          }
-        } else {
-          // If the result is not an array, it is an error.
-          lc.error?.(
-            'Error calling API server to transform custom queries',
-            transformedCustomQueries,
-          );
-        }
+            }),
+          customQueries,
+        );
       }
 
       const serverQueries = transformedQueries.map(

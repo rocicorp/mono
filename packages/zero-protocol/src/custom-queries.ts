@@ -17,13 +17,28 @@ export const transformedQuerySchema = v.object({
   ast: astSchema,
 });
 
-export const erroredQuerySchema = v.object({
+export const appQueryErrorSchema = v.object({
   error: v.literal('app'),
   id: v.string(),
   name: v.string(),
   details: jsonSchema,
 });
+
+export const httpQueryErrorSchema = v.object({
+  error: v.literal('http'),
+  id: v.string(),
+  name: v.string(),
+  status: v.number(),
+  details: jsonSchema,
+});
+
+export const erroredQuerySchema = v.union(
+  appQueryErrorSchema,
+  httpQueryErrorSchema,
+);
 export type ErroredQuery = v.Infer<typeof erroredQuerySchema>;
+export type AppQueryError = v.Infer<typeof appQueryErrorSchema>;
+export type HttpQueryError = v.Infer<typeof httpQueryErrorSchema>;
 
 export const transformResponseBodySchema = v.array(
   v.union(transformedQuerySchema, erroredQuerySchema),
