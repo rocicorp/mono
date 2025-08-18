@@ -34,10 +34,7 @@ import {
   type TransformedAndHashed,
 } from '../../auth/read-authorizer.ts';
 import {getServerVersion, type ZeroConfig} from '../../config/zero-config.ts';
-import {
-  CustomQueryTransformer,
-  type HttpError,
-} from '../../custom-queries/transform-query.ts';
+import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import {
   getOrCreateCounter,
   getOrCreateHistogram,
@@ -1029,7 +1026,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       this.#processTransformedCustomQueries(
         lc,
-        filteredCustomQueries,
         transformedCustomQueries,
         (q: TransformedAndHashed) => transformedQueries.push(q),
         customQueries,
@@ -1094,67 +1090,46 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #processTransformedCustomQueries(
     lc: LogContext,
-    originalQueries: Iterable<CustomQueryRecord>,
-    transformedCustomQueries:
-      | (TransformedAndHashed | ErroredQuery)[]
-      | HttpError,
+    transformedCustomQueries: (TransformedAndHashed | ErroredQuery)[],
     cb: (q: TransformedAndHashed) => void,
     customQueryMap: Map<string, CustomQueryRecord>,
   ) {
     const errors: ErroredQuery[] = [];
-    if (Array.isArray(transformedCustomQueries)) {
-      for (const q of transformedCustomQueries) {
-        if ('error' in q) {
-          lc.error?.(`Error transforming custom query ${q.name}: ${q.error}`);
-          errors.push(q);
-          continue;
-        }
-        cb(q);
+
+    for (const q of transformedCustomQueries) {
+      if ('error' in q) {
+        lc.error?.(`Error transforming custom query ${q.name}: ${q.error}`);
+        errors.push(q);
+        continue;
       }
-    } else {
-      lc.error?.(
-        'Error calling API server to transform custom queries',
-        transformedCustomQueries,
-      );
-      // All queries failed to transform because we did not get a response
-      for (const q of originalQueries) {
-        errors.push({
-          id: q.id,
-          name: q.name,
-          status: transformedCustomQueries.status,
-          details: transformedCustomQueries.details,
-          error: 'http',
-        });
-      }
+      cb(q);
     }
 
     // todo: fan errors out to connected clients
     // based on the client data from queries
+    this.#sendQueryTransformErrorToClients(customQueryMap, errors);
+  }
+
+  #sendQueryTransformErrorToClients(
+    customQueryMap: Map<string, CustomQueryRecord>,
+    errors: ErroredQuery[],
+  ) {
+    const errorGroups = new Map<string, ErroredQuery[]>();
     for (const err of errors) {
       const q = customQueryMap.get(err.id);
       assert(q, 'got an error that does not map back to a custom query');
       const clientIds = Object.keys(q.clientState);
-
-      // idk, is this always true?
-      // can a query be resurrected that has many client ids and is not currently running?
-      // It seems like that would be the case with ttls...
-      // Queries resurrected by TTL we technically cannot tell a client about
-      // because that client may no longer exist.
-      // assert(
-      //   clientIds.length === 1,
-      //   'expected exactly one client to be connected during the transformation of a custom query. Future clients should not re-transform the query.',
-      // );
-
-      // Fan out the error to the connected client
-      this.#sendQueryTransformErrorToClients(clientIds, err);
+      for (const clientId of clientIds) {
+        const group = errorGroups.get(clientId) ?? [];
+        group.push(err);
+        errorGroups.set(clientId, group);
+      }
     }
-  }
 
-  #sendQueryTransformErrorToClients(clientIds: string[], err: ErroredQuery) {
-    for (const clientId of clientIds) {
+    for (const [clientId, errors] of errorGroups) {
       const client = this.#clients.get(clientId);
       if (client) {
-        client.sendQueryTransformError(err);
+        client.sendQueryTransformErrors(errors);
       }
     }
   }
@@ -1280,7 +1255,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
         this.#processTransformedCustomQueries(
           lc,
-          filteredCustomQueries,
           transformedCustomQueries,
           (q: TransformedAndHashed) =>
             transformedQueries.push({

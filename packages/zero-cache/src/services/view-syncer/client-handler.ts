@@ -370,8 +370,8 @@ export class ClientHandler {
     await this.#push(['deleteClients', deleteClientsBody]);
   }
 
-  sendQueryTransformError(_error: ErroredQuery) {
-    // stubbed
+  sendQueryTransformErrors(errors: ErroredQuery[]) {
+    void this.#push(['transformError', errors]);
   }
 
   sendInspectResponse(lc: LogContext, response: InspectDownBody): void {

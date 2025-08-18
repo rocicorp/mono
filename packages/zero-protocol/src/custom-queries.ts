@@ -24,6 +24,13 @@ export const appQueryErrorSchema = v.object({
   details: jsonSchema,
 });
 
+export const zeroErrorSchema = v.object({
+  error: v.literal('zero'),
+  id: v.string(),
+  name: v.string(),
+  details: jsonSchema,
+});
+
 export const httpQueryErrorSchema = v.object({
   error: v.literal('http'),
   id: v.string(),
@@ -35,6 +42,7 @@ export const httpQueryErrorSchema = v.object({
 export const erroredQuerySchema = v.union(
   appQueryErrorSchema,
   httpQueryErrorSchema,
+  zeroErrorSchema,
 );
 export type ErroredQuery = v.Infer<typeof erroredQuerySchema>;
 export type AppQueryError = v.Infer<typeof appQueryErrorSchema>;
@@ -52,6 +60,11 @@ export const transformRequestMessageSchema = v.tuple([
 export type TransformRequestMessage = v.Infer<
   typeof transformRequestMessageSchema
 >;
+export const transformErrorMessageSchema = v.tuple([
+  v.literal('transformError'),
+  v.array(erroredQuerySchema),
+]);
+export type TransformErrorMessage = v.Infer<typeof transformErrorMessageSchema>;
 
 export const transformResponseMessageSchema = v.tuple([
   v.literal('transformed'),

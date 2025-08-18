@@ -218,11 +218,22 @@ describe('CustomQueryTransformer', () => {
     );
     const result = await transformer.transform(headerOptions, mockQueries);
 
-    expect(result).toEqual({
-      error: 'http',
-      status: 400,
-      details: 'Bad Request: Invalid query format',
-    });
+    expect(result).toEqual([
+      {
+        details: 'Bad Request: Invalid query format',
+        error: 'http',
+        id: 'query1',
+        name: 'getUserById',
+        status: 400,
+      },
+      {
+        details: 'Bad Request: Invalid query format',
+        error: 'http',
+        id: 'query2',
+        name: 'getPostsByUser',
+        status: 400,
+      },
+    ]);
   });
 
   test('should handle empty queries array', async () => {

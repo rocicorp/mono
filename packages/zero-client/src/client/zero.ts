@@ -997,6 +997,10 @@ export class Zero<
       case 'pushResponse':
         return this.#mutationTracker.processPushResponse(downMessage[1]);
 
+      case 'transformError':
+        // this.#queryManager.handleTransformError();
+        break;
+
       case 'inspect':
         // ignore at this layer.
         break;
