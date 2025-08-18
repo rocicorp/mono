@@ -57,7 +57,7 @@ jobs:
     name: Perf
     permissions:
       checks: write
-    runs-on: label:ubuntu-24-arm64-perf
+    runs-on: ubuntu-24-arm64-perf
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
