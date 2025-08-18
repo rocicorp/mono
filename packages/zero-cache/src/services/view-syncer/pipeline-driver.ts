@@ -72,6 +72,9 @@ export type RowChange = RowAdd | RowRemove | RowEdit;
 type Pipeline = {
   readonly input: Input;
   readonly hydrationTimeMs: number;
+  readonly originalHash: string;
+  readonly transformedAst: AST; // Optional, only set after hydration
+  readonly transformationHash: string; // The hash of the transformed AST
 };
 
 /**
@@ -79,6 +82,9 @@ type Pipeline = {
  */
 export class PipelineDriver {
   readonly #tables = new Map<string, TableSource>();
+  // We probs need the original query hash
+  // so we can decide not to re-transform a custom query
+  // that is already hydrated.
   readonly #pipelines = new Map<string, Pipeline>();
 
   readonly #lc: LogContext;
@@ -238,8 +244,32 @@ export class PipelineDriver {
   }
 
   /** @return The Set of query hashes for all added queries. */
-  addedQueries(): Set<string> {
-    return new Set(this.#pipelines.keys());
+  addedQueries(): [
+    transformationHashes: Set<string>,
+    byOriginalHash: Map<
+      string,
+      {
+        transformationHash: string;
+        transformedAst: AST;
+      }[]
+    >,
+  ] {
+    const byOriginalHash = new Map<
+      string,
+      {transformationHash: string; transformedAst: AST}[]
+    >();
+    for (const pipeline of this.#pipelines.values()) {
+      const {originalHash, transformedAst, transformationHash} = pipeline;
+
+      if (!byOriginalHash.has(originalHash)) {
+        byOriginalHash.set(originalHash, []);
+      }
+      byOriginalHash.get(originalHash)!.push({
+        transformationHash,
+        transformedAst,
+      });
+    }
+    return [new Set(this.#pipelines.keys()), byOriginalHash];
   }
 
   totalHydrationTimeMs(): number {
@@ -336,7 +366,13 @@ export class PipelineDriver {
     // Note: This hydrationTime is a wall-clock overestimate, as it does
     // not take time slicing into account. The view-syncer resets this
     // to a more precise processing-time measurement with setHydrationTime().
-    this.#pipelines.set(transformationHash, {input, hydrationTimeMs});
+    this.#pipelines.set(transformationHash, {
+      input,
+      hydrationTimeMs,
+      originalHash: queryID,
+      transformedAst: query,
+      transformationHash,
+    });
   }
 
   /**
