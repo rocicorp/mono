@@ -683,7 +683,52 @@ describe('view-syncer/pipeline-driver', () => {
         startTimer(),
       ),
     ];
-    expect(pipelines.addedQueries()).toEqual(new Set(['hash1']));
+    expect(pipelines.addedQueries()).toMatchInlineSnapshot(`
+      [
+        Set {
+          "hash1",
+        },
+        Map {
+          "queryID1" => [
+            {
+              "transformationHash": "hash1",
+              "transformedAst": {
+                "orderBy": [
+                  [
+                    "id",
+                    "desc",
+                  ],
+                ],
+                "related": [
+                  {
+                    "correlation": {
+                      "childField": [
+                        "issueID",
+                      ],
+                      "parentField": [
+                        "id",
+                      ],
+                    },
+                    "subquery": {
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc",
+                        ],
+                      ],
+                      "table": "comments",
+                    },
+                    "system": "client",
+                  },
+                ],
+                "table": "issues",
+              },
+            },
+          ],
+        },
+      ]
+    `);
 
     replicator.processTransaction(
       '134',
@@ -693,7 +738,7 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.advanceWithoutDiff();
     pipelines.reset(null);
 
-    expect(pipelines.addedQueries()).toEqual(new Set());
+    expect(pipelines.addedQueries()).toEqual([new Set(), new Map()]);
 
     // The newColumn should be reflected after a reset.
     expect([
@@ -1506,9 +1551,54 @@ describe('view-syncer/pipeline-driver', () => {
       ),
     ];
 
-    expect([...pipelines.addedQueries()]).toEqual(['hash1']);
+    expect([...pipelines.addedQueries()]).toMatchInlineSnapshot(`
+      [
+        Set {
+          "hash1",
+        },
+        Map {
+          "queryID1" => [
+            {
+              "transformationHash": "hash1",
+              "transformedAst": {
+                "orderBy": [
+                  [
+                    "id",
+                    "desc",
+                  ],
+                ],
+                "related": [
+                  {
+                    "correlation": {
+                      "childField": [
+                        "issueID",
+                      ],
+                      "parentField": [
+                        "id",
+                      ],
+                    },
+                    "subquery": {
+                      "alias": "comments",
+                      "orderBy": [
+                        [
+                          "id",
+                          "desc",
+                        ],
+                      ],
+                      "table": "comments",
+                    },
+                    "system": "client",
+                  },
+                ],
+                "table": "issues",
+              },
+            },
+          ],
+        },
+      ]
+    `);
     pipelines.removeQuery('hash1');
-    expect([...pipelines.addedQueries()]).toEqual([]);
+    expect([...pipelines.addedQueries()]).toEqual([new Set(), new Map()]);
 
     replicator.processTransaction(
       '134',

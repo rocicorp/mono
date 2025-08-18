@@ -88,6 +88,7 @@ import {
   ttlClockFromNumber,
   type TTLClock,
 } from './ttl-clock.ts';
+import {wrapIterable} from '../../../../shared/src/iterables.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -1003,7 +1004,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
+    const [_, byOriginalHash] = this.#pipelines.addedQueries();
     if (this.#customQueryTransformer && customQueries.length > 0) {
+      const filteredCustomQueries = this.#filterCustomQueries(
+        customQueries,
+        byOriginalHash,
+        undefined,
+      );
       const transformedCustomQueries =
         await this.#customQueryTransformer.transform(
           {
@@ -1013,7 +1020,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               ? this.#httpCookie
               : undefined,
           },
-          customQueries,
+          filteredCustomQueries,
         );
 
       // TODO: collected errors need to make it downstream to the client.
@@ -1116,7 +1123,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'pipelines must be initialized (syncQueryPipelineSet)',
       );
 
-      const hydratedQueries = this.#pipelines.addedQueries();
+      const [hydratedQueries, byOriginalHash] = this.#pipelines.addedQueries();
 
       // Convert queries to their transformed ast's and hashes
       const hashToIDs = new Map<string, string[]>();
@@ -1181,6 +1188,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       if (this.#customQueryTransformer && customQueries.size > 0) {
+        const filteredCustomQueries = this.#filterCustomQueries(
+          customQueries.values(),
+          byOriginalHash,
+          (origQuery, existing) => {
+            for (const transformed of existing) {
+              transformedQueries.push({
+                id: origQuery.id,
+                origQuery,
+                transformed: {
+                  id: origQuery.id,
+                  transformationHash: transformed.transformationHash,
+                  transformedAst: transformed.transformedAst,
+                },
+              });
+            }
+          },
+        );
+
         const transformedCustomQueries =
           await this.#customQueryTransformer.transform(
             {
@@ -1188,7 +1213,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               token: this.#authData?.raw,
               cookie: this.#httpCookie,
             },
-            customQueries.values(),
+            filteredCustomQueries,
           );
 
         // TODO: collected errors need to make it downstream to the client.
@@ -1269,6 +1294,41 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       } else {
         await this.#catchupClients(lc, cvr);
       }
+    });
+  }
+
+  // Removes queries from `customQueries` that are already
+  // transformed and in the pipelines. We do not want to re-transform
+  // a query that has already been transformed. The reason is that
+  // we do not want a query that is already running to suddenly flip
+  // to error due to re-calling transform.
+  #filterCustomQueries(
+    customQueries: Iterable<CustomQueryRecord>,
+    byOriginalHash: Map<
+      string,
+      {
+        transformationHash: string;
+        transformedAst: AST;
+      }[]
+    >,
+    onExisting:
+      | ((
+          origQuery: CustomQueryRecord,
+          existing: {
+            transformationHash: string;
+            transformedAst: AST;
+          }[],
+        ) => void)
+      | undefined,
+  ) {
+    return wrapIterable(customQueries).filter(origQuery => {
+      const existing = byOriginalHash.get(origQuery.id);
+      if (existing) {
+        onExisting?.(origQuery, existing);
+        return false;
+      }
+
+      return true;
     });
   }
 

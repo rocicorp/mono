@@ -481,12 +481,17 @@ describe('view-syncer/service', () => {
       vi.unstubAllGlobals();
     });
 
-    function mockFetchImpl(queryResponses: TransformResponseBody) {
+    function mockFetchImpl(
+      queryResponses: TransformResponseBody | (() => Promise<Response>),
+    ) {
       mockFetch.mockImplementation(url => {
         if (
           url ===
           'http://my-pull-endpoint.dev/api/zero/pull?schema=this_app_2&appID=this_app'
         ) {
+          if (typeof queryResponses === 'function') {
+            return queryResponses();
+          }
           return Promise.resolve(
             new Response(
               JSON.stringify([
@@ -927,6 +932,170 @@ describe('view-syncer/service', () => {
           },
         ]
       `);
+    });
+
+    test('does not re-transform the same custom query if it was already registered and transformed', async () => {
+      let callCount = 0;
+      mockFetchImpl(() => {
+        callCount++;
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              'transformed',
+              [
+                {
+                  ast: ISSUES_QUERY,
+                  id: 'custom-1',
+                  name: 'named-query-1',
+                },
+                {
+                  ast: ISSUES_QUERY,
+                  id: 'custom-2',
+                  name: 'named-query-2',
+                },
+              ],
+            ] satisfies TransformResponseMessage),
+          ),
+        );
+      });
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+      expect(callCount).toBe(1);
+
+      const client2 = connect(
+        {
+          ...SYNC_CONTEXT,
+          clientID: 'cq-c2-client',
+          wsID: 'cq-c2-wsid',
+        },
+        [
+          {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+          {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+        ],
+      );
+
+      // query should still transition to `got`
+      expect(await nextPoke(client2)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": null,
+              "pokeID": "01:01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "cq-c2-client": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+                "foo": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+              },
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "put",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01:01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 9007199254740991,
+                    "id": "1",
+                    "json": null,
+                    "owner": "100",
+                    "parent": null,
+                    "title": "parent issue foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": -9007199254740991,
+                    "id": "2",
+                    "json": null,
+                    "owner": "101",
+                    "parent": null,
+                    "title": "parent issue bar",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 123,
+                    "id": "3",
+                    "json": null,
+                    "owner": "102",
+                    "parent": "1",
+                    "title": "foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 100,
+                    "id": "4",
+                    "json": null,
+                    "owner": "101",
+                    "parent": "2",
+                    "title": "bar",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01:01",
+              "pokeID": "01:01",
+            },
+          ],
+        ]
+      `);
+      expect(callCount).toBe(1);
     });
 
     // not yet supported: test('a single custom query that returns many queries' () => {});
