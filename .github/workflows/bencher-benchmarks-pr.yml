@@ -83,7 +83,7 @@ jobs:
 
     permissions:
       pull-requests: write
-    runs-on: self-hosted
+    runs-on: ubuntu-24-arm64-perf
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -111,6 +111,7 @@ jobs:
           npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
           bencher run \
           --project zero \
+          --testbed perf-runner \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
