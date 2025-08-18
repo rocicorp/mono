@@ -16,8 +16,8 @@ import {
   publishEvent,
 } from '../../observability/events.ts';
 
-const byKeys = ([a]: [string, unknown], [b]: [string, unknown]) =>
-  a < b ? -1 : a > b ? 1 : 0;
+const byKeys = (a: [string, unknown], b: [string, unknown]) =>
+  a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0;
 
 export class ReplicationStatusPublisher {
   readonly #db: Database;
