@@ -232,10 +232,19 @@ export const pgContainerTest = baseTest.extend<{pgConnectionString: string}>({
 
 export type PgTest = {testDBs: TestDBs};
 
-export const test = pgContainerTest.extend<PgTest>({
+/**
+ * The test currently uses the global (i.e. per-project) pg container
+ * that's run by `pg-container-setup.ts`. To switch to running a pg
+ * container per worker, extend the `pgContainerTest` instead and use
+ * its `pgConnectionString` fixture.
+ */
+export const test = baseTest.extend<PgTest>({
   testDBs: [
-    async ({pgConnectionString}, use) => {
-      const testDBs = new TestDBs(pgConnectionString);
+    // vitest requires that the first argument inside a fixture use
+    // object destructuring.
+    // eslint-disable-next-line no-empty-pattern
+    async ({}, use) => {
+      const testDBs = new TestDBs(mustInject('pgConnectionString'));
       try {
         await use(testDBs);
       } finally {
