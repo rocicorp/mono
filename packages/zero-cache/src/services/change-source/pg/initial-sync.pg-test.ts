@@ -2293,7 +2293,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     let result;
     try {
       await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
-        tableCopyWorkers: 5,
+        tableCopyWorkers: 1,
       });
     } catch (e) {
       result = e;
@@ -2328,7 +2328,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     await sql.unsafe(corruption);
 
     await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
-      tableCopyWorkers: 5,
+      tableCopyWorkers: 1,
     });
 
     expectMatchingObjectsInTables(replica, {
@@ -2352,7 +2352,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         {appID, shardNum: 0, publications: []},
         replica,
         getConnectionURI(upstream),
-        {tableCopyWorkers: 5},
+        {tableCopyWorkers: 1},
       );
     } catch (e) {
       result = e;
