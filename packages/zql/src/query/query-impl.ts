@@ -517,7 +517,7 @@ export abstract class AbstractQuery<
           defaultFormat,
           this.customQueryID,
           undefined,
-        ),
+        ) as AnyQuery,
       ) as unknown as QueryImpl<any, any>;
       return {
         type: 'correlatedSubquery',

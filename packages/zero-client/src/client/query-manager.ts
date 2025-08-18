@@ -10,6 +10,7 @@ import {
   type AST,
 } from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import {
   hashOfAST,
@@ -69,6 +70,7 @@ export class QueryManager implements InspectorClientMetricsDelegate {
   readonly #metrics: ClientMetric = newMetrics();
   readonly #queryMetrics: Map<string, ClientMetric> = new Map();
   readonly #slowMaterializeThreshold: number;
+  readonly #cleanupCallbacks: Map<string, () => void> = new Map();
 
   constructor(
     lc: ZeroLogContext,
@@ -197,6 +199,20 @@ export class QueryManager implements InspectorClientMetricsDelegate {
     return patch;
   }
 
+  handleTransformErrors(errors: ErroredQuery[]) {
+    for (const error of errors) {
+      const queryId = error.id;
+      const entry = this.#queries.get(queryId);
+      if (entry) {
+        try {
+          entry.gotCallbacks.forEach(callback => callback(false, error));
+        } finally {
+          this.#cleanupCallbacks.get(queryId)?.();
+        }
+      }
+    }
+  }
+
   addCustom(
     {name, args}: CustomQueryID,
     ttl: TTL,
@@ -281,11 +297,12 @@ export class QueryManager implements InspectorClientMetricsDelegate {
     }
 
     let removed = false;
-    return () => {
+    const cleanupCb = () => {
       if (removed) {
         return;
       }
       removed = true;
+      this.#cleanupCallbacks.delete(queryId);
 
       // We cannot remove queries while mutations are pending
       // as that could take data out of scope that is needed in a rebase
@@ -298,6 +315,8 @@ export class QueryManager implements InspectorClientMetricsDelegate {
 
       this.#remove(entry, queryId, gotCallback);
     };
+    this.#cleanupCallbacks.set(queryId, cleanupCb);
+    return cleanupCb;
   }
 
   updateCustom({name, args}: CustomQueryID, ttl: TTL) {
