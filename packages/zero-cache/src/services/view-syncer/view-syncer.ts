@@ -1085,16 +1085,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const elapsed = timer.totalElapsed();
       this.#hydrations.add(1);
       this.#hydrationTime.record(elapsed / 1000);
-      this.#addQueryMaterializationServerMetric(hash, elapsed);
+      this.#addQueryMaterializationServerMetric(transformationHash, elapsed);
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
     }
   }
 
-  #addQueryMaterializationServerMetric(queryID: string, elapsed: number) {
+  #addQueryMaterializationServerMetric(
+    transformationHash: string,
+    elapsed: number,
+  ) {
     this.#inspectMetricsDelegate.addMetric(
       'query-materialization-server',
       elapsed,
-      queryID,
+      transformationHash,
     );
   }
 
@@ -1357,7 +1360,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           const elapsed = timer.stop();
           totalProcessTime += elapsed;
 
-          self.#addQueryMaterializationServerMetric(q.id, elapsed);
+          self.#addQueryMaterializationServerMetric(
+            q.transformationHash,
+            elapsed,
+          );
 
           if (elapsed > slowHydrateThreshold) {
             lc.warn?.('Slow query materialization', elapsed, q.ast);

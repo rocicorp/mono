@@ -20,6 +20,7 @@ export type ServerMetrics = {
 export class InspectMetricsDelegate implements MetricsDelegate {
   readonly #globalMetrics: ServerMetrics = newMetrics();
   readonly #perQueryServerMetrics = new Map<string, ServerMetrics>();
+  readonly #hashToIDs: Map<string, Set<string>> = new Map();
 
   addMetric<K extends keyof MetricMap>(
     metric: K,
@@ -27,15 +28,16 @@ export class InspectMetricsDelegate implements MetricsDelegate {
     ...args: MetricMap[K]
   ): void {
     assert(isServerMetric(metric), `Invalid server metric: ${metric}`);
-    const queryID = args[0];
+    const transformationHash = args[0];
 
-    let serverMetrics = this.#perQueryServerMetrics.get(queryID);
-    if (!serverMetrics) {
-      serverMetrics = newMetrics();
-      this.#perQueryServerMetrics.set(queryID, serverMetrics);
+    for (const queryID of this.#hashToIDs.get(transformationHash) ?? []) {
+      let serverMetrics = this.#perQueryServerMetrics.get(queryID);
+      if (!serverMetrics) {
+        serverMetrics = newMetrics();
+        this.#perQueryServerMetrics.set(queryID, serverMetrics);
+      }
+      serverMetrics[metric].add(value);
     }
-
-    serverMetrics[metric].add(value);
     this.#globalMetrics[metric].add(value);
   }
 
@@ -50,6 +52,22 @@ export class InspectMetricsDelegate implements MetricsDelegate {
 
   deleteMetricsForQuery(queryID: string): void {
     this.#perQueryServerMetrics.delete(queryID);
+    // Remove queryID from all hash-to-ID mappings
+    for (const [hash, idSet] of this.#hashToIDs.entries()) {
+      idSet.delete(queryID);
+      if (idSet.size === 0) {
+        this.#hashToIDs.delete(hash);
+      }
+    }
+  }
+
+  addQueryMapping(transformationHash: string, queryID: string): void {
+    const existing = this.#hashToIDs.get(transformationHash);
+    if (existing === undefined) {
+      this.#hashToIDs.set(transformationHash, new Set([queryID]));
+    } else {
+      existing.add(queryID);
+    }
   }
 }
 
