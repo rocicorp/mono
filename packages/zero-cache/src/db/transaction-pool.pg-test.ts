@@ -804,12 +804,7 @@ describe('db/transaction-pool', () => {
       exportSnapshot,
       cleanupExport,
     );
-    const followers = newTransactionPool(
-      Mode.READONLY,
-      setSnapshot,
-      undefined,
-      3,
-    );
+    const followers = newTransactionPool(Mode.READONLY, setSnapshot, undefined);
 
     const err = new Error('oh nose');
 
