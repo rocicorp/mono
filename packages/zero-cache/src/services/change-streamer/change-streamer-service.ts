@@ -293,11 +293,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     autoReset: boolean,
     setTimeoutFn = setTimeout,
   ) {
-    if (Math.random() > 1) {
-      // eslint-disable-next-line no-console
-      console.log('haha');
-    }
-
     this.id = `change-streamer`;
     this.#lc = lc.withContext('component', 'change-streamer');
     this.#shard = shard;
