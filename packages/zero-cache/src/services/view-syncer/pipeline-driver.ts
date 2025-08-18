@@ -272,6 +272,7 @@ export class PipelineDriver {
     timer: {totalElapsed: () => number},
   ): Iterable<RowChange> {
     assert(this.initialized());
+    this.#inspectMetricsDelegate.addQueryMapping(transformationHash, queryID);
     if (this.#pipelines.has(transformationHash)) {
       this.#lc.info?.(`query ${transformationHash} already added`, query);
       return;
@@ -279,16 +280,17 @@ export class PipelineDriver {
     const debugDelegate = runtimeDebugFlags.trackRowsVended
       ? new Debug()
       : undefined;
+
     const input = buildPipeline(
       query,
       {
         debug: debugDelegate,
         getSource: name => this.#getSource(name),
         createStorage: () => this.#createStorage(),
-        decorateSourceInput: (input: SourceInput, queryID: string): Input =>
+        decorateSourceInput: (input: SourceInput, _queryID: string): Input =>
           new MeasurePushOperator(
             input,
-            queryID,
+            transformationHash,
             this.#inspectMetricsDelegate,
             'query-update-server',
           ),
