@@ -1,10 +1,11 @@
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {
   expectTables,
   getConnectionURI,
   initDB,
-  testDBs,
+  type PgTest,
+  test,
 } from '../../../test/db.ts';
 import {
   DbFile,
@@ -106,15 +107,16 @@ describe('change-streamer/pg/sync-schema', () => {
   let upstream: PostgresDB;
   let replicaFile: DbFile;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     upstream = await testDBs.create('sync_schema_migration_upstream');
     replicaFile = new DbFile('sync_schema_migration_replica');
+
+    return async () => {
+      await testDBs.drop(upstream);
+      replicaFile.delete();
+    };
   });
 
-  afterEach(async () => {
-    await testDBs.drop(upstream);
-    replicaFile.delete();
-  }, 10000);
   const lc = createSilentLogContext();
 
   for (const c of cases) {

@@ -105,6 +105,14 @@ export class RunningState {
   }
 
   /**
+   * Returns a promise that resolves after `ms` milliseconds or when
+   * the service is stopped.
+   */
+  async sleep(ms: number): Promise<void> {
+    await Promise.race(this.#sleep(ms, this.#controller.signal));
+  }
+
+  /**
    * Called to stop the service. After this is called, {@link shouldRun()}
    * will return `false` and the {@link stopped()} Promise will be resolved.
    */
@@ -139,7 +147,7 @@ export class RunningState {
     } else if (this.shouldRun()) {
       const log = delay < 1000 ? 'info' : delay < 5000 ? 'warn' : 'error';
       lc[log]?.(`retrying ${this.#serviceName} in ${delay} ms`, err);
-      await Promise.race(this.#sleep(delay, this.#controller.signal));
+      await this.sleep(delay);
     }
   }
 

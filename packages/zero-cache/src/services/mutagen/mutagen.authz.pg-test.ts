@@ -1,4 +1,5 @@
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
+import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {h128} from '../../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
@@ -23,11 +24,10 @@ import type {Row} from '../../../../zql/src/query/query.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {WriteAuthorizerImpl} from '../../auth/write-authorizer.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
-import {testDBs} from '../../test/db.ts';
+import {type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {zeroSchema} from './mutagen-test-shared.ts';
 import {processMutation} from './mutagen.ts';
-import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 
 const zeroConfig = {
   log: testLogConfig,
@@ -335,7 +335,7 @@ let replica: Database;
 let authorizer: WriteAuthorizerImpl;
 let lmid = 0;
 const lc = createSilentLogContext();
-beforeEach(async () => {
+beforeEach<PgTest>(async ({testDBs}) => {
   upstream = await testDBs.create('authz');
   await createUpstreamTables(upstream);
   replica = new Database(lc, ':memory:');
@@ -348,10 +348,8 @@ beforeEach(async () => {
 
   authorizer = new WriteAuthorizerImpl(lc, zeroConfig, replica, APP_ID, CG_ID);
   lmid = 0;
-});
 
-afterEach(async () => {
-  await testDBs.drop(upstream);
+  return () => testDBs.drop(upstream);
 });
 
 function procMutation(

@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {TestLogSink} from '../../../../../../shared/src/logging-test-utils.ts';
 import {Index} from '../../../../db/postgres-replica-identity-enum.ts';
-import {expectTables, initDB, testDBs} from '../../../../test/db.ts';
+import {expectTables, initDB, type PgTest, test} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import {getPublicationInfo} from './published.ts';
 import {
@@ -18,15 +18,15 @@ describe('change-source/pg', () => {
   let lc: LogContext;
   let db: PostgresDB;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     logSink = new TestLogSink();
     lc = new LogContext('warn', {}, logSink);
     db = await testDBs.create('zero_schema_test');
-  });
 
-  afterEach(async () => {
-    await testDBs.drop(db);
-    await testDBs.sql`RESET ROLE; DROP ROLE IF EXISTS supaneon`.simple();
+    return async () => {
+      await testDBs.drop(db);
+      await testDBs.sql`RESET ROLE; DROP ROLE IF EXISTS supaneon`.simple();
+    };
   });
 
   function publications() {

@@ -1,20 +1,15 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-  type Mock,
-} from 'vitest';
+import {beforeEach, describe, expect, vi, type Mock} from 'vitest';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
-import {testDBs} from '../../test/db.ts';
+import {test, type PgTest} from '../../test/db.ts';
 import {versionToLexi} from '../../types/lexi-version.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowID} from '../../types/row-key.ts';
+import {upstreamSchema} from '../../types/shards.ts';
+import {id} from '../../types/sql.ts';
+import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
 import {CVRStore, OwnershipError} from './cvr-store.ts';
 import {
   CVRQueryDrivenUpdater,
@@ -32,9 +27,6 @@ import {
   ttlClockFromNumber,
   type TTLClock,
 } from './ttl-clock.ts';
-import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
-import {id} from '../../types/sql.ts';
-import {upstreamSchema} from '../../types/shards.ts';
 
 const APP_ID = 'roze';
 const SHARD_NUM = 1;
@@ -56,7 +48,7 @@ describe('view-syncer/cvr-store', () => {
     throw e;
   };
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     [db, upstreamDb] = await Promise.all([
       testDBs.create('view_syncer_cvr_schema'),
       testDBs.create('view_syncer_cvr_upstream'),
@@ -120,10 +112,8 @@ describe('view-syncer/cvr-store', () => {
       DEFERRED_ROW_LIMIT,
       setTimeoutFn as unknown as typeof setTimeout,
     );
-  });
 
-  afterEach(async () => {
-    await testDBs.drop(db);
+    return () => testDBs.drop(db, upstreamDb);
   });
 
   describe('save various json types for named queries', () => {

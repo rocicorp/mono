@@ -7,15 +7,20 @@ import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts'
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
 import {buildPipeline} from '../../../../zql/src/builder/builder.ts';
+import {
+  Debug,
+  runtimeDebugFlags,
+} from '../../../../zql/src/builder/debug-delegate.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
 import type {Input, Storage} from '../../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
-import type {Source, SourceChange} from '../../../../zql/src/ivm/source.ts';
-import {
-  runtimeDebugFlags,
-  runtimeDebugStats,
-} from '../../../../zqlite/src/runtime-debug.ts';
+import type {
+  Source,
+  SourceChange,
+  SourceInput,
+} from '../../../../zql/src/ivm/source.ts';
+import {MeasurePushOperator} from '../../../../zql/src/query/measure-push-operator.ts';
 import {TableSource} from '../../../../zqlite/src/table-source.ts';
 import {
   reloadPermissionsIfChanged,
@@ -25,6 +30,7 @@ import type {LogConfig} from '../../config/zero-config.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import {getOrCreateHistogram} from '../../observability/metrics.ts';
+import type {InspectMetricsDelegate} from '../../server/inspect-metrics-delegate.ts';
 import type {RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
 import type {ShardID} from '../../types/shards.ts';
@@ -79,7 +85,6 @@ export class PipelineDriver {
   readonly #snapshotter: Snapshotter;
   readonly #storage: ClientGroupStorage;
   readonly #shardID: ShardID;
-  readonly #clientGroupID: string;
   readonly #logConfig: LogConfig;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   #streamer: Streamer | null = null;
@@ -91,6 +96,7 @@ export class PipelineDriver {
       'Time to advance all queries for a given client group for in response to a single change.',
     unit: 's',
   });
+  readonly #inspectMetricsDelegate: InspectMetricsDelegate;
 
   constructor(
     lc: LogContext,
@@ -99,13 +105,14 @@ export class PipelineDriver {
     shardID: ShardID,
     storage: ClientGroupStorage,
     clientGroupID: string,
+    inspectMetricsDelegate: InspectMetricsDelegate,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
     this.#storage = storage;
     this.#shardID = shardID;
-    this.#clientGroupID = clientGroupID;
     this.#logConfig = logConfig;
+    this.#inspectMetricsDelegate = inspectMetricsDelegate;
   }
 
   /**
@@ -244,14 +251,14 @@ export class PipelineDriver {
   }
 
   /**
-   * Adds a pipeline for the query. The method will hydrated the query using
-   * the the driver's current snapshot of the database and return a stream
-   * of results. Henceforth, updates to the query will be returned when the
-   * driver is {@link advance}d. The query and its pipeline can be removed with
+   * Adds a pipeline for the query. The method will hydrate the query using the
+   * driver's current snapshot of the database and return a stream of results.
+   * Henceforth, updates to the query will be returned when the driver is
+   * {@link advance}d. The query and its pipeline can be removed with
    * {@link removeQuery()}.
    *
-   * If a query with an identical hash has already been added, this method
-   * is a no-op and no RowChanges are generated.
+   * If a query with an identical hash has already been added, this method is a
+   * no-op and no RowChanges are generated.
    *
    * @param timer The caller-controlled {@link Timer} used to determine the
    *        final hydration time. (The caller may pause and resume the timer
@@ -259,54 +266,60 @@ export class PipelineDriver {
    * @return The rows from the initial hydration of the query.
    */
   *addQuery(
-    hash: string,
+    transformationHash: string,
+    queryID: string,
     query: AST,
     timer: {totalElapsed: () => number},
   ): Iterable<RowChange> {
     assert(this.initialized());
-    if (this.#pipelines.has(hash)) {
-      this.#lc.info?.(`query ${hash} already added`, query);
+    if (this.#pipelines.has(transformationHash)) {
+      this.#lc.info?.(`query ${transformationHash} already added`, query);
       return;
     }
+    const debugDelegate = runtimeDebugFlags.trackRowsVended
+      ? new Debug()
+      : undefined;
     const input = buildPipeline(
       query,
       {
+        debug: debugDelegate,
         getSource: name => this.#getSource(name),
         createStorage: () => this.#createStorage(),
-        decorateSourceInput: input => input,
+        decorateSourceInput: (input: SourceInput, queryID: string): Input =>
+          new MeasurePushOperator(
+            input,
+            queryID,
+            this.#inspectMetricsDelegate,
+            'query-update-server',
+          ),
         decorateInput: input => input,
+        addEdge() {},
         decorateFilterInput: input => input,
       },
-      hash,
+      queryID,
     );
     const schema = input.getSchema();
     input.setOutput({
       push: change => {
         const streamer = this.#streamer;
         assert(streamer, 'must #startAccumulating() before pushing changes');
-        streamer.accumulate(hash, schema, [change]);
+        streamer.accumulate(transformationHash, schema, [change]);
       },
     });
 
-    runtimeDebugStats.resetRowsVended(this.#clientGroupID);
-
-    yield* hydrate(input, hash, this.#tableSpecs);
+    yield* hydrate(input, transformationHash, this.#tableSpecs);
 
     const hydrationTimeMs = timer.totalElapsed();
     if (runtimeDebugFlags.trackRowCountsVended) {
       if (hydrationTimeMs > this.#logConfig.slowHydrateThreshold) {
         let totalRowsConsidered = 0;
         const lc = this.#lc
-          .withContext('hash', hash)
+          .withContext('hash', transformationHash)
           .withContext('hydrationTimeMs', hydrationTimeMs);
         for (const tableName of this.#tables.keys()) {
-          const entries = [
-            ...(runtimeDebugStats
-              .getVendedRowCounts()
-              .get(this.#clientGroupID)
-              ?.get(tableName)
-              ?.entries() ?? []),
-          ];
+          const entries = Object.entries(
+            debugDelegate?.getVendedRowCounts()[tableName] ?? {},
+          );
           totalRowsConsidered += entries.reduce(
             (acc, entry) => acc + entry[1],
             0,
@@ -316,12 +329,12 @@ export class PipelineDriver {
         lc.info?.(`Total rows considered: ${totalRowsConsidered}`);
       }
     }
-    runtimeDebugStats.resetRowsVended(this.#clientGroupID);
+    debugDelegate?.reset();
 
     // Note: This hydrationTime is a wall-clock overestimate, as it does
     // not take time slicing into account. The view-syncer resets this
     // to a more precise processing-time measurement with setHydrationTime().
-    this.#pipelines.set(hash, {input, hydrationTimeMs});
+    this.#pipelines.set(transformationHash, {input, hydrationTimeMs});
   }
 
   /**
@@ -486,7 +499,6 @@ export class PipelineDriver {
     source = new TableSource(
       this.#lc,
       this.#logConfig,
-      this.#clientGroupID,
       db.db,
       tableName,
       tableSpec.zqlSpec,

@@ -9,8 +9,9 @@ import {
   type Downstream,
 } from '../change-streamer/change-streamer.ts';
 import {RunningState} from '../running-state.ts';
-import {ChangeProcessor, type TransactionMode} from './change-processor.ts';
+import {ChangeProcessor} from './change-processor.ts';
 import {Notifier} from './notifier.ts';
+import {ReplicationStatusPublisher} from './replication-status.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
 
@@ -26,7 +27,7 @@ export class IncrementalSyncer {
   readonly #changeStreamer: ChangeStreamer;
   readonly #replica: StatementRunner;
   readonly #mode: ReplicatorMode;
-  readonly #txMode: TransactionMode;
+  readonly #publishReplicationStatus: boolean;
   readonly #notifier: Notifier;
 
   readonly #state = new RunningState('IncrementalSyncer');
@@ -43,13 +44,14 @@ export class IncrementalSyncer {
     changeStreamer: ChangeStreamer,
     replica: Database,
     mode: ReplicatorMode,
+    publishReplicationStatus: boolean,
   ) {
     this.#taskID = taskID;
     this.#id = id;
     this.#changeStreamer = changeStreamer;
     this.#replica = new StatementRunner(replica);
     this.#mode = mode;
-    this.#txMode = mode === 'serving' ? 'CONCURRENT' : 'IMMEDIATE';
+    this.#publishReplicationStatus = publishReplicationStatus;
     this.#notifier = new Notifier();
   }
 
@@ -60,11 +62,16 @@ export class IncrementalSyncer {
     // Notify any waiting subscribers that the replica is ready to be read.
     this.#notifier.notifySubscribers();
 
+    // Only the backup replicator publishes replication status events.
+    const statusPublisher = this.#publishReplicationStatus
+      ? new ReplicationStatusPublisher(this.#replica.db)
+      : undefined;
+
     while (this.#state.shouldRun()) {
       const {replicaVersion, watermark} = getSubscriptionState(this.#replica);
       const processor = new ChangeProcessor(
         this.#replica,
-        this.#txMode,
+        this.#mode,
         (lc: LogContext, err: unknown) => this.stop(lc, err),
       );
 
@@ -84,6 +91,11 @@ export class IncrementalSyncer {
         });
         this.#state.resetBackoff();
         unregister = this.#state.cancelOnStop(downstream);
+        statusPublisher?.publish(
+          lc,
+          'Replicating',
+          `Replicating from ${watermark}`,
+        );
 
         for await (const message of downstream) {
           this.#replicationEvents.add(1);
@@ -97,10 +109,16 @@ export class IncrementalSyncer {
               // Unrecoverable error. Stop the service.
               this.stop(lc, message[1]);
               break;
-            default:
-              if (processor.processMessage(lc, message)) {
+            default: {
+              const result = processor.processMessage(lc, message);
+              if (result?.schemaUpdated) {
+                statusPublisher?.publish(lc, 'Replicating', 'Schema updated');
+              }
+              if (result?.watermark) {
                 this.#notifier.notifySubscribers({state: 'version-ready'});
               }
+              break;
+            }
           }
         }
         processor.abort(lc);

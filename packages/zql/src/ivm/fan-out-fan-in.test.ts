@@ -11,8 +11,12 @@ import {
 } from './filter-operators.ts';
 import {Filter} from './filter.ts';
 import {createSource} from './test/source-factory.ts';
+import type {BuilderDelegate} from '../builder/builder.ts';
 
 const lc = createSilentLogContext();
+const mockDelegate = {
+  addEdge() {},
+} as unknown as BuilderDelegate;
 
 test('fan-out pushes along all paths', () => {
   const s = createSource(
@@ -154,7 +158,7 @@ test('fan-out,fan-in pairing does not duplicate pushes', () => {
     ['a'],
   );
   const connector = s.connect([['a', 'asc']]);
-  const pipeline = buildFilterPipeline(connector, filterInput => {
+  const pipeline = buildFilterPipeline(connector, mockDelegate, filterInput => {
     const fanOut = new FanOut(filterInput);
     const filter1 = new Filter(fanOut, () => true);
     const filter2 = new Filter(fanOut, () => true);
@@ -225,7 +229,7 @@ test('fan-in fetch', () => {
     ['b', 'asc'],
   ]);
 
-  const pipeline = buildFilterPipeline(connector, filterInput => {
+  const pipeline = buildFilterPipeline(connector, mockDelegate, filterInput => {
     const fanOut = new FanOut(filterInput);
 
     const filter1 = new Filter(fanOut, row => row.a === true);

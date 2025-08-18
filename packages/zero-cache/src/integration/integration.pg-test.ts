@@ -3,15 +3,7 @@ import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {type FastifyInstance, type FastifyRequest} from 'fastify';
 import {copyFileSync} from 'fs';
-import {
-  afterAll,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from 'vitest';
+import {afterAll, beforeEach, describe, expect, vi} from 'vitest';
 import WebSocket from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import {h128} from '../../../shared/src/hash.ts';
@@ -35,7 +27,7 @@ import {
   changeSourceUpstreamSchema,
   type ChangeSourceUpstream,
 } from '../services/change-source/protocol/current/upstream.ts';
-import {getConnectionURI, testDBs} from '../test/db.ts';
+import {getConnectionURI, test, type PgTest} from '../test/db.ts';
 import {DbFile} from '../test/lite.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import {childWorker, type Worker} from '../types/processes.ts';
@@ -426,7 +418,7 @@ describe('integration', {timeout: 30000}, () => {
 
   const CHANGE_SOURCE_PATH = '/foo/changes/v0/stream';
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     upDB = await testDBs.create('integration_test_upstream');
     cvrDB = await testDBs.create('integration_test_cvr');
     changeDB = await testDBs.create('integration_test_change');
@@ -479,6 +471,17 @@ describe('integration', {timeout: 30000}, () => {
       ['ZERO_CHANGE_DB']: getConnectionURI(changeDB),
       ['ZERO_REPLICA_FILE']: replicaDbFile.path,
       ['ZERO_NUM_SYNC_WORKERS']: '1',
+    };
+
+    return async () => {
+      try {
+        zeros.forEach(zero => zero.kill('SIGTERM')); // initiate and await graceful shutdown
+        (await Promise.all(zerosExited)).forEach(code => expect(code).toBe(0));
+      } finally {
+        await testDBs.drop(upDB, cvrDB, changeDB);
+        replicaDbFile.delete();
+        replicaDbFile2.delete();
+      }
     };
   }, 30000);
 
@@ -537,17 +540,6 @@ describe('integration', {timeout: 30000}, () => {
     const timedOut = 'nothing';
     expect(await client.dequeue(timedOut, 500)).toBe(timedOut);
   }
-
-  afterEach(async () => {
-    try {
-      zeros.forEach(zero => zero.kill('SIGTERM')); // initiate and await graceful shutdown
-      (await Promise.all(zerosExited)).forEach(code => expect(code).toBe(0));
-    } finally {
-      await testDBs.drop(upDB, cvrDB, changeDB);
-      replicaDbFile.delete();
-      replicaDbFile2.delete();
-    }
-  }, 30000);
 
   async function streamCustomChanges(changes: ChangeStreamMessage[]) {
     const sink = await customDownstream;

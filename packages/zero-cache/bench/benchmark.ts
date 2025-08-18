@@ -37,7 +37,6 @@ export function bench(opts: Options) {
       source = new TableSource(
         lc,
         testLogConfig,
-        'benchmark',
         db,
         name,
         Object.fromEntries(
@@ -58,6 +57,7 @@ export function bench(opts: Options) {
       return new MemoryStorage();
     },
     decorateInput: input => input,
+    addEdge() {},
     decorateSourceInput: input => input,
     decorateFilterInput: input => input,
     addServerQuery() {

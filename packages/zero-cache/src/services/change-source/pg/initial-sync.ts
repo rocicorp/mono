@@ -37,6 +37,7 @@ import {CpuProfiler} from '../../../types/profiler.ts';
 import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
+import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
 import {initChangeLog} from '../../replicator/schema/change-log.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {toLexiVersion} from './lsn.ts';
@@ -76,6 +77,10 @@ export async function initialSync(
     connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
   });
   const slotName = newReplicationSlot(shard);
+  const statusPublisher = new ReplicationStatusPublisher(tx).publish(
+    lc,
+    'Initializing',
+  );
   try {
     await checkUpstreamConfig(sql);
 
@@ -169,6 +174,12 @@ export async function initialSync(
     );
     try {
       createLiteTables(tx, tables, initialVersion);
+      statusPublisher.publish(
+        lc,
+        'Initializing',
+        `Copying ${numTables} upstream tables at version ${initialVersion}`,
+        5000,
+      );
 
       void copyProfiler?.start();
       const rowCounts = await Promise.all(
@@ -188,6 +199,12 @@ export async function initialSync(
         {rows: 0, flushTime: 0},
       );
 
+      statusPublisher.publish(
+        lc,
+        'Indexing',
+        `Creating ${indexes.length} indexes`,
+        5000,
+      );
       const indexStart = performance.now();
       createLiteIndices(tx, indexes);
       const index = performance.now() - indexStart;
@@ -214,9 +231,10 @@ export async function initialSync(
     await sql`
       SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
         WHERE slot_name = ${slotName};
-    `;
-    throw e;
+    `.catch(e => lc.warn?.(`Unable to drop replication slot ${slotName}`, e));
+    await statusPublisher.publishAndThrowError(lc, 'Initializing', e);
   } finally {
+    statusPublisher.stop();
     await replicationSession.end();
     await sql.end();
   }

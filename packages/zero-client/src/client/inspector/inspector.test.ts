@@ -18,6 +18,7 @@ const emptyMetrics = {
   'query-materialization-end-to-end': new TDigest(),
   'query-materialization-server': new TDigest(),
   'query-update-client': new TDigest(),
+  'query-update-server': new TDigest(),
 };
 
 async function getMetrics<
@@ -48,6 +49,7 @@ async function getMetrics<
       id,
       value: metricsResponseValue ?? {
         'query-materialization-server': [1000],
+        'query-update-server': [1000],
       },
     },
   ]);
@@ -386,6 +388,9 @@ describe('query metrics', () => {
         "query-update-client": [
           1000,
         ],
+        "query-update-server": [
+          1000,
+        ],
       }
     `);
 
@@ -598,6 +603,7 @@ describe('query metrics', () => {
             ttl: 60_000,
             metrics: {
               'query-materialization-server': [1000, 1, 2],
+              'query-update-server': [100, 3, 4],
             },
           },
         ],
@@ -610,31 +616,63 @@ describe('query metrics', () => {
 
     const {metrics} = queries[0];
     expect(metrics).toMatchInlineSnapshot(`
-          {
-            "query-materialization-client": [
-              1000,
-              0,
-              1,
-            ],
-            "query-materialization-end-to-end": [
-              1000,
-              50,
-              1,
-            ],
-            "query-materialization-server": [
-              1000,
-              1,
-              2,
-            ],
-            "query-update-client": [
-              1000,
-              0,
-              1,
-            ],
-          }
-        `);
+      {
+        "query-materialization-client": [
+          1000,
+          0,
+          1,
+        ],
+        "query-materialization-end-to-end": [
+          1000,
+          50,
+          1,
+        ],
+        "query-materialization-server": [
+          1000,
+          1,
+          2,
+        ],
+        "query-update-client": [
+          1000,
+          0,
+          1,
+        ],
+        "query-update-server": [
+          100,
+          3,
+          4,
+        ],
+      }
+    `);
 
     view.destroy();
     await z.close();
   });
+});
+
+test('server version', async () => {
+  const z = zeroForTest({schema});
+  await z.triggerConnected();
+  await Promise.resolve();
+  const inspector = await z.inspect();
+  vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+  await z.socket;
+  const p = inspector.serverVersion();
+  await Promise.resolve();
+  expect((await z.socket).messages).toEqual([
+    JSON.stringify(['inspect', {op: 'version', id: '000000000000000000000'}]),
+  ]);
+
+  await z.triggerMessage([
+    'inspect',
+    {
+      op: 'version',
+      id: '000000000000000000000',
+      value: '1.2.34',
+    },
+  ] satisfies InspectDownMessage);
+
+  expect(await p).toBe('1.2.34');
+
+  await z.close();
 });

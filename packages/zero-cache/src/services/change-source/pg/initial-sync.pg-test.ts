@@ -1,6 +1,7 @@
 import {nanoid} from 'nanoid/non-secure';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import type {ZeroEvent} from '../../../../../zero-events/src/index.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {listIndexes, listTables} from '../../../db/lite-tables.ts';
 import {mapPostgresToLiteIndex} from '../../../db/pg-to-lite.ts';
@@ -9,7 +10,8 @@ import type {
   LiteTableSpec,
   PublishedTableSpec,
 } from '../../../db/specs.ts';
-import {getConnectionURI, initDB, testDBs} from '../../../test/db.ts';
+import {initEventSinkForTesting} from '../../../observability/events.ts';
+import {getConnectionURI, initDB, type PgTest, test} from '../../../test/db.ts';
 import {
   expectMatchingObjectsInTables,
   expectTables,
@@ -2140,11 +2142,10 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
   let upstream: PostgresDB;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     upstream = await testDBs.create('initial_sync_upstream');
-    return async () => {
-      await testDBs.drop(upstream);
-    };
+
+    return () => testDBs.drop(upstream);
   });
 
   for (const c of cases) {
@@ -2155,6 +2156,9 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
       // Run each test twice to confirm that a takeover initial sync works.
       for (let i = 0; i < 2; i++) {
+        const eventSink: ZeroEvent[] = [];
+        initEventSinkForTesting(eventSink);
+
         const replica = new Database(lc, ':memory:');
         initLiteDB(replica, c.setupReplicaQuery);
 
@@ -2246,6 +2250,29 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         expect(slots[0]).toEqual({
           slotName: r.slot,
           lsn: fromLexiVersion(replicaState.stateVersion),
+        });
+
+        expect(eventSink.slice(0, 2)).toMatchObject([
+          {
+            type: 'zero/events/status/replication/v1',
+            component: 'replication',
+            stage: 'Initializing',
+            status: 'OK',
+          },
+          {
+            type: 'zero/events/status/replication/v1',
+            component: 'replication',
+            stage: 'Initializing',
+            status: 'OK',
+            description: /Copying \d+ upstream tables at version \w+/,
+          },
+        ]);
+        expect(eventSink.at(-1)).toMatchObject({
+          type: 'zero/events/status/replication/v1',
+          component: 'replication',
+          stage: 'Indexing',
+          status: 'OK',
+          description: /Creating \d+ indexes/,
         });
       }
     });

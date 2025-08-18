@@ -8,6 +8,7 @@ export type ClientMetricMap = {
 
 export type ServerMetricMap = {
   'query-materialization-server': [queryID: string];
+  'query-update-server': [queryID: string];
 };
 
 export type MetricMap = ClientMetricMap & ServerMetricMap;
@@ -18,4 +19,16 @@ export interface MetricsDelegate {
     value: number,
     ...args: MetricMap[K]
   ): void;
+}
+
+export function isClientMetric(
+  metric: keyof MetricMap,
+): metric is keyof ClientMetricMap {
+  return metric.endsWith('-client') || metric.endsWith('-end-to-end');
+}
+
+export function isServerMetric(
+  metric: keyof MetricMap,
+): metric is keyof ServerMetricMap {
+  return metric.endsWith('-server');
 }

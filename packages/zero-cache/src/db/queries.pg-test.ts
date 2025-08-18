@@ -1,5 +1,5 @@
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {testDBs} from '../test/db.ts';
+import {beforeEach, describe, expect} from 'vitest';
+import {type PgTest, test} from '../test/db.ts';
 import {INT4, JSONB, TEXT} from '../types/pg-types.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import type {RowKey} from '../types/row-key.ts';
@@ -8,12 +8,10 @@ import {lookupRowsWithKeys} from './queries.ts';
 describe('db/queries', () => {
   let db: PostgresDB;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     db = await testDBs.create('db_queries_test');
-  });
 
-  afterEach(async () => {
-    await testDBs.drop(db);
+    return () => testDBs.drop(db);
   });
 
   test('lookupRowsWithKeys', async () => {

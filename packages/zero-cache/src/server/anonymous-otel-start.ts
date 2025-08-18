@@ -1,19 +1,23 @@
+import type {ObservableResult} from '@opentelemetry/api';
 import {type Meter} from '@opentelemetry/api';
 import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
-import {PeriodicExportingMetricReader} from '@opentelemetry/sdk-metrics';
-import {MeterProvider} from '@opentelemetry/sdk-metrics';
 import {resourceFromAttributes} from '@opentelemetry/resources';
-import type {ObservableResult} from '@opentelemetry/api';
-import {platform} from 'os';
-import {h64} from '../../../shared/src/hash.js';
+import {
+  MeterProvider,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
 import type {LogContext} from '@rocicorp/logger';
-import packageJson from '../../../zero/package.json' with {type: 'json'};
-import {getZeroConfig, type ZeroConfig} from '../config/zero-config.js';
 import {execSync} from 'child_process';
 import {randomUUID} from 'crypto';
-import {existsSync, readFileSync, writeFileSync, mkdirSync} from 'fs';
-import {join, dirname} from 'path';
-import {homedir} from 'os';
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'fs';
+import {homedir, platform} from 'os';
+import {dirname, join} from 'path';
+import {h64} from '../../../shared/src/hash.js';
+import {
+  getServerVersion,
+  getZeroConfig,
+  type ZeroConfig,
+} from '../config/zero-config.js';
 
 class AnonymousTelemetryManager {
   static #instance: AnonymousTelemetryManager;
@@ -245,7 +249,7 @@ class AnonymousTelemetryManager {
         'zero.machine.os': platform(),
         'zero.telemetry.type': 'anonymous',
         'zero.infra.platform': this.#getPlatform(),
-        'zero.version': this.#config?.serverVersion ?? packageJson.version,
+        'zero.version': getServerVersion(this.#config),
         'zero.task.id': this.#config?.taskID || 'unknown',
         'zero.project.id': this.#getGitProjectId(),
         'zero.process.id': this.#processId,

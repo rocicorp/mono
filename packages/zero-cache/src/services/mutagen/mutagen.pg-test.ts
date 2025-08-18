@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {
   createSilentLogContext,
   TestLogSink,
@@ -14,7 +14,7 @@ import {
 } from '../../../../zero-protocol/src/push.ts';
 import type {WriteAuthorizer} from '../../auth/write-authorizer.ts';
 import * as Mode from '../../db/mode-enum.ts';
-import {expectTables, testDBs} from '../../test/db.ts';
+import {expectTables, type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {zeroSchema} from './mutagen-test-shared.ts';
 import {processMutation} from './mutagen.ts';
@@ -72,15 +72,13 @@ describe('processMutation', {timeout: 15000}, () => {
   let lc: LogContext;
   let db: PostgresDB;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     lc = createSilentLogContext();
     db = await testDBs.create('db_mutagen_test');
     await createTables(db);
-  });
 
-  afterEach(async () => {
-    await testDBs.drop(db);
-  }, 15000);
+    return () => testDBs.drop(db);
+  });
 
   test('new client with no last mutation id', async () => {
     await expectTables(db, {

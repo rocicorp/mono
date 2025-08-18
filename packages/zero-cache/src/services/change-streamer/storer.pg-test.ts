@@ -1,8 +1,8 @@
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
-import {testDBs} from '../../test/db.ts';
+import {type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
@@ -27,7 +27,7 @@ describe('change-streamer/storer', () => {
   const APP_ID = 'xero';
   const SHARD_NUM = 5;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     db = await testDBs.create('change_streamer_storer');
     shard = {appID: APP_ID, shardNum: SHARD_NUM};
     await db.begin(tx => setupCDCTables(lc, tx, shard));
@@ -57,12 +57,12 @@ describe('change-streamer/storer', () => {
     });
     consumed = new Queue();
     fatalErrors = new Queue();
-  });
 
-  afterEach(async () => {
-    await testDBs.drop(db);
-    void storer.stop();
-    await done;
+    return async () => {
+      await testDBs.drop(db);
+      void storer.stop();
+      await done;
+    };
   });
 
   async function expectConsumed(...watermarks: string[]) {

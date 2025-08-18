@@ -5,50 +5,40 @@ import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import {logLevel, logOptions} from '../../otel/src/log-options.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {assert} from '../../shared/src/asserts.ts';
 import '../../shared/src/dotenv.ts';
 import {colorConsole, createLogContext} from '../../shared/src/logging.ts';
 import {must} from '../../shared/src/must.ts';
 import {parseOptions} from '../../shared/src/options.ts';
 import * as v from '../../shared/src/valita.ts';
-import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
 import {
   appOptions,
   shardOptions,
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
 } from '../../zero-cache/src/config/zero-config.ts';
-import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import {
   deployPermissionsOptions,
   loadSchemaAndPermissions,
 } from '../../zero-cache/src/scripts/permissions.ts';
-import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
 import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
-import {
-  mapAST,
-  type AST,
-  type CompoundKey,
-} from '../../zero-protocol/src/ast.ts';
-import type {Row} from '../../zero-protocol/src/data.ts';
-import {hashOfAST} from '../../zero-protocol/src/query-hash.ts';
+import {type AST, type CompoundKey} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,
   serverToClient,
 } from '../../zero-schema/src/name-mapper.ts';
-import {buildPipeline} from '../../zql/src/builder/builder.ts';
+
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
 import {type PullRow, type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
-import {
-  runtimeDebugFlags,
-  runtimeDebugStats,
-} from '../../zqlite/src/runtime-debug.ts';
+import {runtimeDebugFlags} from '../../zql/src/builder/debug-delegate.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
+import {Debug} from '../../zql/src/builder/debug-delegate.ts';
+import {runAst, type RunResult} from './run-ast.ts';
+import {explainQueries} from './explain-queries.ts';
 
 const options = {
   schema: deployPermissionsOptions.schema,
@@ -187,7 +177,6 @@ const config = {
 runtimeDebugFlags.trackRowCountsVended = true;
 runtimeDebugFlags.trackRowsVended = config.outputVendedRows;
 
-const clientGroupID = 'clientGroupIDForAnalyze';
 const lc = createLogContext({
   log: config.log,
 });
@@ -205,7 +194,9 @@ const {schema, permissions} = await loadSchemaAndPermissions(
 const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const serverToClientMapper = serverToClient(schema.tables);
+const debug = new Debug();
 const host: QueryDelegate = {
+  debug,
   getSource: (serverTableName: string) => {
     const clientTableName = serverToClientMapper.tableName(serverTableName);
     let source = sources.get(serverTableName);
@@ -215,7 +206,6 @@ const host: QueryDelegate = {
     source = new TableSource(
       lc,
       testLogConfig,
-      clientGroupID,
       db,
       serverTableName,
       Object.fromEntries(
@@ -242,6 +232,7 @@ const host: QueryDelegate = {
   decorateInput: input => input,
   decorateSourceInput: input => input,
   decorateFilterInput: input => input,
+  addEdge() {},
   addServerQuery() {
     return () => {};
   },
@@ -262,82 +253,29 @@ const host: QueryDelegate = {
   addMetric() {},
 };
 
-let start: number;
-let end: number;
+let result: RunResult;
 
 if (config.ast) {
   // the user likely has a transformed AST since the wire and storage formats are the transformed AST
-  [start, end] = await runAst(JSON.parse(config.ast), true);
+  result = await runAst(lc, JSON.parse(config.ast), true, {
+    applyPermissions: config.applyPermissions,
+    authData: config.authData,
+    clientToServerMapper,
+    permissions,
+    outputSyncedRows: config.outputSyncedRows,
+    db,
+    host,
+  });
 } else if (config.query) {
-  [start, end] = await runQuery(config.query);
+  result = await runQuery(config.query);
 } else if (config.hash) {
-  [start, end] = await runHash(config.hash);
+  result = await runHash(config.hash);
 } else {
   colorConsole.error('No query or AST or hash provided');
   process.exit(1);
 }
 
-async function runAst(
-  ast: AST,
-  isTransformed: boolean,
-): Promise<[number, number]> {
-  if (!isTransformed) {
-    // map the AST to server names if not already transformed
-    ast = mapAST(ast, clientToServerMapper);
-  }
-  if (config.applyPermissions) {
-    const authData = config.authData ? JSON.parse(config.authData) : {};
-    if (!config.authData) {
-      colorConsole.warn(
-        'No auth data provided. Permission rules will compare to `NULL` wherever an auth data field is referenced.',
-      );
-    }
-    ast = transformAndHashQuery(
-      lc,
-      clientGroupID,
-      ast,
-      permissions,
-      authData,
-      false,
-    ).transformedAst;
-    colorConsole.log(chalk.blue.bold('\n\n=== Query After Permissions: ===\n'));
-    colorConsole.log(await formatOutput(ast.table + astToZQL(ast)));
-  }
-
-  const tableSpecs = computeZqlSpecs(lc, db);
-  const pipeline = buildPipeline(ast, host, 'query-id');
-
-  const start = performance.now();
-
-  if (config.outputSyncedRows) {
-    colorConsole.log(chalk.blue.bold('\n\n=== Synced rows: ===\n'));
-  }
-  let syncedRowCount = 0;
-  const rowsByTable: Record<string, Row[]> = {};
-  for (const rowChange of hydrate(pipeline, hashOfAST(ast), tableSpecs)) {
-    assert(rowChange.type === 'add');
-    syncedRowCount++;
-    if (config.outputSyncedRows) {
-      let rows: Row[] = rowsByTable[rowChange.table];
-      if (!rows) {
-        rows = [];
-        rowsByTable[rowChange.table] = rows;
-      }
-      rows.push(rowChange.row);
-    }
-  }
-  if (config.outputSyncedRows) {
-    for (const [source, rows] of Object.entries(rowsByTable)) {
-      colorConsole.log(chalk.bold(`${source}:`), rows);
-    }
-    colorConsole.log(chalk.bold('total synced rows:'), syncedRowCount);
-  }
-
-  const end = performance.now();
-  return [start, end];
-}
-
-function runQuery(queryString: string): Promise<[number, number]> {
+function runQuery(queryString: string): Promise<RunResult> {
   const z = {
     query: Object.fromEntries(
       Object.entries(schema.tables).map(([name]) => [
@@ -351,7 +289,15 @@ function runQuery(queryString: string): Promise<[number, number]> {
   const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
 
   const ast = completedAST(q);
-  return runAst(ast, false);
+  return runAst(lc, ast, false, {
+    applyPermissions: config.applyPermissions,
+    authData: config.authData,
+    clientToServerMapper,
+    permissions,
+    outputSyncedRows: config.outputSyncedRows,
+    db,
+    host,
+  });
 }
 
 async function runHash(hash: string) {
@@ -369,44 +315,54 @@ async function runHash(hash: string) {
   const ast = rows[0].clientAST as AST;
   colorConsole.log(await formatOutput(ast.table + astToZQL(ast)));
 
-  return runAst(ast, true);
+  return runAst(lc, ast, true, {
+    applyPermissions: config.applyPermissions,
+    authData: config.authData,
+    clientToServerMapper,
+    permissions,
+    outputSyncedRows: config.outputSyncedRows,
+    db,
+    host,
+  });
+}
+
+if (config.outputSyncedRows) {
+  colorConsole.log(chalk.blue.bold('=== Synced Rows: ===\n'));
+  for (const [table, rows] of Object.entries(result.syncedRows)) {
+    colorConsole.log(chalk.bold(table + ':'), rows);
+  }
 }
 
 colorConsole.log(chalk.blue.bold('=== Query Stats: ===\n'));
+colorConsole.log(chalk.bold('total synced rows:'), result.syncedRowCount);
 showStats();
 if (config.outputVendedRows) {
   colorConsole.log(chalk.blue.bold('=== Vended Rows: ===\n'));
   for (const source of sources.values()) {
-    const entries = [
-      ...(runtimeDebugStats
-        .getVendedRows()
-        .get(clientGroupID)
-        ?.get(source.table)
-        ?.entries() ?? []),
-    ];
     colorConsole.log(
       chalk.bold(`${source.table}:`),
-      Object.fromEntries(entries),
+      debug.getVendedRows()?.[source.table] ?? {},
     );
   }
 }
 colorConsole.log(chalk.blue.bold('\n\n=== Query Plans: ===\n'));
-explainQueries();
+const plans = explainQueries(debug.getVendedRowCounts() ?? {}, db);
+for (const [query, plan] of Object.entries(plans)) {
+  colorConsole.log(chalk.bold('query'), query);
+  colorConsole.log(plan.map((row, i) => colorPlanRow(row, i)).join('\n'));
+  colorConsole.log('\n');
+}
 
 function showStats() {
   let totalRowsConsidered = 0;
   for (const source of sources.values()) {
-    const entries = [
-      ...(runtimeDebugStats
-        .getVendedRowCounts()
-        .get(clientGroupID)
-        ?.get(source.table)
-        ?.entries() ?? []),
-    ];
+    const entries = Object.entries(
+      debug.getVendedRowCounts()?.[source.table] ?? {},
+    );
     totalRowsConsidered += entries.reduce((acc, entry) => acc + entry[1], 0);
     colorConsole.log(
       chalk.bold(source.table + ' vended:'),
-      Object.fromEntries(entries),
+      debug.getVendedRowCounts()?.[source.table] ?? {},
     );
   }
 
@@ -414,32 +370,11 @@ function showStats() {
     chalk.bold('total rows considered:'),
     colorRowsConsidered(totalRowsConsidered),
   );
-  colorConsole.log(chalk.bold('time:'), colorTime(end - start), 'ms');
-}
-
-function explainQueries() {
-  for (const source of sources.values()) {
-    const queries =
-      runtimeDebugStats
-        .getVendedRowCounts()
-        .get(clientGroupID)
-        ?.get(source.table)
-        ?.keys() ?? [];
-    for (const query of queries) {
-      colorConsole.log(chalk.bold('query'), query);
-      colorConsole.log(
-        db
-          // we should be more intelligent about value replacement.
-          // Different values result in different plans. E.g., picking a value at the start
-          // of an index will result in `scan` vs `search`. The scan is fine in that case.
-          .prepare(`EXPLAIN QUERY PLAN ${query.replaceAll('?', "'sdfse'")}`)
-          .all<{detail: string}>()
-          .map((row, i) => colorPlanRow(row.detail, i))
-          .join('\n'),
-      );
-      colorConsole.log('\n');
-    }
-  }
+  colorConsole.log(
+    chalk.bold('time:'),
+    colorTime(result.end - result.start),
+    'ms',
+  );
 }
 
 function colorTime(duration: number) {

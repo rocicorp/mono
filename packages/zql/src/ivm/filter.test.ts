@@ -5,8 +5,12 @@ import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {buildFilterPipeline} from './filter-operators.ts';
+import type {BuilderDelegate} from '../builder/builder.ts';
 
 const lc = createSilentLogContext();
+const mockDelegate = {
+  addEdge() {},
+} as unknown as BuilderDelegate;
 
 test('basics', () => {
   const ms = createSource(
@@ -23,6 +27,7 @@ test('basics', () => {
   const connector = ms.connect([['a', 'asc']]);
   const filter = buildFilterPipeline(
     connector,
+    mockDelegate,
     filterInput => new Filter(filterInput, row => row.b === 'foo'),
   );
 
@@ -115,6 +120,7 @@ test('edit', () => {
   const connector = ms.connect([['a', 'asc']]);
   const filter = buildFilterPipeline(
     connector,
+    mockDelegate,
     filterInput => new Filter(filterInput, row => (row.x as number) % 2 === 0),
   );
   const out = new Catch(filter);

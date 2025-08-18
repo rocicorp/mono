@@ -1,17 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify from 'fastify';
-import {
-  beforeEach,
-  describe,
-  expect,
-  type MockedFunction,
-  test,
-  vi,
-} from 'vitest';
+import {beforeEach, describe, expect, type MockedFunction, vi} from 'vitest';
 import WebSocket from 'ws';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {getConnectionURI, testDBs} from '../../test/db.ts';
+import {getConnectionURI, type PgTest, test} from '../../test/db.ts';
 import {type PostgresDB} from '../../types/pg.ts';
 import {inProcChannel} from '../../types/processes.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
@@ -50,7 +43,7 @@ describe('change-streamer/http', () => {
   let connectionClosed: Promise<Downstream[]>;
   let changeStreamerClient: ChangeStreamerHttpClient;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     lc = createSilentLogContext();
 
     changeDB = await testDBs.create('change_streamer_http_client');

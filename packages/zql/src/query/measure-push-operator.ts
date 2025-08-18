@@ -1,15 +1,17 @@
-import type {Change} from '../../../zql/src/ivm/change.ts';
-import type {Node} from '../../../zql/src/ivm/data.ts';
+import type {Change} from '../ivm/change.ts';
+import type {Node} from '../ivm/data.ts';
 import {
   throwOutput,
   type FetchRequest,
   type Input,
   type Operator,
   type Output,
-} from '../../../zql/src/ivm/operator.ts';
-import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
-import type {Stream} from '../../../zql/src/ivm/stream.ts';
-import type {MetricsDelegate} from '../../../zql/src/query/metrics-delegate.ts';
+} from '../ivm/operator.ts';
+import type {SourceSchema} from '../ivm/schema.ts';
+import type {Stream} from '../ivm/stream.ts';
+import type {MetricsDelegate} from './metrics-delegate.ts';
+
+type MetricName = 'query-update-client' | 'query-update-server';
 
 export class MeasurePushOperator implements Operator {
   readonly #input: Input;
@@ -17,11 +19,18 @@ export class MeasurePushOperator implements Operator {
   readonly #metricsDelegate: MetricsDelegate;
 
   #output: Output = throwOutput;
+  readonly #metricName: MetricName;
 
-  constructor(input: Input, queryID: string, metricsDelegate: MetricsDelegate) {
+  constructor(
+    input: Input,
+    queryID: string,
+    metricsDelegate: MetricsDelegate,
+    metricName: MetricName,
+  ) {
     this.#input = input;
     this.#queryID = queryID;
     this.#metricsDelegate = metricsDelegate;
+    this.#metricName = metricName;
     input.setOutput(this);
   }
 
@@ -49,7 +58,7 @@ export class MeasurePushOperator implements Operator {
     const startTime = performance.now();
     this.#output.push(change);
     this.#metricsDelegate.addMetric(
-      'query-update-client',
+      this.#metricName,
       performance.now() - startTime,
       this.#queryID,
     );

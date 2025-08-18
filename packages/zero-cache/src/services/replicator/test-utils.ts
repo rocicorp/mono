@@ -56,7 +56,7 @@ export function createChangeProcessor(
     throw err;
   },
 ): ChangeProcessor {
-  return new ChangeProcessor(new StatementRunner(db), 'IMMEDIATE', failures);
+  return new ChangeProcessor(new StatementRunner(db), 'serving', failures);
 }
 
 export class ReplicationMessages<

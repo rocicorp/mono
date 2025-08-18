@@ -14,9 +14,7 @@ import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {must} from '../../../../shared/src/must.ts';
-import {mapValues} from '../../../../shared/src/objects.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
-import {TDigest} from '../../../../shared/src/tdigest.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/change-desired-queries.ts';
 import type {
@@ -35,13 +33,14 @@ import {
   transformAndHashQuery,
   type TransformedAndHashed,
 } from '../../auth/read-authorizer.ts';
-import {type ZeroConfig} from '../../config/zero-config.ts';
+import {getServerVersion, type ZeroConfig} from '../../config/zero-config.ts';
 import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import {
   getOrCreateCounter,
   getOrCreateHistogram,
   getOrCreateUpDownCounter,
 } from '../../observability/metrics.ts';
+import {InspectMetricsDelegate} from '../../server/inspect-metrics-delegate.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
@@ -105,14 +104,6 @@ export type SyncContext = {
   readonly httpCookie: string | undefined;
 };
 
-/**
- * Server-side metrics collected for queries during materialization.
- * These metrics are reported via the inspector and complement client-side metrics.
- */
-export type ServerMetrics = {
-  'query-materialization-server': TDigest;
-};
-
 const tracer = trace.getTracer('view-syncer', version);
 
 const PROTOCOL_VERSION_ATTR = 'protocol.version';
@@ -157,6 +148,8 @@ export const TTL_CLOCK_INTERVAL = 60_000;
  * next tick of the timer.
  */
 export const TTL_TIMER_HYSTERESIS = 50; // ms
+
+type PartialZeroConfig = Pick<ZeroConfig, 'query' | 'serverVersion'>;
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
@@ -247,15 +240,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     },
   );
 
-  // Store per-query server-side materialization metrics for inspector
-  readonly #perQueryServerMetrics = new Map<string, ServerMetrics>();
+  readonly #inspectMetricsDelegate: InspectMetricsDelegate;
 
-  readonly #serverMetrics: ServerMetrics = {
-    'query-materialization-server': new TDigest(),
-  };
+  readonly #config: Pick<ZeroConfig, 'serverVersion'>;
 
   constructor(
-    pullConfig: ZeroConfig['query'],
+    config: PartialZeroConfig,
     lc: LogContext,
     shard: ShardID,
     taskID: string,
@@ -266,9 +256,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
     slowHydrateThreshold: number,
+    inspectMetricsDelegate: InspectMetricsDelegate,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
+    const {query: pullConfig} = config;
+    this.#config = config;
     this.id = clientGroupID;
     this.#shard = shard;
     this.#queryConfig = pullConfig;
@@ -278,6 +271,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#drainCoordinator = drainCoordinator;
     this.#keepaliveMs = keepaliveMs;
     this.#slowHydrateThreshold = slowHydrateThreshold;
+    this.#inspectMetricsDelegate = inspectMetricsDelegate;
     this.#cvrStore = new CVRStore(
       lc,
       cvrDb,
@@ -1073,6 +1067,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           span.setAttribute('table', transformedAst.table);
           for (const _ of this.#pipelines.addQuery(
             transformationHash,
+            hash,
             transformedAst,
             timer.start(),
           )) {
@@ -1096,17 +1091,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #addQueryMaterializationServerMetric(queryID: string, elapsed: number) {
-    let perQueryMetrics = this.#perQueryServerMetrics.get(queryID);
-    if (!perQueryMetrics) {
-      this.#perQueryServerMetrics.set(
-        queryID,
-        (perQueryMetrics = {
-          'query-materialization-server': new TDigest(),
-        }),
-      );
-    }
-    perQueryMetrics['query-materialization-server'].add(elapsed);
-    this.#serverMetrics['query-materialization-server'].add(elapsed);
+    this.#inspectMetricsDelegate.addMetric(
+      'query-materialization-server',
+      elapsed,
+      queryID,
+    );
   }
 
   /**
@@ -1331,7 +1320,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       for (const q of removeQueries) {
         this.#pipelines.removeQuery(q.transformationHash);
         // Remove per-query server metrics when query is deleted
-        this.#perQueryServerMetrics.delete(q.id);
+        this.#inspectMetricsDelegate.deleteMetricsForQuery(q.id);
       }
       for (const hash of unhydrateQueries) {
         this.#pipelines.removeQuery(hash);
@@ -1339,7 +1328,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         const ids = hashToIDs.get(hash);
         if (ids) {
           for (const id of ids) {
-            this.#perQueryServerMetrics.delete(id);
+            this.#inspectMetricsDelegate.deleteMetricsForQuery(id);
           }
         }
       }
@@ -1359,7 +1348,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('transformationHash', q.transformationHash);
           lc.debug?.(`adding pipeline for query`, q.ast);
 
-          yield* pipelines.addQuery(q.transformationHash, q.ast, timer.start());
+          yield* pipelines.addQuery(
+            q.transformationHash,
+            q.id,
+            q.ast,
+            timer.start(),
+          );
           const elapsed = timer.stop();
           totalProcessTime += elapsed;
 
@@ -1706,20 +1700,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
 
         // Enhance query rows with server-side materialization metrics
-        const enhancedRows = queryRows.map(row => {
-          const serverMetrics = this.#perQueryServerMetrics.get(row.queryID);
-          const metrics = serverMetrics
-            ? {
-                'query-materialization-server':
-                  serverMetrics['query-materialization-server'].toJSON(),
-              }
-            : null;
-
-          return {
-            ...row,
-            metrics,
-          };
-        });
+        const enhancedRows = queryRows.map(row => ({
+          ...row,
+          metrics: this.#inspectMetricsDelegate.getMetricsJSONForQuery(
+            row.queryID,
+          ),
+        }));
 
         client.sendInspectResponse(lc, {
           op: 'queries',
@@ -1730,17 +1716,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       case 'metrics': {
-        const serverMetrics = mapValues(this.#serverMetrics, metric =>
-          metric.toJSON(),
-        );
-
         client.sendInspectResponse(lc, {
           op: 'metrics',
           id: body.id,
-          value: serverMetrics,
+          value: this.#inspectMetricsDelegate.getMetricsJSON(),
         });
         break;
       }
+
+      case 'version':
+        client.sendInspectResponse(lc, {
+          op: 'version',
+          id: body.id,
+          value: getServerVersion(this.#config),
+        });
+        break;
 
       default:
         unreachable(body);

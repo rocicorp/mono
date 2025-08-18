@@ -9,7 +9,8 @@ import {
   type ParseOptions,
 } from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {runtimeDebugFlags} from '../../../zqlite/src/runtime-debug.ts';
+import packageJson from '../../../zero/package.json' with {type: 'json'};
+import {runtimeDebugFlags} from '../../../zql/src/builder/debug-delegate.ts';
 import {singleProcessMode} from '../types/processes.ts';
 import {
   ALLOWED_APP_ID_CHARACTERS,
@@ -264,6 +265,15 @@ export const zeroOptions = {
     maxConnsPerWorker: {
       type: v.number().optional(),
       hidden: true, // Passed from main thread to sync workers
+    },
+
+    garbageCollectionInactivityThresholdHours: {
+      type: v.number().default(48),
+      desc: [
+        `The duration after which an inactive CVR is eligible for garbage collection.`,
+        `Note that garbage collection is an incremental, periodic process which does not`,
+        `necessarily purge all eligible CVRs immediately.`,
+      ],
     },
   },
 
@@ -595,6 +605,33 @@ export const zeroOptions = {
       `Setting the DO_NOT_TRACK environment variable also disables telemetry.`,
     ],
   },
+
+  cloudEvent: {
+    sinkEnv: {
+      type: v.string().optional(),
+      desc: [
+        `ENV variable containing a URI to a CloudEvents sink. When set, ZeroEvents`,
+        `will be published to the sink as the {bold data} field of CloudEvents.`,
+        `The {bold source} field of the CloudEvents will be set to the {bold ZERO_TASK_ID},`,
+        `along with any extension attributes specified by the {bold ZERO_CLOUD_EVENT_EXTENSION_OVERRIDES_ENV}.`,
+        ``,
+        `This configuration is modeled to easily integrate with a knative K_SINK binding,`,
+        `(i.e. https://github.com/knative/eventing/blob/main/docs/spec/sources.md#sinkbinding).`,
+        `However, any CloudEvents sink can be used.`,
+      ],
+    },
+
+    extensionOverridesEnv: {
+      type: v.string().optional(),
+      desc: [
+        `ENV variable containing a JSON stringified object with an {bold extensions} field`,
+        `containing attributes that should be added or overridden on outbound CloudEvents.`,
+        ``,
+        `This configuration is modeled to easily integrate with a knative K_CE_OVERRIDES binding,`,
+        `(i.e. https://github.com/knative/eventing/blob/main/docs/spec/sources.md#sinkbinding).`,
+      ],
+    },
+  },
 };
 
 export type ZeroConfig = Config<typeof zeroOptions>;
@@ -630,4 +667,14 @@ export function getNormalizedZeroConfig(
   const config = getZeroConfig(opts);
   assertNormalized(config);
   return config;
+}
+
+/**
+ * Gets the server version from the config if provided. Otherwise it gets it
+ * from the Zero package.json.
+ */
+export function getServerVersion(
+  config: Pick<ZeroConfig, 'serverVersion'> | undefined,
+): string {
+  return config?.serverVersion ?? packageJson.version;
 }

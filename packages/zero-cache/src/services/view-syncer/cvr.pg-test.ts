@@ -1,11 +1,13 @@
-import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {beforeEach, describe, expect, vi} from 'vitest';
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
-import {testDBs} from '../../test/db.ts';
+import {type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cvrSchema, upstreamSchema} from '../../types/shards.ts';
+import {id} from '../../types/sql.ts';
+import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
 import type {PatchToVersion} from './client-handler.ts';
 import {
   ConcurrentModificationException,
@@ -34,8 +36,6 @@ import {
 } from './schema/cvr.ts';
 import type {ClientQueryRecord, CVRVersion, RowID} from './schema/types.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
-import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
-import {id} from '../../types/sql.ts';
 
 const APP_ID = 'dapp';
 const SHARD_NUM = 3;
@@ -65,11 +65,11 @@ describe('view-syncer/cvr', () => {
       const {instances, rowsVersion, desires} = state;
       if (instances && !rowsVersion) {
         state = {
-          ...state,
           rowsVersion: instances.map(({clientGroupID, version}) => ({
             clientGroupID,
             version,
           })),
+          ...state,
         };
       }
 
@@ -174,7 +174,7 @@ describe('view-syncer/cvr', () => {
     throw e;
   };
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     [cvrDb, upstreamDb] = await Promise.all([
       testDBs.create('cvr_test_db'),
       testDBs.create('upstream_test_db'),
@@ -189,10 +189,8 @@ describe('view-syncer/cvr', () => {
       `),
       ),
     ]);
-  });
 
-  afterEach(async () => {
-    await testDBs.drop(cvrDb);
+    return () => testDBs.drop(cvrDb, upstreamDb);
   });
 
   async function catchupRows(

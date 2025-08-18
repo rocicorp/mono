@@ -21,6 +21,7 @@ import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {
   inspectMetricsDownSchema,
   inspectQueriesDownSchema,
+  inspectVersionDownSchema,
   type InspectDownBody,
   type InspectQueryRow,
   type ServerMetrics as ServerMetricsJSON,
@@ -33,7 +34,6 @@ import type {
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   ClientMetricMap,
-  MetricMap,
   ServerMetricMap,
 } from '../../../../zql/src/query/metrics-delegate.ts';
 import {normalizeTTL, type TTL} from '../../../../zql/src/query/ttl.ts';
@@ -52,7 +52,7 @@ type Rep = ReplicacheImpl<MutatorDefs>;
 type GetWebSocket = () => Promise<WebSocket>;
 
 type Metrics = {
-  readonly [K in keyof MetricMap]: ReadonlyTDigest;
+  readonly [K in keyof (ClientMetricMap & ServerMetricMap)]: ReadonlyTDigest;
 };
 
 type ClientMetrics = {
@@ -148,6 +148,10 @@ class Inspector implements InspectorInterface {
         dagRead,
       ),
     );
+  }
+
+  async serverVersion(): Promise<string> {
+    return rpc(await this.socket(), {op: 'version'}, inspectVersionDownSchema);
   }
 }
 
@@ -427,7 +431,7 @@ class Query implements QueryInterface {
 function mergeMetrics(
   clientMetrics: ClientMetrics | undefined,
   serverMetrics: ServerMetricsJSON | null | undefined,
-): Metrics {
+): ClientMetrics & ServerMetrics {
   return {
     ...(clientMetrics ?? newClientMetrics()),
     ...(serverMetrics
@@ -447,6 +451,7 @@ function newClientMetrics(): ClientMetrics {
 function newServerMetrics(): ServerMetrics {
   return {
     'query-materialization-server': new TDigest(),
+    'query-update-server': new TDigest(),
   };
 }
 

@@ -501,7 +501,6 @@ beforeEach(() => {
       source = new TableSource(
         lc,
         testLogConfig,
-        'read-auth-test',
         replica,
         name,
         tableSchema.columns,
@@ -516,6 +515,7 @@ beforeEach(() => {
       return new MemoryStorage();
     },
     decorateInput: input => input,
+    addEdge() {},
     decorateFilterInput: input => input,
     decorateSourceInput: input => input,
     addServerQuery() {

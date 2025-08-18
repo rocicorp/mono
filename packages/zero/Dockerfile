@@ -17,6 +17,7 @@ ARG ZERO_VERSION
 RUN test -n "$ZERO_VERSION"
 
 RUN apk add --update curl
+RUN apk add --no-cache readline readline-dev
 
 RUN mkdir -p /opt/app
 WORKDIR /opt/app
@@ -34,6 +35,9 @@ RUN if echo "$ZERO_VERSION" | grep -q "\.tgz$"; then \
     echo "Installing from npm @rocicorp/zero@$ZERO_VERSION" && \
     npm install -g @rocicorp/zero@${ZERO_VERSION}; \
   fi
+
+# Add zero-sqlite3 to path
+RUN ln -s /usr/local/lib/node_modules/@rocicorp/zero/node_modules/@rocicorp/zero-sqlite3/build/Release/zero_sqlite3  /usr/local/bin/zero-sqlite3
 
 # Copy litestream executable and config.yml
 COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream

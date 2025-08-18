@@ -1,15 +1,20 @@
 import {LogContext} from '@rocicorp/logger';
-import {afterEach, beforeEach, describe, test} from 'vitest';
+import {beforeEach, describe} from 'vitest';
 import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.ts';
 import {
   createVersionHistoryTable,
   type VersionHistory,
 } from '../../../../db/migration.ts';
-import {expectTablesToMatch, initDB, testDBs} from '../../../../test/db.ts';
+import {
+  expectTablesToMatch,
+  initDB,
+  type PgTest,
+  test,
+} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
+import {id} from '../../../../types/sql.ts';
 import {ensureShardSchema, updateShardSchema} from './init.ts';
 import {addReplica, metadataPublicationName} from './shard.ts';
-import {id} from '../../../../types/sql.ts';
 
 const APP_ID = 'zappz';
 const SHARD_NUM = 23;
@@ -26,13 +31,11 @@ describe('change-streamer/pg/schema/init', () => {
   let lc: LogContext;
   let upstream: PostgresDB;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     lc = createSilentLogContext();
     upstream = await testDBs.create('shard_schema_migration_upstream');
-  });
 
-  afterEach(async () => {
-    await testDBs.drop(upstream);
+    return () => testDBs.drop(upstream);
   });
 
   type Case = {

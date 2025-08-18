@@ -45,6 +45,7 @@ import type {
 } from './source.ts';
 import type {Stream} from './stream.ts';
 import {once} from '../../../shared/src/iterables.ts';
+import type {DebugDelegate} from '../builder/debug-delegate.ts';
 
 export type Overlay = {
   outputIndex: number;
@@ -74,6 +75,7 @@ export type Connection = {
         predicate: (row: Row) => boolean;
       }
     | undefined;
+  readonly debug?: DebugDelegate | undefined;
 };
 
 /**

@@ -154,6 +154,8 @@ export class QueryDelegateImpl implements QueryDelegate {
     return input;
   }
 
+  addEdge() {}
+
   callAllGotCallbacks() {
     for (const gotCallback of this.gotCallbacks) {
       gotCallback?.(true);

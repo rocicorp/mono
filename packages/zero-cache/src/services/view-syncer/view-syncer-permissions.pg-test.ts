@@ -1,11 +1,11 @@
-import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {beforeEach, describe, expect, vi} from 'vitest';
 import {h128} from '../../../../shared/src/hash.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
-import {testDBs} from '../../test/db.ts';
+import {type PgTest, test} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {Subscription} from '../../types/subscription.ts';
@@ -29,6 +29,7 @@ describe('permissions', () => {
   ) => Queue<Downstream>;
   let replicaDbFile: DbFile;
   let cvrDB: PostgresDB;
+  let upstreamDb: PostgresDB;
   let vs: ViewSyncerService;
   let viewSyncerDone: Promise<void>;
   let replicator: FakeReplicator;
@@ -46,25 +47,26 @@ describe('permissions', () => {
     httpCookie: undefined,
   };
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     ({
       stateChanges,
       connect,
       vs,
       viewSyncerDone,
       cvrDB,
+      upstreamDb,
       replicaDbFile,
       replicator,
-    } = await setup('view_syncer_permissions_test', permissions));
-  });
+    } = await setup(testDBs, 'view_syncer_permissions_test', permissions));
 
-  afterEach(async () => {
-    // Restores fake date if used.
-    vi.useRealTimers();
-    await vs.stop();
-    await viewSyncerDone;
-    await testDBs.drop(cvrDB);
-    replicaDbFile.delete();
+    return async () => {
+      // Restores fake date if used.
+      vi.useRealTimers();
+      await vs.stop();
+      await viewSyncerDone;
+      await testDBs.drop(cvrDB, upstreamDb);
+      replicaDbFile.delete();
+    };
   });
 
   test('client with user role followed by client with admin role', async () => {

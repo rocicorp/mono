@@ -1,7 +1,7 @@
 import {PG_OBJECT_IN_USE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {PostgresError} from 'postgres';
-import {beforeEach, describe, expect, test, vi} from 'vitest';
+import {beforeEach, describe, expect, vi} from 'vitest';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {TestLogSink} from '../../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
@@ -11,7 +11,8 @@ import {StatementRunner} from '../../../db/statements.ts';
 import {
   dropReplicationSlots,
   getConnectionURI,
-  testDBs,
+  type PgTest,
+  test,
 } from '../../../test/db.ts';
 import {DbFile} from '../../../test/lite.ts';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
@@ -45,7 +46,7 @@ describe.skip('change-source/pg', {timeout: 30000, retry: 3}, () => {
   let source: ChangeSource;
   let streams: ChangeStream[];
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     streams = [];
     logSink = new TestLogSink();
     lc = new LogContext('error', {}, logSink);
