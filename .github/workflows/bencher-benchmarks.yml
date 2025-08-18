@@ -89,4 +89,5 @@ jobs:
           --threshold-measure throughput \
           --threshold-test t_test \
           --threshold-lower-boundary 0.90 \
+          --threshold-max-sample-size 10 \
           --err
