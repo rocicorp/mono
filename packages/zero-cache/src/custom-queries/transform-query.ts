@@ -13,7 +13,7 @@ import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import {TimedCache} from '../../../shared/src/cache.ts';
 import {must} from '../../../shared/src/must.ts';
 
-type HttpError = {
+export type HttpError = {
   error: 'http';
   status: number;
   details: string;
@@ -56,7 +56,7 @@ export class CustomQueryTransformer {
   async transform(
     headerOptions: HeaderOptions,
     queries: Iterable<CustomQueryRecord>,
-  ): Promise<(TransformedAndHashed | ErroredQuery)[] | HttpError> {
+  ): Promise<(TransformedAndHashed | ErroredQuery)[]> {
     const request: TransformRequestBody = [];
     const cachedResponses: TransformedAndHashed[] = [];
 
@@ -86,24 +86,37 @@ export class CustomQueryTransformer {
       return cachedResponses;
     }
 
-    const response = await fetchFromAPIServer(
-      must(
-        this.#config.url[0],
-        'A ZERO_QUERY_URL must be configured for custom queries',
-      ),
-      this.#config.url,
-      this.#shard,
-      headerOptions,
-      undefined,
-      ['transform', request] satisfies TransformRequestMessage,
-    );
+    let response: Response | undefined;
+    try {
+      response = await fetchFromAPIServer(
+        must(
+          this.#config.url[0],
+          'A ZERO_QUERY_URL must be configured for custom queries',
+        ),
+        this.#config.url,
+        this.#shard,
+        headerOptions,
+        undefined,
+        ['transform', request] satisfies TransformRequestMessage,
+      );
+    } catch (e) {
+      return request.map(r => ({
+        error: 'zero',
+        details: e instanceof Error ? e.message : String(e),
+        id: r.id,
+        name: r.name,
+      }));
+    }
 
     if (!response.ok) {
-      return {
+      const details = await response.text();
+      return request.map(r => ({
         error: 'http',
         status: response.status,
-        details: await response.text(),
-      };
+        details,
+        id: r.id,
+        name: r.name,
+      }));
     }
 
     const body = await response.json();

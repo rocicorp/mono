@@ -1,5 +1,6 @@
 import * as v from '../../shared/src/valita.ts';
 import {connectedMessageSchema} from './connect.ts';
+import {transformErrorMessageSchema} from './custom-queries.ts';
 import {deleteClientsMessageSchema} from './delete-clients.ts';
 import {errorMessageSchema} from './error.ts';
 import {inspectDownMessageSchema} from './inspect-down.ts';
@@ -23,6 +24,7 @@ export const downstreamSchema = v.union(
   deleteClientsMessageSchema,
   pushResponseMessageSchema,
   inspectDownMessageSchema,
+  transformErrorMessageSchema,
 );
 
 export type Downstream = v.Infer<typeof downstreamSchema>;

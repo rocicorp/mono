@@ -89,6 +89,7 @@ import {
   type TTLClock,
 } from './ttl-clock.ts';
 import {wrapIterable} from '../../../../shared/src/iterables.ts';
+import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -978,7 +979,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       ([_, state]) => state.transformationHash !== undefined,
     );
 
-    const customQueries: CustomQueryRecord[] = [];
+    const customQueries: Map<string, CustomQueryRecord> = new Map();
     const otherQueries: (ClientQueryRecord | InternalQueryRecord)[] = [];
 
     for (const [, query] of gotQueries) {
@@ -992,22 +993,22 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       if (query.type === 'custom') {
-        customQueries.push(query);
+        customQueries.set(query.id, query);
       } else {
         otherQueries.push(query);
       }
     }
 
     const transformedQueries: TransformedAndHashed[] = [];
-    if (customQueries.length > 0 && !this.#customQueryTransformer) {
+    if (customQueries.size > 0 && !this.#customQueryTransformer) {
       lc.error?.(
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
     const [_, byOriginalHash] = this.#pipelines.addedQueries();
-    if (this.#customQueryTransformer && customQueries.length > 0) {
+    if (this.#customQueryTransformer && customQueries.size > 0) {
       const filteredCustomQueries = this.#filterCustomQueries(
-        customQueries,
+        customQueries.values(),
         byOriginalHash,
         undefined,
       );
@@ -1023,22 +1024,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           filteredCustomQueries,
         );
 
-      // TODO: collected errors need to make it downstream to the client.
-      if (Array.isArray(transformedCustomQueries)) {
-        for (const q of transformedCustomQueries) {
-          if ('error' in q) {
-            lc.error?.(`Error transforming custom query ${q.name}: ${q.error}`);
-            continue;
-          }
-          transformedQueries.push(q);
-        }
-      } else {
-        // If the result is not an array, it is an error.
-        lc.error?.(
-          'Error calling API server to transform custom queries',
-          transformedCustomQueries,
-        );
-      }
+      this.#processTransformedCustomQueries(
+        lc,
+        transformedCustomQueries,
+        (q: TransformedAndHashed) => transformedQueries.push(q),
+        customQueries,
+      );
     }
 
     for (const q of otherQueries) {
@@ -1094,6 +1085,52 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#hydrationTime.record(elapsed / 1000);
       this.#addQueryMaterializationServerMetric(transformationHash, elapsed);
       lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
+    }
+  }
+
+  #processTransformedCustomQueries(
+    lc: LogContext,
+    transformedCustomQueries: (TransformedAndHashed | ErroredQuery)[],
+    cb: (q: TransformedAndHashed) => void,
+    customQueryMap: Map<string, CustomQueryRecord>,
+  ) {
+    const errors: ErroredQuery[] = [];
+
+    for (const q of transformedCustomQueries) {
+      if ('error' in q) {
+        lc.error?.(`Error transforming custom query ${q.name}: ${q.error}`);
+        errors.push(q);
+        continue;
+      }
+      cb(q);
+    }
+
+    // todo: fan errors out to connected clients
+    // based on the client data from queries
+    this.#sendQueryTransformErrorToClients(customQueryMap, errors);
+  }
+
+  #sendQueryTransformErrorToClients(
+    customQueryMap: Map<string, CustomQueryRecord>,
+    errors: ErroredQuery[],
+  ) {
+    const errorGroups = new Map<string, ErroredQuery[]>();
+    for (const err of errors) {
+      const q = customQueryMap.get(err.id);
+      assert(q, 'got an error that does not map back to a custom query');
+      const clientIds = Object.keys(q.clientState);
+      for (const clientId of clientIds) {
+        const group = errorGroups.get(clientId) ?? [];
+        group.push(err);
+        errorGroups.set(clientId, group);
+      }
+    }
+
+    for (const [clientId, errors] of errorGroups) {
+      const client = this.#clients.get(clientId);
+      if (client) {
+        client.sendQueryTransformErrors(errors);
+      }
     }
   }
 
@@ -1216,28 +1253,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             filteredCustomQueries,
           );
 
-        // TODO: collected errors need to make it downstream to the client.
-        if (Array.isArray(transformedCustomQueries)) {
-          for (const q of transformedCustomQueries) {
-            if ('error' in q) {
-              lc.error?.(
-                `Error transforming custom query ${q.name}: ${q.error}`,
-              );
-              continue;
-            }
+        this.#processTransformedCustomQueries(
+          lc,
+          transformedCustomQueries,
+          (q: TransformedAndHashed) =>
             transformedQueries.push({
               id: q.id,
               origQuery: must(customQueries.get(q.id)),
               transformed: q,
-            });
-          }
-        } else {
-          // If the result is not an array, it is an error.
-          lc.error?.(
-            'Error calling API server to transform custom queries',
-            transformedCustomQueries,
-          );
-        }
+            }),
+          customQueries,
+        );
       }
 
       const serverQueries = transformedQueries.map(
