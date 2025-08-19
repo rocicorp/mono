@@ -23,11 +23,6 @@ export function configForVersion(version: number, url: string) {
         reporter: [['html'], ['clover', {file: 'coverage.xml'}]],
         include: ['src/**'],
       },
-      poolOptions: {
-        forks: {
-          isolate: false,
-        },
-      },
       testTimeout: 20000,
       hookTimeout: 20000,
     },
