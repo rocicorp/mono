@@ -419,8 +419,7 @@ describe('view-syncer/cvr', () => {
     );
   });
 
-  // Relies on an async homing signal (with no explicit flush, so allow retries)
-  test('load existing cvr', {retry: 3}, async () => {
+  test('load existing cvr', async () => {
     const initialState: DBState = {
       instances: [
         {
@@ -509,16 +508,19 @@ describe('view-syncer/cvr', () => {
       clientSchema: null,
     } satisfies CVRSnapshot);
 
-    await expectState(cvrDb, {
-      ...initialState,
-      instances: [
-        {
-          ...initialState.instances[0],
-          owner: 'my-task',
-          grantedAt: 1709251200000,
-        },
-      ],
-    });
+    // Relies on an async homing signal (with no explicit flush, so use waitFor)
+    await vi.waitFor(() =>
+      expectState(cvrDb, {
+        ...initialState,
+        instances: [
+          {
+            ...initialState.instances[0],
+            owner: 'my-task',
+            grantedAt: 1709251200000,
+          },
+        ],
+      }),
+    );
   });
 
   test('no update', async () => {
