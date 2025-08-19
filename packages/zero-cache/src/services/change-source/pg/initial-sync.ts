@@ -219,9 +219,13 @@ export async function initialSync(
       );
     } finally {
       copiers.setDone();
-      // Workaround a Node bug in Windows in which certain COPY streams result
-      // in hanging the connection, which causes this await to never resolve.
-      void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
+      if (platform() === 'win32') {
+        // Workaround a Node bug in Windows in which certain COPY streams result
+        // in hanging the connection, which causes this await to never resolve.
+        void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
+      } else {
+        await copyPool.end();
+      }
     }
   } catch (e) {
     // If initial-sync did not succeed, make a best effort to drop the
