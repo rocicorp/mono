@@ -60,20 +60,18 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-24-arm64-test # Larger runner
+    container:
+      image: mcr.microsoft.com/playwright:v1.55.0-noble
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 100
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
           cache: 'npm'
 
       - run: npm ci
-      - name: Install Playwright
-        run: npx playwright install --with-deps
       - name: Run tests
         run: npm run test
