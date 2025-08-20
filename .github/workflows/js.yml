@@ -76,4 +76,23 @@ jobs:
       - name: Install Playwright
         run: npx playwright install --with-deps
       - name: Run tests
-        run: npm run test
+        run: TEST_PG_MODE=nopg npm run test
+
+  test-pg:
+    name: Test PG
+    runs-on: ubuntu-24-arm64-test # Larger runner
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: rocicorp
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - run: npm ci
+      - name: Run tests
+        run: TEST_PG_MODE=pg npm run test
