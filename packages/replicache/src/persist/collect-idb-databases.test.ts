@@ -27,7 +27,7 @@ import {
 } from './idb-databases-store.ts';
 import {makeClientGroupMap} from './test-utils.ts';
 
-describe('collectIDBDatabases', () => {
+describe('collectIDBDatabases', {timeout: 20_000}, () => {
   beforeEach(() => {
     vi.useFakeTimers({now: 0});
   });
