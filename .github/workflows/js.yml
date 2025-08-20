@@ -76,9 +76,4 @@ jobs:
       - name: Install Playwright
         run: npx playwright install --with-deps
       - name: Run tests
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            npm run test -- --changed ${{ github.event.pull_request.base.sha }}
-          else
-            npm run test
-          fi
+        run: npm run test
