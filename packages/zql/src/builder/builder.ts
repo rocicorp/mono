@@ -97,7 +97,7 @@ export interface BuilderDelegate {
  *   }
  * }
  *
- * const input = buildPipeline(ast, myDelegate);
+ * const input = buildPipeline(ast, myDelegate, hash(ast));
  * const sink = new MySink(input);
  * ```
  */

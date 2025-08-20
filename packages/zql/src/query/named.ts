@@ -57,7 +57,7 @@ export type CustomQueryID = {
 };
 
 export type Validator<T extends ReadonlyArray<ReadonlyJSONValue>> = (
-  ...args: readonly unknown[]
+  args: readonly unknown[],
 ) => T | readonly [...T];
 
 /**
@@ -247,6 +247,7 @@ export function withValidation<
   | ValidatedSyncedQuery<TReturnQuery>
   | ValidatedSyncedQueryWithContext<TContext, TReturnQuery> {
   const {validator, takesContext} = fn;
+
   if (validator) {
     if (takesContext) {
       return ((context, ...args) =>
@@ -256,13 +257,13 @@ export function withValidation<
             ReadonlyArray<ReadonlyJSONValue>,
             TReturnQuery
           >
-        )(context, ...validator(...args))) as ValidatedSyncedQueryWithContext<
+        )(context, ...validator(args))) as ValidatedSyncedQueryWithContext<
         TContext,
         TReturnQuery
       >;
     }
     return ((...args) =>
-      fn(...validator(...args))) as ValidatedSyncedQuery<TReturnQuery>;
+      fn(...validator(args))) as ValidatedSyncedQuery<TReturnQuery>;
   }
 
   throw new Error(fn.name + ' does not have a validator defined');
