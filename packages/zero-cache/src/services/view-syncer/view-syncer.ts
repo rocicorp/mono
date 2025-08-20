@@ -151,7 +151,7 @@ export const TTL_CLOCK_INTERVAL = 60_000;
  */
 export const TTL_TIMER_HYSTERESIS = 50; // ms
 
-type PartialZeroConfig = Pick<ZeroConfig, 'query' | 'serverVersion'>;
+type PartialZeroConfig = Pick<ZeroConfig, 'getQueries' | 'serverVersion'>;
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
@@ -162,7 +162,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
   readonly #slowHydrateThreshold: number;
-  readonly #queryConfig: ZeroConfig['query'];
+  readonly #queryConfig: ZeroConfig['getQueries'];
 
   // The ViewSyncerService is only started in response to a connection,
   // so #lastConnectTime is always initialized to now(). This is necessary
@@ -262,7 +262,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
-    const {query: pullConfig} = config;
+    const {getQueries: pullConfig} = config;
     this.#config = config;
     this.id = clientGroupID;
     this.#shard = shard;

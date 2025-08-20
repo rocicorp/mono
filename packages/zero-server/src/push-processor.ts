@@ -11,7 +11,7 @@ import type {CustomMutatorDefs} from './custom.ts';
 import {
   type ExtractTransactionType,
   type Database,
-  mapMutationRequest,
+  handleMutationRequest,
   type TransactFn,
 } from '../../zero-server/src/process-mutations.ts';
 import {must} from '../../shared/src/must.ts';
@@ -58,14 +58,14 @@ export class PushProcessor<
     body?: ReadonlyJSONValue,
   ): Promise<PushResponse> {
     if (queryOrQueryString instanceof Request) {
-      return mapMutationRequest(
+      return handleMutationRequest(
         (transact, mutations) =>
           this.#processMutation(mutators, transact, mutations),
         queryOrQueryString,
         this.#logLevel,
       );
     }
-    return mapMutationRequest(
+    return handleMutationRequest(
       (transact, mutation) =>
         this.#processMutation(mutators, transact, mutation),
       queryOrQueryString,

@@ -75,7 +75,7 @@ export const ON_FAILURE = (e: unknown) => {
   throw e;
 };
 
-export const queryConfig: ZeroConfig['query'] = {
+export const queryConfig: ZeroConfig['getQueries'] = {
   url: ['http://my-pull-endpoint.dev/api/zero/pull'],
   forwardCookies: true,
 };
@@ -670,7 +670,7 @@ export async function setup(
   ).createClientGroupStorage(serviceID);
   const inspectMetricsDelegate = new InspectMetricsDelegate();
   const vs = new ViewSyncerService(
-    {query: queryConfig},
+    {getQueries: queryConfig},
     lc,
     SHARD,
     TASK_ID,
