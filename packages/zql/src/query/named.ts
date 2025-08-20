@@ -57,8 +57,8 @@ export type CustomQueryID = {
 };
 
 export type Validator<T extends ReadonlyArray<ReadonlyJSONValue>> = (
-  ...args: readonly unknown[]
-) => T | readonly [...T];
+  args: unknown,
+) => T;
 
 /**
  * Returns a set of query builders for the given schema.
@@ -256,13 +256,13 @@ export function withValidation<
             ReadonlyArray<ReadonlyJSONValue>,
             TReturnQuery
           >
-        )(context, ...validator(...args))) as ValidatedSyncedQueryWithContext<
+        )(context, ...validator(args))) as ValidatedSyncedQueryWithContext<
         TContext,
         TReturnQuery
       >;
     }
     return ((...args) =>
-      fn(...validator(...args))) as ValidatedSyncedQuery<TReturnQuery>;
+      fn(...validator(args))) as ValidatedSyncedQuery<TReturnQuery>;
   }
 
   throw new Error(fn.name + ' does not have a validator defined');

@@ -55,7 +55,7 @@ export type AnyQuery = Query<Schema, string, any>;
 
 const astSymbol = Symbol();
 
-export function ast(query: AnyQuery): AST {
+export function ast(query: Query<Schema, string, any>): AST {
   return (query as AbstractQuery<Schema, string>)[astSymbol];
 }
 
@@ -243,7 +243,7 @@ export abstract class AbstractQuery<
         },
         this.customQueryID,
         undefined,
-      ) as AnyQuery;
+      );
       if (cardinality === 'one') {
         q = q.one();
       }

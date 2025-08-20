@@ -2,11 +2,13 @@ import {
   escapeLike,
   type Query,
   type Row,
+  syncedQuery,
   syncedQueryWithContext,
 } from '@rocicorp/zero';
 import {builder, type Schema} from './schema.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 import type {AuthData, Role} from './auth.ts';
+import * as v from '../../../packages/shared/src/valita.ts';
 
 function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,25 +20,37 @@ function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
   ) as TQuery;
 }
 
+const listContextParams = v.object({
+  open: v.boolean().nullable(),
+  assignee: v.string().nullable(),
+  creator: v.string().nullable(),
+  labels: v.array(v.string()).nullable(),
+  textFilter: v.string().nullable(),
+  sortField: v.literalUnion('modified', 'created'),
+  sortDirection: v.literalUnion('asc', 'desc'),
+});
+
+export type ListContext = {
+  readonly href: string;
+  readonly title: string;
+  readonly params: v.Infer<typeof listContextParams>;
+};
+
+export const issueRowSort = v.object({
+  id: v.string(),
+  created: v.number(),
+  modified: v.number(),
+});
+
 export const queries = {
-  allLabels: syncedQueryWithContext(
-    'allLabels',
-    (_auth: AuthData | undefined) => builder.label,
-  ),
+  allLabels: syncedQuery('allLabels', v.tuple([]).parse, () => builder.label),
 
-  allIssues: syncedQueryWithContext(
-    'allIssues',
-    (_auth: AuthData | undefined) => builder.issue,
-  ),
-
-  allUsers: syncedQueryWithContext(
-    'allUsers',
-    (_auth: AuthData | undefined) => builder.user,
-  ),
+  allUsers: syncedQuery('allUsers', v.tuple([]).parse, () => builder.user),
 
   issuePreload: syncedQueryWithContext(
     'issuePreload',
-    (auth: AuthData | undefined, userID: string) =>
+    v.tuple([v.string()]).parse,
+    (auth: AuthData | undefined, userID) =>
       applyIssuePermissions(
         builder.issue
           .related('labels')
@@ -57,13 +71,15 @@ export const queries = {
 
   user: syncedQueryWithContext(
     'user',
-    (_auth: AuthData | undefined, userID: string) =>
+    v.tuple([v.string()]).parse,
+    (_auth: AuthData | undefined, userID) =>
       builder.user.where('id', userID).one(),
   ),
 
   userPref: syncedQueryWithContext(
     'userPref',
-    (auth: AuthData | undefined, key: string) =>
+    v.tuple([v.string()]).parse,
+    (auth: AuthData | undefined, key) =>
       builder.userPref
         .where('key', key)
         .where('userID', auth?.sub ?? '')
@@ -72,12 +88,12 @@ export const queries = {
 
   userPicker: syncedQueryWithContext(
     'userPicker',
-    (
-      _auth: AuthData | undefined,
-      disabled: boolean,
-      login: string | null,
-      filter: 'crew' | 'creators' | null,
-    ) => {
+    v.tuple([
+      v.boolean(),
+      v.string().nullable(),
+      v.literalUnion('crew', 'creators').nullable(),
+    ]).parse,
+    (_auth: AuthData | undefined, disabled, login, filter) => {
       let q = builder.user;
       if (disabled && login) {
         q = q.where('login', login);
@@ -98,12 +114,12 @@ export const queries = {
 
   issueDetail: syncedQueryWithContext(
     'issueDetail',
-    (
-      auth: AuthData | undefined,
-      idField: 'shortID' | 'id',
-      id: string | number,
-      userID: string,
-    ) =>
+    v.tuple([
+      v.literalUnion('shortID', 'id'),
+      v.union(v.string(), v.number()),
+      v.string(),
+    ]).parse,
+    (auth: AuthData | undefined, idField, id, userID) =>
       applyIssuePermissions(
         builder.issue
           .where(idField, id)
@@ -131,15 +147,12 @@ export const queries = {
 
   prevNext: syncedQueryWithContext(
     'prevNext',
-    (
-      auth: AuthData | undefined,
-      listContext: ListContext['params'] | null,
-      issue: Pick<
-        Row<Schema['tables']['issue']>,
-        'id' | 'created' | 'modified'
-      > | null,
-      dir: 'next' | 'prev',
-    ) =>
+    v.tuple([
+      listContextParams.nullable(),
+      issueRowSort.nullable(),
+      v.literalUnion('next', 'prev'),
+    ]).parse,
+    (auth: AuthData | undefined, listContext, issue, dir) =>
       applyIssuePermissions(
         buildListQuery(listContext, issue, dir).one(),
         auth?.role,
@@ -148,12 +161,8 @@ export const queries = {
 
   issueList: syncedQueryWithContext(
     'issueList',
-    (
-      auth: AuthData | undefined,
-      listContext: ListContext['params'],
-      userID: string,
-      limit: number,
-    ) =>
+    v.tuple([listContextParams, v.string(), v.number()]).parse,
+    (auth: AuthData | undefined, listContext, userID, limit) =>
       applyIssuePermissions(
         buildListQuery(listContext, null, 'next')
           .limit(limit)
@@ -163,27 +172,14 @@ export const queries = {
       ),
   ),
 
-  emojiChange: syncedQueryWithContext(
+  emojiChange: syncedQuery(
     'emojiChange',
-    (_auth: AuthData | undefined, subjectID: string) =>
+    v.tuple([v.string()]).parse,
+    subjectID =>
       builder.emoji
         .where('subjectID', subjectID ?? '')
         .related('creator', creator => creator.one()),
   ),
-};
-
-export type ListContext = {
-  readonly href: string;
-  readonly title: string;
-  readonly params: {
-    readonly open?: boolean | null;
-    readonly assignee?: string | null;
-    readonly creator?: string | null;
-    readonly labels?: string[] | null;
-    readonly textFilter?: string | null;
-    readonly sortField: 'modified' | 'created';
-    readonly sortDirection: 'asc' | 'desc';
-  };
 };
 
 function buildListQuery(

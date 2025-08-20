@@ -1,6 +1,10 @@
-import type {AnyQuery, ReadonlyJSONValue} from '@rocicorp/zero';
 import {queries} from '../shared/queries.ts';
 import type {AuthData} from '../shared/auth.ts';
+import {withContext} from '../../../packages/zql/src/query/named.ts';
+
+const queryMap = Object.entries(queries).map(([, query]) => [query]);
+
+queryMap[0][1];
 
 export function getQuery(
   context: AuthData | undefined,
