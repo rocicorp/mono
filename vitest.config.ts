@@ -10,27 +10,37 @@ function* getProjects(): Iterable<string> {
   function* walk(
     basePath: string,
     dirUrl: URL,
-    depthLeft: number,
+    depth: number,
   ): Generator<string> {
     const entries = readdirSync(dirUrl, {withFileTypes: true});
+
+    // Process files in this directory first
+    const fileNames = entries.filter(e => e.isFile()).map(e => e.name);
+    const configNames = fileNames.filter(name =>
+      /^vitest\.config.*\.ts$/.test(name),
+    );
+    const hasSuffixed = configNames.some(name =>
+      /^vitest\.config\.[^.]+\.ts$/.test(name),
+    );
+
+    for (const name of configNames) {
+      // Skip the root config file to avoid self-reference
+      if (basePath === '' && name === 'vitest.config.ts') continue;
+      // If any suffixed config exists in this dir, exclude the base config
+      if (name === 'vitest.config.ts' && hasSuffixed) continue;
+      yield `${basePath}${name}`;
+    }
+
+    // Recurse into subdirectories up to max depth, skipping node_modules
     for (const e of entries) {
-      if (e.isDirectory()) {
-        if (e.name === 'node_modules') continue;
-        if (depthLeft > 0) {
-          yield* walk(
-            `${basePath}${e.name}/`,
-            new URL(`${e.name}/`, dirUrl),
-            depthLeft - 1,
-          );
-        }
-      } else if (e.isFile()) {
-        if (/^vitest\.config.*\.ts$/.test(e.name)) {
-          const rel = `${basePath}${e.name}`;
-          // Avoid referencing this root config file itself
-          if (rel !== 'vitest.config.ts') {
-            yield rel;
-          }
-        }
+      if (!e.isDirectory()) continue;
+      if (e.name === 'node_modules') continue;
+      if (depth > 0) {
+        yield* walk(
+          `${basePath}${e.name}/`,
+          new URL(`${e.name}/`, dirUrl),
+          depth - 1,
+        );
       }
     }
   }
