@@ -824,6 +824,10 @@ test('dropDatabase', async () => {
   const createKVStore = (name: string) => new IDBStore(name);
   const store = new IDBDatabasesStore(createKVStore);
 
+  const initialDatabasesLength = Object.values(
+    await store.getDatabases(),
+  ).length;
+
   const db = {
     name: `foo`,
     replicacheName: `fooRep`,
@@ -833,10 +837,14 @@ test('dropDatabase', async () => {
 
   expect(await store.putDatabase(db)).to.have.property(db.name);
 
-  expect(Object.values(await store.getDatabases())).to.have.length(1);
+  expect(Object.values(await store.getDatabases())).to.have.length(
+    initialDatabasesLength + 1,
+  );
   await dropDatabase(db.name);
 
-  expect(Object.values(await store.getDatabases())).to.have.length(0);
+  expect(Object.values(await store.getDatabases())).to.have.length(
+    initialDatabasesLength,
+  );
 
   // deleting non-existent db fails silently.
   await dropDatabase('bonk');
