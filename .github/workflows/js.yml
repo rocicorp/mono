@@ -62,7 +62,7 @@ jobs:
 
   test:
     name: Test
-    depends-on: check-types
+    needs: check-types
     runs-on: ubuntu-24-arm64-test # Larger runner
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
