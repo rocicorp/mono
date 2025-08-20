@@ -2,7 +2,7 @@ import {SignJWT, type JWTPayload} from 'jose';
 import {describe, expect, test} from 'vitest';
 import {must} from '../../../shared/src/must.ts';
 import type {AuthConfig} from '../config/zero-config.ts';
-import {createJwkPair, verifyToken} from './jwt.ts';
+import {createJwkPair, tokenConfigOptions, verifyToken} from './jwt.ts';
 
 describe('symmetric key', () => {
   const key = 'ab'.repeat(16);
@@ -30,28 +30,21 @@ describe('jwk', async () => {
   commonTests({jwk: JSON.stringify(publicJwk)}, makeToken);
 });
 
-test('too many or too few options set', async () => {
-  await expect(verifyToken({}, '', {})).rejects.toThrowError('Exactly one of');
-  await expect(
-    verifyToken(
-      {
-        secret: 'abc',
-        jwk: 'def',
-      },
-      '',
-      {},
-    ),
-  ).rejects.toThrowError('Exactly one of');
-  await expect(
-    verifyToken(
-      {
-        secret: 'abc',
-        jwksUrl: 'def',
-      },
-      '',
-      {},
-    ),
-  ).rejects.toThrowError('Exactly one of');
+test('token config options', async () => {
+  await expect(tokenConfigOptions({})).toEqual([]);
+  await expect(tokenConfigOptions({secret: 'abc'})).toEqual(['secret']);
+  await expect(tokenConfigOptions({jwk: 'def'})).toEqual(['jwk']);
+  await expect(tokenConfigOptions({jwksUrl: 'ghi'})).toEqual(['jwksUrl']);
+  await expect(tokenConfigOptions({jwksUrl: 'jkl', secret: 'mno'})).toEqual([
+    'secret',
+    'jwksUrl',
+  ]);
+});
+
+test('no options set', async () => {
+  await expect(verifyToken({}, '', {})).rejects.toThrowError(
+    'verifyToken was called but no auth options',
+  );
 });
 
 function commonTests(

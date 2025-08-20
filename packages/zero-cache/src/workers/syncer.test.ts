@@ -28,7 +28,11 @@ vi.mock('../server/anonymous-otel-start.ts', () => ({
 const mockDB = (() => {}) as unknown as PostgresDB;
 
 import {Syncer} from './syncer.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import * as jwt from '../auth/jwt.ts';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../shared/src/logging-test-utils.ts';
 import {
   recordConnectionSuccess,
   recordConnectionAttempted,
@@ -45,6 +49,7 @@ import os from 'node:os';
 import fs from 'node:fs/promises';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {PostgresDB} from '../types/pg.ts';
+import {LogContext} from '@rocicorp/logger';
 
 const lc = createSilentLogContext();
 const tempDir = await fs.mkdtemp(
@@ -314,6 +319,242 @@ describe('connection telemetry', () => {
   });
 });
 
+describe('jwt auth validation', () => {
+  let syncer: Syncer;
+  let mutagens: MutagenService[];
+  let pushers: PusherService[];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mutagens = [];
+    pushers = [];
+    syncer = new Syncer(
+      lc,
+      {
+        auth: {
+          // Intentionally set multiple options to trigger the validation error
+          jwk: '{}',
+          secret: 'super-secret',
+        },
+      } as ZeroConfig,
+      id =>
+        ({
+          id,
+          keepalive: () => true,
+          stop() {
+            return Promise.resolve();
+          },
+          run() {
+            return Promise.resolve();
+          },
+        }) as ViewSyncer & ActivityBasedService,
+      id => {
+        const ret = new MutagenService(
+          lc,
+          {
+            appID: 'test-app',
+            shardNum: 0,
+          },
+          id,
+          {} as any,
+          {
+            replica: {
+              file: tempFile,
+            },
+            perUserMutationLimit: {},
+          } as ZeroConfig,
+        );
+        mutagens.push(ret);
+        return ret;
+      },
+      id => {
+        const ret = new PusherService(
+          mockDB,
+          {} as ZeroConfig,
+          {
+            url: ['http://example.com'],
+            forwardCookies: false,
+          },
+          lc,
+          id,
+        );
+        pushers.push(ret);
+        return ret;
+      },
+      {
+        onMessageType: () => {},
+        send: () => {},
+      } as any,
+    );
+  });
+
+  afterEach(async () => {
+    await syncer.stop();
+  });
+
+  function newConnection(clientID: number, params: any = {}) {
+    const ws = new MockWebSocket() as unknown as WebSocket;
+    receiver(
+      ws,
+      {
+        clientGroupID: '1',
+        clientID: `${clientID}`,
+        userID: 'anon',
+        wsID: '1',
+        protocolVersion: 21,
+        ...params,
+      },
+      {} as any,
+    );
+    return ws;
+  }
+
+  test('fails when too many JWT options are set', () => {
+    const ws = newConnection(1, {auth: 'dummy-token'});
+
+    expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordConnectionSuccess)).not.toHaveBeenCalled();
+
+    // Connection should have been closed by the server due to JWT config error
+    expect((ws as any).readyState).toBe(MockWebSocket.CLOSED);
+
+    // Error should be sent to the client
+    const messages = (ws as any).messages as string[];
+    expect(messages.length).toBeGreaterThan(0);
+    const first = JSON.parse(messages[0]);
+    expect(first[0]).toBe('error');
+    expect(first[1].kind).toBe('AuthInvalidated');
+    expect(first[1].message).toContain(
+      'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens',
+    );
+
+    // No services should be instantiated when auth validation fails early
+    expect(mutagens.length).toBe(0);
+    expect(pushers.length).toBe(0);
+  });
+});
+
+describe('jwt auth without options', () => {
+  let syncer: Syncer;
+  let logSink: TestLogSink;
+  let mutagens: MutagenService[];
+  let pushers: PusherService[];
+  let verifySpy: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    verifySpy = vi.spyOn(jwt, 'verifyToken');
+    mutagens = [];
+    pushers = [];
+    logSink = new TestLogSink();
+    const lc = new LogContext('debug', {}, logSink);
+    syncer = new Syncer(
+      lc,
+      {
+        // No auth options set; should not verify token
+        auth: {},
+      } as ZeroConfig,
+      id =>
+        ({
+          id,
+          keepalive: () => true,
+          stop() {
+            return Promise.resolve();
+          },
+          run() {
+            return Promise.resolve();
+          },
+        }) as ViewSyncer & ActivityBasedService,
+      id => {
+        const ret = new MutagenService(
+          lc,
+          {
+            appID: 'test-app',
+            shardNum: 0,
+          },
+          id,
+          {} as any,
+          {
+            replica: {
+              file: tempFile,
+            },
+            perUserMutationLimit: {},
+          } as ZeroConfig,
+        );
+        mutagens.push(ret);
+        return ret;
+      },
+      id => {
+        const ret = new PusherService(
+          mockDB,
+          {} as ZeroConfig,
+          {
+            url: ['http://example.com'],
+            forwardCookies: false,
+          },
+          lc,
+          id,
+        );
+        pushers.push(ret);
+        return ret;
+      },
+      {
+        onMessageType: () => {},
+        send: () => {},
+      } as any,
+    );
+  });
+
+  afterEach(async () => {
+    await syncer.stop();
+  });
+
+  function newConnection(clientID: number, params: any = {}) {
+    const ws = new MockWebSocket() as unknown as WebSocket;
+    receiver(
+      ws,
+      {
+        clientGroupID: '1',
+        clientID: `${clientID}`,
+        userID: 'anon',
+        wsID: '1',
+        protocolVersion: 21,
+        ...params,
+      },
+      {} as any,
+    );
+    return ws;
+  }
+
+  test('succeeds when no JWT options are set and skips verification', () => {
+    const ws = newConnection(1, {auth: 'dummy-token'});
+
+    expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(1);
+    expect(verifySpy).not.toHaveBeenCalled();
+
+    // Connection stays open and sends 'connected'
+    expect((ws as any).readyState).toBe(MockWebSocket.OPEN);
+    const messages = (ws as any).messages as string[];
+    expect(messages.length).toBeGreaterThan(0);
+    const first = JSON.parse(messages[0]);
+    expect(first[0]).toBe('connected');
+
+    // check that we logged a warning that the auth token must be manually verified by the user
+    expect(logSink.messages).toContainEqual([
+      'warn',
+      {},
+      [
+        'One of jwk, secret, or jwksUrl is not configured - the auth token must be manually verified by the user',
+      ],
+    ]);
+
+    // Services should be instantiated for successful connection
+    expect(mutagens.length).toBe(1);
+    expect(pushers.length).toBe(1);
+  });
+});
+
 afterAll(async () => {
   try {
     await fs.rm(tempDir, {recursive: true, force: true});
@@ -356,7 +597,11 @@ class MockWebSocket {
       listener({code: 1000, reason: 'Test close', wasClean: true});
     }
   }
-  send() {}
+  // recorded outbound messages (stringified JSON)
+  messages: string[] = [];
+  send(data: string) {
+    this.messages.push(data);
+  }
   on(event: string, fn: (event: any) => void) {
     this.addEventListener(event, fn);
   }
