@@ -85,10 +85,14 @@ import {
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import {newQuery, type AnyQuery} from '../../../zql/src/query/query-impl.ts';
 import {
+  type HumanReadable,
+  type MaterializeOptions,
   type PreloadOptions,
   type Query,
+  type QueryReturn,
+  type QueryTable,
   type RunOptions,
 } from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
@@ -151,6 +155,8 @@ import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
+import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
+import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -809,6 +815,42 @@ export class Zero<
     options?: PreloadOptions | undefined,
   ) {
     return query.delegate(this.#zeroContext).preload(options);
+  }
+
+  run<Q>(
+    query: Q,
+    runOptions?: RunOptions | undefined,
+  ): Promise<HumanReadable<QueryReturn<Q>>> {
+    return (query as AnyQuery)
+      .delegate(this.#zeroContext)
+      .run(runOptions) as Promise<HumanReadable<QueryReturn<Q>>>;
+  }
+
+  materialize<Q>(
+    query: Q,
+    options?: MaterializeOptions | undefined,
+  ): TypedView<HumanReadable<QueryReturn<Q>>>;
+  materialize<T, Q>(
+    query: Q,
+    factory: ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>,
+    options?: MaterializeOptions | undefined,
+  ): T;
+  materialize<T, Q>(
+    query: Q,
+    factoryOrOptions?:
+      | ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>
+      | MaterializeOptions
+      | undefined,
+    maybeOptions?: MaterializeOptions | undefined,
+  ) {
+    if (typeof factoryOrOptions === 'function') {
+      return (query as AnyQuery)
+        .delegate(this.#zeroContext)
+        .materialize(factoryOrOptions, maybeOptions?.ttl);
+    }
+    return (query as AnyQuery)
+      .delegate(this.#zeroContext)
+      .materialize(factoryOrOptions?.ttl);
   }
 
   /**

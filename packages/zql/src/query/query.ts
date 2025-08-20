@@ -34,6 +34,9 @@ type ArraySelectors<E extends TableSchema> = {
     : never;
 }[keyof E['columns']];
 
+export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
+export type QueryTable<Q> = Q extends Query<any, infer T, any> ? T : never;
+
 export type GetFilterType<
   TSchema extends TableSchema,
   TColumn extends keyof TSchema['columns'],
@@ -455,6 +458,8 @@ export type PreloadOptions = {
    */
   ttl?: TTL | undefined;
 };
+
+export type MaterializeOptions = PreloadOptions;
 
 /**
  * A helper type that tries to make the type more readable.
