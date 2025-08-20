@@ -34,7 +34,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 26 adds inspect/metrics and adds metrics to inspect/query (0.23)
 // -- version 27 adds inspect/version (0.23)
 // -- version 28 adds more inspect/metrics (0.23)
-export const PROTOCOL_VERSION = 28;
+// -- version 29 adds error responses for custom queries (0.23)
+export const PROTOCOL_VERSION = 29;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

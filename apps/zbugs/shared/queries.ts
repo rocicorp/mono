@@ -2,7 +2,7 @@ import {
   escapeLike,
   type Query,
   type Row,
-  queriesWithContext,
+  syncedQueryWithContext,
 } from '@rocicorp/zero';
 import {builder, type Schema} from './schema.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
@@ -18,124 +18,159 @@ function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
   ) as TQuery;
 }
 
-export const queries = queriesWithContext({
-  allLabels: (_auth: AuthData | undefined) => builder.label,
+export const queries = {
+  allLabels: syncedQueryWithContext(
+    'allLabels',
+    (_auth: AuthData | undefined) => builder.label,
+  ),
 
-  allUsers: (_auth: AuthData | undefined) => builder.user,
+  allIssues: syncedQueryWithContext(
+    'allIssues',
+    (_auth: AuthData | undefined) => builder.issue,
+  ),
 
-  issuePreload: (auth: AuthData | undefined, userID: string) =>
-    applyIssuePermissions(
-      builder.issue
-        .related('labels')
-        .related('viewState', q => q.where('userID', userID))
-        .related('creator')
-        .related('assignee')
-        .related('emoji', emoji => emoji.related('creator'))
-        .related('comments', comments =>
-          comments
-            .related('creator')
-            .related('emoji', emoji => emoji.related('creator'))
-            .limit(10)
-            .orderBy('created', 'desc'),
-        ),
-      auth?.role,
-    ),
+  allUsers: syncedQueryWithContext(
+    'allUsers',
+    (_auth: AuthData | undefined) => builder.user,
+  ),
 
-  user: (_auth: AuthData | undefined, userID: string) =>
-    builder.user.where('id', userID).one(),
+  issuePreload: syncedQueryWithContext(
+    'issuePreload',
+    (auth: AuthData | undefined, userID: string) =>
+      applyIssuePermissions(
+        builder.issue
+          .related('labels')
+          .related('viewState', q => q.where('userID', userID))
+          .related('creator')
+          .related('assignee')
+          .related('emoji', emoji => emoji.related('creator'))
+          .related('comments', comments =>
+            comments
+              .related('creator')
+              .related('emoji', emoji => emoji.related('creator'))
+              .limit(10)
+              .orderBy('created', 'desc'),
+          ),
+        auth?.role,
+      ),
+  ),
 
-  userPref: (auth: AuthData | undefined, key: string) =>
-    builder.userPref
-      .where('key', key)
-      .where('userID', auth?.sub ?? '')
-      .one(),
+  user: syncedQueryWithContext(
+    'user',
+    (_auth: AuthData | undefined, userID: string) =>
+      builder.user.where('id', userID).one(),
+  ),
 
-  userPicker: (
-    _auth: AuthData | undefined,
-    disabled: boolean,
-    login: string | null,
-    filter: 'crew' | 'creators' | null,
-  ) => {
-    let q = builder.user;
-    if (disabled && login) {
-      q = q.where('login', login);
-    } else if (filter) {
-      if (filter === 'crew') {
-        q = q.where(({cmp, not, and}) =>
-          and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
-        );
-      } else if (filter === 'creators') {
-        q = q.whereExists('createdIssues');
-      } else {
-        throw new Error(`Unknown filter: ${filter}`);
-      }
-    }
-    return q;
-  },
-
-  issueDetail: (
-    auth: AuthData | undefined,
-    idField: 'shortID' | 'id',
-    id: string | number,
-    userID: string,
-  ) =>
-    applyIssuePermissions(
-      builder.issue
-        .where(idField, id)
-        .related('emoji', emoji => emoji.related('creator'))
-        .related('creator')
-        .related('assignee')
-        .related('labels')
-        .related('notificationState', q => q.where('userID', userID))
-        .related('viewState', viewState =>
-          viewState.where('userID', userID).one(),
-        )
-        .related('comments', comments =>
-          comments
-            .related('creator')
-            .related('emoji', emoji => emoji.related('creator'))
-            // One more than we display so we can detect if there are more to load.
-            .limit(INITIAL_COMMENT_LIMIT + 1)
-            .orderBy('created', 'desc')
-            .orderBy('id', 'desc'),
-        )
+  userPref: syncedQueryWithContext(
+    'userPref',
+    (auth: AuthData | undefined, key: string) =>
+      builder.userPref
+        .where('key', key)
+        .where('userID', auth?.sub ?? '')
         .one(),
-      auth?.role,
-    ),
+  ),
 
-  prevNext: (
-    auth: AuthData | undefined,
-    listContext: ListContext['params'] | null,
-    issue: Pick<
-      Row<Schema['tables']['issue']>,
-      'id' | 'created' | 'modified'
-    > | null,
-    dir: 'next' | 'prev',
-  ) =>
-    applyIssuePermissions(
-      buildListQuery(listContext, issue, dir).one(),
-      auth?.role,
-    ),
+  userPicker: syncedQueryWithContext(
+    'userPicker',
+    (
+      _auth: AuthData | undefined,
+      disabled: boolean,
+      login: string | null,
+      filter: 'crew' | 'creators' | null,
+    ) => {
+      let q = builder.user;
+      if (disabled && login) {
+        q = q.where('login', login);
+      } else if (filter) {
+        if (filter === 'crew') {
+          q = q.where(({cmp, not, and}) =>
+            and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
+          );
+        } else if (filter === 'creators') {
+          q = q.whereExists('createdIssues');
+        } else {
+          throw new Error(`Unknown filter: ${filter}`);
+        }
+      }
+      return q;
+    },
+  ),
 
-  issueList: (
-    auth: AuthData | undefined,
-    listContext: ListContext['params'],
-    userID: string,
-    limit: number,
-  ) =>
-    applyIssuePermissions(
-      buildListQuery(listContext, null, 'next')
-        .limit(limit)
-        .related('viewState', q => q.where('userID', userID).one())
-        .related('labels'),
-      auth?.role,
-    ),
+  issueDetail: syncedQueryWithContext(
+    'issueDetail',
+    (
+      auth: AuthData | undefined,
+      idField: 'shortID' | 'id',
+      id: string | number,
+      userID: string,
+    ) =>
+      applyIssuePermissions(
+        builder.issue
+          .where(idField, id)
+          .related('emoji', emoji => emoji.related('creator'))
+          .related('creator')
+          .related('assignee')
+          .related('labels')
+          .related('notificationState', q => q.where('userID', userID))
+          .related('viewState', viewState =>
+            viewState.where('userID', userID).one(),
+          )
+          .related('comments', comments =>
+            comments
+              .related('creator')
+              .related('emoji', emoji => emoji.related('creator'))
+              // One more than we display so we can detect if there are more to load.
+              .limit(INITIAL_COMMENT_LIMIT + 1)
+              .orderBy('created', 'desc')
+              .orderBy('id', 'desc'),
+          )
+          .one(),
+        auth?.role,
+      ),
+  ),
 
-  emojiChange: (_auth: AuthData | undefined, subjectID: string) =>
-    builder.emoji
-      .where('subjectID', subjectID ?? '')
-      .related('creator', creator => creator.one()),
-});
+  prevNext: syncedQueryWithContext(
+    'prevNext',
+    (
+      auth: AuthData | undefined,
+      listContext: ListContext['params'] | null,
+      issue: Pick<
+        Row<Schema['tables']['issue']>,
+        'id' | 'created' | 'modified'
+      > | null,
+      dir: 'next' | 'prev',
+    ) =>
+      applyIssuePermissions(
+        buildListQuery(listContext, issue, dir).one(),
+        auth?.role,
+      ),
+  ),
+
+  issueList: syncedQueryWithContext(
+    'issueList',
+    (
+      auth: AuthData | undefined,
+      listContext: ListContext['params'],
+      userID: string,
+      limit: number,
+    ) =>
+      applyIssuePermissions(
+        buildListQuery(listContext, null, 'next')
+          .limit(limit)
+          .related('viewState', q => q.where('userID', userID).one())
+          .related('labels'),
+        auth?.role,
+      ),
+  ),
+
+  emojiChange: syncedQueryWithContext(
+    'emojiChange',
+    (_auth: AuthData | undefined, subjectID: string) =>
+      builder.emoji
+        .where('subjectID', subjectID ?? '')
+        .related('creator', creator => creator.one()),
+  ),
+};
 
 export type ListContext = {
   readonly href: string;

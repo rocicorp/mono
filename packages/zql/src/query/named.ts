@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {mapEntries} from '../../../shared/src/objects.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
 import {newQuery} from './query-impl.ts';
@@ -10,22 +9,56 @@ export type NamedQuery<
   TArg extends
     ReadonlyArray<ReadonlyJSONValue> = ReadonlyArray<ReadonlyJSONValue>,
   TReturnQuery extends Query<any, any, any> = Query<any, any, any>,
-> = (...args: TArg) => TReturnQuery;
+> = {
+  (...args: TArg): TReturnQuery;
+};
 
-export type ContextualizedNamedQuery<
+export type NamedQueryWithContext<
   TContext,
   TArg extends
     ReadonlyArray<ReadonlyJSONValue> = ReadonlyArray<ReadonlyJSONValue>,
   TReturnQuery extends Query<any, any, any> = Query<any, any, any>,
 > = {
   (context: TContext, ...args: TArg): TReturnQuery;
-  contextualized?: boolean;
 };
+
+export type SyncedQuery<
+  TArg extends
+    ReadonlyArray<ReadonlyJSONValue> = ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any> = Query<any, any, any>,
+> = NamedQuery<TArg, TReturnQuery> & {
+  queryName: string;
+  takesContext: boolean;
+  validator?: Validator<TArg> | undefined;
+};
+
+export type SyncedQueryWithContext<
+  TContext,
+  TArg extends
+    ReadonlyArray<ReadonlyJSONValue> = ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any> = Query<any, any, any>,
+> = NamedQueryWithContext<TContext, TArg, TReturnQuery> & {
+  queryName: string;
+  takesContext: true;
+  validator?: Validator<TArg> | undefined;
+};
+
+export type ValidatedSyncedQuery<TReturnQuery extends Query<any, any, any>> = (
+  ...args: unknown[]
+) => TReturnQuery;
+export type ValidatedSyncedQueryWithContext<
+  TContext,
+  TReturnQuery extends Query<any, any, any>,
+> = (context: TContext, ...args: unknown[]) => TReturnQuery;
 
 export type CustomQueryID = {
   name: string;
   args: ReadonlyArray<ReadonlyJSONValue>;
 };
+
+export type Validator<T extends ReadonlyArray<ReadonlyJSONValue>> = (
+  ...args: readonly unknown[]
+) => T | readonly [...T];
 
 /**
  * Returns a set of query builders for the given schema.
@@ -43,76 +76,196 @@ export function createBuilder<S extends Schema>(s: S): SchemaQuery<S> {
  * The main use case here is to apply permissions to the requested query or
  * to expand the scope of the query to include additional data. E.g., for preloading.
  */
-function namedQuery(
+export function syncedQuery<
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any>,
+>(
   name: string,
-  fn: NamedQuery<ReadonlyArray<ReadonlyJSONValue>, Query<any, any, any>>,
-): NamedQuery<ReadonlyArray<ReadonlyJSONValue>, Query<any, any, any>> {
-  return ((...args: ReadonlyArray<ReadonlyJSONValue>) =>
-    fn(...args).nameAndArgs(name, args)) as NamedQuery<
-    ReadonlyArray<ReadonlyJSONValue>,
-    Query<any, any, any>
-  >;
+  validator: Validator<TArg>,
+  fn: NamedQuery<TArg, TReturnQuery>,
+): SyncedQuery<TArg, TReturnQuery> & {validator: Validator<TArg>};
+export function syncedQuery<
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any>,
+>(
+  name: string,
+  fn: NamedQuery<TArg, TReturnQuery>,
+): SyncedQuery<TArg, TReturnQuery>;
+export function syncedQuery<
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any>,
+>(
+  name: string,
+  validatorOrQueryFn: Validator<TArg> | NamedQuery<TArg, TReturnQuery>,
+  maybeQueryFn?: NamedQuery<TArg, TReturnQuery> | undefined,
+): SyncedQuery<TArg, TReturnQuery> {
+  let fn: NamedQuery<TArg, TReturnQuery>;
+  let validator: Validator<TArg> | undefined;
+  if (maybeQueryFn === undefined) {
+    fn = validatorOrQueryFn as NamedQuery<TArg, TReturnQuery>;
+  } else {
+    fn = maybeQueryFn;
+    validator = validatorOrQueryFn as Validator<TArg>;
+  }
+  const ret = ((...args: TArg) =>
+    fn(...args).nameAndArgs(name, args)) as SyncedQuery<TArg, TReturnQuery>;
+  ret.takesContext = false;
+  ret.validator = validator;
+  ret.queryName = name;
+  return ret;
 }
 
-function contextualizedNamedQuery<TContext>(
-  name: string,
-  fn: ContextualizedNamedQuery<
-    TContext,
-    ReadonlyArray<ReadonlyJSONValue>,
-    Query<any, any, any>
-  >,
-): ContextualizedNamedQuery<
+export function syncedQueryWithContext<
   TContext,
-  ReadonlyArray<ReadonlyJSONValue>,
-  Query<any, any, any>
-> {
-  const ret = ((context: TContext, ...args: ReadonlyArray<ReadonlyJSONValue>) =>
-    fn(context, ...args).nameAndArgs(name, args)) as ContextualizedNamedQuery<
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any>,
+>(
+  name: string,
+  validator: Validator<TArg>,
+  fn: NamedQueryWithContext<TContext, TArg, TReturnQuery>,
+): SyncedQueryWithContext<TContext, TArg, TReturnQuery> & {
+  validator: Validator<TArg>;
+};
+export function syncedQueryWithContext<
+  TContext,
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any>,
+>(
+  name: string,
+  fn: NamedQueryWithContext<TContext, TArg, TReturnQuery>,
+): SyncedQueryWithContext<TContext, TArg, TReturnQuery>;
+export function syncedQueryWithContext<
+  TContext,
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any>,
+>(
+  name: string,
+  queryOrValidator:
+    | NamedQueryWithContext<TContext, TArg, TReturnQuery>
+    | Validator<TArg>,
+  query?: NamedQueryWithContext<TContext, TArg, TReturnQuery> | undefined,
+): SyncedQueryWithContext<TContext, TArg, TReturnQuery> {
+  let fn: NamedQueryWithContext<TContext, TArg, TReturnQuery>;
+  let validator: Validator<TArg> | undefined;
+  if (query === undefined) {
+    fn = queryOrValidator as NamedQueryWithContext<
+      TContext,
+      TArg,
+      TReturnQuery
+    >;
+  } else {
+    fn = query;
+    validator = queryOrValidator as Validator<TArg>;
+  }
+
+  return contextualizedSyncedQuery(name, validator, fn);
+}
+
+function contextualizedSyncedQuery<
+  TContext,
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any>,
+>(
+  name: string,
+  validator: Validator<TArg> | undefined,
+  fn: NamedQueryWithContext<TContext, TArg, TReturnQuery>,
+): SyncedQueryWithContext<TContext, TArg, TReturnQuery> {
+  const ret = ((context: TContext, ...args: TArg) =>
+    fn(context, ...args).nameAndArgs(name, args)) as SyncedQueryWithContext<
     TContext,
-    ReadonlyArray<ReadonlyJSONValue>,
-    Query<any, any, any>
+    TArg,
+    TReturnQuery
   >;
-  ret.contextualized = true;
+
+  ret.takesContext = true;
+  if (validator) {
+    ret.validator = validator;
+  }
+  ret.queryName = name;
 
   return ret;
 }
 
-export function queries<
-  TQueries extends {
-    [K in keyof TQueries]: TQueries[K] extends NamedQuery<
-      infer TArgs,
-      Query<any, any, any>
-    >
-      ? TArgs extends ReadonlyArray<ReadonlyJSONValue>
-        ? NamedQuery<TArgs, Query<any, any, any>>
-        : never
-      : never;
-  },
->(queries: TQueries): TQueries {
-  return mapEntries(queries, (name, query) => [
-    name,
-    namedQuery(name, query as any),
-  ]) as TQueries;
+export function withContext<
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any>,
+  TContext,
+>(
+  fn: SyncedQueryWithContext<TContext, TArg, TReturnQuery>,
+): SyncedQueryWithContext<TContext, TArg, TReturnQuery>;
+export function withContext<
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any>,
+>(
+  fn: SyncedQuery<TArg, TReturnQuery>,
+): SyncedQueryWithContext<any, TArg, TReturnQuery>;
+export function withContext<
+  TArg extends ReadonlyArray<ReadonlyJSONValue>,
+  TReturnQuery extends Query<any, any, any>,
+  TContext,
+>(
+  fn:
+    | SyncedQuery<TArg, TReturnQuery>
+    | SyncedQueryWithContext<TContext, TArg, TReturnQuery>,
+): SyncedQueryWithContext<TContext, TArg, TReturnQuery> {
+  if (fn.takesContext) {
+    return fn as SyncedQueryWithContext<TContext, TArg, TReturnQuery>;
+  }
+
+  const contextualized = ((_context: TContext, ...args: TArg) =>
+    fn(...args).nameAndArgs(fn.queryName, args)) as SyncedQueryWithContext<
+    TContext,
+    TArg,
+    TReturnQuery
+  >;
+  contextualized.takesContext = true;
+
+  return contextualized;
 }
 
-export function queriesWithContext<
+export function withValidation<TReturnQuery extends Query<any, any, any>>(
+  fn: SyncedQuery<any, TReturnQuery>,
+): ValidatedSyncedQuery<TReturnQuery>;
+export function withValidation<
+  TReturnQuery extends Query<any, any, any>,
   TContext,
-  TQueries extends {
-    [K in keyof TQueries]: TQueries[K] extends ContextualizedNamedQuery<
-      TContext,
-      infer TArgs,
-      Query<any, any, any>
-    >
-      ? TArgs extends ReadonlyArray<ReadonlyJSONValue>
-        ? ContextualizedNamedQuery<TContext, TArgs, Query<any, any, any>>
-        : never
-      : never;
-  },
->(queries: TQueries): TQueries {
-  return mapEntries(queries, (name, query) => [
-    name,
-    contextualizedNamedQuery(name, query as any),
-  ]) as TQueries;
+>(
+  fn: SyncedQueryWithContext<TContext, any, TReturnQuery>,
+): ValidatedSyncedQueryWithContext<TContext, TReturnQuery>;
+export function withValidation<
+  TReturnQuery extends Query<any, any, any>,
+  TContext = unknown,
+>(
+  fn:
+    | SyncedQuery<ReadonlyArray<ReadonlyJSONValue>, TReturnQuery>
+    | SyncedQueryWithContext<
+        TContext,
+        ReadonlyArray<ReadonlyJSONValue>,
+        TReturnQuery
+      >,
+):
+  | ValidatedSyncedQuery<TReturnQuery>
+  | ValidatedSyncedQueryWithContext<TContext, TReturnQuery> {
+  const {validator, takesContext} = fn;
+  if (validator) {
+    if (takesContext) {
+      return ((context, ...args) =>
+        (
+          fn as SyncedQueryWithContext<
+            TContext,
+            ReadonlyArray<ReadonlyJSONValue>,
+            TReturnQuery
+          >
+        )(context, ...validator(...args))) as ValidatedSyncedQueryWithContext<
+        TContext,
+        TReturnQuery
+      >;
+    }
+    return ((...args) =>
+      fn(...validator(...args))) as ValidatedSyncedQuery<TReturnQuery>;
+  }
+
+  throw new Error(fn.name + ' does not have a validator defined');
 }
 
 /**
