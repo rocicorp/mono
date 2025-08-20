@@ -4,6 +4,9 @@ CREATE OR REPLACE FUNCTION update_modified_column()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.modified = (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000);
+    UPDATE "issueLabel"
+    SET modified = (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)
+    WHERE "issueID" = NEW.id;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -17,6 +20,9 @@ CREATE OR REPLACE FUNCTION issue_set_created_on_insert()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.created = (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000);
+    UPDATE "issueLabel"
+    SET created = (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)
+    WHERE "issueID" = NEW.id;
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -25,7 +31,6 @@ CREATE TRIGGER issue_set_created_on_insert_trigger
 BEFORE INSERT ON issue
 FOR EACH ROW
 EXECUTE FUNCTION issue_set_created_on_insert();
-
 
 CREATE OR REPLACE FUNCTION update_issue_modified_time()
 RETURNS TRIGGER AS $$
@@ -49,6 +54,28 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION "issueLabel_set_created_modified_on_insert"()
+RETURNS TRIGGER AS $$
+BEGIN
+    SELECT
+        "modified",
+        "created"
+    INTO
+        NEW."modified",
+        NEW."created"
+    FROM
+        issue
+    WHERE
+        id = NEW."issueID";
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER "issueLabel_set_created_modified_on_insert_trigger"
+BEFORE INSERT ON "issueLabel"
+FOR EACH ROW
+EXECUTE FUNCTION "issueLabel_set_created_modified_on_insert"();
 
 CREATE TRIGGER comment_set_created_on_insert_trigger
 BEFORE INSERT ON comment
@@ -169,11 +196,18 @@ $$ LANGUAGE plpgsql;
 -- place to manage indices and it saves us a step in setting up our demo apps.
 CREATE INDEX issuelabel_issueid_idx ON "issueLabel" ("issueID");
 
+CREATE INDEX "issueLabel_labelID_modified_idx" ON "issueLabel" ("labelID", modified);
+
 CREATE INDEX issue_modified_idx ON issue (modified);
 
 CREATE INDEX issue_created_idx ON issue (created);
 
 CREATE INDEX issue_open_modified_idx ON issue (open, modified);
+
+CREATE INDEX "issue_assigneeID_modified_idx" ON issue ("assigneeID", modified);
+
+CREATE INDEX "issue_creatorID_modified_idx" ON issue ("creatorID", modified);
+
 
 CREATE INDEX comment_issueid_idx ON "comment" ("issueID");
 
