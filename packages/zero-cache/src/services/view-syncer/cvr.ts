@@ -408,17 +408,21 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       if (inactivatedAt === undefined) {
         delete query.clientState[clientID];
       } else {
-        const clientState = must(query.clientState[clientID]);
-        assert(
-          clientState.inactivatedAt === undefined,
-          `Query ${id} is already inactivated`,
-        );
-        ({ttl} = clientState);
-        query.clientState[clientID] = {
-          inactivatedAt,
-          ttl,
-          version: newVersion,
-        };
+        // client state can be missing if the query never transformed so we never
+        // recorded it.
+        const clientState = query.clientState[clientID];
+        if (clientState !== undefined) {
+          assert(
+            clientState.inactivatedAt === undefined,
+            `Query ${id} is already inactivated`,
+          );
+          ({ttl} = clientState);
+          query.clientState[clientID] = {
+            inactivatedAt,
+            ttl,
+            version: newVersion,
+          };
+        }
       }
 
       this._cvrStore.putQuery(query);
@@ -550,7 +554,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   trackQueries(
     lc: LogContext,
     executed: {id: string; transformationHash: string}[],
-    removed: {id: string; transformationHash: string}[],
+    removed: {id: string; transformationHash: string | undefined}[],
   ): {newVersion: CVRVersion; queryPatches: PatchToVersion[]} {
     assert(this.#existingRows === undefined, `trackQueries already called`);
 
