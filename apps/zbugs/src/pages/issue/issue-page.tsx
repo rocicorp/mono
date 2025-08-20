@@ -979,13 +979,9 @@ function useEmojiChangeListener(
   issue: Issue | undefined,
   cb: (added: readonly Emoji[], removed: readonly Emoji[]) => void,
 ) {
-  const login = useLogin();
   const enabled = issue !== undefined;
   const issueID = issue?.id;
-  const [emojis, result] = useQuery(
-    emojiChange(login.loginState?.decoded, issueID ?? ''),
-    {enabled},
-  );
+  const [emojis, result] = useQuery(emojiChange(issueID ?? ''), {enabled});
 
   const lastEmojis = useRef<Map<string, Emoji> | undefined>();
 
