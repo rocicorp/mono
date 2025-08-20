@@ -1141,6 +1141,16 @@ describe('view-syncer/service', () => {
           [
             "pokePart",
             {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "del",
+                },
+              ],
               "lastMutationIDChanges": {
                 "foo": 42,
               },
@@ -1206,6 +1216,16 @@ describe('view-syncer/service', () => {
           [
             "pokePart",
             {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "del",
+                },
+              ],
               "lastMutationIDChanges": {
                 "foo": 42,
               },
@@ -1278,6 +1298,16 @@ describe('view-syncer/service', () => {
           [
             "pokePart",
             {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "del",
+                },
+              ],
               "lastMutationIDChanges": {
                 "foo": 42,
               },
@@ -1347,6 +1377,10 @@ describe('view-syncer/service', () => {
                 {
                   "hash": "custom-2",
                   "op": "put",
+                },
+                {
+                  "hash": "custom-1",
+                  "op": "del",
                 },
               ],
               "lastMutationIDChanges": {

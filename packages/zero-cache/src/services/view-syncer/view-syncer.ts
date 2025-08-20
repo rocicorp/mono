@@ -1012,6 +1012,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         byOriginalHash,
         undefined,
       );
+
       const transformedCustomQueries =
         await this.#customQueryTransformer.transform(
           {
@@ -1105,9 +1106,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       cb(q);
     }
 
-    // todo: fan errors out to connected clients
-    // based on the client data from queries
     this.#sendQueryTransformErrorToClients(customQueryMap, errors);
+    return errors;
   }
 
   #sendQueryTransformErrorToClients(
@@ -1224,6 +1224,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
       }
 
+      let erroredQueries: ErroredQuery[] | undefined;
       if (this.#customQueryTransformer && customQueries.size > 0) {
         const filteredCustomQueries = this.#filterCustomQueries(
           customQueries.values(),
@@ -1253,7 +1254,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             filteredCustomQueries,
           );
 
-        this.#processTransformedCustomQueries(
+        erroredQueries = this.#processTransformedCustomQueries(
           lc,
           transformedCustomQueries,
           (q: TransformedAndHashed) =>
@@ -1286,7 +1287,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const addQueries = serverQueries.filter(
         q => !q.remove && !hydratedQueries.has(q.transformationHash),
       );
-      const removeQueries = serverQueries.filter(q => q.remove);
+      const removeQueries: {
+        id: string;
+        transformationHash: string | undefined;
+      }[] = serverQueries.filter(q => q.remove);
       const desiredQueries = new Set(
         serverQueries.filter(q => !q.remove).map(q => q.transformationHash),
       );
@@ -1302,6 +1306,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           'transformed from',
           orig.type === 'custom' ? orig.name : orig.ast,
         );
+      }
+
+      // These are queries we need to remove from `desired`, not `got`, because they never transformed.
+      if (erroredQueries) {
+        for (const q of erroredQueries) {
+          removeQueries.push({
+            id: q.id,
+            transformationHash: undefined,
+          });
+        }
       }
 
       if (
@@ -1363,7 +1377,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     lc: LogContext,
     cvr: CVRSnapshot,
     addQueries: {id: string; ast: AST; transformationHash: string}[],
-    removeQueries: {id: string; transformationHash: string}[],
+    removeQueries: {id: string; transformationHash: string | undefined}[],
     unhydrateQueries: string[],
     hashToIDs: Map<string, string[]>,
   ): Promise<void> {
@@ -1407,7 +1421,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Removing queries is easy. The pipelines are dropped, and the CVR
       // updater handles the updates and pokes.
       for (const q of removeQueries) {
-        this.#pipelines.removeQuery(q.transformationHash);
+        if (q.transformationHash) {
+          this.#pipelines.removeQuery(q.transformationHash);
+        }
+
         // Remove per-query server metrics when query is deleted
         this.#inspectMetricsDelegate.deleteMetricsForQuery(q.id);
       }
