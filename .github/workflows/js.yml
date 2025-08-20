@@ -23,7 +23,7 @@ jobs:
         with:
           node-version: 22.x
           cache: 'npm'
-          cache-dependency-path: **/package-lock.json
+          cache-dependency-path: package-lock.json
       - run: npm ci --prefer-offline --no-audit --progress=false
       - run: npm run check-format
 
@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: 22.x
           cache: 'npm'
-          cache-dependency-path: **/package-lock.json
+          cache-dependency-path: package-lock.json
       - run: npm ci --prefer-offline --no-audit --progress=false
       - run: npm run lint
 
@@ -55,7 +55,7 @@ jobs:
         with:
           node-version: 22.x
           cache: 'npm'
-          cache-dependency-path: **/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - run: npm ci --prefer-offline --no-audit --progress=false
       - run: npm run check-types
@@ -75,8 +75,7 @@ jobs:
         with:
           node-version: 22.x
           cache: 'npm'
-          cache-dependency-path: **/package-lock.json
-
+          cache-dependency-path: package-lock.json
 
       - run: npm ci --prefer-offline --no-audit --progress=false
       - name: Install Playwright
