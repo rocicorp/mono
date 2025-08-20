@@ -91,7 +91,7 @@ export class CustomQueryTransformer {
       response = await fetchFromAPIServer(
         must(
           this.#config.url[0],
-          'A ZERO_QUERY_URL must be configured for custom queries',
+          'A ZERO_GET_QUERIES_URL must be configured for custom queries',
         ),
         this.#config.url,
         this.#shard,

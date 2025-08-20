@@ -27,7 +27,7 @@ const userQueryMutateParamsSchema = v.object({
    * This URL must match one of the URLs set in the zero config.
    *
    * E.g., Given the following environment variable:
-   * ZERO_QUERY_URL=[https://*.example.com/query]
+   * ZERO_GET_QUERIES_URL=[https://*.example.com/query]
    *
    * Then this URL could be:
    * https://myapp.example.com/query
