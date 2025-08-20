@@ -777,7 +777,7 @@ export class QueryImpl<
     const t0 = performance.now();
 
     const removeAddedQuery = this.customQueryID
-      ? delegate.addCustomQuery(this.customQueryID, ttl, gotCallback)
+      ? delegate.addCustomQuery(ast, this.customQueryID, ttl, gotCallback)
       : delegate.addServerQuery(ast, ttl, gotCallback);
 
     const input = buildPipeline(ast, delegate, queryID);
@@ -839,20 +839,25 @@ export class QueryImpl<
       'preload requires a query delegate to be set',
     );
     const ttl = options?.ttl ?? DEFAULT_PRELOAD_TTL_MS;
+    const ast = this._completeAst();
     const {resolve, promise: complete} = resolver<void>();
     if (this.customQueryID) {
-      const cleanup = delegate.addCustomQuery(this.customQueryID, ttl, got => {
-        if (got) {
-          resolve();
-        }
-      });
+      const cleanup = delegate.addCustomQuery(
+        ast,
+        this.customQueryID,
+        ttl,
+        got => {
+          if (got) {
+            resolve();
+          }
+        },
+      );
       return {
         cleanup,
         complete,
       };
     }
 
-    const ast = this._completeAst();
     const cleanup = delegate.addServerQuery(ast, ttl, got => {
       if (got) {
         resolve();

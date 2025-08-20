@@ -579,8 +579,8 @@ export class Zero<
       this.#ivmMain,
       (ast, ttl, gotCallback) =>
         this.#queryManager.addLegacy(ast, ttl, gotCallback),
-      (customQueryID, ttl, gotCallback) =>
-        this.#queryManager.addCustom(customQueryID, ttl, gotCallback),
+      (ast, customQueryID, ttl, gotCallback) =>
+        this.#queryManager.addCustom(ast, customQueryID, ttl, gotCallback),
       (ast, ttl) => this.#queryManager.updateLegacy(ast, ttl),
       (customQueryID, ttl) =>
         this.#queryManager.updateCustom(customQueryID, ttl),
