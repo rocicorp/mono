@@ -61,7 +61,7 @@ jobs:
     name: Test
     runs-on: ubuntu-24-arm64-test # Larger runner
     container:
-      image: mcr.microsoft.com/playwright:v1.53.2-noble
+      image: mcr.microsoft.com/playwright:v1.53.2-noble-arm64,
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
