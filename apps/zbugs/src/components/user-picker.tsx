@@ -7,7 +7,6 @@ import avatarIcon from '../assets/icons/avatar-default.svg';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
 import {Combobox} from './combobox.tsx';
 import {queries} from '../../shared/queries.ts';
-import {useLogin} from '../hooks/use-login.tsx';
 
 type Props = {
   onSelect?: ((user: User | undefined) => void) | undefined;
@@ -30,14 +29,8 @@ export function UserPicker({
   allowNone = true,
   filter = undefined,
 }: Props) {
-  const login = useLogin();
   const [unsortedUsers] = useQuery(
-    queries.userPicker(
-      login.loginState?.decoded,
-      !!disabled,
-      selected?.login ?? null,
-      filter ?? null,
-    ),
+    queries.userPicker(!!disabled, selected?.login ?? null, filter ?? null),
   );
   // TODO: Support case-insensitive sorting in ZQL.
   const users = useMemo(
