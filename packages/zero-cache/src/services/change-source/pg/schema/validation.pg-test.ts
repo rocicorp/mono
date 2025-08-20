@@ -49,6 +49,24 @@ describe('change-source/pg', () => {
         CREATE TABLE issues ("issueID" INTEGER PRIMARY KEY, "column/with/slashes" INTEGER);
       `,
     },
+    {
+      error:
+        'UnsupportedTableSchemaError: Table "issues" is missing its REPLICA IDENTITY INDEX',
+      setupUpstreamQuery: `
+        CREATE TABLE issues ("issueID" INTEGER NOT NULL, "foo" INTEGER);
+        CREATE UNIQUE INDEX issues_idx ON issues ("issueID");
+        ALTER TABLE issues REPLICA IDENTITY USING INDEX issues_idx;
+        DROP INDEX issues_idx;
+      `,
+    },
+    {
+      error:
+        'UnsupportedTableSchemaError: Table "issues" with REPLICA IDENTITY NOTHING cannot be replicated',
+      setupUpstreamQuery: `
+        CREATE TABLE issues ("issueID" INTEGER NOT NULL, "foo" INTEGER);
+        ALTER TABLE issues REPLICA IDENTITY NOTHING;
+      `,
+    },
   ];
 
   for (const c of invalidUpstreamCases) {
@@ -62,7 +80,7 @@ describe('change-source/pg', () => {
       expect(pubs.tables.length).toBe(1);
       let result;
       try {
-        validate(lc, pubs.tables[0]);
+        validate(lc, pubs.tables[0], pubs.indexes);
       } catch (e) {
         result = e;
       }

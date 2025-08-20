@@ -86,6 +86,10 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     CREATE TABLE my.boo(
       a TEXT PRIMARY KEY, b TEXT, c TEXT, d TEXT
     );
+    CREATE TABLE my.bar(a TEXT NOT NULL);
+    CREATE UNIQUE INDEX bar_idx ON my.bar (a);
+    ALTER TABLE my.bar REPLICA IDENTITY USING INDEX bar_idx;
+
     CREATE PUBLICATION zero_zero FOR TABLES IN SCHEMA my;
     `);
 
@@ -578,6 +582,14 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     [
       'UnsupportedSchemaChangeError: Replication halted',
       `ALTER TABLE foo ADD pubid INT DEFAULT random()`,
+    ],
+    [
+      'UnsupportedTableSchemaError: Table "bar" is missing its REPLICA IDENTITY INDEX',
+      `DROP INDEX my.bar_idx`,
+    ],
+    [
+      'UnsupportedTableSchemaError: Table "bar" with REPLICA IDENTITY NOTHING cannot be replicated',
+      `ALTER TABLE my.bar REPLICA IDENTITY NOTHING`,
     ],
   ])('bad schema change error: %s', async (errMsg, stmt) => {
     await startReplication();
