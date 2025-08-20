@@ -23,7 +23,8 @@ jobs:
         with:
           node-version: 22.x
           cache: 'npm'
-      - run: npm ci
+          cache-dependency-path: **/package-lock.json
+      - run: npm ci --prefer-offline --no-audit --progress=false
       - run: npm run check-format
 
   lint:
@@ -38,7 +39,8 @@ jobs:
         with:
           node-version: 22.x
           cache: 'npm'
-      - run: npm ci
+          cache-dependency-path: **/package-lock.json
+      - run: npm ci --prefer-offline --no-audit --progress=false
       - run: npm run lint
 
   check-types:
@@ -53,12 +55,14 @@ jobs:
         with:
           node-version: 22.x
           cache: 'npm'
+          cache-dependency-path: **/package-lock.json
 
-      - run: npm ci
+      - run: npm ci --prefer-offline --no-audit --progress=false
       - run: npm run check-types
 
   test:
     name: Test
+    depends-on: check-types
     runs-on: ubuntu-24-arm64-test # Larger runner
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
@@ -71,8 +75,10 @@ jobs:
         with:
           node-version: 22.x
           cache: 'npm'
+          cache-dependency-path: **/package-lock.json
 
-      - run: npm ci
+
+      - run: npm ci --prefer-offline --no-audit --progress=false
       - name: Install Playwright
         run: npx playwright install --with-deps
       - name: Run tests
