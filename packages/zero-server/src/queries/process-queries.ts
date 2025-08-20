@@ -8,6 +8,7 @@ import {
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
 import {mapAST} from '../../../zero-protocol/src/ast.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
 
 /**
  * Invokes the callback `cb` for each query in the request or JSON body.
@@ -17,11 +18,11 @@ import {mapAST} from '../../../zero-protocol/src/ast.ts';
  *
  * If you need to limit concurrency, you can use a library like `p-limit` to wrap the `cb` function.
  */
-export async function mapQueryRequest<S extends Schema>(
+export async function handleGetQueriesRequest<S extends Schema>(
   cb: (
     name: string,
     args: readonly ReadonlyJSONValue[],
-  ) => Promise<{query: AnyQuery}>,
+  ) => MaybePromise<{query: AnyQuery}>,
   schema: S,
   requestOrJsonBody: Request | ReadonlyJSONValue,
 ): Promise<TransformResponseMessage> {

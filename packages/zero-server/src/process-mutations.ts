@@ -65,7 +65,7 @@ export type Parsed = {
  * If a mutation has already been processed, it will be skipped and the processing will continue.
  * If a mutation receives an application error, it will be skipped, the error will be returned to the client, and processing will continue.
  */
-export function mapMutationRequest(
+export function handleMutationRequest(
   cb: (
     transact: TransactFn,
     mutation: CustomMutation,
@@ -74,7 +74,7 @@ export function mapMutationRequest(
   body: ReadonlyJSONValue,
   logLevel?: LogLevel | undefined,
 ): Promise<PushResponse>;
-export function mapMutationRequest(
+export function handleMutationRequest(
   cb: (
     transact: TransactFn,
     mutation: CustomMutation,
@@ -82,7 +82,7 @@ export function mapMutationRequest(
   request: Request,
   logLevel?: LogLevel | undefined,
 ): Promise<PushResponse>;
-export async function mapMutationRequest(
+export async function handleMutationRequest(
   cb: (
     transact: TransactFn,
     mutation: CustomMutation,

@@ -14,8 +14,8 @@ import {must} from '../../../packages/shared/src/must.ts';
 import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {getQuery} from '../server/get-query.ts';
 import {
-  mapQueryRequest,
-  mapMutationRequest,
+  handleGetQueriesRequest,
+  handleMutationRequest,
   getMutation,
 } from '@rocicorp/zero/server';
 import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
@@ -150,7 +150,20 @@ async function withAuth<T extends {headers: IncomingHttpHeaders}>(
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
-}>('/api/push', async function (request, reply) {
+}>('/api/push', mutateHandler);
+
+fastify.post<{
+  Querystring: Record<string, string>;
+  Body: ReadonlyJSONValue;
+}>('/api/mutate', mutateHandler);
+
+async function mutateHandler(
+  request: FastifyRequest<{
+    Querystring: Record<string, string>;
+    Body: ReadonlyJSONValue;
+  }>,
+  reply: FastifyReply,
+) {
   let jwtData: JWTData | undefined;
   try {
     jwtData = await maybeVerifyAuth(request.headers);
@@ -165,7 +178,7 @@ fastify.post<{
   const postCommitTasks: (() => Promise<void>)[] = [];
   const mutators = createServerMutators(jwtData, postCommitTasks);
 
-  const response = await mapMutationRequest(
+  const response = await handleMutationRequest(
     transact =>
       transact(dbProvider, (tx, name, args) =>
         getMutation(mutators, name)(tx, args),
@@ -178,22 +191,35 @@ fastify.post<{
   await Promise.all(postCommitTasks.map(task => task()));
 
   reply.send(response);
-});
+}
 
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
-}>('/api/pull', async (request, reply) => {
+}>('/api/pull', getQueriesHandler);
+
+fastify.post<{
+  Querystring: Record<string, string>;
+  Body: ReadonlyJSONValue;
+}>('/api/get-queries', getQueriesHandler);
+
+async function getQueriesHandler(
+  request: FastifyRequest<{
+    Querystring: Record<string, string>;
+    Body: ReadonlyJSONValue;
+  }>,
+  reply: FastifyReply,
+) {
   await withAuth(request, reply, async authData => {
     reply.send(
-      await mapQueryRequest(
-        async (name, args) => ({query: getQuery(authData, name, args)}),
+      await handleGetQueriesRequest(
+        (name, args) => ({query: getQuery(authData, name, args)}),
         schema,
         request.body,
       ),
     );
   });
-});
+}
 
 fastify.post<{
   Body: {contentType: string};
