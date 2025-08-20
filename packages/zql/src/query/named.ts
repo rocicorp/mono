@@ -219,6 +219,8 @@ export function withContext<
     TReturnQuery
   >;
   contextualized.takesContext = true;
+  contextualized.queryName = fn.queryName;
+  contextualized.validator = fn.validator;
 
   return contextualized;
 }

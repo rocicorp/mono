@@ -19,10 +19,14 @@ export function getQuery(
     // const queries = { foo(id: string) {}, bar(created: number) {}}
     // const q = queries[name];
     // typeof q == `(arg: never) => SyncedQuery`
-    return withValidation(withContext(queries[name] as SyncedQuery))(
-      context,
-      ...args,
-    );
+    try {
+      return withValidation(withContext(queries[name] as SyncedQuery))(
+        context,
+        ...args,
+      );
+    } catch (e) {
+      console.error(`Error in getQuery for ${name}`, e);
+    }
   }
   throw new Error(`Unknown query: ${name}`);
 }
