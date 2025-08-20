@@ -210,7 +210,7 @@ describe('view-syncer/cvr-store', () => {
     // start a CVR load.
     const loading = store.load(lc, CONNECT_TIME);
 
-    await sleep(1);
+    await sleep(100);
 
     // Simulate catching up.
     await db`
