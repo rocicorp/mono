@@ -2,9 +2,9 @@ import {PreciseDate} from '@google-cloud/precise-date';
 import {OID} from '@postgresql-typed/oids';
 import {LogContext} from '@rocicorp/logger';
 import postgres, {type Notice, type PostgresType} from 'postgres';
+import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
-import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {
   DATE,
   JSON,
@@ -259,10 +259,10 @@ export type PostgresTransaction = postgres.TransactionSql<{
 export function pgClient(
   lc: LogContext,
   connectionURI: string,
-  options?: postgres.Options<{
+  options: postgres.Options<{
     bigint: PostgresType<bigint>;
     json: PostgresType<JSONValue>;
-  }>,
+  }> = {},
   jsonAsString?: 'json-as-string',
 ): PostgresDB {
   const onnotice = (n: Notice) => {
@@ -298,6 +298,19 @@ export function pgClient(
 
   // Set connections to expire between 5 and 10 minutes to free up state on PG.
   const maxLifetimeSeconds = randInt(5 * 60, 10 * 60);
+
+  // By default, disable any db-level `statement_timeout`, which is explicitly
+  // discouraged in the Postgres documentation, as application defaults are
+  // typically unsuitable for zero-cache operations.
+  //
+  // However, honor any explicit timeout specified in env.PGSTATEMENT_TIMEOUT
+  // so that users can override this if desired.
+  options.connection = {
+    ...options.connection,
+    ['statement_timeout']: process.env['PGSTATEMENT_TIMEOUT']
+      ? parseInt(process.env['PGSTATEMENT_TIMEOUT'])
+      : 0,
+  };
   return postgres(connectionURI, {
     ...postgresTypeConfig(jsonAsString),
     onnotice,
