@@ -8,9 +8,9 @@ import {
   withValidation,
 } from './named.ts';
 import {schema} from './test/test-schemas.ts';
-import {assert} from '../../../shared/src/asserts.ts';
 import {ast} from './query-impl.ts';
 const builder = createBuilder(schema);
+import * as v from '../../../shared/src/valita.ts';
 
 test('defining a synced query', () => {
   const def = syncedQuery('myQuery', (id: string) =>
@@ -78,14 +78,12 @@ test('defining a synced query with context', () => {
 });
 
 test('defining a synced query with validation', () => {
-  const def = syncedQuery(
-    'myQuery',
-    (id: unknown) => {
-      assert(typeof id === 'string', 'id must be a string');
-      return [id] as const;
-    },
-    id => builder.issue.where('id', id),
+  const paramSchema = v.tuple([v.string()]);
+  const def = syncedQuery('myQuery', paramSchema.parse.bind(paramSchema), id =>
+    builder.issue.where('id', id),
   );
+
+  expectTypeOf<Parameters<typeof def>>().toEqualTypeOf<[string]>();
 
   let q = def('123');
   expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
@@ -119,18 +117,15 @@ test('defining a synced query with validation', () => {
   });
 
   expect(() => validated(1)).toThrowErrorMatchingInlineSnapshot(
-    `[Error: id must be a string]`,
+    `[ValitaError: invalid_type at .0 (expected string)]`,
   );
 });
 
 test('defining a synced query with validation and context', () => {
+  const paramSchema = v.tuple([v.string(), v.number()]);
   const def = syncedQueryWithContext(
     'myQuery',
-    (id: unknown, createdAt: unknown) => {
-      assert(typeof id === 'string', 'id must be a string');
-      assert(typeof createdAt === 'number', 'createdAt must be a number');
-      return [id, createdAt] as const;
-    },
+    paramSchema.parse.bind(paramSchema),
     (ctx: object, ownerId, createdAt) => {
       expect(ctx).toEqual({});
       return builder.issue
