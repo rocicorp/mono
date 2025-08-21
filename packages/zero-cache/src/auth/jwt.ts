@@ -7,6 +7,7 @@ import {
   type KeyLike,
 } from 'jose';
 import type {AuthConfig} from '../config/zero-config.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 import {exportJWK, generateKeyPair} from 'jose';
 
 export async function createJwkPair() {
@@ -35,19 +36,20 @@ function getRemoteKeyset(jwksUrl: string) {
   return remoteKeyset;
 }
 
-export const tokenConfigOptions = (config: AuthConfig) => {
-  const tokenOptions = (['jwk', 'secret', 'jwksUrl'] as const).filter(
-    key => config[key] !== undefined,
-  );
-
-  return tokenOptions;
-};
-
 export async function verifyToken(
   config: AuthConfig,
   token: string,
   verifyOptions: JWTClaimVerificationOptions,
 ): Promise<JWTPayload> {
+  const optionsSet = (['jwk', 'secret', 'jwksUrl'] as const).filter(
+    key => config[key] !== undefined,
+  );
+  assert(
+    optionsSet.length === 1,
+    'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
+      JSON.stringify(optionsSet),
+  );
+
   if (config.jwk !== undefined) {
     return verifyTokenImpl(token, loadJwk(config.jwk), verifyOptions);
   }
