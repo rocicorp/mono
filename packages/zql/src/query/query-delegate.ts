@@ -30,6 +30,7 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     gotCallback?: GotCallback | undefined,
   ): () => void;
   addCustomQuery(
+    ast: AST,
     customQueryID: CustomQueryID,
     ttl: TTL,
     gotCallback?: GotCallback | undefined,

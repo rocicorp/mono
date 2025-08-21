@@ -13,7 +13,8 @@ export type ServerMetrics = v.Infer<typeof serverMetricsSchema>;
 const inspectQueryRowSchema = v.object({
   clientID: v.string(),
   queryID: v.string(),
-  // null for custom queries
+  // This is the server return AST for custom queries
+  // TODO: Return server generated AST
   ast: astSchema.nullable(),
   // not null for custom queries
   name: v.string().nullable(),

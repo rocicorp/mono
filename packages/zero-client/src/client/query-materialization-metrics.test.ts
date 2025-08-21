@@ -112,12 +112,13 @@ describe('query materialization metrics', () => {
     addCustomQuerySpy = vi
       .fn<
         (
+          ast: AST,
           customQueryID: CustomQueryID,
           ttl: number,
           callback?: (got: boolean) => void,
         ) => () => void
       >()
-      .mockImplementation((_customQueryID, _ttl, callback) => {
+      .mockImplementation((_ast, _customQueryID, _ttl, callback) => {
         gotCallback = callback;
         return () => {};
       });
