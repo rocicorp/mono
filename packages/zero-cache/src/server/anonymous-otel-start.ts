@@ -176,13 +176,6 @@ class AnonymousTelemetryManager {
       },
     );
 
-    const dailyActiveClientGroupsCounter = this.#meter.createObservableCounter(
-      'zero.count_active_client_groups',
-      {
-        description: 'Total number of unique client groups active today',
-      },
-    );
-
     // Callbacks
     const attrs = this.#getAttributes();
     uptimeGauge.addCallback((result: ObservableResult) => {
@@ -234,12 +227,6 @@ class AnonymousTelemetryManager {
       result.observe(activeClientGroups, attrs);
       this.#lc?.debug?.(
         `telemetry: gauge_active_client_groups=${activeClientGroups}`,
-      );
-    });
-    dailyActiveClientGroupsCounter.addCallback((result: ObservableResult) => {
-      result.observe(this.#totalUniqueClientGroups, attrs);
-      this.#lc?.debug?.(
-        `telemetry: count_active_client_groups=${this.#totalUniqueClientGroups}`,
       );
     });
   }
