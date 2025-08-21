@@ -30,7 +30,7 @@ import {QueryManager} from './query-manager.ts';
 type Schema = typeof schema;
 type MutatorTx = Transaction<Schema>;
 
-beforeEach(() => vi.restoreAllMocks());
+afterEach(() => vi.restoreAllMocks());
 
 test('argument types are preserved on the generated mutator interface', () => {
   const mutators = {

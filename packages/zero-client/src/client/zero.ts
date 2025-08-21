@@ -479,11 +479,7 @@ export class Zero<
     });
     const logOptions = this.#logOptions;
 
-    const enableLegacyMutators =
-      options.enableLegacyMutators ||
-      options.enableLegacyMutators === undefined;
-    const enableLegacyQueries =
-      options.enableLegacyQueries || options.enableLegacyQueries === undefined;
+    const {enableLegacyMutators = true, enableLegacyQueries = true} = options;
 
     const replicacheMutators: MutatorDefs & {
       [CRUD_MUTATION_NAME]: CRUDMutator;
