@@ -7,7 +7,7 @@ import {WebSocketServer, type WebSocket} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {tokenConfigOptions, verifyToken} from '../auth/jwt.ts';
-import {type AuthConfig, type ZeroConfig} from '../config/zero-config.ts';
+import {type ZeroConfig} from '../config/zero-config.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
@@ -54,7 +54,7 @@ export class Syncer implements SingletonService {
   readonly #parent: Worker;
   readonly #wss: WebSocketServer;
   readonly #stopped = resolver();
-  readonly #authConfig: AuthConfig;
+  readonly #config: ZeroConfig;
 
   constructor(
     lc: LogContext,
@@ -68,7 +68,7 @@ export class Syncer implements SingletonService {
     pusherFactory: ((id: string) => Pusher & Service) | undefined,
     parent: Worker,
   ) {
-    this.#authConfig = config.auth;
+    this.#config = config;
     // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
     const notifier = createNotifierFrom(lc, parent);
@@ -113,19 +113,21 @@ export class Syncer implements SingletonService {
 
     let decodedToken: JWTPayload | undefined;
     if (auth) {
-      const tokenOptions = tokenConfigOptions(this.#authConfig);
+      const tokenOptions = tokenConfigOptions(this.#config.auth);
 
-      // only verify token if there are token options set.
-      // if no token options are set, it must be verified by the user
+      // must either have one of the token options set or have custom mutations & queries enabled
+      assert(
+        tokenOptions.length === 1 ||
+          (this.#config.push.url !== undefined &&
+            this.#config.mutate.url !== undefined),
+        'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
+          JSON.stringify(tokenOptions) +
+          '. You may also set both ZERO_MUTATE_URL and ZERO_GET_QUERIES_URL to enable custom mutations and queries without using a token.',
+      );
+
       if (tokenOptions.length > 0) {
         try {
-          assert(
-            tokenOptions.length === 1,
-            'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
-              JSON.stringify(tokenOptions),
-          );
-
-          decodedToken = await verifyToken(this.#authConfig, auth, {
+          decodedToken = await verifyToken(this.#config.auth, auth, {
             subject: userID,
           });
           this.#lc.debug?.(
