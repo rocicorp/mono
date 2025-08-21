@@ -155,6 +155,7 @@ export function shardSetup(
   ${getClientsTableDefinition(shard)}
   ${getMutationsTableDefinition(shard)}
 
+  DROP PUBLICATION IF EXISTS ${id(metadataPublication)};
   CREATE PUBLICATION ${id(metadataPublication)}
     FOR TABLE ${app}."schemaVersions", ${app}."permissions", TABLE ${shard}."clients", ${shard}."mutations";
 
@@ -304,8 +305,8 @@ export async function setupTablesAndReplication(
       requested.appID,
       requested.shardNum,
     );
-    // Note: For re-syncing, this publication is dropped in dropShard(), so an existence
-    //       check is unnecessary.
+    await sql`
+      DROP PUBLICATION IF EXISTS ${sql(defaultPublication)}`;
     await sql`
       CREATE PUBLICATION ${sql(defaultPublication)} 
         FOR TABLES IN SCHEMA public

@@ -29,6 +29,7 @@ import {SyncerWsMessageHandler} from './syncer-ws-message-handler.ts';
 import {
   recordConnectionSuccess,
   recordConnectionAttempted,
+  setActiveClientGroupsGetter,
 } from '../server/anonymous-otel-start.ts';
 
 export type SyncerWorkerData = {
@@ -92,6 +93,8 @@ export class Syncer implements SingletonService {
       this.#createConnection,
       this.#parent,
     );
+
+    setActiveClientGroupsGetter(() => this.#viewSyncers.size);
   }
 
   readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {
@@ -141,6 +144,7 @@ export class Syncer implements SingletonService {
     // a new connection is using the mutagen and pusher. Bump their ref counts.
     mutagen.ref();
     pusher?.ref();
+
     let connection: Connection;
     try {
       connection = new Connection(
