@@ -5,7 +5,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
-import {InspectMetricsDelegate} from '../../server/inspect-metrics-delegate.ts';
+import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {DbFile} from '../../test/lite.ts';
 import {initChangeLog} from '../replicator/schema/change-log.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
@@ -42,7 +42,7 @@ describe('view-syncer/pipeline-driver', () => {
       {appID: 'zeroz', shardNum: 1},
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
       'pipeline-driver.test.ts',
-      new InspectMetricsDelegate(),
+      new InspectorDelegate(),
     );
 
     db = dbFile.connect(lc);

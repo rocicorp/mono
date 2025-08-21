@@ -30,7 +30,7 @@ import type {LogConfig} from '../../config/zero-config.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import {getOrCreateHistogram} from '../../observability/metrics.ts';
-import type {InspectMetricsDelegate} from '../../server/inspect-metrics-delegate.ts';
+import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import type {RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
 import type {ShardID} from '../../types/shards.ts';
@@ -102,7 +102,7 @@ export class PipelineDriver {
       'Time to advance all queries for a given client group for in response to a single change.',
     unit: 's',
   });
-  readonly #inspectMetricsDelegate: InspectMetricsDelegate;
+  readonly #inspectorDelegate: InspectorDelegate;
 
   constructor(
     lc: LogContext,
@@ -111,14 +111,14 @@ export class PipelineDriver {
     shardID: ShardID,
     storage: ClientGroupStorage,
     clientGroupID: string,
-    inspectMetricsDelegate: InspectMetricsDelegate,
+    inspectorDelegate: InspectorDelegate,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
     this.#storage = storage;
     this.#shardID = shardID;
     this.#logConfig = logConfig;
-    this.#inspectMetricsDelegate = inspectMetricsDelegate;
+    this.#inspectorDelegate = inspectorDelegate;
   }
 
   /**
@@ -302,7 +302,7 @@ export class PipelineDriver {
     timer: {totalElapsed: () => number},
   ): Iterable<RowChange> {
     assert(this.initialized());
-    this.#inspectMetricsDelegate.addQueryMapping(transformationHash, queryID);
+    this.#inspectorDelegate.addQuery(transformationHash, queryID, query);
     if (this.#pipelines.has(transformationHash)) {
       this.#lc.info?.(`query ${transformationHash} already added`, query);
       return;
@@ -321,7 +321,7 @@ export class PipelineDriver {
           new MeasurePushOperator(
             input,
             transformationHash,
-            this.#inspectMetricsDelegate,
+            this.#inspectorDelegate,
             'query-update-server',
           ),
         decorateInput: input => input,

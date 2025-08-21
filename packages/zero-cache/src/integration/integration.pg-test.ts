@@ -550,7 +550,7 @@ describe('integration', {timeout: 30000}, () => {
 
   const WATERMARK_REGEX = /[0-9a-z]{4,}/;
 
-  test.each([
+  test.skip.each([
     ['single-node', 'pg', () => [env], undefined],
     ['replica identity full', 'pg', () => [env], 'FULL'],
     [

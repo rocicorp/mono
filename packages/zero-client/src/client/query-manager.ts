@@ -17,6 +17,7 @@ import {
 } from '../../../zero-protocol/src/query-hash.ts';
 import {
   clientToServer,
+  serverToClient,
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
@@ -24,7 +25,7 @@ import type {ClientMetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {CustomQueryID} from '../../../zql/src/query/named.ts';
 import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
 import {clampTTL, compareTTL, type TTL} from '../../../zql/src/query/ttl.ts';
-import type {InspectorClientMetricsDelegate} from './inspector/inspector.ts';
+import type {InspectorDelegate} from './inspector/inspector.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
@@ -33,9 +34,8 @@ import type {ZeroLogContext} from './zero-log-context.ts';
 type QueryHash = string;
 
 type Entry = {
-  // May be undefined if the entry is a custom (named) query.
-  // Will be removed when we no longer support ad-hoc queries that fall back to the server.
-  normalized: AST | undefined;
+  // We keep track of the AST so we can use it in the inspector.
+  normalized: AST;
   name: string | undefined;
   args: readonly ReadonlyJSONValue[] | undefined;
   count: number;
@@ -52,9 +52,10 @@ type ClientMetric = {
  * Sends `changeDesiredQueries` message to server when this changes.
  * Deduplicates requests so that we only listen to a given unique query once.
  */
-export class QueryManager implements InspectorClientMetricsDelegate {
+export class QueryManager implements InspectorDelegate {
   readonly #clientID: ClientID;
   readonly #clientToServer: NameMapper;
+  readonly #serverToClient: NameMapper;
   readonly #send: (change: ChangeDesiredQueriesMessage) => void;
   readonly #queries: Map<QueryHash, Entry> = new Map();
   readonly #recentQueriesMaxSize: number;
@@ -84,6 +85,7 @@ export class QueryManager implements InspectorClientMetricsDelegate {
     this.#lc = lc.withContext('QueryManager');
     this.#clientID = clientID;
     this.#clientToServer = clientToServer(tables);
+    this.#serverToClient = serverToClient(tables);
     this.#recentQueriesMaxSize = recentQueriesMaxSize;
     this.#send = send;
     this.#mutationTracker = mutationTracker;
@@ -122,6 +124,11 @@ export class QueryManager implements InspectorClientMetricsDelegate {
         initialValuesInFirstDiff: true,
       },
     );
+  }
+
+  getAST(queryID: string): AST | undefined {
+    const ast = this.#queries.get(queryID)?.normalized;
+    return ast && mapAST(ast, this.#serverToClient);
   }
 
   #fireGotCallbacks(queryHash: string, got: boolean) {
@@ -167,7 +174,7 @@ export class QueryManager implements InspectorClientMetricsDelegate {
         patch.set(hash, {
           op: 'put',
           hash,
-          ast: normalized,
+          ast: name === undefined ? normalized : undefined,
           name,
           args,
           // We get TTL out of the DagStore so it is possible that the TTL was written
@@ -198,19 +205,14 @@ export class QueryManager implements InspectorClientMetricsDelegate {
   }
 
   addCustom(
+    ast: AST,
     {name, args}: CustomQueryID,
     ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ): () => void {
+    const normalized = normalizeAST(ast);
     const queryId = hashOfNameAndArgs(name, args);
-    return this.#add(
-      queryId,
-      undefined, // normalized is undefined for custom queries
-      name,
-      args,
-      ttl,
-      gotCallback,
-    );
+    return this.#add(queryId, normalized, name, args, ttl, gotCallback);
   }
 
   addLegacy(
@@ -232,24 +234,22 @@ export class QueryManager implements InspectorClientMetricsDelegate {
 
   #add(
     queryId: string,
-    normalized: AST | undefined,
+    normalized: AST,
     name: string | undefined,
     args: readonly ReadonlyJSONValue[] | undefined,
     ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ) {
     assert(
-      (normalized === undefined && name !== undefined && args !== undefined) ||
-        (normalized !== undefined && name === undefined && args === undefined),
-      'Either normalized or name and args must be defined, but not both.',
+      (name === undefined) === (args === undefined),
+      'If name is defined, args must be defined',
     );
     ttl = clampTTL(ttl, this.#lc);
     let entry = this.#queries.get(queryId);
     this.#recentQueries.delete(queryId);
     if (!entry) {
-      if (normalized !== undefined) {
-        normalized = mapAST(normalized, this.#clientToServer);
-      }
+      normalized = mapAST(normalized, this.#clientToServer);
+
       entry = {
         normalized,
         name,
@@ -262,7 +262,7 @@ export class QueryManager implements InspectorClientMetricsDelegate {
       this.#queueQueryChange({
         op: 'put',
         hash: queryId,
-        ast: normalized,
+        ast: name === undefined ? normalized : undefined,
         name,
         args,
         ttl,
@@ -301,19 +301,19 @@ export class QueryManager implements InspectorClientMetricsDelegate {
   }
 
   updateCustom({name, args}: CustomQueryID, ttl: TTL) {
-    const hash = hashOfNameAndArgs(name, args);
-    const entry = must(this.#queries.get(hash));
-    this.#updateEntry(entry, hash, ttl);
+    const queryID = hashOfNameAndArgs(name, args);
+    const entry = must(this.#queries.get(queryID));
+    this.#updateEntry(entry, queryID, ttl);
   }
 
   updateLegacy(ast: AST, ttl: TTL) {
     const normalized = normalizeAST(ast);
-    const astHash = hashOfAST(normalized);
-    const entry = must(this.#queries.get(astHash));
-    this.#updateEntry(entry, astHash, ttl);
+    const queryID = hashOfAST(normalized);
+    const entry = must(this.#queries.get(queryID));
+    this.#updateEntry(entry, queryID, ttl);
   }
 
-  #updateEntry(entry: Entry, hash: string, ttl: TTL): void {
+  #updateEntry(entry: Entry, queryID: string, ttl: TTL): void {
     // If the query already exists and the new ttl is larger than the old one
     // we send a changeDesiredQueries message to the server to update the ttl.
     ttl = clampTTL(ttl, this.#lc);
@@ -321,8 +321,8 @@ export class QueryManager implements InspectorClientMetricsDelegate {
       entry.ttl = ttl;
       this.#queueQueryChange({
         op: 'put',
-        hash,
-        ast: entry.normalized,
+        hash: queryID,
+        ast: entry.name === undefined ? entry.normalized : undefined,
         name: entry.name,
         args: entry.args,
         ttl,
