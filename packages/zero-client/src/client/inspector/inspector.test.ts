@@ -164,7 +164,7 @@ test('client queries', async () => {
       {
         clientID: z.clientID,
         queryID: '1',
-        ast: {table: 'issue'},
+        ast: {table: 'issues'},
         name: null,
         args: null,
         deleted: false,
@@ -179,7 +179,7 @@ test('client queries', async () => {
       {
         clientID: z.clientID,
         clientZQL: null,
-        serverZQL: 'issue',
+        serverZQL: 'issues',
         name: null,
         args: null,
         deleted: false,
@@ -199,12 +199,12 @@ test('client queries', async () => {
         clientID: z.clientID,
         queryID: '1',
         ast: {
-          table: 'issue',
+          table: 'issues',
           where: {
             type: 'simple',
-            left: {type: 'column', name: 'id'},
+            left: {type: 'column', name: 'owner_id'},
             op: '=',
-            right: {type: 'literal', value: 123},
+            right: {type: 'literal', value: 'arv'},
           },
         },
         name: null,
@@ -221,7 +221,7 @@ test('client queries', async () => {
       {
         clientID: z.clientID,
         clientZQL: null,
-        serverZQL: "issue.where('id', 123)",
+        serverZQL: "issues.where('owner_id', 'arv')",
         name: null,
         args: null,
         deleted: false,

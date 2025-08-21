@@ -42,7 +42,7 @@ import {
   getOrCreateHistogram,
   getOrCreateUpDownCounter,
 } from '../../observability/metrics.ts';
-import {InspectMetricsDelegate} from '../../server/inspect-metrics-delegate.ts';
+import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
@@ -242,7 +242,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     },
   );
 
-  readonly #inspectMetricsDelegate: InspectMetricsDelegate;
+  readonly #inspectorDelegate: InspectorDelegate;
 
   readonly #config: Pick<ZeroConfig, 'serverVersion'>;
 
@@ -258,7 +258,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
     slowHydrateThreshold: number,
-    inspectMetricsDelegate: InspectMetricsDelegate,
+    inspectorDelegate: InspectorDelegate,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
@@ -273,7 +273,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#drainCoordinator = drainCoordinator;
     this.#keepaliveMs = keepaliveMs;
     this.#slowHydrateThreshold = slowHydrateThreshold;
-    this.#inspectMetricsDelegate = inspectMetricsDelegate;
+    this.#inspectorDelegate = inspectorDelegate;
     this.#cvrStore = new CVRStore(
       lc,
       cvrDb,
@@ -1051,7 +1051,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     for (const {
-      id: hash,
+      id: queryID,
       transformationHash,
       transformedAst,
     } of transformedQueries) {
@@ -1061,12 +1061,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         tracer,
         'vs.#hydrateUnchangedQueries.addQuery',
         async span => {
-          span.setAttribute('queryHash', hash);
+          span.setAttribute('queryHash', queryID);
           span.setAttribute('transformationHash', transformationHash);
           span.setAttribute('table', transformedAst.table);
           for (const _ of this.#pipelines.addQuery(
             transformationHash,
-            hash,
+            queryID,
             transformedAst,
             timer.start(),
           )) {
@@ -1085,7 +1085,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#hydrations.add(1);
       this.#hydrationTime.record(elapsed / 1000);
       this.#addQueryMaterializationServerMetric(transformationHash, elapsed);
-      lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
+      lc.debug?.(`hydrated ${count} rows for ${queryID} (${elapsed} ms)`);
     }
   }
 
@@ -1138,7 +1138,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     transformationHash: string,
     elapsed: number,
   ) {
-    this.#inspectMetricsDelegate.addMetric(
+    this.#inspectorDelegate.addMetric(
       'query-materialization-server',
       elapsed,
       transformationHash,
@@ -1426,7 +1426,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
 
         // Remove per-query server metrics when query is deleted
-        this.#inspectMetricsDelegate.deleteMetricsForQuery(q.id);
+        this.#inspectorDelegate.removeQuery(q.id);
       }
       for (const hash of unhydrateQueries) {
         this.#pipelines.removeQuery(hash);
@@ -1434,7 +1434,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         const ids = hashToIDs.get(hash);
         if (ids) {
           for (const id of ids) {
-            this.#inspectMetricsDelegate.deleteMetricsForQuery(id);
+            this.#inspectorDelegate.removeQuery(id);
           }
         }
       }
@@ -1811,9 +1811,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // Enhance query rows with server-side materialization metrics
         const enhancedRows = queryRows.map(row => ({
           ...row,
-          metrics: this.#inspectMetricsDelegate.getMetricsJSONForQuery(
-            row.queryID,
-          ),
+          ast:
+            row.ast ??
+            this.#inspectorDelegate.getASTForQuery(row.queryID) ??
+            null,
+          metrics: this.#inspectorDelegate.getMetricsJSONForQuery(row.queryID),
         }));
 
         client.sendInspectResponse(lc, {
@@ -1828,7 +1830,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         client.sendInspectResponse(lc, {
           op: 'metrics',
           id: body.id,
-          value: this.#inspectMetricsDelegate.getMetricsJSON(),
+          value: this.#inspectorDelegate.getMetricsJSON(),
         });
         break;
       }

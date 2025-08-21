@@ -27,7 +27,7 @@ import {
 import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
-import {InspectMetricsDelegate} from '../../server/inspect-metrics-delegate.ts';
+import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {TestDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {upstreamSchema} from '../../types/shards.ts';
@@ -668,7 +668,7 @@ export async function setup(
   const operatorStorage = new DatabaseStorage(
     storageDB,
   ).createClientGroupStorage(serviceID);
-  const inspectMetricsDelegate = new InspectMetricsDelegate();
+  const inspectMetricsDelegate = new InspectorDelegate();
   const vs = new ViewSyncerService(
     {getQueries: queryConfig},
     lc,
