@@ -95,7 +95,6 @@ export class Syncer implements SingletonService {
       this.#parent,
     );
 
-    // Set up telemetry to track active client groups for this worker
     setActiveClientGroupsGetter(() => this.#viewSyncers.size);
   }
 
