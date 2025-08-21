@@ -167,10 +167,10 @@ export class Syncer implements SingletonService {
         new SyncerWsMessageHandler(
           this.#lc,
           params,
-          auth !== undefined && decodedToken !== undefined
+          auth !== undefined
             ? {
                 raw: auth,
-                decoded: decodedToken,
+                decoded: decodedToken ?? {},
               }
             : undefined,
           this.#viewSyncers.getService(clientGroupID),
