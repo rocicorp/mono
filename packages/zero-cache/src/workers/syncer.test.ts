@@ -20,10 +20,9 @@ vi.mock('../types/websocket-handoff.ts', () => ({
 
 // Mock the anonymous telemetry functions
 vi.mock('../server/anonymous-otel-start.ts', () => ({
-  addClientGroup: vi.fn(),
-  removeClientGroup: vi.fn(),
   recordConnectionSuccess: vi.fn(),
   recordConnectionAttempted: vi.fn(),
+  setActiveClientGroupsGetter: vi.fn(),
 }));
 const mockDB = (() => {}) as unknown as PostgresDB;
 
