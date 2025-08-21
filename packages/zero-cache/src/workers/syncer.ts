@@ -115,14 +115,17 @@ export class Syncer implements SingletonService {
     if (auth) {
       const tokenOptions = tokenConfigOptions(this.#config.auth);
 
+      const hasPushOrMutate =
+        this.#config?.push?.url !== undefined ||
+        this.#config?.mutate?.url !== undefined;
+      const hasGetQueries = this.#config?.getQueries?.url !== undefined;
+
       // must either have one of the token options set or have custom mutations & queries enabled
       assert(
-        tokenOptions.length === 1 ||
-          (this.#config.push.url !== undefined &&
-            this.#config.mutate.url !== undefined),
+        tokenOptions.length === 1 || (hasPushOrMutate && hasGetQueries),
         'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
           JSON.stringify(tokenOptions) +
-          '. You may also set both ZERO_MUTATE_URL and ZERO_GET_QUERIES_URL to enable custom mutations and queries without using a token.',
+          '. You may also set both ZERO_MUTATE_URL and ZERO_GET_QUERIES_URL to enable custom mutations and queries without passing token verification options.',
       );
 
       if (tokenOptions.length > 0) {
@@ -148,7 +151,7 @@ export class Syncer implements SingletonService {
         }
       } else {
         this.#lc.warn?.(
-          `One of jwk, secret, or jwksUrl is not configured - the auth token must be manually verified by the user`,
+          `One of jwk, secret, or jwksUrl is not configured - the \`authorization\` header must be manually verified by the user`,
         );
       }
     } else {

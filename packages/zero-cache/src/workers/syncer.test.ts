@@ -63,86 +63,116 @@ CREATE TABLE "test-app.permissions" (permissions, hash);
 INSERT INTO "test-app.permissions" (permissions, hash) VALUES (null, 'test-hash');
 `);
 
+// ------------------------------
+// Test helpers
+// ------------------------------
+
+const TEST_PARENT: any = {
+  onMessageType: () => {},
+  send: () => {},
+};
+
+function makeFactories(
+  lc: LogContext,
+  mutagensOut: MutagenService[],
+  pushersOut: PusherService[],
+) {
+  return {
+    viewSyncerFactory: (id: string) =>
+      ({
+        id,
+        keepalive: () => true,
+        stop() {
+          return Promise.resolve();
+        },
+        run() {
+          return Promise.resolve();
+        },
+      }) as ViewSyncer & ActivityBasedService,
+    mutagenFactory: (id: string) => {
+      const ret = new MutagenService(
+        lc,
+        {appID: 'test-app', shardNum: 0},
+        id,
+        {} as any,
+        {
+          replica: {file: tempFile},
+          perUserMutationLimit: {},
+        } as ZeroConfig,
+      );
+      mutagensOut.push(ret);
+      return ret;
+    },
+    pusherFactory: (id: string) => {
+      const ret = new PusherService(
+        mockDB,
+        {} as ZeroConfig,
+        {url: ['http://example.com'], forwardCookies: false},
+        lc,
+        id,
+      );
+      pushersOut.push(ret);
+      return ret;
+    },
+  } as const;
+}
+
+function setupSyncer(lc: LogContext, config: ZeroConfig) {
+  const mutagens: MutagenService[] = [];
+  const pushers: PusherService[] = [];
+  const {viewSyncerFactory, mutagenFactory, pusherFactory} = makeFactories(
+    lc,
+    mutagens,
+    pushers,
+  );
+  const syncer = new Syncer(
+    lc,
+    config,
+    viewSyncerFactory,
+    mutagenFactory,
+    pusherFactory,
+    TEST_PARENT,
+  );
+  return {syncer, mutagens, pushers};
+}
+
+const baseParams = {
+  clientGroupID: '1',
+  userID: 'anon',
+  wsID: '1',
+  protocolVersion: 21,
+};
+
+function makeParams(clientID: number, params: any = {}) {
+  return {
+    ...baseParams,
+    clientID: `${clientID}`,
+    ...params,
+  };
+}
+
+function openConnection(clientID: number, params: any = {}) {
+  const ws = new MockWebSocket() as unknown as WebSocket;
+  receiver(ws, makeParams(clientID, params), {} as any);
+  return ws;
+}
+
 describe('cleanup', () => {
   let syncer: Syncer;
   let mutagens: MutagenService[];
   let pushers: PusherService[];
   beforeEach(() => {
-    mutagens = [];
-    pushers = [];
-    syncer = new Syncer(
-      lc,
-      {} as ZeroConfig,
-      id =>
-        ({
-          id,
-          keepalive: () => true,
-          stop() {
-            return Promise.resolve();
-          },
-          run() {
-            return Promise.resolve();
-          },
-        }) as ViewSyncer & ActivityBasedService,
-      id => {
-        const ret = new MutagenService(
-          lc,
-          {
-            appID: 'test-app',
-            shardNum: 0,
-          },
-          id,
-          {} as any,
-          {
-            replica: {
-              file: tempFile,
-            },
-            perUserMutationLimit: {},
-          } as ZeroConfig,
-        );
-        mutagens.push(ret);
-        return ret;
-      },
-      id => {
-        const ret = new PusherService(
-          mockDB,
-          {} as ZeroConfig,
-          {
-            url: ['http://example.com'],
-            forwardCookies: false,
-          },
-          lc,
-          id,
-        );
-        pushers.push(ret);
-        return ret;
-      },
-      {
-        onMessageType: () => {},
-        send: () => {},
-      } as any,
-    );
+    const env = setupSyncer(lc, {} as ZeroConfig);
+    syncer = env.syncer;
+    mutagens = env.mutagens;
+    pushers = env.pushers;
   });
 
   afterEach(async () => {
     await syncer.stop();
   });
 
-  function newConnection(clientID: number) {
-    const ws = new MockWebSocket() as unknown as WebSocket;
-    receiver(
-      ws,
-      {
-        clientGroupID: '1',
-        clientID: `${clientID}`,
-        userID: 'anon',
-        wsID: '1',
-        protocolVersion: 21, // Valid protocol version (current PROTOCOL_VERSION)
-      },
-      {} as any,
-    );
-    return ws;
-  }
+  const newConnection = (clientID: number) => openConnection(clientID);
 
   test('bumps ref count when getting same service over and over', () => {
     const connections: WebSocket[] = [];
@@ -209,87 +239,19 @@ describe('cleanup', () => {
 
 describe('connection telemetry', () => {
   let syncer: Syncer;
-  let mutagens: MutagenService[];
-  let pushers: PusherService[];
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mutagens = [];
-    pushers = [];
-    syncer = new Syncer(
-      lc,
-      {} as ZeroConfig,
-      id =>
-        ({
-          id,
-          keepalive: () => true,
-          stop() {
-            return Promise.resolve();
-          },
-          run() {
-            return Promise.resolve();
-          },
-        }) as ViewSyncer & ActivityBasedService,
-      id => {
-        const ret = new MutagenService(
-          lc,
-          {
-            appID: 'test-app',
-            shardNum: 0,
-          },
-          id,
-          {} as any,
-          {
-            replica: {
-              file: tempFile,
-            },
-            perUserMutationLimit: {},
-          } as ZeroConfig,
-        );
-        mutagens.push(ret);
-        return ret;
-      },
-      id => {
-        const ret = new PusherService(
-          mockDB,
-          {} as ZeroConfig,
-          {
-            url: ['http://example.com'],
-            forwardCookies: false,
-          },
-          lc,
-          id,
-        );
-        pushers.push(ret);
-        return ret;
-      },
-      {
-        onMessageType: () => {},
-        send: () => {},
-      } as any,
-    );
+    const env = setupSyncer(lc, {} as ZeroConfig);
+    syncer = env.syncer;
   });
 
   afterEach(async () => {
     await syncer.stop();
   });
 
-  function newConnection(clientID: number, params: any = {}) {
-    const ws = new MockWebSocket() as unknown as WebSocket;
-    receiver(
-      ws,
-      {
-        clientGroupID: '1',
-        clientID: `${clientID}`,
-        userID: 'anon',
-        wsID: '1',
-        protocolVersion: 21, // Valid protocol version (current PROTOCOL_VERSION)
-        ...params,
-      },
-      {} as any,
-    );
-    return ws;
-  }
+  const newConnection = (clientID: number, params: any = {}) =>
+    openConnection(clientID, params);
 
   test('should record connection success for valid protocol version', () => {
     // Create a connection with valid protocol version
@@ -326,107 +288,41 @@ describe('jwt auth validation', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mutagens = [];
-    pushers = [];
-    syncer = new Syncer(
-      lc,
-      {
-        auth: {
-          // Intentionally set multiple options to trigger the validation error
-          jwk: '{}',
-          secret: 'super-secret',
-        },
-      } as ZeroConfig,
-      id =>
-        ({
-          id,
-          keepalive: () => true,
-          stop() {
-            return Promise.resolve();
-          },
-          run() {
-            return Promise.resolve();
-          },
-        }) as ViewSyncer & ActivityBasedService,
-      id => {
-        const ret = new MutagenService(
-          lc,
-          {
-            appID: 'test-app',
-            shardNum: 0,
-          },
-          id,
-          {} as any,
-          {
-            replica: {
-              file: tempFile,
-            },
-            perUserMutationLimit: {},
-          } as ZeroConfig,
-        );
-        mutagens.push(ret);
-        return ret;
+    const env = setupSyncer(lc, {
+      auth: {
+        // Intentionally set multiple options to trigger the validation error
+        jwk: '{}',
+        secret: 'super-secret',
       },
-      id => {
-        const ret = new PusherService(
-          mockDB,
-          {} as ZeroConfig,
-          {
-            url: ['http://example.com'],
-            forwardCookies: false,
-          },
-          lc,
-          id,
-        );
-        pushers.push(ret);
-        return ret;
-      },
-      {
-        onMessageType: () => {},
-        send: () => {},
-      } as any,
-    );
+    } as ZeroConfig);
+    syncer = env.syncer;
+    mutagens = env.mutagens;
+    pushers = env.pushers;
   });
 
   afterEach(async () => {
     await syncer.stop();
   });
 
-  function newConnection(clientID: number, params: any = {}) {
+  test('fails when too many JWT options are set', async () => {
     const ws = new MockWebSocket() as unknown as WebSocket;
-    receiver(
-      ws,
-      {
-        clientGroupID: '1',
-        clientID: `${clientID}`,
-        userID: 'anon',
-        wsID: '1',
-        protocolVersion: 21,
-        ...params,
-      },
-      {} as any,
-    );
-    return ws;
-  }
-
-  test('fails when too many JWT options are set', () => {
-    const ws = newConnection(1, {auth: 'dummy-token'});
+    await expect(
+      receiver(
+        ws,
+        {
+          clientGroupID: '1',
+          clientID: `1`,
+          userID: 'anon',
+          wsID: '1',
+          protocolVersion: 21,
+          auth: 'dummy-token',
+        },
+        {} as any,
+      ),
+    ).rejects.toThrow(/Exactly one of jwk, secret, or jwksUrl must be set/);
 
     expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(recordConnectionSuccess)).not.toHaveBeenCalled();
-
-    // Connection should have been closed by the server due to JWT config error
-    expect((ws as any).readyState).toBe(MockWebSocket.CLOSED);
-
-    // Error should be sent to the client
-    const messages = (ws as any).messages as string[];
-    expect(messages.length).toBeGreaterThan(0);
-    const first = JSON.parse(messages[0]);
-    expect(first[0]).toBe('error');
-    expect(first[1].kind).toBe('AuthInvalidated');
-    expect(first[1].message).toContain(
-      'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens',
-    );
 
     // No services should be instantiated when auth validation fails early
     expect(mutagens.length).toBe(0);
@@ -448,85 +344,26 @@ describe('jwt auth without options', () => {
     pushers = [];
     logSink = new TestLogSink();
     const lc = new LogContext('debug', {}, logSink);
-    syncer = new Syncer(
-      lc,
-      {
-        // No auth options set; should not verify token
-        auth: {},
-      } as ZeroConfig,
-      id =>
-        ({
-          id,
-          keepalive: () => true,
-          stop() {
-            return Promise.resolve();
-          },
-          run() {
-            return Promise.resolve();
-          },
-        }) as ViewSyncer & ActivityBasedService,
-      id => {
-        const ret = new MutagenService(
-          lc,
-          {
-            appID: 'test-app',
-            shardNum: 0,
-          },
-          id,
-          {} as any,
-          {
-            replica: {
-              file: tempFile,
-            },
-            perUserMutationLimit: {},
-          } as ZeroConfig,
-        );
-        mutagens.push(ret);
-        return ret;
-      },
-      id => {
-        const ret = new PusherService(
-          mockDB,
-          {} as ZeroConfig,
-          {
-            url: ['http://example.com'],
-            forwardCookies: false,
-          },
-          lc,
-          id,
-        );
-        pushers.push(ret);
-        return ret;
-      },
-      {
-        onMessageType: () => {},
-        send: () => {},
-      } as any,
-    );
+    const env = setupSyncer(lc, {
+      // No auth options set; should not verify token
+      auth: {},
+      // set custom mutations & get queries to avoid token verification
+      mutate: {url: ['http://mutate.example.com']},
+      getQueries: {url: ['http://queries.example.com']},
+    } as ZeroConfig);
+    syncer = env.syncer;
+    mutagens = env.mutagens;
+    pushers = env.pushers;
   });
 
   afterEach(async () => {
     await syncer.stop();
   });
 
-  function newConnection(clientID: number, params: any = {}) {
-    const ws = new MockWebSocket() as unknown as WebSocket;
-    receiver(
-      ws,
-      {
-        clientGroupID: '1',
-        clientID: `${clientID}`,
-        userID: 'anon',
-        wsID: '1',
-        protocolVersion: 21,
-        ...params,
-      },
-      {} as any,
-    );
-    return ws;
-  }
+  const newConnection = (clientID: number, params: any = {}) =>
+    openConnection(clientID, params);
 
-  test('succeeds when no JWT options are set and skips verification', () => {
+  test('succeeds when using mutations & get queries and skips verification', () => {
     const ws = newConnection(1, {auth: 'dummy-token'});
 
     expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(1);
@@ -545,13 +382,58 @@ describe('jwt auth without options', () => {
       'warn',
       {},
       [
-        'One of jwk, secret, or jwksUrl is not configured - the auth token must be manually verified by the user',
+        'One of jwk, secret, or jwksUrl is not configured - the `authorization` header must be manually verified by the user',
       ],
     ]);
 
     // Services should be instantiated for successful connection
     expect(mutagens.length).toBe(1);
     expect(pushers.length).toBe(1);
+  });
+});
+
+describe('jwt auth missing options and missing endpoints', () => {
+  let syncer: Syncer;
+  let mutagens: MutagenService[];
+  let pushers: PusherService[];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    const env = setupSyncer(lc, {
+      // No auth and no mutate/getQueries set; should assert on receiving auth
+      auth: {},
+    } as ZeroConfig);
+    syncer = env.syncer;
+    mutagens = env.mutagens;
+    pushers = env.pushers;
+  });
+
+  afterEach(async () => {
+    await syncer.stop();
+  });
+
+  test('fails when no JWT options and no custom endpoints are set', async () => {
+    const ws = new MockWebSocket() as unknown as WebSocket;
+    await expect(
+      receiver(
+        ws,
+        {
+          clientGroupID: '1',
+          clientID: `1`,
+          userID: 'anon',
+          wsID: '1',
+          protocolVersion: 21,
+          auth: 'dummy-token',
+        },
+        {} as any,
+      ),
+    ).rejects.toThrow(/Exactly one of jwk, secret, or jwksUrl must be set/);
+
+    expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(recordConnectionSuccess)).not.toHaveBeenCalled();
+
+    expect(mutagens.length).toBe(0);
+    expect(pushers.length).toBe(0);
   });
 });
 
