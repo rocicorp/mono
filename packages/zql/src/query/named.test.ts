@@ -142,6 +142,9 @@ test('defining a synced query with validation and context', () => {
 
   const validated = withValidation(def);
   q = validated({}, '321', 321);
+  expectTypeOf<Parameters<typeof validated>>().toEqualTypeOf<
+    [object, ...unknown[]]
+  >();
   expect(q.customQueryID).toEqual({
     name: 'myQuery',
     args: ['321', 321],

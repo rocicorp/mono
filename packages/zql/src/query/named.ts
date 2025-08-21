@@ -225,15 +225,15 @@ export function withContext<
   return contextualized;
 }
 
-export function withValidation<TReturnQuery extends Query<any, any, any>>(
-  fn: SyncedQuery<any, TReturnQuery>,
-): ValidatedSyncedQuery<TReturnQuery>;
 export function withValidation<
   TReturnQuery extends Query<any, any, any>,
   TContext,
 >(
   fn: SyncedQueryWithContext<TContext, any, TReturnQuery>,
 ): ValidatedSyncedQueryWithContext<TContext, TReturnQuery>;
+export function withValidation<TReturnQuery extends Query<any, any, any>>(
+  fn: SyncedQuery<any, TReturnQuery>,
+): ValidatedSyncedQuery<TReturnQuery>;
 export function withValidation<
   TReturnQuery extends Query<any, any, any>,
   TContext = unknown,
