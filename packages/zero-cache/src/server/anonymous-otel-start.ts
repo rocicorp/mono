@@ -30,6 +30,9 @@ class AnonymousTelemetryManager {
   #totalRowsSynced = 0;
   #totalConnectionsSuccess = 0;
   #totalConnectionsAttempted = 0;
+  #activeClientGroupsGetter: (() => number) | undefined;
+  #totalUniqueClientGroups = 0;
+  #seenClientGroups = new Set<string>();
   #lc: LogContext | undefined;
   #config: ZeroConfig | undefined;
   #processId: string;
@@ -166,6 +169,20 @@ class AnonymousTelemetryManager {
       },
     );
 
+    const activeClientGroupsGauge = this.#meter.createObservableGauge(
+      'zero.gauge_active_client_groups',
+      {
+        description: 'Number of currently active client groups',
+      },
+    );
+
+    const dailyActiveClientGroupsCounter = this.#meter.createObservableCounter(
+      'zero.count_active_client_groups',
+      {
+        description: 'Total number of unique client groups active today',
+      },
+    );
+
     // Callbacks
     const attrs = this.#getAttributes();
     uptimeGauge.addCallback((result: ObservableResult) => {
@@ -212,6 +229,19 @@ class AnonymousTelemetryManager {
         `telemetry: connections_attempted=${this.#totalConnectionsAttempted}`,
       );
     });
+    activeClientGroupsGauge.addCallback((result: ObservableResult) => {
+      const activeClientGroups = this.#activeClientGroupsGetter?.() ?? 0;
+      result.observe(activeClientGroups, attrs);
+      this.#lc?.debug?.(
+        `telemetry: gauge_active_client_groups=${activeClientGroups}`,
+      );
+    });
+    dailyActiveClientGroupsCounter.addCallback((result: ObservableResult) => {
+      result.observe(this.#totalUniqueClientGroups, attrs);
+      this.#lc?.debug?.(
+        `telemetry: count_active_client_groups=${this.#totalUniqueClientGroups}`,
+      );
+    });
   }
 
   recordMutation(type: 'crud' | 'custom', count = 1) {
@@ -232,6 +262,17 @@ class AnonymousTelemetryManager {
 
   recordConnectionAttempted() {
     this.#totalConnectionsAttempted++;
+  }
+
+  setActiveClientGroupsGetter(getter: () => number) {
+    this.#activeClientGroupsGetter = getter;
+  }
+
+  recordClientGroupActive(clientGroupID: string) {
+    if (!this.#seenClientGroups.has(clientGroupID)) {
+      this.#seenClientGroups.add(clientGroupID);
+      this.#totalUniqueClientGroups++;
+    }
   }
 
   shutdown() {
@@ -407,4 +448,8 @@ export const recordConnectionSuccess = () =>
   manager().recordConnectionSuccess();
 export const recordConnectionAttempted = () =>
   manager().recordConnectionAttempted();
+export const setActiveClientGroupsGetter = (getter: () => number) =>
+  manager().setActiveClientGroupsGetter(getter);
+export const recordClientGroupActive = (clientGroupID: string) =>
+  manager().recordClientGroupActive(clientGroupID);
 export const shutdownAnonymousTelemetry = () => manager().shutdown();
