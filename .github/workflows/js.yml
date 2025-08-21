@@ -59,7 +59,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: ubuntu-24-arm64-test # Larger runner
+    runs-on: ubuntu-latest
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -80,7 +80,7 @@ jobs:
 
   test-pg:
     name: Test PG
-    runs-on: ubuntu-24-arm64-test # Larger runner
+    runs-on: ubuntu-latest
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
