@@ -1,4 +1,5 @@
-import {useSyncExternalStore} from 'react';
+import React, {useSyncExternalStore} from 'react';
+import {resolver, type Resolver} from '@rocicorp/resolver';
 import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
@@ -30,6 +31,21 @@ export type UseQueryOptions = {
   ttl?: TTL | undefined;
 };
 
+export type UseSuspenseQueryOptions = {
+  enabled?: boolean | undefined;
+  /**
+   * Time to live (TTL) in seconds. Controls how long query results are cached
+   * after the query is removed. During this time, Zero continues to sync the query.
+   * Default is 'never'.
+   */
+  ttl?: TTL | undefined;
+  /**
+   * Whether to suspend until the query is complete or until the query has non-empty data.
+   * Default is 'complete'.
+   */
+  suspendUntil?: 'complete' | 'non-empty';
+};
+
 export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
@@ -58,6 +74,70 @@ export function useQuery<
     view.getSnapshot,
     view.getSnapshot,
   );
+}
+
+export function useSuspenseQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+>(
+  query: Query<TSchema, TTable, TReturn>,
+  options?: UseSuspenseQueryOptions | boolean,
+): QueryResult<TReturn> {
+  let enabled = true;
+  let ttl: TTL = DEFAULT_TTL_MS;
+  let suspendUntil: 'complete' | 'non-empty' = 'complete';
+  if (typeof options === 'boolean') {
+    enabled = options;
+  } else if (options) {
+    ({
+      enabled = true,
+      ttl = DEFAULT_TTL_MS,
+      suspendUntil = 'complete',
+    } = options);
+  }
+
+  const view = viewStore.getView(
+    useZero(),
+    query as AbstractQuery<TSchema, TTable, TReturn>,
+    enabled,
+    ttl,
+  );
+  // https://react.dev/reference/react/useSyncExternalStore
+  const snapshot = useSyncExternalStore(
+    view.subscribeReactInternals,
+    view.getSnapshot,
+    view.getSnapshot,
+  );
+
+  // React 19 exposes use(), otherwise we throw the promise to suspend
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+  const useHook = (React as unknown as {use?: (p: Promise<void>) => void}).use;
+
+  if (suspendUntil === 'complete' && snapshot[1].type !== 'complete') {
+    const promise = view.waitForComplete();
+    if (useHook) {
+      useHook(promise);
+    } else {
+      throw promise;
+    }
+  }
+
+  if (
+    suspendUntil === 'non-empty' &&
+    (query.format.singular
+      ? snapshot[0] === undefined
+      : (snapshot[0] as unknown[]).length === 0)
+  ) {
+    const promise = view.waitForNonEmpty();
+    if (useHook) {
+      useHook(promise);
+    } else {
+      throw promise;
+    }
+  }
+
+  return snapshot;
 }
 
 const emptyArray: unknown[] = [];
@@ -190,6 +270,8 @@ export class ViewStore {
     getSnapshot: () => QueryResult<TReturn>;
     subscribeReactInternals: (internals: () => void) => () => void;
     updateTTL: (ttl: TTL) => void;
+    waitForComplete: () => Promise<void>;
+    waitForNonEmpty: () => Promise<void>;
   } {
     const {format} = query;
     if (!enabled) {
@@ -197,6 +279,8 @@ export class ViewStore {
         getSnapshot: () => getDefaultSnapshot(format.singular),
         subscribeReactInternals: disabledSubscriber,
         updateTTL: () => {},
+        waitForComplete: () => Promise.resolve(),
+        waitForNonEmpty: () => Promise.resolve(),
       };
     }
 
@@ -270,6 +354,10 @@ class ViewWrapper<
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
   #ttl: TTL;
+  #completeResolver: Resolver<void> | undefined;
+  #complete: Promise<void> | undefined;
+  #nonEmptyResolver: Resolver<void> | undefined;
+  #nonEmpty: Promise<void> | undefined;
 
   constructor(
     query: Query<TSchema, TTable, TReturn>,
@@ -297,6 +385,20 @@ class ViewWrapper<
         ? snap
         : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
     this.#snapshot = getSnapshot(this.#format.singular, data, resultType);
+
+    if (resultType === 'complete') {
+      this.#completeResolver?.resolve();
+      this.#nonEmptyResolver?.resolve();
+    }
+
+    if (
+      this.#format.singular
+        ? this.#snapshot[0] !== undefined
+        : (this.#snapshot[0] as unknown[]).length !== 0
+    ) {
+      this.#nonEmptyResolver?.resolve();
+    }
+
     for (const internals of this.#reactInternals) {
       internals();
     }
@@ -307,6 +409,8 @@ class ViewWrapper<
       return;
     }
 
+    this.#resetComplete();
+    this.#resetNonEmpty();
     this.#view = this.#query.materialize(this.#ttl);
     this.#view.addListener(this.#onData);
 
@@ -345,5 +449,29 @@ class ViewWrapper<
   updateTTL(ttl: TTL): void {
     this.#ttl = ttl;
     this.#view?.updateTTL(ttl);
+  }
+
+  waitForComplete(): Promise<void> {
+    if (!this.#complete) {
+      this.#resetComplete();
+    }
+    return this.#complete!;
+  }
+
+  waitForNonEmpty(): Promise<void> {
+    if (!this.#nonEmpty) {
+      this.#resetNonEmpty();
+    }
+    return this.#nonEmpty!;
+  }
+
+  #resetComplete() {
+    this.#completeResolver = resolver<void>();
+    this.#complete = this.#completeResolver.promise;
+  }
+
+  #resetNonEmpty() {
+    this.#nonEmptyResolver = resolver<void>();
+    this.#nonEmpty = this.#nonEmptyResolver.promise;
   }
 }
