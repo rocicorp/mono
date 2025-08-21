@@ -74,7 +74,7 @@ jobs:
 
       - run: npm ci
       - name: Install Playwright
-        run: npx playwright install --with-deps
+        run: npx playwright install chrome firefox webkit
       - name: Run tests
         run: TEST_PG_MODE=nopg npm run test
 
