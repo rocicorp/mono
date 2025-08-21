@@ -13,6 +13,7 @@ import {version} from '../../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {wrapIterable} from '../../../../shared/src/iterables.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
@@ -21,6 +22,7 @@ import type {
   InitConnectionBody,
   InitConnectionMessage,
 } from '../../../../zero-protocol/src/connect.ts';
+import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
 import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
@@ -88,8 +90,6 @@ import {
   ttlClockFromNumber,
   type TTLClock,
 } from './ttl-clock.ts';
-import {wrapIterable} from '../../../../shared/src/iterables.ts';
-import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -1002,7 +1002,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const transformedQueries: TransformedAndHashed[] = [];
     if (customQueries.size > 0 && !this.#customQueryTransformer) {
       lc.error?.(
-        'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
+        'Custom/named queries were requested but no `ZERO_GET_QUERIES_URL` is configured for Zero Cache.',
       );
     }
     const [_, byOriginalHash] = this.#pipelines.addedQueries();
@@ -1220,7 +1220,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       if (customQueries.size > 0 && !this.#customQueryTransformer) {
         lc.error?.(
-          'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
+          'Custom/named queries were requested but no `ZERO_GET_QUERIES_URL` is configured for Zero Cache.',
         );
       }
 
