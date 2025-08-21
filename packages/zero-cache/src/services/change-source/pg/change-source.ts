@@ -185,7 +185,7 @@ async function checkAndUpdateUpstream(
   const {slot} = upstreamReplica;
   const result = await sql<
     {restartLSN: LSN | null; walStatus: string | null}[]
-  >/*sql*/ `
+  > /*sql*/ `
     SELECT restart_lsn as "restartLSN", wal_status as "walStatus" FROM pg_replication_slots
       WHERE slot_name = ${slot}`;
   if (result.length === 0) {

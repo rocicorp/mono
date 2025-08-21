@@ -65,7 +65,7 @@ export async function discoverChangeStreamerAddress(
   shard: ShardID,
   sql: PostgresDB,
 ): Promise<string | null> {
-  const result = await sql<{ownerAddress: string | null}[]>/*sql*/ `
+  const result = await sql<{ownerAddress: string | null}[]> /*sql*/ `
     SELECT "ownerAddress" FROM ${sql(cdcSchema(shard))}."replicationState"`;
   return result[0].ownerAddress;
 }
@@ -139,7 +139,7 @@ export async function ensureReplicationConfig(
         publications: string[];
         resetRequired: boolean | null;
       }[]
-    >/*sql*/ `
+    > /*sql*/ `
     SELECT "replicaVersion", "publications", "resetRequired" 
       FROM ${sql(schema)}."replicationConfig"`;
 
