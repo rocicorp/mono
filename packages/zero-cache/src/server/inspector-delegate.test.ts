@@ -1,6 +1,6 @@
 import {expect, test} from 'vitest';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import {InspectorDelegate} from './inspect-metrics-delegate.ts';
+import {InspectorDelegate} from './inspector-delegate.ts';
 
 test('routes one query meta data to all queries sharing a transformationHash', () => {
   const d = new InspectorDelegate();

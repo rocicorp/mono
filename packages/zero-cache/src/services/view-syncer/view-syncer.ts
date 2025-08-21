@@ -42,7 +42,7 @@ import {
   getOrCreateHistogram,
   getOrCreateUpDownCounter,
 } from '../../observability/metrics.ts';
-import {InspectorDelegate} from '../../server/inspect-metrics-delegate.ts';
+import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';

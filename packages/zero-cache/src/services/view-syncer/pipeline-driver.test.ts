@@ -5,7 +5,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
-import {InspectorDelegate} from '../../server/inspect-metrics-delegate.ts';
+import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {DbFile} from '../../test/lite.ts';
 import {initChangeLog} from '../replicator/schema/change-log.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';

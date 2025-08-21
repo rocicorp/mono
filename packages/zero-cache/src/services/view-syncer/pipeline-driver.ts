@@ -30,7 +30,7 @@ import type {LogConfig} from '../../config/zero-config.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import {getOrCreateHistogram} from '../../observability/metrics.ts';
-import type {InspectorDelegate} from '../../server/inspect-metrics-delegate.ts';
+import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import type {RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
 import type {ShardID} from '../../types/shards.ts';

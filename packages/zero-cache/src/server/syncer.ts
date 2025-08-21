@@ -28,7 +28,7 @@ import {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
 import {startAnonymousTelemetry} from './anonymous-otel-start.ts';
-import {InspectorDelegate} from './inspect-metrics-delegate.ts';
+import {InspectorDelegate} from './inspector-delegate.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
 
