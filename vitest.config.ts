@@ -49,13 +49,16 @@ function* getProjects(): Iterable<string> {
 }
 
 function filterTestName(name: string) {
+  if (!TEST_PG_MODE) {
+    return true;
+  }
   if (TEST_PG_MODE === 'nopg') {
     return !name.includes('pg-');
   }
   if (TEST_PG_MODE === 'pg') {
     return name.includes('pg-');
   }
-  return true;
+  return name.includes(TEST_PG_MODE);
 }
 
 const projects = [...getProjects()].filter(filterTestName);
