@@ -194,21 +194,25 @@ $$ LANGUAGE plpgsql;
 -- Until then, I think it makes the most sense to copy the indices from upstream
 -- to the replica. The argument in favor of this is that it gives the user a single
 -- place to manage indices and it saves us a step in setting up our demo apps.
-CREATE INDEX issuelabel_issueid_idx ON "issueLabel" ("issueID");
+CREATE INDEX issuelabel_issueid_idx ON "issueLabel" ("issueID", "labelID");
 
 CREATE INDEX "issueLabel_labelID_modified_idx" ON "issueLabel" ("labelID", modified);
 
-CREATE INDEX issue_modified_idx ON issue (modified);
+CREATE INDEX issue_shortid_idx ON issue ("shortID", id);
 
-CREATE INDEX issue_created_idx ON issue (created);
+CREATE INDEX issue_modified_idx ON issue (modified, id);
 
-CREATE INDEX issue_open_modified_idx ON issue (open, modified);
+CREATE INDEX issue_created_idx ON issue (created, id);
 
-CREATE INDEX "issue_assigneeID_modified_idx" ON issue ("assigneeID", modified);
+CREATE INDEX issue_open_modified_idx ON issue (open, modified, id);
 
-CREATE INDEX "issue_creatorID_modified_idx" ON issue ("creatorID", modified);
+CREATE INDEX "issue_assigneeID_modified_idx" ON issue ("assigneeID", modified, id);
 
+CREATE INDEX "issue_creatorID_modified_idx" ON issue ("creatorID", modified, id);
 
-CREATE INDEX comment_issueid_idx ON "comment" ("issueID");
+CREATE INDEX comment_issueid_created_idx ON "comment" ("issueID", "created", id);
+
+CREATE INDEX emoji_created_idx ON emoji (created, id);
+CREATE INDEX emoji_subject_id_idx ON emoji ("subjectID", id);
 
 VACUUM;

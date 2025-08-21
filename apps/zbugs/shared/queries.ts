@@ -55,18 +55,19 @@ export const queries = {
     (auth: AuthData | undefined, userID) =>
       applyIssuePermissions(
         builder.issue
-          .related('labels')
+          .related('issueLabels')
           .related('viewState', q => q.where('userID', userID))
-          .related('creator')
-          .related('assignee')
-          .related('emoji', emoji => emoji.related('creator'))
+          .related('emoji')
           .related('comments', comments =>
             comments
-              .related('creator')
-              .related('emoji', emoji => emoji.related('creator'))
+              .related('emoji')
               .limit(10)
-              .orderBy('created', 'desc'),
-          ),
+              .orderBy('created', 'desc')
+              .orderBy('id', 'desc'),
+          )
+          .orderBy('modified', 'desc')
+          .orderBy('id', 'desc')
+          .limit(1000),
         auth?.role,
       ),
   ),
@@ -98,7 +99,9 @@ export const queries = {
             and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
           );
         } else if (filter === 'creators') {
-          q = q.whereExists('createdIssues');
+          q = q.whereExists('createdIssues', q =>
+            q.orderBy('creatorID', 'desc').orderBy('modified', 'desc'),
+          );
         } else {
           throw new Error(`Unknown filter: ${filter}`);
         }
