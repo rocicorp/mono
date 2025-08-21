@@ -253,7 +253,6 @@ class AnonymousTelemetryManager {
     this.#activeClientGroupsGetter = getter;
   }
 
-
   shutdown() {
     this.#stopped = true;
     if (this.#meterProvider) {

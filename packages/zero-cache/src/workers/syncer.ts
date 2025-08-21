@@ -145,7 +145,6 @@ export class Syncer implements SingletonService {
     mutagen.ref();
     pusher?.ref();
 
-
     let connection: Connection;
     try {
       connection = new Connection(
