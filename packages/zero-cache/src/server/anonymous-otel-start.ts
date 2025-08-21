@@ -31,8 +31,6 @@ class AnonymousTelemetryManager {
   #totalConnectionsSuccess = 0;
   #totalConnectionsAttempted = 0;
   #activeClientGroupsGetter: (() => number) | undefined;
-  #totalUniqueClientGroups = 0;
-  #seenClientGroups = new Set<string>();
   #lc: LogContext | undefined;
   #config: ZeroConfig | undefined;
   #processId: string;
@@ -255,12 +253,6 @@ class AnonymousTelemetryManager {
     this.#activeClientGroupsGetter = getter;
   }
 
-  recordClientGroupActive(clientGroupID: string) {
-    if (!this.#seenClientGroups.has(clientGroupID)) {
-      this.#seenClientGroups.add(clientGroupID);
-      this.#totalUniqueClientGroups++;
-    }
-  }
 
   shutdown() {
     this.#stopped = true;
@@ -437,6 +429,4 @@ export const recordConnectionAttempted = () =>
   manager().recordConnectionAttempted();
 export const setActiveClientGroupsGetter = (getter: () => number) =>
   manager().setActiveClientGroupsGetter(getter);
-export const recordClientGroupActive = (clientGroupID: string) =>
-  manager().recordClientGroupActive(clientGroupID);
 export const shutdownAnonymousTelemetry = () => manager().shutdown();

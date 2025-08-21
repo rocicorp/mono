@@ -30,7 +30,6 @@ import {
   recordConnectionSuccess,
   recordConnectionAttempted,
   setActiveClientGroupsGetter,
-  recordClientGroupActive,
 } from '../server/anonymous-otel-start.ts';
 
 export type SyncerWorkerData = {
@@ -146,8 +145,6 @@ export class Syncer implements SingletonService {
     mutagen.ref();
     pusher?.ref();
 
-    // Record this client group as active for telemetry
-    recordClientGroupActive(clientGroupID);
 
     let connection: Connection;
     try {
