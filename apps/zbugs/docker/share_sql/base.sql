@@ -73,8 +73,8 @@ CREATE TABLE label (
 CREATE TABLE "issueLabel" (
     "labelID" VARCHAR REFERENCES label(id) ON DELETE CASCADE,
     "issueID" VARCHAR REFERENCES issue(id) ON DELETE CASCADE,
-    "modified" DOUBLE PRECISION,
-    "created" DOUBLE PRECISION,
+    "modified" DOUBLE PRECISION, -- denormalized by trigger from issue
+    "created" DOUBLE PRECISION, -- denormalized by trigger from issue
     PRIMARY KEY ("labelID", "issueID")
 );
 
@@ -93,8 +93,6 @@ CREATE TABLE emoji (
 
     UNIQUE ("subjectID", "creatorID", "value")
 );
-CREATE INDEX emoji_created_idx ON emoji (created);
-CREATE INDEX emoji_subject_id_idx ON emoji ("subjectID");
 
 
 -- userPref

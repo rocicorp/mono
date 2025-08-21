@@ -20,6 +20,7 @@ const user = table('user')
     login: string(),
     name: string().optional(),
     avatar: string(),
+    githubID: number(),
     role: enumeration<Role>(),
   })
   .primaryKey('id');
@@ -128,6 +129,11 @@ const issueRelationships = relationships(issue, ({many, one}) => ({
       destSchema: label,
     },
   ),
+  issueLabels: many({
+    sourceField: ['id'],
+    destField: ['issueID'],
+    destSchema: issueLabel,
+  }),
   comments: many({
     sourceField: ['id'],
     destField: ['issueID'],

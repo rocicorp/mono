@@ -119,7 +119,6 @@ function serverOptimizedListQuery(
       .where('name', labels[0])
       .related('issueLabels', q => {
         q = q
-          .limit(args.limit)
           .whereExists('issues', q =>
             buildBaseListQueryFilter(q, restListContext, args.role),
           )
@@ -140,15 +139,13 @@ function serverOptimizedListQuery(
               ? 'desc'
               : 'asc';
         q = q
-          .orderBy(
-            listContext.sortField === 'modified'
-              ? 'issueModified'
-              : 'issueCreated',
-            orderByDir,
-          )
+          .orderBy(listContext.sortField, orderByDir)
           .orderBy('issueID', orderByDir);
         if (args.start) {
           q = q.start(args.start);
+        }
+        if (args.limit) {
+          q = q.limit(args.limit);
         }
         return q;
       })
