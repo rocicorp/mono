@@ -6,8 +6,8 @@ import {MessagePort} from 'node:worker_threads';
 import {WebSocketServer, type WebSocket} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {tokenConfigOptions, verifyToken} from '../auth/jwt.ts';
-import {type ZeroConfig} from '../config/zero-config.ts';
+import {verifyToken} from '../auth/jwt.ts';
+import {type AuthConfig, type ZeroConfig} from '../config/zero-config.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
@@ -30,7 +30,6 @@ import {
   recordConnectionSuccess,
   recordConnectionAttempted,
 } from '../server/anonymous-otel-start.ts';
-import {assert} from '../../../shared/src/asserts.ts';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -54,7 +53,7 @@ export class Syncer implements SingletonService {
   readonly #parent: Worker;
   readonly #wss: WebSocketServer;
   readonly #stopped = resolver();
-  readonly #config: ZeroConfig;
+  readonly #authConfig: AuthConfig;
 
   constructor(
     lc: LogContext,
@@ -68,7 +67,7 @@ export class Syncer implements SingletonService {
     pusherFactory: ((id: string) => Pusher & Service) | undefined,
     parent: Worker,
   ) {
-    this.#config = config;
+    this.#authConfig = config.auth;
     // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
     const notifier = createNotifierFrom(lc, parent);
@@ -113,46 +112,25 @@ export class Syncer implements SingletonService {
 
     let decodedToken: JWTPayload | undefined;
     if (auth) {
-      const tokenOptions = tokenConfigOptions(this.#config.auth);
-
-      const hasPushOrMutate =
-        this.#config?.push?.url !== undefined ||
-        this.#config?.mutate?.url !== undefined;
-      const hasGetQueries = this.#config?.getQueries?.url !== undefined;
-
-      // must either have one of the token options set or have custom mutations & queries enabled
-      assert(
-        tokenOptions.length === 1 || (hasPushOrMutate && hasGetQueries),
-        'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
-          JSON.stringify(tokenOptions) +
-          '. You may also set both ZERO_MUTATE_URL and ZERO_GET_QUERIES_URL to enable custom mutations and queries without passing token verification options.',
-      );
-
-      if (tokenOptions.length > 0) {
-        try {
-          decodedToken = await verifyToken(this.#config.auth, auth, {
-            subject: userID,
-          });
-          this.#lc.debug?.(
-            `Received auth token ${auth} for clientID ${clientID}, decoded: ${JSON.stringify(decodedToken)}`,
-          );
-        } catch (e) {
-          sendError(
-            this.#lc,
-            ws,
-            {
-              kind: ErrorKind.AuthInvalidated,
-              message: `Failed to decode auth token: ${String(e)}`,
-            },
-            e,
-          );
-          ws.close(3000, 'Failed to decode JWT');
-          return;
-        }
-      } else {
-        this.#lc.warn?.(
-          `One of jwk, secret, or jwksUrl is not configured - the \`authorization\` header must be manually verified by the user`,
+      try {
+        decodedToken = await verifyToken(this.#authConfig, auth, {
+          subject: userID,
+        });
+        this.#lc.debug?.(
+          `Received auth token ${auth} for clientID ${clientID}, decoded: ${JSON.stringify(decodedToken)}`,
         );
+      } catch (e) {
+        sendError(
+          this.#lc,
+          ws,
+          {
+            kind: ErrorKind.AuthInvalidated,
+            message: `Failed to decode auth token: ${String(e)}`,
+          },
+          e,
+        );
+        ws.close(3000, 'Failed to decode JWT');
+        return;
       }
     } else {
       this.#lc.debug?.(`No auth token received for clientID ${clientID}`);
@@ -172,10 +150,10 @@ export class Syncer implements SingletonService {
         new SyncerWsMessageHandler(
           this.#lc,
           params,
-          auth !== undefined
+          auth !== undefined && decodedToken !== undefined
             ? {
                 raw: auth,
-                decoded: decodedToken ?? {},
+                decoded: decodedToken,
               }
             : undefined,
           this.#viewSyncers.getService(clientGroupID),
