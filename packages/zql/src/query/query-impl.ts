@@ -41,6 +41,7 @@ import {
 import type {CustomQueryID} from './named.ts';
 import type {GotCallback, QueryDelegate} from './query-delegate.ts';
 import {
+  delegateSymbol,
   type GetFilterType,
   type HumanReadable,
   type PreloadOptions,
@@ -131,7 +132,7 @@ export abstract class AbstractQuery<
     this.customQueryID = customQueryID;
   }
 
-  delegate(delegate: QueryDelegate): Query<TSchema, TTable, TReturn> {
+  [delegateSymbol](delegate: QueryDelegate): Query<TSchema, TTable, TReturn> {
     return this[newQuerySymbol](
       delegate,
       this.#schema,

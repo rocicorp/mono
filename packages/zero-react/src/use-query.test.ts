@@ -4,6 +4,7 @@ import {type AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
 import {getAllViewsSizeForTesting, ViewStore} from './use-query.tsx';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
+import {delegateSymbol} from '../../zql/src/query/query.ts';
 
 function newMockQuery(
   query: string,
@@ -14,7 +15,7 @@ function newMockQuery(
     hash() {
       return query;
     },
-    delegate() {
+    [delegateSymbol]() {
       return ret;
     },
     materialize: vi.fn().mockImplementation(() => view),

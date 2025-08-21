@@ -87,6 +87,7 @@ import {
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery, type AnyQuery} from '../../../zql/src/query/query-impl.ts';
 import {
+  delegateSymbol,
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
@@ -831,16 +832,19 @@ export class Zero<
     query: Query<S, keyof S['tables'] & string, any>,
     options?: PreloadOptions | undefined,
   ) {
-    return query.delegate(this.#zeroContext).preload(options);
+    return query[delegateSymbol](this.#zeroContext).preload(options);
   }
 
   run<Q>(
     query: Q,
     runOptions?: RunOptions | undefined,
   ): Promise<HumanReadable<QueryReturn<Q>>> {
-    return (query as AnyQuery)
-      .delegate(this.#zeroContext)
-      .run(runOptions) as Promise<HumanReadable<QueryReturn<Q>>>;
+    return (
+      (query as AnyQuery)
+        // eslint-disable-next-line no-unexpected-multiline
+        [delegateSymbol](this.#zeroContext)
+        .run(runOptions) as Promise<HumanReadable<QueryReturn<Q>>>
+    );
   }
 
   materialize<Q>(
@@ -861,13 +865,19 @@ export class Zero<
     maybeOptions?: MaterializeOptions | undefined,
   ) {
     if (typeof factoryOrOptions === 'function') {
-      return (query as AnyQuery)
-        .delegate(this.#zeroContext)
-        .materialize(factoryOrOptions, maybeOptions?.ttl);
+      return (
+        (query as AnyQuery)
+          // eslint-disable-next-line no-unexpected-multiline
+          [delegateSymbol](this.#zeroContext)
+          .materialize(factoryOrOptions, maybeOptions?.ttl)
+      );
     }
-    return (query as AnyQuery)
-      .delegate(this.#zeroContext)
-      .materialize(factoryOrOptions?.ttl);
+    return (
+      (query as AnyQuery)
+        // eslint-disable-next-line no-unexpected-multiline
+        [delegateSymbol](this.#zeroContext)
+        .materialize(factoryOrOptions?.ttl)
+    );
   }
 
   /**
