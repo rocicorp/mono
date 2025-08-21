@@ -60,6 +60,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    needs: [format, lint, check-types]
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -81,6 +82,7 @@ jobs:
   test-pg:
     name: Test PG
     runs-on: ubuntu-latest
+    needs: [format, lint, check-types]
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
