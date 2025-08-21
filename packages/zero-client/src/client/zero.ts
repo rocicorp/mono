@@ -157,6 +157,7 @@ import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
+import {emptyFunction} from '../../../shared/src/sentinels.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -478,10 +479,15 @@ export class Zero<
     });
     const logOptions = this.#logOptions;
 
+    const {enableLegacyMutators = true, enableLegacyQueries = true} = options;
+
     const replicacheMutators: MutatorDefs & {
       [CRUD_MUTATION_NAME]: CRUDMutator;
     } = {
-      [CRUD_MUTATION_NAME]: makeCRUDMutator(schema),
+      [CRUD_MUTATION_NAME]: enableLegacyMutators
+        ? makeCRUDMutator(schema)
+        : () =>
+            Promise.reject(new Error('Zero CRUD mutators are not enabled.')),
     };
     this.#ivmMain = new IVMSourceBranch(schema.tables);
 
@@ -577,11 +583,22 @@ export class Zero<
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
-      (ast, ttl, gotCallback) =>
-        this.#queryManager.addLegacy(ast, ttl, gotCallback),
+      (ast, ttl, gotCallback) => {
+        if (enableLegacyQueries) {
+          return this.#queryManager.addLegacy(ast, ttl, gotCallback);
+        }
+        // legacy queries are client side only. Do not track with the server
+        return emptyFunction;
+      },
       (ast, customQueryID, ttl, gotCallback) =>
         this.#queryManager.addCustom(ast, customQueryID, ttl, gotCallback),
-      (ast, ttl) => this.#queryManager.updateLegacy(ast, ttl),
+      (ast, ttl) => {
+        if (enableLegacyQueries) {
+          this.#queryManager.updateLegacy(ast, ttl);
+          return;
+        }
+        this.#queryManager.updateLegacy(ast, ttl);
+      },
       (customQueryID, ttl) =>
         this.#queryManager.updateCustom(customQueryID, ttl),
       () => this.#queryManager.flushBatch(),

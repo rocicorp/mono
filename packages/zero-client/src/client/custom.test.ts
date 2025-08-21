@@ -25,9 +25,12 @@ import type {WriteTransaction} from './replicache-types.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
+import {QueryManager} from './query-manager.ts';
 
 type Schema = typeof schema;
 type MutatorTx = Transaction<Schema>;
+
+afterEach(() => vi.restoreAllMocks());
 
 test('argument types are preserved on the generated mutator interface', () => {
   const mutators = {
@@ -792,5 +795,89 @@ test('warns when awaiting the promise directly', async () => {
     'Awaiting the mutator result directly is being deprecated. Please use `await z.mutate[mutatorName].client` or `await result.mutate[mutatorName].server`',
   ]);
 
+  await z.close();
+});
+
+test('trying to use crud mutators throws if `enableLegacyMutators` is set to false', async () => {
+  const z = zeroForTest({
+    schema,
+    enableLegacyMutators: false,
+  });
+
+  await expect(
+    z.mutate.issue.insert({
+      id: '1',
+      title: 'foo',
+      closed: false,
+      description: '',
+      ownerId: '',
+      createdAt: 1743018138477,
+    }),
+  ).rejects.toThrowErrorMatchingInlineSnapshot(
+    `[Error: Zero CRUD mutators are not enabled.]`,
+  );
+
+  await z.close();
+});
+
+test('crud mutators work if `enableLegacyMutators` is set to true (or not set)', async () => {
+  const z = zeroForTest({
+    schema,
+  });
+
+  await z.mutate.issue.insert({
+    id: '1',
+    title: 'foo',
+    closed: false,
+    description: '',
+    ownerId: '',
+    createdAt: 1743018138477,
+  });
+  // read a row
+  await expect(z.query.issue.where('id', '1').one()).resolves.toEqual({
+    id: '1',
+    title: 'foo',
+    closed: false,
+    description: '',
+    ownerId: '',
+    createdAt: 1743018138477,
+    [refCountSymbol]: 1,
+  });
+
+  await z.close();
+});
+
+test('unnamed queries do not get registered with the query manager if `enableLegacyQueries` is set to false', async () => {
+  const addLegacySpy = vi.spyOn(QueryManager.prototype, 'addLegacy');
+  const z = zeroForTest({
+    schema,
+    enableLegacyQueries: false,
+  });
+
+  // mock the QueryManager class
+  // and spy on addLegacy
+
+  await z.triggerConnected();
+  await z.waitForConnectionState(ConnectionState.Connected);
+
+  await z.query.issue.where('id', '1').one();
+
+  expect(addLegacySpy).not.toHaveBeenCalled();
+  await z.close();
+});
+
+test('unnamed queries do get registered with the query manager if `enableLegacyQueries` is set to true', async () => {
+  const addLegacySpy = vi.spyOn(QueryManager.prototype, 'addLegacy');
+
+  const z = zeroForTest({
+    schema,
+  });
+
+  await z.triggerConnected();
+  await z.waitForConnectionState(ConnectionState.Connected);
+
+  await z.query.issue.where('id', '1').one();
+
+  expect(addLegacySpy).toHaveBeenCalled();
   await z.close();
 });
