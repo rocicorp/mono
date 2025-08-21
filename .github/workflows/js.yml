@@ -95,4 +95,7 @@ jobs:
 
       - run: npm ci
       - name: Run tests
-        run: TEST_PG_MODE=pg npm run test
+        run: |
+          TEST_PG_MODE=pg-17 npm run test
+          TEST_PG_MODE=pg-16 npm run test
+          TEST_PG_MODE=pg-15 npm run test
