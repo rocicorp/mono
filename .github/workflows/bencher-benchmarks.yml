@@ -57,7 +57,7 @@ jobs:
     name: Perf
     permissions:
       checks: write
-    runs-on: ubuntu-24-arm64-perf
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -82,7 +82,7 @@ jobs:
           npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
           bencher run \
           --project zero \
-          --testbed perf-runner \
+          --testbed self-hosted \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \

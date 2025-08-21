@@ -190,7 +190,7 @@ const makeMutatorQueryOptions = (
 
 const mutateOptions = makeMutatorQueryOptions(undefined, 'push mutations');
 const pushOptions = makeMutatorQueryOptions('mutate-url', 'push mutations');
-const queryOptions = makeMutatorQueryOptions(undefined, 'send named queries');
+const queryOptions = makeMutatorQueryOptions(undefined, 'send synced queries');
 
 export type AuthConfig = Config<typeof authOptions>;
 
@@ -239,7 +239,7 @@ export const zeroOptions = {
 
   push: pushOptions,
   mutate: mutateOptions,
-  query: queryOptions,
+  getQueries: queryOptions,
 
   cvr: {
     db: {

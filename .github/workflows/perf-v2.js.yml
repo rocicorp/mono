@@ -10,7 +10,7 @@ on:
 jobs:
   benchmark:
     name: Performance regression check
-    runs-on: ubuntu-24-arm64-perf
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -82,22 +82,22 @@ test('zero-cache --help', () => {
                                                                    This is useful for passing authentication cookies to the API server.                              
                                                                    If false, cookies are not forwarded.                                                              
                                                                                                                                                                      
-     --query-url string[]                                          optional                                                                                          
-       ZERO_QUERY_URL env                                                                                                                                            
+     --get-queries-url string[]                                    optional                                                                                          
+       ZERO_GET_QUERIES_URL env                                                                                                                                      
                                                                                                                                                                      
-                                                                   The URL of the API server to which zero-cache will send named queries.                            
+                                                                   The URL of the API server to which zero-cache will send synced queries.                           
                                                                                                                                                                      
                                                                    * is allowed if you would like to allow the client to specify a subdomain to use.                 
                                                                    e.g., *.example.com/api/mutate                                                                    
                                                                    You can specify multiple URLs as well which the client can choose from.                           
                                                                    e.g., ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                      
                                                                                                                                                                      
-     --query-api-key string                                        optional                                                                                          
-       ZERO_QUERY_API_KEY env                                                                                                                                        
+     --get-queries-api-key string                                  optional                                                                                          
+       ZERO_GET_QUERIES_API_KEY env                                                                                                                                  
                                                                    An optional secret used to authorize zero-cache to call the API server handling writes.           
                                                                                                                                                                      
-     --query-forward-cookies boolean                               default: false                                                                                    
-       ZERO_QUERY_FORWARD_COOKIES env                                                                                                                                
+     --get-queries-forward-cookies boolean                         default: false                                                                                    
+       ZERO_GET_QUERIES_FORWARD_COOKIES env                                                                                                                          
                                                                    If true, zero-cache will forward cookies from the request.                                        
                                                                    This is useful for passing authentication cookies to the API server.                              
                                                                    If false, cookies are not forwarded.                                                              
