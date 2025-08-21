@@ -1,6 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {mapValues} from '../../../shared/src/objects.ts';
 import {TDigest} from '../../../shared/src/tdigest.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ServerMetrics as ServerMetricsJSON} from '../../../zero-protocol/src/inspect-down.ts';
 import {
   isServerMetric,
@@ -17,10 +18,12 @@ export type ServerMetrics = {
   'query-update-server': TDigest;
 };
 
-export class InspectMetricsDelegate implements MetricsDelegate {
+export class InspectorDelegate implements MetricsDelegate {
   readonly #globalMetrics: ServerMetrics = newMetrics();
   readonly #perQueryServerMetrics = new Map<string, ServerMetrics>();
-  readonly #hashToIDs: Map<string, Set<string>> = new Map();
+  readonly #hashToIDs = new Map<string, Set<string>>();
+  readonly #queryIDToTransformationHash = new Map<string, string>();
+  readonly #transformationASTs: Map<string, AST> = new Map();
 
   addMetric<K extends keyof MetricMap>(
     metric: K,
@@ -50,24 +53,35 @@ export class InspectMetricsDelegate implements MetricsDelegate {
     return mapValues(this.#globalMetrics, v => v.toJSON());
   }
 
-  deleteMetricsForQuery(queryID: string): void {
+  getASTForQuery(queryID: string): AST | undefined {
+    const transformationHash = this.#queryIDToTransformationHash.get(queryID);
+    return transformationHash
+      ? this.#transformationASTs.get(transformationHash)
+      : undefined;
+  }
+
+  removeQuery(queryID: string): void {
     this.#perQueryServerMetrics.delete(queryID);
+    this.#queryIDToTransformationHash.delete(queryID);
     // Remove queryID from all hash-to-ID mappings
-    for (const [hash, idSet] of this.#hashToIDs.entries()) {
+    for (const [transformationHash, idSet] of this.#hashToIDs.entries()) {
       idSet.delete(queryID);
       if (idSet.size === 0) {
-        this.#hashToIDs.delete(hash);
+        this.#hashToIDs.delete(transformationHash);
+        this.#transformationASTs.delete(transformationHash);
       }
     }
   }
 
-  addQueryMapping(transformationHash: string, queryID: string): void {
+  addQuery(transformationHash: string, queryID: string, ast: AST): void {
     const existing = this.#hashToIDs.get(transformationHash);
     if (existing === undefined) {
       this.#hashToIDs.set(transformationHash, new Set([queryID]));
     } else {
       existing.add(queryID);
     }
+    this.#queryIDToTransformationHash.set(queryID, transformationHash);
+    this.#transformationASTs.set(transformationHash, ast);
   }
 }
 

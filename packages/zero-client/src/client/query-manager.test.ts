@@ -28,6 +28,7 @@ import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import {upPutOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
+import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {MAX_TTL_MS, type TTL} from '../../../zql/src/query/ttl.ts';
 import {toGotQueriesKey} from './keys.ts';
@@ -104,7 +105,14 @@ test('add and remove a custom query', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
   );
-  const rm1 = queryManager.addCustom({name: 'customQuery', args: [1]}, '1m');
+  const ast: AST = {
+    table: 'issue',
+  };
+  const rm1 = queryManager.addCustom(
+    ast,
+    {name: 'customQuery', args: [1]},
+    '1m',
+  );
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
   expect(send).toBeCalledWith([
@@ -122,20 +130,28 @@ test('add and remove a custom query', () => {
     },
   ]);
 
-  const rm2 = queryManager.addCustom({name: 'customQuery', args: [1]}, '1m');
+  const rm2 = queryManager.addCustom(
+    ast,
+    {name: 'customQuery', args: [1]},
+    '1m',
+  );
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
 
   rm2();
   queryManager.flushBatch();
-  const rm3 = queryManager.addCustom({name: 'customQuery', args: [1]}, '1m');
+  const rm3 = queryManager.addCustom(
+    ast,
+    {name: 'customQuery', args: [1]},
+    '1m',
+  );
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
   rm1();
   queryManager.flushBatch();
   rm3();
   queryManager.flushBatch();
-  queryManager.addCustom({name: 'customQuery', args: [1]}, '1m');
+  queryManager.addCustom(ast, {name: 'customQuery', args: [1]}, '1m');
   queryManager.flushBatch();
   // once for del, another for put
   expect(send).toBeCalledTimes(3);
@@ -1676,13 +1692,12 @@ test('batching multiple operations in same microtask', () => {
   );
 
   // Add multiple queries synchronously - should be batched
+  const ast: AST = {table: 'issue', orderBy: [['id', 'desc']]};
   queryManager.addLegacy({table: 'issue', orderBy: [['id', 'asc']]}, 'forever');
-  queryManager.addLegacy(
-    {table: 'issue', orderBy: [['id', 'desc']]},
-    'forever',
-  );
-  queryManager.addCustom({name: 'customQuery1', args: [1]}, '1m');
-  queryManager.addCustom({name: 'customQuery2', args: [2]}, '1m');
+  queryManager.addLegacy(ast, 'forever');
+
+  queryManager.addCustom(ast, {name: 'customQuery1', args: [1]}, '1m');
+  queryManager.addCustom(ast, {name: 'customQuery2', args: [2]}, '1m');
 
   expect(send).toBeCalledTimes(0); // No calls yet
 
@@ -1811,7 +1826,10 @@ describe('Adding a query with TTL too large should warn', () => {
   test('addCustom', () => {
     // Test with TTL larger than MAX_TTL_MS (600,000ms = 10 minutes)
     const largeTTL = MAX_TTL_MS + 1; // 600,001ms
-    queryManager.addCustom({name: 'testQuery', args: ['arg1']}, largeTTL);
+    const ast: AST = {
+      table: 'issue',
+    };
+    queryManager.addCustom(ast, {name: 'testQuery', args: ['arg1']}, largeTTL);
     queryManager.flushBatch();
 
     expect(logSink.log).toHaveBeenCalledExactlyOnceWith(
@@ -1822,7 +1840,11 @@ describe('Adding a query with TTL too large should warn', () => {
 
     // Test with 'forever' TTL which should also warn
     logSink.log.mockClear();
-    queryManager.addCustom({name: 'testQuery2', args: ['arg2']}, 'forever');
+    queryManager.addCustom(
+      ast,
+      {name: 'testQuery2', args: ['arg2']},
+      'forever',
+    );
     queryManager.flushBatch();
 
     expect(logSink.log).toHaveBeenCalledExactlyOnceWith(
@@ -1833,7 +1855,7 @@ describe('Adding a query with TTL too large should warn', () => {
 
     // Test with valid TTL that should not warn
     logSink.log.mockClear();
-    queryManager.addCustom({name: 'testQuery3', args: ['arg3']}, '5m');
+    queryManager.addCustom(ast, {name: 'testQuery3', args: ['arg3']}, '5m');
     queryManager.flushBatch();
 
     expect(logSink.log).not.toHaveBeenCalled();
@@ -1933,7 +1955,10 @@ describe('update clamps TTL correctly', () => {
 
   test('updateCustom', () => {
     // Add a custom query with a specific TTL
-    queryManager.addCustom({name: 'customQuery', args: [1]}, '1m');
+    const ast: AST = {
+      table: 'issue',
+    };
+    queryManager.addCustom(ast, {name: 'customQuery', args: [1]}, '1m');
     queryManager.flushBatch();
 
     // Update the query with a larger TTL
@@ -1994,7 +2019,10 @@ describe('update clamps TTL correctly', () => {
 
   test('updateCustom does not send when TTL is already at max', () => {
     // Add a custom query with max TTL
-    queryManager.addCustom({name: 'customQuery', args: [1]}, 'forever');
+    const ast: AST = {
+      table: 'issue',
+    };
+    queryManager.addCustom(ast, {name: 'customQuery', args: [1]}, 'forever');
     queryManager.flushBatch();
 
     // Update the query with a larger TTL (should be no-op since already at max)
@@ -2020,5 +2048,32 @@ describe('update clamps TTL correctly', () => {
         ],
       },
     ]);
+  });
+});
+
+test('Getting the AST of custom query', () => {
+  const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+  const maxRecentQueriesSize = 0;
+  const mutationTracker = new MutationTracker(lc, ackMutations);
+  const queryManager = new QueryManager(
+    lc,
+    mutationTracker,
+    'client1',
+    schema.tables,
+    send,
+    () => () => {},
+    maxRecentQueriesSize,
+    queryChangeThrottleMs,
+    slowMaterializeThreshold,
+  );
+
+  const ast: AST = {
+    table: 'issue',
+  };
+  queryManager.addCustom(ast, {name: 'customQuery', args: [1]}, '1m');
+
+  const queryID = hashOfNameAndArgs('customQuery', [1]);
+  expect(queryManager.getAST(queryID)).toEqual({
+    table: 'issue',
   });
 });
