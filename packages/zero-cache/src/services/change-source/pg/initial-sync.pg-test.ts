@@ -2310,6 +2310,10 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       'missing metadata publication',
       `DROP PUBLICATION "_${APP_ID}_metadata_${SHARD_NUM}"`,
     ],
+    [
+      'dropped schema with vestigial publications',
+      `DROP SCHEMA "${APP_ID}_${SHARD_NUM}" CASCADE`,
+    ],
   ])('recover from corrupted state: %s', async (_name, corruption) => {
     const lc = createSilentLogContext();
     const sql = upstream;
