@@ -273,12 +273,19 @@ describe('Anonymous Telemetry Integration Tests', () => {
         },
       );
 
+      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith(
+        'zero.gauge_active_client_groups',
+        {
+          description: 'Number of currently active client groups',
+        },
+      );
+
       // Note: Histogram metrics are not currently implemented in the anonymous telemetry
     });
 
     test('should register callbacks for observable metrics', () => {
       // Each observable should have a callback registered
-      expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(1); // 1 gauge (uptime)
+      expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(2); // 2 gauges (uptime, active_client_groups)
       expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(7); // 7 counters (uptime_counter, crud_mutations, custom_mutations, total_mutations, rows_synced, connections_success, connections_attempted)
     });
   });
