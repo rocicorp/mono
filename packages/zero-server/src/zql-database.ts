@@ -26,8 +26,7 @@ import type {
 export class ZQLDatabase<S extends Schema, WrappedTransaction>
   implements Database<TransactionImpl<S, WrappedTransaction>>
 {
-  readonly #connection: DBConnection<WrappedTransaction>;
-
+  readonly connection: DBConnection<WrappedTransaction>;
   readonly #mutate: (
     dbTransaction: DBTransaction<WrappedTransaction>,
     serverSchema: ServerSchema,
@@ -39,7 +38,7 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
   readonly #schema: S;
 
   constructor(connection: DBConnection<WrappedTransaction>, schema: S) {
-    this.#connection = connection;
+    this.connection = connection;
     this.#mutate = makeSchemaCRUD(schema);
     this.#query = makeSchemaQuery(schema);
     this.#schema = schema;
@@ -52,7 +51,7 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
     ) => Promise<R>,
     transactionInput: TransactionProviderInput,
   ): Promise<R> {
-    return this.#connection.transaction(async dbTx => {
+    return this.connection.transaction(async dbTx => {
       const zeroTx = await makeServerTransaction(
         dbTx,
         transactionInput.clientID,
