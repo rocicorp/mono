@@ -114,8 +114,16 @@
       "default": "./out/zero/src/server.js"
     },
     "./server/adapters/postgresjs": {
-      "types": "./out/zero-server/src/adapters/postgres.d.ts",
+      "types": "./out/zero-server/src/adapters/postgresjs.d.ts",
       "default": "./out/zero/src/adapters/postgresjs.js"
+    },
+    "./server/adapters/pg": {
+      "types": "./out/zero-server/src/adapters/pg.d.ts",
+      "default": "./out/zero/src/adapters/pg.js"
+    },
+    "./server/adapters/drizzle-postgresjs": {
+      "types": "./out/zero-server/src/adapters/drizzle-postgresjs.d.ts",
+      "default": "./out/zero/src/adapters/drizzle-postgresjs.js"
     },
     "./server/adapters/drizzle-pg": {
       "types": "./out/zero-server/src/adapters/drizzle-pg.d.ts",

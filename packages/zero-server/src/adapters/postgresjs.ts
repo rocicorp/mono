@@ -8,6 +8,16 @@ import type {
 import postgres from 'postgres';
 import {ZQLDatabase} from '../zql-database.ts';
 
+/**
+ * Helper type for the wrapped transaction used by postgres.js.
+ *
+ * @typeParam T - The row-shape context bound to the postgres.js client.
+ * @remarks Use with `ServerTransaction` as `ServerTransaction<Schema, PostgresJsTransaction>`.
+ */
+export type PostgresJsTransaction<
+  T extends Record<string, unknown> = Record<string, unknown>,
+> = postgres.TransactionSql<T>;
+
 export class PostgresJSConnection<T extends Record<string, unknown>>
   implements DBConnection<postgres.TransactionSql<T>>
 {
@@ -19,11 +29,13 @@ export class PostgresJSConnection<T extends Record<string, unknown>>
   transaction<TRet>(
     fn: (tx: DBTransaction<postgres.TransactionSql<T>>) => Promise<TRet>,
   ): Promise<TRet> {
-    return this.#pg.begin(pgTx => fn(new Transaction(pgTx))) as Promise<TRet>;
+    return this.#pg.begin(pgTx =>
+      fn(new PostgresJsTransactionInternal(pgTx)),
+    ) as Promise<TRet>;
   }
 }
 
-class Transaction<T extends Record<string, unknown>>
+class PostgresJsTransactionInternal<T extends Record<string, unknown>>
   implements DBTransaction<postgres.TransactionSql<T>>
 {
   readonly wrappedTransaction: postgres.TransactionSql<T>;
@@ -37,17 +49,34 @@ class Transaction<T extends Record<string, unknown>>
 }
 
 /**
- * Example usage:
+ * Wrap a `postgres` client for Zero ZQL.
+ *
+ * Provides ZQL querying plus access to the underlying postgres.js transaction.
+ * Use {@link PostgresJsTransaction} to type your server mutator transaction.
+ *
+ * @param schema - Zero schema.
+ * @param pg - `postgres` client or connection string.
+ *
+ * @example
  * ```ts
  * import postgres from 'postgres';
- * const processor = new PushProcessor(
- *   zeroPostgresJS(schema, postgres(process.env.ZERO_UPSTREAM_DB as string)),
- * );
  *
- * // within your custom mutators you can do:
- * const tx = tx.wrappedTransaction();
- * // to get ahold of the underlying postgres.js transaction
- * // and then drop down to raw SQL if needed.
+ * const sql = postgres(process.env.ZERO_UPSTREAM_DB!);
+ * const zql = zeroPostgresJS(schema, sql);
+ *
+ * // Define the server mutator transaction type using the helper
+ * type ServerTx = ServerTransaction<
+ *   Schema,
+ *   PostgresJsTransaction
+ * >;
+ *
+ * async function createUser(
+ *   tx: ServerTx,
+ *   {id, name}: {id: string; name: string},
+ * ) {
+ *   await tx.dbTransaction.wrappedTransaction
+ *     .unsafe('INSERT INTO "user" (id, name) VALUES ($1, $2)', [id, name]);
+ * }
  * ```
  */
 export function zeroPostgresJS<
