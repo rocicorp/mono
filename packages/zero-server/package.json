@@ -24,6 +24,7 @@
     "@rocicorp/prettier-config": "^0.3.0",
     "@vitest/runner": "3.2.4",
     "drizzle-orm": "^0.44.2",
+    "pg": "^8.16.3",
     "postgres": "^3.4.4",
     "vitest": "3.2.4"
   }
