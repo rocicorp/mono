@@ -16,7 +16,6 @@ export type LogConfig = {
 
 const colors = {
   debug: chalk.grey,
-  info: chalk.whiteBright,
   warn: chalk.yellow,
   error: chalk.red,
 };
@@ -33,7 +32,7 @@ export const colorConsole = {
     console.debug(colors.debug(...args));
   },
   info: (...args: unknown[]) => {
-    console.info(colors.info(...args));
+    console.info(...args);
   },
   warn: (...args: unknown[]) => {
     console.warn(colors.warn(...args));
