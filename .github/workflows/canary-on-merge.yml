@@ -1,0 +1,116 @@
+name: Canary on Merge
+
+on:
+  workflow_run:
+    workflows: ['JS']
+    types:
+      - completed
+
+permissions:
+  contents: write
+  pull-requests: read
+  issues: write
+
+jobs:
+  create-canary-if-requested:
+    name: Create canary if requested
+    runs-on: ubuntu-latest
+    if: |
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'main')
+    steps:
+      - name: Select merged PR with canary label
+        id: select
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const { owner, repo } = context.repo;
+            // Find PRs associated with this commit
+            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+              owner,
+              repo,
+              commit_sha: run.head_sha,
+            });
+            let chosen = '';
+            for (const pr of prs) {
+              if (!pr.merged_at) continue;
+              const { data: labels } = await github.rest.issues.listLabelsOnIssue({ owner, repo, issue_number: pr.number });
+              if (labels.some(l => l.name === 'canary-after-merge')) {
+                chosen = String(pr.number);
+                break;
+              }
+            }
+            core.setOutput('pr', chosen);
+      - name: Comment that canary is starting
+        if: steps.select.outputs.pr != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: Number(process.env.pr),
+              body: 'Starting canary creation for this merge...'
+            });
+        env:
+          pr: ${{ steps.select.outputs.pr }}
+      - name: Checkout repository at target SHA
+        if: steps.select.outputs.pr != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+      - name: Setup SSH for git push/tag
+        if: steps.select.outputs.pr != ''
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.CANARY_SSH_PRIVATE_KEY }}
+      - name: Add github.com to known_hosts
+        if: steps.select.outputs.pr != ''
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
+      - name: Setup Node.js
+        if: steps.select.outputs.pr != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Install dependencies
+        if: steps.select.outputs.pr != ''
+        run: npm ci
+      - name: Configure npm auth
+        if: steps.select.outputs.pr != ''
+        run: echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Docker login
+        if: steps.select.outputs.pr != ''
+        run: echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Run canary script
+        if: steps.select.outputs.pr != ''
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node packages/zero/tool/create-canary.js main
+      - name: Remove label
+        if: steps.select.outputs.pr != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pr = Number(process.env.pr);
+            if (!pr) return;
+            try {
+              await github.rest.issues.removeLabel({ owner, repo, issue_number: pr, name: 'canary-after-merge' });
+            } catch (e) {
+              core.info('Label already removed or missing');
+            }
+        env:
+          pr: ${{ steps.select.outputs.pr }}

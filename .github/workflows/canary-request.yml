@@ -1,0 +1,65 @@
+name: Canary Request
+
+on:
+  workflow_dispatch:
+    inputs:
+      pull_request_number:
+        description: PR number to mark for canary after merge
+        required: true
+        type: string
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  pull-requests: read
+  contents: read
+
+jobs:
+  request-canary:
+    name: Mark PR for canary after merge
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request != null && (
+        contains(github.event.comment.body, '/canary') || contains(github.event.comment.body, 'create canary')
+      ))
+    steps:
+      - name: Extract PR number
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "number=${{ inputs.pull_request_number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Ensure label exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            repos/${{ github.repository }}/labels \
+            -f name='canary-after-merge' \
+            -f color='0e8a16' \
+            -f description='Create a canary after this PR merges' || true
+      - name: Add label to PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            repos/${{ github.repository }}/issues/${{ steps.pr.outputs.number }}/labels \
+            -f labels[]='canary-after-merge'
+      - name: Acknowledge request
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            repos/${{ github.repository }}/issues/${{ steps.pr.outputs.number }}/comments \
+            -f body='Canary will be created after this PR merges (label: `canary-after-merge`).'
