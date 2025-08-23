@@ -30,3 +30,9 @@ This creates a tgz (tarball) file in the `packages/zero` directory. You can then
 ```bash
 npm install /path/to/rocicorp-zero-<VERSION>.tgz
 ```
+
+## Canary
+
+You can create a canary reelase with the tools/create-canary.js script.
+
+You can also comment "/canary" on a PR to create a canary when the PR lands.

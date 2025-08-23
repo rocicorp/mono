@@ -33,6 +33,24 @@ jobs:
           else
             echo "number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
           fi
+      - name: Authorize commenter is org member
+        if: github.event_name == 'issue_comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ASSOC: ${{ github.event.comment.author_association }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          if [ "$ASSOC" = "MEMBER" ] || [ "$ASSOC" = "OWNER" ]; then
+            echo "Authorized: $ASSOC"
+          else
+            echo "Commenter is not an org member (association: $ASSOC). Denying request." >&2
+            gh api \
+              -X POST \
+              -H "Accept: application/vnd.github+json" \
+              repos/${{ github.repository }}/issues/$ISSUE/comments \
+              -f body='Only organization members can request a canary.'
+            exit 1
+          fi
       - name: Ensure label exists
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
