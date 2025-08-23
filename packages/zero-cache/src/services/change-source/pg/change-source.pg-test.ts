@@ -17,6 +17,7 @@ import {
 import {DbFile} from '../../../test/lite.ts';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
 import {type PostgresDB} from '../../../types/pg.ts';
+import type {ShardConfig} from '../../../types/shards.ts';
 import type {Source} from '../../../types/streams.ts';
 import type {
   ChangeSource,
@@ -129,7 +130,11 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     );
   }
 
-  async function startReplication() {
+  async function startReplication(options?: {
+    ignoredTables?: readonly string[];
+  }) {
+    const { ignoredTables = [] } = options ?? {};
+    
     ({changeSource: source} = await initializePostgresChangeSource(
       lc,
       upstreamURI,
@@ -137,6 +142,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
         appID: APP_ID,
         publications: ['zero_foo', 'zero_zero'],
         shardNum: SHARD_NUM,
+        ignoredTables,
       },
       replicaDbFile.path,
       {tableCopyWorkers: 5},
@@ -832,6 +838,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
         appID: APP_ID,
         publications: ['zero_foo', 'zero_zero'],
         shardNum: SHARD_NUM,
+        ignoredTables: [],
       },
       replicaFile2.path,
       {tableCopyWorkers: 5},
@@ -876,6 +883,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
         appID: APP_ID,
         publications: ['zero_foo', 'zero_zero'],
         shardNum: SHARD_NUM,
+        ignoredTables: [],
       },
       replicaFile3.path,
       {tableCopyWorkers: 5},
@@ -950,6 +958,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
           appID: APP_ID,
           shardNum: SHARD_NUM,
           publications: ['zero_different_publication'],
+          ignoredTables: [],
         },
         replicaDbFile.path,
         {tableCopyWorkers: 5},
@@ -977,5 +986,224 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     expect(err).toMatchInlineSnapshot(
       `[AutoResetSignal: Upstream publications [zero_zero,_23_metadata_1] do not contain all subscribed publications [_23_metadata_1,zero_foo,zero_zero]]`,
     );
+  });
+
+  test('ignored tables excluded from initial sync', async () => {
+    // Insert data into both ignored and non-ignored tables BEFORE initial sync
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO foo(id) VALUES('test1')`;
+      await tx`INSERT INTO my.boo(a, b) VALUES('ignored1', 'data1')`;
+    });
+    
+    // Start replication with my.boo ignored - this triggers initial sync
+    await startReplication({ ignoredTables: ['my.boo'] });
+
+    // Verify foo table has data in replica (synced during initial sync)
+    const replica = replicaDbFile.connect(lc);
+    const fooRows = replica.prepare('SELECT * FROM foo').all();
+    expect(fooRows).toHaveLength(1);
+    expect(fooRows[0]).toMatchObject({id: 'test1'});
+
+    // Verify my.boo table exists but is empty (ignored during initial sync)
+    // SQLite stores schema.table as "schema.table" in a flat namespace
+    const booRows = replica.prepare('SELECT * FROM "my.boo"').all();
+    expect(booRows).toHaveLength(0);
+    replica.close();
+  });
+
+  test('changes to ignored tables are dropped', async () => {
+    await startReplication({ ignoredTables: ['my.boo'] });
+    
+    const {changes, acks} = await startStream('00');
+    const downstream = drainToQueue(changes);
+
+    // Insert into both ignored and non-ignored tables
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO foo(id) VALUES('test2')`;
+      await tx`INSERT INTO my.boo(a, b) VALUES('ignored2', 'data2')`;
+    });
+
+    const begin = (await downstream.dequeue()) as Begin;
+    expect(begin).toMatchObject([
+      'begin',
+      {tag: 'begin'},
+      {commitWatermark: expect.stringMatching(WATERMARK_REGEX)},
+    ]);
+    
+    // Should only see the foo insert, not the my.boo insert
+    const data = await downstream.dequeue();
+    expect(data).toMatchObject([
+      'data',
+      {
+        tag: 'insert',
+        new: {id: 'test2'},
+      },
+    ]);
+    
+    const commit = (await downstream.dequeue()) as Commit;
+    expect(commit).toMatchObject([
+      'commit',
+      {tag: 'commit'},
+      {watermark: begin[2]?.commitWatermark},
+    ]);
+    
+    acks.push(['status', {}, commit[2]]);
+  });
+
+  test('AutoReset on changed ignored tables', async () => {
+    await startReplication({ ignoredTables: ['my.boo'] });
+    
+    let err;
+    try {
+      // Try to reinitialize with different ignored tables
+      await initializePostgresChangeSource(
+        lc,
+        upstreamURI,
+        {
+          appID: APP_ID,
+          shardNum: SHARD_NUM,
+          publications: ['zero_foo', 'zero_zero'],
+          ignoredTables: ['public.foo'],  // Different ignored tables
+        },
+        replicaDbFile.path,
+        {tableCopyWorkers: 5},
+      );
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeInstanceOf(AutoResetSignal);
+    expect((err as Error).message).toContain('Requested ignored tables');
+  });
+
+  test('ignored table with row filter in publication', async () => {
+    // Create a table with a row filter that will be part of existing publication
+    await upstream`
+      CREATE TABLE filtered_table(id INT4 PRIMARY KEY, status TEXT);
+      ALTER PUBLICATION zero_foo ADD TABLE filtered_table WHERE (status = 'active');
+    `.simple();
+    
+    // Insert data that matches and doesn't match the filter
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO filtered_table(id, status) VALUES(1, 'active')`;
+      await tx`INSERT INTO filtered_table(id, status) VALUES(2, 'inactive')`;
+    });
+
+    // Start replication with the table in both publication AND ignored list
+    await startReplication({
+      ignoredTables: ['public.filtered_table']
+    });
+
+    // Table should be created but no data should sync (ignored takes precedence)
+    const replica = replicaDbFile.connect(lc);
+    const tables = replica.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{name: string}>;
+    expect(tables.map(t => t.name)).toContain('filtered_table');
+    
+    const rows = replica.prepare('SELECT * FROM filtered_table').all();
+    expect(rows).toEqual([]);
+
+    // Even changes that match the row filter should be dropped
+    await upstream`INSERT INTO filtered_table(id, status) VALUES(3, 'active')`.simple();
+    await sleep(200);
+    
+    const rowsAfter = replica.prepare('SELECT * FROM filtered_table').all();
+    expect(rowsAfter).toEqual([]);
+    replica.close();
+  });
+
+  test('ignored table in multiple publications', async () => {
+    // Create a table that will be added to both existing publications
+    await upstream`
+      CREATE TABLE shared_table(id INT4 PRIMARY KEY, category TEXT);
+      ALTER PUBLICATION zero_foo ADD TABLE shared_table WHERE (category = 'A');
+      ALTER PUBLICATION zero_zero ADD TABLE shared_table WHERE (category = 'B');
+    `.simple();
+    
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO shared_table(id, category) VALUES(1, 'A')`;
+      await tx`INSERT INTO shared_table(id, category) VALUES(2, 'B')`;
+      await tx`INSERT INTO shared_table(id, category) VALUES(3, 'C')`;
+    });
+
+    // Start replication with the table ignored
+    await startReplication({
+      ignoredTables: ['public.shared_table']
+    });
+
+    // Table should be created but empty despite being in multiple publications
+    const replica = replicaDbFile.connect(lc);
+    const tables = replica.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{name: string}>;
+    expect(tables.map(t => t.name)).toContain('shared_table');
+    
+    const rows = replica.prepare('SELECT * FROM shared_table').all();
+    expect(rows).toEqual([]);
+    replica.close();
+  });
+
+  test('exact table name matching for ignored tables', async () => {
+    // Create tables with similar names and add them to existing publication
+    await upstream`
+      CREATE TABLE test_table(id INT4 PRIMARY KEY);
+      CREATE TABLE test_table_2(id INT4 PRIMARY KEY);
+      CREATE TABLE other_test_table(id INT4 PRIMARY KEY);
+      ALTER PUBLICATION zero_foo ADD TABLE test_table, test_table_2, other_test_table;
+    `.simple();
+    
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO test_table(id) VALUES(1)`;
+      await tx`INSERT INTO test_table_2(id) VALUES(2)`;
+      await tx`INSERT INTO other_test_table(id) VALUES(3)`;
+    });
+
+    // Only ignore the exact table name
+    await startReplication({
+      ignoredTables: ['public.test_table']
+    });
+
+    // Only test_table should be empty
+    const replica = replicaDbFile.connect(lc);
+    const testTableRows = replica.prepare('SELECT * FROM test_table').all();
+    expect(testTableRows).toEqual([]);
+    
+    // Similar named tables should have their data
+    const testTable2Rows = replica.prepare('SELECT * FROM test_table_2').all();
+    expect(testTable2Rows).toHaveLength(1);
+    expect(testTable2Rows[0]).toMatchObject({id: 2});
+    
+    const otherTestTableRows = replica.prepare('SELECT * FROM other_test_table').all();
+    expect(otherTestTableRows).toHaveLength(1);
+    expect(otherTestTableRows[0]).toMatchObject({id: 3});
+    replica.close();
+  });
+
+  test('ignored table with schema qualification', async () => {
+    // Create tables in different schemas with same name and add to existing publications
+    await upstream`
+      CREATE SCHEMA other_schema;
+      CREATE TABLE foo2(id INT4 PRIMARY KEY);
+      CREATE TABLE other_schema.foo2(id INT4 PRIMARY KEY);
+      ALTER PUBLICATION zero_foo ADD TABLE foo2;
+      ALTER PUBLICATION zero_zero ADD TABLE other_schema.foo2;
+    `.simple();
+    
+    await upstream.begin(async tx => {
+      await tx`INSERT INTO foo2(id) VALUES(1)`;
+      await tx`INSERT INTO other_schema.foo2(id) VALUES(2)`;
+    });
+
+    // Only ignore the one in other_schema
+    await startReplication({
+      ignoredTables: ['other_schema.foo2']
+    });
+
+    // public.foo2 should have data
+    const replica = replicaDbFile.connect(lc);
+    const publicRows = replica.prepare('SELECT * FROM foo2').all();
+    expect(publicRows).toHaveLength(1);
+    expect(publicRows[0]).toMatchObject({id: 1});
+    
+    // other_schema.foo2 should be empty (SQLite uses flat namespace)
+    const otherRows = replica.prepare('SELECT * FROM "other_schema.foo2"').all();
+    expect(otherRows).toEqual([]);
+    replica.close();
   });
 });
