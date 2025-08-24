@@ -44,6 +44,7 @@ import {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
 import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
+import {deepClone} from '../../shared/src/deep-clone.ts';
 
 type Statements = {
   readonly cache: StatementCache;
@@ -80,6 +81,7 @@ export class TableSource implements Source {
   readonly #primaryKey: PrimaryKey;
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
+  readonly #pkCache = new Map<string, Row>();
   #stmts: Statements;
   #overlay?: Overlay | undefined;
   #splitEditOverlay?: Overlay | undefined;
@@ -260,6 +262,28 @@ export class TableSource implements Source {
   }
 
   *#fetch(req: FetchRequest, connection: Connection): Stream<Node> {
+    if (this.#primaryKey.length === 1) {
+      if (connection.filters?.condition.type === 'simple') {
+        if (
+          connection.filters?.condition.left.type === 'column' &&
+          connection.filters?.condition.left.name === this.#primaryKey[0]
+        ) {
+          if (connection.filters?.condition.right.type === 'literal') {
+            const pk = connection.filters?.condition.right.value;
+            if (pk !== undefined && pk !== null) {
+              const row = this.#pkCache.get(String(pk));
+              if (row) {
+                // I do not know if it is correct to return the row by reference.
+                // If it is, there's another 2x speedup.
+                yield {row: deepClone(row) as Row, relationships: {}};
+              }
+              return;
+            }
+          }
+        }
+      }
+    }
+
     const {sort, debug} = connection;
 
     const query = this.#requestToSQL(req, connection.filters?.condition, sort);
