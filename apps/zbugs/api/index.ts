@@ -150,68 +150,76 @@ async function withAuth<T extends {headers: IncomingHttpHeaders}>(
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
-}>(
-  '/api/mutate',
-  async (
-    request: FastifyRequest<{
-      Querystring: Record<string, string>;
-      Body: ReadonlyJSONValue;
-    }>,
-    reply: FastifyReply,
-  ) => {
-    let jwtData: JWTData | undefined;
-    try {
-      jwtData = await maybeVerifyAuth(request.headers);
-    } catch (e) {
-      if (e instanceof Error) {
-        reply.status(401).send(e.message);
-        return;
-      }
-      throw e;
-    }
-
-    const postCommitTasks: (() => Promise<void>)[] = [];
-    const mutators = createServerMutators(jwtData, postCommitTasks);
-
-    const response = await handleMutationRequest(
-      transact =>
-        transact(dbProvider, (tx, name, args) =>
-          getMutation(mutators, name)(tx, args),
-        ),
-      request.query,
-      request.body,
-      'info',
-    );
-
-    await Promise.all(postCommitTasks.map(task => task()));
-
-    reply.send(response);
-  },
-);
+}>('/api/push', mutateHandler);
 
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
-}>(
-  '/api/get-queries',
-  async (
-    request: FastifyRequest<{
-      Querystring: Record<string, string>;
-      Body: ReadonlyJSONValue;
-    }>,
-    reply: FastifyReply,
-  ) => {
-    await withAuth(request, reply, async authData => {
-      reply.send(
-        await handleGetQueriesRequest(
-          (name, args) => ({query: getQuery(authData, name, args)}),
-          schema,
-          request.body,
-        ),
-      );
-    });
-  },
-);
+}>('/api/mutate', mutateHandler);
+
+async function mutateHandler(
+  request: FastifyRequest<{
+    Querystring: Record<string, string>;
+    Body: ReadonlyJSONValue;
+  }>,
+  reply: FastifyReply,
+) {
+  let jwtData: JWTData | undefined;
+  try {
+    jwtData = await maybeVerifyAuth(request.headers);
+  } catch (e) {
+    if (e instanceof Error) {
+      reply.status(401).send(e.message);
+      return;
+    }
+    throw e;
+  }
+
+  const postCommitTasks: (() => Promise<void>)[] = [];
+  const mutators = createServerMutators(jwtData, postCommitTasks);
+
+  const response = await handleMutationRequest(
+    transact =>
+      transact(dbProvider, (tx, name, args) =>
+        getMutation(mutators, name)(tx, args),
+      ),
+    request.query,
+    request.body,
+    'info',
+  );
+
+  await Promise.all(postCommitTasks.map(task => task()));
+
+  reply.send(response);
+}
+
+fastify.post<{
+  Querystring: Record<string, string>;
+  Body: ReadonlyJSONValue;
+}>('/api/pull', getQueriesHandler);
+
+fastify.post<{
+  Querystring: Record<string, string>;
+  Body: ReadonlyJSONValue;
+}>('/api/get-queries', getQueriesHandler);
+
+async function getQueriesHandler(
+  request: FastifyRequest<{
+    Querystring: Record<string, string>;
+    Body: ReadonlyJSONValue;
+  }>,
+  reply: FastifyReply,
+) {
+  await withAuth(request, reply, async authData => {
+    reply.send(
+      await handleGetQueriesRequest(
+        (name, args) => ({query: getQuery(authData, name, args)}),
+        schema,
+        request.body,
+      ),
+    );
+  });
+}
 
 fastify.post<{
   Body: {contentType: string};
