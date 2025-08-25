@@ -1,9 +1,7 @@
 import {
   withValidation,
-  type AnyQuery,
   type Query,
   type ReadonlyJSONValue,
-  type Row,
   type Schema,
 } from '@rocicorp/zero';
 import {
@@ -11,7 +9,6 @@ import {
   buildBaseListQueryFilter,
   buildListQuery,
   queries,
-  type ListContext,
   type ListQueryArgs,
 } from '../shared/queries.ts';
 import type {AuthData} from '../shared/auth.ts';
@@ -34,7 +31,7 @@ export function getQuery(
   if (name in validated) {
     if (name === 'issueList') {
       assert(queries.issueList.parse);
-      const [listContext, userID, limit] = queries.issueList.parse(args);
+      const [listContext, userID, limit] = queries.issueList.parse([...args]);
       return serverOptimizedListQuery(
         {
           listContext,
@@ -47,7 +44,7 @@ export function getQuery(
     }
     if (name === 'prevNext') {
       assert(queries.prevNext.parse);
-      const [listContext, issue, dir] = queries.prevNext.parse(args);
+      const [listContext, issue, dir] = queries.prevNext.parse([...args]);
       return serverOptimizedListQuery(
         {
           listContext: listContext ?? undefined,
