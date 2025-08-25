@@ -22,11 +22,11 @@ import {
 } from '../../zero-cache/src/scripts/permissions.ts';
 import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
-import {type AST, type CompoundKey} from '../../zero-protocol/src/ast.ts';
+import {type AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,
-  serverToClient,
+  //serverToClient,
 } from '../../zero-schema/src/name-mapper.ts';
 
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
@@ -39,6 +39,8 @@ import {TableSource} from '../../zqlite/src/table-source.ts';
 import {Debug} from '../../zql/src/builder/debug-delegate.ts';
 import {runAst, type RunResult} from './run-ast.ts';
 import {explainQueries} from './explain-queries.ts';
+import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
+import {assert} from '../../shared/src/asserts.ts';
 
 const options = {
   schema: deployPermissionsOptions.schema,
@@ -193,32 +195,35 @@ const {schema, permissions} = await loadSchemaAndPermissions(
 
 const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
-const serverToClientMapper = serverToClient(schema.tables);
 const debug = new Debug();
+const tableSpecs = computeZqlSpecs(lc, db);
 const host: QueryDelegate = {
   debug,
   getSource: (serverTableName: string) => {
-    const clientTableName = serverToClientMapper.tableName(serverTableName);
     let source = sources.get(serverTableName);
     if (source) {
       return source;
     }
+    const tableSpec = tableSpecs.get(serverTableName);
+    if (!tableSpec) {
+      throw new Error(
+        `table '${serverTableName}' is not one of: ${[...tableSpecs.keys()]
+          .filter(t => !t.includes('.') && !t.startsWith('_litestream_'))
+          .sort()}. ` +
+          `Check the spelling and ensure that the table has a primary key.`,
+      );
+    }
+    const {primaryKey} = tableSpec.tableSpec;
+    assert(primaryKey?.length);
     source = new TableSource(
       lc,
       testLogConfig,
       db,
       serverTableName,
-      Object.fromEntries(
-        Object.entries(schema.tables[clientTableName].columns).map(
-          ([colName, column]) => [
-            clientToServerMapper.columnName(clientTableName, colName),
-            column,
-          ],
-        ),
-      ),
-      schema.tables[clientTableName].primaryKey.map(col =>
-        clientToServerMapper.columnName(clientTableName, col),
-      ) as unknown as CompoundKey,
+      // HERE IS THE DIFFERENCE zero-cache BASE THIS SCHEMA
+      // OFF OF THE SQLITE DB, NOT THE SCHEMA FILE
+      tableSpec.zqlSpec,
+      [primaryKey[0], ...primaryKey.slice(1)],
     );
 
     sources.set(serverTableName, source);
@@ -264,6 +269,7 @@ if (config.ast) {
     permissions,
     outputSyncedRows: config.outputSyncedRows,
     db,
+    tableSpecs,
     host,
   });
 } else if (config.query) {
@@ -296,6 +302,7 @@ function runQuery(queryString: string): Promise<RunResult> {
     permissions,
     outputSyncedRows: config.outputSyncedRows,
     db,
+    tableSpecs,
     host,
   });
 }
@@ -322,6 +329,7 @@ async function runHash(hash: string) {
     permissions,
     outputSyncedRows: config.outputSyncedRows,
     db,
+    tableSpecs,
     host,
   });
 }
