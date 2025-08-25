@@ -31,7 +31,6 @@ import {
   recordConnectionAttempted,
   setActiveClientGroupsGetter,
 } from '../server/anonymous-otel-start.ts';
-import {assert} from '../../../shared/src/asserts.ts';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -124,12 +123,15 @@ export class Syncer implements SingletonService {
       const hasGetQueries = this.#config?.getQueries?.url !== undefined;
 
       // must either have one of the token options set or have custom mutations & queries enabled
-      assert(
-        tokenOptions.length === 1 || (hasPushOrMutate && hasGetQueries),
-        'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
-          JSON.stringify(tokenOptions) +
-          '. You may also set both ZERO_MUTATE_URL and ZERO_GET_QUERIES_URL to enable custom mutations and queries without passing token verification options.',
-      );
+      const hasExactlyOneTokenOption = tokenOptions.length === 1;
+      const hasCustomEndpoints = hasPushOrMutate && hasGetQueries;
+      if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
+        throw new Error(
+          'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
+            JSON.stringify(tokenOptions) +
+            '. You may also set both ZERO_MUTATE_URL and ZERO_GET_QUERIES_URL to enable custom mutations and queries without passing token verification options.',
+        );
+      }
 
       if (tokenOptions.length > 0) {
         try {
