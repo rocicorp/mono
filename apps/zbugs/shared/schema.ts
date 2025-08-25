@@ -20,7 +20,6 @@ const user = table('user')
     login: string(),
     name: string().optional(),
     avatar: string(),
-    githubID: number(),
     role: enumeration<Role>(),
   })
   .primaryKey('id');

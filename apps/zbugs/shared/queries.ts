@@ -177,7 +177,7 @@ export const queries = {
       .where('subjectID', subjectID ?? '')
       .related('creator', creator => creator.one()),
   ),
-};
+} as const;
 
 export type ListContext = {
   readonly href: string;

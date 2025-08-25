@@ -16,6 +16,7 @@ import {
 } from '../shared/queries.ts';
 import type {AuthData} from '../shared/auth.ts';
 import {builder} from '../shared/schema.ts';
+import {assert} from '../../../packages/shared/src/asserts.ts';
 
 // It's important to map incoming queries by queryName, not the
 // field name in queries. The latter is just a local identifier.
@@ -32,12 +33,8 @@ export function getQuery(
 ) {
   if (name in validated) {
     if (name === 'issueList') {
-      //const [listContext, userID, limit] = queries.issueList.parse(args);
-      const [listContext, userID, limit] = args as [
-        ListContext['params'],
-        string,
-        number,
-      ];
+      assert(queries.issueList.parse);
+      const [listContext, userID, limit] = queries.issueList.parse(args);
       return serverOptimizedListQuery(
         {
           listContext,
@@ -49,14 +46,8 @@ export function getQuery(
       );
     }
     if (name === 'prevNext') {
-      const [listContext, issue, dir] = args as [
-        ListContext['params'] | null,
-        Pick<
-          Row<Schema['tables']['issue']>,
-          'id' | 'created' | 'modified'
-        > | null,
-        'next' | 'prev',
-      ];
+      assert(queries.prevNext.parse);
+      const [listContext, issue, dir] = queries.prevNext.parse(args);
       return serverOptimizedListQuery(
         {
           listContext: listContext ?? undefined,

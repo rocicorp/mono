@@ -93,7 +93,7 @@ export function withValidation<T extends SyncedQuery<any, any, any, any, any>>(
   if (!fn.parse) {
     throw new Error('ret does not have a parse function defined');
   }
-  const ret: any = (context: unknown, ...args: unknown[]) => {
+  const ret: any = (context: unknown, ...args: readonly unknown[]) => {
     const f = fn as any;
     const parsed = f.parse(args);
     return f.takesContext ? f(context, ...parsed) : f(...parsed);
@@ -105,7 +105,9 @@ export function withValidation<T extends SyncedQuery<any, any, any, any, any>>(
   return ret;
 }
 
-export type ParseFn<T extends ReadonlyJSONValue[]> = (args: unknown[]) => T;
+export type ParseFn<T extends ReadonlyJSONValue[]> = (
+  args: readonly unknown[],
+) => T;
 
 export type HasParseFn<T extends ReadonlyJSONValue[]> = {
   parse: ParseFn<T>;
