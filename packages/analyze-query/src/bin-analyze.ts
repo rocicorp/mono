@@ -211,7 +211,7 @@ const host: QueryDelegate = {
       db,
       serverTableName,
       tableSpec.zqlSpec,
-      [primaryKey[0], ...primaryKey.slice(1)],
+      primaryKey,
     );
 
     sources.set(serverTableName, source);

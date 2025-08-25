@@ -531,7 +531,7 @@ export class PipelineDriver {
       db.db,
       tableName,
       tableSpec.zqlSpec,
-      [primaryKey[0], ...primaryKey.slice(1)],
+      primaryKey,
     );
     this.#tables.set(tableName, source);
     this.#lc.debug?.(`created TableSource for ${tableName}`);
