@@ -196,30 +196,26 @@ async function mutateHandler(
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
-}>('/api/pull', getQueriesHandler);
-
-fastify.post<{
-  Querystring: Record<string, string>;
-  Body: ReadonlyJSONValue;
-}>('/api/get-queries', getQueriesHandler);
-
-async function getQueriesHandler(
-  request: FastifyRequest<{
-    Querystring: Record<string, string>;
-    Body: ReadonlyJSONValue;
-  }>,
-  reply: FastifyReply,
-) {
-  await withAuth(request, reply, async authData => {
-    reply.send(
-      await handleGetQueriesRequest(
-        (name, args) => ({query: getQuery(authData, name, args)}),
-        schema,
-        request.body,
-      ),
-    );
-  });
-}
+}>(
+  '/api/get-queries',
+  async (
+    request: FastifyRequest<{
+      Querystring: Record<string, string>;
+      Body: ReadonlyJSONValue;
+    }>,
+    reply: FastifyReply,
+  ) => {
+    await withAuth(request, reply, async authData => {
+      reply.send(
+        await handleGetQueriesRequest(
+          (name, args) => ({query: getQuery(authData, name, args)}),
+          schema,
+          request.body,
+        ),
+      );
+    });
+  },
+);
 
 fastify.post<{
   Body: {contentType: string};
