@@ -24,11 +24,7 @@ import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 import {type AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import {
-  clientToServer,
-  //serverToClient,
-} from '../../zero-schema/src/name-mapper.ts';
-
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
@@ -39,8 +35,10 @@ import {TableSource} from '../../zqlite/src/table-source.ts';
 import {Debug} from '../../zql/src/builder/debug-delegate.ts';
 import {runAst, type RunResult} from './run-ast.ts';
 import {explainQueries} from './explain-queries.ts';
-import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
-import {assert} from '../../shared/src/asserts.ts';
+import {
+  computeZqlSpecs,
+  mustGetTableSpec,
+} from '../../zero-cache/src/db/lite-tables.ts';
 
 const options = {
   schema: deployPermissionsOptions.schema,
@@ -204,24 +202,14 @@ const host: QueryDelegate = {
     if (source) {
       return source;
     }
-    const tableSpec = tableSpecs.get(serverTableName);
-    if (!tableSpec) {
-      throw new Error(
-        `table '${serverTableName}' is not one of: ${[...tableSpecs.keys()]
-          .filter(t => !t.includes('.') && !t.startsWith('_litestream_'))
-          .sort()}. ` +
-          `Check the spelling and ensure that the table has a primary key.`,
-      );
-    }
+    const tableSpec = mustGetTableSpec(tableSpecs, serverTableName);
     const {primaryKey} = tableSpec.tableSpec;
-    assert(primaryKey?.length);
+
     source = new TableSource(
       lc,
       testLogConfig,
       db,
       serverTableName,
-      // HERE IS THE DIFFERENCE zero-cache BASE THIS SCHEMA
-      // OFF OF THE SQLITE DB, NOT THE SCHEMA FILE
       tableSpec.zqlSpec,
       [primaryKey[0], ...primaryKey.slice(1)],
     );
