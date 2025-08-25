@@ -7,9 +7,8 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../db/specs.ts';
-import {computeZqlSpecs} from '../db/lite-tables.ts';
+import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
-import {assert} from '../../../shared/src/asserts.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import {explainQueries} from '../../../analyze-query/src/explain-queries.ts';
 
@@ -53,6 +52,7 @@ export async function handleAnalyzeQueryRequest(
     applyPermissions: false,
     outputSyncedRows: true,
     db,
+    tableSpecs,
     host: {
       debug: new Debug(),
       getSource(tableName: string) {
@@ -61,17 +61,8 @@ export async function handleAnalyzeQueryRequest(
           return source;
         }
 
-        const tableSpec = tableSpecs.get(tableName);
-        if (!tableSpec) {
-          throw new Error(
-            `table '${tableName}' is not one of: ${[...tableSpecs.keys()]
-              .filter(t => !t.includes('.') && !t.startsWith('_litestream_'))
-              .sort()}. ` +
-              `Check the spelling and ensure that the table has a primary key.`,
-          );
-        }
+        const tableSpec = mustGetTableSpec(tableSpecs, tableName);
         const {primaryKey} = tableSpec.tableSpec;
-        assert(primaryKey?.length);
 
         source = new TableSource(
           lc,

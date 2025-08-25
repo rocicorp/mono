@@ -231,6 +231,22 @@ export function computeZqlSpecs(
   return tableSpecs;
 }
 
+export function mustGetTableSpec(
+  tableSpecs: Map<string, LiteAndZqlSpec>,
+  tableName: string,
+): LiteAndZqlSpec {
+  const tableSpec = tableSpecs.get(tableName);
+  if (!tableSpec) {
+    throw new Error(
+      `table '${tableName}' is not one of: ${[...tableSpecs.keys()]
+        .filter(t => !t.includes('.') && !t.startsWith('_litestream_'))
+        .sort()}. ` +
+        `Check the spelling and ensure that the table has a primary key.`,
+    );
+  }
+  return tableSpec;
+}
+
 // Deterministic comparator for favoring shorter row keys.
 function keyCmp(a: string[], b: string[]) {
   if (a.length !== b.length) {

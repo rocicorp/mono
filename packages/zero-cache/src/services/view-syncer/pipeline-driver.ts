@@ -27,7 +27,7 @@ import {
   type LoadedPermissions,
 } from '../../auth/load-permissions.ts';
 import type {LogConfig} from '../../config/zero-config.ts';
-import {computeZqlSpecs} from '../../db/lite-tables.ts';
+import {computeZqlSpecs, mustGetTableSpec} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import {getOrCreateHistogram} from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
@@ -521,17 +521,8 @@ export class PipelineDriver {
       return source;
     }
 
-    const tableSpec = this.#tableSpecs.get(tableName);
-    if (!tableSpec) {
-      throw new Error(
-        `table '${tableName}' is not one of: ${[...this.#tableSpecs.keys()]
-          .filter(t => !t.includes('.') && !t.startsWith('_litestream_'))
-          .sort()}. ` +
-          `Check the spelling and ensure that the table has a primary key.`,
-      );
-    }
+    const tableSpec = mustGetTableSpec(this.#tableSpecs, tableName);
     const {primaryKey} = tableSpec.tableSpec;
-    assert(primaryKey?.length);
 
     const {db} = this.#snapshotter.current();
     source = new TableSource(
@@ -540,7 +531,7 @@ export class PipelineDriver {
       db.db,
       tableName,
       tableSpec.zqlSpec,
-      [primaryKey[0], ...primaryKey.slice(1)],
+      primaryKey,
     );
     this.#tables.set(tableName, source);
     this.#lc.debug?.(`created TableSource for ${tableName}`);

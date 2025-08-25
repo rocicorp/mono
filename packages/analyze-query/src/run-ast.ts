@@ -21,6 +21,7 @@ import type {
   RowCountsBySource,
   RowsBySource,
 } from '../../zql/src/builder/debug-delegate.ts';
+import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 
 export type RunResult = {
   warnings: string[];
@@ -45,6 +46,7 @@ export async function runAst(
     permissions?: PermissionsConfig | undefined;
     outputSyncedRows: boolean;
     db: Database;
+    tableSpecs: Map<string, LiteAndZqlSpec>;
     host: BuilderDelegate;
   },
 ): Promise<RunResult> {
