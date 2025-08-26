@@ -23,7 +23,7 @@ function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
 const idValidator = z.tuple([z.string()]);
 const keyValidator = idValidator;
 
-const listContextParams = z.object({
+export const listContextParams = z.object({
   open: z.boolean().nullable(),
   assignee: z.string().nullable(),
   creator: z.string().nullable(),
@@ -32,9 +32,9 @@ const listContextParams = z.object({
   sortField: z.union([z.literal('modified'), z.literal('created')]),
   sortDirection: z.union([z.literal('asc'), z.literal('desc')]),
 });
-type ListContextParams = z.infer<typeof listContextParams>;
+export type ListContextParams = z.infer<typeof listContextParams>;
 
-const issueRowSort = z.object({
+export const issueRowSort = z.object({
   id: z.string(),
   created: z.number(),
   modified: z.number(),

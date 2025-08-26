@@ -1,4 +1,5 @@
 import {
+  syncedQueryWithContext,
   withValidation,
   type Query,
   type ReadonlyJSONValue,
@@ -8,12 +9,53 @@ import {
   buildBaseListQuery,
   buildBaseListQueryFilter,
   buildListQuery,
-  queries,
+  issueRowSort,
+  listContextParams,
+  queries as sharedQueries,
   type ListQueryArgs,
 } from '../shared/queries.ts';
 import type {AuthData} from '../shared/auth.ts';
 import {builder} from '../shared/schema.ts';
-import {assert} from '../../../packages/shared/src/asserts.ts';
+import {z} from 'zod';
+
+const queries = {
+  ...sharedQueries,
+  // Replace prevNext, and issueList with server optimized versions.
+  prevNext: syncedQueryWithContext(
+    'prevNext',
+    z.tuple([
+      listContextParams.nullable(),
+      issueRowSort.nullable(),
+      z.union([z.literal('next'), z.literal('prev')]),
+    ]),
+    (auth: AuthData | undefined, listContext, issue, dir) =>
+      serverOptimizedListQuery(
+        {
+          listContext: listContext ?? undefined,
+          limit: 1,
+          start: issue ?? undefined,
+          dir,
+          role: auth?.role,
+        },
+        buildBaseListQuery,
+      ),
+  ),
+
+  issueList: syncedQueryWithContext(
+    'issueList',
+    z.tuple([listContextParams, z.string(), z.number()]),
+    (auth: AuthData | undefined, listContext, userID, limit) =>
+      serverOptimizedListQuery(
+        {
+          listContext,
+          limit,
+          userID,
+          role: auth?.role,
+        },
+        buildListQuery,
+      ),
+  ),
+};
 
 // It's important to map incoming queries by queryName, not the
 // field name in queries. The latter is just a local identifier.
@@ -29,39 +71,8 @@ export function getQuery(
   args: readonly ReadonlyJSONValue[],
 ) {
   if (name in validated) {
-    if (name === 'issueList') {
-      assert(queries.issueList.parse);
-      const [listContext, userID, limit] = queries.issueList.parse([...args]);
-      return serverOptimizedListQuery(
-        {
-          listContext,
-          limit,
-          userID,
-          role: context?.role,
-        },
-        buildListQuery,
-      );
-    }
-    if (name === 'prevNext') {
-      assert(queries.prevNext.parse);
-      const [listContext, issue, dir] = queries.prevNext.parse([...args]);
-      return serverOptimizedListQuery(
-        {
-          listContext: listContext ?? undefined,
-          limit: 1,
-          start: issue ?? undefined,
-          dir,
-          role: context?.role,
-        },
-        buildBaseListQuery,
-      );
-    }
-
     return validated[name](context, ...args);
-  } else {
-    throw new Error(`Unknown query: ${name}`);
   }
-
   throw new Error(`Unknown query: ${name}`);
 }
 
