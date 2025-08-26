@@ -108,9 +108,9 @@ async function buildZeroClient() {
   const entryPoints = forBundleSizeDashboard
     ? {zero: basePath('src/zero.ts')}
     : {
-        zero: basePath('src/zero.ts'),
-        react: basePath('src/react.ts'),
-        solid: basePath('src/solid.ts'),
+        'zero': basePath('src/zero.ts'),
+        'react': basePath('src/react.ts'),
+        'solid': basePath('src/solid.ts'),
         'react-native': basePath('src/react-native.ts'),
       };
   const result = await esbuild.build({
