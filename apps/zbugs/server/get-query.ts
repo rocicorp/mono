@@ -9,25 +9,18 @@ import {
   buildBaseListQuery,
   buildBaseListQueryFilter,
   buildListQuery,
-  issueRowSort,
-  listContextParams,
   queries as sharedQueries,
   type ListQueryArgs,
 } from '../shared/queries.ts';
 import type {AuthData} from '../shared/auth.ts';
 import {builder} from '../shared/schema.ts';
-import {z} from 'zod';
 
 const queries = {
   ...sharedQueries,
   // Replace prevNext, and issueList with server optimized versions.
   prevNext: syncedQueryWithContext(
-    'prevNext',
-    z.tuple([
-      listContextParams.nullable(),
-      issueRowSort.nullable(),
-      z.union([z.literal('next'), z.literal('prev')]),
-    ]),
+    sharedQueries.prevNext.queryName,
+    sharedQueries.prevNext.parse,
     (auth: AuthData | undefined, listContext, issue, dir) =>
       serverOptimizedListQuery(
         {
@@ -40,10 +33,9 @@ const queries = {
         buildBaseListQuery,
       ),
   ),
-
   issueList: syncedQueryWithContext(
-    'issueList',
-    z.tuple([listContextParams, z.string(), z.number()]),
+    sharedQueries.issueList.queryName,
+    sharedQueries.issueList.parse,
     (auth: AuthData | undefined, listContext, userID, limit) =>
       serverOptimizedListQuery(
         {
