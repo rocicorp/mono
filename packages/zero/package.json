@@ -94,7 +94,7 @@
     "zero-react": "0.0.0",
     "zero-server": "0.0.0",
     "zero-cache": "0.0.0",
-    "zero-expo": "0.0.0"
+    "zero-react-native": "0.0.0"
   },
   "type": "module",
   "main": "out/zero.js",
@@ -137,9 +137,9 @@
       "types": "./out/zqlite/src/mod.d.ts",
       "default": "./out/zero/src/zqlite.js"
     },
-    "./expo": {
-      "types": "./out/zero-expo/src/mod.d.ts",
-      "default": "./out/expo.js"
+    "./react-native": {
+      "types": "./out/zero-react-native/src/mod.d.ts",
+      "default": "./out/react-native.js"
     }
   },
   "bin": {
