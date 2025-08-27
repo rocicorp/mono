@@ -58,10 +58,10 @@ async function getExternal(includePeerDeps: boolean): Promise<string[]> {
     'zero',
     'zero-cache',
     'zero-client',
-    'zero-expo',
     'zero-pg',
     'zero-protocol',
     'zero-react',
+    'zero-react-native',
     'zero-server',
     'zero-schema',
     'zero-solid',
@@ -108,10 +108,10 @@ async function buildZeroClient() {
   const entryPoints = forBundleSizeDashboard
     ? {zero: basePath('src/zero.ts')}
     : {
-        zero: basePath('src/zero.ts'),
-        react: basePath('src/react.ts'),
-        solid: basePath('src/solid.ts'),
-        expo: basePath('src/expo.ts'),
+        'zero': basePath('src/zero.ts'),
+        'react': basePath('src/react.ts'),
+        'solid': basePath('src/solid.ts'),
+        'react-native': basePath('src/react-native.ts'),
       };
   const result = await esbuild.build({
     ...sharedOptions(minify, metafile),
