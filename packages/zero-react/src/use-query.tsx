@@ -35,14 +35,7 @@ export type UseQueryOptions = {
   ttl?: TTL | undefined;
 };
 
-export type UseSuspenseQueryOptions = {
-  enabled?: boolean | undefined;
-  /**
-   * Time to live (TTL) in seconds. Controls how long query results are cached
-   * after the query is removed. During this time, Zero continues to sync the query.
-   * Default is 'never'.
-   */
-  ttl?: TTL | undefined;
+export type UseSuspenseQueryOptions = UseQueryOptions & {
   /**
    * Whether to suspend until the query is complete or until the query has non-empty data.
    * Default is 'complete'.
