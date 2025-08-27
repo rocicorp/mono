@@ -111,11 +111,9 @@ export function makeErrorDetails(e: unknown): JSONObject {
   };
   // Include any enumerable properties (e.g. of Error subtypes).
   for (const [field, value] of Object.entries(err)) {
-    if (isJSONValue(value, pathUnused)) {
+    if (isJSONValue(value, [])) {
       errorDetails[field] = value;
     }
   }
   return errorDetails;
 }
-
-const pathUnused = {push: () => {}, pop: () => {}};

@@ -1,5 +1,5 @@
 import {nanoid} from 'nanoid/non-secure';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import type {ZeroEvent} from '../../../../../zero-events/src/index.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
@@ -11,7 +11,7 @@ import type {
   PublishedTableSpec,
 } from '../../../db/specs.ts';
 import {initEventSinkForTesting} from '../../../observability/events.ts';
-import {getConnectionURI, initDB, testDBs} from '../../../test/db.ts';
+import {getConnectionURI, initDB, type PgTest, test} from '../../../test/db.ts';
 import {
   expectMatchingObjectsInTables,
   expectTables,
@@ -2142,11 +2142,10 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
   let upstream: PostgresDB;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     upstream = await testDBs.create('initial_sync_upstream');
-    return async () => {
-      await testDBs.drop(upstream);
-    };
+
+    return () => testDBs.drop(upstream);
   });
 
   for (const c of cases) {
@@ -2294,7 +2293,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     let result;
     try {
       await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
-        tableCopyWorkers: 5,
+        tableCopyWorkers: 1,
       });
     } catch (e) {
       result = e;
@@ -2310,6 +2309,10 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     [
       'missing metadata publication',
       `DROP PUBLICATION "_${APP_ID}_metadata_${SHARD_NUM}"`,
+    ],
+    [
+      'dropped schema with vestigial publications',
+      `DROP SCHEMA "${APP_ID}_${SHARD_NUM}" CASCADE`,
     ],
   ])('recover from corrupted state: %s', async (_name, corruption) => {
     const lc = createSilentLogContext();
@@ -2329,7 +2332,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     await sql.unsafe(corruption);
 
     await initialSync(lc, shardConfig, replica, getConnectionURI(upstream), {
-      tableCopyWorkers: 5,
+      tableCopyWorkers: 1,
     });
 
     expectMatchingObjectsInTables(replica, {
@@ -2353,7 +2356,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         {appID, shardNum: 0, publications: []},
         replica,
         getConnectionURI(upstream),
-        {tableCopyWorkers: 5},
+        {tableCopyWorkers: 1},
       );
     } catch (e) {
       result = e;

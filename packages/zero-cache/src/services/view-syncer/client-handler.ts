@@ -41,6 +41,7 @@ import {
   type PutQueryPatch,
   type RowID,
 } from './schema/types.ts';
+import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
 
 export type PutRowPatch = {
   type: 'row';
@@ -367,6 +368,10 @@ export class ClientHandler {
     }
     lc.debug?.('sending deleteClients', deleteClientsBody);
     await this.#push(['deleteClients', deleteClientsBody]);
+  }
+
+  sendQueryTransformErrors(errors: ErroredQuery[]) {
+    void this.#push(['transformError', errors]);
   }
 
   sendInspectResponse(lc: LogContext, response: InspectDownBody): void {

@@ -158,9 +158,6 @@ function not<T>(f: (lhs: T) => boolean) {
  *
  * If the condition does not contain any CorrelatedSubqueryConditions
  * returns the condition unmodified and `conditionsRemoved: false`.
- *
- *
- * Assumes Condition is in DNF.
  */
 export function transformFilters(filters: Condition | undefined): {
   filters: NoSubqueryCondition | undefined;

@@ -1,5 +1,8 @@
 import type {AST} from '../../zero-protocol/src/ast.ts';
-import {buildPipeline} from '../../zql/src/builder/builder.ts';
+import {
+  buildPipeline,
+  type BuilderDelegate,
+} from '../../zql/src/builder/builder.ts';
 import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
 import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
 import {assert} from '../../shared/src/asserts.ts';
@@ -13,12 +16,12 @@ import type {PermissionsConfig} from '../../zero-schema/src/compiled-permissions
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import type {Database} from '../../zqlite/src/db.ts';
-import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {must} from '../../shared/src/must.ts';
 import type {
   RowCountsBySource,
   RowsBySource,
 } from '../../zql/src/builder/debug-delegate.ts';
+import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 
 export type RunResult = {
   warnings: string[];
@@ -29,6 +32,7 @@ export type RunResult = {
   afterPermissions: string | undefined;
   vendedRowCounts: RowCountsBySource | undefined;
   vendedRows: RowsBySource | undefined;
+  plans?: Record<string, string[]> | undefined;
 };
 
 export async function runAst(
@@ -37,12 +41,13 @@ export async function runAst(
   isTransformed: boolean,
   options: {
     applyPermissions: boolean;
-    authData: string | undefined;
-    clientToServerMapper: NameMapper | undefined;
-    permissions: PermissionsConfig;
+    authData?: string | undefined;
+    clientToServerMapper?: NameMapper | undefined;
+    permissions?: PermissionsConfig | undefined;
     outputSyncedRows: boolean;
     db: Database;
-    host: QueryDelegate;
+    tableSpecs: Map<string, LiteAndZqlSpec>;
+    host: BuilderDelegate;
   },
 ): Promise<RunResult> {
   const {clientToServerMapper, permissions, host, db} = options;
@@ -72,7 +77,7 @@ export async function runAst(
       lc,
       'clientGroupIDForAnalyze',
       ast,
-      permissions,
+      must(permissions),
       authData,
       false,
     ).transformedAst;
@@ -86,11 +91,17 @@ export async function runAst(
 
   let syncedRowCount = 0;
   const rowsByTable: Record<string, Row[]> = {};
+  const seenByTable: Set<string> = new Set();
   for (const rowChange of hydrate(pipeline, hashOfAST(ast), tableSpecs)) {
     assert(rowChange.type === 'add');
     syncedRowCount++;
     if (options.outputSyncedRows) {
       let rows: Row[] = rowsByTable[rowChange.table];
+      const s = rowChange.table + '.' + JSON.stringify(rowChange.row);
+      if (seenByTable.has(s)) {
+        continue; // skip duplicates
+      }
+      seenByTable.add(s);
       if (!rows) {
         rows = [];
         rowsByTable[rowChange.table] = rows;

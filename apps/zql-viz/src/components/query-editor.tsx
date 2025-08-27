@@ -67,7 +67,6 @@ export const QueryEditor: FC<QueryEditorProps> = ({
           title="Execute Query (Ctrl+Enter)"
         >
           <Play size={16} />
-          Execute
         </button>
       </div>
       <Editor

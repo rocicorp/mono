@@ -5,7 +5,6 @@ import {
   expect,
   type Mock,
   type MockedFunction,
-  test,
   vi,
 } from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
@@ -29,7 +28,7 @@ import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.t
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {testDBs} from '../../test/db.ts';
+import {type PgTest, test} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -118,7 +117,7 @@ describe('view-syncer/service', () => {
     httpCookie: undefined,
   };
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     ({
       storageDB,
       replicaDbFile,
@@ -134,15 +133,15 @@ describe('view-syncer/service', () => {
       connect,
       connectWithQueueAndSource,
       setTimeoutFn,
-    } = await setup('view_syncer_service_test', permissionsAll));
-  });
+    } = await setup(testDBs, 'view_syncer_service_test', permissionsAll));
 
-  afterEach(async () => {
-    vi.useRealTimers();
-    await vs.stop();
-    await viewSyncerDone;
-    await testDBs.drop(cvrDB);
-    replicaDbFile.delete();
+    return async () => {
+      vi.useRealTimers();
+      await vs.stop();
+      await viewSyncerDone;
+      await testDBs.drop(cvrDB, upstreamDb);
+      replicaDbFile.delete();
+    };
   });
 
   async function getCVROwner() {
@@ -482,12 +481,17 @@ describe('view-syncer/service', () => {
       vi.unstubAllGlobals();
     });
 
-    function mockFetchImpl(queryResponses: TransformResponseBody) {
+    function mockFetchImpl(
+      queryResponses: TransformResponseBody | (() => Promise<Response>),
+    ) {
       mockFetch.mockImplementation(url => {
         if (
           url ===
           'http://my-pull-endpoint.dev/api/zero/pull?schema=this_app_2&appID=this_app'
         ) {
+          if (typeof queryResponses === 'function') {
+            return queryResponses();
+          }
           return Promise.resolve(
             new Response(
               JSON.stringify([
@@ -926,6 +930,498 @@ describe('view-syncer/service', () => {
             "schema": "",
             "table": "issues",
           },
+        ]
+      `);
+    });
+
+    test('does not re-transform the same custom query if it was already registered and transformed', async () => {
+      let callCount = 0;
+      mockFetchImpl(() => {
+        callCount++;
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              'transformed',
+              [
+                {
+                  ast: ISSUES_QUERY,
+                  id: 'custom-1',
+                  name: 'named-query-1',
+                },
+                {
+                  ast: ISSUES_QUERY,
+                  id: 'custom-2',
+                  name: 'named-query-2',
+                },
+              ],
+            ] satisfies TransformResponseMessage),
+          ),
+        );
+      });
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+      expect(callCount).toBe(1);
+
+      const client2 = connect(
+        {
+          ...SYNC_CONTEXT,
+          clientID: 'cq-c2-client',
+          wsID: 'cq-c2-wsid',
+        },
+        [
+          {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+          {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+        ],
+      );
+
+      // query should still transition to `got`
+      expect(await nextPoke(client2)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": null,
+              "pokeID": "01:01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "cq-c2-client": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+                "foo": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+              },
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "put",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01:01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 9007199254740991,
+                    "id": "1",
+                    "json": null,
+                    "owner": "100",
+                    "parent": null,
+                    "title": "parent issue foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": -9007199254740991,
+                    "id": "2",
+                    "json": null,
+                    "owner": "101",
+                    "parent": null,
+                    "title": "parent issue bar",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 123,
+                    "id": "3",
+                    "json": null,
+                    "owner": "102",
+                    "parent": "1",
+                    "title": "foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 100,
+                    "id": "4",
+                    "json": null,
+                    "owner": "101",
+                    "parent": "2",
+                    "title": "bar",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01:01",
+              "pokeID": "01:01",
+            },
+          ],
+        ]
+      `);
+      expect(callCount).toBe(1);
+    });
+
+    // test cases where custom query transforms fail
+    test('http transform call fails', async () => {
+      mockFetchImpl(() => Promise.reject(JSON.stringify({})));
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "transformError",
+            [
+              {
+                "details": "{}",
+                "error": "zero",
+                "id": "custom-1",
+                "name": "named-query-1",
+              },
+              {
+                "details": "{}",
+                "error": "zero",
+                "id": "custom-2",
+                "name": "named-query-2",
+              },
+            ],
+          ],
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "del",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+    });
+
+    test('bad http response', async () => {
+      const r = new Response(JSON.stringify({}), {
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+      mockFetchImpl(() => Promise.resolve(r));
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "transformError",
+            [
+              {
+                "details": "{}",
+                "error": "http",
+                "id": "custom-1",
+                "name": "named-query-1",
+                "status": 500,
+              },
+              {
+                "details": "{}",
+                "error": "http",
+                "id": "custom-2",
+                "name": "named-query-2",
+                "status": 500,
+              },
+            ],
+          ],
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "del",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+    });
+
+    test('all individual queries fail', async () => {
+      mockFetchImpl([
+        {
+          error: 'app',
+          id: 'custom-1',
+          name: 'named-query-1',
+          details: 'errrrrr',
+        },
+        {
+          error: 'app',
+          id: 'custom-2',
+          name: 'named-query-2',
+          details: 'brrrr',
+        },
+      ] satisfies TransformResponseBody);
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "transformError",
+            [
+              {
+                "details": "errrrrr",
+                "error": "app",
+                "id": "custom-1",
+                "name": "named-query-1",
+              },
+              {
+                "details": "brrrr",
+                "error": "app",
+                "id": "custom-2",
+                "name": "named-query-2",
+              },
+            ],
+          ],
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "del",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+    });
+
+    test('some individual queries fail', async () => {
+      mockFetchImpl([
+        {
+          error: 'app',
+          id: 'custom-1',
+          name: 'named-query-1',
+          details: 'errrrrr',
+        },
+        {
+          id: 'custom-2',
+          name: 'named-query-2',
+          ast: USERS_QUERY,
+        },
+      ] satisfies TransformResponseBody);
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "transformError",
+            [
+              {
+                "details": "errrrrr",
+                "error": "app",
+                "id": "custom-1",
+                "name": "named-query-1",
+              },
+            ],
+          ],
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-2",
+                  "op": "put",
+                },
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "users",
+                  "value": {
+                    "id": "100",
+                    "name": "Alice",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "users",
+                  "value": {
+                    "id": "101",
+                    "name": "Bob",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "users",
+                  "value": {
+                    "id": "102",
+                    "name": "Candice",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
         ]
       `);
     });
@@ -3500,5 +3996,52 @@ describe('view-syncer/service', () => {
         ],
       ]
     `);
+  });
+
+  test('inspect metrics op returns server metrics', async () => {
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
+    // Wait for initial hydration to complete
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+
+    // Trigger query materializations to generate metrics
+    replicator.processTransaction(
+      'txn-1',
+      messages.insert('issues', {
+        id: 'test-issue',
+        title: 'Test Issue',
+        owner: '100',
+        big: 1000,
+        json: null,
+        parent: null,
+      }),
+    );
+    stateChanges.push({state: 'version-ready'});
+    await expectNoPokes(client);
+
+    // Now call the inspect method and expect it to send a response
+    const inspectId = 'test-metrics-inspect';
+
+    // Call inspect and wait for the response to come through the client queue
+    await vs.inspect(SYNC_CONTEXT, ['inspect', {op: 'metrics', id: inspectId}]);
+
+    const msg = await client.dequeue();
+    expect(msg).toMatchObject([
+      'inspect',
+      {
+        id: 'test-metrics-inspect',
+        op: 'metrics',
+        value: {
+          'query-materialization-server': expect.arrayContaining([
+            expect.any(Number),
+          ]),
+          'query-update-server': expect.arrayContaining([expect.any(Number)]),
+        },
+      },
+    ]);
   });
 });

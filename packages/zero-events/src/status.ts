@@ -6,19 +6,17 @@ export const statusSchema = v.literalUnion('OK', 'ERROR');
 
 export type Status = v.Infer<typeof statusSchema>;
 
-export const STATUS_EVENT_PREFIX = 'zero/events/status/';
-
 /**
  * A StatusEvent conveys the most current status of a given component,
  * with each event replacing any preceding status events (based on the
  * `time` field) for the same component.
  *
- * All StatusEvents have common fields (e.g. `stage`, `description`,
- * `errorDetails`) that can be used to describe the state of any
- * component even if the specific message subtype is not known. In this
- * respect, an event consumer can subscribe to "zero/events/status/*" and
- * display general status information without needing to understand
- * subtype-specific fields.
+ * All StatusEvents have a `type` value that starts with `zero/events/status/`,
+ * with common fields (e.g. `stage`, `description`, `errorDetails`) that can
+ * be used to describe the state of any component even if the specific subtype
+ * is not known. In this respect, an event consumer can subscribe to
+ * "zero/events/status/*" and display general status information without
+ * needing to understand subtype-specific fields.
  */
 export const statusEventSchema = zeroEventSchema.extend({
   /**
@@ -46,7 +44,11 @@ export const statusEventSchema = zeroEventSchema.extend({
   errorDetails: jsonObjectSchema.optional(),
 });
 
-export type StatusEvent = v.Infer<typeof statusEventSchema>;
+export type StatusEvent<
+  T extends v.Infer<typeof statusEventSchema> & {
+    type: `zero/events/status/${string}`;
+  },
+> = T;
 
 const replicatedColumnSchema = v.object({
   column: v.string(),
@@ -87,9 +89,7 @@ export type ReplicationStage = v.Infer<typeof replicationStageSchema>;
  * "replication" component.
  */
 export const replicationStatusEventSchema = statusEventSchema.extend({
-  type: v
-    .literal('zero/events/status/replication/v1')
-    .assert(v => v.startsWith(STATUS_EVENT_PREFIX)),
+  type: v.literal('zero/events/status/replication/v1'),
   component: v.literal('replication'),
   stage: replicationStageSchema,
 
@@ -99,6 +99,6 @@ export const replicationStatusEventSchema = statusEventSchema.extend({
 });
 
 // CloudEvent type: "zero.status/replication/v1"
-export type ReplicationStatusEvent = v.Infer<
-  typeof replicationStatusEventSchema
+export type ReplicationStatusEvent = StatusEvent<
+  v.Infer<typeof replicationStatusEventSchema>
 >;

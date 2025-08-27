@@ -1,12 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
+import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {listIndexes, listTables} from '../../db/lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
-import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor} from './change-processor.ts';
 import {initChangeLog} from './schema/change-log.ts';
@@ -18,15 +18,25 @@ import {createChangeProcessor, ReplicationMessages} from './test-utils.ts';
 
 describe('replicator/incremental-sync', () => {
   let lc: LogContext;
-  let replica: Database;
-  let processor: ChangeProcessor;
+  let servingReplica: Database;
+  let servingProcessor: ChangeProcessor;
+  let backupReplica: Database;
+  let backupProcessor: ChangeProcessor;
 
   beforeEach(() => {
     lc = createSilentLogContext();
-    replica = new Database(lc, ':memory:');
-    processor = new ChangeProcessor(
-      new StatementRunner(replica),
-      'CONCURRENT',
+    servingReplica = new Database(lc, ':memory:');
+    servingProcessor = new ChangeProcessor(
+      new StatementRunner(servingReplica),
+      'serving',
+      (_, err) => {
+        throw err;
+      },
+    );
+    backupReplica = new Database(lc, ':memory:');
+    backupProcessor = new ChangeProcessor(
+      new StatementRunner(backupReplica),
+      'backup',
       (_, err) => {
         throw err;
       },
@@ -2047,23 +2057,32 @@ describe('replicator/incremental-sync', () => {
 
   for (const c of cases) {
     test(c.name, () => {
-      initDB(replica, c.setup);
-      initReplicationState(replica, ['zero_data'], '02');
-      initChangeLog(replica);
+      for (const [replica, processor, includeChangeLog] of [
+        [servingReplica, servingProcessor, true],
+        [backupReplica, backupProcessor, false],
+      ] satisfies [Database, ChangeProcessor, boolean][]) {
+        initDB(replica, c.setup);
+        initReplicationState(replica, ['zero_data'], '02');
+        initChangeLog(replica);
 
-      for (const change of c.downstream) {
-        processor.processMessage(lc, change);
-      }
+        for (const change of c.downstream) {
+          processor.processMessage(lc, change);
+        }
 
-      expectTables(replica, c.data, 'bigint');
+        if (includeChangeLog) {
+          expectTables(replica, c.data, 'bigint');
+        } else {
+          expectTables(replica, {...c.data, ['_zero.changeLog']: []}, 'bigint');
+        }
 
-      if (c.tableSpecs) {
-        expect(
-          listTables(replica).filter(t => !t.name.startsWith('_zero.')),
-        ).toEqual(c.tableSpecs);
-      }
-      if (c.indexSpecs) {
-        expect(listIndexes(replica)).toEqual(c.indexSpecs);
+        if (c.tableSpecs) {
+          expect(
+            listTables(replica).filter(t => !t.name.startsWith('_zero.')),
+          ).toEqual(c.tableSpecs);
+        }
+        if (c.indexSpecs) {
+          expect(listIndexes(replica)).toEqual(c.indexSpecs);
+        }
       }
     });
   }

@@ -41,6 +41,7 @@ import {
 import type {CustomQueryID} from './named.ts';
 import type {GotCallback, QueryDelegate} from './query-delegate.ts';
 import {
+  delegateSymbol,
   type GetFilterType,
   type HumanReadable,
   type PreloadOptions,
@@ -55,7 +56,7 @@ export type AnyQuery = Query<Schema, string, any>;
 
 const astSymbol = Symbol();
 
-export function ast(query: Query<Schema, string, any>): AST {
+export function ast(query: AnyQuery): AST {
   return (query as AbstractQuery<Schema, string>)[astSymbol];
 }
 
@@ -131,7 +132,7 @@ export abstract class AbstractQuery<
     this.customQueryID = customQueryID;
   }
 
-  delegate(delegate: QueryDelegate): Query<TSchema, TTable, TReturn> {
+  [delegateSymbol](delegate: QueryDelegate): Query<TSchema, TTable, TReturn> {
     return this[newQuerySymbol](
       delegate,
       this.#schema,
@@ -243,7 +244,7 @@ export abstract class AbstractQuery<
         },
         this.customQueryID,
         undefined,
-      );
+      ) as AnyQuery;
       if (cardinality === 'one') {
         q = q.one();
       }
@@ -777,7 +778,7 @@ export class QueryImpl<
     const t0 = performance.now();
 
     const removeAddedQuery = this.customQueryID
-      ? delegate.addCustomQuery(this.customQueryID, ttl, gotCallback)
+      ? delegate.addCustomQuery(ast, this.customQueryID, ttl, gotCallback)
       : delegate.addServerQuery(ast, ttl, gotCallback);
 
     const input = buildPipeline(ast, delegate, queryID);
@@ -839,20 +840,25 @@ export class QueryImpl<
       'preload requires a query delegate to be set',
     );
     const ttl = options?.ttl ?? DEFAULT_PRELOAD_TTL_MS;
+    const ast = this._completeAst();
     const {resolve, promise: complete} = resolver<void>();
     if (this.customQueryID) {
-      const cleanup = delegate.addCustomQuery(this.customQueryID, ttl, got => {
-        if (got) {
-          resolve();
-        }
-      });
+      const cleanup = delegate.addCustomQuery(
+        ast,
+        this.customQueryID,
+        ttl,
+        got => {
+          if (got) {
+            resolve();
+          }
+        },
+      );
       return {
         cleanup,
         complete,
       };
     }
 
-    const ast = this._completeAst();
     const cleanup = delegate.addServerQuery(ast, ttl, got => {
       if (got) {
         resolve();

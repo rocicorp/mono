@@ -34,6 +34,10 @@ type ArraySelectors<E extends TableSchema> = {
     : never;
 }[keyof E['columns']];
 
+export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
+export type QueryTable<Q> = Q extends Query<any, infer T, any> ? T : never;
+export const delegateSymbol = Symbol('delegate');
+
 export type GetFilterType<
   TSchema extends TableSchema,
   TColumn extends keyof TSchema['columns'],
@@ -172,7 +176,7 @@ export interface Query<
     name: string,
     args: ReadonlyArray<ReadonlyJSONValue>,
   ): Query<TSchema, TTable, TReturn>;
-  delegate(delegate: QueryDelegate): Query<TSchema, TTable, TReturn>;
+  [delegateSymbol](delegate: QueryDelegate): Query<TSchema, TTable, TReturn>;
 
   /**
    * Related is used to add a related query to the current query. This is used
@@ -455,6 +459,8 @@ export type PreloadOptions = {
    */
   ttl?: TTL | undefined;
 };
+
+export type MaterializeOptions = PreloadOptions;
 
 /**
  * A helper type that tries to make the type more readable.

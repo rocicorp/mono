@@ -7,21 +7,30 @@ import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts'
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
 import {buildPipeline} from '../../../../zql/src/builder/builder.ts';
+import {
+  Debug,
+  runtimeDebugFlags,
+} from '../../../../zql/src/builder/debug-delegate.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
 import type {Input, Storage} from '../../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
-import type {Source, SourceChange} from '../../../../zql/src/ivm/source.ts';
-import {runtimeDebugFlags} from '../../../../zql/src/builder/debug-delegate.ts';
+import type {
+  Source,
+  SourceChange,
+  SourceInput,
+} from '../../../../zql/src/ivm/source.ts';
+import {MeasurePushOperator} from '../../../../zql/src/query/measure-push-operator.ts';
 import {TableSource} from '../../../../zqlite/src/table-source.ts';
 import {
   reloadPermissionsIfChanged,
   type LoadedPermissions,
 } from '../../auth/load-permissions.ts';
 import type {LogConfig} from '../../config/zero-config.ts';
-import {computeZqlSpecs} from '../../db/lite-tables.ts';
+import {computeZqlSpecs, mustGetTableSpec} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import {getOrCreateHistogram} from '../../observability/metrics.ts';
+import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import type {RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
 import type {ShardID} from '../../types/shards.ts';
@@ -33,7 +42,6 @@ import {
   Snapshotter,
   type SnapshotDiff,
 } from './snapshotter.ts';
-import {Debug} from '../../../../zql/src/builder/debug-delegate.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -64,6 +72,9 @@ export type RowChange = RowAdd | RowRemove | RowEdit;
 type Pipeline = {
   readonly input: Input;
   readonly hydrationTimeMs: number;
+  readonly originalHash: string;
+  readonly transformedAst: AST; // Optional, only set after hydration
+  readonly transformationHash: string; // The hash of the transformed AST
 };
 
 /**
@@ -71,6 +82,9 @@ type Pipeline = {
  */
 export class PipelineDriver {
   readonly #tables = new Map<string, TableSource>();
+  // We probs need the original query hash
+  // so we can decide not to re-transform a custom query
+  // that is already hydrated.
   readonly #pipelines = new Map<string, Pipeline>();
 
   readonly #lc: LogContext;
@@ -88,6 +102,7 @@ export class PipelineDriver {
       'Time to advance all queries for a given client group for in response to a single change.',
     unit: 's',
   });
+  readonly #inspectorDelegate: InspectorDelegate;
 
   constructor(
     lc: LogContext,
@@ -96,12 +111,14 @@ export class PipelineDriver {
     shardID: ShardID,
     storage: ClientGroupStorage,
     clientGroupID: string,
+    inspectorDelegate: InspectorDelegate,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
     this.#storage = storage;
     this.#shardID = shardID;
     this.#logConfig = logConfig;
+    this.#inspectorDelegate = inspectorDelegate;
   }
 
   /**
@@ -227,8 +244,32 @@ export class PipelineDriver {
   }
 
   /** @return The Set of query hashes for all added queries. */
-  addedQueries(): Set<string> {
-    return new Set(this.#pipelines.keys());
+  addedQueries(): [
+    transformationHashes: Set<string>,
+    byOriginalHash: Map<
+      string,
+      {
+        transformationHash: string;
+        transformedAst: AST;
+      }[]
+    >,
+  ] {
+    const byOriginalHash = new Map<
+      string,
+      {transformationHash: string; transformedAst: AST}[]
+    >();
+    for (const pipeline of this.#pipelines.values()) {
+      const {originalHash, transformedAst, transformationHash} = pipeline;
+
+      if (!byOriginalHash.has(originalHash)) {
+        byOriginalHash.set(originalHash, []);
+      }
+      byOriginalHash.get(originalHash)!.push({
+        transformationHash,
+        transformedAst,
+      });
+    }
+    return [new Set(this.#pipelines.keys()), byOriginalHash];
   }
 
   totalHydrationTimeMs(): number {
@@ -240,14 +281,14 @@ export class PipelineDriver {
   }
 
   /**
-   * Adds a pipeline for the query. The method will hydrated the query using
-   * the the driver's current snapshot of the database and return a stream
-   * of results. Henceforth, updates to the query will be returned when the
-   * driver is {@link advance}d. The query and its pipeline can be removed with
+   * Adds a pipeline for the query. The method will hydrate the query using the
+   * driver's current snapshot of the database and return a stream of results.
+   * Henceforth, updates to the query will be returned when the driver is
+   * {@link advance}d. The query and its pipeline can be removed with
    * {@link removeQuery()}.
    *
-   * If a query with an identical hash has already been added, this method
-   * is a no-op and no RowChanges are generated.
+   * If a query with an identical hash has already been added, this method is a
+   * no-op and no RowChanges are generated.
    *
    * @param timer The caller-controlled {@link Timer} used to determine the
    *        final hydration time. (The caller may pause and resume the timer
@@ -255,56 +296,62 @@ export class PipelineDriver {
    * @return The rows from the initial hydration of the query.
    */
   *addQuery(
-    hash: string,
+    transformationHash: string,
+    queryID: string,
     query: AST,
     timer: {totalElapsed: () => number},
   ): Iterable<RowChange> {
     assert(this.initialized());
-    if (this.#pipelines.has(hash)) {
-      this.#lc.info?.(`query ${hash} already added`, query);
+    this.#inspectorDelegate.addQuery(transformationHash, queryID, query);
+    if (this.#pipelines.has(transformationHash)) {
+      this.#lc.info?.(`query ${transformationHash} already added`, query);
       return;
     }
     const debugDelegate = runtimeDebugFlags.trackRowsVended
       ? new Debug()
       : undefined;
+
     const input = buildPipeline(
       query,
       {
         debug: debugDelegate,
         getSource: name => this.#getSource(name),
         createStorage: () => this.#createStorage(),
-        decorateSourceInput: input => input,
+        decorateSourceInput: (input: SourceInput, _queryID: string): Input =>
+          new MeasurePushOperator(
+            input,
+            transformationHash,
+            this.#inspectorDelegate,
+            'query-update-server',
+          ),
         decorateInput: input => input,
         addEdge() {},
         decorateFilterInput: input => input,
       },
-      hash,
+      queryID,
     );
     const schema = input.getSchema();
     input.setOutput({
       push: change => {
         const streamer = this.#streamer;
         assert(streamer, 'must #startAccumulating() before pushing changes');
-        streamer.accumulate(hash, schema, [change]);
+        streamer.accumulate(transformationHash, schema, [change]);
       },
     });
 
-    yield* hydrate(input, hash, this.#tableSpecs);
+    yield* hydrate(input, transformationHash, this.#tableSpecs);
 
     const hydrationTimeMs = timer.totalElapsed();
     if (runtimeDebugFlags.trackRowCountsVended) {
       if (hydrationTimeMs > this.#logConfig.slowHydrateThreshold) {
         let totalRowsConsidered = 0;
         const lc = this.#lc
-          .withContext('hash', hash)
+          .withContext('hash', transformationHash)
           .withContext('hydrationTimeMs', hydrationTimeMs);
         for (const tableName of this.#tables.keys()) {
-          const entries = [
-            ...(debugDelegate
-              ?.getVendedRowCounts()
-              ?.get(tableName)
-              ?.entries() ?? []),
-          ];
+          const entries = Object.entries(
+            debugDelegate?.getVendedRowCounts()[tableName] ?? {},
+          );
           totalRowsConsidered += entries.reduce(
             (acc, entry) => acc + entry[1],
             0,
@@ -319,7 +366,13 @@ export class PipelineDriver {
     // Note: This hydrationTime is a wall-clock overestimate, as it does
     // not take time slicing into account. The view-syncer resets this
     // to a more precise processing-time measurement with setHydrationTime().
-    this.#pipelines.set(hash, {input, hydrationTimeMs});
+    this.#pipelines.set(transformationHash, {
+      input,
+      hydrationTimeMs,
+      originalHash: queryID,
+      transformedAst: query,
+      transformationHash,
+    });
   }
 
   /**
@@ -468,17 +521,8 @@ export class PipelineDriver {
       return source;
     }
 
-    const tableSpec = this.#tableSpecs.get(tableName);
-    if (!tableSpec) {
-      throw new Error(
-        `table '${tableName}' is not one of: ${[...this.#tableSpecs.keys()]
-          .filter(t => !t.includes('.') && !t.startsWith('_litestream_'))
-          .sort()}. ` +
-          `Check the spelling and ensure that the table has a primary key.`,
-      );
-    }
+    const tableSpec = mustGetTableSpec(this.#tableSpecs, tableName);
     const {primaryKey} = tableSpec.tableSpec;
-    assert(primaryKey?.length);
 
     const {db} = this.#snapshotter.current();
     source = new TableSource(
@@ -487,7 +531,7 @@ export class PipelineDriver {
       db.db,
       tableName,
       tableSpec.zqlSpec,
-      [primaryKey[0], ...primaryKey.slice(1)],
+      primaryKey,
     );
     this.#tables.set(tableName, source);
     this.#lc.debug?.(`created TableSource for ${tableName}`);

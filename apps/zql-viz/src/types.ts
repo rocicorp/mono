@@ -31,6 +31,18 @@ export interface Graph {
 export type Result = {
   ast: unknown | undefined;
   graph: Graph | undefined;
-  plan: string | undefined;
-  rows: unknown[] | undefined;
+  remoteRunResult: RemoteRunResult | undefined;
+};
+
+export type RemoteRunResult = {
+  warnings: string[];
+  syncedRows: Record<string, Record<string, unknown>[]>;
+  syncedRowCount: number;
+  start: number;
+  end: number;
+  afterPermissions: string | undefined;
+  // record of { [tableName: string]: { [queryName: string]: number } }
+  vendedRowCounts: Record<string, Record<string, number>> | undefined;
+  vendedRows: Record<string, Record<string, number>> | undefined;
+  plans: Record<string, string[]> | undefined;
 };

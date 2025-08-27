@@ -11,6 +11,7 @@ import {
 } from './use-query.tsx';
 import {ZeroProvider} from './zero-provider.tsx';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
+import {delegateSymbol} from '../../zql/src/query/query.ts';
 
 function newMockQuery(
   query: string,
@@ -21,7 +22,7 @@ function newMockQuery(
     hash() {
       return query;
     },
-    delegate() {
+    [delegateSymbol]() {
       return ret;
     },
     materialize: vi.fn().mockImplementation(() => view),

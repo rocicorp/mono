@@ -18,6 +18,7 @@ const emptyMetrics = {
   'query-materialization-end-to-end': new TDigest(),
   'query-materialization-server': new TDigest(),
   'query-update-client': new TDigest(),
+  'query-update-server': new TDigest(),
 };
 
 async function getMetrics<
@@ -48,6 +49,7 @@ async function getMetrics<
       id,
       value: metricsResponseValue ?? {
         'query-materialization-server': [1000],
+        'query-update-server': [1000],
       },
     },
   ]);
@@ -162,7 +164,7 @@ test('client queries', async () => {
       {
         clientID: z.clientID,
         queryID: '1',
-        ast: {table: 'issue'},
+        ast: {table: 'issues'},
         name: null,
         args: null,
         deleted: false,
@@ -176,7 +178,8 @@ test('client queries', async () => {
     [
       {
         clientID: z.clientID,
-        ast: {table: 'issue'},
+        clientZQL: null,
+        serverZQL: 'issues',
         name: null,
         args: null,
         deleted: false,
@@ -185,7 +188,6 @@ test('client queries', async () => {
         inactivatedAt: null,
         rowCount: 10,
         ttl: '1m',
-        zql: 'issue',
         metrics: emptyMetrics,
       },
     ],
@@ -196,7 +198,15 @@ test('client queries', async () => {
       {
         clientID: z.clientID,
         queryID: '1',
-        ast: {table: 'issue'},
+        ast: {
+          table: 'issues',
+          where: {
+            type: 'simple',
+            left: {type: 'column', name: 'owner_id'},
+            op: '=',
+            right: {type: 'literal', value: 'arv'},
+          },
+        },
         name: null,
         args: null,
         deleted: false,
@@ -210,7 +220,8 @@ test('client queries', async () => {
     [
       {
         clientID: z.clientID,
-        ast: {table: 'issue'},
+        clientZQL: null,
+        serverZQL: "issues.where('owner_id', 'arv')",
         name: null,
         args: null,
         deleted: false,
@@ -219,7 +230,6 @@ test('client queries', async () => {
         inactivatedAt: new Date(d),
         rowCount: 10,
         ttl: '1m',
-        zql: 'issue',
         metrics: emptyMetrics,
       },
     ],
@@ -230,7 +240,7 @@ test('client queries', async () => {
 
 test('clientGroup queries', async () => {
   const ast: AST = {
-    table: 'issue',
+    table: 'issues',
     where: {
       type: 'or',
       conditions: [
@@ -248,12 +258,6 @@ test('clientGroup queries', async () => {
         },
       ],
     },
-    alias: undefined,
-    limit: undefined,
-    orderBy: undefined,
-    related: undefined,
-    schema: undefined,
-    start: undefined,
   };
   const z = zeroForTest({schema});
   await z.triggerConnected();
@@ -291,17 +295,18 @@ test('clientGroup queries', async () => {
   ] satisfies InspectDownMessage);
   expect(await p).toEqual([
     {
-      ast,
       name: null,
       args: null,
       clientID: z.clientID,
+      clientZQL: null,
       deleted: false,
       got: true,
       id: '1',
       inactivatedAt: null,
       rowCount: 10,
       ttl: '1m',
-      zql: "issue.where(({cmp, or}) => or(cmp('id', '1'), cmp('id', '!=', '2')))",
+      serverZQL:
+        "issues.where(({cmp, or}) => or(cmp('id', '1'), cmp('id', '!=', '2')))",
       metrics: emptyMetrics,
     },
   ]);
@@ -384,6 +389,9 @@ describe('query metrics', () => {
           1000,
         ],
         "query-update-client": [
+          1000,
+        ],
+        "query-update-server": [
           1000,
         ],
       }
@@ -598,6 +606,7 @@ describe('query metrics', () => {
             ttl: 60_000,
             metrics: {
               'query-materialization-server': [1000, 1, 2],
+              'query-update-server': [100, 3, 4],
             },
           },
         ],
@@ -610,29 +619,34 @@ describe('query metrics', () => {
 
     const {metrics} = queries[0];
     expect(metrics).toMatchInlineSnapshot(`
-          {
-            "query-materialization-client": [
-              1000,
-              0,
-              1,
-            ],
-            "query-materialization-end-to-end": [
-              1000,
-              50,
-              1,
-            ],
-            "query-materialization-server": [
-              1000,
-              1,
-              2,
-            ],
-            "query-update-client": [
-              1000,
-              0,
-              1,
-            ],
-          }
-        `);
+      {
+        "query-materialization-client": [
+          1000,
+          0,
+          1,
+        ],
+        "query-materialization-end-to-end": [
+          1000,
+          50,
+          1,
+        ],
+        "query-materialization-server": [
+          1000,
+          1,
+          2,
+        ],
+        "query-update-client": [
+          1000,
+          0,
+          1,
+        ],
+        "query-update-server": [
+          100,
+          3,
+          4,
+        ],
+      }
+    `);
 
     view.destroy();
     await z.close();
@@ -663,5 +677,66 @@ test('server version', async () => {
 
   expect(await p).toBe('1.2.34');
 
+  await z.close();
+});
+
+test('clientZQL', async () => {
+  const z = zeroForTest({schema});
+  await z.triggerConnected();
+  await Promise.resolve();
+  const inspector = await z.inspect();
+  vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+  await z.socket;
+  const p = inspector.client.queries();
+
+  // Trigger QueryManager.#add by materializing a query and marking it as got
+  const issueQuery = z.query.issue.where('ownerId', 'arv');
+  const view = issueQuery.materialize();
+  await z.triggerGotQueriesPatch(issueQuery);
+
+  // Send fake inspect/queries response for this query
+  await z.triggerMessage([
+    'inspect',
+    {
+      op: 'queries',
+      id: '000000000000000000000',
+      value: [
+        {
+          clientID: z.clientID,
+          queryID: issueQuery.hash(),
+          ast: {
+            table: 'issues',
+            where: {
+              type: 'simple',
+              left: {type: 'column', name: 'owner_id'},
+              op: '=',
+              right: {type: 'literal', value: 'arv'},
+            },
+            orderBy: [['id', 'asc']],
+          },
+          name: null,
+          args: null,
+          deleted: false,
+          got: true,
+          inactivatedAt: null,
+          rowCount: 0,
+          ttl: 60_000,
+          metrics: null,
+        },
+      ],
+    },
+  ] satisfies InspectDownMessage);
+
+  const queries = await p;
+  expect(queries).toHaveLength(1);
+  expect(queries[0].id).toBe(issueQuery.hash());
+  expect(queries[0].clientZQL).toBe(
+    "issue.where('ownerId', 'arv').orderBy('id', 'asc')",
+  );
+  expect(queries[0].serverZQL).toBe(
+    "issues.where('owner_id', 'arv').orderBy('id', 'asc')",
+  );
+
+  view.destroy();
   await z.close();
 });

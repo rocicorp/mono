@@ -34,7 +34,7 @@ export default {
       return undefined;
     },
     include: ['src/**/*.{test,spec}{,.node}.?(c|m)[jt]s?(x)'],
-    silent: true,
+    silent: 'passed-only',
     browser: {
       enabled: true,
       provider: 'playwright',

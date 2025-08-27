@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {testDBs} from '../test/db.ts';
+import {type PgTest, test} from '../test/db.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import {
   type IncrementalMigrationMap,
@@ -205,13 +205,11 @@ describe('db/migration', () => {
 
   let db: PostgresDB;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     db = await testDBs.create('migration_test');
     await db`CREATE TABLE "MigrationHistory" (event TEXT)`;
-  });
 
-  afterEach(async () => {
-    await testDBs.drop(db);
+    return () => testDBs.drop(db);
   });
 
   for (const c of cases) {

@@ -36,6 +36,6 @@ function send(w: Worker, data: {name: string}): Promise<unknown> {
 function withTimeout<T>(p: Promise<T>): Promise<T> {
   return Promise.race([
     p,
-    sleep(3000).then(() => Promise.reject(new Error('Timed out'))),
+    sleep(9000).then(() => Promise.reject(new Error('Timed out'))),
   ]);
 }

@@ -1,14 +1,14 @@
 import {
   boolean,
+  createBuilder,
   createSchema,
+  definePermissions,
   enumeration,
   number,
   relationships,
   string,
   table,
   type Row,
-  createBuilder,
-  definePermissions,
 } from '@rocicorp/zero';
 import type {Role} from './auth.ts';
 

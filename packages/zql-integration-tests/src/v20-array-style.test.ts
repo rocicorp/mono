@@ -10,6 +10,7 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {createBuilder} from '../../zql/src/query/named.ts';
+import {delegateSymbol} from '../../zql/src/query/query.ts';
 
 test('reading from old array style tables', async () => {
   const lc = createSilentLogContext();
@@ -45,7 +46,7 @@ test('reading from old array style tables', async () => {
   const d = newQueryDelegate(lc, testLogConfig, sqlite, schema);
   const queries = createBuilder(schema);
 
-  const rows = await queries.bar.delegate(d).run();
+  const rows = await queries.bar[delegateSymbol](d).run();
   expect(rows).toMatchInlineSnapshot(`
     [
       {

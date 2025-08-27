@@ -1,26 +1,117 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {mapEntries} from '../../../shared/src/objects.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
 import {newQuery} from './query-impl.ts';
 import type {Query} from './query.ts';
 
-export type NamedQuery<
-  TArg extends
-    ReadonlyArray<ReadonlyJSONValue> = ReadonlyArray<ReadonlyJSONValue>,
-  TReturnQuery extends Query<any, any, any> = Query<any, any, any>,
-> = (...args: TArg) => TReturnQuery;
-
-export type ContextualizedNamedQuery<
+export type QueryFn<
   TContext,
-  TArg extends
-    ReadonlyArray<ReadonlyJSONValue> = ReadonlyArray<ReadonlyJSONValue>,
-  TReturnQuery extends Query<any, any, any> = Query<any, any, any>,
-> = {
-  (context: TContext, ...args: TArg): TReturnQuery;
-  contextualized?: boolean;
+  TTakesContext extends boolean,
+  TArg extends ReadonlyJSONValue[],
+  TReturnQuery extends Query<any, any, any>,
+> = TTakesContext extends false
+  ? {(...args: TArg): TReturnQuery}
+  : {(context: TContext, ...args: TArg): TReturnQuery};
+
+export type SyncedQuery<
+  TName extends string,
+  TContext,
+  TTakesContext extends boolean,
+  TArg extends ReadonlyJSONValue[],
+  TReturnQuery extends Query<any, any, any>,
+> = QueryFn<TContext, TTakesContext, TArg, TReturnQuery> & {
+  queryName: TName;
+  parse: ParseFn<TArg> | undefined;
+  takesContext: TTakesContext;
 };
+
+function normalizeParser<T extends ReadonlyJSONValue[]>(
+  parser: ParseFn<T> | HasParseFn<T> | undefined,
+): ParseFn<T> | undefined {
+  if (parser) {
+    if ('parse' in parser) {
+      return parser.parse.bind(parser);
+    }
+    return parser;
+  }
+  return undefined;
+}
+
+export function syncedQuery<
+  TName extends string,
+  TArg extends ReadonlyJSONValue[],
+  TReturnQuery extends Query<any, any, any>,
+>(
+  name: TName,
+  parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,
+  fn: QueryFn<unknown, false, TArg, TReturnQuery>,
+): SyncedQuery<TName, unknown, false, TArg, TReturnQuery> {
+  const impl = syncedQueryImpl(name, fn, false);
+  const ret: any = (...args: TArg) => impl(undefined, args);
+  ret.queryName = name;
+  ret.parse = normalizeParser(parser);
+  ret.takesContext = false;
+  return ret;
+}
+
+export function syncedQueryWithContext<
+  TName extends string,
+  TContext,
+  TArg extends ReadonlyJSONValue[],
+  TReturnQuery extends Query<any, any, any>,
+>(
+  name: TName,
+  parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,
+  fn: QueryFn<TContext, true, TArg, TReturnQuery>,
+): SyncedQuery<TName, TContext, true, TArg, TReturnQuery> {
+  const impl = syncedQueryImpl(name, fn, true);
+  const ret: any = (context: TContext, ...args: TArg) => impl(context, args);
+  ret.queryName = name;
+  ret.parse = normalizeParser(parser);
+  ret.takesContext = true;
+  return ret;
+}
+
+function syncedQueryImpl<
+  TName extends string,
+  TContext,
+  TArg extends ReadonlyJSONValue[],
+  TReturnQuery extends Query<any, any, any>,
+>(name: TName, fn: any, takesContext: boolean) {
+  return (context: TContext, args: TArg) => {
+    const q = takesContext ? fn(context, ...args) : fn(...args);
+    return q.nameAndArgs(name, args) as TReturnQuery;
+  };
+}
+
+export function withValidation<T extends SyncedQuery<any, any, any, any, any>>(
+  fn: T,
+): T extends SyncedQuery<infer N, infer C, any, any, infer R>
+  ? SyncedQuery<N, C, true, ReadonlyJSONValue[], R>
+  : never {
+  if (!fn.parse) {
+    throw new Error('ret does not have a parse function defined');
+  }
+  const ret: any = (context: unknown, ...args: unknown[]) => {
+    const f = fn as any;
+    const parsed = f.parse(args);
+    return f.takesContext ? f(context, ...parsed) : f(...parsed);
+  };
+  ret.queryName = fn.queryName;
+  ret.parse = fn.parse;
+  ret.takesContext = true;
+
+  return ret;
+}
+
+export type ParseFn<T extends ReadonlyJSONValue[]> = (args: unknown[]) => T;
+
+export type HasParseFn<T extends ReadonlyJSONValue[]> = {
+  parse: ParseFn<T>;
+};
+
+export type Parser<T extends ReadonlyJSONValue[]> = ParseFn<T> | HasParseFn<T>;
 
 export type CustomQueryID = {
   name: string;
@@ -32,87 +123,6 @@ export type CustomQueryID = {
  */
 export function createBuilder<S extends Schema>(s: S): SchemaQuery<S> {
   return makeQueryBuilders(s) as SchemaQuery<S>;
-}
-
-/**
- * Tags a query with a name and arguments.
- * Named queries are run on both the client and server.
- * The server will receive the name and arguments for a named query and can
- * either run the same query the client did or a completely different one.
- *
- * The main use case here is to apply permissions to the requested query or
- * to expand the scope of the query to include additional data. E.g., for preloading.
- */
-function namedQuery(
-  name: string,
-  fn: NamedQuery<ReadonlyArray<ReadonlyJSONValue>, Query<any, any, any>>,
-): NamedQuery<ReadonlyArray<ReadonlyJSONValue>, Query<any, any, any>> {
-  return ((...args: ReadonlyArray<ReadonlyJSONValue>) =>
-    fn(...args).nameAndArgs(name, args)) as NamedQuery<
-    ReadonlyArray<ReadonlyJSONValue>,
-    Query<any, any, any>
-  >;
-}
-
-function contextualizedNamedQuery<TContext>(
-  name: string,
-  fn: ContextualizedNamedQuery<
-    TContext,
-    ReadonlyArray<ReadonlyJSONValue>,
-    Query<any, any, any>
-  >,
-): ContextualizedNamedQuery<
-  TContext,
-  ReadonlyArray<ReadonlyJSONValue>,
-  Query<any, any, any>
-> {
-  const ret = ((context: TContext, ...args: ReadonlyArray<ReadonlyJSONValue>) =>
-    fn(context, ...args).nameAndArgs(name, args)) as ContextualizedNamedQuery<
-    TContext,
-    ReadonlyArray<ReadonlyJSONValue>,
-    Query<any, any, any>
-  >;
-  ret.contextualized = true;
-
-  return ret;
-}
-
-export function queries<
-  TQueries extends {
-    [K in keyof TQueries]: TQueries[K] extends NamedQuery<
-      infer TArgs,
-      Query<any, any, any>
-    >
-      ? TArgs extends ReadonlyArray<ReadonlyJSONValue>
-        ? NamedQuery<TArgs, Query<any, any, any>>
-        : never
-      : never;
-  },
->(queries: TQueries): TQueries {
-  return mapEntries(queries, (name, query) => [
-    name,
-    namedQuery(name, query as any),
-  ]) as TQueries;
-}
-
-export function queriesWithContext<
-  TContext,
-  TQueries extends {
-    [K in keyof TQueries]: TQueries[K] extends ContextualizedNamedQuery<
-      TContext,
-      infer TArgs,
-      Query<any, any, any>
-    >
-      ? TArgs extends ReadonlyArray<ReadonlyJSONValue>
-        ? ContextualizedNamedQuery<TContext, TArgs, Query<any, any, any>>
-        : never
-      : never;
-  },
->(queries: TQueries): TQueries {
-  return mapEntries(queries, (name, query) => [
-    name,
-    contextualizedNamedQuery(name, query as any),
-  ]) as TQueries;
 }
 
 /**

@@ -2,11 +2,13 @@ import {
   escapeLike,
   type Query,
   type Row,
-  queriesWithContext,
+  syncedQuery,
+  syncedQueryWithContext,
 } from '@rocicorp/zero';
 import {builder, type Schema} from './schema.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 import type {AuthData, Role} from './auth.ts';
+import z from 'zod';
 
 function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,137 +20,164 @@ function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
   ) as TQuery;
 }
 
-export const queries = queriesWithContext({
-  allLabels: (_auth: AuthData | undefined) => builder.label,
+const idValidator = z.tuple([z.string()]);
+const keyValidator = idValidator;
 
-  allUsers: (_auth: AuthData | undefined) => builder.user,
+const listContextParams = z.object({
+  open: z.boolean().nullable(),
+  assignee: z.string().nullable(),
+  creator: z.string().nullable(),
+  labels: z.array(z.string()).nullable(),
+  textFilter: z.string().nullable(),
+  sortField: z.union([z.literal('modified'), z.literal('created')]),
+  sortDirection: z.union([z.literal('asc'), z.literal('desc')]),
+});
+type ListContextParams = z.infer<typeof listContextParams>;
 
-  issuePreload: (auth: AuthData | undefined, userID: string) =>
-    applyIssuePermissions(
-      builder.issue
-        .related('labels')
-        .related('viewState', q => q.where('userID', userID))
-        .related('creator')
-        .related('assignee')
-        .related('emoji', emoji => emoji.related('creator'))
-        .related('comments', comments =>
-          comments
-            .related('creator')
-            .related('emoji', emoji => emoji.related('creator'))
-            .limit(10)
-            .orderBy('created', 'desc'),
-        ),
-      auth?.role,
-    ),
+const issueRowSort = z.object({
+  id: z.string(),
+  created: z.number(),
+  modified: z.number(),
+});
 
-  user: (_auth: AuthData | undefined, userID: string) =>
+export const queries = {
+  allLabels: syncedQuery('allLabels', z.tuple([]), () => builder.label),
+
+  allUsers: syncedQuery('allUsers', z.tuple([]), () => builder.user),
+
+  user: syncedQuery('user', idValidator, userID =>
     builder.user.where('id', userID).one(),
+  ),
 
-  userPref: (auth: AuthData | undefined, key: string) =>
-    builder.userPref
-      .where('key', key)
-      .where('userID', auth?.sub ?? '')
-      .one(),
+  issuePreload: syncedQueryWithContext(
+    'issuePreload',
+    idValidator,
+    (auth: AuthData | undefined, userID) =>
+      applyIssuePermissions(
+        builder.issue
+          .related('labels')
+          .related('viewState', q => q.where('userID', userID))
+          .related('creator')
+          .related('assignee')
+          .related('emoji', emoji => emoji.related('creator'))
+          .related('comments', comments =>
+            comments
+              .related('creator')
+              .related('emoji', emoji => emoji.related('creator'))
+              .limit(10)
+              .orderBy('created', 'desc'),
+          ),
+        auth?.role,
+      ),
+  ),
 
-  userPicker: (
-    _auth: AuthData | undefined,
-    disabled: boolean,
-    login: string | null,
-    filter: 'crew' | 'creators' | null,
-  ) => {
-    let q = builder.user;
-    if (disabled && login) {
-      q = q.where('login', login);
-    } else if (filter) {
-      if (filter === 'crew') {
-        q = q.where(({cmp, not, and}) =>
-          and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
-        );
-      } else if (filter === 'creators') {
-        q = q.whereExists('createdIssues');
-      } else {
-        throw new Error(`Unknown filter: ${filter}`);
-      }
-    }
-    return q;
-  },
-
-  issueDetail: (
-    auth: AuthData | undefined,
-    idField: 'shortID' | 'id',
-    id: string | number,
-    userID: string,
-  ) =>
-    applyIssuePermissions(
-      builder.issue
-        .where(idField, id)
-        .related('emoji', emoji => emoji.related('creator'))
-        .related('creator')
-        .related('assignee')
-        .related('labels')
-        .related('notificationState', q => q.where('userID', userID))
-        .related('viewState', viewState =>
-          viewState.where('userID', userID).one(),
-        )
-        .related('comments', comments =>
-          comments
-            .related('creator')
-            .related('emoji', emoji => emoji.related('creator'))
-            // One more than we display so we can detect if there are more to load.
-            .limit(INITIAL_COMMENT_LIMIT + 1)
-            .orderBy('created', 'desc')
-            .orderBy('id', 'desc'),
-        )
+  userPref: syncedQueryWithContext(
+    'userPref',
+    keyValidator,
+    (auth: AuthData | undefined, key) =>
+      builder.userPref
+        .where('key', key)
+        .where('userID', auth?.sub ?? '')
         .one(),
-      auth?.role,
-    ),
+  ),
 
-  prevNext: (
-    auth: AuthData | undefined,
-    listContext: ListContext['params'] | null,
-    issue: Pick<
-      Row<Schema['tables']['issue']>,
-      'id' | 'created' | 'modified'
-    > | null,
-    dir: 'next' | 'prev',
-  ) =>
-    applyIssuePermissions(
-      buildListQuery(listContext, issue, dir).one(),
-      auth?.role,
-    ),
+  userPicker: syncedQuery(
+    'userPicker',
+    z.tuple([
+      z.boolean(),
+      z.string().nullable(),
+      z.enum(['crew', 'creators']).nullable(),
+    ]),
+    (disabled, login, filter) => {
+      let q = builder.user;
+      if (disabled && login) {
+        q = q.where('login', login);
+      } else if (filter) {
+        if (filter === 'crew') {
+          q = q.where(({cmp, not, and}) =>
+            and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
+          );
+        } else if (filter === 'creators') {
+          q = q.whereExists('createdIssues');
+        } else {
+          throw new Error(`Unknown filter: ${filter}`);
+        }
+      }
+      return q;
+    },
+  ),
 
-  issueList: (
-    auth: AuthData | undefined,
-    listContext: ListContext['params'],
-    userID: string,
-    limit: number,
-  ) =>
-    applyIssuePermissions(
-      buildListQuery(listContext, null, 'next')
-        .limit(limit)
-        .related('viewState', q => q.where('userID', userID).one())
-        .related('labels'),
-      auth?.role,
-    ),
+  issueDetail: syncedQueryWithContext(
+    'issueDetail',
+    z.tuple([
+      z.union([z.literal('shortID'), z.literal('id')]),
+      z.string().or(z.number()),
+      z.string(),
+    ]),
+    (auth: AuthData | undefined, idField, id, userID) =>
+      applyIssuePermissions(
+        builder.issue
+          .where(idField, id)
+          .related('emoji', emoji => emoji.related('creator'))
+          .related('creator')
+          .related('assignee')
+          .related('labels')
+          .related('notificationState', q => q.where('userID', userID))
+          .related('viewState', viewState =>
+            viewState.where('userID', userID).one(),
+          )
+          .related('comments', comments =>
+            comments
+              .related('creator')
+              .related('emoji', emoji => emoji.related('creator'))
+              // One more than we display so we can detect if there are more to load.
+              .limit(INITIAL_COMMENT_LIMIT + 1)
+              .orderBy('created', 'desc')
+              .orderBy('id', 'desc'),
+          )
+          .one(),
+        auth?.role,
+      ),
+  ),
 
-  emojiChange: (_auth: AuthData | undefined, subjectID: string) =>
+  prevNext: syncedQueryWithContext(
+    'prevNext',
+    z.tuple([
+      listContextParams.nullable(),
+      issueRowSort.nullable(),
+      z.union([z.literal('next'), z.literal('prev')]),
+    ]),
+    (auth: AuthData | undefined, listContext, issue, dir) =>
+      applyIssuePermissions(
+        buildListQuery(listContext, issue, dir).one(),
+        auth?.role,
+      ),
+  ),
+
+  issueList: syncedQueryWithContext(
+    'issueList',
+    z.tuple([listContextParams, z.string(), z.number()]),
+    (auth: AuthData | undefined, listContext, userID, limit) =>
+      applyIssuePermissions(
+        buildListQuery(listContext, null, 'next')
+          .limit(limit)
+          .related('viewState', q => q.where('userID', userID).one())
+          .related('labels'),
+        auth?.role,
+      ),
+  ),
+
+  emojiChange: syncedQuery('emojiChange', idValidator, subjectID =>
     builder.emoji
       .where('subjectID', subjectID ?? '')
       .related('creator', creator => creator.one()),
-});
+  ),
+};
 
 export type ListContext = {
   readonly href: string;
   readonly title: string;
-  readonly params: {
-    readonly open?: boolean | null;
-    readonly assignee?: string | null;
-    readonly creator?: string | null;
-    readonly labels?: string[] | null;
-    readonly textFilter?: string | null;
-    readonly sortField: 'modified' | 'created';
-    readonly sortDirection: 'asc' | 'desc';
-  };
+  readonly params: ListContextParams;
 };
 
 function buildListQuery(

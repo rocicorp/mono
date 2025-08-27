@@ -27,7 +27,8 @@ import {
 import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
-import {testDBs} from '../../test/db.ts';
+import {InspectorDelegate} from '../../server/inspector-delegate.ts';
+import {TestDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
@@ -74,7 +75,7 @@ export const ON_FAILURE = (e: unknown) => {
   throw e;
 };
 
-export const queryConfig: ZeroConfig['query'] = {
+export const queryConfig: ZeroConfig['getQueries'] = {
   url: ['http://my-pull-endpoint.dev/api/zero/pull'],
   forwardCookies: true,
 };
@@ -544,6 +545,7 @@ async function expectDesired(
 }
 
 export async function setup(
+  testDBs: TestDBs,
   testName: string,
   permissions: PermissionsConfig | undefined,
 ) {
@@ -666,8 +668,9 @@ export async function setup(
   const operatorStorage = new DatabaseStorage(
     storageDB,
   ).createClientGroupStorage(serviceID);
+  const inspectMetricsDelegate = new InspectorDelegate();
   const vs = new ViewSyncerService(
-    {query: queryConfig},
+    {getQueries: queryConfig},
     lc,
     SHARD,
     TASK_ID,
@@ -681,10 +684,12 @@ export async function setup(
       SHARD,
       operatorStorage,
       'view-syncer.pg-test.ts',
+      inspectMetricsDelegate,
     ),
     stateChanges,
     drainCoordinator,
     100,
+    inspectMetricsDelegate,
     undefined,
     setTimeoutFn,
   );

@@ -1,17 +1,15 @@
 import type postgres from 'postgres';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import * as PostgresTypeClass from '../../../../db/postgres-type-class-enum.ts';
-import {testDBs} from '../../../../test/db.ts';
-import {type PublicationInfo, getPublicationInfo} from './published.ts';
+import {test, type PgTest} from '../../../../test/db.ts';
+import {getPublicationInfo, type PublicationInfo} from './published.ts';
 
 describe('tables/published', () => {
   let db: postgres.Sql;
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     db = await testDBs.create('published_tables_test');
 
-    return async () => {
-      await testDBs.drop(db);
-    };
+    return () => testDBs.drop(db);
   });
 
   async function runAndExpectIndexes(

@@ -21,7 +21,7 @@ export async function fetchFromAPIServer(
 ) {
   if (!urlMatch(url, allowedUrls)) {
     throw new Error(
-      `URL "${url}" is not allowed by the ZERO_MUTATE/QUERY_URL configuration`,
+      `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
     );
   }
   const headers: Record<string, string> = {

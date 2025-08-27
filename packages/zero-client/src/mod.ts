@@ -116,13 +116,7 @@ export type {
   ExpressionBuilder,
   ExpressionFactory,
 } from '../../zql/src/query/expression.ts';
-export {
-  createBuilder,
-  type CustomQueryID,
-  type NamedQuery,
-  queries,
-  queriesWithContext,
-} from '../../zql/src/query/named.ts';
+export * from '../../zql/src/query/named.ts';
 export type {
   HumanReadable,
   PullRow,

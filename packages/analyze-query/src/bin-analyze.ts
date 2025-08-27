@@ -22,13 +22,9 @@ import {
 } from '../../zero-cache/src/scripts/permissions.ts';
 import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
-import {type AST, type CompoundKey} from '../../zero-protocol/src/ast.ts';
+import {type AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import {
-  clientToServer,
-  serverToClient,
-} from '../../zero-schema/src/name-mapper.ts';
-
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
@@ -38,6 +34,11 @@ import {runtimeDebugFlags} from '../../zql/src/builder/debug-delegate.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {Debug} from '../../zql/src/builder/debug-delegate.ts';
 import {runAst, type RunResult} from './run-ast.ts';
+import {explainQueries} from './explain-queries.ts';
+import {
+  computeZqlSpecs,
+  mustGetTableSpec,
+} from '../../zero-cache/src/db/lite-tables.ts';
 
 const options = {
   schema: deployPermissionsOptions.schema,
@@ -176,7 +177,6 @@ const config = {
 runtimeDebugFlags.trackRowCountsVended = true;
 runtimeDebugFlags.trackRowsVended = config.outputVendedRows;
 
-const clientGroupID = 'clientGroupIDForAnalyze';
 const lc = createLogContext({
   log: config.log,
 });
@@ -193,32 +193,25 @@ const {schema, permissions} = await loadSchemaAndPermissions(
 
 const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
-const serverToClientMapper = serverToClient(schema.tables);
 const debug = new Debug();
+const tableSpecs = computeZqlSpecs(lc, db);
 const host: QueryDelegate = {
   debug,
   getSource: (serverTableName: string) => {
-    const clientTableName = serverToClientMapper.tableName(serverTableName);
     let source = sources.get(serverTableName);
     if (source) {
       return source;
     }
+    const tableSpec = mustGetTableSpec(tableSpecs, serverTableName);
+    const {primaryKey} = tableSpec.tableSpec;
+
     source = new TableSource(
       lc,
       testLogConfig,
       db,
       serverTableName,
-      Object.fromEntries(
-        Object.entries(schema.tables[clientTableName].columns).map(
-          ([colName, column]) => [
-            clientToServerMapper.columnName(clientTableName, colName),
-            column,
-          ],
-        ),
-      ),
-      schema.tables[clientTableName].primaryKey.map(col =>
-        clientToServerMapper.columnName(clientTableName, col),
-      ) as unknown as CompoundKey,
+      tableSpec.zqlSpec,
+      primaryKey,
     );
 
     sources.set(serverTableName, source);
@@ -264,6 +257,7 @@ if (config.ast) {
     permissions,
     outputSyncedRows: config.outputSyncedRows,
     db,
+    tableSpecs,
     host,
   });
 } else if (config.query) {
@@ -296,6 +290,7 @@ function runQuery(queryString: string): Promise<RunResult> {
     permissions,
     outputSyncedRows: config.outputSyncedRows,
     db,
+    tableSpecs,
     host,
   });
 }
@@ -322,6 +317,7 @@ async function runHash(hash: string) {
     permissions,
     outputSyncedRows: config.outputSyncedRows,
     db,
+    tableSpecs,
     host,
   });
 }
@@ -339,32 +335,30 @@ showStats();
 if (config.outputVendedRows) {
   colorConsole.log(chalk.blue.bold('=== Vended Rows: ===\n'));
   for (const source of sources.values()) {
-    const entries = [
-      ...(debug
-        .getVendedRows()
-        .get(clientGroupID)
-        ?.get(source.table)
-        ?.entries() ?? []),
-    ];
     colorConsole.log(
       chalk.bold(`${source.table}:`),
-      Object.fromEntries(entries),
+      debug.getVendedRows()?.[source.table] ?? {},
     );
   }
 }
 colorConsole.log(chalk.blue.bold('\n\n=== Query Plans: ===\n'));
-explainQueries();
+const plans = explainQueries(debug.getVendedRowCounts() ?? {}, db);
+for (const [query, plan] of Object.entries(plans)) {
+  colorConsole.log(chalk.bold('query'), query);
+  colorConsole.log(plan.map((row, i) => colorPlanRow(row, i)).join('\n'));
+  colorConsole.log('\n');
+}
 
 function showStats() {
   let totalRowsConsidered = 0;
   for (const source of sources.values()) {
-    const entries = [
-      ...(debug.getVendedRowCounts()?.get(source.table)?.entries() ?? []),
-    ];
+    const entries = Object.entries(
+      debug.getVendedRowCounts()?.[source.table] ?? {},
+    );
     totalRowsConsidered += entries.reduce((acc, entry) => acc + entry[1], 0);
     colorConsole.log(
       chalk.bold(source.table + ' vended:'),
-      Object.fromEntries(entries),
+      debug.getVendedRowCounts()?.[source.table] ?? {},
     );
   }
 
@@ -377,26 +371,6 @@ function showStats() {
     colorTime(result.end - result.start),
     'ms',
   );
-}
-
-function explainQueries() {
-  for (const source of sources.values()) {
-    const queries = debug.getVendedRowCounts()?.get(source.table)?.keys() ?? [];
-    for (const query of queries) {
-      colorConsole.log(chalk.bold('query'), query);
-      colorConsole.log(
-        db
-          // we should be more intelligent about value replacement.
-          // Different values result in different plans. E.g., picking a value at the start
-          // of an index will result in `scan` vs `search`. The scan is fine in that case.
-          .prepare(`EXPLAIN QUERY PLAN ${query.replaceAll('?', "'sdfse'")}`)
-          .all<{detail: string}>()
-          .map((row, i) => colorPlanRow(row.detail, i))
-          .join('\n'),
-      );
-      colorConsole.log('\n');
-    }
-  }
 }
 
 function colorTime(duration: number) {

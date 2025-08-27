@@ -4,11 +4,20 @@ import {Panel, PanelGroup, PanelResizeHandle} from 'react-resizable-panels';
 import {QueryEditor} from './components/query-editor.tsx';
 import {ResultsViewer} from './components/results-viewer.tsx';
 import {QueryHistory} from './components/query-history.tsx';
-import {type QueryHistoryItem, type Result} from './types.ts';
+import {CredentialsModal} from './components/credentials-modal.tsx';
+import {VerticalNav} from './components/vertical-nav.tsx';
+import {ServerStatusModal} from './components/server-status-modal.tsx';
+import {
+  type QueryHistoryItem,
+  type RemoteRunResult,
+  type Result,
+} from './types.ts';
 import './App.css';
 import * as zero from '@rocicorp/zero';
 import {VizDelegate} from './query-delegate.ts';
 import * as ts from 'typescript';
+import {clientToServer} from '../../../packages/zero-schema/src/name-mapper.ts';
+import {mapAST} from '../../../packages/zero-protocol/src/ast.ts';
 
 type AnyQuery = zero.Query<any, any, any>;
 const DEFAULT_QUERY = `const {
@@ -17,6 +26,8 @@ const DEFAULT_QUERY = `const {
   table,
   number,
   string,
+  boolean,
+  enumeration,
   relationships,
 } = zero;
 
@@ -24,33 +35,48 @@ const DEFAULT_QUERY = `const {
 const user = table('user')
   .columns({
     id: string(),
-    name: string(),
-  });
+    login: string(),
+    name: string().optional(),
+  })
+    .primaryKey('id');
 
-const session = table('session')
+const issue = table('issue')
   .columns({
     id: string(),
-    userId: string(),
-    createdAt: number(),
-  });
+    shortID: number().optional(),
+    title: string(),
+    open: boolean(),
+    modified: number(),
+    created: number(),
+    creatorID: string(),
+    assigneeID: string().optional(),
+    description: string(),
+    visibility: enumeration<'internal' | 'public'>(),
+  })
+  .primaryKey('id');
 
-const userToSession = relationships(user, ({many}) => ({
-  sessions: many({
+const userRelationships = relationships(user, ({many}) => ({
+  createdIssues: many({
     sourceField: ['id'],
-    destField: ['userId'],
-    destSchema: session,
+    destField: ['creatorID'],
+    destSchema: issue,
+  }),
+  assignedIssues: many({
+    sourceField: ['id'],
+    destField: ['assigneeID'],
+    destSchema: issue,
   }),
 }));
 
 const builder = createBuilder(createSchema({
-  tables: [user, session],
-  relationships: [userToSession]
+  tables: [user, issue],
+  relationships: [userRelationships]
 }));
 
-//: Get user with recent sessions
+//: Get user and their assigned issues
 run(
-  builder.user.where('id', '=', 'some-user-id')
-    .related('sessions', q => q.orderBy('createdAt', 'desc').one())
+  builder.user
+    .related('assignedIssues', q => q.orderBy('modified', 'desc'))
 )`;
 
 function App() {
@@ -64,6 +90,15 @@ function App() {
   const [result, setResult] = useState<Result | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
+  const [auth, setAuth] = useState<
+    {serverUrl: string; password: string} | undefined
+  >(() => {
+    const savedAuth = localStorage.getItem('zql-auth');
+    return savedAuth ? JSON.parse(savedAuth) : undefined;
+  });
+  const [isCredentialsModalOpen, setIsCredentialsModalOpen] = useState(false);
+  const [isHistoryVisible, setIsHistoryVisible] = useState(true);
+  const [isServerStatusModalOpen, setIsServerStatusModalOpen] = useState(false);
   const [history, setHistory] = useState<QueryHistoryItem[]>(() => {
     const savedHistory = localStorage.getItem('zql-history');
     if (savedHistory) {
@@ -84,6 +119,14 @@ function App() {
   useEffect(() => {
     localStorage.setItem('zql-history', JSON.stringify(history));
   }, [history]);
+
+  useEffect(() => {
+    if (auth) {
+      localStorage.setItem('zql-auth', JSON.stringify(auth));
+    } else {
+      localStorage.removeItem('zql-auth');
+    }
+  }, [auth]);
 
   const executeQuery = useCallback(async () => {
     setIsLoading(true);
@@ -154,18 +197,49 @@ function App() {
 
     try {
       executeCode(queryCode);
-      const vizDelegate = new VizDelegate(capturedSchema!);
-      capturedQuery = capturedQuery?.delegate(vizDelegate);
-      // TODO: run against a zero instance? run against local sqlite? run against server? so many options.
-      // custom queries is an interesting wrench too. Anyway, I just care about data flow viz at the moment.
-      const rows = (await capturedQuery?.run()) as any;
+      if (capturedSchema === undefined) {
+        throw new Error('Failed to capture the schema definition');
+      }
+      if (capturedQuery === undefined) {
+        throw new Error('Failed to capture the query definition');
+      }
+      const vizDelegate = new VizDelegate(capturedSchema);
+      capturedQuery = capturedQuery.delegate(vizDelegate);
+      (await capturedQuery.run()) as any;
       const graph = vizDelegate.getGraph();
+      const mapper = clientToServer(capturedSchema.tables);
+
+      let remoteRunResult: RemoteRunResult | undefined;
+      try {
+        if (auth && auth.serverUrl) {
+          console.log('Using server URL:', auth.serverUrl);
+          const credentials = btoa(`:${auth.password}`);
+          const response = await fetch(`${auth.serverUrl}/analyze-queryz`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Basic ${credentials}`,
+            },
+            body: JSON.stringify({
+              ast: mapAST(capturedQuery.ast, mapper),
+            }),
+          });
+
+          remoteRunResult = await response.json();
+        } else {
+          console.warn(
+            'No auth credentials set or server URL missing, will not run the query server side or analyze it server side',
+            auth,
+          );
+        }
+      } catch (e) {
+        console.error('Error calling server:', e);
+      }
 
       setResult({
         ast: capturedQuery?.ast,
         graph,
-        plan: undefined,
-        rows,
+        remoteRunResult,
       });
 
       // Check if the current query code is the same as the previous entry
@@ -223,7 +297,7 @@ function App() {
     } finally {
       setIsLoading(false);
     }
-  }, [queryCode]);
+  }, [queryCode, auth]);
 
   const handleSelectHistoryQuery = useCallback(
     (historyItem: QueryHistoryItem) => {
@@ -235,6 +309,33 @@ function App() {
 
   const handleClearHistory = useCallback(() => {
     setHistory([]);
+  }, []);
+
+  const handleOpenCredentials = useCallback(() => {
+    setIsCredentialsModalOpen(true);
+  }, []);
+
+  const handleSaveCredentials = useCallback(
+    (serverUrl: string, password: string) => {
+      setAuth({serverUrl, password});
+    },
+    [],
+  );
+
+  const handleCloseCredentials = useCallback(() => {
+    setIsCredentialsModalOpen(false);
+  }, []);
+
+  const handleToggleHistory = useCallback(() => {
+    setIsHistoryVisible(prev => !prev);
+  }, []);
+
+  const handleShowServerStatus = useCallback(() => {
+    setIsServerStatusModalOpen(true);
+  }, []);
+
+  const handleCloseServerStatus = useCallback(() => {
+    setIsServerStatusModalOpen(false);
   }, []);
 
   useEffect(() => {
@@ -251,40 +352,65 @@ function App() {
   return (
     <div className="app">
       <div className="app-body">
-        <PanelGroup direction="horizontal">
-          <Panel defaultSize={20} minSize={15}>
-            <PanelGroup direction="vertical">
-              <Panel defaultSize={100} minSize={30}>
-                <QueryHistory
-                  history={history}
-                  onSelectQuery={handleSelectHistoryQuery}
-                  onClearHistory={handleClearHistory}
-                />
-              </Panel>
-            </PanelGroup>
-          </Panel>
+        <VerticalNav
+          onShowHistory={handleToggleHistory}
+          onOpenCredentials={handleOpenCredentials}
+          onShowServerStatus={handleShowServerStatus}
+          hasCredentials={!!auth}
+          isHistoryVisible={isHistoryVisible}
+        />
+        <div className="main-content">
+          <PanelGroup direction="horizontal">
+            {isHistoryVisible && (
+              <>
+                <Panel defaultSize={20} minSize={15}>
+                  <PanelGroup direction="vertical">
+                    <Panel defaultSize={100} minSize={30}>
+                      <QueryHistory
+                        history={history}
+                        onSelectQuery={handleSelectHistoryQuery}
+                        onClearHistory={handleClearHistory}
+                      />
+                    </Panel>
+                  </PanelGroup>
+                </Panel>
+                <PanelResizeHandle className="resize-handle-vertical" />
+              </>
+            )}
 
-          <PanelResizeHandle className="resize-handle-vertical" />
+            <Panel defaultSize={isHistoryVisible ? 40 : 50} minSize={30}>
+              <QueryEditor
+                value={queryCode}
+                onChange={setQueryCode}
+                onExecute={executeQuery}
+              />
+            </Panel>
 
-          <Panel defaultSize={40} minSize={30}>
-            <QueryEditor
-              value={queryCode}
-              onChange={setQueryCode}
-              onExecute={executeQuery}
-            />
-          </Panel>
+            <PanelResizeHandle className="resize-handle-vertical" />
 
-          <PanelResizeHandle className="resize-handle-vertical" />
-
-          <Panel defaultSize={40} minSize={30}>
-            <ResultsViewer
-              result={result}
-              error={error}
-              isLoading={isLoading}
-            />
-          </Panel>
-        </PanelGroup>
+            <Panel defaultSize={isHistoryVisible ? 40 : 50} minSize={30}>
+              <ResultsViewer
+                result={result}
+                error={error}
+                isLoading={isLoading}
+              />
+            </Panel>
+          </PanelGroup>
+        </div>
       </div>
+      <CredentialsModal
+        isOpen={isCredentialsModalOpen}
+        onClose={handleCloseCredentials}
+        onSave={handleSaveCredentials}
+        initialServerUrl={auth?.serverUrl || ''}
+        initialPassword={auth?.password || ''}
+      />
+      <ServerStatusModal
+        isOpen={isServerStatusModalOpen}
+        onClose={handleCloseServerStatus}
+        hasCredentials={!!auth}
+        serverUrl={auth?.serverUrl}
+      />
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import {resolver} from '@rocicorp/resolver';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
-import {testDBs} from '../../test/db.ts';
+import {test, type PgTest} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cvrSchema} from '../../types/shards.ts';
 import {CVRPurger} from './cvr-purger.ts';
@@ -87,7 +87,7 @@ describe('view-syncer/cvr', () => {
   let cvrDb: PostgresDB;
   let purger: CVRPurger;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     cvrDb = await testDBs.create('cvr_purger_test_db');
     await cvrDb.begin(tx => setupCVRTables(lc, tx, SHARD));
 
@@ -156,10 +156,8 @@ describe('view-syncer/cvr', () => {
         ],
       });
     }
-  });
 
-  afterEach(async () => {
-    await testDBs.drop(cvrDb);
+    return () => testDBs.drop(cvrDb);
   });
 
   test('complete purge', async () => {

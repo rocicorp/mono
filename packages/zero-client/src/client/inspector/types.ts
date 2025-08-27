@@ -1,6 +1,5 @@
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import type {ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {TTL} from '../../../../zql/src/query/ttl.ts';
 
@@ -13,6 +12,7 @@ export type Metrics = {
   'query-materialization-end-to-end': ReadonlyTDigest;
   'query-update-client': ReadonlyTDigest;
   'query-materialization-server': ReadonlyTDigest;
+  'query-update-server': ReadonlyTDigest;
 };
 
 export interface Inspector {
@@ -40,7 +40,6 @@ export interface ClientGroup {
 }
 
 export interface Query {
-  readonly ast: AST | null;
   readonly name: string | null;
   readonly args: ReadonlyArray<ReadonlyJSONValue> | null;
   readonly clientID: string;
@@ -50,6 +49,7 @@ export interface Query {
   readonly inactivatedAt: Date | null;
   readonly rowCount: number;
   readonly ttl: TTL;
-  readonly zql: string | null;
+  readonly clientZQL: string | null;
+  readonly serverZQL: string | null;
   readonly metrics: Metrics | null;
 }

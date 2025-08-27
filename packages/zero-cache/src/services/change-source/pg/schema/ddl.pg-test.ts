@@ -1,8 +1,8 @@
 import type postgres from 'postgres';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../../../shared/src/queue.ts';
-import {testDBs} from '../../../../test/db.ts';
+import {type PgTest, test} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import type {
   Message,
@@ -25,7 +25,7 @@ describe('change-source/tables/ddl', () => {
   const APP_ID = 'zap';
   const SHARD_NUM = 0;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     notices = new Queue();
     upstream = await testDBs.create('ddl_test_upstream', n =>
       notices.enqueue(n),

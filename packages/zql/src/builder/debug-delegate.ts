@@ -7,10 +7,10 @@ export const runtimeDebugFlags = {
 
 type SourceName = string;
 type SQL = string;
-export type RowCountsBySource = Map<SourceName, RowCountsByQuery>;
-export type RowsBySource = Map<SourceName, RowsByQuery>;
-type RowCountsByQuery = Map<SQL, number>;
-type RowsByQuery = Map<SQL, Row[]>;
+export type RowCountsBySource = Record<SourceName, RowCountsByQuery>;
+export type RowsBySource = Record<SourceName, RowsByQuery>;
+type RowCountsByQuery = Record<SQL, number>;
+type RowsByQuery = Record<SQL, Row[]>;
 
 export interface DebugDelegate {
   initQuery(table: SourceName, query: SQL): void;
@@ -22,12 +22,12 @@ export interface DebugDelegate {
 }
 
 export class Debug implements DebugDelegate {
-  readonly #rowCountsBySource: RowCountsBySource;
-  readonly #rowsBySource: RowsBySource;
+  #rowCountsBySource: RowCountsBySource;
+  #rowsBySource: RowsBySource;
 
   constructor() {
-    this.#rowCountsBySource = new Map();
-    this.#rowsBySource = new Map();
+    this.#rowCountsBySource = {};
+    this.#rowsBySource = {};
   }
 
   getVendedRowCounts(): RowCountsBySource {
@@ -41,43 +41,39 @@ export class Debug implements DebugDelegate {
   initQuery(table: SourceName, query: SQL): void {
     const {counts} = this.#getRowStats(table);
     if (counts) {
-      if (!counts.has(query)) {
-        counts.set(query, 0);
+      if (!counts[query]) {
+        counts[query] = 0;
       }
     }
   }
 
   reset(): void {
-    this.#rowCountsBySource.clear();
-    this.#rowsBySource.clear();
+    this.#rowCountsBySource = {};
+    this.#rowsBySource = {};
   }
 
   rowVended(table: SourceName, query: SQL, row: Row): void {
     const {counts, rows} = this.#getRowStats(table);
     if (counts) {
-      counts.set(query, (counts.get(query) ?? 0) + 1);
+      counts[query] = (counts[query] ?? 0) + 1;
     }
     if (rows) {
-      rows.set(query, [...(rows.get(query) ?? []), row]);
+      rows[query] = [...(rows[query] ?? []), row];
     }
   }
 
   #getRowStats(source: SourceName) {
     let counts: RowCountsByQuery | undefined;
     let rows: RowsByQuery | undefined;
-    if (runtimeDebugFlags.trackRowCountsVended) {
-      counts = this.#rowCountsBySource.get(source);
-      if (!counts) {
-        counts = new Map();
-        this.#rowCountsBySource.set(source, counts);
-      }
+    counts = this.#rowCountsBySource[source];
+    if (!counts) {
+      counts = {};
+      this.#rowCountsBySource[source] = counts;
     }
-    if (runtimeDebugFlags.trackRowsVended) {
-      rows = this.#rowsBySource.get(source);
-      if (!rows) {
-        rows = new Map();
-        this.#rowsBySource.set(source, rows);
-      }
+    rows = this.#rowsBySource[source];
+    if (!rows) {
+      rows = {};
+      this.#rowsBySource[source] = rows;
     }
     return {counts, rows};
   }

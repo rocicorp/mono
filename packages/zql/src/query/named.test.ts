@@ -1,20 +1,26 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {expect, expectTypeOf, test} from 'vitest';
 import {
-  hashOfAST,
-  hashOfNameAndArgs,
-} from '../../../zero-protocol/src/query-hash.ts';
-import {queries, createBuilder, type NamedQuery} from './named.ts';
-import {ast} from './query-impl.ts';
-import {StaticQuery} from './static-query.ts';
+  createBuilder,
+  syncedQuery,
+  syncedQueryWithContext,
+  withValidation,
+} from './named.ts';
 import {schema} from './test/test-schemas.ts';
+const builder = createBuilder(schema);
+import * as v from '../../../shared/src/valita.ts';
+import {ast} from './query-impl.ts';
 
-test('defining a named query', () => {
-  const queryBuilder = createBuilder(schema);
-  const x = queries({
-    myName: (id: string) => queryBuilder.issue.where('id', id),
-  });
-  const q = x.myName('123');
+test('syncedQuery', () => {
+  const idArgs = v.tuple([v.string()]);
+  const def = syncedQuery('myQuery', idArgs, (id: string) =>
+    builder.issue.where('id', id),
+  );
+  expect(def.queryName).toEqual('myQuery');
+  expect(def.parse).toBeDefined();
+  expect(def.takesContext).toEqual(false);
+
+  const q = def('123');
   expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
     Promise<
       {
@@ -27,64 +33,202 @@ test('defining a named query', () => {
       }[]
     >
   >();
-  check(x.myName);
 
-  // define many at once
-  const y = queries({
-    myName: (id: string) => queryBuilder.issue.where('id', id),
-    myOtherName: (id: string) => queryBuilder.issue.where('id', id),
-    myThirdName: (id: string) => queryBuilder.issue.where('id', id),
+  expect(q.customQueryID).toEqual({
+    name: 'myQuery',
+    args: ['123'],
   });
-  check(y.myName, 'myName');
-  check(y.myOtherName, 'myOtherName');
-  check(y.myThirdName, 'myThirdName');
-  const q1 = y.myName('123');
-  const q2 = y.myOtherName('123');
-  const q3 = y.myThirdName('123');
-  expectTypeOf<ReturnType<typeof q1.run>>().toEqualTypeOf<
-    ReturnType<typeof q.run>
+
+  expect(q.ast).toEqual({
+    table: 'issue',
+    where: {
+      left: {
+        name: 'id',
+        type: 'column',
+      },
+      op: '=',
+      right: {
+        type: 'literal',
+        value: '123',
+      },
+      type: 'simple',
+    },
+    orderBy: [['id', 'asc']],
+  });
+
+  const wv = withValidation(def);
+  expect(wv.queryName).toEqual('myQuery');
+  expect(wv.parse).toBeDefined();
+  expect(wv.takesContext).toEqual(true);
+  expect(() => wv('ignored', 123)).toThrow(
+    'invalid_type at .0 (expected string)',
+  );
+
+  const vq = wv('ignored', '123');
+  expectTypeOf<ReturnType<typeof vq.run>>().toEqualTypeOf<
+    Promise<
+      {
+        readonly id: string;
+        readonly title: string;
+        readonly description: string;
+        readonly closed: boolean;
+        readonly ownerId: string | null;
+        readonly createdAt: number;
+      }[]
+    >
   >();
-  expectTypeOf<ReturnType<typeof q2.run>>().toEqualTypeOf<
-    ReturnType<typeof q.run>
-  >();
-  expectTypeOf<ReturnType<typeof q3.run>>().toEqualTypeOf<
-    ReturnType<typeof q.run>
-  >();
+
+  expect(vq.customQueryID).toEqual({
+    name: 'myQuery',
+    args: ['123'],
+  });
+
+  expect(vq.ast).toEqual({
+    table: 'issue',
+    where: {
+      left: {
+        name: 'id',
+        type: 'column',
+      },
+      op: '=',
+      right: {
+        type: 'literal',
+        value: '123',
+      },
+      type: 'simple',
+    },
+    orderBy: [['id', 'asc']],
+  });
 });
 
-function check(
-  named: NamedQuery<[string], any>,
-  expectedName: string = 'myName',
-) {
-  const r = named('123');
-
-  const id = r.customQueryID;
-  expect(id?.name).toBe(expectedName);
-  expect(id?.args).toEqual(['123']);
-  expect(ast(r)).toMatchInlineSnapshot(`
-    {
-      "table": "issue",
-      "where": {
-        "left": {
-          "name": "id",
-          "type": "column",
-        },
-        "op": "=",
-        "right": {
-          "type": "literal",
-          "value": "123",
-        },
-        "type": "simple",
-      },
-    }
-  `);
-
-  // see comment on `r.hash()`
-  expect(r.hash()).not.toEqual(hashOfNameAndArgs('issue', ['123']));
-  expect(r.hash()).toEqual(
-    hashOfAST((r as StaticQuery<typeof schema, 'issue'>).ast),
+test('syncedQueryWithContext', () => {
+  const idArgs = v.tuple([v.string()]);
+  const def = syncedQueryWithContext(
+    'myQuery',
+    idArgs,
+    (context: string, id: string) =>
+      builder.issue.where('id', id).where('ownerId', context),
   );
-}
+  expect(def.queryName).toEqual('myQuery');
+  expect(def.parse).toBeDefined();
+  expect(def.takesContext).toEqual(true);
+
+  const q = def('user1', '123');
+  expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
+    Promise<
+      {
+        readonly id: string;
+        readonly title: string;
+        readonly description: string;
+        readonly closed: boolean;
+        readonly ownerId: string | null;
+        readonly createdAt: number;
+      }[]
+    >
+  >();
+
+  expect(q.customQueryID).toEqual({
+    name: 'myQuery',
+    args: ['123'],
+  });
+
+  expect(q.ast).toEqual({
+    table: 'issue',
+    where: {
+      conditions: [
+        {
+          left: {
+            name: 'id',
+            type: 'column',
+          },
+          op: '=',
+          right: {
+            type: 'literal',
+            value: '123',
+          },
+          type: 'simple',
+        },
+        {
+          left: {
+            name: 'ownerId',
+            type: 'column',
+          },
+          op: '=',
+          right: {
+            type: 'literal',
+            value: 'user1',
+          },
+          type: 'simple',
+        },
+      ],
+      type: 'and',
+    },
+    orderBy: [['id', 'asc']],
+  });
+
+  const wv = withValidation(def);
+  expect(wv.queryName).toEqual('myQuery');
+  expect(wv.parse).toBeDefined();
+  expect(wv.takesContext).toEqual(true);
+  expect(() => wv('ignored', 123)).toThrow(
+    'invalid_type at .0 (expected string)',
+  );
+
+  const vq = wv('user1', '123');
+  expectTypeOf<ReturnType<typeof vq.run>>().toEqualTypeOf<
+    Promise<
+      {
+        readonly id: string;
+        readonly title: string;
+        readonly description: string;
+        readonly closed: boolean;
+        readonly ownerId: string | null;
+        readonly createdAt: number;
+      }[]
+    >
+  >();
+
+  expect(vq.customQueryID).toEqual({
+    name: 'myQuery',
+    args: ['123'],
+  });
+
+  expect(vq.ast).toEqual({
+    table: 'issue',
+    where: {
+      conditions: [
+        {
+          left: {
+            name: 'id',
+            type: 'column',
+          },
+          op: '=',
+          right: {
+            type: 'literal',
+            value: '123',
+          },
+          type: 'simple',
+        },
+        {
+          left: {
+            name: 'ownerId',
+            type: 'column',
+          },
+          op: '=',
+          right: {
+            type: 'literal',
+            value: 'user1',
+          },
+          type: 'simple',
+        },
+      ],
+      type: 'and',
+    },
+    orderBy: [['id', 'asc']],
+  });
+});
+
+// TODO: test unions
 
 test('makeSchemaQuery', () => {
   const builders = createBuilder(schema);

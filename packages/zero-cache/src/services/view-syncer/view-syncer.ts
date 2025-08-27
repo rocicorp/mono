@@ -13,16 +13,16 @@ import {version} from '../../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {wrapIterable} from '../../../../shared/src/iterables.ts';
 import {must} from '../../../../shared/src/must.ts';
-import {mapValues} from '../../../../shared/src/objects.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
-import {TDigest} from '../../../../shared/src/tdigest.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/change-desired-queries.ts';
 import type {
   InitConnectionBody,
   InitConnectionMessage,
 } from '../../../../zero-protocol/src/connect.ts';
+import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
 import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
@@ -42,6 +42,7 @@ import {
   getOrCreateHistogram,
   getOrCreateUpDownCounter,
 } from '../../observability/metrics.ts';
+import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
@@ -105,14 +106,6 @@ export type SyncContext = {
   readonly httpCookie: string | undefined;
 };
 
-/**
- * Server-side metrics collected for queries during materialization.
- * These metrics are reported via the inspector and complement client-side metrics.
- */
-export type ServerMetrics = {
-  'query-materialization-server': TDigest;
-};
-
 const tracer = trace.getTracer('view-syncer', version);
 
 const PROTOCOL_VERSION_ATTR = 'protocol.version';
@@ -158,7 +151,7 @@ export const TTL_CLOCK_INTERVAL = 60_000;
  */
 export const TTL_TIMER_HYSTERESIS = 50; // ms
 
-type PartialZeroConfig = Pick<ZeroConfig, 'query' | 'serverVersion'>;
+type PartialZeroConfig = Pick<ZeroConfig, 'getQueries' | 'serverVersion'>;
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
@@ -169,7 +162,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
   readonly #slowHydrateThreshold: number;
-  readonly #queryConfig: ZeroConfig['query'];
+  readonly #queryConfig: ZeroConfig['getQueries'];
 
   // The ViewSyncerService is only started in response to a connection,
   // so #lastConnectTime is always initialized to now(). This is necessary
@@ -249,12 +242,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     },
   );
 
-  // Store per-query server-side materialization metrics for inspector
-  readonly #perQueryServerMetrics = new Map<string, ServerMetrics>();
-
-  readonly #serverMetrics: ServerMetrics = {
-    'query-materialization-server': new TDigest(),
-  };
+  readonly #inspectorDelegate: InspectorDelegate;
 
   readonly #config: Pick<ZeroConfig, 'serverVersion'>;
 
@@ -270,10 +258,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     versionChanges: Subscription<ReplicaState>,
     drainCoordinator: DrainCoordinator,
     slowHydrateThreshold: number,
+    inspectorDelegate: InspectorDelegate,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
-    const {query: pullConfig} = config;
+    const {getQueries: pullConfig} = config;
     this.#config = config;
     this.id = clientGroupID;
     this.#shard = shard;
@@ -284,6 +273,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#drainCoordinator = drainCoordinator;
     this.#keepaliveMs = keepaliveMs;
     this.#slowHydrateThreshold = slowHydrateThreshold;
+    this.#inspectorDelegate = inspectorDelegate;
     this.#cvrStore = new CVRStore(
       lc,
       cvrDb,
@@ -989,7 +979,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       ([_, state]) => state.transformationHash !== undefined,
     );
 
-    const customQueries: CustomQueryRecord[] = [];
+    const customQueries: Map<string, CustomQueryRecord> = new Map();
     const otherQueries: (ClientQueryRecord | InternalQueryRecord)[] = [];
 
     for (const [, query] of gotQueries) {
@@ -1003,19 +993,26 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       if (query.type === 'custom') {
-        customQueries.push(query);
+        customQueries.set(query.id, query);
       } else {
         otherQueries.push(query);
       }
     }
 
     const transformedQueries: TransformedAndHashed[] = [];
-    if (customQueries.length > 0 && !this.#customQueryTransformer) {
+    if (customQueries.size > 0 && !this.#customQueryTransformer) {
       lc.error?.(
-        'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
+        'Custom/named queries were requested but no `ZERO_GET_QUERIES_URL` is configured for Zero Cache.',
       );
     }
-    if (this.#customQueryTransformer && customQueries.length > 0) {
+    const [_, byOriginalHash] = this.#pipelines.addedQueries();
+    if (this.#customQueryTransformer && customQueries.size > 0) {
+      const filteredCustomQueries = this.#filterCustomQueries(
+        customQueries.values(),
+        byOriginalHash,
+        undefined,
+      );
+
       const transformedCustomQueries =
         await this.#customQueryTransformer.transform(
           {
@@ -1025,25 +1022,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               ? this.#httpCookie
               : undefined,
           },
-          customQueries,
+          filteredCustomQueries,
         );
 
-      // TODO: collected errors need to make it downstream to the client.
-      if (Array.isArray(transformedCustomQueries)) {
-        for (const q of transformedCustomQueries) {
-          if ('error' in q) {
-            lc.error?.(`Error transforming custom query ${q.name}: ${q.error}`);
-            continue;
-          }
-          transformedQueries.push(q);
-        }
-      } else {
-        // If the result is not an array, it is an error.
-        lc.error?.(
-          'Error calling API server to transform custom queries',
-          transformedCustomQueries,
-        );
-      }
+      this.#processTransformedCustomQueries(
+        lc,
+        transformedCustomQueries,
+        (q: TransformedAndHashed) => transformedQueries.push(q),
+        customQueries,
+      );
     }
 
     for (const q of otherQueries) {
@@ -1064,7 +1051,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
 
     for (const {
-      id: hash,
+      id: queryID,
       transformationHash,
       transformedAst,
     } of transformedQueries) {
@@ -1074,11 +1061,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         tracer,
         'vs.#hydrateUnchangedQueries.addQuery',
         async span => {
-          span.setAttribute('queryHash', hash);
+          span.setAttribute('queryHash', queryID);
           span.setAttribute('transformationHash', transformationHash);
           span.setAttribute('table', transformedAst.table);
           for (const _ of this.#pipelines.addQuery(
             transformationHash,
+            queryID,
             transformedAst,
             timer.start(),
           )) {
@@ -1096,23 +1084,67 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const elapsed = timer.totalElapsed();
       this.#hydrations.add(1);
       this.#hydrationTime.record(elapsed / 1000);
-      this.#addQueryMaterializationServerMetric(hash, elapsed);
-      lc.debug?.(`hydrated ${count} rows for ${hash} (${elapsed} ms)`);
+      this.#addQueryMaterializationServerMetric(transformationHash, elapsed);
+      lc.debug?.(`hydrated ${count} rows for ${queryID} (${elapsed} ms)`);
     }
   }
 
-  #addQueryMaterializationServerMetric(queryID: string, elapsed: number) {
-    let perQueryMetrics = this.#perQueryServerMetrics.get(queryID);
-    if (!perQueryMetrics) {
-      this.#perQueryServerMetrics.set(
-        queryID,
-        (perQueryMetrics = {
-          'query-materialization-server': new TDigest(),
-        }),
-      );
+  #processTransformedCustomQueries(
+    lc: LogContext,
+    transformedCustomQueries: (TransformedAndHashed | ErroredQuery)[],
+    cb: (q: TransformedAndHashed) => void,
+    customQueryMap: Map<string, CustomQueryRecord>,
+  ) {
+    const errors: ErroredQuery[] = [];
+
+    for (const q of transformedCustomQueries) {
+      if ('error' in q) {
+        lc.error?.(
+          `Error transforming custom query ${q.name}: ${q.error} ${q.details}`,
+        );
+        errors.push(q);
+        continue;
+      }
+      cb(q);
     }
-    perQueryMetrics['query-materialization-server'].add(elapsed);
-    this.#serverMetrics['query-materialization-server'].add(elapsed);
+
+    this.#sendQueryTransformErrorToClients(customQueryMap, errors);
+    return errors;
+  }
+
+  #sendQueryTransformErrorToClients(
+    customQueryMap: Map<string, CustomQueryRecord>,
+    errors: ErroredQuery[],
+  ) {
+    const errorGroups = new Map<string, ErroredQuery[]>();
+    for (const err of errors) {
+      const q = customQueryMap.get(err.id);
+      assert(q, 'got an error that does not map back to a custom query');
+      const clientIds = Object.keys(q.clientState);
+      for (const clientId of clientIds) {
+        const group = errorGroups.get(clientId) ?? [];
+        group.push(err);
+        errorGroups.set(clientId, group);
+      }
+    }
+
+    for (const [clientId, errors] of errorGroups) {
+      const client = this.#clients.get(clientId);
+      if (client) {
+        client.sendQueryTransformErrors(errors);
+      }
+    }
+  }
+
+  #addQueryMaterializationServerMetric(
+    transformationHash: string,
+    elapsed: number,
+  ) {
+    this.#inspectorDelegate.addMetric(
+      'query-materialization-server',
+      elapsed,
+      transformationHash,
+    );
   }
 
   /**
@@ -1130,7 +1162,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'pipelines must be initialized (syncQueryPipelineSet)',
       );
 
-      const hydratedQueries = this.#pipelines.addedQueries();
+      const [hydratedQueries, byOriginalHash] = this.#pipelines.addedQueries();
 
       // Convert queries to their transformed ast's and hashes
       const hashToIDs = new Map<string, string[]>();
@@ -1190,11 +1222,30 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       if (customQueries.size > 0 && !this.#customQueryTransformer) {
         lc.error?.(
-          'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
+          'Custom/named queries were requested but no `ZERO_GET_QUERIES_URL` is configured for Zero Cache.',
         );
       }
 
+      let erroredQueries: ErroredQuery[] | undefined;
       if (this.#customQueryTransformer && customQueries.size > 0) {
+        const filteredCustomQueries = this.#filterCustomQueries(
+          customQueries.values(),
+          byOriginalHash,
+          (origQuery, existing) => {
+            for (const transformed of existing) {
+              transformedQueries.push({
+                id: origQuery.id,
+                origQuery,
+                transformed: {
+                  id: origQuery.id,
+                  transformationHash: transformed.transformationHash,
+                  transformedAst: transformed.transformedAst,
+                },
+              });
+            }
+          },
+        );
+
         const transformedCustomQueries =
           await this.#customQueryTransformer.transform(
             {
@@ -1202,31 +1253,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               token: this.#authData?.raw,
               cookie: this.#httpCookie,
             },
-            customQueries.values(),
+            filteredCustomQueries,
           );
 
-        // TODO: collected errors need to make it downstream to the client.
-        if (Array.isArray(transformedCustomQueries)) {
-          for (const q of transformedCustomQueries) {
-            if ('error' in q) {
-              lc.error?.(
-                `Error transforming custom query ${q.name}: ${q.error}`,
-              );
-              continue;
-            }
+        erroredQueries = this.#processTransformedCustomQueries(
+          lc,
+          transformedCustomQueries,
+          (q: TransformedAndHashed) =>
             transformedQueries.push({
               id: q.id,
               origQuery: must(customQueries.get(q.id)),
               transformed: q,
-            });
-          }
-        } else {
-          // If the result is not an array, it is an error.
-          lc.error?.(
-            'Error calling API server to transform custom queries',
-            transformedCustomQueries,
-          );
-        }
+            }),
+          customQueries,
+        );
       }
 
       const serverQueries = transformedQueries.map(
@@ -1249,7 +1289,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const addQueries = serverQueries.filter(
         q => !q.remove && !hydratedQueries.has(q.transformationHash),
       );
-      const removeQueries = serverQueries.filter(q => q.remove);
+      const removeQueries: {
+        id: string;
+        transformationHash: string | undefined;
+      }[] = serverQueries.filter(q => q.remove);
       const desiredQueries = new Set(
         serverQueries.filter(q => !q.remove).map(q => q.transformationHash),
       );
@@ -1265,6 +1308,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           'transformed from',
           orig.type === 'custom' ? orig.name : orig.ast,
         );
+      }
+
+      // These are queries we need to remove from `desired`, not `got`, because they never transformed.
+      if (erroredQueries) {
+        for (const q of erroredQueries) {
+          removeQueries.push({
+            id: q.id,
+            transformationHash: undefined,
+          });
+        }
       }
 
       if (
@@ -1286,12 +1339,47 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
+  // Removes queries from `customQueries` that are already
+  // transformed and in the pipelines. We do not want to re-transform
+  // a query that has already been transformed. The reason is that
+  // we do not want a query that is already running to suddenly flip
+  // to error due to re-calling transform.
+  #filterCustomQueries(
+    customQueries: Iterable<CustomQueryRecord>,
+    byOriginalHash: Map<
+      string,
+      {
+        transformationHash: string;
+        transformedAst: AST;
+      }[]
+    >,
+    onExisting:
+      | ((
+          origQuery: CustomQueryRecord,
+          existing: {
+            transformationHash: string;
+            transformedAst: AST;
+          }[],
+        ) => void)
+      | undefined,
+  ) {
+    return wrapIterable(customQueries).filter(origQuery => {
+      const existing = byOriginalHash.get(origQuery.id);
+      if (existing) {
+        onExisting?.(origQuery, existing);
+        return false;
+      }
+
+      return true;
+    });
+  }
+
   // This must be called from within the #lock.
   #addAndRemoveQueries(
     lc: LogContext,
     cvr: CVRSnapshot,
     addQueries: {id: string; ast: AST; transformationHash: string}[],
-    removeQueries: {id: string; transformationHash: string}[],
+    removeQueries: {id: string; transformationHash: string | undefined}[],
     unhydrateQueries: string[],
     hashToIDs: Map<string, string[]>,
   ): Promise<void> {
@@ -1335,9 +1423,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // Removing queries is easy. The pipelines are dropped, and the CVR
       // updater handles the updates and pokes.
       for (const q of removeQueries) {
-        this.#pipelines.removeQuery(q.transformationHash);
+        if (q.transformationHash) {
+          this.#pipelines.removeQuery(q.transformationHash);
+        }
+
         // Remove per-query server metrics when query is deleted
-        this.#perQueryServerMetrics.delete(q.id);
+        this.#inspectorDelegate.removeQuery(q.id);
       }
       for (const hash of unhydrateQueries) {
         this.#pipelines.removeQuery(hash);
@@ -1345,7 +1436,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         const ids = hashToIDs.get(hash);
         if (ids) {
           for (const id of ids) {
-            this.#perQueryServerMetrics.delete(id);
+            this.#inspectorDelegate.removeQuery(id);
           }
         }
       }
@@ -1365,11 +1456,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('transformationHash', q.transformationHash);
           lc.debug?.(`adding pipeline for query`, q.ast);
 
-          yield* pipelines.addQuery(q.transformationHash, q.ast, timer.start());
+          yield* pipelines.addQuery(
+            q.transformationHash,
+            q.id,
+            q.ast,
+            timer.start(),
+          );
           const elapsed = timer.stop();
           totalProcessTime += elapsed;
 
-          self.#addQueryMaterializationServerMetric(q.id, elapsed);
+          self.#addQueryMaterializationServerMetric(
+            q.transformationHash,
+            elapsed,
+          );
 
           if (elapsed > slowHydrateThreshold) {
             lc.warn?.('Slow query materialization', elapsed, q.ast);
@@ -1712,20 +1811,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
 
         // Enhance query rows with server-side materialization metrics
-        const enhancedRows = queryRows.map(row => {
-          const serverMetrics = this.#perQueryServerMetrics.get(row.queryID);
-          const metrics = serverMetrics
-            ? {
-                'query-materialization-server':
-                  serverMetrics['query-materialization-server'].toJSON(),
-              }
-            : null;
-
-          return {
-            ...row,
-            metrics,
-          };
-        });
+        const enhancedRows = queryRows.map(row => ({
+          ...row,
+          ast:
+            row.ast ??
+            this.#inspectorDelegate.getASTForQuery(row.queryID) ??
+            null,
+          metrics: this.#inspectorDelegate.getMetricsJSONForQuery(row.queryID),
+        }));
 
         client.sendInspectResponse(lc, {
           op: 'queries',
@@ -1736,14 +1829,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       case 'metrics': {
-        const serverMetrics = mapValues(this.#serverMetrics, metric =>
-          metric.toJSON(),
-        );
-
         client.sendInspectResponse(lc, {
           op: 'metrics',
           id: body.id,
-          value: serverMetrics,
+          value: this.#inspectorDelegate.getMetricsJSON(),
         });
         break;
       }

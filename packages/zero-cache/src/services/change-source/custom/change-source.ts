@@ -152,7 +152,7 @@ export async function initialSync(
 
   const processor = new ChangeProcessor(
     new StatementRunner(tx),
-    'INITIAL-SYNC',
+    'initial-sync',
     (_, err) => {
       throw err;
     },
