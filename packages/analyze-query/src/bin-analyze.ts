@@ -22,13 +22,9 @@ import {
 } from '../../zero-cache/src/scripts/permissions.ts';
 import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
-import {type AST, type CompoundKey} from '../../zero-protocol/src/ast.ts';
+import {type AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import {
-  clientToServer,
-  serverToClient,
-} from '../../zero-schema/src/name-mapper.ts';
-
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
@@ -39,6 +35,10 @@ import {TableSource} from '../../zqlite/src/table-source.ts';
 import {Debug} from '../../zql/src/builder/debug-delegate.ts';
 import {runAst, type RunResult} from './run-ast.ts';
 import {explainQueries} from './explain-queries.ts';
+import {
+  computeZqlSpecs,
+  mustGetTableSpec,
+} from '../../zero-cache/src/db/lite-tables.ts';
 
 const options = {
   schema: deployPermissionsOptions.schema,
@@ -193,32 +193,25 @@ const {schema, permissions} = await loadSchemaAndPermissions(
 
 const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
-const serverToClientMapper = serverToClient(schema.tables);
 const debug = new Debug();
+const tableSpecs = computeZqlSpecs(lc, db);
 const host: QueryDelegate = {
   debug,
   getSource: (serverTableName: string) => {
-    const clientTableName = serverToClientMapper.tableName(serverTableName);
     let source = sources.get(serverTableName);
     if (source) {
       return source;
     }
+    const tableSpec = mustGetTableSpec(tableSpecs, serverTableName);
+    const {primaryKey} = tableSpec.tableSpec;
+
     source = new TableSource(
       lc,
       testLogConfig,
       db,
       serverTableName,
-      Object.fromEntries(
-        Object.entries(schema.tables[clientTableName].columns).map(
-          ([colName, column]) => [
-            clientToServerMapper.columnName(clientTableName, colName),
-            column,
-          ],
-        ),
-      ),
-      schema.tables[clientTableName].primaryKey.map(col =>
-        clientToServerMapper.columnName(clientTableName, col),
-      ) as unknown as CompoundKey,
+      tableSpec.zqlSpec,
+      primaryKey,
     );
 
     sources.set(serverTableName, source);
@@ -264,6 +257,7 @@ if (config.ast) {
     permissions,
     outputSyncedRows: config.outputSyncedRows,
     db,
+    tableSpecs,
     host,
   });
 } else if (config.query) {
@@ -296,6 +290,7 @@ function runQuery(queryString: string): Promise<RunResult> {
     permissions,
     outputSyncedRows: config.outputSyncedRows,
     db,
+    tableSpecs,
     host,
   });
 }
@@ -322,6 +317,7 @@ async function runHash(hash: string) {
     permissions,
     outputSyncedRows: config.outputSyncedRows,
     db,
+    tableSpecs,
     host,
   });
 }

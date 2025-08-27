@@ -20,7 +20,7 @@ function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
   ) as TQuery;
 }
 
-const idValidator = z.tuple([z.string()]).parse;
+const idValidator = z.tuple([z.string()]);
 const keyValidator = idValidator;
 
 const listContextParams = z.object({
@@ -41,11 +41,13 @@ const issueRowSort = z.object({
 });
 
 export const queries = {
-  allLabels: syncedQuery('allLabels', z.tuple([]).parse, () => builder.label),
+  allLabels: syncedQuery('allLabels', z.tuple([]), () => builder.label),
 
-  allIssues: syncedQuery('allIssues', z.tuple([]).parse, () => builder.issue),
+  allUsers: syncedQuery('allUsers', z.tuple([]), () => builder.user),
 
-  allUsers: syncedQuery('allUsers', z.tuple([]).parse, () => builder.user),
+  user: syncedQuery('user', idValidator, userID =>
+    builder.user.where('id', userID).one(),
+  ),
 
   issuePreload: syncedQueryWithContext(
     'issuePreload',
@@ -69,10 +71,6 @@ export const queries = {
       ),
   ),
 
-  user: syncedQuery('user', idValidator, userID =>
-    builder.user.where('id', userID).one(),
-  ),
-
   userPref: syncedQueryWithContext(
     'userPref',
     keyValidator,
@@ -89,7 +87,7 @@ export const queries = {
       z.boolean(),
       z.string().nullable(),
       z.enum(['crew', 'creators']).nullable(),
-    ]).parse,
+    ]),
     (disabled, login, filter) => {
       let q = builder.user;
       if (disabled && login) {
@@ -115,7 +113,7 @@ export const queries = {
       z.union([z.literal('shortID'), z.literal('id')]),
       z.string().or(z.number()),
       z.string(),
-    ]).parse,
+    ]),
     (auth: AuthData | undefined, idField, id, userID) =>
       applyIssuePermissions(
         builder.issue
@@ -148,7 +146,7 @@ export const queries = {
       listContextParams.nullable(),
       issueRowSort.nullable(),
       z.union([z.literal('next'), z.literal('prev')]),
-    ]).parse,
+    ]),
     (auth: AuthData | undefined, listContext, issue, dir) =>
       applyIssuePermissions(
         buildListQuery(listContext, issue, dir).one(),
@@ -158,7 +156,7 @@ export const queries = {
 
   issueList: syncedQueryWithContext(
     'issueList',
-    z.tuple([listContextParams, z.string(), z.number()]).parse,
+    z.tuple([listContextParams, z.string(), z.number()]),
     (auth: AuthData | undefined, listContext, userID, limit) =>
       applyIssuePermissions(
         buildListQuery(listContext, null, 'next')
